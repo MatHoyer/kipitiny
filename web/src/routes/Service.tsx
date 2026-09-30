@@ -556,6 +556,12 @@ function DeploymentLog({ deployment }: { deployment: Deployment }) {
 
 const MAX_LINES = 1000;
 
+// Local HH:MM:SS; lines Docker didn't timestamp come with the zero time.
+function logTime(t: string) {
+  const d = new Date(t);
+  return d.getFullYear() > 1 ? d.toLocaleTimeString([], { hour12: false }) : "--:--:--";
+}
+
 function LiveLogs({ serviceId }: { serviceId: string }) {
   const [lines, setLines] = useState<LogLine[]>([]);
   const [ended, setEnded] = useState(false);
@@ -611,6 +617,7 @@ function LiveLogs({ serviceId }: { serviceId: string }) {
         {lines.length === 0 && <span className="text-neutral-500">{ended ? "Stream closed." : "Waiting for logs…"}</span>}
         {lines.map((l, i) => (
           <div key={i}>
+            <span className="text-neutral-500">{logTime(l.time)} </span>
             {multi && <span className="text-neutral-500">{l.container} | </span>}
             {l.text}
           </div>

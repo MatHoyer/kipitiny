@@ -195,7 +195,7 @@ export type AuditEntry = {
   createdAt: string;
 };
 
-export type LogLine = { container: string; text: string };
+export type LogLine = { container: string; time: string; text: string };
 
 export type User = { id: string; username: string; createdAt: string };
 
