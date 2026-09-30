@@ -350,6 +350,20 @@ func (s *Store) FinishBackup(ctx context.Context, b store.Backup) error {
 	return nil
 }
 
+func (s *Store) SetBackupVerification(ctx context.Context, id string, v store.Verification) error {
+	b := store.Backup{ID: id, Verification: v}
+	res, err := s.db.NewUpdate().Model(&b).
+		Column("verify_status", "verify_error", "verify_details", "verified_at").
+		WherePK().Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) DeleteBackup(ctx context.Context, id string) error {
 	return deleteByID(ctx, s.db, "backups", id)
 }
@@ -379,7 +393,7 @@ func (s *Store) CreateBackupSchedule(ctx context.Context, sc store.BackupSchedul
 
 func (s *Store) UpdateBackupSchedule(ctx context.Context, sc store.BackupSchedule) (store.BackupSchedule, error) {
 	res, err := s.db.NewUpdate().Model(&sc).
-		Column("target_id", "cron", "keep_last", "keep_daily", "keep_weekly", "keep_monthly", "enabled").
+		Column("target_id", "cron", "keep_last", "keep_daily", "keep_weekly", "keep_monthly", "enabled", "verify").
 		WherePK().Exec(ctx)
 	if err != nil {
 		return store.BackupSchedule{}, mapErr(err)
@@ -432,7 +446,10 @@ func (s *Store) FailRunningOperations(ctx context.Context, errMsg string) error 
 				return mapErr(err)
 			}
 		}
-		return nil
+		_, err := tx.NewUpdate().Model((*store.Backup)(nil)).
+			Set("verify_status = ?", store.OpFailed).Set("verify_error = ?", errMsg).Set("verified_at = ?", now()).
+			Where("verify_status = ?", store.OpRunning).Exec(ctx)
+		return mapErr(err)
 	})
 }
 

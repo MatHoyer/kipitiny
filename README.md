@@ -48,6 +48,14 @@ docker compose exec -it manager /kipitiny reset-password admin
   never pruned. A run that finds the database busy (deploy, restore) retries for
   15 minutes.
 
+### Restore tests
+
+A backup nobody restored is a hope. *Verify* (or a schedule with restore tests on,
+the default) restores a backup into a throwaway PostgreSQL container with no
+network, matching the backup's major version, then runs `ANALYZE` and records
+tables, estimated rows, database size and duration on the backup. The container
+and its volume are always removed; one test runs at a time.
+
 ### Encryption
 
 An S3 target can encrypt everything stored on it with [age](https://age-encryption.org)

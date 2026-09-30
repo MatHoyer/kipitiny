@@ -229,3 +229,12 @@ func (a *API) backupManager(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusAccepted, b)
 }
+
+func (a *API) verifyBackup(w http.ResponseWriter, r *http.Request) {
+	b, err := a.core.VerifyBackup(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, b)
+}

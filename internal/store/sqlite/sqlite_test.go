@@ -199,6 +199,16 @@ func TestBackups(t *testing.T) {
 		t.Fatalf("backup round-trip: %+v %v", got, err)
 	}
 
+	at := time.Now()
+	v := store.Verification{VerifyStatus: store.OpSucceeded, VerifiedAt: &at,
+		VerifyDetails: store.VerificationDetails{Tables: 3, Rows: 42}}
+	if err := s.SetBackupVerification(ctx, b.ID, v); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetBackup(ctx, b.ID); got.VerifyStatus != store.OpSucceeded || got.VerifyDetails.Rows != 42 || got.VerifiedAt == nil || got.SizeBytes != 1234 {
+		t.Fatalf("verification round-trip: %+v", got)
+	}
+
 	running, _ := s.CreateBackup(ctx, store.Backup{ServiceID: "SVC", TargetID: "local", Status: store.OpRunning})
 	if err := s.FailRunningOperations(ctx, "interrupted"); err != nil {
 		t.Fatal(err)

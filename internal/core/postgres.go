@@ -159,14 +159,7 @@ func postgresTuning(memoryMB int) []string {
 func applyPostgresSpec(cfg *container.Config, host *container.HostConfig, svc store.Service) {
 	cfg.Cmd = postgresTuning(svc.MemoryMB)
 	cfg.Env = append(cfg.Env, "PGDATA="+pgDataDir)
-	cfg.Healthcheck = &container.HealthConfig{
-		Test:          []string{"CMD-SHELL", fmt.Sprintf("pg_isready -U %s -d %s", svc.Env[pgUser], svc.Env[pgDatabase])},
-		Interval:      10 * time.Second,
-		Timeout:       5 * time.Second,
-		StartPeriod:   60 * time.Second,
-		StartInterval: time.Second,
-		Retries:       3,
-	}
+	cfg.Healthcheck = postgresHealthcheck(svc.Env[pgUser], svc.Env[pgDatabase])
 	// Room for pg_dump/pg_restore over exec without hitting /dev/shm limits.
 	host.ShmSize = 128 << 20
 	host.Mounts = append(host.Mounts, mount.Mount{
@@ -175,6 +168,20 @@ func applyPostgresSpec(cfg *container.Config, host *container.HostConfig, svc st
 		Target: pgVolumeMount,
 	})
 	cfg.Labels[docker.LabelComponent] = "postgres"
+}
+
+// postgresHealthcheck probes over TCP: during first-start initdb the image
+// runs a temporary server on the Unix socket only, which must not count as
+// ready (it restarts right after).
+func postgresHealthcheck(user, db string) *container.HealthConfig {
+	return &container.HealthConfig{
+		Test:          []string{"CMD-SHELL", fmt.Sprintf("pg_isready -h 127.0.0.1 -U %s -d %s", user, db)},
+		Interval:      10 * time.Second,
+		Timeout:       5 * time.Second,
+		StartPeriod:   60 * time.Second,
+		StartInterval: time.Second,
+		Retries:       3,
+	}
 }
 
 func stopTimeoutFor(svc store.Service) time.Duration {

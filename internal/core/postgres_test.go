@@ -124,3 +124,13 @@ func TestDatabaseURLInjection(t *testing.T) {
 		t.Errorf("explicit DATABASE_URL overridden: %v", spec.Config.Env)
 	}
 }
+
+func TestParseVerifyOutput(t *testing.T) {
+	d, err := parseVerifyOutput("3|100000|8421376\n")
+	if err != nil || d.Tables != 3 || d.Rows != 100000 || d.DBBytes != 8421376 {
+		t.Fatalf("got %+v %v", d, err)
+	}
+	if _, err := parseVerifyOutput("ERROR"); err == nil {
+		t.Fatal("garbage accepted")
+	}
+}

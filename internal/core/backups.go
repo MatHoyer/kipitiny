@@ -87,7 +87,7 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, scheduleID 
 		ok := c.runBackup(svc, ct, st, target, b)
 		unlock()
 		if ok && scheduleID != "" {
-			c.applyRetention(scheduleID)
+			c.afterScheduledBackup(scheduleID, b.ID)
 		}
 	}); err != nil {
 		unlock()
@@ -381,34 +381,9 @@ func (c *Core) restore(ctx context.Context, svc store.Service, containerID strin
 		_ = admin(fmt.Sprintf(`DROP DATABASE IF EXISTS %s WITH (FORCE)`, pgIdent(scratch)))
 	}
 
-	// The checksum covers the stored (possibly encrypted) bytes.
-	sum := &hashCounter{h: sha256.New()}
-	stored := io.TeeReader(rc, sum)
-	var dump io.Reader = stored
-	if b.Encrypted {
-		if dump, err = decryptFrom(stored, target.AgeIdentity); err != nil {
-			dropScratch()
-			return err
-		}
-	}
-	err = c.docker.Exec(ctx, containerID, docker.ExecOptions{
-		Cmd: []string{
-			"pg_restore", "-U", user, "-d", scratch,
-			"--no-owner", "--no-privileges", "--exit-on-error",
-		},
-		Stdin: dump,
-	})
-	if err != nil {
+	if err := c.pgRestore(ctx, containerID, user, scratch, rc, target, b); err != nil {
 		dropScratch()
-		return fmt.Errorf("pg_restore: %w", err)
-	}
-	if _, err := io.Copy(io.Discard, stored); err != nil { // finish the checksum
-		dropScratch()
-		return fmt.Errorf("read backup: %w", err)
-	}
-	if got := hex.EncodeToString(sum.h.Sum(nil)); b.SHA256 != "" && got != b.SHA256 {
-		dropScratch()
-		return fmt.Errorf("checksum mismatch: backup is corrupted (got %s, want %s)", got, b.SHA256)
+		return err
 	}
 
 	// Swap. Each statement runs on its own: DROP DATABASE can't run in the
@@ -444,6 +419,37 @@ func (c *Core) restore(ctx context.Context, svc store.Service, containerID strin
 
 func pgLiteral(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+// pgRestore streams a stored backup (decrypting if needed) into pg_restore
+// against database db, then verifies the checksum of the stored bytes.
+func (c *Core) pgRestore(ctx context.Context, containerID, user, db string, rc io.Reader, target store.BackupTarget, b store.Backup) error {
+	sum := &hashCounter{h: sha256.New()}
+	stored := io.TeeReader(rc, sum)
+	var dump io.Reader = stored
+	if b.Encrypted {
+		var err error
+		if dump, err = decryptFrom(stored, target.AgeIdentity); err != nil {
+			return err
+		}
+	}
+	err := c.docker.Exec(ctx, containerID, docker.ExecOptions{
+		Cmd: []string{
+			"pg_restore", "-U", user, "-d", db,
+			"--no-owner", "--no-privileges", "--exit-on-error",
+		},
+		Stdin: dump,
+	})
+	if err != nil {
+		return fmt.Errorf("pg_restore: %w", err)
+	}
+	if _, err := io.Copy(io.Discard, stored); err != nil { // finish the checksum
+		return fmt.Errorf("read backup: %w", err)
+	}
+	if got := hex.EncodeToString(sum.h.Sum(nil)); b.SHA256 != "" && got != b.SHA256 {
+		return fmt.Errorf("checksum mismatch: backup is corrupted (got %s, want %s)", got, b.SHA256)
+	}
+	return nil
 }
 
 // pgIdent quotes an identifier. Names come from generated credentials, but

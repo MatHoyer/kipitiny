@@ -44,12 +44,13 @@ type Core struct {
 	setupMu    sync.Mutex
 	setupToken string // set while no admin exists
 
-	sched scheduler
+	sched     scheduler
+	verifySem chan struct{}
 }
 
 func New(cfg config.Config, s store.Store, d *docker.Client, log *slog.Logger) *Core {
 	bg, cancel := context.WithCancel(context.Background())
-	return &Core{cfg: cfg, store: s, docker: d, log: log, bg: bg, cancel: cancel}
+	return &Core{cfg: cfg, store: s, docker: d, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1)}
 }
 
 // Bootstrap prepares host-level resources the manager relies on.
@@ -63,6 +64,9 @@ func (c *Core) Bootstrap(ctx context.Context) error {
 		return err
 	}
 	if err := c.docker.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil {
+		return err
+	}
+	if err := c.cleanupRestoreTests(ctx); err != nil {
 		return err
 	}
 	if c.cfg.Traefik.Enabled {
