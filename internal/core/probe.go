@@ -2,7 +2,6 @@ package core
 
 import (
 	"archive/tar"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -32,24 +31,32 @@ const (
 
 var (
 	probeBinOnce sync.Once
-	probeBin     []byte
+	probeBinPath string
 	probeBinHash string
 	probeBinErr  error
 )
 
-// ownBinary reads the manager's static executable once: it is the probe.
-func ownBinary() ([]byte, string, error) {
+// ownBinary locates the manager's static executable (the probe) and hashes
+// it once, streaming: it is ~20 MB and must not stay in memory.
+func ownBinary() (path, hash string, err error) {
 	probeBinOnce.Do(func() {
-		exe, err := os.Executable()
+		if probeBinPath, probeBinErr = os.Executable(); probeBinErr != nil {
+			return
+		}
+		f, err := os.Open(probeBinPath)
 		if err != nil {
 			probeBinErr = err
 			return
 		}
-		probeBin, probeBinErr = os.ReadFile(exe)
-		sum := sha256.Sum256(probeBin)
-		probeBinHash = hex.EncodeToString(sum[:6])
+		defer f.Close()
+		h := sha256.New()
+		if _, err := io.Copy(h, f); err != nil {
+			probeBinErr = err
+			return
+		}
+		probeBinHash = hex.EncodeToString(h.Sum(nil)[:6])
 	})
-	return probeBin, probeBinHash, probeBinErr
+	return probeBinPath, probeBinHash, probeBinErr
 }
 
 // probeMount returns a read-only mount holding the probe binary on the
@@ -88,8 +95,8 @@ func (c *Core) probeMount(ctx context.Context, serverID string) (*mount.Mount, e
 }
 
 // installProbe copies the binary into a new volume through a stopped helper
-// container, then removes the helper.
-func installProbe(ctx context.Context, dk *docker.Client, volume string, bin []byte) error {
+// container, then removes the helper. The file is streamed, not buffered.
+func installProbe(ctx context.Context, dk *docker.Client, volume, bin string) error {
 	if _, err := dk.VolumeCreate(ctx, client.VolumeCreateOptions{
 		Name:   volume,
 		Labels: map[string]string{docker.LabelManaged: "true", docker.LabelComponent: "probe"},
@@ -110,18 +117,29 @@ func installProbe(ctx context.Context, dk *docker.Client, volume string, bin []b
 	}
 	defer dk.RemoveContainerAndVolumes(context.WithoutCancel(ctx), helper.ID)
 
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	if err := tw.WriteHeader(&tar.Header{Name: "kipitiny", Mode: 0o755, Size: int64(len(bin)), ModTime: time.Now()}); err != nil {
+	f, err := os.Open(bin)
+	if err != nil {
 		return err
 	}
-	if _, err := tw.Write(bin); err != nil {
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
 		return err
 	}
-	if err := tw.Close(); err != nil {
-		return err
-	}
-	_, err = dk.CopyToContainer(ctx, helper.ID, client.CopyToContainerOptions{DestinationPath: "/probe", Content: io.Reader(&buf)})
+	pr, pw := io.Pipe()
+	go func() {
+		tw := tar.NewWriter(pw)
+		err := tw.WriteHeader(&tar.Header{Name: "kipitiny", Mode: 0o755, Size: info.Size(), ModTime: time.Now()})
+		if err == nil {
+			_, err = io.Copy(tw, f)
+		}
+		if err == nil {
+			err = tw.Close()
+		}
+		pw.CloseWithError(err)
+	}()
+	_, err = dk.CopyToContainer(ctx, helper.ID, client.CopyToContainerOptions{DestinationPath: "/probe", Content: pr})
+	pr.Close()
 	return err
 }
 
