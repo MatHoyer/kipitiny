@@ -65,7 +65,7 @@ export function Service() {
   const svc = service.data;
   if (!svc) return <p className="text-sm text-zinc-500">Loading…</p>;
 
-  const state = deploying ? "deploying" : serviceState(svc.containers.filter((c) => !c.retired));
+  const state = deploying ? "deploying" : svc.stopped ? "stopped" : serviceState(svc.containers.filter((c) => !c.retired));
   const active = svc.containers.filter((c) => !c.retired);
   const allStopped = active.length > 0 && active.every((c) => c.state !== "running");
   const busy = deploying || deploy.isPending || action.isPending || remove.isPending;
@@ -276,7 +276,11 @@ function Settings({ svc }: { svc: ServiceT }) {
         </Field>
         <div className="flex items-center gap-3">
           <Button disabled={save.isPending}>Save</Button>
-          {save.isSuccess && <span className="text-xs text-zinc-500">Saved. Deploy to apply.</span>}
+          {save.isSuccess && (
+            <span className="text-xs text-zinc-500">
+              Saved. {isDb ? "Deploy to apply." : "Replica count applies now; deploy to apply other changes."}
+            </span>
+          )}
           <ErrorText error={save.error} />
         </div>
       </form>

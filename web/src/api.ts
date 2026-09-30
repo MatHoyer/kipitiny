@@ -32,6 +32,7 @@ export type Service = {
   healthPath: string;
   preDeploy: string;
   currentDeploymentId: string;
+  stopped: boolean;
   createdAt: string;
   updatedAt: string;
   containers: Container[];

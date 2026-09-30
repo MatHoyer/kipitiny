@@ -184,6 +184,9 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	if svc, err = c.store.UpdateService(ctx, svc); err != nil {
 		return ServiceView{}, err
 	}
+	if svc.Replicas != old.Replicas {
+		c.kick() // scaling applies right away, other changes on the next deploy
+	}
 	return c.view(ctx, svc)
 }
 
@@ -453,6 +456,11 @@ func (c *Core) ServiceAction(ctx context.Context, id string, action Action) (Ser
 	if len(cts) == 0 {
 		return ServiceView{}, fmt.Errorf("%w: service has not been deployed yet", ErrInvalid)
 	}
+	// Record the desired state first: the reconciler must not undo a stop.
+	if err := c.store.SetServiceStopped(ctx, svc.ID, action == ActionStop); err != nil {
+		return ServiceView{}, err
+	}
+	svc.Stopped = action == ActionStop
 	secs := int(stopTimeoutFor(svc).Seconds())
 	for _, ct := range cts {
 		switch action {

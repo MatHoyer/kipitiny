@@ -48,6 +48,13 @@ gets ready, the new containers are removed and the old version keeps serving.
   their logs stay readable. **Roll back** redeploys an earlier image.
 - Databases are recreated in place (a volume can't be shared by two servers).
 
+A **reconciler** keeps Docker matching the store every 30 s, shortly after any
+change, and whenever a managed container dies or is removed: missing replicas
+are recreated from the deployed version, externally stopped ones restarted,
+extra ones removed (so changing the replica count applies without a deploy),
+and containers of deleted services cleaned up. A service stopped from the UI
+stays stopped. Services busy with a deploy, backup or restore are left alone.
+
 ## Backups
 
 - `pg_dump -Fc` runs **inside** the database container (client always matches the

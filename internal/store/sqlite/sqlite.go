@@ -147,6 +147,24 @@ func (s *Store) SetCurrentDeployment(ctx context.Context, serviceID, deploymentI
 	return nil
 }
 
+func (s *Store) SetServiceStopped(ctx context.Context, serviceID string, stopped bool) error {
+	res, err := s.db.NewUpdate().Model((*store.Service)(nil)).
+		Set("stopped = ?", stopped).Where("id = ?", serviceID).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) ListAllServices(ctx context.Context) ([]store.Service, error) {
+	svcs := []store.Service{}
+	err := s.db.NewSelect().Model(&svcs).Order("project_id", "name").Scan(ctx)
+	return svcs, mapErr(err)
+}
+
 func (s *Store) DeleteService(ctx context.Context, id string) error {
 	return deleteByID(ctx, s.db, "services", id)
 }
