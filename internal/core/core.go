@@ -20,6 +20,8 @@ var (
 	ErrInvalid = errors.New("invalid input")
 	// ErrBusy means another operation (usually a deploy) holds the service.
 	ErrBusy = errors.New("operation in progress")
+	// ErrShuttingDown is returned for work submitted during shutdown.
+	ErrShuttingDown = errors.New("manager is shutting down")
 )
 
 // Names end up in container, network and DNS names, so keep them DNS-safe.
@@ -35,10 +37,14 @@ type Core struct {
 	bg     context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+	bgMu   sync.Mutex
+	closed bool
 	locks  sync.Map // service ID -> *sync.Mutex
 
 	setupMu    sync.Mutex
 	setupToken string // set while no admin exists
+
+	sched scheduler
 }
 
 func New(cfg config.Config, s store.Store, d *docker.Client, log *slog.Logger) *Core {
@@ -69,6 +75,10 @@ func (c *Core) Bootstrap(ctx context.Context) error {
 
 // Shutdown cancels background work and waits for it to wind down.
 func (c *Core) Shutdown(ctx context.Context) error {
+	c.stopScheduler()
+	c.bgMu.Lock()
+	c.closed = true
+	c.bgMu.Unlock()
 	c.cancel()
 	done := make(chan struct{})
 	go func() { c.wg.Wait(); close(done) }()
@@ -78,6 +88,21 @@ func (c *Core) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// goBackground runs f as tracked background work, unless shutdown started.
+func (c *Core) goBackground(f func()) error {
+	c.bgMu.Lock()
+	defer c.bgMu.Unlock()
+	if c.closed {
+		return ErrShuttingDown
+	}
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		f()
+	}()
+	return nil
 }
 
 // lockService serializes mutating operations on one service. It never

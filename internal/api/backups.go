@@ -139,3 +139,68 @@ func (a *API) deleteTarget(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (a *API) backupProject(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		TargetID string `json:"targetId"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	started, err := a.core.BackupProject(r.Context(), r.PathValue("id"), body.TargetID)
+	if err != nil && len(started) == 0 {
+		a.fail(w, err)
+		return
+	}
+	res := struct {
+		Backups []store.Backup `json:"backups"`
+		Error   string         `json:"error,omitempty"`
+	}{Backups: started}
+	if err != nil {
+		res.Error = err.Error() // some databases could not start
+	}
+	writeJSON(w, http.StatusAccepted, res)
+}
+
+func (a *API) listSchedules(w http.ResponseWriter, r *http.Request) {
+	scs, err := a.core.ListBackupSchedules(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, scs)
+}
+
+func (a *API) createSchedule(w http.ResponseWriter, r *http.Request) {
+	var in core.ScheduleInput
+	if !decode(w, r, &in) {
+		return
+	}
+	sc, err := a.core.CreateBackupSchedule(r.Context(), r.PathValue("id"), in)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, sc)
+}
+
+func (a *API) updateSchedule(w http.ResponseWriter, r *http.Request) {
+	var in core.ScheduleInput
+	if !decode(w, r, &in) {
+		return
+	}
+	sc, err := a.core.UpdateBackupSchedule(r.Context(), r.PathValue("id"), in)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, sc)
+}
+
+func (a *API) deleteSchedule(w http.ResponseWriter, r *http.Request) {
+	if err := a.core.DeleteBackupSchedule(r.Context(), r.PathValue("id")); err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

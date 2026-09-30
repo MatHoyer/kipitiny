@@ -102,6 +102,23 @@ export type Backup = {
   finishedAt?: string;
 };
 
+export type ScheduleInput = {
+  targetId: string;
+  cron: string;
+  keepLast: number;
+  keepDaily: number;
+  keepWeekly: number;
+  keepMonthly: number;
+  enabled: boolean;
+};
+
+export type Schedule = ScheduleInput & {
+  id: string;
+  serviceId: string;
+  createdAt: string;
+  nextRun?: string;
+};
+
 export type Restore = {
   id: string;
   backupId: string;
@@ -193,6 +210,13 @@ export const api = {
   downloadUrl: (id: string) => `/api/backups/${id}/download`,
   restore: (backupId: string, confirm: string, serviceId = "") =>
     request<Restore>(`/backups/${backupId}/restore`, json("POST", { serviceId, confirm })),
+  schedules: (serviceId: string) => request<Schedule[]>(`/services/${serviceId}/schedules`),
+  createSchedule: (serviceId: string, s: ScheduleInput) =>
+    request<Schedule>(`/services/${serviceId}/schedules`, json("POST", s)),
+  updateSchedule: (id: string, s: ScheduleInput) => request<Schedule>(`/schedules/${id}`, json("PUT", s)),
+  deleteSchedule: (id: string) => request<void>(`/schedules/${id}`, { method: "DELETE" }),
+  backupProject: (projectId: string, targetId = "") =>
+    request<{ backups: Backup[]; error?: string }>(`/projects/${projectId}/backups`, json("POST", { targetId })),
   restores: (serviceId: string) => request<Restore[]>(`/services/${serviceId}/restores`),
 
   logsUrl: (serviceId: string, tail = 200) => `/api/services/${serviceId}/logs?tail=${tail}`,

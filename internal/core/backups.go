@@ -15,6 +15,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/ids"
 	"github.com/MatHoyer/kipitiny/internal/storage"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -28,6 +29,12 @@ const (
 // background. The dump runs inside the database container, so the client
 // always matches the server version and the manager needs no Postgres tools.
 func (c *Core) BackupDatabase(ctx context.Context, serviceID, targetID string) (store.Backup, error) {
+	return c.startBackup(ctx, serviceID, targetID, "", nil)
+}
+
+// startBackup starts a backup; done, if set, is closed when it finishes.
+// Backups made by a schedule trigger its retention on success.
+func (c *Core) startBackup(ctx context.Context, serviceID, targetID, scheduleID string, done chan<- struct{}) (store.Backup, error) {
 	if targetID == "" {
 		targetID = store.LocalTargetID
 	}
@@ -63,24 +70,63 @@ func (c *Core) BackupDatabase(ctx context.Context, serviceID, targetID string) (
 		ServiceName: svc.Name,
 		ProjectName: project.Name,
 		TargetID:    target.ID,
-		ObjectKey:   fmt.Sprintf("%s/%s/%s.dump", project.Name, svc.Name, created.Format("20060102T150405Z")),
-		Status:      store.OpRunning,
+		ScheduleID:  scheduleID,
+		// The suffix keeps keys unique for backups started in the same second.
+		ObjectKey: fmt.Sprintf("%s/%s/%s-%s.dump", project.Name, svc.Name,
+			created.Format("20060102T150405Z"), strings.ToLower(ids.New()[16:])),
+		Status: store.OpRunning,
 	})
 	if err != nil {
 		unlock()
 		return store.Backup{}, err
 	}
 
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-		defer unlock()
-		c.runBackup(svc, ct, st, b)
-	}()
+	if err := c.goBackground(func() {
+		if done != nil {
+			defer close(done)
+		}
+		ok := c.runBackup(svc, ct, st, b)
+		unlock()
+		if ok && scheduleID != "" {
+			c.applyRetention(scheduleID)
+		}
+	}); err != nil {
+		unlock()
+		b.Status, b.Error = store.OpFailed, err.Error()
+		_ = c.store.FinishBackup(ctx, b)
+		return store.Backup{}, err
+	}
 	return b, nil
 }
 
-func (c *Core) runBackup(svc store.Service, containerID string, st storage.Storage, b store.Backup) {
+// BackupProject backs up every database of a project to one target.
+// Failures to start are reported per database; the others still run.
+func (c *Core) BackupProject(ctx context.Context, projectID, targetID string) ([]store.Backup, error) {
+	svcs, err := c.store.ListServices(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	var started []store.Backup
+	var errs []error
+	for _, s := range svcs {
+		if s.Kind != store.ServiceKindPostgres {
+			continue
+		}
+		b, err := c.BackupDatabase(ctx, s.ID, targetID)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", s.Name, err))
+			continue
+		}
+		started = append(started, b)
+	}
+	if len(started) == 0 && len(errs) == 0 {
+		return nil, fmt.Errorf("%w: the project has no databases", ErrInvalid)
+	}
+	return started, errors.Join(errs...)
+}
+
+// runBackup performs the backup and records the outcome; it reports success.
+func (c *Core) runBackup(svc store.Service, containerID string, st storage.Storage, b store.Backup) bool {
 	ctx, cancel := context.WithTimeout(c.bg, backupTimeout)
 	defer cancel()
 	log := c.log.With("backup", b.ID, "service", svc.Name)
@@ -105,7 +151,9 @@ func (c *Core) runBackup(svc store.Service, containerID string, st storage.Stora
 	}
 	if err := c.store.FinishBackup(context.WithoutCancel(ctx), b); err != nil {
 		log.Error("cannot record backup result", "err", err)
+		return false
 	}
+	return err == nil && b.Status == store.OpSucceeded
 }
 
 // dump streams pg_dump output to storage, filling in size, checksum and
@@ -224,12 +272,14 @@ func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, con
 		return store.Restore{}, err
 	}
 
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
+	if err := c.goBackground(func() {
 		defer unlock()
 		c.runRestore(svc, ct, st, b, r)
-	}()
+	}); err != nil {
+		unlock()
+		_ = c.store.FinishRestore(ctx, r.ID, store.OpFailed, err.Error())
+		return store.Restore{}, err
+	}
 	return r, nil
 }
 

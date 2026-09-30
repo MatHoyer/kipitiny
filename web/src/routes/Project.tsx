@@ -28,6 +28,11 @@ export function Project() {
   });
   const [showForm, setShowForm] = useState(false);
 
+  const backupAll = useMutation({
+    mutationFn: () => api.backupProject(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["backups"] }),
+  });
+  const hasDatabases = services.data?.some((s) => s.kind === "postgres");
   const remove = useMutation({
     mutationFn: (confirm: string) => api.deleteProject(id, confirm),
     onSuccess: () => {
@@ -49,6 +54,11 @@ export function Project() {
           <h1 className="text-xl font-semibold">{project.data.name}</h1>
         </div>
         <div className="flex gap-2">
+          {hasDatabases && (
+            <Button variant="secondary" disabled={backupAll.isPending} onClick={() => backupAll.mutate()}>
+              {backupAll.isSuccess ? "Backups started" : "Back up databases"}
+            </Button>
+          )}
           <Button onClick={() => setShowForm((v) => !v)}>{showForm ? "Cancel" : "New service"}</Button>
           <Button
             variant="danger"
@@ -65,7 +75,10 @@ export function Project() {
           </Button>
         </div>
       </div>
-      <ErrorText error={remove.error} />
+      <ErrorText error={remove.error ?? backupAll.error} />
+      {backupAll.data?.error && (
+        <p className="text-sm text-amber-600">Some databases were not backed up: {backupAll.data.error}</p>
+      )}
 
       {showForm && <NewServiceForm projectId={id} onDone={() => setShowForm(false)} />}
 

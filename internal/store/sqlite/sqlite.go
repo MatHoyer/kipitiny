@@ -309,6 +309,9 @@ func (s *Store) ListBackups(ctx context.Context, f store.BackupFilter) ([]store.
 	if f.ProjectID != "" {
 		q = q.Where("project_id = ?", f.ProjectID)
 	}
+	if f.ScheduleID != "" {
+		q = q.Where("schedule_id = ?", f.ScheduleID)
+	}
 	if f.Status != "" {
 		q = q.Where("status = ?", f.Status)
 	}
@@ -336,6 +339,46 @@ func (s *Store) FinishBackup(ctx context.Context, b store.Backup) error {
 
 func (s *Store) DeleteBackup(ctx context.Context, id string) error {
 	return deleteByID(ctx, s.db, "backups", id)
+}
+
+func (s *Store) ListBackupSchedules(ctx context.Context, serviceID string) ([]store.BackupSchedule, error) {
+	ss := []store.BackupSchedule{}
+	q := s.db.NewSelect().Model(&ss).Order("created_at")
+	if serviceID != "" {
+		q = q.Where("service_id = ?", serviceID)
+	}
+	return ss, mapErr(q.Scan(ctx))
+}
+
+func (s *Store) GetBackupSchedule(ctx context.Context, id string) (store.BackupSchedule, error) {
+	var sc store.BackupSchedule
+	err := s.db.NewSelect().Model(&sc).Where("id = ?", id).Scan(ctx)
+	return sc, mapErr(err)
+}
+
+func (s *Store) CreateBackupSchedule(ctx context.Context, sc store.BackupSchedule) (store.BackupSchedule, error) {
+	sc.ID, sc.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&sc).Exec(ctx); err != nil {
+		return store.BackupSchedule{}, mapErr(err)
+	}
+	return sc, nil
+}
+
+func (s *Store) UpdateBackupSchedule(ctx context.Context, sc store.BackupSchedule) (store.BackupSchedule, error) {
+	res, err := s.db.NewUpdate().Model(&sc).
+		Column("target_id", "cron", "keep_last", "keep_daily", "keep_weekly", "keep_monthly", "enabled").
+		WherePK().Exec(ctx)
+	if err != nil {
+		return store.BackupSchedule{}, mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.BackupSchedule{}, store.ErrNotFound
+	}
+	return sc, nil
+}
+
+func (s *Store) DeleteBackupSchedule(ctx context.Context, id string) error {
+	return deleteByID(ctx, s.db, "backup_schedules", id)
 }
 
 func (s *Store) CreateRestore(ctx context.Context, r store.Restore) (store.Restore, error) {
