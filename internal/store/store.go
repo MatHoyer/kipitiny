@@ -63,6 +63,12 @@ type Store interface {
 	FinishBackup(ctx context.Context, b Backup) error
 	DeleteBackup(ctx context.Context, id string) error
 
+	ListBackupSchedules(ctx context.Context, serviceID string) ([]BackupSchedule, error)
+	GetBackupSchedule(ctx context.Context, id string) (BackupSchedule, error)
+	CreateBackupSchedule(ctx context.Context, s BackupSchedule) (BackupSchedule, error)
+	UpdateBackupSchedule(ctx context.Context, s BackupSchedule) (BackupSchedule, error)
+	DeleteBackupSchedule(ctx context.Context, id string) error
+
 	CreateRestore(ctx context.Context, r Restore) (Restore, error)
 	ListRestores(ctx context.Context, serviceID string, limit int) ([]Restore, error)
 	FinishRestore(ctx context.Context, id string, status OpStatus, errMsg string) error
@@ -195,6 +201,7 @@ type Backup struct {
 	ServiceName string     `bun:"service_name" json:"serviceName"`
 	ProjectName string     `bun:"project_name" json:"projectName"`
 	TargetID    string     `bun:"target_id" json:"targetId"`
+	ScheduleID  string     `bun:"schedule_id" json:"scheduleId,omitempty"`
 	ObjectKey   string     `bun:"object_key" json:"objectKey"`
 	Status      OpStatus   `bun:"status" json:"status"`
 	SizeBytes   int64      `bun:"size_bytes" json:"sizeBytes"`
@@ -207,10 +214,11 @@ type Backup struct {
 }
 
 type BackupFilter struct {
-	ServiceID string
-	ProjectID string
-	Status    OpStatus
-	Limit     int
+	ServiceID  string
+	ScheduleID string
+	ProjectID  string
+	Status     OpStatus
+	Limit      int
 }
 
 type Restore struct {
@@ -223,4 +231,25 @@ type Restore struct {
 	Error      string     `bun:"error" json:"error,omitempty"`
 	CreatedAt  time.Time  `bun:"created_at" json:"createdAt"`
 	FinishedAt *time.Time `bun:"finished_at" json:"finishedAt,omitempty"`
+}
+
+// BackupSchedule backs up a database on a cron schedule and prunes older
+// backups it made. A backup is kept if any Keep* rule selects it.
+type BackupSchedule struct {
+	bun.BaseModel `bun:"table:backup_schedules,alias:schedule" json:"-"`
+
+	ID        string `bun:"id,pk" json:"id"`
+	ServiceID string `bun:"service_id" json:"serviceId"`
+	TargetID  string `bun:"target_id" json:"targetId"`
+	// Cron is a standard 5-field expression or a descriptor like @daily.
+	Cron string `bun:"cron" json:"cron"`
+	// KeepLast keeps the N most recent backups.
+	KeepLast int `bun:"keep_last" json:"keepLast"`
+	// KeepDaily/Weekly/Monthly keep the newest backup of each of the last N
+	// days/ISO weeks/months that have one.
+	KeepDaily   int       `bun:"keep_daily" json:"keepDaily"`
+	KeepWeekly  int       `bun:"keep_weekly" json:"keepWeekly"`
+	KeepMonthly int       `bun:"keep_monthly" json:"keepMonthly"`
+	Enabled     bool      `bun:"enabled" json:"enabled"`
+	CreatedAt   time.Time `bun:"created_at" json:"createdAt"`
 }

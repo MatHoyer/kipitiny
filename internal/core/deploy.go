@@ -53,12 +53,14 @@ func (c *Core) Deploy(ctx context.Context, serviceID string) (store.Deployment, 
 		return store.Deployment{}, err
 	}
 
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
+	if err := c.goBackground(func() {
 		defer unlock()
 		c.runDeploy(project, svc, dep)
-	}()
+	}); err != nil {
+		unlock()
+		_ = c.store.FinishDeployment(ctx, dep.ID, store.DeploymentFailed, err.Error())
+		return store.Deployment{}, err
+	}
 	return dep, nil
 }
 

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { BackupList } from "./BackupList";
+import { Schedules } from "./Schedules";
 import { api, type Connection, type Deployment, type LogLine, type Service as ServiceT } from "../api";
 import {
   Button,
@@ -306,6 +307,8 @@ function BackupsCard({ serviceId, name }: { serviceId: string; name: string }) {
           </div>
         )}
         <ErrorText error={backup.error} />
+        <Schedules serviceId={serviceId} targets={targets.data ?? []} />
+        <h3 className="pt-2 text-xs font-semibold tracking-wide text-zinc-500 uppercase">History</h3>
         <BackupList backups={backups.data ?? []} targets={targets.data ?? []} restoreInto={name} />
       </div>
     </Card>

@@ -221,3 +221,43 @@ func TestBackups(t *testing.T) {
 		t.Fatalf("delete unused target: %v", err)
 	}
 }
+
+func TestBackupSchedules(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	p, _ := s.CreateProject(ctx, store.Project{Name: "shop"})
+	db, err := s.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc, err := s.CreateBackupSchedule(ctx, store.BackupSchedule{
+		ServiceID: db.ID, TargetID: store.LocalTargetID, Cron: "@daily", KeepDaily: 7, Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sc.Enabled, sc.KeepWeekly = false, 4
+	if _, err := s.UpdateBackupSchedule(ctx, sc); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetBackupSchedule(ctx, sc.ID)
+	if err != nil || got.Enabled || got.KeepWeekly != 4 || got.KeepDaily != 7 {
+		t.Fatalf("schedule round-trip: %+v %v", got, err)
+	}
+	if _, err := s.CreateBackup(ctx, store.Backup{ServiceID: db.ID, TargetID: "local", ScheduleID: sc.ID, Status: store.OpSucceeded}); err != nil {
+		t.Fatal(err)
+	}
+	if bs, _ := s.ListBackups(ctx, store.BackupFilter{ScheduleID: sc.ID}); len(bs) != 1 {
+		t.Fatalf("filter by schedule: %v", bs)
+	}
+	// Deleting the database removes its schedules (backups stay).
+	if err := s.DeleteService(ctx, db.ID); err != nil {
+		t.Fatal(err)
+	}
+	if all, _ := s.ListBackupSchedules(ctx, ""); len(all) != 0 {
+		t.Fatalf("schedules not cascaded: %v", all)
+	}
+	if bs, _ := s.ListBackups(ctx, store.BackupFilter{}); len(bs) != 1 {
+		t.Fatalf("backups must outlive the database: %v", bs)
+	}
+}

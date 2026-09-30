@@ -75,6 +75,9 @@ func serve() error {
 		// Keep serving the UI so the problem is visible there.
 		log.Warn("docker bootstrap failed", "err", err)
 	}
+	if err := c.StartScheduler(ctx); err != nil {
+		return err
+	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/", api.New(c, log))

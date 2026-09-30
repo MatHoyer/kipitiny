@@ -42,6 +42,11 @@ docker compose exec -it manager /kipitiny reset-password admin
   result is exactly the backup and a failed restore leaves live data untouched.
   Apps linked to the database are stopped meanwhile. The checksum is verified.
 - Backups outlive their database and project; delete them explicitly.
+- **Schedules** (cron, UTC unless `CRON_TZ=` is given) back up a database to a
+  target and then apply retention to *their own* backups: keep the last N, plus
+  the newest of each of the last N days / ISO weeks / months. Manual backups are
+  never pruned. A run that finds the database busy (deploy, restore) retries for
+  15 minutes.
 
 S3 targets are checked (a test object is written and deleted) before they are saved.
 `go test ./internal/storage/` runs S3 tests against a real server when
