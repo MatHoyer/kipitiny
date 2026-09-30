@@ -201,6 +201,9 @@ export type User = { id: string; username: string; createdAt: string };
 
 export type AuthState = { setupRequired: boolean; user?: User };
 
+/** A base domain offered when giving a service a public domain. */
+export type Domain = { id: string; name: string; createdAt: string };
+
 export type UpdateInfo = {
   current: string;
   latest?: string;
@@ -311,6 +314,9 @@ export const api = {
   updateServer: (id: string, s: ServerInput) => request<Server>(`/servers/${id}`, json("PUT", s)),
   deleteServer: (id: string) => request<void>(`/servers/${id}`, { method: "DELETE" }),
   sshKey: () => request<{ publicKey: string }>("/ssh-key"),
+  domains: () => request<Domain[]>("/domains"),
+  createDomain: (name: string) => request<Domain>("/domains", json("POST", { name })),
+  deleteDomain: (id: string) => request<void>(`/domains/${id}`, { method: "DELETE" }),
   tokens: () => request<ApiToken[]>("/tokens"),
   createToken: (name: string, scope: Scope) =>
     request<ApiToken & { token: string }>("/tokens", json("POST", { name, scope })),

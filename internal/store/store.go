@@ -90,6 +90,10 @@ type Store interface {
 	GetAPITokenByHash(ctx context.Context, hash string) (APIToken, error)
 	DeleteAPIToken(ctx context.Context, id string) error
 
+	CreateDomain(ctx context.Context, d Domain) (Domain, error)
+	ListDomains(ctx context.Context) ([]Domain, error)
+	DeleteDomain(ctx context.Context, id string) error
+
 	AddAudit(ctx context.Context, e AuditEntry) error
 	ListAudit(ctx context.Context, limit int) ([]AuditEntry, error)
 	// PruneAudit deletes entries older than before.
@@ -377,6 +381,16 @@ type APIToken struct {
 	Scope      Scope      `bun:"scope" json:"scope"`
 	CreatedAt  time.Time  `bun:"created_at" json:"createdAt"`
 	LastUsedAt *time.Time `bun:"last_used_at" json:"lastUsedAt,omitempty"`
+}
+
+// Domain is a base domain (example.com) offered in the UI when giving a
+// service a public domain. Services store their full domain, not a reference.
+type Domain struct {
+	bun.BaseModel `bun:"table:domains,alias:domain" json:"-"`
+
+	ID        string    `bun:"id,pk" json:"id"`
+	Name      string    `bun:"name" json:"name"`
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 }
 
 type AuditEntry struct {

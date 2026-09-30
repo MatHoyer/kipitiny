@@ -465,3 +465,26 @@ func TestPrunePreMigrate(t *testing.T) {
 		t.Errorf("left %v, want %v", left, want)
 	}
 }
+
+func TestDomains(t *testing.T) {
+	s := open(t)
+	ctx := context.Background()
+	for _, n := range []string{"example.org", "example.com"} {
+		if _, err := s.CreateDomain(ctx, store.Domain{Name: n}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.CreateDomain(ctx, store.Domain{Name: "example.com"}); !errors.Is(err, store.ErrConflict) {
+		t.Errorf("duplicate: %v", err)
+	}
+	ds, err := s.ListDomains(ctx)
+	if err != nil || len(ds) != 2 || ds[0].Name != "example.com" {
+		t.Fatalf("list = %+v, %v", ds, err)
+	}
+	if err := s.DeleteDomain(ctx, ds[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if ds, _ := s.ListDomains(ctx); len(ds) != 1 || ds[0].Name != "example.org" {
+		t.Errorf("after delete: %+v", ds)
+	}
+}

@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { Empty, ErrorText, StateBadge } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DomainField } from "@/components/domain-field";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -305,13 +306,7 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
                 ) : (
                   <GitFields form={form} set={set} />
                 )}
-                <FloatingInput
-                  label="Domain"
-                  value={form.domain}
-                  onChange={set("domain")}
-                  placeholder="app.example.com"
-                  description="Empty for a private service, reachable only inside the project."
-                />
+                <DomainField value={form.domain} onChange={(domain) => setForm({ ...form, domain })} className="sm:col-span-2" />
                 <FloatingInput
                   label="Container port"
                   type="number"

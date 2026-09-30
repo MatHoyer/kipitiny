@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { Empty, ErrorText, Mono, SecretList, Section, StateBadge, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DomainField } from "@/components/domain-field";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
@@ -256,7 +257,7 @@ function Settings({ svc }: { svc: ServiceT }) {
         )}
         {!isDb && (
           <>
-            <FloatingInput label="Domain" value={form.domain} onChange={set("domain")} placeholder="private" className="sm:col-span-2" />
+            <DomainField value={form.domain} onChange={(domain) => setForm({ ...form, domain })} className="sm:col-span-2" />
             <FloatingInput label="Port" type="number" min={0} max={65535} value={form.port} onChange={set("port")} />
             <FloatingInput label="Replicas" type="number" min={1} max={10} value={form.replicas} onChange={set("replicas")} />
           </>

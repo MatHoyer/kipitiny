@@ -580,6 +580,24 @@ func (s *Store) DeleteAPIToken(ctx context.Context, id string) error {
 	return deleteByID(ctx, s.db, "api_tokens", id)
 }
 
+func (s *Store) CreateDomain(ctx context.Context, d store.Domain) (store.Domain, error) {
+	d.ID, d.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&d).Exec(ctx); err != nil {
+		return store.Domain{}, mapErr(err)
+	}
+	return d, nil
+}
+
+func (s *Store) ListDomains(ctx context.Context) ([]store.Domain, error) {
+	ds := []store.Domain{}
+	err := s.db.NewSelect().Model(&ds).Order("name").Scan(ctx)
+	return ds, mapErr(err)
+}
+
+func (s *Store) DeleteDomain(ctx context.Context, id string) error {
+	return deleteByID(ctx, s.db, "domains", id)
+}
+
 func (s *Store) AddAudit(ctx context.Context, e store.AuditEntry) error {
 	e.ID, e.CreatedAt = ids.New(), now()
 	_, err := s.db.NewInsert().Model(&e).Exec(ctx)
