@@ -191,9 +191,9 @@ function CloudflareSection() {
             Connected · {status.zones.length} zone{status.zones.length === 1 ? "" : "s"}:{" "}
             <span className="font-mono">{status.zones.join(", ")}</span>
           </p>
-          {status.tunnel && (
+          {status.tunnels.length > 0 && (
             <p className="text-muted-foreground">
-              Tunnel routes managed on <Mono>{status.tunnel}</Mono>.
+              Tunnel routes managed for {status.tunnels.map((t) => t.server).join(", ")}.
             </p>
           )}
           {status.syncedAt && <p className="text-xs text-muted-foreground">Last sync {timeAgo(status.syncedAt)}</p>}

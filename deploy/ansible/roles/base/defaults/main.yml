@@ -3,12 +3,11 @@
 base_ssh_harden: true
 base_login_user: "{{ ansible_user | default(lookup('env', 'USER')) }}"
 
-# ufw: SSH is always allowed. 80/443 for Traefik, except on the manager when
-# its traffic comes through a Cloudflare tunnel (the tunnel doesn't serve
-# workers). Note that ports published by Docker bypass ufw.
+# ufw: SSH is always allowed. 80/443 for Traefik, except on servers whose
+# traffic comes through their own Cloudflare tunnel (set the token per host).
+# Note that ports published by Docker bypass ufw.
 base_firewall: true
-base_web_ports: >-
-  {{ not ('manager' in group_names and (kipitiny_cloudflare_tunnel_token | default('')) != '') }}
+base_web_ports: "{{ (kipitiny_cloudflare_tunnel_token | default('')) == '' }}"
 base_extra_ports: [] # e.g. ["8080/tcp"]
 
 base_packages:

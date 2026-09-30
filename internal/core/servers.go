@@ -94,7 +94,10 @@ type ServerInput struct {
 type ServerView struct {
 	store.Server
 	// DetectedIP is the public IP found when none is set.
-	DetectedIP  string       `json:"detectedIp,omitempty"`
+	DetectedIP string `json:"detectedIp,omitempty"`
+	// Tunnel is where its Cloudflare tunnel token comes from: "server"
+	// (set in the UI), "env" (KIPITINY_CLOUDFLARE_TUNNEL_TOKEN) or "".
+	Tunnel      string       `json:"tunnel,omitempty"`
 	Docker      *docker.Info `json:"docker,omitempty"`
 	DockerError string       `json:"dockerError,omitempty"`
 	Projects    int          `json:"projects"`
@@ -114,7 +117,7 @@ func (c *Core) ListServers(ctx context.Context) ([]ServerView, error) {
 	views := make([]ServerView, len(servers))
 	done := make(chan struct{})
 	for i, sv := range servers {
-		views[i] = ServerView{Server: sv, DetectedIP: c.DetectedPublicIP(sv.ID)}
+		views[i] = c.serverView(sv)
 		for _, p := range projects {
 			if p.ServerID == sv.ID {
 				views[i].Projects++
@@ -196,7 +199,11 @@ func (c *Core) DeleteServer(ctx context.Context, id string) error {
 		return err
 	}
 	dk := c.dockerFor(id)
-	if cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: traefikComponent}); err == nil {
+	for _, component := range []string{traefikComponent, tunnelComponent} {
+		cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: component})
+		if err != nil {
+			continue
+		}
 		for _, ct := range cts {
 			_ = dk.RemoveContainer(ctx, ct.ID, 10*time.Second)
 		}
@@ -220,7 +227,9 @@ func (c *Core) checkServer(ctx context.Context, sv store.Server) (ServerView, er
 	if err := c.bootstrapServer(ctx, sv); err != nil {
 		return ServerView{}, fmt.Errorf("%w: prepare %s: %v", ErrInvalid, sv.Name, err)
 	}
-	return ServerView{Server: sv, Docker: &info}, nil
+	v := c.serverView(sv)
+	v.Docker = &info
+	return v, nil
 }
 
 func applyServerInput(sv *store.Server, in ServerInput) error {

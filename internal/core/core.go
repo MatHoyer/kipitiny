@@ -160,10 +160,10 @@ func waitDone(wg *sync.WaitGroup) <-chan struct{} {
 	return done
 }
 
-// BehindTunnel reports whether the manager's traffic arrives through the
+// BehindTunnel reports whether the manager's traffic arrives through a
 // Cloudflare tunnel.
-func (c *Core) BehindTunnel() bool {
-	return c.cfg.Traefik.Enabled && c.viaTunnel(store.LocalServerID)
+func (c *Core) BehindTunnel(ctx context.Context) bool {
+	return c.cfg.Traefik.Enabled && c.viaTunnel(ctx, store.LocalServerID)
 }
 
 // dockerFor returns the Docker client of a server ("" or "local": this one).

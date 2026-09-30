@@ -651,7 +651,7 @@ func (s *Store) CreateServer(ctx context.Context, sv store.Server) (store.Server
 
 func (s *Store) UpdateServer(ctx context.Context, sv store.Server) (store.Server, error) {
 	res, err := s.db.NewUpdate().Model(&sv).
-		Column("name", "host", "port", "ssh_user", "socket", "host_key", "public_ip").WherePK().Exec(ctx)
+		Column("name", "host", "port", "ssh_user", "socket", "host_key", "public_ip", "tunnel_token").WherePK().Exec(ctx)
 	if err != nil {
 		return store.Server{}, mapErr(err)
 	}

@@ -431,6 +431,9 @@ type Server struct {
 	Socket  string     `bun:"socket" json:"socket"`
 	HostKey string     `bun:"host_key" json:"hostKey"`
 	// PublicIP is where managed DNS records point for apps on this server.
-	PublicIP  string    `bun:"public_ip" json:"publicIp"`
-	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+	PublicIP string `bun:"public_ip" json:"publicIp"`
+	// TunnelToken, when set, serves the server's apps through that
+	// Cloudflare tunnel instead of public ports. Never sent to clients.
+	TunnelToken string    `bun:"tunnel_token" json:"-"`
+	CreatedAt   time.Time `bun:"created_at" json:"createdAt"`
 }

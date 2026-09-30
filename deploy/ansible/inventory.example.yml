@@ -13,3 +13,6 @@ all:
     workers:
       hosts:
         # worker-1.example.com:
+        #   # Its own tunnel (one per server); also paste it in the manager
+        #   # under Settings → Servers → Network.
+        #   kipitiny_cloudflare_tunnel_token: "{{ vault_worker1_tunnel_token }}"

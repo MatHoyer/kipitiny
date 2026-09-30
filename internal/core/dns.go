@@ -40,12 +40,18 @@ type DNSStatus struct {
 
 // CloudflareView is the connection state shown in Settings.
 type CloudflareView struct {
-	Connected bool       `json:"connected"`
-	Zones     []string   `json:"zones"`
-	Error     string     `json:"error,omitempty"`
-	Tunnel    string     `json:"tunnel,omitempty"` // tunnel ID when routes are managed
-	TunnelErr string     `json:"tunnelError,omitempty"`
-	SyncedAt  *time.Time `json:"syncedAt,omitempty"`
+	Connected bool     `json:"connected"`
+	Zones     []string `json:"zones"`
+	Error     string   `json:"error,omitempty"`
+	// Tunnels are the servers whose tunnel routes the manager keeps.
+	Tunnels   []TunnelView `json:"tunnels"`
+	TunnelErr string       `json:"tunnelError,omitempty"`
+	SyncedAt  *time.Time   `json:"syncedAt,omitempty"`
+}
+
+type TunnelView struct {
+	Server string `json:"server"`
+	ID     string `json:"id"`
 }
 
 // DomainView adds what Cloudflare knows about a listed domain.
@@ -102,7 +108,7 @@ func (c *Core) onCloudflare(ctx context.Context, host string) bool {
 // challenge for Cloudflare zones, the TLS challenge otherwise.
 func (c *Core) certResolver(ctx context.Context, serverID, domain string) string {
 	switch {
-	case c.viaTunnel(serverID) || isLocalDomain(domain):
+	case c.viaTunnel(ctx, serverID) || isLocalDomain(domain):
 		return ""
 	case c.onCloudflare(ctx, domain):
 		return certResolverDNS
@@ -120,10 +126,18 @@ func (c *Core) cfToken(ctx context.Context) string {
 }
 
 func (c *Core) CloudflareStatus(ctx context.Context) CloudflareView {
+	tunnels := []TunnelView{}
+	if servers, err := c.store.ListServers(ctx); err == nil {
+		for _, sv := range servers {
+			if t, err := cloudflare.ParseTunnelToken(c.tunnelToken(sv)); err == nil {
+				tunnels = append(tunnels, TunnelView{Server: sv.Name, ID: t.ID})
+			}
+		}
+	}
 	s := c.cf(ctx)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	v := CloudflareView{Connected: s.token != "", Zones: []string{}, Error: s.zonesErr, TunnelErr: s.tunnelErr}
+	v := CloudflareView{Connected: s.token != "", Zones: []string{}, Tunnels: tunnels, Error: s.zonesErr, TunnelErr: s.tunnelErr}
 	if !v.Connected {
 		return v
 	}
@@ -131,9 +145,6 @@ func (c *Core) CloudflareStatus(ctx context.Context) CloudflareView {
 		v.Zones = append(v.Zones, z.Name)
 	}
 	slices.Sort(v.Zones)
-	if t, err := cloudflare.ParseTunnelToken(c.cfg.Tunnel.Token); err == nil && c.cfg.Tunnel.Token != "" {
-		v.Tunnel = t.ID
-	}
 	if !s.syncedAt.IsZero() {
 		t := s.syncedAt
 		v.SyncedAt = &t
@@ -216,25 +227,55 @@ func (c *Core) SetDomainProxied(ctx context.Context, id string, proxied bool) (s
 	return d, err
 }
 
-// SetServerPublicIP sets where DNS records point for apps on a server; empty
-// means detect it.
-func (c *Core) SetServerPublicIP(ctx context.Context, id, ip string) (store.Server, error) {
-	ip = strings.TrimSpace(ip)
+// ServerNetwork is how a server's apps are reached from the internet.
+type ServerNetwork struct {
+	// PublicIP is where DNS records point; empty means detect it.
+	PublicIP string `json:"publicIp"`
+	// TunnelToken serves the apps through a Cloudflare tunnel; empty means
+	// public ports. SecretMask keeps the current token.
+	TunnelToken string `json:"tunnelToken"`
+}
+
+// SetServerNetwork sets a server's public IP and tunnel. The reconciler then
+// starts or removes its cloudflared and adjusts its Traefik.
+func (c *Core) SetServerNetwork(ctx context.Context, id string, in ServerNetwork) (ServerView, error) {
+	ip := strings.TrimSpace(in.PublicIP)
 	if ip != "" {
 		if a := net.ParseIP(ip); a == nil || a.To4() == nil {
-			return store.Server{}, fmt.Errorf("%w: %q is not an IPv4 address", ErrInvalid, ip)
+			return ServerView{}, fmt.Errorf("%w: %q is not an IPv4 address", ErrInvalid, ip)
 		}
 	}
 	sv, err := c.store.GetServer(ctx, id)
 	if err != nil {
-		return store.Server{}, err
+		return ServerView{}, err
 	}
 	sv.PublicIP = ip
-	if sv, err = c.store.UpdateServer(ctx, sv); err != nil {
-		return store.Server{}, err
+	if token := strings.TrimSpace(in.TunnelToken); token != SecretMask {
+		if token != "" {
+			if _, err := cloudflare.ParseTunnelToken(token); err != nil {
+				return ServerView{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+			}
+		}
+		sv.TunnelToken = token
 	}
+	if sv, err = c.store.UpdateServer(ctx, sv); err != nil {
+		return ServerView{}, err
+	}
+	c.kick()
 	c.kickDNS()
-	return sv, nil
+	return c.serverView(sv), nil
+}
+
+// serverView is a server as clients see it, without live status.
+func (c *Core) serverView(sv store.Server) ServerView {
+	v := ServerView{Server: sv, DetectedIP: c.DetectedPublicIP(sv.ID)}
+	switch {
+	case sv.TunnelToken != "":
+		v.Tunnel = "server"
+	case sv.Kind == store.ServerLocal && c.cfg.Tunnel.Token != "":
+		v.Tunnel = "env"
+	}
+	return v
 }
 
 // dnsStatus is the managed-record state of host, if the manager manages it.
@@ -281,7 +322,7 @@ func (c *Core) StartDNSSync() error {
 type want struct {
 	zone    cloudflare.Zone
 	record  cloudflare.Record
-	tunnel  bool
+	tunnel  string // ID of the tunnel serving it, if any
 	problem string // why it can't be created
 }
 
@@ -375,15 +416,16 @@ func (c *Core) wantedRecords(ctx context.Context, zones []cloudflare.Zone) (map[
 			return
 		}
 		w := want{zone: z, record: cloudflare.Record{Name: host, TTL: 1}}
-		if c.viaTunnel(serverID) {
-			t, err := cloudflare.ParseTunnelToken(c.cfg.Tunnel.Token)
+		sv := byID[serverID]
+		if token := c.tunnelToken(sv); token != "" {
+			t, err := cloudflare.ParseTunnelToken(token)
 			if err != nil {
-				w.problem = err.Error()
+				w.problem = fmt.Sprintf("%s's tunnel token: %v", sv.Name, err)
 			}
 			// Tunnel hostnames must be proxied.
-			w.record.Type, w.record.Content, w.record.Proxied, w.tunnel = "CNAME", t.Target(), true, true
+			w.record.Type, w.record.Content, w.record.Proxied, w.tunnel = "CNAME", t.Target(), true, t.ID
 		} else {
-			ip, err := c.publicIP(ctx, byID[serverID])
+			ip, err := c.publicIP(ctx, sv)
 			if err != nil {
 				w.problem = err.Error()
 			}
@@ -469,38 +511,88 @@ func (c *Core) applyRecord(ctx context.Context, cf *cloudflare.Client, w want) D
 	return DNSStatus{State: "synced"}
 }
 
-// syncTunnelRoutes points the tunnel's routes for tunnelled hostnames at
-// Traefik, keeping routes the user added. It returns a problem to show.
+// syncTunnelRoutes points each tunnel's routes for its hostnames at the
+// Traefik of its server, keeping routes the user added. It returns the
+// problems to show, if any.
 func (c *Core) syncTunnelRoutes(ctx context.Context, cf *cloudflare.Client, wants map[string]want) string {
-	if !c.viaTunnel(store.LocalServerID) || !c.cfg.Traefik.Enabled {
+	if !c.cfg.Traefik.Enabled {
 		return ""
 	}
-	t, err := cloudflare.ParseTunnelToken(c.cfg.Tunnel.Token)
+	servers, err := c.store.ListServers(ctx)
 	if err != nil {
 		return err.Error()
 	}
+	var problems []string
+	current := map[string]cloudflare.Tunnel{}
+	for _, sv := range servers {
+		token := c.tunnelToken(sv)
+		if token == "" {
+			continue
+		}
+		t, err := cloudflare.ParseTunnelToken(token)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s: %v", sv.Name, err))
+			continue
+		}
+		current[t.ID] = t
+		if err := c.syncTunnel(ctx, cf, t, wants); err != nil {
+			problems = append(problems, fmt.Sprintf("%s: %v", sv.Name, err))
+		}
+	}
+
+	// A tunnel no server uses anymore keeps the routes the manager added
+	// until they're removed here; it's forgotten once that worked.
+	remembered := c.managedTunnels(ctx)
+	for id, t := range remembered {
+		if _, ok := current[id]; ok {
+			continue
+		}
+		if err := c.syncTunnel(ctx, cf, t, nil); err != nil {
+			c.log.Warn("dns: clean up routes of a former tunnel", "tunnel", id, "err", err)
+			current[id] = t // retry next time
+		}
+	}
+	c.saveManagedTunnels(ctx, current)
+	return strings.Join(problems, "; ")
+}
+
+const cfTunnelsSetting = "cloudflare_tunnels" // tunnels with routes we added
+
+func (c *Core) managedTunnels(ctx context.Context) map[string]cloudflare.Tunnel {
+	out := map[string]cloudflare.Tunnel{}
+	if v, err := c.store.GetSetting(ctx, cfTunnelsSetting); err == nil {
+		_ = json.Unmarshal([]byte(v), &out)
+	}
+	return out
+}
+
+func (c *Core) saveManagedTunnels(ctx context.Context, ts map[string]cloudflare.Tunnel) {
+	b, _ := json.Marshal(ts)
+	if err := c.store.SetSetting(ctx, cfTunnelsSetting, string(b)); err != nil {
+		c.log.Warn("cannot save managed tunnels", "err", err)
+	}
+}
+
+func (c *Core) syncTunnel(ctx context.Context, cf *cloudflare.Client, t cloudflare.Tunnel, wants map[string]want) error {
 	rules, cfg, err := cf.TunnelIngress(ctx, t)
 	if err != nil {
 		if cloudflare.Forbidden(err) {
-			return "the Cloudflare token can't edit the tunnel (it needs Account › Cloudflare Tunnel › Edit)"
+			return errors.New("the Cloudflare token can't edit this tunnel (it needs Account › Cloudflare Tunnel › Edit)")
 		}
-		return err.Error()
+		return err
 	}
 	var hosts []string
 	for host, w := range wants {
-		if w.tunnel {
+		if w.tunnel == t.ID {
 			hosts = append(hosts, host)
 		}
 	}
 	next := tunnelRoutes(rules, hosts)
 	if reflect.DeepEqual(normalize(rules), normalize(next)) {
-		return ""
+		return nil
 	}
 	c.log.Info("dns: updating tunnel routes", "tunnel", t.ID, "hostnames", len(hosts))
-	if err := cf.SetTunnelIngress(ctx, t, cfg, next); err != nil {
-		return err.Error()
-	}
-	return ""
+	return cf.SetTunnelIngress(ctx, t, cfg, next)
 }
 
 // tunnelRoutes returns rules with one route per host to Traefik first, the

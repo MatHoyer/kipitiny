@@ -251,8 +251,9 @@ To keep ports 80/443 closed, let traffic come in through a
    under TLS enable **No TLS Verify** and **Match SNI to Host**. Check that DNS
    has a proxied `* CNAME <tunnel-id>.cfargotunnel.com` record, and add it if
    the dashboard didn't.
-3. Start the manager with `KIPITINY_CLOUDFLARE_TUNNEL_TOKEN=<token>` (and
-   `KIPITINY_DOMAIN`), and publish no port in the compose file.
+3. Paste the token in *Settings › Servers › Network* (globe button), or start
+   the manager with `KIPITINY_CLOUDFLARE_TUNNEL_TOKEN=<token>` for its own
+   server (with `KIPITINY_DOMAIN`), and publish no port in the compose file.
 
 The manager then runs `kipitiny-cloudflared` next to Traefik, and Traefik
 publishes no ports and requests no Let's Encrypt certificates: Cloudflare
@@ -261,8 +262,10 @@ hop from cloudflared. Service domains need no per-app setup as long as they
 match a hostname of the tunnel. Cloudflare's free certificate covers one level
 of subdomain (`app.example.com`, not `a.b.example.com`).
 
-This only applies to the manager's own server; remote servers keep using their
-ports. Apps deployed before switching keep working, but redeploy them to drop
+Each server can have its own tunnel (one token per server; create one tunnel
+per server): the manager runs cloudflared on every server with a token, and
+those servers publish no ports. With Cloudflare connected, each app's hostname
+points at the tunnel of the server running it. Apps deployed before switching keep working, but redeploy them to drop
 their Let's Encrypt labels (Traefik logs a "nonexistent certificate resolver"
 error until then).
 

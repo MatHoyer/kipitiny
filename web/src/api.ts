@@ -175,7 +175,11 @@ export type Server = {
   /** Where Cloudflare DNS records point; empty means detected (detectedIp). */
   publicIp: string;
   detectedIp?: string;
+  /** Source of its Cloudflare tunnel token: set in the UI, or the manager's env. */
+  tunnel?: "server" | "env";
 };
+
+export type ServerNetwork = { publicIp: string; tunnelToken: string };
 
 export type ServerInput = {
   name: string;
@@ -222,7 +226,7 @@ export type Cloudflare = {
   connected: boolean;
   zones: string[];
   error?: string;
-  tunnel?: string;
+  tunnels: { server: string; id: string }[];
   tunnelError?: string;
   syncedAt?: string;
 };
@@ -347,7 +351,7 @@ export const api = {
   cloudflare: () => request<Cloudflare>("/cloudflare"),
   connectCloudflare: (token: string) => request<Cloudflare>("/cloudflare", json("PUT", { token })),
   disconnectCloudflare: () => request<void>("/cloudflare", { method: "DELETE" }),
-  setServerPublicIp: (id: string, publicIp: string) => request<Server>(`/servers/${id}/public-ip`, json("PUT", { publicIp })),
+  setServerNetwork: (id: string, n: ServerNetwork) => request<Server>(`/servers/${id}/network`, json("PUT", n)),
   tokens: () => request<ApiToken[]>("/tokens"),
   createToken: (name: string, scope: Scope) =>
     request<ApiToken & { token: string }>("/tokens", json("POST", { name, scope })),

@@ -94,7 +94,7 @@ Internet → Traefik ──→ app1-web        app2-web          │
 - Routing declared with labels on app containers; Traefik watches Docker and reconfigures instantly.
 - Automatic HTTPS via Let's Encrypt.
 - Separate container (not embedded) so manager restarts/updates never take apps offline.
-- Optional Cloudflare Tunnel (`KIPITINY_CLOUDFLARE_TUNNEL_TOKEN`, manager's own server only): a managed `cloudflared` container on `kipitiny-proxy` forwards to Traefik's 443; Traefik then publishes no ports and runs no ACME (routers use its default cert). Hostnames are configured in the Cloudflare dashboard (wildcard recommended), or by the manager when Cloudflare is connected.
+- Optional Cloudflare Tunnel, one per server (token in Settings › Servers, or `KIPITINY_CLOUDFLARE_TUNNEL_TOKEN` for the manager's server): a managed `cloudflared` container on `kipitiny-proxy` forwards to Traefik's 443; Traefik then publishes no ports and runs no ACME (routers use its default cert). Hostnames are configured in the Cloudflare dashboard (wildcard recommended), or by the manager when Cloudflare is connected.
 - Optional Cloudflare API token (Settings): the manager syncs DNS for service domains in the token's zones (A to the server's public IP, or CNAME + tunnel route behind the tunnel), touching only records commented `managed by kipitiny`. Those domains get certificates via the Cloudflare DNS challenge (`letsencrypt-dns` resolver), which works behind the proxy.
 - The manager's own UI (`KIPITINY_DOMAIN`) is routed by a file-provider config written into the Traefik container: the manager is created outside our control (compose), so it can't carry labels. It joins `kipitiny-proxy` itself (alias `kipitiny-manager`), or is reached via `host.docker.internal` when run on the host.
 

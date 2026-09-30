@@ -79,7 +79,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("GET /api/cloudflare", a.cloudflareStatus)
 	mux.HandleFunc("PUT /api/cloudflare", a.connectCloudflare)
 	mux.HandleFunc("DELETE /api/cloudflare", a.disconnectCloudflare)
-	mux.HandleFunc("PUT /api/servers/{id}/public-ip", a.setServerPublicIP)
+	mux.HandleFunc("PUT /api/servers/{id}/network", a.setServerNetwork)
 	mux.HandleFunc("GET /api/tokens", a.listTokens)
 	mux.HandleFunc("POST /api/tokens", a.createToken)
 	mux.HandleFunc("DELETE /api/tokens/{id}", a.deleteToken)

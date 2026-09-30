@@ -130,10 +130,10 @@ func TestWantedRecords(t *testing.T) {
 	if len(wants) != 2 {
 		t.Fatalf("wants = %+v (a domain outside the zones must be left alone)", wants)
 	}
-	if w := wants["tunnelled.example.com"]; !w.tunnel || w.record.Type != "CNAME" || w.record.Content != "tid.cfargotunnel.com" || !w.record.Proxied {
+	if w := wants["tunnelled.example.com"]; w.tunnel != "tid" || w.record.Type != "CNAME" || w.record.Content != "tid.cfargotunnel.com" || !w.record.Proxied {
 		t.Errorf("tunnelled = %+v", w)
 	}
-	if w := wants["direct.example.com"]; w.tunnel || w.record.Type != "A" || w.record.Content != "203.0.113.9" || !w.record.Proxied {
+	if w := wants["direct.example.com"]; w.tunnel != "" || w.record.Type != "A" || w.record.Content != "203.0.113.9" || !w.record.Proxied {
 		t.Errorf("direct = %+v", w)
 	}
 }
@@ -143,7 +143,7 @@ func TestWantedRecords(t *testing.T) {
 type fakeCloudflare struct {
 	mu      sync.Mutex
 	records map[string]cloudflare.Record
-	ingress []any
+	ingress map[string][]any // tunnel ID -> routes
 	writes  int
 	nextID  int
 }
@@ -190,16 +190,19 @@ func (f *fakeCloudflare) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			f.records[id] = rec
 		}
 		ok(map[string]string{"id": id})
-	case path == "/accounts/acc/cfd_tunnel/tid/configurations" && r.Method == http.MethodGet:
-		ok(map[string]any{"config": map[string]any{"ingress": f.ingress}})
-	case path == "/accounts/acc/cfd_tunnel/tid/configurations" && r.Method == http.MethodPut:
+	case strings.HasPrefix(path, "/accounts/acc/cfd_tunnel/") && strings.HasSuffix(path, "/configurations"):
+		tid := strings.TrimSuffix(strings.TrimPrefix(path, "/accounts/acc/cfd_tunnel/"), "/configurations")
+		if r.Method == http.MethodGet {
+			ok(map[string]any{"config": map[string]any{"ingress": f.ingress[tid]}})
+			return
+		}
 		var body struct {
 			Config struct {
 				Ingress []any `json:"ingress"`
 			} `json:"config"`
 		}
 		json.NewDecoder(r.Body).Decode(&body)
-		f.ingress = body.Config.Ingress
+		f.ingress[tid] = body.Config.Ingress
 		f.writes++
 		ok(map[string]any{})
 	default:
@@ -216,10 +219,10 @@ func TestSyncDNS(t *testing.T) {
 			"old":   {ID: "old", Type: "A", Name: "direct.example.com", Content: "192.0.2.3", Comment: cloudflare.ManagedComment},
 			"mx":    {ID: "mx", Type: "MX", Name: "example.com", Content: "mail.example.com"},
 		},
-		ingress: []any{
+		ingress: map[string][]any{"tid": {
 			map[string]any{"hostname": "ssh.example.com", "service": "ssh://localhost:22"},
 			map[string]any{"service": "http_status:404"},
-		},
+		}},
 	}
 	srv := httptest.NewServer(fake)
 	defer srv.Close()
@@ -232,12 +235,16 @@ func TestSyncDNS(t *testing.T) {
 		t.Fatal(err)
 	}
 	remote, _ := c.store.CreateServer(ctx, store.Server{Name: "w1", Kind: store.ServerSSH, Host: "w1", Port: 22, PublicIP: "203.0.113.9"})
+	tok2 := base64.StdEncoding.EncodeToString([]byte(`{"a":"acc","t":"tid2","s":"y"}`))
+	tunnelled, _ := c.store.CreateServer(ctx, store.Server{Name: "w2", Kind: store.ServerSSH, Host: "w2", Port: 22, TunnelToken: tok2})
 	local, _ := c.store.CreateProject(ctx, store.Project{Name: "a", ServerID: store.LocalServerID})
 	far, _ := c.store.CreateProject(ctx, store.Project{Name: "b", ServerID: remote.ID})
+	far2, _ := c.store.CreateProject(ctx, store.Project{Name: "c", ServerID: tunnelled.ID})
 	for _, s := range []store.Service{
 		{ProjectID: local.ID, ServerID: store.LocalServerID, Name: "web", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "tunnelled.example.com", Port: 80},
 		{ProjectID: far.ID, ServerID: remote.ID, Name: "web", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "direct.example.com", Port: 80},
 		{ProjectID: far.ID, ServerID: remote.ID, Name: "hand", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "handmade.example.com", Port: 80},
+		{ProjectID: far2.ID, ServerID: tunnelled.ID, Name: "web", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "worker.example.com", Port: 80},
 	} {
 		if _, err := c.store.CreateService(ctx, s); err != nil {
 			t.Fatal(err)
@@ -276,7 +283,15 @@ func TestSyncDNS(t *testing.T) {
 		t.Errorf("direct status = %+v", st)
 	}
 
-	routes, _ := json.Marshal(fake.ingress)
+	if r := byName["worker.example.com"]; r.Type != "CNAME" || r.Content != "tid2.cfargotunnel.com" {
+		t.Errorf("a worker's hostname must point at its own tunnel: %+v", r)
+	}
+	routes2, _ := json.Marshal(fake.ingress["tid2"])
+	if want := `[{"hostname":"worker.example.com","originRequest":{"noTLSVerify":true,"originServerName":"worker.example.com"},"service":"https://kipitiny-traefik:443"},{"service":"http_status:404"}]`; string(routes2) != want {
+		t.Errorf("worker tunnel routes = %s", routes2)
+	}
+
+	routes, _ := json.Marshal(fake.ingress["tid"])
 	want := `[{"hostname":"tunnelled.example.com","originRequest":{"noTLSVerify":true,"originServerName":"tunnelled.example.com"},"service":"https://kipitiny-traefik:443"},{"hostname":"ssh.example.com","service":"ssh://localhost:22"},{"service":"http_status:404"}]`
 	if string(routes) != want {
 		t.Errorf("tunnel routes = %s", routes)
@@ -288,5 +303,36 @@ func TestSyncDNS(t *testing.T) {
 	}
 	if fake.writes != 0 {
 		t.Errorf("a second sync with nothing changed made %d writes", fake.writes)
+	}
+
+	// w2 leaves its tunnel for public ports; w1 moves behind a new tunnel.
+	tok3 := base64.StdEncoding.EncodeToString([]byte(`{"a":"acc","t":"tid3","s":"z"}`))
+	fake.ingress["tid3"] = nil
+	if _, err := c.SetServerNetwork(ctx, tunnelled.ID, ServerNetwork{PublicIP: "198.51.100.20"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.SetServerNetwork(ctx, remote.ID, ServerNetwork{PublicIP: "203.0.113.9", TunnelToken: tok3}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.syncDNS(ctx); err != nil {
+		t.Fatal(err)
+	}
+	byName = map[string]cloudflare.Record{}
+	count := map[string]int{}
+	for _, r := range fake.records {
+		byName[r.Name] = r
+		count[r.Name]++
+	}
+	if r := byName["worker.example.com"]; r.Type != "A" || r.Content != "198.51.100.20" || count["worker.example.com"] != 1 {
+		t.Errorf("leaving the tunnel: %+v (%d records)", r, count["worker.example.com"])
+	}
+	if r := byName["direct.example.com"]; r.Type != "CNAME" || r.Content != "tid3.cfargotunnel.com" || count["direct.example.com"] != 1 {
+		t.Errorf("joining a tunnel: %+v (%d records)", r, count["direct.example.com"])
+	}
+	if routes, _ := json.Marshal(fake.ingress["tid2"]); string(routes) != `[{"service":"http_status:404"}]` {
+		t.Errorf("the former tunnel keeps kipitiny's routes: %s", routes)
+	}
+	if _, ok := c.managedTunnels(ctx)["tid2"]; ok {
+		t.Error("the former tunnel should be forgotten once cleaned up")
 	}
 }

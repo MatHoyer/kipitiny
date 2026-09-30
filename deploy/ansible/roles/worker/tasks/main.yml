@@ -44,3 +44,5 @@
       In the manager: Settings → Servers → Add server, host
       {{ ansible_host | default(inventory_hostname) }}, user {{ worker_user }},
       port {{ ansible_port | default(22) }}.
+      {{ 'Then paste its tunnel token under Network (globe button): ports 80/443 stay closed here.'
+         if (kipitiny_cloudflare_tunnel_token | default('')) else '' }}

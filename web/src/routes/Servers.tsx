@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
-import { api, type Server, type ServerInput } from "../api";
+import { api, SECRET_MASK, type Server, type ServerInput } from "../api";
 
 export function Servers() {
   const qc = useQueryClient();
@@ -48,11 +48,17 @@ export function Servers() {
                 {s.kind === "local" ? "the manager's own Docker" : `ssh://${s.sshUser}@${s.host}:${s.port}`}
                 {s.docker ? ` · Docker ${s.docker.version} (${s.docker.arch})` : ` · ${s.dockerError}`}
                 {` · ${s.projects} project${s.projects === 1 ? "" : "s"}`}
-                {s.publicIp ? ` · IP ${s.publicIp}` : s.detectedIp ? ` · IP ${s.detectedIp} (detected)` : ""}
+                {s.tunnel
+                  ? " · Cloudflare tunnel"
+                  : s.publicIp
+                    ? ` · IP ${s.publicIp}`
+                    : s.detectedIp
+                      ? ` · IP ${s.detectedIp} (detected)`
+                      : ""}
               </p>
             </div>
             <div className="flex gap-0.5">
-              <Button variant="ghost" size="icon-sm" title="Public IP" aria-label="Public IP" onClick={() => setIpFor(s)}>
+              <Button variant="ghost" size="icon-sm" title="Network" aria-label="Network" onClick={() => setIpFor(s)}>
                 <Globe />
               </Button>
               {s.kind === "ssh" && (
@@ -79,7 +85,7 @@ export function Servers() {
       <ErrorText error={remove.error} />
       <Dialog open={ipFor !== null} onOpenChange={(o) => !o && setIpFor(null)}>
         <DialogContent className="sm:max-w-md">
-          {ipFor && <PublicIpForm key={ipFor.id} server={ipFor} onDone={() => setIpFor(null)} />}
+          {ipFor && <NetworkForm key={ipFor.id} server={ipFor} onDone={() => setIpFor(null)} />}
         </DialogContent>
       </Dialog>
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
@@ -172,14 +178,16 @@ function ServerForm({ server, onDone }: { server: Server | null; onDone: () => v
   );
 }
 
-/** Where Cloudflare DNS records point for apps on a server. */
-function PublicIpForm({ server, onDone }: { server: Server; onDone: () => void }) {
+/** How a server's apps are reached: its public IP, or a Cloudflare tunnel. */
+function NetworkForm({ server, onDone }: { server: Server; onDone: () => void }) {
   const qc = useQueryClient();
   const [ip, setIp] = useState(server.publicIp);
+  const [token, setToken] = useState(server.tunnel === "server" ? SECRET_MASK : "");
   const save = useMutation({
-    mutationFn: () => api.setServerPublicIp(server.id, ip.trim()),
+    mutationFn: () => api.setServerNetwork(server.id, { publicIp: ip.trim(), tunnelToken: token.trim() }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["servers"] });
+      qc.invalidateQueries({ queryKey: ["cloudflare"] });
       onDone();
     },
   });
@@ -190,19 +198,45 @@ function PublicIpForm({ server, onDone }: { server: Server; onDone: () => void }
   return (
     <form onSubmit={onSubmit} className="contents">
       <DialogHeader>
-        <DialogTitle>Public IP of {server.name}</DialogTitle>
-        <DialogDescription>
-          Where managed Cloudflare DNS records point for apps on this server. Leave empty to detect it
-          {server.detectedIp && (
-            <>
-              {" "}
-              (currently <Mono>{server.detectedIp}</Mono>)
-            </>
-          )}
-          .
-        </DialogDescription>
+        <DialogTitle>Network of {server.name}</DialogTitle>
+        <DialogDescription>How its apps are reached from the internet.</DialogDescription>
       </DialogHeader>
-      <FloatingInput label="Public IPv4" value={ip} onChange={(e) => setIp(e.target.value)} placeholder={server.detectedIp || "203.0.113.10"} />
+      <div className="space-y-4">
+        <FloatingInput
+          label="Cloudflare tunnel token"
+          type="password"
+          autoComplete="off"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          description={
+            server.tunnel === "env" && !token ? (
+              <>
+                Set by <Mono>KIPITINY_CLOUDFLARE_TUNNEL_TOKEN</Mono>; a token here replaces it.
+              </>
+            ) : (
+              "Its own tunnel (one per server). With a token, cloudflared runs there and ports 80/443 aren't published. Empty for public ports."
+            )
+          }
+        />
+        <FloatingInput
+          label="Public IPv4"
+          value={ip}
+          onChange={(e) => setIp(e.target.value)}
+          placeholder={server.detectedIp || "203.0.113.10"}
+          description={
+            <>
+              Where Cloudflare DNS records point without a tunnel. Empty to detect it
+              {server.detectedIp && (
+                <>
+                  {" "}
+                  (currently <Mono>{server.detectedIp}</Mono>)
+                </>
+              )}
+              .
+            </>
+          }
+        />
+      </div>
       <ErrorText error={save.error} />
       <DialogFooter>
         <Button type="submit" disabled={save.isPending}>

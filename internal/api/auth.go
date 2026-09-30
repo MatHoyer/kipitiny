@@ -198,7 +198,7 @@ type credentials struct {
 }
 
 func (a *API) setup(w http.ResponseWriter, r *http.Request) {
-	if !a.limiter.allow(clientIP(r, a.core.BehindTunnel())) {
+	if !a.limiter.allow(clientIP(r, a.core.BehindTunnel(r.Context()))) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return
 	}
@@ -208,7 +208,7 @@ func (a *API) setup(w http.ResponseWriter, r *http.Request) {
 	}
 	u, token, err := a.core.Setup(r.Context(), c.SetupToken, c.Username, c.Password)
 	if err != nil {
-		a.limiter.fail(clientIP(r, a.core.BehindTunnel()))
+		a.limiter.fail(clientIP(r, a.core.BehindTunnel(r.Context())))
 		a.fail(w, err)
 		return
 	}
@@ -217,7 +217,7 @@ func (a *API) setup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) login(w http.ResponseWriter, r *http.Request) {
-	ip := clientIP(r, a.core.BehindTunnel())
+	ip := clientIP(r, a.core.BehindTunnel(r.Context()))
 	if !a.limiter.allow(ip) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return

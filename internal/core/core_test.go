@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -160,9 +161,21 @@ func TestTraefikManagerRoute(t *testing.T) {
 }
 
 func TestTunnelMode(t *testing.T) {
-	c := &Core{cfg: config.Config{Domain: "kipitiny.example.com", Tunnel: config.Tunnel{Token: "tok", Image: "cloudflare/cloudflared"}}}
-	if !c.viaTunnel(store.LocalServerID) || !c.viaTunnel("") || c.viaTunnel("01REMOTE") {
-		t.Error("the tunnel only serves the manager's own server")
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{Domain: "kipitiny.example.com", Tunnel: config.Tunnel{Token: "tok", Image: "cloudflare/cloudflared"}})
+	worker, err := c.store.CreateServer(ctx, store.Server{Name: "w1", Kind: store.ServerSSH, Host: "w1", Port: 22})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.viaTunnel(ctx, store.LocalServerID) || !c.viaTunnel(ctx, "") || c.viaTunnel(ctx, worker.ID) {
+		t.Error("the environment token only serves the manager's own server")
+	}
+	worker.TunnelToken = "worker-tok"
+	if _, err := c.store.UpdateServer(ctx, worker); err != nil {
+		t.Fatal(err)
+	}
+	if !c.viaTunnel(ctx, worker.ID) || c.tunnelToken(worker) != "worker-tok" {
+		t.Error("a server's own token puts it behind its tunnel")
 	}
 
 	opts, files := c.traefikSpec("/var/run/docker.sock", traefikOpts{ManagerURL: "http://kipitiny-manager:3000", Tunnel: true})
@@ -181,7 +194,7 @@ func TestTunnelMode(t *testing.T) {
 		t.Errorf("tunnel labels = %v", l)
 	}
 
-	spec := c.tunnelSpec()
+	spec := c.tunnelSpec("tok")
 	if !slices.Contains(spec.Config.Env, "TUNNEL_TOKEN=tok") || slices.Contains(spec.Config.Cmd, "tok") {
 		t.Error("token must be passed through the environment only")
 	}

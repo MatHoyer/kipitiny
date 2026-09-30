@@ -39,7 +39,7 @@ func (c *Core) ensureTraefik(ctx context.Context, sv store.Server) error {
 	cfg := c.cfg.Traefik
 	socket := socketPath(sv, c.cfg)
 	dk := c.dockerFor(sv.ID)
-	o := traefikOpts{Tunnel: c.viaTunnel(sv.ID), CFToken: c.cfToken(ctx)}
+	o := traefikOpts{Tunnel: c.tunnelToken(sv) != "", CFToken: c.cfToken(ctx)}
 	if c.cfg.Domain != "" && sv.Kind == store.ServerLocal {
 		u, err := c.managerUpstream(ctx, dk)
 		if err != nil {
@@ -109,12 +109,6 @@ func (c *Core) managerUpstream(ctx context.Context, dk *docker.Client) (string, 
 		return "http://" + managerAlias + ":" + port, nil
 	}
 	return "http://" + managerHost + ":" + port, nil
-}
-
-// viaTunnel reports whether a server's public traffic comes through the
-// Cloudflare tunnel, which only runs on the manager's own server.
-func (c *Core) viaTunnel(serverID string) bool {
-	return c.cfg.Tunnel.Token != "" && (serverID == "" || serverID == store.LocalServerID)
 }
 
 type traefikOpts struct {

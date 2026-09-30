@@ -1,6 +1,10 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/MatHoyer/kipitiny/internal/core"
+)
 
 func (a *API) listDomains(w http.ResponseWriter, r *http.Request) {
 	ds, err := a.core.DomainViews(r.Context())
@@ -68,14 +72,12 @@ func (a *API) disconnectCloudflare(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (a *API) setServerPublicIP(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		PublicIP string `json:"publicIp"`
-	}
+func (a *API) setServerNetwork(w http.ResponseWriter, r *http.Request) {
+	var body core.ServerNetwork
 	if !decode(w, r, &body) {
 		return
 	}
-	sv, err := a.core.SetServerPublicIP(r.Context(), r.PathValue("id"), body.PublicIP)
+	sv, err := a.core.SetServerNetwork(r.Context(), r.PathValue("id"), body)
 	if err != nil {
 		a.fail(w, err)
 		return
