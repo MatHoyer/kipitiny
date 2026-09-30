@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,7 +39,9 @@ func (a *API) protect(next http.Handler) http.Handler {
 			writeError(w, http.StatusForbidden, "cross-origin request refused")
 			return
 		}
-		if publicRoutes[r.Method+" "+r.URL.Path] {
+		// Push webhooks authenticate with their own secret.
+		isHook := r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/hooks/")
+		if publicRoutes[r.Method+" "+r.URL.Path] || isHook {
 			next.ServeHTTP(w, r)
 			return
 		}

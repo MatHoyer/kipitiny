@@ -42,6 +42,13 @@ type ServiceInput struct {
 	DatabaseID string `json:"databaseId"`
 	HealthPath string `json:"healthPath"`
 	PreDeploy  string `json:"preDeploy"`
+	// Git source (Source "git"): Image is then ignored.
+	Source       store.ServiceSource `json:"source"`
+	GitURL       string              `json:"gitUrl"`
+	GitBranch    string              `json:"gitBranch"`
+	GitToken     string              `json:"gitToken"`
+	Dockerfile   string              `json:"dockerfile"`
+	BuildContext string              `json:"buildContext"`
 }
 
 // ServicePatch updates only the fields that are set. Env replaces the whole
@@ -56,6 +63,12 @@ type ServicePatch struct {
 	DatabaseID *string           `json:"databaseId"`
 	HealthPath *string           `json:"healthPath"`
 	PreDeploy  *string           `json:"preDeploy"`
+	GitURL     *string           `json:"gitUrl"`
+	GitBranch  *string           `json:"gitBranch"`
+	// GitToken equal to SecretMask keeps the stored token.
+	GitToken     *string `json:"gitToken"`
+	Dockerfile   *string `json:"dockerfile"`
+	BuildContext *string `json:"buildContext"`
 }
 
 type ContainerView struct {
@@ -89,18 +102,37 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		in.Replicas = 1
 	}
 	svc := store.Service{
-		ProjectID:  projectID,
-		Name:       in.Name,
-		Kind:       in.Kind,
-		Image:      strings.TrimSpace(in.Image),
-		Replicas:   in.Replicas,
-		Port:       in.Port,
-		Domain:     strings.ToLower(strings.TrimSpace(in.Domain)),
-		Env:        in.Env,
-		MemoryMB:   in.MemoryMB,
-		DatabaseID: in.DatabaseID,
-		HealthPath: strings.TrimSpace(in.HealthPath),
-		PreDeploy:  strings.TrimSpace(in.PreDeploy),
+		ProjectID:    projectID,
+		Name:         in.Name,
+		Kind:         in.Kind,
+		Image:        strings.TrimSpace(in.Image),
+		Replicas:     in.Replicas,
+		Port:         in.Port,
+		Domain:       strings.ToLower(strings.TrimSpace(in.Domain)),
+		Env:          in.Env,
+		MemoryMB:     in.MemoryMB,
+		DatabaseID:   in.DatabaseID,
+		HealthPath:   strings.TrimSpace(in.HealthPath),
+		PreDeploy:    strings.TrimSpace(in.PreDeploy),
+		Source:       in.Source,
+		GitURL:       strings.TrimSpace(in.GitURL),
+		GitBranch:    strings.TrimSpace(in.GitBranch),
+		GitToken:     strings.TrimSpace(in.GitToken),
+		Dockerfile:   strings.Trim(strings.TrimSpace(in.Dockerfile), "/"),
+		BuildContext: strings.Trim(strings.TrimSpace(in.BuildContext), "/"),
+	}
+	if svc.Source == "" {
+		svc.Source = store.SourceImage
+	}
+	if svc.Source == store.SourceGit {
+		svc.Image = "" // built on deploy
+		if svc.GitBranch == "" {
+			svc.GitBranch = "main"
+		}
+		if svc.Dockerfile == "" {
+			svc.Dockerfile = "Dockerfile"
+		}
+		svc.WebhookSecret = randomToken(24)
 	}
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
@@ -173,6 +205,23 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	if p.PreDeploy != nil {
 		svc.PreDeploy = strings.TrimSpace(*p.PreDeploy)
 	}
+	if svc.Source == store.SourceGit {
+		if p.GitURL != nil {
+			svc.GitURL = strings.TrimSpace(*p.GitURL)
+		}
+		if p.GitBranch != nil {
+			svc.GitBranch = strings.TrimSpace(*p.GitBranch)
+		}
+		if p.GitToken != nil && *p.GitToken != SecretMask {
+			svc.GitToken = strings.TrimSpace(*p.GitToken)
+		}
+		if p.Dockerfile != nil {
+			svc.Dockerfile = strings.Trim(strings.TrimSpace(*p.Dockerfile), "/")
+		}
+		if p.BuildContext != nil {
+			svc.BuildContext = strings.Trim(strings.TrimSpace(*p.BuildContext), "/")
+		}
+	}
 	if svc.Kind == store.ServiceKindPostgres {
 		if err := checkPostgresUpdate(old, svc); err != nil {
 			return ServiceView{}, err
@@ -206,8 +255,18 @@ func (c *Core) validate(ctx context.Context, s store.Service) error {
 }
 
 func validateService(s store.Service) error {
-	if _, err := reference.ParseNormalizedNamed(s.Image); err != nil {
-		return fmt.Errorf("%w: image: %v", ErrInvalid, err)
+	switch s.Source {
+	case store.SourceGit:
+		if s.Kind != store.ServiceKindApp {
+			return fmt.Errorf("%w: only apps can be built from git", ErrInvalid)
+		}
+		if err := validateGit(s); err != nil {
+			return err
+		}
+	default:
+		if _, err := reference.ParseNormalizedNamed(s.Image); err != nil {
+			return fmt.Errorf("%w: image: %v", ErrInvalid, err)
+		}
 	}
 	for k := range s.Env {
 		if !envKeyRe.MatchString(k) {
@@ -363,6 +422,9 @@ func sortedContainers(v []ContainerView) []ContainerView {
 }
 
 func masked(s store.Service) store.Service {
+	if s.GitToken != "" {
+		s.GitToken = SecretMask
+	}
 	env := maps.Clone(s.Env)
 	for k := range env {
 		env[k] = SecretMask
@@ -425,6 +487,9 @@ func (c *Core) removeServiceContainers(ctx context.Context, svc store.Service) e
 	}
 	if svc.Kind == store.ServiceKindPostgres {
 		return c.docker.RemoveVolume(ctx, PostgresVolume(svc.ID))
+	}
+	if svc.Source == store.SourceGit {
+		return c.docker.RemoveImagesByLabel(ctx, docker.LabelService, svc.ID)
 	}
 	return nil
 }

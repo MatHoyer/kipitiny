@@ -42,6 +42,8 @@ func New(c *core.Core, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/services/{id}/deployments", a.listDeployments)
 	mux.HandleFunc("GET /api/services/{id}/logs", a.streamLogs)
 	mux.HandleFunc("GET /api/services/{id}/connection", a.connection)
+	mux.HandleFunc("GET /api/services/{id}/webhook", a.webhook)
+	mux.HandleFunc("POST /api/hooks/{id}", a.hook)
 	mux.HandleFunc("GET /api/services/{id}/backups", a.listServiceBackups)
 	mux.HandleFunc("POST /api/services/{id}/backups", a.createBackup)
 	mux.HandleFunc("GET /api/services/{id}/restores", a.listRestores)

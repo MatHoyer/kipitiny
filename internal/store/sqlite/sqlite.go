@@ -102,6 +102,9 @@ func (s *Store) DeleteProject(ctx context.Context, id string) error {
 func (s *Store) CreateService(ctx context.Context, svc store.Service) (store.Service, error) {
 	now := now()
 	svc.ID, svc.CreatedAt, svc.UpdatedAt = ids.New(), now, now
+	if svc.Source == "" {
+		svc.Source = store.SourceImage
+	}
 	if _, err := s.db.NewInsert().Model(&svc).Exec(ctx); err != nil {
 		return store.Service{}, mapErr(err)
 	}
@@ -124,7 +127,8 @@ func (s *Store) ListServices(ctx context.Context, projectID string) ([]store.Ser
 func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Service, error) {
 	svc.UpdatedAt = now()
 	res, err := s.db.NewUpdate().Model(&svc).
-		Column("image", "replicas", "port", "domain", "env", "memory_mb", "database_id", "health_path", "pre_deploy", "updated_at").
+		Column("image", "replicas", "port", "domain", "env", "memory_mb", "database_id", "health_path", "pre_deploy",
+			"git_url", "git_branch", "git_token", "dockerfile", "build_context", "updated_at").
 		WherePK().Exec(ctx)
 	if err != nil {
 		return store.Service{}, mapErr(err)
@@ -138,6 +142,18 @@ func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Ser
 func (s *Store) SetCurrentDeployment(ctx context.Context, serviceID, deploymentID string) error {
 	res, err := s.db.NewUpdate().Model((*store.Service)(nil)).
 		Set("current_deployment_id = ?", deploymentID).Where("id = ?", serviceID).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) SetDeploymentBuild(ctx context.Context, id, image, commit string, config store.Service) error {
+	d := store.Deployment{ID: id, Image: image, GitCommit: commit, Config: config}
+	res, err := s.db.NewUpdate().Model(&d).Column("image", "git_commit", "config").WherePK().Exec(ctx)
 	if err != nil {
 		return mapErr(err)
 	}

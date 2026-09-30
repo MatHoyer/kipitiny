@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
+	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 )
 
@@ -119,3 +120,59 @@ func (t *tailBuffer) Write(p []byte) (int, error) {
 }
 
 func (t *tailBuffer) String() string { return string(t.buf) }
+
+// RunAttached creates and starts a one-off container, streams stdin into it
+// and its output to out, waits for it to exit and removes it. It returns the
+// exit code.
+func (c *Client) RunAttached(ctx context.Context, opts client.ContainerCreateOptions, stdin io.Reader, out io.Writer) (int, error) {
+	opts.Config.OpenStdin = stdin != nil
+	opts.Config.StdinOnce = stdin != nil
+	opts.Config.AttachStdin = stdin != nil
+	opts.Config.AttachStdout, opts.Config.AttachStderr = true, true
+	created, err := c.ContainerCreate(ctx, opts)
+	if err != nil {
+		return -1, fmt.Errorf("create %s: %w", opts.Name, err)
+	}
+	defer func() {
+		_, _ = c.ContainerRemove(context.WithoutCancel(ctx), created.ID, client.ContainerRemoveOptions{Force: true})
+	}()
+
+	att, err := c.ContainerAttach(ctx, created.ID, client.ContainerAttachOptions{
+		Stream: true, Stdin: stdin != nil, Stdout: true, Stderr: true,
+	})
+	if err != nil {
+		return -1, fmt.Errorf("attach %s: %w", opts.Name, err)
+	}
+	defer att.Close()
+	stop := context.AfterFunc(ctx, func() { att.Close() })
+	defer stop()
+
+	// Wait for "next exit" before starting, so a fast exit isn't missed.
+	wait := c.ContainerWait(ctx, created.ID, client.ContainerWaitOptions{Condition: container.WaitConditionNextExit})
+	if _, err := c.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
+		return -1, fmt.Errorf("start %s: %w", opts.Name, err)
+	}
+
+	var stdinErr error
+	var wg sync.WaitGroup
+	if stdin != nil {
+		wg.Go(func() {
+			_, stdinErr = io.Copy(att.Conn, stdin)
+			_ = att.CloseWrite()
+		})
+	}
+	_, _ = stdcopy.StdCopy(out, out, att.Reader)
+	wg.Wait()
+
+	select {
+	case res := <-wait.Result:
+		if res.StatusCode == 0 && stdinErr != nil {
+			return -1, fmt.Errorf("stdin: %w", stdinErr)
+		}
+		return int(res.StatusCode), nil
+	case err := <-wait.Error:
+		return -1, err
+	case <-ctx.Done():
+		return -1, ctx.Err()
+	}
+}
