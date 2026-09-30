@@ -73,13 +73,14 @@
         proto: tcp
       loop: "{{ base_sshd_config.stdout_lines | select('match', '^port ') | map('split') | map('last') | list }}"
 
-    - name: Allow HTTP and HTTPS
+    # Removed again when a server switches to the tunnel.
+    - name: "{{ 'Allow' if base_web_ports | bool else 'Close' }} HTTP and HTTPS"
       community.general.ufw:
         rule: allow
         port: "{{ item }}"
         proto: tcp
+        delete: "{{ not (base_web_ports | bool) }}"
       loop: ["80", "443"]
-      when: base_web_ports | bool
 
     - name: Allow extra ports
       community.general.ufw:

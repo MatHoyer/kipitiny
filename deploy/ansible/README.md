@@ -23,7 +23,8 @@ doesn't upgrade kipitiny: use the UI's update button or
 
 **Manager settings** (per host, see `roles/kipitiny/defaults/main.yml`):
 `kipitiny_domain` (DNS must point at the server first), `kipitiny_acme_email`,
-`kipitiny_cloudflare_tunnel_token` (keep it in Ansible Vault), `kipitiny_env`
+`kipitiny_cloudflare_tunnel_token` (keep it in Ansible Vault; the manager's
+firewall then closes 80/443, workers keep them open), `kipitiny_env`
 for any other `KIPITINY_*` variable. With a domain, port 3000 is bound to
 localhost only: `ssh -L 3000:localhost:3000 server` if you need it.
 
