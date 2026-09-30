@@ -37,7 +37,38 @@ type Store interface {
 	// process as failed. Returns how many were updated.
 	FailRunningDeployments(ctx context.Context, errMsg string) (int, error)
 
+	CountUsers(ctx context.Context) (int, error)
+	CreateUser(ctx context.Context, u User) (User, error)
+	GetUser(ctx context.Context, id string) (User, error)
+	GetUserByUsername(ctx context.Context, username string) (User, error)
+	// SetPassword updates the hash and revokes all of the user's sessions.
+	SetPassword(ctx context.Context, userID, passwordHash string) error
+
+	CreateSession(ctx context.Context, s Session) error
+	// GetSession returns ErrNotFound for unknown or expired sessions.
+	GetSession(ctx context.Context, tokenHash string) (Session, error)
+	DeleteSession(ctx context.Context, tokenHash string) error
+	DeleteExpiredSessions(ctx context.Context) error
+
 	Close() error
+}
+
+type User struct {
+	bun.BaseModel `bun:"table:users,alias:u" json:"-"`
+
+	ID           string    `bun:"id,pk" json:"id"`
+	Username     string    `bun:"username" json:"username"`
+	PasswordHash string    `bun:"password_hash" json:"-"`
+	CreatedAt    time.Time `bun:"created_at" json:"createdAt"`
+}
+
+type Session struct {
+	bun.BaseModel `bun:"table:sessions,alias:session" json:"-"`
+
+	TokenHash string    `bun:"token_hash,pk"`
+	UserID    string    `bun:"user_id"`
+	CreatedAt time.Time `bun:"created_at"`
+	ExpiresAt time.Time `bun:"expires_at"`
 }
 
 type Project struct {

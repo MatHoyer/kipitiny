@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -102,5 +103,56 @@ func TestProjectsAndServices(t *testing.T) {
 	}
 	if err := s.DeleteProject(ctx, p.ID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("second delete: got %v, want ErrNotFound", err)
+	}
+}
+
+func TestUsersAndSessions(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+
+	if n, _ := s.CountUsers(ctx); n != 0 {
+		t.Fatalf("users = %d", n)
+	}
+	u, err := s.CreateUser(ctx, store.User{Username: "admin", PasswordHash: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateUser(ctx, store.User{Username: "admin", PasswordHash: "y"}); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("duplicate user: %v", err)
+	}
+	if got, err := s.GetUserByUsername(ctx, "admin"); err != nil || got.ID != u.ID {
+		t.Fatalf("by username: %+v %v", got, err)
+	}
+
+	future := time.Now().Add(time.Hour)
+	if err := s.CreateSession(ctx, store.Session{TokenHash: "live", UserID: u.ID, ExpiresAt: future}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateSession(ctx, store.Session{TokenHash: "dead", UserID: u.ID, ExpiresAt: time.Now().Add(-time.Second)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetSession(ctx, "live"); err != nil {
+		t.Fatalf("live session: %v", err)
+	}
+	if _, err := s.GetSession(ctx, "dead"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("expired session should be not found, got %v", err)
+	}
+	if err := s.SetPassword(ctx, u.ID, "new-hash"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetSession(ctx, "live"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("password change must revoke sessions, got %v", err)
+	}
+	if err := s.CreateSession(ctx, store.Session{TokenHash: "live", UserID: u.ID, ExpiresAt: future}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteExpiredSessions(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteSession(ctx, "live"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetSession(ctx, "live"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("deleted session: %v", err)
 	}
 }

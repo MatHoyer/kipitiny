@@ -53,6 +53,10 @@ export type Deployment = {
 
 export type LogLine = { container: string; text: string };
 
+export type User = { id: string; username: string; createdAt: string };
+
+export type AuthState = { setupRequired: boolean; user?: User };
+
 export type Status = {
   docker?: { version: string; apiVersion: string; os: string; arch: string };
   dockerError?: string;
@@ -86,6 +90,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
 
 export const api = {
+  authState: () => request<AuthState>("/auth/state"),
+  setup: (setupToken: string, username: string, password: string) =>
+    request<User>("/auth/setup", json("POST", { setupToken, username, password })),
+  login: (username: string, password: string) => request<User>("/auth/login", json("POST", { username, password })),
+  logout: () => request<void>("/auth/logout", { method: "POST" }),
+
   status: () => request<Status>("/status"),
 
   projects: () => request<Project[]>("/projects"),

@@ -15,6 +15,10 @@ type Config struct {
 	// LogLevel is one of debug, info, warn, error.
 	LogLevel string
 
+	// SetupToken, if set, replaces the random token printed on first start
+	// that is required to create the admin account.
+	SetupToken string
+
 	Traefik Traefik
 }
 
@@ -32,9 +36,10 @@ type Traefik struct {
 
 func Load() Config {
 	return Config{
-		Addr:     env("KIPITINY_ADDR", ":3000"),
-		DataDir:  env("KIPITINY_DATA_DIR", "/data"),
-		LogLevel: env("KIPITINY_LOG_LEVEL", "info"),
+		Addr:       env("KIPITINY_ADDR", ":3000"),
+		DataDir:    env("KIPITINY_DATA_DIR", "/data"),
+		LogLevel:   env("KIPITINY_LOG_LEVEL", "info"),
+		SetupToken: env("KIPITINY_SETUP_TOKEN", ""),
 		Traefik: Traefik{
 			Enabled:      env("KIPITINY_TRAEFIK", "true") != "false",
 			Image:        env("KIPITINY_TRAEFIK_IMAGE", "traefik:v3.7"),
