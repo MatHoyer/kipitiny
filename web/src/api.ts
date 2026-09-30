@@ -14,6 +14,7 @@ export type Container = {
   state: string;
   status: string;
   health?: string;
+  retired?: boolean;
 };
 
 export type Service = {
@@ -28,6 +29,9 @@ export type Service = {
   env: Record<string, string>;
   memoryMb: number;
   databaseId: string;
+  healthPath: string;
+  preDeploy: string;
+  currentDeploymentId: string;
   createdAt: string;
   updatedAt: string;
   containers: Container[];
@@ -43,6 +47,8 @@ export type ServiceInput = {
   env?: Record<string, string>;
   memoryMb?: number;
   databaseId?: string;
+  healthPath?: string;
+  preDeploy?: string;
 };
 
 export type Connection = {
@@ -201,6 +207,8 @@ export const api = {
   serviceAction: (id: string, action: "start" | "stop" | "restart") =>
     request<Service>(`/services/${id}/${action}`, { method: "POST" }),
 
+  rollback: (serviceId: string, deploymentId = "") =>
+    request<Deployment>(`/services/${serviceId}/rollback`, json("POST", { deploymentId })),
   deploy: (serviceId: string) => request<Deployment>(`/services/${serviceId}/deploy`, { method: "POST" }),
   deployments: (serviceId: string) => request<Deployment[]>(`/services/${serviceId}/deployments`),
   deploymentLog: (id: string) => request<string>(`/deployments/${id}/log`),

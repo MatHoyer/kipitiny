@@ -40,6 +40,8 @@ type ServiceInput struct {
 	MemoryMB int               `json:"memoryMb"`
 	// DatabaseID links an app to a postgres service of the same project.
 	DatabaseID string `json:"databaseId"`
+	HealthPath string `json:"healthPath"`
+	PreDeploy  string `json:"preDeploy"`
 }
 
 // ServicePatch updates only the fields that are set. Env replaces the whole
@@ -52,6 +54,8 @@ type ServicePatch struct {
 	Env        map[string]string `json:"env"`
 	MemoryMB   *int              `json:"memoryMb"`
 	DatabaseID *string           `json:"databaseId"`
+	HealthPath *string           `json:"healthPath"`
+	PreDeploy  *string           `json:"preDeploy"`
 }
 
 type ContainerView struct {
@@ -64,6 +68,9 @@ type ContainerView struct {
 	Status   string `json:"status"`
 	// Health is empty when the image has no healthcheck.
 	Health string `json:"health,omitempty"`
+	// Retired containers belong to a previous deployment; they are kept
+	// stopped for their logs until the next deploy.
+	Retired bool `json:"retired,omitempty"`
 }
 
 type ServiceView struct {
@@ -92,6 +99,8 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		Env:        in.Env,
 		MemoryMB:   in.MemoryMB,
 		DatabaseID: in.DatabaseID,
+		HealthPath: strings.TrimSpace(in.HealthPath),
+		PreDeploy:  strings.TrimSpace(in.PreDeploy),
 	}
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
@@ -158,6 +167,12 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	if p.DatabaseID != nil {
 		svc.DatabaseID = *p.DatabaseID
 	}
+	if p.HealthPath != nil {
+		svc.HealthPath = strings.TrimSpace(*p.HealthPath)
+	}
+	if p.PreDeploy != nil {
+		svc.PreDeploy = strings.TrimSpace(*p.PreDeploy)
+	}
 	if svc.Kind == store.ServiceKindPostgres {
 		if err := checkPostgresUpdate(old, svc); err != nil {
 			return ServiceView{}, err
@@ -203,7 +218,18 @@ func validateService(s store.Service) error {
 		if s.DatabaseID != "" {
 			return fmt.Errorf("%w: a database cannot link another database", ErrInvalid)
 		}
+		if s.HealthPath != "" || s.PreDeploy != "" {
+			return fmt.Errorf("%w: databases have a built-in healthcheck and no pre-deploy command", ErrInvalid)
+		}
 		return validatePostgres(s)
+	}
+	if s.HealthPath != "" {
+		if !strings.HasPrefix(s.HealthPath, "/") || strings.ContainsAny(s.HealthPath, " \t\n") {
+			return fmt.Errorf("%w: health path must start with / (e.g. /healthz)", ErrInvalid)
+		}
+		if s.Port == 0 {
+			return fmt.Errorf("%w: a health path needs the container port", ErrInvalid)
+		}
 	}
 	if s.Replicas < 1 || s.Replicas > maxReplicas {
 		return fmt.Errorf("%w: replicas must be between 1 and %d", ErrInvalid, maxReplicas)
@@ -240,10 +266,16 @@ func (c *Core) ListServices(ctx context.Context, projectID string) ([]ServiceVie
 	if err != nil {
 		return nil, err
 	}
+	svcByID := map[string]store.Service{}
+	for _, s := range svcs {
+		svcByID[s.ID] = s
+	}
 	byService := map[string][]ContainerView{}
 	for _, ct := range cts {
 		sid := ct.Labels[docker.LabelService]
-		byService[sid] = append(byService[sid], containerView(ct))
+		if s, ok := svcByID[sid]; ok {
+			byService[sid] = append(byService[sid], containerView(ct, s))
+		}
 	}
 	views := make([]ServiceView, len(svcs))
 	for i, s := range svcs {
@@ -259,7 +291,7 @@ func (c *Core) view(ctx context.Context, svc store.Service) (ServiceView, error)
 	}
 	views := make([]ContainerView, len(cts))
 	for i, ct := range cts {
-		views[i] = containerView(ct)
+		views[i] = containerView(ct, svc)
 	}
 	return ServiceView{Service: masked(svc), Containers: sortedContainers(views)}, nil
 }
@@ -271,14 +303,30 @@ func (c *Core) serviceContainers(ctx context.Context, svc store.Service) ([]cont
 	})
 }
 
-func containerView(ct container.Summary) ContainerView {
+// activeContainers returns the containers of the deployment serving traffic.
+func (c *Core) activeContainers(ctx context.Context, svc store.Service) ([]container.Summary, error) {
+	cts, err := c.serviceContainers(ctx, svc)
+	if err != nil {
+		return nil, err
+	}
+	active := cts[:0]
+	for _, ct := range cts {
+		if isActive(ct, svc) {
+			active = append(active, ct)
+		}
+	}
+	return active, nil
+}
+
+func containerView(ct container.Summary, svc store.Service) ContainerView {
 	replica, _ := strconv.Atoi(ct.Labels[docker.LabelReplica])
 	name := ""
 	if len(ct.Names) > 0 {
 		name = strings.TrimPrefix(ct.Names[0], "/")
 	}
 	health := ""
-	if ct.Health != nil && ct.Health.Status != container.NoHealthcheck {
+	// A stopped container keeps its last health status; it means nothing then.
+	if ct.State == container.StateRunning && ct.Health != nil && ct.Health.Status != container.NoHealthcheck {
 		health = string(ct.Health.Status)
 	}
 	return ContainerView{
@@ -290,6 +338,7 @@ func containerView(ct container.Summary) ContainerView {
 		State:    string(ct.State),
 		Status:   ct.Status,
 		Health:   health,
+		Retired:  !isActive(ct, svc),
 	}
 }
 
@@ -297,7 +346,16 @@ func sortedContainers(v []ContainerView) []ContainerView {
 	if v == nil {
 		return []ContainerView{}
 	}
-	slices.SortFunc(v, func(a, b ContainerView) int { return a.Replica - b.Replica })
+	// Active first, then by replica.
+	slices.SortFunc(v, func(a, b ContainerView) int {
+		if a.Retired != b.Retired {
+			if a.Retired {
+				return 1
+			}
+			return -1
+		}
+		return a.Replica - b.Replica
+	})
 	return v
 }
 
@@ -388,7 +446,7 @@ func (c *Core) ServiceAction(ctx context.Context, id string, action Action) (Ser
 	if err != nil {
 		return ServiceView{}, err
 	}
-	cts, err := c.serviceContainers(ctx, svc)
+	cts, err := c.activeContainers(ctx, svc)
 	if err != nil {
 		return ServiceView{}, err
 	}

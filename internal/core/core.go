@@ -46,6 +46,7 @@ type Core struct {
 
 	sched     scheduler
 	verifySem chan struct{}
+	selfState
 }
 
 func New(cfg config.Config, s store.Store, d *docker.Client, log *slog.Logger) *Core {

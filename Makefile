@@ -1,4 +1,6 @@
 BIN := bin/kipitiny
+# Static binary everywhere: app containers run it as their health probe.
+export CGO_ENABLED := 0
 DEV_ENV := KIPITINY_ADDR=:8080 KIPITINY_DATA_DIR=./data KIPITINY_LOG_LEVEL=debug
 
 .PHONY: all build ui ui-stub dev-api dev-ui test lint docker clean
@@ -14,7 +16,7 @@ ui-stub:
 		echo '<!doctype html><p>UI not built. Run <code>make ui</code> or use the Vite dev server.</p>' > web/dist/index.html)
 
 build: ui
-	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BIN) ./cmd/kipitiny
+	go build -trimpath -ldflags="-s -w" -o $(BIN) ./cmd/kipitiny
 
 # Go API on :8080; run `make dev-ui` alongside for the Vite dev server (proxies /api).
 dev-api: ui-stub

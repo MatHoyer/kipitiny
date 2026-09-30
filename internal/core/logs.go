@@ -27,7 +27,7 @@ func (c *Core) StreamLogs(ctx context.Context, serviceID string, tail int, emit 
 	if err != nil {
 		return err
 	}
-	cts, err := c.serviceContainers(ctx, svc)
+	cts, err := c.activeContainers(ctx, svc)
 	if err != nil {
 		return err
 	}

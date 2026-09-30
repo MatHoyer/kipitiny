@@ -55,7 +55,7 @@ func TestAppContainerSpec(t *testing.T) {
 	}
 
 	spec := containerSpec(p, svc, nil, "D1", 2)
-	if spec.Name != "shop-web-2" {
+	if spec.Name != "shop-web-2-d1" {
 		t.Errorf("name = %q", spec.Name)
 	}
 	if !slices.Equal(spec.Config.Env, []string{"A=1", "B=2"}) {
@@ -84,6 +84,17 @@ func TestAppContainerSpec(t *testing.T) {
 	}
 	if l["traefik.http.services.kipitiny-01abc.loadbalancer.server.port"] != "8080" {
 		t.Error("service port label wrong")
+	}
+	if l["traefik.http.routers.kipitiny-01abc.tls.certresolver"] != "letsencrypt" {
+		t.Error("public domain must use the ACME resolver")
+	}
+	if l["traefik.http.routers.kipitiny-01abc.middlewares"] != "kipitiny-01abc-retry@docker" {
+		t.Error("retry middleware missing")
+	}
+	svc.Domain = "shop.localhost"
+	l = containerSpec(p, svc, nil, "D1", 1).Config.Labels
+	if _, acme := l["traefik.http.routers.kipitiny-01abc.tls.certresolver"]; acme || l["traefik.http.routers.kipitiny-01abc.tls"] != "true" {
+		t.Error(".localhost must not request an ACME certificate")
 	}
 	if _, ok := spec.NetworkingConfig.EndpointsConfig[docker.ProxyNetwork]; !ok {
 		t.Error("public service must join the proxy network")

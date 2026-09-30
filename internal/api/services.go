@@ -81,6 +81,21 @@ func (a *API) deployService(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, dep)
 }
 
+func (a *API) rollbackService(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		DeploymentID string `json:"deploymentId"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	dep, err := a.core.Rollback(r.Context(), r.PathValue("id"), body.DeploymentID)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, dep)
+}
+
 func (a *API) serviceAction(w http.ResponseWriter, r *http.Request) {
 	action := core.Action(r.PathValue("action"))
 	switch action {

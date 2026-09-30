@@ -26,6 +26,7 @@ type Store interface {
 	GetService(ctx context.Context, id string) (Service, error)
 	ListServices(ctx context.Context, projectID string) ([]Service, error)
 	UpdateService(ctx context.Context, s Service) (Service, error)
+	SetCurrentDeployment(ctx context.Context, serviceID, deploymentID string) error
 	DeleteService(ctx context.Context, id string) error
 
 	CreateDeployment(ctx context.Context, d Deployment) (Deployment, error)
@@ -136,9 +137,16 @@ type Service struct {
 	// MemoryMB is the container memory limit; 0 means unlimited.
 	MemoryMB int `bun:"memory_mb" json:"memoryMb"`
 	// DatabaseID links an app to a postgres service of the same project.
-	DatabaseID string    `bun:"database_id" json:"databaseId"`
-	CreatedAt  time.Time `bun:"created_at" json:"createdAt"`
-	UpdatedAt  time.Time `bun:"updated_at" json:"updatedAt"`
+	DatabaseID string `bun:"database_id" json:"databaseId"`
+	// HealthPath is an HTTP path that must answer 2xx/3xx before a new
+	// replica takes over; empty uses the image healthcheck or a stability wait.
+	HealthPath string `bun:"health_path" json:"healthPath"`
+	// PreDeploy runs once (sh -c) in a one-off container before a rollout,
+	// e.g. migrations. A failure aborts the deploy.
+	PreDeploy           string    `bun:"pre_deploy" json:"preDeploy"`
+	CurrentDeploymentID string    `bun:"current_deployment_id" json:"currentDeploymentId"`
+	CreatedAt           time.Time `bun:"created_at" json:"createdAt"`
+	UpdatedAt           time.Time `bun:"updated_at" json:"updatedAt"`
 }
 
 type DeploymentStatus string
