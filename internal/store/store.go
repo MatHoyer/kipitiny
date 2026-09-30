@@ -100,10 +100,14 @@ type Service struct {
 	// Port is the container port Traefik routes to; 0 when not public.
 	Port int `bun:"port" json:"port"`
 	// Domain is the public hostname; empty when not public.
-	Domain    string            `bun:"domain" json:"domain"`
-	Env       map[string]string `bun:"env" json:"env"`
-	CreatedAt time.Time         `bun:"created_at" json:"createdAt"`
-	UpdatedAt time.Time         `bun:"updated_at" json:"updatedAt"`
+	Domain string            `bun:"domain" json:"domain"`
+	Env    map[string]string `bun:"env" json:"env"`
+	// MemoryMB is the container memory limit; 0 means unlimited.
+	MemoryMB int `bun:"memory_mb" json:"memoryMb"`
+	// DatabaseID links an app to a postgres service of the same project.
+	DatabaseID string    `bun:"database_id" json:"databaseId"`
+	CreatedAt  time.Time `bun:"created_at" json:"createdAt"`
+	UpdatedAt  time.Time `bun:"updated_at" json:"updatedAt"`
 }
 
 type DeploymentStatus string

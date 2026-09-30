@@ -102,6 +102,16 @@ func (c *Core) runDeploy(project store.Project, svc store.Service, dep store.Dep
 func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Service, dep store.Deployment,
 	out io.Writer, logf func(string, ...any)) error {
 
+	var db *store.Service
+	if svc.DatabaseID != "" {
+		d, err := c.store.GetService(ctx, svc.DatabaseID)
+		if err != nil {
+			return fmt.Errorf("linked database: %w", err)
+		}
+		db = &d
+		logf("Injecting DATABASE_URL for database %s", d.Name)
+	}
+
 	logf("Pulling %s", svc.Image)
 	if err := c.docker.PullImage(ctx, svc.Image, out); err != nil {
 		return fmt.Errorf("pull %s: %w", svc.Image, err)
@@ -120,14 +130,21 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 	for i := 1; i <= svc.Replicas; i++ {
 		for _, old := range byReplica[i] {
 			logf("Removing old container %s", old.Names[0][1:])
-			if err := c.docker.RemoveContainer(ctx, old.ID, stopTimeout); err != nil {
+			if err := c.docker.RemoveContainer(ctx, old.ID, stopTimeoutFor(svc)); err != nil {
 				return err
 			}
 		}
-		spec := appContainerSpec(project, svc, dep.ID, i)
+		spec := containerSpec(project, svc, db, dep.ID, i)
 		logf("Starting %s", spec.Name)
-		if _, err := c.docker.Run(ctx, spec); err != nil {
+		id, err := c.docker.Run(ctx, spec)
+		if err != nil {
 			return err
+		}
+		if svc.Kind == store.ServiceKindPostgres {
+			logf("Waiting for postgres to accept connections")
+			if err := c.docker.WaitHealthy(ctx, id, postgresReadyTimeout); err != nil {
+				return fmt.Errorf("postgres did not become ready: %w", err)
+			}
 		}
 	}
 
@@ -138,7 +155,7 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 		}
 		for _, old := range byReplica[idx] {
 			logf("Removing extra container %s", old.Names[0][1:])
-			if err := c.docker.RemoveContainer(ctx, old.ID, stopTimeout); err != nil {
+			if err := c.docker.RemoveContainer(ctx, old.ID, stopTimeoutFor(svc)); err != nil {
 				return err
 			}
 		}
@@ -146,7 +163,9 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 	return nil
 }
 
-func appContainerSpec(project store.Project, svc store.Service, deployID string, replica int) client.ContainerCreateOptions {
+// containerSpec builds the container for one replica. db is the linked
+// database of an app, if any.
+func containerSpec(project store.Project, svc store.Service, db *store.Service, deployID string, replica int) client.ContainerCreateOptions {
 	labels := map[string]string{
 		docker.LabelManaged: "true",
 		docker.LabelProject: project.ID,
@@ -163,22 +182,36 @@ func appContainerSpec(project store.Project, svc store.Service, deployID string,
 		endpoints[docker.ProxyNetwork] = &network.EndpointSettings{}
 	}
 
-	env := make([]string, 0, len(svc.Env))
-	for _, k := range slices.Sorted(maps.Keys(svc.Env)) {
-		env = append(env, k+"="+svc.Env[k])
+	envMap := maps.Clone(svc.Env)
+	if db != nil {
+		if _, set := envMap["DATABASE_URL"]; !set { // an explicit value wins
+			envMap["DATABASE_URL"] = DatabaseURL(*db)
+		}
+	}
+	env := make([]string, 0, len(envMap))
+	for _, k := range slices.Sorted(maps.Keys(envMap)) {
+		env = append(env, k+"="+envMap[k])
 	}
 
+	cfg := &container.Config{
+		Image:  svc.Image,
+		Env:    env,
+		Labels: labels,
+	}
+	host := &container.HostConfig{
+		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
+		LogConfig:     docker.DefaultLogConfig(),
+	}
+	if svc.MemoryMB > 0 {
+		host.Memory = int64(svc.MemoryMB) << 20
+	}
+	if svc.Kind == store.ServiceKindPostgres {
+		applyPostgresSpec(cfg, host, svc)
+	}
 	return client.ContainerCreateOptions{
-		Name: fmt.Sprintf("%s-%s-%d", project.Name, svc.Name, replica),
-		Config: &container.Config{
-			Image:  svc.Image,
-			Env:    env,
-			Labels: labels,
-		},
-		HostConfig: &container.HostConfig{
-			RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
-			LogConfig:     docker.DefaultLogConfig(),
-		},
+		Name:             fmt.Sprintf("%s-%s-%d", project.Name, svc.Name, replica),
+		Config:           cfg,
+		HostConfig:       host,
 		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: endpoints},
 	}
 }

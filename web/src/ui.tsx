@@ -1,4 +1,10 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
+import type {
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from "react";
 
 type Variant = "primary" | "secondary" | "danger";
 
@@ -24,6 +30,13 @@ export function Button({
 
 const inputClass =
   "w-full rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900";
+
+export function Select({
+  className = "",
+  ...props
+}: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select className={`${inputClass} ${className}`} {...props} />;
+}
 
 export function Input({ className = "", ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={`${inputClass} ${className}`} {...props} />;
@@ -59,6 +72,9 @@ export function Card({ title, actions, children }: { title?: string; actions?: R
 
 const stateColors: Record<string, string> = {
   running: "bg-emerald-500",
+  healthy: "bg-emerald-500",
+  starting: "animate-pulse bg-amber-500",
+  unhealthy: "bg-red-500",
   succeeded: "bg-emerald-500",
   deploying: "animate-pulse bg-sky-500",
   degraded: "bg-amber-500",
@@ -109,9 +125,17 @@ export function timeAgo(iso: string): string {
 }
 
 /** Aggregate state of a service from its containers. */
-export function serviceState(containers: { state: string }[]): string {
+export function serviceState(containers: { state: string; health?: string }[]): string {
   if (containers.length === 0) return "not deployed";
+  if (containers.some((c) => c.health === "unhealthy")) return "unhealthy";
+  if (containers.some((c) => c.health === "starting")) return "starting";
   if (containers.every((c) => c.state === "running")) return "running";
   if (containers.some((c) => c.state === "running")) return "degraded";
   return containers[0].state;
+}
+
+/** Asks the user to type `name` to confirm a destructive action. */
+export function confirmByName(what: string, name: string): string | null {
+  const typed = prompt(`${what}\n\nType "${name}" to confirm.`);
+  return typed === name ? typed : null;
 }

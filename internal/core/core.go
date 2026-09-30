@@ -123,24 +123,24 @@ func (c *Core) GetProject(ctx context.Context, id string) (store.Project, error)
 	return c.store.GetProject(ctx, id)
 }
 
-// DeleteProject removes every container of the project, its record and its
-// private network.
-func (c *Core) DeleteProject(ctx context.Context, id string) error {
-	if _, err := c.store.GetProject(ctx, id); err != nil {
-		return err
-	}
-	cts, err := c.docker.ListContainers(ctx, map[string]string{docker.LabelProject: id})
+// DeleteProject removes every container and database volume of the project,
+// its record and its private network. The caller must confirm with the name.
+func (c *Core) DeleteProject(ctx context.Context, id, confirm string) error {
+	p, err := c.store.GetProject(ctx, id)
 	if err != nil {
 		return err
 	}
-	for _, ct := range cts {
-		if err := c.docker.RemoveContainer(ctx, ct.ID, stopTimeout); err != nil {
-			return err
-		}
+	if confirm != p.Name {
+		return fmt.Errorf("%w: confirm with the project name", ErrInvalid)
 	}
 	svcs, err := c.store.ListServices(ctx, id)
 	if err != nil {
 		return err
+	}
+	for _, s := range svcs {
+		if err := c.removeServiceContainers(ctx, s); err != nil {
+			return err
+		}
 	}
 	if err := c.store.DeleteProject(ctx, id); err != nil {
 		return err

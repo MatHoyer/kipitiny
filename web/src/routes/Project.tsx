@@ -1,8 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { api } from "../api";
-import { Button, Card, ErrorText, Field, Input, parseEnv, serviceState, StateBadge, Textarea } from "../ui";
+import { api, type ServiceInput } from "../api";
+import {
+  Button,
+  Card,
+  confirmByName,
+  ErrorText,
+  Field,
+  Input,
+  parseEnv,
+  Select,
+  serviceState,
+  StateBadge,
+  Textarea,
+} from "../ui";
 
 export function Project() {
   const { id = "" } = useParams();
@@ -17,7 +29,7 @@ export function Project() {
   const [showForm, setShowForm] = useState(false);
 
   const remove = useMutation({
-    mutationFn: () => api.deleteProject(id),
+    mutationFn: (confirm: string) => api.deleteProject(id, confirm),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects"] });
       navigate("/");
@@ -41,9 +53,13 @@ export function Project() {
           <Button
             variant="danger"
             disabled={remove.isPending}
-            onClick={() =>
-              confirm(`Delete project ${project.data.name}? All its containers will be removed.`) && remove.mutate()
-            }
+            onClick={() => {
+              const name = confirmByName(
+                `Delete project ${project.data.name}? All its containers and database data will be destroyed.`,
+                project.data.name,
+              );
+              if (name) remove.mutate(name);
+            }}
           >
             Delete
           </Button>
@@ -71,7 +87,9 @@ export function Project() {
               </div>
               <p className="truncate font-mono text-xs text-zinc-500">{s.image}</p>
               <p className="text-xs text-zinc-500">
-                {s.domain || "private"} · {s.replicas} replica{s.replicas > 1 ? "s" : ""}
+                {s.kind === "postgres"
+                  ? `PostgreSQL · ${s.memoryMb} MB`
+                  : `${s.domain || "private"} · ${s.replicas} replica${s.replicas > 1 ? "s" : ""}`}
               </p>
             </Link>
           ))}
@@ -84,19 +102,46 @@ export function Project() {
 function NewServiceForm({ projectId, onDone }: { projectId: string; onDone: () => void }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", image: "", port: "", domain: "", replicas: "1", env: "" });
+  const services = useQuery({ queryKey: ["services", projectId], queryFn: () => api.services(projectId) });
+  const databases = services.data?.filter((s) => s.kind === "postgres") ?? [];
+
+  const [kind, setKind] = useState<"app" | "postgres">("app");
+  const [form, setForm] = useState({
+    name: "",
+    image: "",
+    port: "",
+    domain: "",
+    replicas: "1",
+    env: "",
+    version: "17",
+    memory: "512",
+    databaseId: "",
+  });
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
+  // Default an app to the project's only database.
+  const databaseId = form.databaseId || (databases.length === 1 ? databases[0].id : "");
 
   const create = useMutation({
     mutationFn: async () => {
-      const svc = await api.createService(projectId, {
-        name: form.name.trim(),
-        image: form.image.trim(),
-        port: Number(form.port) || 0,
-        domain: form.domain.trim(),
-        replicas: Number(form.replicas) || 1,
-        env: parseEnv(form.env),
-      });
+      const input: ServiceInput =
+        kind === "postgres"
+          ? {
+              kind,
+              name: form.name.trim(),
+              image: `postgres:${form.version}-alpine`,
+              memoryMb: Number(form.memory) || 512,
+            }
+          : {
+              kind,
+              name: form.name.trim(),
+              image: form.image.trim(),
+              port: Number(form.port) || 0,
+              domain: form.domain.trim(),
+              replicas: Number(form.replicas) || 1,
+              env: parseEnv(form.env),
+              databaseId: databaseId === "none" ? "" : databaseId,
+            };
+      const svc = await api.createService(projectId, input);
       await api.deploy(svc.id);
       return svc;
     },
@@ -113,28 +158,73 @@ function NewServiceForm({ projectId, onDone }: { projectId: string; onDone: () =
   };
 
   return (
-    <Card title="New app service">
-      <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
-        <Field label="Name">
-          <Input required value={form.name} onChange={set("name")} placeholder="web" />
-        </Field>
-        <Field label="Image">
-          <Input required value={form.image} onChange={set("image")} placeholder="ghcr.io/org/app:latest" />
-        </Field>
-        <Field label="Domain" hint="Leave empty for a private service (reachable only inside the project).">
-          <Input value={form.domain} onChange={set("domain")} placeholder="app.example.com" />
-        </Field>
-        <Field label="Container port" hint="The port your app listens on. Required with a domain.">
-          <Input type="number" min={1} max={65535} value={form.port} onChange={set("port")} placeholder="3000" />
-        </Field>
-        <Field label="Replicas">
-          <Input type="number" min={1} max={10} value={form.replicas} onChange={set("replicas")} />
-        </Field>
-        <div className="sm:col-span-2">
-          <Field label="Environment" hint="One KEY=value per line. Values are hidden once saved.">
-            <Textarea rows={4} value={form.env} onChange={set("env")} placeholder="NODE_ENV=production" />
-          </Field>
+    <Card
+      title="New service"
+      actions={
+        <div className="flex rounded-md border border-zinc-300 p-0.5 text-xs dark:border-zinc-700">
+          {(["app", "postgres"] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKind(k)}
+              className={`rounded px-2 py-0.5 ${kind === k ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : ""}`}
+            >
+              {k === "app" ? "App" : "PostgreSQL"}
+            </button>
+          ))}
         </div>
+      }
+    >
+      <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
+        <Field label="Name" hint={kind === "postgres" ? "Also the hostname apps use to connect." : undefined}>
+          <Input required value={form.name} onChange={set("name")} placeholder={kind === "postgres" ? "db" : "web"} />
+        </Field>
+        {kind === "postgres" ? (
+          <>
+            <Field label="Version">
+              <Select value={form.version} onChange={set("version")}>
+                {["18", "17", "16", "15"].map((v) => (
+                  <option key={v} value={v}>
+                    PostgreSQL {v}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Memory (MB)" hint="Container limit; shared_buffers is sized from it.">
+              <Input type="number" min={128} step={128} value={form.memory} onChange={set("memory")} />
+            </Field>
+          </>
+        ) : (
+          <>
+            <Field label="Image">
+              <Input required value={form.image} onChange={set("image")} placeholder="ghcr.io/org/app:latest" />
+            </Field>
+            <Field label="Domain" hint="Leave empty for a private service (reachable only inside the project).">
+              <Input value={form.domain} onChange={set("domain")} placeholder="app.example.com" />
+            </Field>
+            <Field label="Container port" hint="The port your app listens on. Required with a domain.">
+              <Input type="number" min={1} max={65535} value={form.port} onChange={set("port")} placeholder="3000" />
+            </Field>
+            <Field label="Replicas">
+              <Input type="number" min={1} max={10} value={form.replicas} onChange={set("replicas")} />
+            </Field>
+            <Field label="Database" hint="Injects DATABASE_URL.">
+              <Select value={databaseId || "none"} onChange={set("databaseId")}>
+                <option value="none">None</option>
+                {databases.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="sm:col-span-2">
+              <Field label="Environment" hint="One KEY=value per line. Values are hidden once saved.">
+                <Textarea rows={4} value={form.env} onChange={set("env")} placeholder="NODE_ENV=production" />
+              </Field>
+            </div>
+          </>
+        )}
         <div className="flex items-center gap-3 sm:col-span-2">
           <Button disabled={create.isPending}>{create.isPending ? "Creating…" : "Create & deploy"}</Button>
           <ErrorText error={create.error} />

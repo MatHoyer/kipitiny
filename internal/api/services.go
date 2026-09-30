@@ -55,11 +55,21 @@ func (a *API) updateService(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) deleteService(w http.ResponseWriter, r *http.Request) {
-	if err := a.core.DeleteService(r.Context(), r.PathValue("id")); err != nil {
+	if err := a.core.DeleteService(r.Context(), r.PathValue("id"), r.URL.Query().Get("confirm")); err != nil {
 		a.fail(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *API) connection(w http.ResponseWriter, r *http.Request) {
+	conn, err := a.core.PostgresConnection(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, conn)
 }
 
 func (a *API) deployService(w http.ResponseWriter, r *http.Request) {

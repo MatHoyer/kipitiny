@@ -22,6 +22,15 @@ the admin account. Forgot the password?
 docker compose exec -it manager /kipitiny reset-password admin
 ```
 
+## Services
+
+- **Apps** run from an image, optionally public on a domain (HTTPS via Traefik), 1–10 replicas.
+- **PostgreSQL** services get generated credentials, a named data volume, a memory
+  limit with matching `shared_buffers`, and a `pg_isready` healthcheck. They are
+  only reachable inside their project, at `<service-name>:5432`. Link an app to a
+  database and it receives `DATABASE_URL` (an explicit `DATABASE_URL` env var wins).
+- Deleting a database or a project destroys data and must be confirmed by typing its name.
+
 ## Develop
 
 Requires Go 1.26+, Node 24+, pnpm 10.

@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"regexp"
@@ -36,16 +37,21 @@ type ServiceInput struct {
 	Port     int               `json:"port"`
 	Domain   string            `json:"domain"`
 	Env      map[string]string `json:"env"`
+	MemoryMB int               `json:"memoryMb"`
+	// DatabaseID links an app to a postgres service of the same project.
+	DatabaseID string `json:"databaseId"`
 }
 
 // ServicePatch updates only the fields that are set. Env replaces the whole
 // map; values equal to SecretMask keep their stored value.
 type ServicePatch struct {
-	Image    *string           `json:"image"`
-	Replicas *int              `json:"replicas"`
-	Port     *int              `json:"port"`
-	Domain   *string           `json:"domain"`
-	Env      map[string]string `json:"env"`
+	Image      *string           `json:"image"`
+	Replicas   *int              `json:"replicas"`
+	Port       *int              `json:"port"`
+	Domain     *string           `json:"domain"`
+	Env        map[string]string `json:"env"`
+	MemoryMB   *int              `json:"memoryMb"`
+	DatabaseID *string           `json:"databaseId"`
 }
 
 type ContainerView struct {
@@ -56,6 +62,8 @@ type ContainerView struct {
 	Image    string `json:"image"`
 	State    string `json:"state"`
 	Status   string `json:"status"`
+	// Health is empty when the image has no healthcheck.
+	Health string `json:"health,omitempty"`
 }
 
 type ServiceView struct {
@@ -74,14 +82,16 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		in.Replicas = 1
 	}
 	svc := store.Service{
-		ProjectID: projectID,
-		Name:      in.Name,
-		Kind:      in.Kind,
-		Image:     strings.TrimSpace(in.Image),
-		Replicas:  in.Replicas,
-		Port:      in.Port,
-		Domain:    strings.ToLower(strings.TrimSpace(in.Domain)),
-		Env:       in.Env,
+		ProjectID:  projectID,
+		Name:       in.Name,
+		Kind:       in.Kind,
+		Image:      strings.TrimSpace(in.Image),
+		Replicas:   in.Replicas,
+		Port:       in.Port,
+		Domain:     strings.ToLower(strings.TrimSpace(in.Domain)),
+		Env:        in.Env,
+		MemoryMB:   in.MemoryMB,
+		DatabaseID: in.DatabaseID,
 	}
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
@@ -89,10 +99,21 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 	if !nameRe.MatchString(svc.Name) {
 		return ServiceView{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
-	if svc.Kind != store.ServiceKindApp {
-		return ServiceView{}, fmt.Errorf("%w: only app services are supported for now", ErrInvalid)
+	switch svc.Kind {
+	case store.ServiceKindApp:
+	case store.ServiceKindPostgres:
+		if svc.Image == "" {
+			svc.Image = DefaultPostgresImage
+		}
+		if svc.MemoryMB == 0 {
+			svc.MemoryMB = defaultPostgresMemoryMB
+		}
+		// Generated credentials win over anything sent in.
+		maps.Copy(svc.Env, newPostgresEnv())
+	default:
+		return ServiceView{}, fmt.Errorf("%w: unknown service kind %q", ErrInvalid, svc.Kind)
 	}
-	if err := validateService(svc); err != nil {
+	if err := c.validate(ctx, svc); err != nil {
 		return ServiceView{}, err
 	}
 	svc, err := c.store.CreateService(ctx, svc)
@@ -103,10 +124,12 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 }
 
 func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (ServiceView, error) {
-	svc, err := c.store.GetService(ctx, id)
+	old, err := c.store.GetService(ctx, id)
 	if err != nil {
 		return ServiceView{}, err
 	}
+	svc := old
+	svc.Env = maps.Clone(old.Env)
 	if p.Image != nil {
 		svc.Image = strings.TrimSpace(*p.Image)
 	}
@@ -129,7 +152,18 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 		}
 		svc.Env = env
 	}
-	if err := validateService(svc); err != nil {
+	if p.MemoryMB != nil {
+		svc.MemoryMB = *p.MemoryMB
+	}
+	if p.DatabaseID != nil {
+		svc.DatabaseID = *p.DatabaseID
+	}
+	if svc.Kind == store.ServiceKindPostgres {
+		if err := checkPostgresUpdate(old, svc); err != nil {
+			return ServiceView{}, err
+		}
+	}
+	if err := c.validate(ctx, svc); err != nil {
 		return ServiceView{}, err
 	}
 	if svc, err = c.store.UpdateService(ctx, svc); err != nil {
@@ -138,9 +172,38 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	return c.view(ctx, svc)
 }
 
+// validate checks a service's fields and its link to a database.
+func (c *Core) validate(ctx context.Context, s store.Service) error {
+	if err := validateService(s); err != nil {
+		return err
+	}
+	if s.DatabaseID == "" {
+		return nil
+	}
+	db, err := c.store.GetService(ctx, s.DatabaseID)
+	if errors.Is(err, store.ErrNotFound) || (err == nil && (db.ProjectID != s.ProjectID || db.Kind != store.ServiceKindPostgres)) {
+		return fmt.Errorf("%w: linked database must be a postgres service of the same project", ErrInvalid)
+	}
+	return err
+}
+
 func validateService(s store.Service) error {
 	if _, err := reference.ParseNormalizedNamed(s.Image); err != nil {
 		return fmt.Errorf("%w: image: %v", ErrInvalid, err)
+	}
+	for k := range s.Env {
+		if !envKeyRe.MatchString(k) {
+			return fmt.Errorf("%w: invalid env var name %q", ErrInvalid, k)
+		}
+	}
+	if s.MemoryMB < 0 {
+		return fmt.Errorf("%w: memory must be positive", ErrInvalid)
+	}
+	if s.Kind == store.ServiceKindPostgres {
+		if s.DatabaseID != "" {
+			return fmt.Errorf("%w: a database cannot link another database", ErrInvalid)
+		}
+		return validatePostgres(s)
 	}
 	if s.Replicas < 1 || s.Replicas > maxReplicas {
 		return fmt.Errorf("%w: replicas must be between 1 and %d", ErrInvalid, maxReplicas)
@@ -154,11 +217,6 @@ func validateService(s store.Service) error {
 		}
 	} else if s.Port < 0 || s.Port > 65535 {
 		return fmt.Errorf("%w: port out of range", ErrInvalid)
-	}
-	for k := range s.Env {
-		if !envKeyRe.MatchString(k) {
-			return fmt.Errorf("%w: invalid env var name %q", ErrInvalid, k)
-		}
 	}
 	return nil
 }
@@ -219,6 +277,10 @@ func containerView(ct container.Summary) ContainerView {
 	if len(ct.Names) > 0 {
 		name = strings.TrimPrefix(ct.Names[0], "/")
 	}
+	health := ""
+	if ct.Health != nil && ct.Health.Status != container.NoHealthcheck {
+		health = string(ct.Health.Status)
+	}
 	return ContainerView{
 		ID:       ct.ID[:12],
 		Name:     name,
@@ -227,6 +289,7 @@ func containerView(ct container.Summary) ContainerView {
 		Image:    ct.Image,
 		State:    string(ct.State),
 		Status:   ct.Status,
+		Health:   health,
 	}
 }
 
@@ -251,7 +314,9 @@ func masked(s store.Service) store.Service {
 }
 
 // DeleteService removes the service's containers, its record and deploy logs.
-func (c *Core) DeleteService(ctx context.Context, id string) error {
+// Deleting a database also destroys its data volume, so confirm must repeat
+// the service name.
+func (c *Core) DeleteService(ctx context.Context, id, confirm string) error {
 	unlock, err := c.lockService(id)
 	if err != nil {
 		return err
@@ -262,19 +327,44 @@ func (c *Core) DeleteService(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	cts, err := c.serviceContainers(ctx, svc)
-	if err != nil {
-		return err
-	}
-	for _, ct := range cts {
-		if err := c.docker.RemoveContainer(ctx, ct.ID, stopTimeout); err != nil {
+	if svc.Kind == store.ServiceKindPostgres {
+		if confirm != svc.Name {
+			return fmt.Errorf("%w: deleting a database destroys its data; confirm with the service name", ErrInvalid)
+		}
+		siblings, err := c.store.ListServices(ctx, svc.ProjectID)
+		if err != nil {
 			return err
 		}
+		for _, s := range siblings {
+			if s.DatabaseID == svc.ID {
+				return fmt.Errorf("%w: database is used by %q; unlink it first", ErrInvalid, s.Name)
+			}
+		}
+	}
+	if err := c.removeServiceContainers(ctx, svc); err != nil {
+		return err
 	}
 	if err := c.store.DeleteService(ctx, id); err != nil {
 		return err
 	}
 	c.removeDeployLogs(id)
+	return nil
+}
+
+// removeServiceContainers removes containers and, for databases, the volume.
+func (c *Core) removeServiceContainers(ctx context.Context, svc store.Service) error {
+	cts, err := c.serviceContainers(ctx, svc)
+	if err != nil {
+		return err
+	}
+	for _, ct := range cts {
+		if err := c.docker.RemoveContainer(ctx, ct.ID, stopTimeoutFor(svc)); err != nil {
+			return err
+		}
+	}
+	if svc.Kind == store.ServiceKindPostgres {
+		return c.docker.RemoveVolume(ctx, PostgresVolume(svc.ID))
+	}
 	return nil
 }
 
@@ -305,7 +395,7 @@ func (c *Core) ServiceAction(ctx context.Context, id string, action Action) (Ser
 	if len(cts) == 0 {
 		return ServiceView{}, fmt.Errorf("%w: service has not been deployed yet", ErrInvalid)
 	}
-	secs := int(stopTimeout.Seconds())
+	secs := int(stopTimeoutFor(svc).Seconds())
 	for _, ct := range cts {
 		switch action {
 		case ActionStart:

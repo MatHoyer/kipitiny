@@ -40,6 +40,7 @@ func New(c *core.Core, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/services/{id}/{action}", a.serviceAction)
 	mux.HandleFunc("GET /api/services/{id}/deployments", a.listDeployments)
 	mux.HandleFunc("GET /api/services/{id}/logs", a.streamLogs)
+	mux.HandleFunc("GET /api/services/{id}/connection", a.connection)
 	mux.HandleFunc("GET /api/deployments/{id}", a.getDeployment)
 	mux.HandleFunc("GET /api/deployments/{id}/log", a.deploymentLog)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +91,7 @@ func (a *API) getProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) deleteProject(w http.ResponseWriter, r *http.Request) {
-	if err := a.core.DeleteProject(r.Context(), r.PathValue("id")); err != nil {
+	if err := a.core.DeleteProject(r.Context(), r.PathValue("id"), r.URL.Query().Get("confirm")); err != nil {
 		a.fail(w, err)
 		return
 	}
