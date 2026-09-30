@@ -34,7 +34,20 @@ make docker    # image `kipitiny`
 | `KIPITINY_ADDR`      | `:3000` | HTTP listen address |
 | `KIPITINY_DATA_DIR`  | `/data` | SQLite DB, deploy logs, local backups. Local disk only. |
 | `KIPITINY_LOG_LEVEL` | `info`  | `debug`, `info`, `warn`, `error` |
+| `KIPITINY_TRAEFIK`   | `true`  | Run and maintain the Traefik container (`false` to bring your own) |
+| `KIPITINY_TRAEFIK_IMAGE` | `traefik:v3.7` | |
+| `KIPITINY_HTTP_PORT` / `KIPITINY_HTTPS_PORT` | `80` / `443` | Host ports Traefik binds |
+| `KIPITINY_ACME_EMAIL` | — | Let's Encrypt account email (optional) |
+| `KIPITINY_DOCKER_SOCKET` | `/var/run/docker.sock` | Host socket path mounted into Traefik |
 | `DOCKER_HOST`        | socket  | Standard Docker client env vars apply |
+
+Traefik is (re)created on startup whenever its configuration changes; it keeps
+running across manager restarts. HTTP redirects to HTTPS, certificates come from
+Let's Encrypt (TLS-ALPN challenge, so port 443 must be reachable publicly).
+
+For local testing use a `*.localhost` domain and alternate ports, e.g.
+`KIPITINY_HTTP_PORT=8081 KIPITINY_HTTPS_PORT=8443`, then
+`curl -k https://app.localhost:8443` (Traefik serves its default self-signed cert).
 
 ## Layout
 

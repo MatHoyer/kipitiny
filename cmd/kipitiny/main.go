@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -53,7 +54,7 @@ func run() error {
 	}
 	defer dc.Close()
 
-	c := core.New(st, dc)
+	c := core.New(cfg, st, dc, log)
 	if err := c.Bootstrap(ctx); err != nil {
 		// Keep serving the UI so the problem is visible there.
 		log.Warn("docker bootstrap failed", "err", err)
@@ -67,6 +68,9 @@ func run() error {
 		Addr:              cfg.Addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
+		// Request contexts end on SIGTERM so long-lived SSE log streams don't
+		// hold up Shutdown (which only waits, it never cancels).
+		BaseContext: func(net.Listener) context.Context { return ctx },
 	}
 
 	errc := make(chan error, 1)
@@ -84,7 +88,11 @@ func run() error {
 		log.Info("shutting down")
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	return srv.Shutdown(shutdownCtx)
+	srvErr := srv.Shutdown(shutdownCtx)
+	if err := c.Shutdown(shutdownCtx); err != nil {
+		log.Warn("background work did not stop in time", "err", err)
+	}
+	return srvErr
 }

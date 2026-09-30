@@ -25,6 +25,17 @@ func New(c *core.Core, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/projects", a.createProject)
 	mux.HandleFunc("GET /api/projects/{id}", a.getProject)
 	mux.HandleFunc("DELETE /api/projects/{id}", a.deleteProject)
+	mux.HandleFunc("GET /api/projects/{id}/services", a.listServices)
+	mux.HandleFunc("POST /api/projects/{id}/services", a.createService)
+	mux.HandleFunc("GET /api/services/{id}", a.getService)
+	mux.HandleFunc("PATCH /api/services/{id}", a.updateService)
+	mux.HandleFunc("DELETE /api/services/{id}", a.deleteService)
+	mux.HandleFunc("POST /api/services/{id}/deploy", a.deployService)
+	mux.HandleFunc("POST /api/services/{id}/{action}", a.serviceAction)
+	mux.HandleFunc("GET /api/services/{id}/deployments", a.listDeployments)
+	mux.HandleFunc("GET /api/services/{id}/logs", a.streamLogs)
+	mux.HandleFunc("GET /api/deployments/{id}", a.getDeployment)
+	mux.HandleFunc("GET /api/deployments/{id}/log", a.deploymentLog)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 	})
@@ -52,8 +63,7 @@ func (a *API) createProject(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name string `json:"name"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	if !decode(w, r, &body) {
 		return
 	}
 	p, err := a.core.CreateProject(r.Context(), body.Name)
@@ -88,11 +98,23 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not found")
 	case errors.Is(err, store.ErrConflict):
-		writeError(w, http.StatusConflict, "already exists")
+		writeError(w, http.StatusConflict, "already exists (name or domain taken)")
+	case errors.Is(err, core.ErrBusy):
+		writeError(w, http.StatusConflict, "another operation is in progress for this service")
 	default:
 		a.log.Error("request failed", "err", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 	}
+}
+
+func decode(w http.ResponseWriter, r *http.Request, v any) bool {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return false
+	}
+	return true
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
