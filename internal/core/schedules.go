@@ -58,6 +58,9 @@ func (c *Core) StartScheduler(ctx context.Context) error {
 	if err := c.reloadSchedules(ctx); err != nil {
 		return err
 	}
+	if err := c.scheduleManagerBackup(); err != nil {
+		return err
+	}
 	c.sched.cron.Start()
 	return nil
 }

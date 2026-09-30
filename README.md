@@ -48,6 +48,25 @@ docker compose exec -it manager /kipitiny reset-password admin
   never pruned. A run that finds the database busy (deploy, restore) retries for
   15 minutes.
 
+### Encryption
+
+An S3 target can encrypt everything stored on it with [age](https://age-encryption.org)
+(chosen at creation; the key never changes). Copy the key (*Show key*) somewhere
+safe: without it, those backups are unreadable if this server is lost. Offline:
+
+```sh
+age -d -i key.txt shop-20260930T030000Z-xxxx.dump.age | pg_restore -d "$DATABASE_URL" --no-owner
+```
+
+### Manager state
+
+The manager's own SQLite file (projects, services, schedules, credentials, keys)
+is snapshotted with `VACUUM INTO` daily to local disk and the last 14 are kept
+(`KIPITINY_MANAGER_BACKUP_CRON` / `_TARGET` / `_KEEP`, `off` to disable). These
+snapshots contain every secret the manager holds: prefer an encrypted target.
+To restore one, stop the manager and replace `/data/kipitiny.db` with the file
+(delete `kipitiny.db-wal` and `kipitiny.db-shm` first).
+
 S3 targets are checked (a test object is written and deleted) before they are saved.
 `go test ./internal/storage/` runs S3 tests against a real server when
 `KIPITINY_TEST_S3_ENDPOINT` is set (see `internal/storage/s3_test.go`).
@@ -77,6 +96,9 @@ make docker    # image `kipitiny`
 | `KIPITINY_TRAEFIK_IMAGE` | `traefik:v3.7` | |
 | `KIPITINY_HTTP_PORT` / `KIPITINY_HTTPS_PORT` | `80` / `443` | Host ports Traefik binds |
 | `KIPITINY_ACME_EMAIL` | — | Let's Encrypt account email (optional) |
+| `KIPITINY_MANAGER_BACKUP_CRON` | `@daily` | Snapshot of the manager's state (`off` to disable) |
+| `KIPITINY_MANAGER_BACKUP_TARGET` | `local` | Target ID for those snapshots |
+| `KIPITINY_MANAGER_BACKUP_KEEP` | `14` | Snapshots kept per target |
 | `KIPITINY_DOCKER_SOCKET` | `/var/run/docker.sock` | Host socket path mounted into Traefik |
 | `DOCKER_HOST`        | socket  | Standard Docker client env vars apply |
 

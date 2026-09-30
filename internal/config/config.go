@@ -4,6 +4,8 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -19,7 +21,17 @@ type Config struct {
 	// that is required to create the admin account.
 	SetupToken string
 
-	Traefik Traefik
+	Traefik       Traefik
+	ManagerBackup ManagerBackup
+}
+
+// ManagerBackup schedules backups of the manager's own SQLite state.
+type ManagerBackup struct {
+	// Cron is empty when disabled (KIPITINY_MANAGER_BACKUP_CRON=off).
+	Cron     string
+	TargetID string
+	// Keep is how many manager backups to keep per target (0 = all).
+	Keep int
 }
 
 type Traefik struct {
@@ -48,7 +60,27 @@ func Load() Config {
 			ACMEEmail:    env("KIPITINY_ACME_EMAIL", ""),
 			DockerSocket: env("KIPITINY_DOCKER_SOCKET", "/var/run/docker.sock"),
 		},
+		ManagerBackup: ManagerBackup{
+			Cron:     managerCron(env("KIPITINY_MANAGER_BACKUP_CRON", "@daily")),
+			TargetID: env("KIPITINY_MANAGER_BACKUP_TARGET", "local"),
+			Keep:     envInt("KIPITINY_MANAGER_BACKUP_KEEP", 14),
+		},
 	}
+}
+
+func managerCron(v string) string {
+	if strings.EqualFold(v, "off") {
+		return ""
+	}
+	return v
+}
+
+func envInt(key string, fallback int) int {
+	n, err := strconv.Atoi(env(key, ""))
+	if err != nil {
+		return fallback
+	}
+	return n
 }
 
 func (c Config) DBPath() string {

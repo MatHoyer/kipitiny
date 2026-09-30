@@ -72,9 +72,8 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, scheduleID 
 		TargetID:    target.ID,
 		ScheduleID:  scheduleID,
 		// The suffix keeps keys unique for backups started in the same second.
-		ObjectKey: fmt.Sprintf("%s/%s/%s-%s.dump", project.Name, svc.Name,
-			created.Format("20060102T150405Z"), strings.ToLower(ids.New()[16:])),
-		Status: store.OpRunning,
+		ObjectKey: objectKey(fmt.Sprintf("%s/%s/", project.Name, svc.Name), created, ".dump", target),
+		Status:    store.OpRunning,
 	})
 	if err != nil {
 		unlock()
@@ -85,7 +84,7 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, scheduleID 
 		if done != nil {
 			defer close(done)
 		}
-		ok := c.runBackup(svc, ct, st, b)
+		ok := c.runBackup(svc, ct, st, target, b)
 		unlock()
 		if ok && scheduleID != "" {
 			c.applyRetention(scheduleID)
@@ -97,6 +96,16 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, scheduleID 
 		return store.Backup{}, err
 	}
 	return b, nil
+}
+
+// objectKey is dir/<timestamp>-<suffix><ext>[.age]. The suffix keeps keys
+// unique for backups started in the same second.
+func objectKey(dir string, created time.Time, ext string, target store.BackupTarget) string {
+	key := dir + created.Format("20060102T150405Z") + "-" + strings.ToLower(ids.New()[16:]) + ext
+	if target.Encrypted() {
+		key += ".age"
+	}
+	return key
 }
 
 // BackupProject backs up every database of a project to one target.
@@ -126,13 +135,13 @@ func (c *Core) BackupProject(ctx context.Context, projectID, targetID string) ([
 }
 
 // runBackup performs the backup and records the outcome; it reports success.
-func (c *Core) runBackup(svc store.Service, containerID string, st storage.Storage, b store.Backup) bool {
+func (c *Core) runBackup(svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b store.Backup) bool {
 	ctx, cancel := context.WithTimeout(c.bg, backupTimeout)
 	defer cancel()
 	log := c.log.With("backup", b.ID, "service", svc.Name)
 	start := time.Now()
 
-	err := c.dump(ctx, svc, containerID, st, &b)
+	err := c.dump(ctx, svc, containerID, st, target, &b)
 	b.DurationMS = time.Since(start).Milliseconds()
 	b.Status = store.OpSucceeded
 	if err != nil {
@@ -158,46 +167,73 @@ func (c *Core) runBackup(svc store.Service, containerID string, st storage.Stora
 
 // dump streams pg_dump output to storage, filling in size, checksum and
 // server version on b.
-func (c *Core) dump(ctx context.Context, svc store.Service, containerID string, st storage.Storage, b *store.Backup) error {
+func (c *Core) dump(ctx context.Context, svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b *store.Backup) error {
 	version, err := c.serverVersion(ctx, svc, containerID)
 	if err != nil {
 		return fmt.Errorf("server version: %w", err)
 	}
 	b.PGVersion = version
-
-	pr, pw := io.Pipe()
-	execErr := make(chan error, 1)
-	go func() {
+	return c.upload(ctx, st, target, b, func(w io.Writer) error {
 		err := c.docker.Exec(ctx, containerID, docker.ExecOptions{
 			// Custom format: compressed, and pg_restore can restore selectively.
 			Cmd:    []string{"pg_dump", "-U", svc.Env[pgUser], "-d", svc.Env[pgDatabase], "-Fc"},
-			Stdout: pw,
+			Stdout: w,
 		})
+		if err != nil {
+			return fmt.Errorf("pg_dump: %w", err)
+		}
+		return nil
+	})
+}
+
+// upload streams what produce writes to storage under b.ObjectKey, through
+// age encryption when the target has a recipient, and records size and
+// SHA-256 of the stored bytes on b. produce's error takes precedence: a
+// producer can fail after data already flowed.
+func (c *Core) upload(ctx context.Context, st storage.Storage, target store.BackupTarget, b *store.Backup,
+	produce func(w io.Writer) error) error {
+
+	pr, pw := io.Pipe()
+	prodErr := make(chan error, 1)
+	go func() {
+		err := func() error {
+			var w io.Writer = pw
+			if target.Encrypted() {
+				enc, err := encryptTo(pw, target.AgeRecipient)
+				if err != nil {
+					return err
+				}
+				if err := produce(enc); err != nil {
+					return err
+				}
+				return enc.Close() // writes the final authenticated chunk
+			}
+			return produce(w)
+		}()
 		pw.CloseWithError(err) // nil → EOF for the uploader
-		execErr <- err
+		prodErr <- err
 	}()
 
 	sum := &hashCounter{h: sha256.New()}
 	putErr := st.Put(ctx, b.ObjectKey, io.TeeReader(pr, sum))
-	pr.CloseWithError(errors.New("upload stopped")) // unblock pg_dump if the upload failed
-	dumpErr := <-execErr
+	pr.CloseWithError(errors.New("upload stopped")) // unblock the producer if the upload failed
+	err := <-prodErr
 
-	// pg_dump can fail after data started flowing, so its exit code is
-	// checked even when the upload went through. When the upload fails first,
-	// pg_dump only sees a broken pipe: report the upload error then.
+	// When the upload fails first, the producer only sees a broken pipe:
+	// report the upload error then.
 	var exitErr *docker.ExecError
 	switch {
-	case errors.As(dumpErr, &exitErr):
-		return fmt.Errorf("pg_dump: %w", dumpErr)
+	case errors.As(err, &exitErr):
+		return err
 	case putErr != nil:
 		return fmt.Errorf("upload: %w", putErr)
-	case dumpErr != nil:
-		return fmt.Errorf("pg_dump: %w", dumpErr)
+	case err != nil:
+		return err
 	}
 	if sum.n == 0 {
-		return errors.New("pg_dump produced no output")
+		return errors.New("backup produced no output")
 	}
-	b.SizeBytes, b.SHA256 = sum.n, hex.EncodeToString(sum.h.Sum(nil))
+	b.SizeBytes, b.SHA256, b.Encrypted = sum.n, hex.EncodeToString(sum.h.Sum(nil)), target.Encrypted()
 	return nil
 }
 
@@ -232,6 +268,9 @@ func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, con
 	}
 	if b.Status != store.OpSucceeded {
 		return store.Restore{}, fmt.Errorf("%w: only successful backups can be restored", ErrInvalid)
+	}
+	if b.Kind != store.BackupKindPostgres {
+		return store.Restore{}, fmt.Errorf("%w: manager backups are restored by replacing the data file (see README)", ErrInvalid)
 	}
 	if targetServiceID == "" {
 		targetServiceID = b.ServiceID
@@ -274,7 +313,7 @@ func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, con
 
 	if err := c.goBackground(func() {
 		defer unlock()
-		c.runRestore(svc, ct, st, b, r)
+		c.runRestore(svc, ct, st, target, b, r)
 	}); err != nil {
 		unlock()
 		_ = c.store.FinishRestore(ctx, r.ID, store.OpFailed, err.Error())
@@ -283,14 +322,14 @@ func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, con
 	return r, nil
 }
 
-func (c *Core) runRestore(svc store.Service, containerID string, st storage.Storage, b store.Backup, r store.Restore) {
+func (c *Core) runRestore(svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b store.Backup, r store.Restore) {
 	ctx, cancel := context.WithTimeout(c.bg, restoreTimeout)
 	defer cancel()
 	log := c.log.With("restore", r.ID, "backup", b.ID, "service", svc.Name)
 
 	stopped, err := c.stopLinkedApps(ctx, svc)
 	if err == nil {
-		err = c.restore(ctx, svc, containerID, st, b)
+		err = c.restore(ctx, svc, containerID, st, target, b)
 	}
 	// Bring apps back even if the restore failed: the transaction rolled back.
 	for _, id := range stopped {
@@ -317,7 +356,7 @@ func (c *Core) runRestore(svc store.Service, containerID string, st storage.Stor
 // restore loads the dump into a scratch database and swaps it in by rename,
 // so the result is exactly the backup (objects created since are gone) and
 // a failure leaves the live database untouched.
-func (c *Core) restore(ctx context.Context, svc store.Service, containerID string, st storage.Storage, b store.Backup) error {
+func (c *Core) restore(ctx context.Context, svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b store.Backup) error {
 	rc, err := st.Get(ctx, b.ObjectKey)
 	if err != nil {
 		return fmt.Errorf("open backup: %w", err)
@@ -342,17 +381,30 @@ func (c *Core) restore(ctx context.Context, svc store.Service, containerID strin
 		_ = admin(fmt.Sprintf(`DROP DATABASE IF EXISTS %s WITH (FORCE)`, pgIdent(scratch)))
 	}
 
+	// The checksum covers the stored (possibly encrypted) bytes.
 	sum := &hashCounter{h: sha256.New()}
+	stored := io.TeeReader(rc, sum)
+	var dump io.Reader = stored
+	if b.Encrypted {
+		if dump, err = decryptFrom(stored, target.AgeIdentity); err != nil {
+			dropScratch()
+			return err
+		}
+	}
 	err = c.docker.Exec(ctx, containerID, docker.ExecOptions{
 		Cmd: []string{
 			"pg_restore", "-U", user, "-d", scratch,
 			"--no-owner", "--no-privileges", "--exit-on-error",
 		},
-		Stdin: io.TeeReader(rc, sum),
+		Stdin: dump,
 	})
 	if err != nil {
 		dropScratch()
 		return fmt.Errorf("pg_restore: %w", err)
+	}
+	if _, err := io.Copy(io.Discard, stored); err != nil { // finish the checksum
+		dropScratch()
+		return fmt.Errorf("read backup: %w", err)
 	}
 	if got := hex.EncodeToString(sum.h.Sum(nil)); b.SHA256 != "" && got != b.SHA256 {
 		dropScratch()
