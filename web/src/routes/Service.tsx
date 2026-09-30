@@ -1,25 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ExternalLink, Play, RefreshCw, RotateCcw, Rocket, Square, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
+import { toast } from "sonner";
+import { Empty, ErrorText, Mono, SecretList, Section, StateBadge, Tag } from "@/components/common";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { PageBody, PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import { FloatingInput } from "@/components/ui/floating-input";
+import { FloatingSelect } from "@/components/ui/floating-select";
+import { FloatingTextarea } from "@/components/ui/floating-textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatEnv, parseEnv, serviceState, timeAgo } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { api, type Connection, type Deployment, type LogLine, type Service as ServiceT } from "../api";
 import { BackupList } from "./BackupList";
 import { GitFields } from "./Project";
 import { Schedules } from "./Schedules";
-import { api, type Connection, type Deployment, type LogLine, type Service as ServiceT } from "../api";
-import {
-  Button,
-  Card,
-  confirmByName,
-  ErrorText,
-  Field,
-  formatEnv,
-  Input,
-  parseEnv,
-  Select,
-  serviceState,
-  StateBadge,
-  Textarea,
-  timeAgo,
-} from "../ui";
 
 export function Service() {
   const { id = "" } = useParams();
@@ -27,6 +24,11 @@ export function Service() {
   const navigate = useNavigate();
 
   const service = useQuery({ queryKey: ["service", id], queryFn: () => api.service(id), refetchInterval: 5_000 });
+  const project = useQuery({
+    queryKey: ["project", service.data?.projectId],
+    queryFn: () => api.project(service.data!.projectId),
+    enabled: !!service.data,
+  });
   const deployments = useQuery({
     queryKey: ["deployments", id],
     queryFn: () => api.deployments(id),
@@ -62,111 +64,112 @@ export function Service() {
     onSuccess: () => navigate(`/projects/${service.data?.projectId}`),
   });
 
-  if (service.error) return <ErrorText error={service.error} />;
   const svc = service.data;
-  if (!svc) return <p className="text-sm text-zinc-500">Loading…</p>;
+  const crumbs = [
+    { label: "Projects", to: "/" },
+    { label: project.data?.name ?? "…", to: svc && `/projects/${svc.projectId}` },
+    { label: svc?.name ?? "…" },
+  ];
+  if (!svc)
+    return (
+      <>
+        <PageHeader crumbs={crumbs} />
+        <PageBody>{service.error ? <ErrorText error={service.error} /> : <Empty>Loading…</Empty>}</PageBody>
+      </>
+    );
 
-  const state = deploying ? "deploying" : svc.stopped ? "stopped" : serviceState(svc.containers.filter((c) => !c.retired));
   const active = svc.containers.filter((c) => !c.retired);
+  const state = deploying ? "deploying" : svc.stopped ? "stopped" : serviceState(active);
   const allStopped = active.length > 0 && active.every((c) => c.state !== "running");
   const busy = deploying || deploy.isPending || action.isPending || remove.isPending;
+  const isDb = svc.kind === "postgres";
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Link to={`/projects/${svc.projectId}`} className="text-xs text-zinc-500 hover:underline">
-            ← Project
-          </Link>
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-semibold">{svc.name}</h1>
-            <StateBadge state={state} />
-          </div>
+    <>
+      <PageHeader
+        crumbs={crumbs}
+        actions={
+          <>
+            {svc.containers.length > 0 && (
+              <>
+                <Button variant="outline" size="sm" disabled={busy} onClick={() => action.mutate("restart")}>
+                  <RotateCcw data-icon="inline-start" />
+                  Restart
+                </Button>
+                <Button variant="outline" size="sm" disabled={busy} onClick={() => action.mutate(allStopped ? "start" : "stop")}>
+                  {allStopped ? <Play data-icon="inline-start" /> : <Square data-icon="inline-start" />}
+                  {allStopped ? "Start" : "Stop"}
+                </Button>
+              </>
+            )}
+            <Button size="sm" disabled={busy} onClick={() => deploy.mutate()}>
+              <Rocket data-icon="inline-start" />
+              {deploying ? "Deploying…" : "Deploy"}
+            </Button>
+            <ConfirmDialog
+              trigger={
+                <Button variant="destructive" size="icon-sm" aria-label="Delete service" disabled={busy}>
+                  <Trash2 />
+                </Button>
+              }
+              title={isDb ? `Delete database ${svc.name}?` : `Delete service ${svc.name}?`}
+              description={isDb ? "Its data volume will be destroyed." : "Its containers are removed."}
+              typeToConfirm={isDb ? svc.name : undefined}
+              onConfirm={(name) => remove.mutate(name)}
+            />
+          </>
+        }
+      />
+      <PageBody>
+        <div className="flex flex-wrap items-center gap-3">
+          <StateBadge state={state} />
           {svc.domain && (
-            <a href={`https://${svc.domain}`} target="_blank" rel="noreferrer" className="text-sm text-sky-600 hover:underline">
+            <a
+              href={`https://${svc.domain}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
               {svc.domain}
+              <ExternalLink className="size-3.5" />
             </a>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button disabled={busy} onClick={() => deploy.mutate()}>
-            {deploying ? "Deploying…" : "Deploy"}
-          </Button>
-          {svc.containers.length > 0 && (
-            <>
-              <Button variant="secondary" disabled={busy} onClick={() => action.mutate("restart")}>
-                Restart
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={busy}
-                onClick={() => action.mutate(allStopped ? "start" : "stop")}
-              >
-                {allStopped ? "Start" : "Stop"}
-              </Button>
-            </>
-          )}
-          <Button
-            variant="danger"
-            disabled={busy}
-            onClick={() => {
-              if (svc.kind !== "postgres") {
-                if (confirm(`Delete service ${svc.name} and its containers?`)) remove.mutate("");
-                return;
-              }
-              const name = confirmByName(`Delete database ${svc.name}? Its data volume will be destroyed.`, svc.name);
-              if (name) remove.mutate(name);
-            }}
-          >
-            Delete
-          </Button>
-        </div>
-      </div>
-      <ErrorText error={deploy.error ?? action.error ?? remove.error} />
+        <ErrorText error={deploy.error ?? action.error ?? remove.error} />
 
-      <Card title="Containers">
-        {svc.containers.length === 0 ? (
-          <p className="text-sm text-zinc-500">Not deployed yet.</p>
-        ) : (
-          <table className="w-full text-left text-sm">
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+        <Section title="Containers">
+          {svc.containers.length === 0 ? (
+            <Empty>Not deployed yet.</Empty>
+          ) : (
+            <ul className="-my-2 divide-y">
               {svc.containers.map((c) => (
-                <tr key={c.id} className={c.retired ? "text-zinc-400" : ""}>
-                  <td className="py-1.5 font-mono text-xs">
-                    {c.name}
-                    {c.retired && <span className="ml-2 font-sans">previous deploy, kept for its logs</span>}
-                  </td>
-                  <td className="py-1.5">
-                    <StateBadge state={c.health ?? c.state} />
-                  </td>
-                  <td className="py-1.5 text-xs text-zinc-500">{c.status}</td>
-                </tr>
+                <li key={c.id} className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 py-2", c.retired && "opacity-50")}>
+                  <span className="font-mono text-xs">{c.name}</span>
+                  <StateBadge state={c.health ?? c.state} />
+                  <span className="flex-1 text-right text-xs text-muted-foreground">
+                    {c.retired ? "previous deploy, kept for its logs" : c.status}
+                  </span>
+                </li>
               ))}
-            </tbody>
-          </table>
+            </ul>
+          )}
+        </Section>
+
+        {isDb && <ConnectionCard serviceId={svc.id} host={svc.name} />}
+        {svc.source === "git" && <WebhookCard serviceId={svc.id} branch={svc.gitBranch} />}
+        {isDb && <BackupsCard serviceId={svc.id} name={svc.name} />}
+
+        {svc.containers.length > 0 && (
+          // Remount (and reconnect) whenever the set of containers changes.
+          <LiveLogs key={active.map((c) => c.id).join()} serviceId={id} />
         )}
-      </Card>
 
-      {svc.kind === "postgres" && <ConnectionCard serviceId={svc.id} host={svc.name} />}
-      {svc.source === "git" && <WebhookCard serviceId={svc.id} branch={svc.gitBranch} />}
-      {svc.kind === "postgres" && <BackupsCard serviceId={svc.id} name={svc.name} />}
-
-      {svc.containers.length > 0 && (
-        // Remount (and reconnect) whenever the set of containers changes.
-        <LiveLogs key={active.map((c) => c.id).join()} serviceId={id} />
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Settings svc={svc} />
-        <Deployments
-          svc={svc}
-          deployments={deployments.data ?? []}
-          selected={selected}
-          onSelect={setSelected}
-          busy={busy}
-        />
-      </div>
-    </div>
+        <div className="grid items-start gap-4 lg:grid-cols-2">
+          <Settings svc={svc} />
+          <Deployments svc={svc} deployments={deployments.data ?? []} selected={selected} onSelect={setSelected} busy={busy} />
+        </div>
+      </PageBody>
+    </>
   );
 }
 
@@ -223,7 +226,12 @@ function Settings({ svc }: { svc: ServiceT }) {
               env: parseEnv(form.env),
             },
       ),
-    onSuccess: (updated) => qc.setQueryData(["service", svc.id], updated),
+    onSuccess: (updated) => {
+      qc.setQueryData(["service", svc.id], updated);
+      toast.success("Settings saved", {
+        description: isDb ? "Deploy to apply." : "Replica count applies now; deploy to apply other changes.",
+      });
+    },
   });
 
   const onSubmit = (e: FormEvent) => {
@@ -232,80 +240,85 @@ function Settings({ svc }: { svc: ServiceT }) {
   };
 
   return (
-    <Card title="Settings">
-      <form onSubmit={onSubmit} className="space-y-4">
+    <Section title="Settings">
+      <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
         {svc.source === "git" ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <GitFields form={form} set={set} tokenHint="******** keeps the saved token." />
-          </div>
+          <GitFields form={form} set={set} tokenHint="******** keeps the saved token." />
         ) : (
-          <Field label="Image" hint={isDb ? "Minor upgrades only; major versions need a dump and restore." : undefined}>
-            <Input required value={form.image} onChange={set("image")} />
-          </Field>
+          <FloatingInput
+            label="Image"
+            required
+            value={form.image}
+            onChange={set("image")}
+            className="sm:col-span-2"
+            description={isDb ? "Minor upgrades only; major versions need a dump and restore." : undefined}
+          />
         )}
         {!isDb && (
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-3 sm:col-span-1">
-              <Field label="Domain">
-                <Input value={form.domain} onChange={set("domain")} placeholder="private" />
-              </Field>
-            </div>
-            <Field label="Port">
-              <Input type="number" min={0} max={65535} value={form.port} onChange={set("port")} />
-            </Field>
-            <Field label="Replicas">
-              <Input type="number" min={1} max={10} value={form.replicas} onChange={set("replicas")} />
-            </Field>
-          </div>
+          <>
+            <FloatingInput label="Domain" value={form.domain} onChange={set("domain")} placeholder="private" className="sm:col-span-2" />
+            <FloatingInput label="Port" type="number" min={0} max={65535} value={form.port} onChange={set("port")} />
+            <FloatingInput label="Replicas" type="number" min={1} max={10} value={form.replicas} onChange={set("replicas")} />
+          </>
         )}
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Memory (MB)" hint={isDb ? undefined : "Empty for no limit."}>
-            <Input type="number" min={0} step={64} value={form.memory} onChange={set("memory")} />
-          </Field>
-          {!isDb && (
-            <Field label="Database" hint="Injects DATABASE_URL.">
-              <Select value={form.databaseId} onChange={set("databaseId")}>
-                <option value="">None</option>
-                {databases.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )}
-        </div>
+        <FloatingInput
+          label="Memory (MB)"
+          type="number"
+          min={0}
+          step={64}
+          value={form.memory}
+          onChange={set("memory")}
+          description={isDb ? undefined : "Empty for no limit."}
+          className={isDb ? "sm:col-span-2" : undefined}
+        />
         {!isDb && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Health path" hint="New replicas get traffic once this answers < 400. Empty: port accepts connections.">
-              <Input value={form.healthPath} onChange={set("healthPath")} placeholder="/healthz" />
-            </Field>
-            <Field label="Pre-deploy command" hint="Runs once (sh -c) before replicas start, e.g. migrations.">
-              <Input value={form.preDeploy} onChange={set("preDeploy")} placeholder="npm run migrate" className="font-mono" />
-            </Field>
-          </div>
+          <>
+            <FloatingSelect
+              label="Database"
+              value={form.databaseId || "none"}
+              onValueChange={(v) => setForm({ ...form, databaseId: v === "none" ? "" : v })}
+              options={[{ value: "none", label: "None" }, ...databases.map((d) => ({ value: d.id, label: d.name }))]}
+              description="Injects DATABASE_URL."
+            />
+            <FloatingInput
+              label="Health path"
+              value={form.healthPath}
+              onChange={set("healthPath")}
+              placeholder="/healthz"
+              className="sm:col-span-2"
+              description="New replicas get traffic once this answers < 400. Empty: port accepts connections."
+            />
+            <FloatingInput
+              label="Pre-deploy command"
+              value={form.preDeploy}
+              onChange={set("preDeploy")}
+              placeholder="npm run migrate"
+              inputClassName="font-mono"
+              className="sm:col-span-2"
+              description="Runs once (sh -c) before replicas start, e.g. migrations."
+            />
+          </>
         )}
-        <Field
+        <FloatingTextarea
           label="Environment"
-          hint={
+          rows={5}
+          value={form.env}
+          onChange={set("env")}
+          className="sm:col-span-2 [&_textarea]:font-mono [&_textarea]:text-sm"
+          description={
             isDb
               ? "POSTGRES_* credentials are fixed at creation."
               : "Hidden values (********) are kept as-is. Remove a line to delete a variable."
           }
-        >
-          <Textarea rows={5} value={form.env} onChange={set("env")} />
-        </Field>
-        <div className="flex items-center gap-3">
-          <Button disabled={save.isPending}>Save</Button>
-          {save.isSuccess && (
-            <span className="text-xs text-zinc-500">
-              Saved. {isDb ? "Deploy to apply." : "Replica count applies now; deploy to apply other changes."}
-            </span>
-          )}
+        />
+        <div className="flex items-center justify-end gap-3 sm:col-span-2">
           <ErrorText error={save.error} />
+          <Button type="submit" disabled={save.isPending}>
+            {save.isPending ? "Saving…" : "Save"}
+          </Button>
         </div>
       </form>
-    </Card>
+    </Section>
   );
 }
 
@@ -331,141 +344,123 @@ function BackupsCard({ serviceId, name }: { serviceId: string; name: string }) {
   const busy = backups.data?.some((b) => b.status === "running") || lastRestore?.status === "running";
 
   return (
-    <Card
+    <Section
       title="Backups"
-      actions={
-        <>
-          <Select value={targetId} onChange={(e) => setTargetId(e.target.value)} className="!w-auto !py-0.5 text-xs">
-            {targets.data?.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
-          <Button className="!py-0.5 text-xs" disabled={busy || backup.isPending} onClick={() => backup.mutate()}>
-            Back up now
-          </Button>
-        </>
-      }
+      actions={<BackupNow targets={targets.data ?? []} targetId={targetId} onTarget={setTargetId} disabled={busy || backup.isPending} onBackup={() => backup.mutate()} />}
     >
-      <div className="space-y-3">
-        {lastRestore && (
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
-            Last restore: <StateBadge state={lastRestore.status} /> {timeAgo(lastRestore.createdAt)}
-            {lastRestore.error && <span className="truncate text-red-600">{lastRestore.error}</span>}
-          </div>
-        )}
-        <ErrorText error={backup.error} />
-        <Schedules serviceId={serviceId} targets={targets.data ?? []} />
-        <h3 className="pt-2 text-xs font-semibold tracking-wide text-zinc-500 uppercase">History</h3>
+      {lastRestore && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          Last restore <StateBadge state={lastRestore.status} /> {timeAgo(lastRestore.createdAt)}
+          {lastRestore.error && <span className="truncate text-destructive">{lastRestore.error}</span>}
+        </div>
+      )}
+      <ErrorText error={backup.error} />
+      <Schedules serviceId={serviceId} targets={targets.data ?? []} />
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium">History</h3>
         <BackupList backups={backups.data ?? []} targets={targets.data ?? []} restoreInto={name} />
       </div>
-    </Card>
+    </Section>
+  );
+}
+
+/** Target picker and "Back up now", for a card's actions. */
+export function BackupNow({
+  targets,
+  targetId,
+  onTarget,
+  disabled,
+  onBackup,
+}: {
+  targets: { id: string; name: string }[];
+  targetId: string;
+  onTarget: (id: string) => void;
+  disabled?: boolean;
+  onBackup: () => void;
+}) {
+  return (
+    <>
+      <Select value={targetId} onValueChange={onTarget}>
+        <SelectTrigger size="sm" aria-label="Target" className="min-w-24">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent position="popper" align="end">
+          {targets.map((t) => (
+            <SelectItem key={t.id} value={t.id}>
+              {t.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button size="sm" disabled={disabled} onClick={onBackup}>
+        Back up now
+      </Button>
+    </>
   );
 }
 
 function WebhookCard({ serviceId, branch }: { serviceId: string; branch: string }) {
   const [hook, setHook] = useState<{ url: string; secret: string } | null>(null);
   const reveal = useMutation({ mutationFn: () => api.webhook(serviceId), onSuccess: setHook });
-  const url = hook ? window.location.origin + hook.url : "";
   return (
-    <Card
+    <Section
       title="Deploy on push"
+      description={
+        <>
+          Add a push webhook (GitHub: content type <Mono>application/json</Mono>; GitLab: secret token) and every push to{" "}
+          <Mono>{branch}</Mono> builds and deploys.
+        </>
+      }
       actions={
-        <Button
-          variant="secondary"
-          className="!py-0.5 text-xs"
-          onClick={() => (hook ? setHook(null) : reveal.mutate())}
-          disabled={reveal.isPending}
-        >
+        <Button variant="outline" size="sm" onClick={() => (hook ? setHook(null) : reveal.mutate())} disabled={reveal.isPending}>
           {hook ? "Hide" : "Show webhook"}
         </Button>
       }
     >
-      {hook ? (
-        <dl className="grid grid-cols-[6rem_1fr] gap-y-1.5 text-sm">
-          {[
-            ["Payload URL", url],
+      {hook && (
+        <SecretList
+          rows={[
+            ["Payload URL", window.location.origin + hook.url],
             ["Secret", hook.secret],
-          ].map(([k, v]) => (
-            <div key={k} className="contents">
-              <dt className="text-zinc-500">{k}</dt>
-              <dd className="flex items-center gap-2 font-mono text-xs break-all">
-                {v}
-                <button
-                  type="button"
-                  onClick={() => navigator.clipboard.writeText(v)}
-                  className="text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-                >
-                  copy
-                </button>
-              </dd>
-            </div>
-          ))}
-        </dl>
-      ) : (
-        <p className="text-sm text-zinc-500">
-          Add a push webhook (GitHub: content type <span className="font-mono">application/json</span>; GitLab: secret
-          token) and every push to <span className="font-mono">{branch}</span> builds and deploys.
-        </p>
+          ]}
+        />
       )}
       <ErrorText error={reveal.error} />
-    </Card>
+    </Section>
   );
 }
 
 function ConnectionCard({ serviceId, host }: { serviceId: string; host: string }) {
   const [conn, setConn] = useState<Connection | null>(null);
   const reveal = useMutation({ mutationFn: () => api.connection(serviceId), onSuccess: setConn });
-  const rows: [string, string][] = conn
-    ? [
-        ["Host", `${conn.host}:${conn.port}`],
-        ["Database", conn.database],
-        ["User", conn.user],
-        ["Password", conn.password],
-        ["URL", conn.url],
-      ]
-    : [];
   return (
-    <Card
+    <Section
       title="Connection"
+      description={
+        <>
+          Reachable only inside the project at <Mono>{host}:5432</Mono>. Link it from an app to inject{" "}
+          <Mono>DATABASE_URL</Mono>.
+        </>
+      }
       actions={
-        <Button
-          variant="secondary"
-          className="!py-0.5 text-xs"
-          onClick={() => (conn ? setConn(null) : reveal.mutate())}
-          disabled={reveal.isPending}
-        >
+        <Button variant="outline" size="sm" onClick={() => (conn ? setConn(null) : reveal.mutate())} disabled={reveal.isPending}>
           {conn ? "Hide" : "Reveal credentials"}
         </Button>
       }
     >
-      {conn ? (
-        <dl className="grid grid-cols-[6rem_1fr] gap-y-1.5 text-sm">
-          {rows.map(([k, v]) => (
-            <div key={k} className="contents">
-              <dt className="text-zinc-500">{k}</dt>
-              <dd className="flex items-center gap-2 font-mono text-xs break-all">
-                {v}
-                <button
-                  type="button"
-                  onClick={() => navigator.clipboard.writeText(v)}
-                  className="text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-                >
-                  copy
-                </button>
-              </dd>
-            </div>
-          ))}
-        </dl>
-      ) : (
-        <p className="text-sm text-zinc-500">
-          Reachable only inside the project at <span className="font-mono">{host}:5432</span>. Link it
-          from an app to inject <span className="font-mono">DATABASE_URL</span>.
-        </p>
+      {conn && (
+        <SecretList
+          rows={[
+            ["Host", `${conn.host}:${conn.port}`],
+            ["Database", conn.database],
+            ["User", conn.user],
+            ["Password", conn.password],
+            ["URL", conn.url],
+          ]}
+        />
       )}
       <ErrorText error={reveal.error} />
-    </Card>
+    </Section>
   );
 }
 
@@ -492,54 +487,58 @@ function Deployments({
   });
   const current = deployments.find((d) => d.id === selected);
   return (
-    <Card title="Deployments">
+    <Section title="Deployments" description={deployments.length > 0 ? "Select one to see its log." : undefined}>
       {deployments.length === 0 ? (
-        <p className="text-sm text-zinc-500">No deployments yet.</p>
+        <Empty>No deployments yet.</Empty>
       ) : (
-        <div className="space-y-3">
-          <ul className="max-h-60 divide-y divide-zinc-200 overflow-y-auto dark:divide-zinc-800">
+        <>
+          <ul className="-mx-2 max-h-72 space-y-0.5 overflow-y-auto">
             {deployments.map((d) => (
-              <li key={d.id}>
+              <li
+                key={d.id}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-muted",
+                  d.id === selected && "bg-muted",
+                )}
+              >
                 <button
+                  type="button"
                   onClick={() => onSelect(d.id === selected ? null : d.id)}
-                  className={`flex w-full items-center justify-between gap-3 px-1 py-1.5 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 ${d.id === selected ? "bg-zinc-100 dark:bg-zinc-800" : ""}`}
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left outline-none"
                 >
                   <StateBadge state={d.status} />
-                  <span className="flex-1 truncate font-mono text-xs text-zinc-500">
+                  <span className="flex-1 truncate font-mono text-xs text-muted-foreground">
                     {d.gitCommit ? `commit ${d.gitCommit.slice(0, 7)}` : d.image}
-                    {d.id === svc.currentDeploymentId && (
-                      <span className="ml-2 font-sans text-emerald-600">current</span>
-                    )}
                   </span>
-                  {svc.kind === "app" && d.status === "succeeded" && d.id !== svc.currentDeploymentId && !busy && (
-                    <span
-                      role="button"
-                      className="text-xs hover:underline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (
-                          confirm(
-                            `Roll back to ${d.image}? Current settings are kept; the next regular deploy uses the image in Settings again.`,
-                          )
-                        )
-                          rollback.mutate(d.id);
-                      }}
-                    >
-                      Roll back
-                    </span>
-                  )}
-                  <span className="text-xs text-zinc-500">{timeAgo(d.createdAt)}</span>
+                  {d.id === svc.currentDeploymentId && <Tag className="bg-emerald-500/10 text-emerald-600">current</Tag>}
+                  <span className="text-xs whitespace-nowrap text-muted-foreground">{timeAgo(d.createdAt)}</span>
                 </button>
+                {svc.kind === "app" && d.status === "succeeded" && d.id !== svc.currentDeploymentId && !busy && (
+                  <ConfirmDialog
+                    trigger={
+                      <Button variant="ghost" size="icon-xs" aria-label="Roll back" title="Roll back">
+                        <RefreshCw />
+                      </Button>
+                    }
+                    title="Roll back?"
+                    description={`Redeploys ${d.image}. Current settings are kept; the next regular deploy uses the image in Settings again.`}
+                    confirmLabel="Roll back"
+                    destructive={false}
+                    onConfirm={() => rollback.mutate(d.id)}
+                  />
+                )}
               </li>
             ))}
           </ul>
           <ErrorText error={rollback.error} />
           {current && <DeploymentLog deployment={current} />}
-        </div>
+        </>
       )}
-    </Card>
+    </Section>
   );
 }
+
+const terminal = "overflow-auto rounded-lg bg-neutral-950 p-3 font-mono text-xs leading-relaxed text-neutral-200 dark:ring-1 dark:ring-foreground/10";
 
 function DeploymentLog({ deployment }: { deployment: Deployment }) {
   const log = useQuery({
@@ -549,10 +548,8 @@ function DeploymentLog({ deployment }: { deployment: Deployment }) {
   });
   return (
     <div className="space-y-2">
-      {deployment.error && <p className="text-sm text-red-600 dark:text-red-400">{deployment.error}</p>}
-      <pre className="max-h-80 overflow-auto rounded-md bg-zinc-950 p-3 text-xs leading-relaxed text-zinc-200">
-        {log.data || "No output."}
-      </pre>
+      {deployment.error && <p className="text-sm text-destructive">{deployment.error}</p>}
+      <pre className={cn(terminal, "max-h-80")}>{log.data || "No output."}</pre>
     </div>
   );
 }
@@ -593,11 +590,11 @@ function LiveLogs({ serviceId }: { serviceId: string }) {
   const multi = new Set(lines.map((l) => l.container)).size > 1;
 
   return (
-    <Card
+    <Section
       title="Logs"
       actions={
         ended && (
-          <Button variant="secondary" className="!py-0.5 text-xs" onClick={() => setAttempt((n) => n + 1)}>
+          <Button variant="outline" size="sm" onClick={() => setAttempt((n) => n + 1)}>
             Reconnect
           </Button>
         )
@@ -609,16 +606,16 @@ function LiveLogs({ serviceId }: { serviceId: string }) {
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
         }}
-        className="h-80 overflow-auto rounded-md bg-zinc-950 p-3 text-xs leading-relaxed text-zinc-200"
+        className={cn(terminal, "h-80")}
       >
-        {lines.length === 0 && <span className="text-zinc-500">{ended ? "Stream closed." : "Waiting for logs…"}</span>}
+        {lines.length === 0 && <span className="text-neutral-500">{ended ? "Stream closed." : "Waiting for logs…"}</span>}
         {lines.map((l, i) => (
           <div key={i}>
-            {multi && <span className="text-zinc-500">{l.container} | </span>}
+            {multi && <span className="text-neutral-500">{l.container} | </span>}
             {l.text}
           </div>
         ))}
       </pre>
-    </Card>
+    </Section>
   );
 }
