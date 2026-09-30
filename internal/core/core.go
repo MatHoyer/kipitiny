@@ -53,6 +53,9 @@ func (c *Core) Bootstrap(ctx context.Context) error {
 	} else if n > 0 {
 		c.log.Warn("marked interrupted deployments as failed", "count", n)
 	}
+	if err := c.store.FailRunningOperations(ctx, "interrupted by manager restart"); err != nil {
+		return err
+	}
 	if err := c.docker.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil {
 		return err
 	}

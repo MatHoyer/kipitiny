@@ -66,6 +66,52 @@ export type Deployment = {
   finishedAt?: string;
 };
 
+export type OpStatus = "running" | "succeeded" | "failed";
+
+export type BackupTarget = {
+  id: string;
+  name: string;
+  kind: "local" | "s3";
+  endpoint: string;
+  region: string;
+  bucket: string;
+  prefix: string;
+  accessKey: string;
+  secretKey: string;
+  useSsl: boolean;
+  createdAt: string;
+};
+
+export type TargetInput = Omit<BackupTarget, "id" | "kind" | "createdAt">;
+
+export type Backup = {
+  id: string;
+  serviceId: string;
+  projectId: string;
+  serviceName: string;
+  projectName: string;
+  targetId: string;
+  objectKey: string;
+  status: OpStatus;
+  sizeBytes: number;
+  sha256: string;
+  pgVersion: string;
+  durationMs: number;
+  error?: string;
+  createdAt: string;
+  finishedAt?: string;
+};
+
+export type Restore = {
+  id: string;
+  backupId: string;
+  serviceId: string;
+  status: OpStatus;
+  error?: string;
+  createdAt: string;
+  finishedAt?: string;
+};
+
 export type LogLine = { container: string; text: string };
 
 export type User = { id: string; username: string; createdAt: string };
@@ -133,6 +179,21 @@ export const api = {
   deploy: (serviceId: string) => request<Deployment>(`/services/${serviceId}/deploy`, { method: "POST" }),
   deployments: (serviceId: string) => request<Deployment[]>(`/services/${serviceId}/deployments`),
   deploymentLog: (id: string) => request<string>(`/deployments/${id}/log`),
+
+  backupTargets: () => request<BackupTarget[]>("/backup-targets"),
+  createBackupTarget: (t: TargetInput) => request<BackupTarget>("/backup-targets", json("POST", t)),
+  updateBackupTarget: (id: string, t: TargetInput) => request<BackupTarget>(`/backup-targets/${id}`, json("PUT", t)),
+  deleteBackupTarget: (id: string) => request<void>(`/backup-targets/${id}`, { method: "DELETE" }),
+
+  backups: (projectId?: string) => request<Backup[]>(`/backups${projectId ? `?projectId=${projectId}` : ""}`),
+  serviceBackups: (serviceId: string) => request<Backup[]>(`/services/${serviceId}/backups`),
+  backup: (serviceId: string, targetId: string) =>
+    request<Backup>(`/services/${serviceId}/backups`, json("POST", { targetId })),
+  deleteBackup: (id: string) => request<void>(`/backups/${id}`, { method: "DELETE" }),
+  downloadUrl: (id: string) => `/api/backups/${id}/download`,
+  restore: (backupId: string, confirm: string, serviceId = "") =>
+    request<Restore>(`/backups/${backupId}/restore`, json("POST", { serviceId, confirm })),
+  restores: (serviceId: string) => request<Restore[]>(`/services/${serviceId}/restores`),
 
   logsUrl: (serviceId: string, tail = 200) => `/api/services/${serviceId}/logs?tail=${tail}`,
 };

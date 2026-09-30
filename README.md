@@ -31,6 +31,22 @@ docker compose exec -it manager /kipitiny reset-password admin
   database and it receives `DATABASE_URL` (an explicit `DATABASE_URL` env var wins).
 - Deleting a database or a project destroys data and must be confirmed by typing its name.
 
+## Backups
+
+- `pg_dump -Fc` runs **inside** the database container (client always matches the
+  server) and streams straight to the target: local disk (`/data/backups`) or any
+  S3-compatible bucket. Memory stays constant; nothing touches a temp file.
+- A backup only counts once `pg_dump` exits 0; partial uploads are deleted. Each
+  backup records size, SHA-256, server version and duration.
+- Restores load the dump into a scratch database and swap it in by rename, so the
+  result is exactly the backup and a failed restore leaves live data untouched.
+  Apps linked to the database are stopped meanwhile. The checksum is verified.
+- Backups outlive their database and project; delete them explicitly.
+
+S3 targets are checked (a test object is written and deleted) before they are saved.
+`go test ./internal/storage/` runs S3 tests against a real server when
+`KIPITINY_TEST_S3_ENDPOINT` is set (see `internal/storage/s3_test.go`).
+
 ## Develop
 
 Requires Go 1.26+, Node 24+, pnpm 10.

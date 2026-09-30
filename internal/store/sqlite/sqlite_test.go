@@ -156,3 +156,68 @@ func TestUsersAndSessions(t *testing.T) {
 		t.Fatalf("deleted session: %v", err)
 	}
 }
+
+func TestBackups(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+
+	targets, err := s.ListBackupTargets(ctx)
+	if err != nil || len(targets) != 1 || targets[0].ID != store.LocalTargetID {
+		t.Fatalf("seeded local target: %+v %v", targets, err)
+	}
+	s3, err := s.CreateBackupTarget(ctx, store.BackupTarget{
+		Name: "offsite", Kind: store.BackupTargetS3, Endpoint: "s3.example.com", Bucket: "b", SecretKey: "k", UseSSL: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s3.Prefix = "pg/"
+	if _, err := s.UpdateBackupTarget(ctx, s3); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetBackupTarget(ctx, s3.ID); got.Prefix != "pg/" || !got.UseSSL {
+		t.Fatalf("target round-trip: %+v", got)
+	}
+
+	b, err := s.CreateBackup(ctx, store.Backup{
+		ServiceID: "SVC", ProjectID: "P", ServiceName: "db", ProjectName: "shop",
+		TargetID: s3.ID, ObjectKey: "shop/db/x.dump", Status: store.OpRunning,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteBackupTarget(ctx, s3.ID); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("deleting a target in use: %v", err)
+	}
+
+	b.Status, b.SizeBytes, b.SHA256, b.PGVersion, b.DurationMS = store.OpSucceeded, 1234, "abc", "17.2", 99
+	if err := s.FinishBackup(ctx, b); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetBackup(ctx, b.ID)
+	if err != nil || got.SizeBytes != 1234 || got.PGVersion != "17.2" || got.FinishedAt == nil {
+		t.Fatalf("backup round-trip: %+v %v", got, err)
+	}
+
+	running, _ := s.CreateBackup(ctx, store.Backup{ServiceID: "SVC", TargetID: "local", Status: store.OpRunning})
+	if err := s.FailRunningOperations(ctx, "interrupted"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetBackup(ctx, running.ID); got.Status != store.OpFailed {
+		t.Fatalf("running backup not failed: %+v", got)
+	}
+	ok, err := s.ListBackups(ctx, store.BackupFilter{ServiceID: "SVC", Status: store.OpSucceeded})
+	if err != nil || len(ok) != 1 {
+		t.Fatalf("filtered list: %v %v", ok, err)
+	}
+
+	if err := s.DeleteBackup(ctx, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteBackup(ctx, running.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteBackupTarget(ctx, s3.ID); err != nil {
+		t.Fatalf("delete unused target: %v", err)
+	}
+}

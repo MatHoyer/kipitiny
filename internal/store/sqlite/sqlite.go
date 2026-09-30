@@ -241,6 +241,145 @@ func (s *Store) DeleteExpiredSessions(ctx context.Context) error {
 	return mapErr(err)
 }
 
+func (s *Store) ListBackupTargets(ctx context.Context) ([]store.BackupTarget, error) {
+	ts := []store.BackupTarget{}
+	// Local first, then by name.
+	err := s.db.NewSelect().Model(&ts).OrderExpr("kind = 'local' DESC, name").Scan(ctx)
+	return ts, mapErr(err)
+}
+
+func (s *Store) GetBackupTarget(ctx context.Context, id string) (store.BackupTarget, error) {
+	var t store.BackupTarget
+	err := s.db.NewSelect().Model(&t).Where("id = ?", id).Scan(ctx)
+	return t, mapErr(err)
+}
+
+func (s *Store) CreateBackupTarget(ctx context.Context, t store.BackupTarget) (store.BackupTarget, error) {
+	t.ID, t.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&t).Exec(ctx); err != nil {
+		return store.BackupTarget{}, mapErr(err)
+	}
+	return t, nil
+}
+
+func (s *Store) UpdateBackupTarget(ctx context.Context, t store.BackupTarget) (store.BackupTarget, error) {
+	res, err := s.db.NewUpdate().Model(&t).
+		Column("name", "endpoint", "region", "bucket", "prefix", "access_key", "secret_key", "use_ssl").
+		WherePK().Exec(ctx)
+	if err != nil {
+		return store.BackupTarget{}, mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.BackupTarget{}, store.ErrNotFound
+	}
+	return t, nil
+}
+
+func (s *Store) DeleteBackupTarget(ctx context.Context, id string) error {
+	n, err := s.db.NewSelect().Model((*store.Backup)(nil)).Where("target_id = ?", id).Count(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n > 0 {
+		return fmt.Errorf("%w: %d backups are stored on this target", store.ErrConflict, n)
+	}
+	return deleteByID(ctx, s.db, "backup_targets", id)
+}
+
+func (s *Store) CreateBackup(ctx context.Context, b store.Backup) (store.Backup, error) {
+	b.ID, b.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&b).Exec(ctx); err != nil {
+		return store.Backup{}, mapErr(err)
+	}
+	return b, nil
+}
+
+func (s *Store) GetBackup(ctx context.Context, id string) (store.Backup, error) {
+	var b store.Backup
+	err := s.db.NewSelect().Model(&b).Where("id = ?", id).Scan(ctx)
+	return b, mapErr(err)
+}
+
+func (s *Store) ListBackups(ctx context.Context, f store.BackupFilter) ([]store.Backup, error) {
+	bs := []store.Backup{}
+	q := s.db.NewSelect().Model(&bs).Order("created_at DESC")
+	if f.ServiceID != "" {
+		q = q.Where("service_id = ?", f.ServiceID)
+	}
+	if f.ProjectID != "" {
+		q = q.Where("project_id = ?", f.ProjectID)
+	}
+	if f.Status != "" {
+		q = q.Where("status = ?", f.Status)
+	}
+	if f.Limit > 0 {
+		q = q.Limit(f.Limit)
+	}
+	return bs, mapErr(q.Scan(ctx))
+}
+
+// FinishBackup records the outcome and metadata of a backup.
+func (s *Store) FinishBackup(ctx context.Context, b store.Backup) error {
+	t := now()
+	b.FinishedAt = &t
+	res, err := s.db.NewUpdate().Model(&b).
+		Column("status", "size_bytes", "sha256", "pg_version", "duration_ms", "error", "finished_at").
+		WherePK().Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) DeleteBackup(ctx context.Context, id string) error {
+	return deleteByID(ctx, s.db, "backups", id)
+}
+
+func (s *Store) CreateRestore(ctx context.Context, r store.Restore) (store.Restore, error) {
+	r.ID, r.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&r).Exec(ctx); err != nil {
+		return store.Restore{}, mapErr(err)
+	}
+	return r, nil
+}
+
+func (s *Store) ListRestores(ctx context.Context, serviceID string, limit int) ([]store.Restore, error) {
+	rs := []store.Restore{}
+	err := s.db.NewSelect().Model(&rs).Where("service_id = ?", serviceID).
+		Order("created_at DESC").Limit(limit).Scan(ctx)
+	return rs, mapErr(err)
+}
+
+func (s *Store) FinishRestore(ctx context.Context, id string, status store.OpStatus, errMsg string) error {
+	res, err := s.db.NewUpdate().Model((*store.Restore)(nil)).
+		Set("status = ?", status).Set("error = ?", errMsg).Set("finished_at = ?", now()).
+		Where("id = ?", id).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) FailRunningOperations(ctx context.Context, errMsg string) error {
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		for _, model := range []any{(*store.Backup)(nil), (*store.Restore)(nil)} {
+			_, err := tx.NewUpdate().Model(model).
+				Set("status = ?", store.OpFailed).Set("error = ?", errMsg).Set("finished_at = ?", now()).
+				Where("status = ?", store.OpRunning).Exec(ctx)
+			if err != nil {
+				return mapErr(err)
+			}
+		}
+		return nil
+	})
+}
+
 // now matches the microsecond precision bun persists, so returned structs
 // equal what a later read yields.
 func now() time.Time {

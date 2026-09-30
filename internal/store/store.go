@@ -50,6 +50,27 @@ type Store interface {
 	DeleteSession(ctx context.Context, tokenHash string) error
 	DeleteExpiredSessions(ctx context.Context) error
 
+	ListBackupTargets(ctx context.Context) ([]BackupTarget, error)
+	GetBackupTarget(ctx context.Context, id string) (BackupTarget, error)
+	CreateBackupTarget(ctx context.Context, t BackupTarget) (BackupTarget, error)
+	UpdateBackupTarget(ctx context.Context, t BackupTarget) (BackupTarget, error)
+	// DeleteBackupTarget returns ErrConflict while backups reference it.
+	DeleteBackupTarget(ctx context.Context, id string) error
+
+	CreateBackup(ctx context.Context, b Backup) (Backup, error)
+	GetBackup(ctx context.Context, id string) (Backup, error)
+	ListBackups(ctx context.Context, f BackupFilter) ([]Backup, error)
+	FinishBackup(ctx context.Context, b Backup) error
+	DeleteBackup(ctx context.Context, id string) error
+
+	CreateRestore(ctx context.Context, r Restore) (Restore, error)
+	ListRestores(ctx context.Context, serviceID string, limit int) ([]Restore, error)
+	FinishRestore(ctx context.Context, id string, status OpStatus, errMsg string) error
+
+	// FailRunningOperations marks backups and restores left running by a
+	// previous process as failed.
+	FailRunningOperations(ctx context.Context, errMsg string) error
+
 	Close() error
 }
 
@@ -128,4 +149,78 @@ type Deployment struct {
 	Error      string           `bun:"error" json:"error,omitempty"`
 	CreatedAt  time.Time        `bun:"created_at" json:"createdAt"`
 	FinishedAt *time.Time       `bun:"finished_at" json:"finishedAt,omitempty"`
+}
+
+type BackupTargetKind string
+
+const (
+	BackupTargetLocal BackupTargetKind = "local"
+	BackupTargetS3    BackupTargetKind = "s3"
+
+	// LocalTargetID is the built-in local disk target.
+	LocalTargetID = "local"
+)
+
+type BackupTarget struct {
+	bun.BaseModel `bun:"table:backup_targets,alias:target" json:"-"`
+
+	ID        string           `bun:"id,pk" json:"id"`
+	Name      string           `bun:"name" json:"name"`
+	Kind      BackupTargetKind `bun:"kind" json:"kind"`
+	Endpoint  string           `bun:"endpoint" json:"endpoint"`
+	Region    string           `bun:"region" json:"region"`
+	Bucket    string           `bun:"bucket" json:"bucket"`
+	Prefix    string           `bun:"prefix" json:"prefix"`
+	AccessKey string           `bun:"access_key" json:"accessKey"`
+	SecretKey string           `bun:"secret_key" json:"secretKey"`
+	UseSSL    bool             `bun:"use_ssl" json:"useSsl"`
+	CreatedAt time.Time        `bun:"created_at" json:"createdAt"`
+}
+
+// OpStatus is the lifecycle of a background operation (backup, restore).
+type OpStatus string
+
+const (
+	OpRunning   OpStatus = "running"
+	OpSucceeded OpStatus = "succeeded"
+	OpFailed    OpStatus = "failed"
+)
+
+type Backup struct {
+	bun.BaseModel `bun:"table:backups,alias:backup" json:"-"`
+
+	ID          string     `bun:"id,pk" json:"id"`
+	ServiceID   string     `bun:"service_id" json:"serviceId"`
+	ProjectID   string     `bun:"project_id" json:"projectId"`
+	ServiceName string     `bun:"service_name" json:"serviceName"`
+	ProjectName string     `bun:"project_name" json:"projectName"`
+	TargetID    string     `bun:"target_id" json:"targetId"`
+	ObjectKey   string     `bun:"object_key" json:"objectKey"`
+	Status      OpStatus   `bun:"status" json:"status"`
+	SizeBytes   int64      `bun:"size_bytes" json:"sizeBytes"`
+	SHA256      string     `bun:"sha256" json:"sha256"`
+	PGVersion   string     `bun:"pg_version" json:"pgVersion"`
+	DurationMS  int64      `bun:"duration_ms" json:"durationMs"`
+	Error       string     `bun:"error" json:"error,omitempty"`
+	CreatedAt   time.Time  `bun:"created_at" json:"createdAt"`
+	FinishedAt  *time.Time `bun:"finished_at" json:"finishedAt,omitempty"`
+}
+
+type BackupFilter struct {
+	ServiceID string
+	ProjectID string
+	Status    OpStatus
+	Limit     int
+}
+
+type Restore struct {
+	bun.BaseModel `bun:"table:restores,alias:restore" json:"-"`
+
+	ID         string     `bun:"id,pk" json:"id"`
+	BackupID   string     `bun:"backup_id" json:"backupId"`
+	ServiceID  string     `bun:"service_id" json:"serviceId"`
+	Status     OpStatus   `bun:"status" json:"status"`
+	Error      string     `bun:"error" json:"error,omitempty"`
+	CreatedAt  time.Time  `bun:"created_at" json:"createdAt"`
+	FinishedAt *time.Time `bun:"finished_at" json:"finishedAt,omitempty"`
 }

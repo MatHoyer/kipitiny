@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, Outlet } from "react-router";
+import { Link, NavLink, Outlet } from "react-router";
 import { api } from "../api";
 import { Login, Setup } from "./Auth";
 
@@ -23,9 +23,26 @@ function App({ username }: { username: string }) {
     <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
       <header className="border-b border-zinc-200 dark:border-zinc-800">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
-          <Link to="/" className="font-semibold tracking-tight">
-            kipitiny
-          </Link>
+          <nav className="flex items-center gap-6 text-sm">
+            <Link to="/" className="font-semibold tracking-tight">
+              kipitiny
+            </Link>
+            {[
+              ["/", "Projects"],
+              ["/backups", "Backups"],
+            ].map(([to, label]) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === "/"}
+                className={({ isActive }) =>
+                  isActive ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+                }
+              >
+                {label}
+              </NavLink>
+            ))}
+          </nav>
           <div className="flex items-center gap-4 text-xs text-zinc-500">
             <span className="flex items-center gap-2">
               <span className={`size-2 rounded-full ${docker ? "bg-emerald-500" : "bg-red-500"}`} />
