@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { CopyField, Empty, ErrorText, Mono, Section, Tag } from "@/components/common";
+import { CheckboxField, CopyField, Empty, ErrorText, Mono, Section, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ export function Settings() {
       <PageHeader crumbs={[{ label: "Settings" }]} />
       <PageBody>
         <Domains />
+        <CloudflareSection />
         <Servers />
         <Tokens />
         <Audit />
@@ -54,6 +55,10 @@ function Domains() {
     },
   });
   const remove = useMutation({ mutationFn: api.deleteDomain, onSuccess: refresh });
+  const proxy = useMutation({
+    mutationFn: ({ id, proxied }: { id: string; proxied: boolean }) => api.setDomainProxied(id, proxied),
+    onSuccess: refresh,
+  });
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     create.mutate();
@@ -90,7 +95,26 @@ function Domains() {
         <ul className="mt-2 divide-y">
           {domains.data?.map((d) => (
             <li key={d.id} className="flex items-center justify-between gap-4 py-2">
-              <span className="font-mono text-sm">{d.name}</span>
+              <div className="min-w-0 space-y-1">
+                <p className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-sm">{d.name}</span>
+                  {d.cloudflare && <Tag>Cloudflare DNS</Tag>}
+                </p>
+                {d.cloudflare && (
+                  <CheckboxField
+                    label="Proxied"
+                    description="Through Cloudflare's proxy (orange cloud): protection, and the server's IP stays hidden."
+                    checked={d.proxied}
+                    onCheckedChange={(proxied) => proxy.mutate({ id: d.id, proxied })}
+                  />
+                )}
+                {d.cloudflare && d.proxied && (d.sslMode === "flexible" || d.sslMode === "off") && (
+                  <p className="text-xs text-destructive">
+                    This zone's SSL/TLS mode is <Mono>{d.sslMode}</Mono>: set it to Full (strict) in Cloudflare, or proxied
+                    sites loop between HTTP and HTTPS.
+                  </p>
+                )}
+              </div>
               <ConfirmDialog
                 trigger={
                   <Button variant="ghost" size="icon-sm" title="Remove" aria-label="Remove" className="text-muted-foreground hover:text-destructive">
@@ -106,7 +130,93 @@ function Domains() {
           ))}
         </ul>
       )}
-      <ErrorText error={remove.error} />
+      <ErrorText error={remove.error ?? proxy.error} />
+    </Section>
+  );
+}
+
+/** Lets the manager keep DNS records (and tunnel routes) in sync. */
+function CloudflareSection() {
+  const qc = useQueryClient();
+  const cf = useQuery({ queryKey: ["cloudflare"], queryFn: api.cloudflare, refetchInterval: 30_000 });
+  const [token, setToken] = useState("");
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["cloudflare"] });
+    qc.invalidateQueries({ queryKey: ["domains"] });
+  };
+  const connect = useMutation({
+    mutationFn: () => api.connectCloudflare(token.trim()),
+    onSuccess: () => {
+      setToken("");
+      refresh();
+    },
+  });
+  const disconnect = useMutation({ mutationFn: api.disconnectCloudflare, onSuccess: refresh });
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    connect.mutate();
+  };
+  const status = cf.data;
+
+  return (
+    <Section
+      title="Cloudflare"
+      description={
+        <>
+          With an API token, kipitiny creates the DNS record of every service domain in your Cloudflare zones (an A record
+          to the server, or a CNAME to your tunnel along with its route) and removes it when the domain goes away. Records
+          it didn't create are never changed. Token permissions: <Mono>Zone › Zone › Read</Mono>,{" "}
+          <Mono>Zone › DNS › Edit</Mono>, and <Mono>Account › Cloudflare Tunnel › Edit</Mono> with a tunnel.
+        </>
+      }
+      actions={
+        status?.connected && (
+          <ConfirmDialog
+            trigger={
+              <Button variant="outline" size="sm">
+                Disconnect
+              </Button>
+            }
+            title="Disconnect Cloudflare?"
+            description="kipitiny stops managing DNS. Records it created stay in Cloudflare."
+            confirmLabel="Disconnect"
+            onConfirm={() => disconnect.mutate()}
+          />
+        )
+      }
+    >
+      {status?.connected ? (
+        <div className="space-y-1 text-sm">
+          <p>
+            Connected · {status.zones.length} zone{status.zones.length === 1 ? "" : "s"}:{" "}
+            <span className="font-mono">{status.zones.join(", ")}</span>
+          </p>
+          {status.tunnel && (
+            <p className="text-muted-foreground">
+              Tunnel routes managed on <Mono>{status.tunnel}</Mono>.
+            </p>
+          )}
+          {status.syncedAt && <p className="text-xs text-muted-foreground">Last sync {timeAgo(status.syncedAt)}</p>}
+          {status.error && <p className="text-sm text-destructive">{status.error}</p>}
+          {status.tunnelError && <p className="text-sm text-destructive">{status.tunnelError}</p>}
+        </div>
+      ) : (
+        <form onSubmit={onSubmit} className="flex items-start gap-2">
+          <FloatingInput
+            label="API token"
+            type="password"
+            required
+            autoComplete="off"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            className="flex-1"
+          />
+          <Button type="submit" className="h-14" disabled={connect.isPending}>
+            Connect
+          </Button>
+        </form>
+      )}
+      <ErrorText error={connect.error ?? disconnect.error} />
     </Section>
   );
 }

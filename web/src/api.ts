@@ -43,6 +43,8 @@ export type Service = {
   createdAt: string;
   updatedAt: string;
   containers: Container[];
+  /** Set when the manager manages the domain's Cloudflare DNS record. */
+  dns?: DNSStatus;
 };
 
 export type ServiceInput = {
@@ -170,6 +172,9 @@ export type Server = {
   projects: number;
   docker?: { version: string; os: string; arch: string };
   dockerError?: string;
+  /** Where Cloudflare DNS records point; empty means detected (detectedIp). */
+  publicIp: string;
+  detectedIp?: string;
 };
 
 export type ServerInput = {
@@ -202,7 +207,28 @@ export type User = { id: string; username: string; createdAt: string };
 export type AuthState = { setupRequired: boolean; user?: User };
 
 /** A base domain offered when giving a service a public domain. */
-export type Domain = { id: string; name: string; createdAt: string };
+export type Domain = {
+  id: string;
+  name: string;
+  proxied: boolean;
+  createdAt: string;
+  /** In a zone the connected Cloudflare token manages. */
+  cloudflare?: boolean;
+  /** The zone's SSL/TLS mode: off, flexible, full or strict. */
+  sslMode?: string;
+};
+
+export type Cloudflare = {
+  connected: boolean;
+  zones: string[];
+  error?: string;
+  tunnel?: string;
+  tunnelError?: string;
+  syncedAt?: string;
+};
+
+/** State of a service domain's managed Cloudflare record. */
+export type DNSStatus = { state: "synced" | "conflict" | "error"; message?: string };
 
 export type UpdateInfo = {
   current: string;
@@ -317,6 +343,11 @@ export const api = {
   domains: () => request<Domain[]>("/domains"),
   createDomain: (name: string) => request<Domain>("/domains", json("POST", { name })),
   deleteDomain: (id: string) => request<void>(`/domains/${id}`, { method: "DELETE" }),
+  setDomainProxied: (id: string, proxied: boolean) => request<Domain>(`/domains/${id}`, json("PATCH", { proxied })),
+  cloudflare: () => request<Cloudflare>("/cloudflare"),
+  connectCloudflare: (token: string) => request<Cloudflare>("/cloudflare", json("PUT", { token })),
+  disconnectCloudflare: () => request<void>("/cloudflare", { method: "DELETE" }),
+  setServerPublicIp: (id: string, publicIp: string) => request<Server>(`/servers/${id}/public-ip`, json("PUT", { publicIp })),
   tokens: () => request<ApiToken[]>("/tokens"),
   createToken: (name: string, scope: Scope) =>
     request<ApiToken & { token: string }>("/tokens", json("POST", { name, scope })),

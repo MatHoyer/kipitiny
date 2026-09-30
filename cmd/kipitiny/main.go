@@ -105,6 +105,9 @@ func serve() error {
 	if err := c.StartUpdateChecker(); err != nil {
 		return err
 	}
+	if err := c.StartDNSSync(); err != nil {
+		return err
+	}
 
 	mux := http.NewServeMux()
 	a := api.New(c, log)

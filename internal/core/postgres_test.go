@@ -86,7 +86,7 @@ func TestDatabaseURLEscapes(t *testing.T) {
 
 func TestPostgresContainerSpec(t *testing.T) {
 	p := store.Project{ID: "P1", Name: "shop"}
-	spec := containerSpec(p, pgService(), nil, "D1", 1, true)
+	spec := containerSpec(p, pgService(), nil, "D1", 1, certResolver)
 
 	if spec.HostConfig.Memory != 512<<20 {
 		t.Errorf("memory = %d", spec.HostConfig.Memory)
@@ -113,13 +113,13 @@ func TestDatabaseURLInjection(t *testing.T) {
 	db := pgService()
 	app := store.Service{ID: "01APP", Name: "web", Image: "app", Replicas: 1, DatabaseID: db.ID, Env: map[string]string{}}
 
-	spec := containerSpec(p, app, &db, "D1", 1, true)
+	spec := containerSpec(p, app, &db, "D1", 1, certResolver)
 	if !slices.Contains(spec.Config.Env, "DATABASE_URL="+DatabaseURL(db)) {
 		t.Errorf("DATABASE_URL not injected: %v", spec.Config.Env)
 	}
 
 	app.Env["DATABASE_URL"] = "postgres://custom"
-	spec = containerSpec(p, app, &db, "D1", 1, true)
+	spec = containerSpec(p, app, &db, "D1", 1, certResolver)
 	if !slices.Contains(spec.Config.Env, "DATABASE_URL=postgres://custom") {
 		t.Errorf("explicit DATABASE_URL overridden: %v", spec.Config.Env)
 	}

@@ -39,18 +39,23 @@ func (c *Core) ensureTraefik(ctx context.Context, sv store.Server) error {
 	cfg := c.cfg.Traefik
 	socket := socketPath(sv, c.cfg)
 	dk := c.dockerFor(sv.ID)
-	var managerURL string
+	o := traefikOpts{Tunnel: c.viaTunnel(sv.ID), CFToken: c.cfToken(ctx)}
 	if c.cfg.Domain != "" && sv.Kind == store.ServerLocal {
 		u, err := c.managerUpstream(ctx, dk)
 		if err != nil {
 			return err
 		}
-		managerURL = u
+		o.ManagerURL = u
+		o.ManagerResolver = c.certResolver(ctx, sv.ID, c.cfg.Domain)
 	}
-	opts, files := c.traefikSpec(socket, managerURL, c.viaTunnel(sv.ID))
+	opts, files := c.traefikSpec(socket, o)
 	// Keep this formula stable: any change recreates Traefik on every server
 	// at upgrade, a short outage for all apps. Tunnel mode changes Cmd.
-	hash := specHash(cfg.Image, opts.Config.Cmd, cfg.HTTPPort, cfg.HTTPSPort, socket, files)
+	parts := []any{cfg.Image, opts.Config.Cmd, cfg.HTTPPort, cfg.HTTPSPort, socket, files}
+	if o.CFToken != "" && !o.Tunnel {
+		parts = append(parts, o.CFToken) // a new token must reach Traefik
+	}
+	hash := specHash(parts...)
 	opts.Config.Labels[docker.LabelConfigHash] = hash
 
 	existing, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: traefikComponent})
@@ -112,18 +117,21 @@ func (c *Core) viaTunnel(serverID string) bool {
 	return c.cfg.Tunnel.Token != "" && (serverID == "" || serverID == store.LocalServerID)
 }
 
-// acme reports whether routers on a server get Let's Encrypt certificates.
-// Behind the tunnel Cloudflare terminates TLS, and the challenge can't reach
-// Traefik anyway: Traefik's default certificate is enough.
-func (c *Core) acme(serverID string) bool {
-	return !c.viaTunnel(serverID)
+type traefikOpts struct {
+	// ManagerURL, when set, routes the manager's domain to it through a file
+	// provider, with a certificate from ManagerResolver.
+	ManagerURL      string
+	ManagerResolver string
+	// Tunnel: behind the Cloudflare tunnel, publish no ports and run no ACME.
+	Tunnel bool
+	// CFToken enables the Cloudflare DNS challenge (certResolverDNS).
+	CFToken string
 }
 
-// traefikSpec builds the Traefik container. A non-empty managerURL routes
-// the manager's domain to it through a file provider. Behind the tunnel it
-// publishes no ports and runs no ACME.
-func (c *Core) traefikSpec(socket, managerURL string, tunnel bool) (client.ContainerCreateOptions, []docker.File) {
+// traefikSpec builds the Traefik container.
+func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreateOptions, []docker.File) {
 	cfg := c.cfg.Traefik
+	tunnel := o.Tunnel
 
 	// Redirect to the public HTTPS port, which differs from 443 in dev setups.
 	redirectTo := "websecure"
@@ -158,12 +166,25 @@ func (c *Core) traefikSpec(socket, managerURL string, tunnel bool) (client.Conta
 			args = append(args, "--certificatesresolvers."+certResolver+".acme.email="+cfg.ACMEEmail)
 		}
 	}
+	var env []string
+	if !tunnel && o.CFToken != "" {
+		args = append(args,
+			"--certificatesresolvers."+certResolverDNS+".acme.dnschallenge.provider=cloudflare",
+			// Public resolvers see the challenge record sooner than a cache.
+			"--certificatesresolvers."+certResolverDNS+".acme.dnschallenge.resolvers=1.1.1.1:53,1.0.0.1:53",
+			"--certificatesresolvers."+certResolverDNS+".acme.storage=/acme/acme.json",
+		)
+		if cfg.ACMEEmail != "" {
+			args = append(args, "--certificatesresolvers."+certResolverDNS+".acme.email="+cfg.ACMEEmail)
+		}
+		env = append(env, "CF_DNS_API_TOKEN="+o.CFToken)
+	}
 	var files []docker.File
 	var extraHosts []string
-	if managerURL != "" {
+	if o.ManagerURL != "" {
 		args = append(args, "--providers.file.filename="+managerRouteFile)
-		files = append(files, docker.File{Path: managerRouteFile, Content: managerRoute(c.cfg.Domain, managerURL, !tunnel)})
-		if strings.Contains(managerURL, "//"+managerHost+":") {
+		files = append(files, docker.File{Path: managerRouteFile, Content: managerRoute(c.cfg.Domain, o.ManagerURL, o.ManagerResolver)})
+		if strings.Contains(o.ManagerURL, "//"+managerHost+":") {
 			extraHosts = append(extraHosts, managerHost+":host-gateway")
 		}
 	}
@@ -181,6 +202,7 @@ func (c *Core) traefikSpec(socket, managerURL string, tunnel bool) (client.Conta
 		Config: &container.Config{
 			Image:        cfg.Image,
 			Cmd:          args,
+			Env:          env,
 			ExposedPorts: network.PortSet{http: {}, https: {}},
 			Labels: map[string]string{
 				docker.LabelManaged:   "true",
@@ -205,10 +227,10 @@ func (c *Core) traefikSpec(socket, managerURL string, tunnel bool) (client.Conta
 
 // managerRoute is Traefik dynamic configuration serving domain from url. JSON
 // is valid YAML, which the file provider reads.
-func managerRoute(domain, url string, acme bool) []byte {
+func managerRoute(domain, url, resolver string) []byte {
 	tls := map[string]any{}
-	if acme && !isLocalDomain(domain) {
-		tls["certResolver"] = certResolver
+	if resolver != "" {
+		tls["certResolver"] = resolver
 	}
 	b, _ := json.MarshalIndent(map[string]any{
 		"http": map[string]any{
@@ -226,9 +248,9 @@ func managerRoute(domain, url string, acme bool) []byte {
 	return b
 }
 
-// traefikLabels routes HTTPS traffic for svc.Domain to svc.Port, with a Let's
-// Encrypt certificate when acme is set.
-func traefikLabels(svc store.Service, acme bool) map[string]string {
+// traefikLabels routes HTTPS traffic for svc.Domain to svc.Port, with a
+// certificate from resolver ("" for Traefik's default one).
+func traefikLabels(svc store.Service, resolver string) map[string]string {
 	name := "kipitiny-" + strings.ToLower(svc.ID)
 	labels := map[string]string{
 		"traefik.enable":                                "true",
@@ -243,11 +265,10 @@ func traefikLabels(svc store.Service, acme bool) map[string]string {
 		"traefik.http.middlewares." + name + "-retry.retry.initialinterval": "100ms",
 		"traefik.http.services." + name + ".loadbalancer.server.port":       fmt.Sprint(svc.Port),
 	}
-	if !acme || isLocalDomain(svc.Domain) {
-		// Let's Encrypt can't issue for these; Traefik's default cert is used.
+	if resolver == "" {
 		labels["traefik.http.routers."+name+".tls"] = "true"
 	} else {
-		labels["traefik.http.routers."+name+".tls.certresolver"] = certResolver
+		labels["traefik.http.routers."+name+".tls.certresolver"] = resolver
 	}
 	return labels
 }

@@ -89,6 +89,8 @@ type ContainerView struct {
 type ServiceView struct {
 	store.Service
 	Containers []ContainerView `json:"containers"`
+	// DNS is set when the manager manages the domain's Cloudflare record.
+	DNS *DNSStatus `json:"dns,omitempty"`
 }
 
 func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceInput) (ServiceView, error) {
@@ -160,6 +162,9 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 	svc, err := c.store.CreateService(ctx, svc)
 	if err != nil {
 		return ServiceView{}, err
+	}
+	if svc.Domain != "" {
+		c.kickDNS()
 	}
 	return ServiceView{Service: masked(svc), Containers: []ContainerView{}}, nil
 }
@@ -235,6 +240,9 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	}
 	if svc.Replicas != old.Replicas {
 		c.kick() // scaling applies right away, other changes on the next deploy
+	}
+	if svc.Domain != old.Domain {
+		c.kickDNS()
 	}
 	return c.view(ctx, svc)
 }
@@ -362,7 +370,11 @@ func (c *Core) view(ctx context.Context, svc store.Service) (ServiceView, error)
 	for i, ct := range cts {
 		views[i] = containerView(ct, svc)
 	}
-	return ServiceView{Service: masked(svc), Containers: sortedContainers(views)}, nil
+	v := ServiceView{Service: masked(svc), Containers: sortedContainers(views)}
+	if svc.Domain != "" {
+		v.DNS = c.dnsStatus(ctx, svc.Domain)
+	}
+	return v, nil
 }
 
 func (c *Core) serviceContainers(ctx context.Context, svc store.Service) ([]container.Summary, error) {
@@ -477,6 +489,7 @@ func (c *Core) DeleteService(ctx context.Context, id, confirm string) error {
 	if err := c.store.DeleteService(ctx, id); err != nil {
 		return err
 	}
+	c.kickDNS()
 	c.removeDeployLogs(id)
 	return nil
 }

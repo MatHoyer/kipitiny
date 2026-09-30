@@ -311,6 +311,6 @@ func (c *Core) recreateReplica(ctx context.Context, project store.Project, svc s
 	if err != nil {
 		return err
 	}
-	_, err = dk.Run(ctx, replicaSpec(project, svc, db, deployID, replica, probe, c.acme(svc.ServerID)))
+	_, err = dk.Run(ctx, replicaSpec(project, svc, db, deployID, replica, probe, c.certResolver(ctx, svc.ServerID, svc.Domain)))
 	return err
 }

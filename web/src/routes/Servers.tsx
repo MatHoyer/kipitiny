@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Globe, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { CheckboxField, CopyField, ErrorText, Mono, Section, StateBadge } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -19,6 +19,7 @@ export function Servers() {
   const qc = useQueryClient();
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.servers, refetchInterval: 30_000 });
   const [editing, setEditing] = useState<Server | "new" | null>(null);
+  const [ipFor, setIpFor] = useState<Server | null>(null);
   const remove = useMutation({
     mutationFn: api.deleteServer,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["servers"] }),
@@ -47,13 +48,19 @@ export function Servers() {
                 {s.kind === "local" ? "the manager's own Docker" : `ssh://${s.sshUser}@${s.host}:${s.port}`}
                 {s.docker ? ` · Docker ${s.docker.version} (${s.docker.arch})` : ` · ${s.dockerError}`}
                 {` · ${s.projects} project${s.projects === 1 ? "" : "s"}`}
+                {s.publicIp ? ` · IP ${s.publicIp}` : s.detectedIp ? ` · IP ${s.detectedIp} (detected)` : ""}
               </p>
             </div>
-            {s.kind === "ssh" && (
-              <div className="flex gap-0.5">
+            <div className="flex gap-0.5">
+              <Button variant="ghost" size="icon-sm" title="Public IP" aria-label="Public IP" onClick={() => setIpFor(s)}>
+                <Globe />
+              </Button>
+              {s.kind === "ssh" && (
                 <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={() => setEditing(s)}>
                   <Pencil />
                 </Button>
+              )}
+              {s.kind === "ssh" && (
                 <ConfirmDialog
                   trigger={
                     <Button variant="ghost" size="icon-sm" title="Remove" aria-label="Remove" className="text-muted-foreground hover:text-destructive">
@@ -64,12 +71,17 @@ export function Servers() {
                   confirmLabel="Remove"
                   onConfirm={() => remove.mutate(s.id)}
                 />
-              </div>
-            )}
+              )}
+            </div>
           </li>
         ))}
       </ul>
       <ErrorText error={remove.error} />
+      <Dialog open={ipFor !== null} onOpenChange={(o) => !o && setIpFor(null)}>
+        <DialogContent className="sm:max-w-md">
+          {ipFor && <PublicIpForm key={ipFor.id} server={ipFor} onDone={() => setIpFor(null)} />}
+        </DialogContent>
+      </Dialog>
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
           {editing && (
@@ -154,6 +166,47 @@ function ServerForm({ server, onDone }: { server: Server | null; onDone: () => v
       <DialogFooter>
         <Button type="submit" disabled={save.isPending}>
           {save.isPending ? "Connecting…" : server ? "Save" : "Add server"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+/** Where Cloudflare DNS records point for apps on a server. */
+function PublicIpForm({ server, onDone }: { server: Server; onDone: () => void }) {
+  const qc = useQueryClient();
+  const [ip, setIp] = useState(server.publicIp);
+  const save = useMutation({
+    mutationFn: () => api.setServerPublicIp(server.id, ip.trim()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["servers"] });
+      onDone();
+    },
+  });
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    save.mutate();
+  };
+  return (
+    <form onSubmit={onSubmit} className="contents">
+      <DialogHeader>
+        <DialogTitle>Public IP of {server.name}</DialogTitle>
+        <DialogDescription>
+          Where managed Cloudflare DNS records point for apps on this server. Leave empty to detect it
+          {server.detectedIp && (
+            <>
+              {" "}
+              (currently <Mono>{server.detectedIp}</Mono>)
+            </>
+          )}
+          .
+        </DialogDescription>
+      </DialogHeader>
+      <FloatingInput label="Public IPv4" value={ip} onChange={(e) => setIp(e.target.value)} placeholder={server.detectedIp || "203.0.113.10"} />
+      <ErrorText error={save.error} />
+      <DialogFooter>
+        <Button type="submit" disabled={save.isPending}>
+          Save
         </Button>
       </DialogFooter>
     </form>

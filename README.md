@@ -245,11 +245,12 @@ To keep ports 80/443 closed, let traffic come in through a
 
 1. In Cloudflare Zero Trust, create a tunnel (Networks → Tunnels, type
    *cloudflared*) and copy its token.
-2. Add public hostnames `example.com` and `*.example.com`, both with service
-   **HTTPS** `kipitiny-traefik:443`, and under TLS enable **No TLS Verify** and
-   **Match SNI to Host**. Check that DNS has a proxied
-   `* CNAME <tunnel-id>.cfargotunnel.com` record, and add it if the dashboard
-   didn't.
+2. Either connect Cloudflare in *Settings* (below), which adds each service's
+   hostname to the tunnel, or add public hostnames yourself: `example.com` and
+   `*.example.com`, both with service **HTTPS** `kipitiny-traefik:443`, and
+   under TLS enable **No TLS Verify** and **Match SNI to Host**. Check that DNS
+   has a proxied `* CNAME <tunnel-id>.cfargotunnel.com` record, and add it if
+   the dashboard didn't.
 3. Start the manager with `KIPITINY_CLOUDFLARE_TUNNEL_TOKEN=<token>` (and
    `KIPITINY_DOMAIN`), and publish no port in the compose file.
 
@@ -264,6 +265,27 @@ This only applies to the manager's own server; remote servers keep using their
 ports. Apps deployed before switching keep working, but redeploy them to drop
 their Let's Encrypt labels (Traefik logs a "nonexistent certificate resolver"
 error until then).
+
+### Cloudflare DNS
+
+List your domains in *Settings › Domains*, then connect Cloudflare in
+*Settings › Cloudflare* with an API token (*My Profile › API Tokens*) allowed
+**Zone › Zone › Read** and **Zone › DNS › Edit**, plus **Account › Cloudflare
+Tunnel › Edit** with a tunnel. For every service domain in one of the token's
+zones, the manager then keeps the DNS record in sync:
+
+- an **A** record to the server's public IP (detected, or set under
+  *Settings › Servers*), proxied if the domain is marked **Proxied**;
+- behind the tunnel, a proxied **CNAME** to it, and the tunnel's route to
+  Traefik.
+
+Records are created, updated and removed as services come and go; they carry
+the comment `managed by kipitiny`, and records without it are never changed (a
+service whose name already has one shows a DNS conflict). Certificates for these
+domains come from Let's Encrypt through the Cloudflare DNS challenge, so they
+work behind the proxy too; Traefik gets the token for that. Proxied domains
+need the zone's SSL/TLS mode on **Full (strict)**. Services deployed before
+connecting keep their certificate settings until their next deploy.
 
 For local testing use a `*.localhost` domain and alternate ports, e.g.
 `KIPITINY_HTTP_PORT=8081 KIPITINY_HTTPS_PORT=8443`, then

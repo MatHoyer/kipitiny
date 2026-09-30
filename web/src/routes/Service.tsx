@@ -135,7 +135,13 @@ export function Service() {
               <ExternalLink className="size-3.5" />
             </a>
           )}
+          {svc.dns?.state === "synced" && <span className="text-xs text-muted-foreground">DNS managed by kipitiny</span>}
         </div>
+        {svc.dns && svc.dns.state !== "synced" && (
+          <p role="alert" className="text-sm text-destructive">
+            DNS {svc.dns.state}: {svc.dns.message}
+          </p>
+        )}
         <ErrorText error={deploy.error ?? action.error ?? remove.error} />
 
         <Section title="Containers">

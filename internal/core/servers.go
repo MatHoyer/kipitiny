@@ -93,6 +93,8 @@ type ServerInput struct {
 
 type ServerView struct {
 	store.Server
+	// DetectedIP is the public IP found when none is set.
+	DetectedIP  string       `json:"detectedIp,omitempty"`
 	Docker      *docker.Info `json:"docker,omitempty"`
 	DockerError string       `json:"dockerError,omitempty"`
 	Projects    int          `json:"projects"`
@@ -112,7 +114,7 @@ func (c *Core) ListServers(ctx context.Context) ([]ServerView, error) {
 	views := make([]ServerView, len(servers))
 	done := make(chan struct{})
 	for i, sv := range servers {
-		views[i] = ServerView{Server: sv}
+		views[i] = ServerView{Server: sv, DetectedIP: c.DetectedPublicIP(sv.ID)}
 		for _, p := range projects {
 			if p.ServerID == sv.ID {
 				views[i].Projects++

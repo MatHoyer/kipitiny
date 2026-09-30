@@ -51,13 +51,15 @@ type Core struct {
 	reconcileKick chan struct{}
 	probes        sync.Map // server ID -> *mount.Mount (nil: no probe there)
 	update        updateState
+	dns           dnsState
+	dnsKick       chan struct{}
 }
 
 // New builds the core around the local Docker client; remote servers are
 // connected on demand over SSH.
 func New(cfg config.Config, s store.Store, local *docker.Client, log *slog.Logger) *Core {
 	bg, cancel := context.WithCancel(context.Background())
-	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1)}
+	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1), dnsKick: make(chan struct{}, 1)}
 	c.pool = docker.NewPool(local, c.connectServer)
 	return c
 }

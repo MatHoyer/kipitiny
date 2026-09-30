@@ -594,6 +594,19 @@ func (s *Store) ListDomains(ctx context.Context) ([]store.Domain, error) {
 	return ds, mapErr(err)
 }
 
+func (s *Store) SetDomainProxied(ctx context.Context, id string, proxied bool) (store.Domain, error) {
+	d := store.Domain{ID: id, Proxied: proxied}
+	res, err := s.db.NewUpdate().Model(&d).Column("proxied").WherePK().Exec(ctx)
+	if err != nil {
+		return store.Domain{}, mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.Domain{}, store.ErrNotFound
+	}
+	err = s.db.NewSelect().Model(&d).WherePK().Scan(ctx)
+	return d, mapErr(err)
+}
+
 func (s *Store) DeleteDomain(ctx context.Context, id string) error {
 	return deleteByID(ctx, s.db, "domains", id)
 }
@@ -638,7 +651,7 @@ func (s *Store) CreateServer(ctx context.Context, sv store.Server) (store.Server
 
 func (s *Store) UpdateServer(ctx context.Context, sv store.Server) (store.Server, error) {
 	res, err := s.db.NewUpdate().Model(&sv).
-		Column("name", "host", "port", "ssh_user", "socket", "host_key").WherePK().Exec(ctx)
+		Column("name", "host", "port", "ssh_user", "socket", "host_key", "public_ip").WherePK().Exec(ctx)
 	if err != nil {
 		return store.Server{}, mapErr(err)
 	}

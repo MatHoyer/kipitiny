@@ -92,6 +92,7 @@ type Store interface {
 
 	CreateDomain(ctx context.Context, d Domain) (Domain, error)
 	ListDomains(ctx context.Context) ([]Domain, error)
+	SetDomainProxied(ctx context.Context, id string, proxied bool) (Domain, error)
 	DeleteDomain(ctx context.Context, id string) error
 
 	AddAudit(ctx context.Context, e AuditEntry) error
@@ -388,8 +389,10 @@ type APIToken struct {
 type Domain struct {
 	bun.BaseModel `bun:"table:domains,alias:domain" json:"-"`
 
-	ID        string    `bun:"id,pk" json:"id"`
-	Name      string    `bun:"name" json:"name"`
+	ID   string `bun:"id,pk" json:"id"`
+	Name string `bun:"name" json:"name"`
+	// Proxied puts managed DNS records behind Cloudflare's proxy.
+	Proxied   bool      `bun:"proxied" json:"proxied"`
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 }
 
@@ -419,13 +422,15 @@ const (
 type Server struct {
 	bun.BaseModel `bun:"table:servers,alias:server" json:"-"`
 
-	ID        string     `bun:"id,pk" json:"id"`
-	Name      string     `bun:"name" json:"name"`
-	Kind      ServerKind `bun:"kind" json:"kind"`
-	Host      string     `bun:"host" json:"host"`
-	Port      int        `bun:"port" json:"port"`
-	SSHUser   string     `bun:"ssh_user" json:"sshUser"`
-	Socket    string     `bun:"socket" json:"socket"`
-	HostKey   string     `bun:"host_key" json:"hostKey"`
-	CreatedAt time.Time  `bun:"created_at" json:"createdAt"`
+	ID      string     `bun:"id,pk" json:"id"`
+	Name    string     `bun:"name" json:"name"`
+	Kind    ServerKind `bun:"kind" json:"kind"`
+	Host    string     `bun:"host" json:"host"`
+	Port    int        `bun:"port" json:"port"`
+	SSHUser string     `bun:"ssh_user" json:"sshUser"`
+	Socket  string     `bun:"socket" json:"socket"`
+	HostKey string     `bun:"host_key" json:"hostKey"`
+	// PublicIP is where managed DNS records point for apps on this server.
+	PublicIP  string    `bun:"public_ip" json:"publicIp"`
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 }
