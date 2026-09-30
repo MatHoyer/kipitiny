@@ -1,20 +1,40 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { Box, Loader2 } from "lucide-react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { ErrorText } from "@/components/common";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { FloatingInput } from "@/components/ui/floating-input";
 import { api } from "../api";
-import { Button, ErrorText, Field, Input } from "../ui";
 
-function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      <div className="w-full max-w-sm space-y-6 rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="space-y-1">
-          <p className="text-sm font-semibold tracking-tight text-zinc-500">kipitiny</p>
-          <h1 className="text-lg font-semibold">{title}</h1>
-          {subtitle && <p className="text-sm text-zinc-500">{subtitle}</p>}
-        </div>
-        {children}
+    <div className="flex min-h-svh items-center justify-center bg-muted/40 p-4">
+      <div className="w-full max-w-sm space-y-6">
+        <p className="flex items-center justify-center gap-2 text-lg font-semibold tracking-tight">
+          <Box className="size-6" />
+          kipitiny
+        </p>
+        <Card>
+          <CardHeader>
+            <CardTitle>{title}</CardTitle>
+            {subtitle && <CardDescription>{subtitle}</CardDescription>}
+          </CardHeader>
+          {children}
+        </Card>
       </div>
     </div>
+  );
+}
+
+function Submit({ pending, children }: { pending: boolean; children: ReactNode }) {
+  return (
+    <CardFooter className="mt-2">
+      <Button type="submit" size="lg" className="h-11 w-full rounded-xl" disabled={pending}>
+        {pending && <Loader2 className="animate-spin" aria-hidden />}
+        {children}
+      </Button>
+    </CardFooter>
   );
 }
 
@@ -30,28 +50,36 @@ export function Login() {
     e.preventDefault();
     login.mutate();
   };
+  const wrong = login.error?.message === "unauthorized";
   return (
     <Shell title="Sign in">
-      <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Username">
-          <Input autoFocus autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} />
-        </Field>
-        <Field label="Password">
-          <Input
+      <form onSubmit={onSubmit}>
+        <CardContent className="space-y-4">
+          <FloatingInput
+            label="Username"
+            autoFocus
+            required
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            aria-invalid={wrong || undefined}
+          />
+          <FloatingInput
+            label="Password"
             type="password"
+            required
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            aria-invalid={wrong || undefined}
           />
-        </Field>
-        <Button className="w-full" disabled={login.isPending}>
-          Sign in
-        </Button>
-        {login.error && (
-          <p className="text-sm text-red-600 dark:text-red-400">
-            {login.error.message === "unauthorized" ? "Wrong username or password." : login.error.message}
-          </p>
-        )}
+          {login.error && (
+            <p role="alert" className="text-sm text-destructive">
+              {wrong ? "Wrong username or password." : login.error.message}
+            </p>
+          )}
+        </CardContent>
+        <Submit pending={login.isPending}>Sign in</Submit>
       </form>
     </Shell>
   );
@@ -74,23 +102,37 @@ export function Setup() {
   };
   return (
     <Shell title="Create the admin account" subtitle="The setup token is printed in the manager's logs on first start.">
-      <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Setup token">
-          <Input autoFocus required value={form.token} onChange={set("token")} className="font-mono" />
-        </Field>
-        <Field label="Username">
-          <Input required autoComplete="username" value={form.username} onChange={set("username")} />
-        </Field>
-        <Field label="Password" hint="At least 10 characters.">
-          <Input type="password" required autoComplete="new-password" value={form.password} onChange={set("password")} />
-        </Field>
-        <Field label="Confirm password">
-          <Input type="password" required autoComplete="new-password" value={form.confirm} onChange={set("confirm")} />
-        </Field>
-        <Button className="w-full" disabled={setup.isPending}>
-          Create account
-        </Button>
-        <ErrorText error={setup.error} />
+      <form onSubmit={onSubmit}>
+        <CardContent className="space-y-4">
+          <FloatingInput
+            label="Setup token"
+            autoFocus
+            required
+            value={form.token}
+            onChange={set("token")}
+            inputClassName="font-mono"
+          />
+          <FloatingInput label="Username" required autoComplete="username" value={form.username} onChange={set("username")} />
+          <FloatingInput
+            label="Password"
+            type="password"
+            required
+            autoComplete="new-password"
+            value={form.password}
+            onChange={set("password")}
+            description="At least 10 characters."
+          />
+          <FloatingInput
+            label="Confirm password"
+            type="password"
+            required
+            autoComplete="new-password"
+            value={form.confirm}
+            onChange={set("confirm")}
+          />
+          <ErrorText error={setup.error} />
+        </CardContent>
+        <Submit pending={setup.isPending}>Create account</Submit>
       </form>
     </Shell>
   );

@@ -1,8 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { KeyRound, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { CheckboxField, CopyField, ErrorText, Mono, Section, Tag } from "@/components/common";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { PageBody, PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { FloatingInput } from "@/components/ui/floating-input";
 import { api, type BackupTarget, type TargetInput } from "../api";
-import { Button, Card, ErrorText, Field, Input, Select } from "../ui";
 import { BackupList } from "./BackupList";
+import { BackupNow } from "./Service";
 
 export function Backups() {
   const targets = useQuery({ queryKey: ["backup-targets"], queryFn: api.backupTargets });
@@ -13,15 +27,17 @@ export function Backups() {
   });
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Backups</h1>
-      <Targets targets={targets.data ?? []} />
-      <ManagerBackup targets={targets.data ?? []} />
-      <Card title="All backups">
-        <ErrorText error={backups.error} />
-        <BackupList backups={backups.data ?? []} targets={targets.data ?? []} showService />
-      </Card>
-    </div>
+    <>
+      <PageHeader crumbs={[{ label: "Backups" }]} />
+      <PageBody>
+        <Targets targets={targets.data ?? []} />
+        <ManagerBackup targets={targets.data ?? []} />
+        <Section title="All backups">
+          <ErrorText error={backups.error} />
+          <BackupList backups={backups.data ?? []} targets={targets.data ?? []} showService />
+        </Section>
+      </PageBody>
+    </>
   );
 }
 
@@ -33,29 +49,110 @@ function ManagerBackup({ targets }: { targets: BackupTarget[] }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["backups"] }),
   });
   return (
-    <Card
+    <Section
       title="Manager state"
-      actions={
+      description={
         <>
-          <Select value={targetId} onChange={(e) => setTargetId(e.target.value)} className="!w-auto !py-0.5 text-xs">
-            {targets.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
-          <Button className="!py-0.5 text-xs" disabled={backup.isPending} onClick={() => backup.mutate()}>
-            Back up now
-          </Button>
+          Projects, services, schedules and backup records live in one SQLite file. It is snapshotted daily to local disk
+          by default (<Mono>KIPITINY_MANAGER_BACKUP_*</Mono>); send a copy off-site too.
         </>
       }
+      actions={<BackupNow targets={targets} targetId={targetId} onTarget={setTargetId} disabled={backup.isPending} onBackup={() => backup.mutate()} />}
     >
-      <p className="text-sm text-zinc-500">
-        Projects, services, schedules and backup records live in one SQLite file. It is snapshotted daily to local disk
-        by default (<span className="font-mono">KIPITINY_MANAGER_BACKUP_*</span>); send a copy off-site too.
-      </p>
-      <ErrorText error={backup.error} />
-    </Card>
+      {backup.error && <ErrorText error={backup.error} />}
+    </Section>
+  );
+}
+
+function Targets({ targets }: { targets: BackupTarget[] }) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState<BackupTarget | "new" | null>(null);
+  const remove = useMutation({
+    mutationFn: api.deleteBackupTarget,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["backup-targets"] }),
+  });
+
+  return (
+    <Section
+      title="Targets"
+      description="Where backups are stored."
+      actions={
+        <Button variant="outline" size="sm" onClick={() => setEditing("new")}>
+          <Plus data-icon="inline-start" />
+          Add S3 target
+        </Button>
+      }
+    >
+      <ul className="-my-2 divide-y">
+        {targets.map((t) => (
+          <li key={t.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2.5">
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                {t.name}
+                {t.ageRecipient && <Tag className="bg-emerald-500/10 text-emerald-600">encrypted (age)</Tag>}
+              </p>
+              <p className="truncate font-mono text-xs text-muted-foreground">
+                {t.kind === "local"
+                  ? "/data/backups on the manager's volume"
+                  : `${t.useSsl ? "https" : "http"}://${t.endpoint}/${t.bucket}/${t.prefix}`}
+              </p>
+            </div>
+            {t.kind === "s3" && (
+              <div className="flex gap-0.5">
+                {t.ageRecipient && <KeyButton targetId={t.id} name={t.name} />}
+                <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={() => setEditing(t)}>
+                  <Pencil />
+                </Button>
+                <ConfirmDialog
+                  trigger={
+                    <Button variant="ghost" size="icon-sm" title="Delete" aria-label="Delete" className="text-muted-foreground hover:text-destructive">
+                      <Trash2 />
+                    </Button>
+                  }
+                  title={`Delete target ${t.name}?`}
+                  description="Backups already stored there are not deleted."
+                  onConfirm={() => remove.mutate(t.id)}
+                />
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      <ErrorText error={remove.error} />
+      <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
+          {editing && (
+            <TargetForm
+              key={editing === "new" ? "new" : editing.id}
+              target={editing === "new" ? null : editing}
+              onDone={() => setEditing(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </Section>
+  );
+}
+
+function KeyButton({ targetId, name }: { targetId: string; name: string }) {
+  const [key, setKey] = useState<string | null>(null);
+  const reveal = useMutation({ mutationFn: () => api.backupTargetKey(targetId), onSuccess: (k) => setKey(k.identity) });
+  return (
+    <>
+      <Button variant="ghost" size="icon-sm" title="Show key" aria-label="Show key" disabled={reveal.isPending} onClick={() => reveal.mutate()}>
+        <KeyRound />
+      </Button>
+      <Dialog open={key !== null} onOpenChange={(o) => !o && setKey(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Decryption key for {name}</DialogTitle>
+            <DialogDescription>Keep it somewhere safe: without it, these backups are unreadable if this server is lost.</DialogDescription>
+          </DialogHeader>
+          {key && <CopyField value={key} />}
+        </DialogContent>
+      </Dialog>
+      <ErrorText error={reveal.error} />
+    </>
   );
 }
 
@@ -69,88 +166,6 @@ const emptyTarget: TargetInput = {
   secretKey: "",
   useSsl: true,
 };
-
-function Targets({ targets }: { targets: BackupTarget[] }) {
-  const qc = useQueryClient();
-  const [editing, setEditing] = useState<BackupTarget | "new" | null>(null);
-  const remove = useMutation({
-    mutationFn: api.deleteBackupTarget,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["backup-targets"] }),
-  });
-
-  return (
-    <Card
-      title="Targets"
-      actions={
-        !editing && (
-          <Button variant="secondary" className="!py-0.5 text-xs" onClick={() => setEditing("new")}>
-            Add S3 target
-          </Button>
-        )
-      }
-    >
-      <ul className="divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
-        {targets.map((t) => (
-          <li key={t.id} className="flex items-center justify-between gap-4 py-2">
-            <div>
-              <p className="font-medium">
-                {t.name}
-                {t.ageRecipient && <span className="ml-2 text-xs font-normal text-emerald-600">encrypted (age)</span>}
-              </p>
-              <p className="font-mono text-xs text-zinc-500">
-                {t.kind === "local" ? "/data/backups on the manager's volume" : `${t.useSsl ? "https" : "http"}://${t.endpoint}/${t.bucket}/${t.prefix}`}
-              </p>
-            </div>
-            {t.kind === "s3" && (
-              <div className="space-x-3 text-xs">
-                {t.ageRecipient && <KeyButton targetId={t.id} />}
-                <button className="hover:underline" onClick={() => setEditing(t)}>
-                  Edit
-                </button>
-                <button
-                  className="text-red-600 hover:underline"
-                  onClick={() => confirm(`Delete target ${t.name}?`) && remove.mutate(t.id)}
-                >
-                  Delete
-                </button>
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
-      <ErrorText error={remove.error} />
-      {editing && (
-        <TargetForm
-          key={editing === "new" ? "new" : editing.id}
-          target={editing === "new" ? null : editing}
-          onDone={() => setEditing(null)}
-        />
-      )}
-    </Card>
-  );
-}
-
-function KeyButton({ targetId }: { targetId: string }) {
-  const [key, setKey] = useState<string | null>(null);
-  const reveal = useMutation({ mutationFn: () => api.backupTargetKey(targetId), onSuccess: (k) => setKey(k.identity) });
-  if (key)
-    return (
-      <span className="inline-flex items-center gap-2">
-        <code className="max-w-md rounded bg-zinc-100 px-1 break-all dark:bg-zinc-800">{key}</code>
-        <button className="hover:underline" onClick={() => navigator.clipboard.writeText(key)}>
-          copy
-        </button>
-        <button className="hover:underline" onClick={() => setKey(null)}>
-          hide
-        </button>
-      </span>
-    );
-  return (
-    <button className="hover:underline" onClick={() => reveal.mutate()}>
-      Show key
-    </button>
-  );
-}
 
 function TargetForm({ target, onDone }: { target: BackupTarget | null; onDone: () => void }) {
   const qc = useQueryClient();
@@ -172,57 +187,65 @@ function TargetForm({ target, onDone }: { target: BackupTarget | null; onDone: (
     save.mutate();
   };
   return (
-    <form onSubmit={onSubmit} className="mt-4 grid gap-4 border-t border-zinc-200 pt-4 sm:grid-cols-2 dark:border-zinc-800">
-      <Field label="Name">
-        <Input required value={form.name} onChange={set("name")} placeholder="offsite" />
-      </Field>
-      <Field label="Endpoint" hint="host[:port], e.g. s3.eu-west-1.amazonaws.com">
-        <Input required value={form.endpoint} onChange={set("endpoint")} />
-      </Field>
-      <Field label="Bucket">
-        <Input required value={form.bucket} onChange={set("bucket")} />
-      </Field>
-      <Field label="Prefix" hint="Optional folder inside the bucket.">
-        <Input value={form.prefix} onChange={set("prefix")} placeholder="kipitiny" />
-      </Field>
-      <Field label="Access key">
-        <Input required value={form.accessKey} onChange={set("accessKey")} autoComplete="off" />
-      </Field>
-      <Field label="Secret key">
-        <Input required type="password" value={form.secretKey} onChange={set("secretKey")} autoComplete="new-password" />
-      </Field>
-      <Field label="Region" hint="Usually optional.">
-        <Input value={form.region} onChange={set("region")} />
-      </Field>
-      <label className="flex items-center gap-2 self-end pb-2 text-sm">
-        <input type="checkbox" checked={form.useSsl} onChange={(e) => setForm({ ...form, useSsl: e.target.checked })} />
-        Use HTTPS
-      </label>
-      {!target && (
-        <label className="flex items-start gap-2 text-sm sm:col-span-2">
-          <input
-            type="checkbox"
-            className="mt-1"
+    <form onSubmit={onSubmit} className="contents">
+      <DialogHeader>
+        <DialogTitle>{target ? `Edit ${target.name}` : "New S3 target"}</DialogTitle>
+        <DialogDescription>A test object is written and deleted before saving.</DialogDescription>
+      </DialogHeader>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FloatingInput label="Name" required autoFocus value={form.name} onChange={set("name")} placeholder="offsite" />
+        <FloatingInput
+          label="Endpoint"
+          required
+          value={form.endpoint}
+          onChange={set("endpoint")}
+          placeholder="s3.eu-west-1.amazonaws.com"
+          description="host[:port]"
+        />
+        <FloatingInput label="Bucket" required value={form.bucket} onChange={set("bucket")} />
+        <FloatingInput
+          label="Prefix"
+          value={form.prefix}
+          onChange={set("prefix")}
+          placeholder="kipitiny"
+          description="Optional folder inside the bucket."
+        />
+        <FloatingInput label="Access key" required value={form.accessKey} onChange={set("accessKey")} autoComplete="off" />
+        <FloatingInput
+          label="Secret key"
+          required
+          type="password"
+          value={form.secretKey}
+          onChange={set("secretKey")}
+          autoComplete="new-password"
+        />
+        <FloatingInput label="Region" value={form.region} onChange={set("region")} description="Usually optional." />
+        <CheckboxField
+          label="Use HTTPS"
+          checked={form.useSsl}
+          onCheckedChange={(v) => setForm({ ...form, useSsl: v })}
+          className="self-center"
+        />
+        {!target && (
+          <CheckboxField
+            label={
+              <>
+                Encrypt backups with <Mono>age</Mono>
+              </>
+            }
+            description="A key is generated for this target and cannot be changed later. Copy it (Show key) somewhere safe: without it, these backups are unreadable if this server is lost."
             checked={form.encrypt ?? false}
-            onChange={(e) => setForm({ ...form, encrypt: e.target.checked })}
+            onCheckedChange={(v) => setForm({ ...form, encrypt: v })}
+            className="sm:col-span-2"
           />
-          <span>
-            Encrypt backups with <span className="font-mono">age</span>
-            <span className="block text-xs text-zinc-500">
-              A key is generated for this target and cannot be changed later. Copy it (Show key) somewhere safe: without
-              it, these backups are unreadable if this server is lost.
-            </span>
-          </span>
-        </label>
-      )}
-      <div className="flex items-center gap-3 sm:col-span-2">
-        <Button disabled={save.isPending}>{save.isPending ? "Testing…" : target ? "Save" : "Add target"}</Button>
-        <Button type="button" variant="secondary" onClick={onDone}>
-          Cancel
-        </Button>
-        <span className="text-xs text-zinc-500">A test object is written and deleted before saving.</span>
+        )}
       </div>
       <ErrorText error={save.error} />
+      <DialogFooter>
+        <Button type="submit" disabled={save.isPending}>
+          {save.isPending ? "Testing…" : target ? "Save" : "Add target"}
+        </Button>
+      </DialogFooter>
     </form>
   );
 }

@@ -1,7 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { CopyField, Empty, ErrorText, Mono, Section, Tag } from "@/components/common";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { PageBody, PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { FloatingInput } from "@/components/ui/floating-input";
+import { FloatingSelect } from "@/components/ui/floating-select";
+import { timeAgo } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { api, type Scope } from "../api";
-import { Button, Card, ErrorText, Field, Input, Select, timeAgo } from "../ui";
 import { Servers } from "./Servers";
 
 const scopes: [Scope, string][] = [
@@ -12,18 +29,74 @@ const scopes: [Scope, string][] = [
 
 export function Settings() {
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Settings</h1>
-      <Servers />
-      <Tokens />
-      <Audit />
-    </div>
+    <>
+      <PageHeader crumbs={[{ label: "Settings" }]} />
+      <PageBody>
+        <Servers />
+        <Tokens />
+        <Audit />
+      </PageBody>
+    </>
   );
 }
 
 function Tokens() {
   const qc = useQueryClient();
   const tokens = useQuery({ queryKey: ["tokens"], queryFn: api.tokens });
+  const remove = useMutation({
+    mutationFn: api.deleteToken,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tokens"] }),
+  });
+
+  return (
+    <Section
+      title="API tokens & MCP"
+      description={
+        <>
+          Tokens authenticate scripts (<Mono>Authorization: Bearer …</Mono> on <Mono>/api</Mono>) and AI agents on the
+          MCP endpoint <Mono>{window.location.origin}/mcp</Mono>. Every change they make is in the audit log.
+        </>
+      }
+      actions={<TokenDialog />}
+    >
+      {tokens.data?.length === 0 ? (
+        <Empty>No tokens yet.</Empty>
+      ) : (
+        <ul className="-my-2 divide-y">
+          {tokens.data?.map((t) => (
+            <li key={t.id} className="flex items-center justify-between gap-4 py-2.5">
+              <div>
+                <p className="flex items-center gap-2 text-sm font-medium">
+                  {t.name}
+                  <Tag>{t.scope}</Tag>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  created {timeAgo(t.createdAt)} · {t.lastUsedAt ? `last used ${timeAgo(t.lastUsedAt)}` : "never used"}
+                </p>
+              </div>
+              <ConfirmDialog
+                trigger={
+                  <Button variant="ghost" size="icon-sm" title="Revoke" aria-label="Revoke" className="text-muted-foreground hover:text-destructive">
+                    <Trash2 />
+                  </Button>
+                }
+                title={`Revoke token ${t.name}?`}
+                description="Anything using it stops working immediately."
+                confirmLabel="Revoke"
+                onConfirm={() => remove.mutate(t.id)}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+      <ErrorText error={remove.error} />
+    </Section>
+  );
+}
+
+function TokenDialog() {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [scope, setScope] = useState<Scope>("read");
   const [created, setCreated] = useState<string | null>(null);
@@ -31,122 +104,106 @@ function Tokens() {
     mutationFn: () => api.createToken(name.trim(), scope),
     onSuccess: (t) => {
       setCreated(t.token);
-      setName("");
       qc.invalidateQueries({ queryKey: ["tokens"] });
     },
   });
-  const remove = useMutation({
-    mutationFn: api.deleteToken,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tokens"] }),
-  });
+  const onOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setName("");
+      setScope("read");
+      setCreated(null);
+      create.reset();
+    }
+  };
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     create.mutate();
   };
-  const mcpCommand = created
-    ? `claude mcp add --transport http kipitiny ${window.location.origin}/mcp --header "Authorization: Bearer ${created}"`
-    : "";
 
   return (
-    <Card title="API tokens & MCP">
-      <div className="space-y-4">
-        <p className="text-sm text-zinc-500">
-          Tokens authenticate scripts (<span className="font-mono">Authorization: Bearer …</span> on{" "}
-          <span className="font-mono">/api</span>) and AI agents on the MCP endpoint{" "}
-          <span className="font-mono">{window.location.origin}/mcp</span>. Every change they make is in the audit log.
-        </p>
-        <form onSubmit={onSubmit} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-          <Field label="Name">
-            <Input required value={name} onChange={(e) => setName(e.target.value)} placeholder="claude-code" />
-          </Field>
-          <Field label="Scope">
-            <Select value={scope} onChange={(e) => setScope(e.target.value as Scope)}>
-              {scopes.map(([s, label]) => (
-                <option key={s} value={s}>
-                  {label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Button disabled={create.isPending}>Create token</Button>
-        </form>
-        <ErrorText error={create.error ?? remove.error} />
-        {created && (
-          <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950">
-            <p className="font-medium">Copy it now: it won't be shown again.</p>
-            <CopyLine value={created} />
-            <p className="text-xs text-zinc-500">Connect Claude Code:</p>
-            <CopyLine value={mcpCommand} />
-            <button className="text-xs hover:underline" onClick={() => setCreated(null)}>
-              Done
-            </button>
-          </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Plus data-icon="inline-start" />
+          Create token
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        {created ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Token created</DialogTitle>
+              <DialogDescription>Copy it now: it won't be shown again.</DialogDescription>
+            </DialogHeader>
+            <CopyField value={created} />
+            <p className="text-sm text-muted-foreground">Connect Claude Code:</p>
+            <CopyField
+              value={`claude mcp add --transport http kipitiny ${window.location.origin}/mcp --header "Authorization: Bearer ${created}"`}
+            />
+            <DialogFooter>
+              <Button onClick={() => onOpenChange(false)}>Done</Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <form onSubmit={onSubmit} className="contents">
+            <DialogHeader>
+              <DialogTitle>New API token</DialogTitle>
+              <DialogDescription>For a script or an AI agent.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <FloatingInput label="Name" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="claude-code" />
+              <FloatingSelect
+                label="Scope"
+                value={scope}
+                onValueChange={(v) => setScope(v as Scope)}
+                options={scopes.map(([value, label]) => ({ value, label }))}
+              />
+              <ErrorText error={create.error} />
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={create.isPending}>
+                Create token
+              </Button>
+            </DialogFooter>
+          </form>
         )}
-        <ul className="divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
-          {tokens.data?.map((t) => (
-            <li key={t.id} className="flex items-center justify-between gap-4 py-2">
-              <div>
-                <span className="font-medium">{t.name}</span>{" "}
-                <span className="rounded bg-zinc-100 px-1 text-xs dark:bg-zinc-800">{t.scope}</span>
-                <p className="text-xs text-zinc-500">
-                  created {timeAgo(t.createdAt)} · {t.lastUsedAt ? `last used ${timeAgo(t.lastUsedAt)}` : "never used"}
-                </p>
-              </div>
-              <button
-                className="text-xs text-red-600 hover:underline"
-                onClick={() => confirm(`Revoke token ${t.name}?`) && remove.mutate(t.id)}
-              >
-                Revoke
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </Card>
-  );
-}
-
-function CopyLine({ value }: { value: string }) {
-  return (
-    <div className="flex items-start gap-2">
-      <code className="flex-1 rounded bg-white px-2 py-1 font-mono text-xs break-all dark:bg-zinc-900">{value}</code>
-      <button className="text-xs hover:underline" onClick={() => navigator.clipboard.writeText(value)}>
-        copy
-      </button>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 function Audit() {
   const audit = useQuery({ queryKey: ["audit"], queryFn: api.audit, refetchInterval: 15_000 });
+  const th = "px-2 pb-2 font-medium";
   return (
-    <Card title="Audit log">
+    <Section title="Audit log" description="Every change, by whom, and how it went.">
       <ErrorText error={audit.error} />
       {audit.data?.length === 0 ? (
-        <p className="text-sm text-zinc-500">Nothing yet.</p>
+        <Empty>Nothing yet.</Empty>
       ) : (
-        <div className="max-h-96 overflow-auto">
+        <div className="-mx-2 max-h-96 overflow-auto">
           <table className="w-full text-left text-xs">
-            <thead className="text-zinc-500">
-              <tr>
-                <th className="pb-2 font-medium">When</th>
-                <th className="pb-2 font-medium">Who</th>
-                <th className="pb-2 font-medium">Action</th>
-                <th className="pb-2 font-medium">Result</th>
+            <thead className="sticky top-0 bg-card text-muted-foreground">
+              <tr className="border-b">
+                <th className={th}>When</th>
+                <th className={th}>Who</th>
+                <th className={th}>Action</th>
+                <th className={th}>Result</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+            <tbody className="divide-y">
               {audit.data?.map((e) => (
-                <tr key={e.id}>
-                  <td className="py-1 whitespace-nowrap text-zinc-500" title={new Date(e.createdAt).toLocaleString()}>
+                <tr key={e.id} className="hover:bg-muted/50">
+                  <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground" title={new Date(e.createdAt).toLocaleString()}>
                     {timeAgo(e.createdAt)}
                   </td>
-                  <td className="py-1">{e.actor}</td>
-                  <td className="py-1 font-mono">
+                  <td className="px-2 py-1.5">{e.actor}</td>
+                  <td className="px-2 py-1.5 font-mono">
                     {e.action}
-                    {e.target && <span className="text-zinc-500"> {e.target}</span>}
+                    {e.target && <span className="text-muted-foreground"> {e.target}</span>}
                   </td>
-                  <td className={`py-1 ${e.status >= 400 ? "text-red-600" : "text-zinc-500"}`} title={e.error}>
+                  <td className={cn("px-2 py-1.5", e.status >= 400 ? "text-destructive" : "text-muted-foreground")} title={e.error}>
                     {e.status}
                   </td>
                 </tr>
@@ -155,6 +212,6 @@ function Audit() {
           </table>
         </div>
       )}
-    </Card>
+    </Section>
   );
 }
