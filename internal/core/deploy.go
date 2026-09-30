@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
@@ -74,16 +73,17 @@ func (c *Core) startDeploy(ctx context.Context, serviceID, image string) (store.
 	if image == "" {
 		image = svc.Image
 	}
+	svc.Image = image
 	dep, err := c.store.CreateDeployment(ctx, store.Deployment{
 		ServiceID: svc.ID,
 		Status:    store.DeploymentRunning,
 		Image:     image,
+		Config:    svc,
 	})
 	if err != nil {
 		unlock()
 		return store.Deployment{}, err
 	}
-	svc.Image = image
 
 	if err := c.goBackground(func() {
 		defer unlock()
@@ -181,6 +181,9 @@ func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Se
 	if err := c.docker.WaitHealthy(ctx, id, postgresReadyTimeout); err != nil {
 		return fmt.Errorf("postgres did not become ready: %w", err)
 	}
+	if err := c.store.SetServiceStopped(ctx, svc.ID, false); err != nil {
+		return err
+	}
 	return c.store.SetCurrentDeployment(ctx, svc.ID, dep.ID)
 }
 
@@ -213,20 +216,9 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 		}
 	}
 
-	// Apps with a port get an injected healthcheck unless their image has one.
-	var probe *mount.Mount
-	if svc.Port > 0 {
-		has, err := c.imageHealthcheck(ctx, svc.Image)
-		if err != nil {
-			return err
-		}
-		if !has {
-			m, err := c.probeMount(ctx)
-			if err != nil {
-				return fmt.Errorf("health probe: %w", err)
-			}
-			probe = &m
-		}
+	probe, err := c.probeFor(ctx, svc)
+	if err != nil {
+		return err
 	}
 
 	var started []string
@@ -236,10 +228,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 		}
 	}
 	for i := 1; i <= svc.Replicas; i++ {
-		spec := containerSpec(project, svc, db, dep.ID, i)
-		if probe != nil {
-			withProbe(&spec, svc, *probe)
-		}
+		spec := replicaSpec(project, svc, db, dep.ID, i, probe)
 		logf("Starting %s", spec.Name)
 		id, err := c.docker.Run(ctx, spec)
 		if err != nil {
@@ -267,6 +256,10 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 		return fmt.Errorf("new version not ready: %w", readyErr)
 	}
 
+	if err := c.store.SetServiceStopped(ctx, svc.ID, false); err != nil {
+		cleanup()
+		return err
+	}
 	if err := c.store.SetCurrentDeployment(ctx, svc.ID, dep.ID); err != nil {
 		cleanup()
 		return err

@@ -65,3 +65,29 @@ func withProbe(spec *client.ContainerCreateOptions, svc store.Service, m mount.M
 	}
 	spec.HostConfig.Mounts = append(spec.HostConfig.Mounts, m)
 }
+
+// probeFor returns the probe mount to inject into the service's replicas, or
+// nil when the image has its own healthcheck or the service has no port.
+func (c *Core) probeFor(ctx context.Context, svc store.Service) (*mount.Mount, error) {
+	if svc.Kind != store.ServiceKindApp || svc.Port == 0 {
+		return nil, nil
+	}
+	has, err := c.imageHealthcheck(ctx, svc.Image)
+	if err != nil || has {
+		return nil, err
+	}
+	m, err := c.probeMount(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("health probe: %w", err)
+	}
+	return &m, nil
+}
+
+// replicaSpec is containerSpec plus the injected health probe, if any.
+func replicaSpec(project store.Project, svc store.Service, db *store.Service, deployID string, replica int, probe *mount.Mount) client.ContainerCreateOptions {
+	spec := containerSpec(project, svc, db, deployID, replica)
+	if probe != nil {
+		withProbe(&spec, svc, *probe)
+	}
+	return spec
+}

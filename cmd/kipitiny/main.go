@@ -85,6 +85,9 @@ func serve() error {
 	if err := c.StartScheduler(ctx); err != nil {
 		return err
 	}
+	if err := c.StartReconciler(ctx); err != nil {
+		return err
+	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/", api.New(c, log))

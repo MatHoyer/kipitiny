@@ -27,6 +27,9 @@ type Store interface {
 	ListServices(ctx context.Context, projectID string) ([]Service, error)
 	UpdateService(ctx context.Context, s Service) (Service, error)
 	SetCurrentDeployment(ctx context.Context, serviceID, deploymentID string) error
+	SetServiceStopped(ctx context.Context, serviceID string, stopped bool) error
+	// ListAllServices returns every service of every project.
+	ListAllServices(ctx context.Context) ([]Service, error)
 	DeleteService(ctx context.Context, id string) error
 
 	CreateDeployment(ctx context.Context, d Deployment) (Deployment, error)
@@ -143,10 +146,12 @@ type Service struct {
 	HealthPath string `bun:"health_path" json:"healthPath"`
 	// PreDeploy runs once (sh -c) in a one-off container before a rollout,
 	// e.g. migrations. A failure aborts the deploy.
-	PreDeploy           string    `bun:"pre_deploy" json:"preDeploy"`
-	CurrentDeploymentID string    `bun:"current_deployment_id" json:"currentDeploymentId"`
-	CreatedAt           time.Time `bun:"created_at" json:"createdAt"`
-	UpdatedAt           time.Time `bun:"updated_at" json:"updatedAt"`
+	PreDeploy           string `bun:"pre_deploy" json:"preDeploy"`
+	CurrentDeploymentID string `bun:"current_deployment_id" json:"currentDeploymentId"`
+	// Stopped is the desired run state after the user stopped the service.
+	Stopped   bool      `bun:"stopped" json:"stopped"`
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+	UpdatedAt time.Time `bun:"updated_at" json:"updatedAt"`
 }
 
 type DeploymentStatus string
@@ -160,13 +165,15 @@ const (
 type Deployment struct {
 	bun.BaseModel `bun:"table:deployments,alias:deployment" json:"-"`
 
-	ID         string           `bun:"id,pk" json:"id"`
-	ServiceID  string           `bun:"service_id" json:"serviceId"`
-	Status     DeploymentStatus `bun:"status" json:"status"`
-	Image      string           `bun:"image" json:"image"`
-	Error      string           `bun:"error" json:"error,omitempty"`
-	CreatedAt  time.Time        `bun:"created_at" json:"createdAt"`
-	FinishedAt *time.Time       `bun:"finished_at" json:"finishedAt,omitempty"`
+	ID        string           `bun:"id,pk" json:"id"`
+	ServiceID string           `bun:"service_id" json:"serviceId"`
+	Status    DeploymentStatus `bun:"status" json:"status"`
+	Image     string           `bun:"image" json:"image"`
+	Error     string           `bun:"error" json:"error,omitempty"`
+	// Config is the service as deployed (image included).
+	Config     Service    `bun:"config,type:text" json:"-"`
+	CreatedAt  time.Time  `bun:"created_at" json:"createdAt"`
+	FinishedAt *time.Time `bun:"finished_at" json:"finishedAt,omitempty"`
 }
 
 type BackupTargetKind string

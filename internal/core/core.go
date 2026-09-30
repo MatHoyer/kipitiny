@@ -44,14 +44,15 @@ type Core struct {
 	setupMu    sync.Mutex
 	setupToken string // set while no admin exists
 
-	sched     scheduler
-	verifySem chan struct{}
+	sched         scheduler
+	verifySem     chan struct{}
+	reconcileKick chan struct{}
 	selfState
 }
 
 func New(cfg config.Config, s store.Store, d *docker.Client, log *slog.Logger) *Core {
 	bg, cancel := context.WithCancel(context.Background())
-	return &Core{cfg: cfg, store: s, docker: d, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1)}
+	return &Core{cfg: cfg, store: s, docker: d, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1)}
 }
 
 // Bootstrap prepares host-level resources the manager relies on.
@@ -169,6 +170,15 @@ func (c *Core) DeleteProject(ctx context.Context, id, confirm string) error {
 	svcs, err := c.store.ListServices(ctx, id)
 	if err != nil {
 		return err
+	}
+	// Hold every service so nothing (deploy, backup, reconciler) recreates
+	// containers while the project goes away.
+	for _, s := range svcs {
+		unlock, err := c.lockService(s.ID)
+		if err != nil {
+			return fmt.Errorf("%s: %w", s.Name, err)
+		}
+		defer unlock()
 	}
 	for _, s := range svcs {
 		if err := c.removeServiceContainers(ctx, s); err != nil {
