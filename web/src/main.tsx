@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router";
 import { ApiError } from "./api";
 import "./index.css";
+import { Backups } from "./routes/Backups";
 import { Layout } from "./routes/Layout";
 import { Project } from "./routes/Project";
 import { Projects } from "./routes/Projects";
@@ -29,6 +30,7 @@ const router = createBrowserRouter([
       { index: true, element: <Projects /> },
       { path: "projects/:id", element: <Project /> },
       { path: "services/:id", element: <Service /> },
+      { path: "backups", element: <Backups /> },
     ],
   },
 ]);

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
+import { BackupList } from "./BackupList";
 import { api, type Connection, type Deployment, type LogLine, type Service as ServiceT } from "../api";
 import {
   Button,
@@ -141,6 +142,7 @@ export function Service() {
       </Card>
 
       {svc.kind === "postgres" && <ConnectionCard serviceId={svc.id} host={svc.name} />}
+      {svc.kind === "postgres" && <BackupsCard serviceId={svc.id} name={svc.name} />}
 
       {svc.containers.length > 0 && (
         // Remount (and reconnect) whenever the set of containers changes.
@@ -253,6 +255,59 @@ function Settings({ svc }: { svc: ServiceT }) {
           <ErrorText error={save.error} />
         </div>
       </form>
+    </Card>
+  );
+}
+
+function BackupsCard({ serviceId, name }: { serviceId: string; name: string }) {
+  const qc = useQueryClient();
+  const targets = useQuery({ queryKey: ["backup-targets"], queryFn: api.backupTargets });
+  const backups = useQuery({
+    queryKey: ["backups", serviceId],
+    queryFn: () => api.serviceBackups(serviceId),
+    refetchInterval: (q) => (q.state.data?.some((b) => b.status === "running") ? 1_000 : 15_000),
+  });
+  const restores = useQuery({
+    queryKey: ["restores", serviceId],
+    queryFn: () => api.restores(serviceId),
+    refetchInterval: (q) => (q.state.data?.some((r) => r.status === "running") ? 1_000 : 15_000),
+  });
+  const [targetId, setTargetId] = useState("local");
+  const backup = useMutation({
+    mutationFn: () => api.backup(serviceId, targetId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["backups"] }),
+  });
+  const lastRestore = restores.data?.[0];
+  const busy = backups.data?.some((b) => b.status === "running") || lastRestore?.status === "running";
+
+  return (
+    <Card
+      title="Backups"
+      actions={
+        <>
+          <Select value={targetId} onChange={(e) => setTargetId(e.target.value)} className="!w-auto !py-0.5 text-xs">
+            {targets.data?.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+          <Button className="!py-0.5 text-xs" disabled={busy || backup.isPending} onClick={() => backup.mutate()}>
+            Back up now
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {lastRestore && (
+          <div className="flex items-center gap-2 text-xs text-zinc-500">
+            Last restore: <StateBadge state={lastRestore.status} /> {timeAgo(lastRestore.createdAt)}
+            {lastRestore.error && <span className="truncate text-red-600">{lastRestore.error}</span>}
+          </div>
+        )}
+        <ErrorText error={backup.error} />
+        <BackupList backups={backups.data ?? []} targets={targets.data ?? []} restoreInto={name} />
+      </div>
     </Card>
   );
 }
