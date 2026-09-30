@@ -1,0 +1,13 @@
+services:
+  manager:
+    build: .
+    image: kipitiny
+    ports:
+      - "3000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - manager-data:/data
+    restart: unless-stopped
+
+volumes:
+  manager-data:
