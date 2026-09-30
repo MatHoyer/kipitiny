@@ -77,6 +77,9 @@ func (s *Store) Snapshot(ctx context.Context, path string) error {
 func (s *Store) CreateProject(ctx context.Context, p store.Project) (store.Project, error) {
 	now := now()
 	p.ID, p.CreatedAt, p.UpdatedAt = ids.New(), now, now
+	if p.ServerID == "" {
+		p.ServerID = store.LocalServerID
+	}
 	if _, err := s.db.NewInsert().Model(&p).Exec(ctx); err != nil {
 		return store.Project{}, mapErr(err)
 	}
@@ -104,6 +107,12 @@ func (s *Store) CreateService(ctx context.Context, svc store.Service) (store.Ser
 	svc.ID, svc.CreatedAt, svc.UpdatedAt = ids.New(), now, now
 	if svc.Source == "" {
 		svc.Source = store.SourceImage
+	}
+	// Services always run on their project's server.
+	err := s.db.NewSelect().Model((*store.Project)(nil)).Column("server_id").
+		Where("id = ?", svc.ProjectID).Scan(ctx, &svc.ServerID)
+	if err != nil {
+		return store.Service{}, mapErr(err)
 	}
 	if _, err := s.db.NewInsert().Model(&svc).Exec(ctx); err != nil {
 		return store.Service{}, mapErr(err)
@@ -546,6 +555,62 @@ func (s *Store) ListAudit(ctx context.Context, limit int) ([]store.AuditEntry, e
 func (s *Store) PruneAudit(ctx context.Context, before time.Time) error {
 	_, err := s.db.NewDelete().Model((*store.AuditEntry)(nil)).
 		Where("created_at < ?", before.UTC().Truncate(time.Microsecond)).Exec(ctx)
+	return mapErr(err)
+}
+
+func (s *Store) ListServers(ctx context.Context) ([]store.Server, error) {
+	ss := []store.Server{}
+	err := s.db.NewSelect().Model(&ss).OrderExpr("kind = 'local' DESC, name").Scan(ctx)
+	return ss, mapErr(err)
+}
+
+func (s *Store) GetServer(ctx context.Context, id string) (store.Server, error) {
+	var sv store.Server
+	err := s.db.NewSelect().Model(&sv).Where("id = ?", id).Scan(ctx)
+	return sv, mapErr(err)
+}
+
+func (s *Store) CreateServer(ctx context.Context, sv store.Server) (store.Server, error) {
+	sv.ID, sv.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&sv).Exec(ctx); err != nil {
+		return store.Server{}, mapErr(err)
+	}
+	return sv, nil
+}
+
+func (s *Store) UpdateServer(ctx context.Context, sv store.Server) (store.Server, error) {
+	res, err := s.db.NewUpdate().Model(&sv).
+		Column("name", "host", "port", "ssh_user", "socket", "host_key").WherePK().Exec(ctx)
+	if err != nil {
+		return store.Server{}, mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.Server{}, store.ErrNotFound
+	}
+	return sv, nil
+}
+
+func (s *Store) DeleteServer(ctx context.Context, id string) error {
+	n, err := s.db.NewSelect().Model((*store.Project)(nil)).Where("server_id = ?", id).Count(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n > 0 {
+		return fmt.Errorf("%w: %d projects run on this server", store.ErrConflict, n)
+	}
+	return deleteByID(ctx, s.db, "servers", id)
+}
+
+func (s *Store) GetSetting(ctx context.Context, key string) (string, error) {
+	var v string
+	err := s.db.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = ?", key).Scan(&v)
+	return v, mapErr(err)
+}
+
+func (s *Store) SetSetting(ctx context.Context, key, value string) error {
+	_, err := s.db.ExecContext(ctx,
+		"INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+		key, value)
 	return mapErr(err)
 }
 

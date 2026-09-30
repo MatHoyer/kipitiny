@@ -320,11 +320,15 @@ func (c *Core) GetService(ctx context.Context, id string) (ServiceView, error) {
 // ListServices returns the project's services with their containers, using a
 // single Docker call for the whole project.
 func (c *Core) ListServices(ctx context.Context, projectID string) ([]ServiceView, error) {
+	project, err := c.store.GetProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
 	svcs, err := c.store.ListServices(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	cts, err := c.docker.ListContainers(ctx, map[string]string{docker.LabelProject: projectID})
+	cts, err := c.dockerFor(project.ServerID).ListContainers(ctx, map[string]string{docker.LabelProject: projectID})
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +363,7 @@ func (c *Core) view(ctx context.Context, svc store.Service) (ServiceView, error)
 }
 
 func (c *Core) serviceContainers(ctx context.Context, svc store.Service) ([]container.Summary, error) {
-	return c.docker.ListContainers(ctx, map[string]string{
+	return c.dockerFor(svc.ServerID).ListContainers(ctx, map[string]string{
 		docker.LabelProject: svc.ProjectID,
 		docker.LabelService: svc.ID,
 	})
@@ -480,16 +484,17 @@ func (c *Core) removeServiceContainers(ctx context.Context, svc store.Service) e
 	if err != nil {
 		return err
 	}
+	dk := c.dockerFor(svc.ServerID)
 	for _, ct := range cts {
-		if err := c.docker.RemoveContainer(ctx, ct.ID, stopTimeoutFor(svc)); err != nil {
+		if err := dk.RemoveContainer(ctx, ct.ID, stopTimeoutFor(svc)); err != nil {
 			return err
 		}
 	}
 	if svc.Kind == store.ServiceKindPostgres {
-		return c.docker.RemoveVolume(ctx, PostgresVolume(svc.ID))
+		return dk.RemoveVolume(ctx, PostgresVolume(svc.ID))
 	}
 	if svc.Source == store.SourceGit {
-		return c.docker.RemoveImagesByLabel(ctx, docker.LabelService, svc.ID)
+		return dk.RemoveImagesByLabel(ctx, docker.LabelService, svc.ID)
 	}
 	return nil
 }
@@ -527,16 +532,17 @@ func (c *Core) ServiceAction(ctx context.Context, id string, action Action) (Ser
 	}
 	svc.Stopped = action == ActionStop
 	secs := int(stopTimeoutFor(svc).Seconds())
+	dk := c.dockerFor(svc.ServerID)
 	for _, ct := range cts {
 		switch action {
 		case ActionStart:
 			if ct.State != container.StateRunning {
-				_, err = c.docker.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{})
+				_, err = dk.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{})
 			}
 		case ActionStop:
-			_, err = c.docker.ContainerStop(ctx, ct.ID, client.ContainerStopOptions{Timeout: &secs})
+			_, err = dk.ContainerStop(ctx, ct.ID, client.ContainerStopOptions{Timeout: &secs})
 		case ActionRestart:
-			_, err = c.docker.ContainerRestart(ctx, ct.ID, client.ContainerRestartOptions{Timeout: &secs})
+			_, err = dk.ContainerRestart(ctx, ct.ID, client.ContainerRestartOptions{Timeout: &secs})
 		default:
 			return ServiceView{}, fmt.Errorf("%w: unknown action %q", ErrInvalid, action)
 		}

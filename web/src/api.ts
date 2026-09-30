@@ -1,6 +1,7 @@
 export type Project = {
   id: string;
   name: string;
+  serverId: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -157,6 +158,29 @@ export type Restore = {
   finishedAt?: string;
 };
 
+export type Server = {
+  id: string;
+  name: string;
+  kind: "local" | "ssh";
+  host: string;
+  port: number;
+  sshUser: string;
+  socket: string;
+  hostKey: string;
+  projects: number;
+  docker?: { version: string; os: string; arch: string };
+  dockerError?: string;
+};
+
+export type ServerInput = {
+  name: string;
+  host: string;
+  port: number;
+  sshUser: string;
+  socket: string;
+  resetHostKey?: boolean;
+};
+
 export type Scope = "read" | "deploy" | "admin";
 
 export type ApiToken = { id: string; name: string; scope: Scope; createdAt: string; lastUsedAt?: string };
@@ -220,7 +244,7 @@ export const api = {
 
   projects: () => request<Project[]>("/projects"),
   project: (id: string) => request<Project>(`/projects/${id}`),
-  createProject: (name: string) => request<Project>("/projects", json("POST", { name })),
+  createProject: (name: string, serverId = "") => request<Project>("/projects", json("POST", { name, serverId })),
   deleteProject: (id: string, confirm: string) =>
     request<void>(`/projects/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),
 
@@ -267,6 +291,11 @@ export const api = {
     request<{ backups: Backup[]; error?: string }>(`/projects/${projectId}/backups`, json("POST", { targetId })),
   restores: (serviceId: string) => request<Restore[]>(`/services/${serviceId}/restores`),
 
+  servers: () => request<Server[]>("/servers"),
+  createServer: (s: ServerInput) => request<Server>("/servers", json("POST", s)),
+  updateServer: (id: string, s: ServerInput) => request<Server>(`/servers/${id}`, json("PUT", s)),
+  deleteServer: (id: string) => request<void>(`/servers/${id}`, { method: "DELETE" }),
+  sshKey: () => request<{ publicKey: string }>("/ssh-key"),
   tokens: () => request<ApiToken[]>("/tokens"),
   createToken: (name: string, scope: Scope) =>
     request<ApiToken & { token: string }>("/tokens", json("POST", { name, scope })),

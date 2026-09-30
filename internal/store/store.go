@@ -95,6 +95,16 @@ type Store interface {
 	// PruneAudit deletes entries older than before.
 	PruneAudit(ctx context.Context, before time.Time) error
 
+	ListServers(ctx context.Context) ([]Server, error)
+	GetServer(ctx context.Context, id string) (Server, error)
+	CreateServer(ctx context.Context, s Server) (Server, error)
+	UpdateServer(ctx context.Context, s Server) (Server, error)
+	// DeleteServer returns ErrConflict while projects use it.
+	DeleteServer(ctx context.Context, id string) error
+
+	GetSetting(ctx context.Context, key string) (string, error)
+	SetSetting(ctx context.Context, key, value string) error
+
 	// Snapshot writes a consistent copy of the whole store to path.
 	Snapshot(ctx context.Context, path string) error
 
@@ -122,8 +132,10 @@ type Session struct {
 type Project struct {
 	bun.BaseModel `bun:"table:projects,alias:project" json:"-"`
 
-	ID        string    `bun:"id,pk" json:"id"`
-	Name      string    `bun:"name" json:"name"`
+	ID   string `bun:"id,pk" json:"id"`
+	Name string `bun:"name" json:"name"`
+	// ServerID is where the project's containers run; fixed at creation.
+	ServerID  string    `bun:"server_id" json:"serverId"`
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 	UpdatedAt time.Time `bun:"updated_at" json:"updatedAt"`
 }
@@ -145,11 +157,13 @@ const (
 type Service struct {
 	bun.BaseModel `bun:"table:services,alias:service" json:"-"`
 
-	ID        string      `bun:"id,pk" json:"id"`
-	ProjectID string      `bun:"project_id" json:"projectId"`
-	Name      string      `bun:"name" json:"name"`
-	Kind      ServiceKind `bun:"kind" json:"kind"`
-	Image     string      `bun:"image" json:"image"`
+	ID        string `bun:"id,pk" json:"id"`
+	ProjectID string `bun:"project_id" json:"projectId"`
+	// ServerID mirrors the project's server.
+	ServerID string      `bun:"server_id" json:"serverId"`
+	Name     string      `bun:"name" json:"name"`
+	Kind     ServiceKind `bun:"kind" json:"kind"`
+	Image    string      `bun:"image" json:"image"`
 	// Replicas is always 1 for postgres services.
 	Replicas int `bun:"replicas" json:"replicas"`
 	// Port is the container port Traefik routes to; 0 when not public.
@@ -376,4 +390,28 @@ type AuditEntry struct {
 	Status    int       `bun:"status" json:"status"`
 	Error     string    `bun:"error" json:"error,omitempty"`
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+}
+
+const LocalServerID = "local"
+
+type ServerKind string
+
+const (
+	ServerLocal ServerKind = "local"
+	ServerSSH   ServerKind = "ssh"
+)
+
+// Server is a Docker host: the manager's own, or a remote one reached over SSH.
+type Server struct {
+	bun.BaseModel `bun:"table:servers,alias:server" json:"-"`
+
+	ID        string     `bun:"id,pk" json:"id"`
+	Name      string     `bun:"name" json:"name"`
+	Kind      ServerKind `bun:"kind" json:"kind"`
+	Host      string     `bun:"host" json:"host"`
+	Port      int        `bun:"port" json:"port"`
+	SSHUser   string     `bun:"ssh_user" json:"sshUser"`
+	Socket    string     `bun:"socket" json:"socket"`
+	HostKey   string     `bun:"host_key" json:"hostKey"`
+	CreatedAt time.Time  `bun:"created_at" json:"createdAt"`
 }

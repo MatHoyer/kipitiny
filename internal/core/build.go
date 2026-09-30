@@ -76,7 +76,12 @@ func (c *Core) buildImage(ctx context.Context, project store.Project, svc store.
 	}
 
 	tag := fmt.Sprintf("kipitiny/%s-%s:%s", project.Name, svc.Name, strings.ToLower(dep.ID))
-	if err := c.docker.EnsureImage(ctx, c.cfg.BuilderImage); err != nil {
+	server, err := c.store.GetServer(ctx, svc.ServerID)
+	if err != nil {
+		return "", "", err
+	}
+	dk := c.dockerFor(server.ID)
+	if err := dk.EnsureImage(ctx, c.cfg.BuilderImage); err != nil {
 		return "", "", fmt.Errorf("pull builder %s: %w", c.cfg.BuilderImage, err)
 	}
 
@@ -85,7 +90,7 @@ func (c *Core) buildImage(ctx context.Context, project store.Project, svc store.
 	defer pr.Close()
 
 	logf("Building %s", tag)
-	code, err := c.docker.RunAttached(ctx, client.ContainerCreateOptions{
+	code, err := dk.RunAttached(ctx, client.ContainerCreateOptions{
 		Name: "kipitiny-build-" + strings.ToLower(dep.ID),
 		Config: &container.Config{
 			Image: c.cfg.BuilderImage,
@@ -100,7 +105,7 @@ func (c *Core) buildImage(ctx context.Context, project store.Project, svc store.
 			Labels: map[string]string{docker.LabelManaged: "true", docker.LabelComponent: "builder"},
 		},
 		HostConfig: &container.HostConfig{
-			Mounts: []mount.Mount{{Type: mount.TypeBind, Source: c.cfg.Traefik.DockerSocket, Target: "/var/run/docker.sock"}},
+			Mounts: []mount.Mount{{Type: mount.TypeBind, Source: socketPath(server, c.cfg), Target: "/var/run/docker.sock"}},
 		},
 	}, pr, out)
 	if err != nil {
@@ -180,7 +185,7 @@ func (c *Core) pruneBuilds(ctx context.Context, svc store.Service) {
 			kept++
 			continue
 		}
-		if _, err := c.docker.ImageRemove(ctx, d.Image, client.ImageRemoveOptions{PruneChildren: true}); err == nil {
+		if _, err := c.dockerFor(svc.ServerID).ImageRemove(ctx, d.Image, client.ImageRemoveOptions{PruneChildren: true}); err == nil {
 			c.log.Info("removed old build", "image", d.Image)
 		}
 	}

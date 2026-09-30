@@ -174,7 +174,7 @@ func (c *Core) dump(ctx context.Context, svc store.Service, containerID string, 
 	}
 	b.PGVersion = version
 	return c.upload(ctx, st, target, b, func(w io.Writer) error {
-		err := c.docker.Exec(ctx, containerID, docker.ExecOptions{
+		err := c.dockerFor(svc.ServerID).Exec(ctx, containerID, docker.ExecOptions{
 			// Custom format: compressed, and pg_restore can restore selectively.
 			Cmd:    []string{"pg_dump", "-U", svc.Env[pgUser], "-d", svc.Env[pgDatabase], "-Fc"},
 			Stdout: w,
@@ -239,7 +239,7 @@ func (c *Core) upload(ctx context.Context, st storage.Storage, target store.Back
 
 func (c *Core) serverVersion(ctx context.Context, svc store.Service, containerID string) (string, error) {
 	var out strings.Builder
-	err := c.docker.Exec(ctx, containerID, docker.ExecOptions{
+	err := c.dockerFor(svc.ServerID).Exec(ctx, containerID, docker.ExecOptions{
 		Cmd:    []string{"psql", "-U", svc.Env[pgUser], "-d", svc.Env[pgDatabase], "-tAc", "SHOW server_version"},
 		Stdout: &out,
 	})
@@ -333,7 +333,7 @@ func (c *Core) runRestore(svc store.Service, containerID string, st storage.Stor
 	}
 	// Bring apps back even if the restore failed: the transaction rolled back.
 	for _, id := range stopped {
-		if _, serr := c.docker.ContainerStart(context.WithoutCancel(ctx), id, client.ContainerStartOptions{}); serr != nil {
+		if _, serr := c.dockerFor(svc.ServerID).ContainerStart(context.WithoutCancel(ctx), id, client.ContainerStartOptions{}); serr != nil {
 			log.Error("cannot restart linked app", "container", id, "err", serr)
 		}
 	}
@@ -365,9 +365,10 @@ func (c *Core) restore(ctx context.Context, svc store.Service, containerID strin
 
 	user, db := svc.Env[pgUser], svc.Env[pgDatabase]
 	scratch, old := db+"__restore", db+"__pre_restore"
+	dk := c.dockerFor(svc.ServerID)
 	admin := func(sql string) error {
 		// Maintenance database: the target can't be renamed while connected to it.
-		return c.docker.Exec(ctx, containerID, docker.ExecOptions{
+		return dk.Exec(ctx, containerID, docker.ExecOptions{
 			Cmd: []string{"psql", "-U", user, "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-qc", sql},
 		})
 	}
@@ -381,7 +382,7 @@ func (c *Core) restore(ctx context.Context, svc store.Service, containerID strin
 		_ = admin(fmt.Sprintf(`DROP DATABASE IF EXISTS %s WITH (FORCE)`, pgIdent(scratch)))
 	}
 
-	if err := c.pgRestore(ctx, containerID, user, scratch, rc, target, b); err != nil {
+	if err := c.pgRestore(ctx, dk, containerID, user, scratch, rc, target, b); err != nil {
 		dropScratch()
 		return err
 	}
@@ -423,7 +424,7 @@ func pgLiteral(s string) string {
 
 // pgRestore streams a stored backup (decrypting if needed) into pg_restore
 // against database db, then verifies the checksum of the stored bytes.
-func (c *Core) pgRestore(ctx context.Context, containerID, user, db string, rc io.Reader, target store.BackupTarget, b store.Backup) error {
+func (c *Core) pgRestore(ctx context.Context, dk *docker.Client, containerID, user, db string, rc io.Reader, target store.BackupTarget, b store.Backup) error {
 	sum := &hashCounter{h: sha256.New()}
 	stored := io.TeeReader(rc, sum)
 	var dump io.Reader = stored
@@ -433,7 +434,7 @@ func (c *Core) pgRestore(ctx context.Context, containerID, user, db string, rc i
 			return err
 		}
 	}
-	err := c.docker.Exec(ctx, containerID, docker.ExecOptions{
+	err := dk.Exec(ctx, containerID, docker.ExecOptions{
 		Cmd: []string{
 			"pg_restore", "-U", user, "-d", db,
 			"--no-owner", "--no-privileges", "--exit-on-error",
@@ -479,7 +480,7 @@ func (c *Core) stopLinkedApps(ctx context.Context, db store.Service) ([]string, 
 			if ct.State != container.StateRunning {
 				continue
 			}
-			if _, err := c.docker.ContainerStop(ctx, ct.ID, client.ContainerStopOptions{Timeout: &secs}); err != nil {
+			if _, err := c.dockerFor(db.ServerID).ContainerStop(ctx, ct.ID, client.ContainerStopOptions{Timeout: &secs}); err != nil {
 				return stopped, err
 			}
 			stopped = append(stopped, ct.ID)

@@ -14,6 +14,7 @@ import (
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
+	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -27,13 +28,15 @@ const (
 
 // ensureTraefik makes sure exactly one Traefik container runs with the
 // current configuration, recreating it when the configuration changed.
-func (c *Core) ensureTraefik(ctx context.Context) error {
+func (c *Core) ensureTraefik(ctx context.Context, sv store.Server) error {
 	cfg := c.cfg.Traefik
-	opts := c.traefikSpec()
-	hash := specHash(cfg.Image, opts.Config.Cmd, cfg.HTTPPort, cfg.HTTPSPort, cfg.DockerSocket)
+	socket := socketPath(sv, c.cfg)
+	opts := c.traefikSpec(socket)
+	hash := specHash(cfg.Image, opts.Config.Cmd, cfg.HTTPPort, cfg.HTTPSPort, socket)
 	opts.Config.Labels[docker.LabelConfigHash] = hash
+	dk := c.dockerFor(sv.ID)
 
-	existing, err := c.docker.ListContainers(ctx, map[string]string{docker.LabelComponent: traefikComponent})
+	existing, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: traefikComponent})
 	if err != nil {
 		return err
 	}
@@ -41,27 +44,36 @@ func (c *Core) ensureTraefik(ctx context.Context) error {
 		if existing[0].State == container.StateRunning {
 			return nil
 		}
-		_, err := c.docker.ContainerStart(ctx, existing[0].ID, client.ContainerStartOptions{})
+		_, err := dk.ContainerStart(ctx, existing[0].ID, client.ContainerStartOptions{})
 		return err
 	}
 	for _, ct := range existing {
 		c.log.Info("removing outdated traefik container", "id", ct.ID[:12])
-		if err := c.docker.RemoveContainer(ctx, ct.ID, 10*time.Second); err != nil {
+		if err := dk.RemoveContainer(ctx, ct.ID, 10*time.Second); err != nil {
 			return err
 		}
 	}
 
-	if err := c.docker.EnsureImage(ctx, cfg.Image); err != nil {
+	if err := dk.EnsureImage(ctx, cfg.Image); err != nil {
 		return fmt.Errorf("pull %s: %w", cfg.Image, err)
 	}
-	if _, err := c.docker.Run(ctx, opts); err != nil {
+	if _, err := dk.Run(ctx, opts); err != nil {
 		return err
 	}
-	c.log.Info("traefik started", "image", cfg.Image, "http", cfg.HTTPPort, "https", cfg.HTTPSPort)
+	c.log.Info("traefik started", "server", sv.Name, "image", cfg.Image, "http", cfg.HTTPPort, "https", cfg.HTTPSPort)
 	return nil
 }
 
-func (c *Core) traefikSpec() client.ContainerCreateOptions {
+// socketPath is the Docker socket's path on a server's host, for containers
+// that mount it (Traefik, builders).
+func socketPath(sv store.Server, cfg config.Config) string {
+	if sv.Kind == store.ServerSSH && sv.Socket != "" {
+		return sv.Socket
+	}
+	return cfg.Traefik.DockerSocket
+}
+
+func (c *Core) traefikSpec(socket string) client.ContainerCreateOptions {
 	cfg := c.cfg.Traefik
 
 	// Redirect to the public HTTPS port, which differs from 443 in dev setups.
@@ -112,7 +124,7 @@ func (c *Core) traefikSpec() client.ContainerCreateOptions {
 				https: {{HostPort: cfg.HTTPSPort}},
 			},
 			Mounts: []mount.Mount{
-				{Type: mount.TypeBind, Source: cfg.DockerSocket, Target: "/var/run/docker.sock", ReadOnly: true},
+				{Type: mount.TypeBind, Source: socket, Target: "/var/run/docker.sock", ReadOnly: true},
 				{Type: mount.TypeVolume, Source: traefikACMEVolume, Target: "/acme"},
 			},
 			RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},

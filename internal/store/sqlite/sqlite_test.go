@@ -358,3 +358,46 @@ func TestScopeAllows(t *testing.T) {
 		}
 	}
 }
+
+func TestServersAndSettings(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	servers, err := s.ListServers(ctx)
+	if err != nil || len(servers) != 1 || servers[0].ID != store.LocalServerID {
+		t.Fatalf("seeded local server: %+v %v", servers, err)
+	}
+	remote, err := s.CreateServer(ctx, store.Server{Name: "db-2", Kind: store.ServerSSH, Host: "10.0.0.2", Port: 22, SSHUser: "root", Socket: "/var/run/docker.sock"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote.HostKey = "ssh-ed25519 AAAA"
+	if _, err := s.UpdateServer(ctx, remote); err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.CreateProject(ctx, store.Project{Name: "shop", ServerID: remote.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := s.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx"})
+	if err != nil || svc.ServerID != remote.ID {
+		t.Fatalf("service must inherit the project's server: %+v %v", svc, err)
+	}
+	if def, _ := s.CreateProject(ctx, store.Project{Name: "other"}); def.ServerID != store.LocalServerID {
+		t.Fatalf("default server: %q", def.ServerID)
+	}
+	if err := s.DeleteServer(ctx, remote.ID); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("deleting a server in use: %v", err)
+	}
+
+	if _, err := s.GetSetting(ctx, "k"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("missing setting: %v", err)
+	}
+	for _, v := range []string{"a", "b"} {
+		if err := s.SetSetting(ctx, "k", v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if v, _ := s.GetSetting(ctx, "k"); v != "b" {
+		t.Fatalf("setting upsert: %q", v)
+	}
+}

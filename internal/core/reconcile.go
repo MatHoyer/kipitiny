@@ -21,13 +21,19 @@ const (
 	reconcileDebounce = 2 * time.Second
 )
 
-// StartReconciler keeps Docker in line with the store: missing or stopped
-// replicas of deployed services come back, replicas above the desired count
-// go away, and containers of deleted services are removed. It runs every
-// 30 s, after changes, and when a managed container dies or disappears.
+// StartReconciler keeps Docker in line with the store on every server:
+// missing or stopped replicas of deployed services come back, replicas above
+// the desired count go away, and containers of deleted services are removed.
+// It runs every 30 s, after changes, and when a managed container dies or
+// disappears.
 func (c *Core) StartReconciler(ctx context.Context) error {
 	return c.goBackground(func() {
-		go c.watchEvents()
+		watchers := map[string]context.CancelFunc{}
+		defer func() {
+			for _, stop := range watchers {
+				stop()
+			}
+		}()
 		timer := time.NewTimer(0) // once at startup
 		for {
 			select {
@@ -40,6 +46,7 @@ func (c *Core) StartReconciler(ctx context.Context) error {
 				continue
 			case <-timer.C:
 			}
+			c.syncWatchers(watchers)
 			if err := c.reconcile(c.bg); err != nil && c.bg.Err() == nil {
 				c.log.Warn("reconcile failed", "err", err)
 			}
@@ -56,47 +63,94 @@ func (c *Core) kick() {
 	}
 }
 
-// watchEvents kicks the reconciler when a managed container dies or is
-// removed, reconnecting if the event stream breaks.
-func (c *Core) watchEvents() {
-	for c.bg.Err() == nil {
+// syncWatchers runs one Docker event watcher per server.
+func (c *Core) syncWatchers(watchers map[string]context.CancelFunc) {
+	servers, err := c.store.ListServers(c.bg)
+	if err != nil {
+		return
+	}
+	seen := map[string]bool{}
+	for _, sv := range servers {
+		seen[sv.ID] = true
+		if _, ok := watchers[sv.ID]; !ok {
+			ctx, cancel := context.WithCancel(c.bg)
+			watchers[sv.ID] = cancel
+			go c.watchEvents(ctx, sv.ID)
+		}
+	}
+	for id, stop := range watchers {
+		if !seen[id] {
+			stop()
+			delete(watchers, id)
+		}
+	}
+}
+
+// watchEvents kicks the reconciler when a managed container on a server dies
+// or is removed, reconnecting if the event stream breaks.
+func (c *Core) watchEvents(ctx context.Context, serverID string) {
+	for ctx.Err() == nil {
 		f := make(client.Filters)
 		f.Add("type", string(events.ContainerEventType))
 		f.Add("label", docker.LabelManaged+"=true")
 		f.Add("event", string(events.ActionDie), string(events.ActionDestroy))
-		res := c.docker.Events(c.bg, client.EventsListOptions{Filters: f})
+		res := c.dockerFor(serverID).Events(ctx, client.EventsListOptions{Filters: f})
 	stream:
 		for {
 			select {
 			case <-res.Messages:
 				c.kick()
 			case err := <-res.Err:
-				if err != nil && c.bg.Err() == nil {
-					c.log.Debug("docker event stream ended", "err", err)
+				if err != nil && ctx.Err() == nil {
+					c.log.Debug("docker event stream ended", "server", serverID, "err", err)
 				}
 				break stream
-			case <-c.bg.Done():
+			case <-ctx.Done():
 				return
 			}
 		}
 		select {
 		case <-time.After(5 * time.Second):
-		case <-c.bg.Done():
+		case <-ctx.Done():
 		}
 	}
 }
 
 func (c *Core) reconcile(ctx context.Context) error {
-	if c.cfg.Traefik.Enabled {
-		if err := c.ensureTraefik(ctx); err != nil {
-			c.log.Warn("reconcile: traefik", "err", err)
-		}
+	servers, err := c.store.ListServers(ctx)
+	if err != nil {
+		return err
 	}
 	svcs, err := c.store.ListAllServices(ctx)
 	if err != nil {
 		return err
 	}
-	all, err := c.docker.ListContainers(ctx, map[string]string{docker.LabelManaged: "true"})
+	var errs []error
+	for _, sv := range servers {
+		var here []store.Service
+		for _, s := range svcs {
+			if s.ServerID == sv.ID {
+				here = append(here, s)
+			}
+		}
+		if err := c.reconcileServer(ctx, sv, here); err != nil {
+			errs = append(errs, fmt.Errorf("server %s: %w", sv.Name, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (c *Core) reconcileServer(ctx context.Context, sv store.Server, svcs []store.Service) error {
+	dk := c.dockerFor(sv.ID)
+	if err := dk.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil {
+		return err // server unreachable: nothing else will work either
+	}
+	if c.cfg.Traefik.Enabled {
+		if err := c.ensureTraefik(ctx, sv); err != nil {
+			c.log.Warn("reconcile: traefik", "server", sv.Name, "err", err)
+		}
+	}
+	all, err := dk.ListContainers(ctx, map[string]string{docker.LabelManaged: "true"})
 	if err != nil {
 		return err
 	}
@@ -119,7 +173,7 @@ func (c *Core) reconcile(ctx context.Context) error {
 				continue
 			}
 			projects[p.ID] = p
-			if err := c.docker.EnsureNetwork(ctx, docker.ProjectNetwork(p.ID)); err != nil {
+			if err := dk.EnsureNetwork(ctx, docker.ProjectNetwork(p.ID)); err != nil {
 				errs = append(errs, err)
 				continue
 			}
@@ -136,8 +190,8 @@ func (c *Core) reconcile(ctx context.Context) error {
 			continue
 		}
 		for _, ct := range cts {
-			c.log.Info("reconcile: removing orphaned container", "container", ct.Names[0][1:])
-			if err := c.docker.RemoveContainer(ctx, ct.ID, stopTimeout); err != nil {
+			c.log.Info("reconcile: removing orphaned container", "server", sv.Name, "container", ct.Names[0][1:])
+			if err := dk.RemoveContainer(ctx, ct.ID, stopTimeout); err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -195,6 +249,7 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 	}
 
 	log := c.log.With("project", project.Name, "service", svc.Name)
+	dk := c.dockerFor(svc.ServerID)
 	for i := 1; i <= want.Replicas; i++ {
 		ct, ok := byReplica[i]
 		switch {
@@ -204,7 +259,7 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 			}
 			log.Info("reconcile: recreated missing replica", "replica", i)
 		case ct.State == container.StateExited || ct.State == container.StateCreated:
-			if _, err := c.docker.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{}); err != nil {
+			if _, err := dk.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{}); err != nil {
 				return fmt.Errorf("start %s: %w", ct.Names[0][1:], err)
 			}
 			log.Info("reconcile: started stopped replica", "container", ct.Names[0][1:])
@@ -222,7 +277,7 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 			time.Sleep(retireGap)
 		}
 		log.Info("reconcile: removing extra replica", "container", ct.Names[0][1:])
-		if err := c.docker.RemoveContainer(ctx, ct.ID, stopTimeoutFor(svc)); err != nil {
+		if err := dk.RemoveContainer(ctx, ct.ID, stopTimeoutFor(svc)); err != nil {
 			return err
 		}
 	}
@@ -238,17 +293,18 @@ func (c *Core) recreateReplica(ctx context.Context, project store.Project, svc s
 		}
 		db = &d
 	}
+	dk := c.dockerFor(svc.ServerID)
 	if isBuiltImage(svc.Image) {
-		if _, err := c.docker.ImageInspect(ctx, svc.Image); err != nil {
+		if _, err := dk.ImageInspect(ctx, svc.Image); err != nil {
 			return fmt.Errorf("build %s is gone; redeploy: %w", svc.Image, err)
 		}
-	} else if err := c.docker.EnsureImage(ctx, svc.Image); err != nil {
+	} else if err := dk.EnsureImage(ctx, svc.Image); err != nil {
 		return err
 	}
 	probe, err := c.probeFor(ctx, svc)
 	if err != nil {
 		return err
 	}
-	_, err = c.docker.Run(ctx, replicaSpec(project, svc, db, deployID, replica, probe))
+	_, err = dk.Run(ctx, replicaSpec(project, svc, db, deployID, replica, probe))
 	return err
 }

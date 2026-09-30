@@ -28,10 +28,10 @@ var (
 var nameRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 
 type Core struct {
-	cfg    config.Config
-	store  store.Store
-	docker *docker.Client
-	log    *slog.Logger
+	cfg   config.Config
+	store store.Store
+	pool  *docker.Pool
+	log   *slog.Logger
 
 	// Background work (deploys) runs under bg and is awaited on Shutdown.
 	bg     context.Context
@@ -47,12 +47,16 @@ type Core struct {
 	sched         scheduler
 	verifySem     chan struct{}
 	reconcileKick chan struct{}
-	selfState
+	probes        sync.Map // server ID -> *mount.Mount (nil: no probe there)
 }
 
-func New(cfg config.Config, s store.Store, d *docker.Client, log *slog.Logger) *Core {
+// New builds the core around the local Docker client; remote servers are
+// connected on demand over SSH.
+func New(cfg config.Config, s store.Store, local *docker.Client, log *slog.Logger) *Core {
 	bg, cancel := context.WithCancel(context.Background())
-	return &Core{cfg: cfg, store: s, docker: d, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1)}
+	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1)}
+	c.pool = docker.NewPool(local, c.connectServer)
+	return c
 }
 
 // Bootstrap prepares host-level resources the manager relies on.
@@ -65,14 +69,31 @@ func (c *Core) Bootstrap(ctx context.Context) error {
 	if err := c.store.FailRunningOperations(ctx, "interrupted by manager restart"); err != nil {
 		return err
 	}
-	if err := c.docker.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil {
+	servers, err := c.store.ListServers(ctx)
+	if err != nil {
 		return err
 	}
-	if err := c.cleanupRestoreTests(ctx); err != nil {
+	var errs []error
+	for _, sv := range servers {
+		if err := c.bootstrapServer(ctx, sv); err != nil {
+			errs = append(errs, fmt.Errorf("server %s: %w", sv.Name, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// bootstrapServer prepares a Docker host: proxy network, Traefik, and
+// cleanup of throwaway containers left by a crash.
+func (c *Core) bootstrapServer(ctx context.Context, sv store.Server) error {
+	dk := c.dockerFor(sv.ID)
+	if err := dk.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil {
+		return err
+	}
+	if err := c.cleanupRestoreTests(ctx, dk); err != nil {
 		return err
 	}
 	if c.cfg.Traefik.Enabled {
-		if err := c.ensureTraefik(ctx); err != nil {
+		if err := c.ensureTraefik(ctx, sv); err != nil {
 			return fmt.Errorf("traefik: %w", err)
 		}
 	}
@@ -94,6 +115,11 @@ func (c *Core) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// dockerFor returns the Docker client of a server ("" or "local": this one).
+func (c *Core) dockerFor(serverID string) *docker.Client {
+	return c.pool.For(serverID)
 }
 
 // goBackground runs f as tracked background work, unless shutdown started.
@@ -128,7 +154,7 @@ type Status struct {
 }
 
 func (c *Core) Status(ctx context.Context) Status {
-	info, err := c.docker.Info(ctx)
+	info, err := c.dockerFor(store.LocalServerID).Info(ctx)
 	if err != nil {
 		return Status{DockerError: err.Error()}
 	}
@@ -139,15 +165,24 @@ func (c *Core) ListProjects(ctx context.Context) ([]store.Project, error) {
 	return c.store.ListProjects(ctx)
 }
 
-func (c *Core) CreateProject(ctx context.Context, name string) (store.Project, error) {
+// CreateProject creates a project on a server (this one when serverID is empty).
+func (c *Core) CreateProject(ctx context.Context, name, serverID string) (store.Project, error) {
 	if !nameRe.MatchString(name) {
 		return store.Project{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
-	p, err := c.store.CreateProject(ctx, store.Project{Name: name})
+	if serverID == "" {
+		serverID = store.LocalServerID
+	}
+	if _, err := c.store.GetServer(ctx, serverID); errors.Is(err, store.ErrNotFound) {
+		return store.Project{}, fmt.Errorf("%w: unknown server", ErrInvalid)
+	} else if err != nil {
+		return store.Project{}, err
+	}
+	p, err := c.store.CreateProject(ctx, store.Project{Name: name, ServerID: serverID})
 	if err != nil {
 		return store.Project{}, err
 	}
-	if err := c.docker.EnsureNetwork(ctx, docker.ProjectNetwork(p.ID)); err != nil {
+	if err := c.dockerFor(p.ServerID).EnsureNetwork(ctx, docker.ProjectNetwork(p.ID)); err != nil {
 		return p, fmt.Errorf("project created but network setup failed: %w", err)
 	}
 	return p, nil
@@ -191,7 +226,7 @@ func (c *Core) DeleteProject(ctx context.Context, id, confirm string) error {
 	for _, s := range svcs {
 		c.removeDeployLogs(s.ID)
 	}
-	return c.docker.RemoveNetwork(ctx, docker.ProjectNetwork(id))
+	return c.dockerFor(p.ServerID).RemoveNetwork(ctx, docker.ProjectNetwork(id))
 }
 
 const stopTimeout = 10 * time.Second

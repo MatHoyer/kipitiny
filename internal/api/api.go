@@ -66,6 +66,11 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("POST /api/manager/backups", a.backupManager)
 	mux.HandleFunc("GET /api/deployments/{id}", a.getDeployment)
 	mux.HandleFunc("GET /api/deployments/{id}/log", a.deploymentLog)
+	mux.HandleFunc("GET /api/servers", a.listServers)
+	mux.HandleFunc("POST /api/servers", a.createServer)
+	mux.HandleFunc("PUT /api/servers/{id}", a.updateServer)
+	mux.HandleFunc("DELETE /api/servers/{id}", a.deleteServer)
+	mux.HandleFunc("GET /api/ssh-key", a.sshKey)
 	mux.HandleFunc("GET /api/tokens", a.listTokens)
 	mux.HandleFunc("POST /api/tokens", a.createToken)
 	mux.HandleFunc("DELETE /api/tokens/{id}", a.deleteToken)
@@ -98,12 +103,13 @@ func (a *API) listProjects(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) createProject(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Name string `json:"name"`
+		Name     string `json:"name"`
+		ServerID string `json:"serverId"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
-	p, err := a.core.CreateProject(r.Context(), body.Name)
+	p, err := a.core.CreateProject(r.Context(), body.Name, body.ServerID)
 	if err != nil {
 		a.fail(w, err)
 		return
