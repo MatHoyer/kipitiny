@@ -39,8 +39,14 @@ func main() {
 				os.Exit(1)
 			}
 			os.Exit(0)
+		case "healthcheck":
+			// Docker HEALTHCHECK for the manager image, which has no curl.
+			if probe.Check(healthURL(config.Load().Addr)) != nil {
+				os.Exit(1)
+			}
+			os.Exit(0)
 		default:
-			fmt.Fprintf(os.Stderr, "usage: %s [reset-password <username>]\n", os.Args[0])
+			fmt.Fprintf(os.Stderr, "usage: %s [reset-password <username> | healthcheck]\n", os.Args[0])
 			os.Exit(2)
 		}
 	}
@@ -101,7 +107,7 @@ func serve() error {
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           mux,
+		Handler:           api.SecureHeaders(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Request contexts end on SIGTERM so long-lived SSE log streams don't
 		// hold up Shutdown (which only waits, it never cancels).
@@ -130,6 +136,18 @@ func serve() error {
 		log.Warn("background work did not stop in time", "err", err)
 	}
 	return srvErr
+}
+
+// healthURL is the manager's health endpoint as seen from inside its container.
+func healthURL(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "http://127.0.0.1:3000/api/health"
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port) + "/api/health"
 }
 
 // resetPassword reads a new password from stdin. Run it where the manager's

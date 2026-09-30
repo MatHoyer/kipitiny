@@ -23,4 +23,5 @@ COPY --from=build /out/kipitiny /kipitiny
 ENV KIPITINY_DATA_DIR=/data
 VOLUME /data
 EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD ["/kipitiny", "healthcheck"]
 ENTRYPOINT ["/kipitiny"]
