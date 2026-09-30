@@ -116,6 +116,26 @@ S3 targets are checked (a test object is written and deleted) before they are sa
 `go test ./internal/storage/` runs S3 tests against a real server when
 `KIPITINY_TEST_S3_ENDPOINT` is set (see `internal/storage/s3_test.go`).
 
+## API tokens, MCP and audit
+
+Create tokens in *Settings*. Scopes: **read** (status, logs, backup lists),
+**deploy** (plus deploy, rollback, start/stop, back up) and **admin**
+(everything, including settings, revealed secrets and restores). Tokens work as
+`Authorization: Bearer kpt_…` on `/api` and on the built-in **MCP** endpoint
+(Streamable HTTP):
+
+```sh
+claude mcp add --transport http kipitiny https://kipitiny.example.com/mcp \
+  --header "Authorization: Bearer kpt_…"
+```
+
+Tools are task-oriented rather than a copy of the REST API: `list_services`,
+`get_app_status`, `get_logs`, `deploy`, `deploy_from_git`, `rollback`,
+`backup_database`, `list_backups`, `restore_database` (admin, requires the
+database name as confirmation). Secrets are masked in every response. Every
+mutation, from the UI, a token or an agent (including refused attempts), lands
+in the audit log (kept 90 days).
+
 ## Develop
 
 Requires Go 1.26+, Node 24+, pnpm 10.

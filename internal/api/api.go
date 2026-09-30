@@ -16,9 +16,10 @@ type API struct {
 	core    *core.Core
 	log     *slog.Logger
 	limiter *failLimiter
+	handler http.Handler
 }
 
-func New(c *core.Core, log *slog.Logger) http.Handler {
+func New(c *core.Core, log *slog.Logger) *API {
 	a := &API{core: c, log: log, limiter: newFailLimiter(10, 15*time.Minute)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", a.health)
@@ -65,11 +66,18 @@ func New(c *core.Core, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/manager/backups", a.backupManager)
 	mux.HandleFunc("GET /api/deployments/{id}", a.getDeployment)
 	mux.HandleFunc("GET /api/deployments/{id}/log", a.deploymentLog)
+	mux.HandleFunc("GET /api/tokens", a.listTokens)
+	mux.HandleFunc("POST /api/tokens", a.createToken)
+	mux.HandleFunc("DELETE /api/tokens/{id}", a.deleteToken)
+	mux.HandleFunc("GET /api/audit", a.listAudit)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 	})
-	return a.protect(mux)
+	a.handler = a.protect(mux)
+	return a
 }
+
+func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) { a.handler.ServeHTTP(w, r) }
 
 func (a *API) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -124,6 +132,8 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, core.ErrUnauthorized):
 		writeError(w, http.StatusUnauthorized, err.Error())
+	case errors.Is(err, core.ErrForbidden):
+		writeError(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, core.ErrInvalid):
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, store.ErrNotFound):

@@ -84,6 +84,17 @@ type Store interface {
 	// previous process as failed.
 	FailRunningOperations(ctx context.Context, errMsg string) error
 
+	CreateAPIToken(ctx context.Context, t APIToken) (APIToken, error)
+	ListAPITokens(ctx context.Context) ([]APIToken, error)
+	// GetAPITokenByHash also records the use.
+	GetAPITokenByHash(ctx context.Context, hash string) (APIToken, error)
+	DeleteAPIToken(ctx context.Context, id string) error
+
+	AddAudit(ctx context.Context, e AuditEntry) error
+	ListAudit(ctx context.Context, limit int) ([]AuditEntry, error)
+	// PruneAudit deletes entries older than before.
+	PruneAudit(ctx context.Context, before time.Time) error
+
 	// Snapshot writes a consistent copy of the whole store to path.
 	Snapshot(ctx context.Context, path string) error
 
@@ -326,5 +337,43 @@ type BackupSchedule struct {
 	Enabled     bool `bun:"enabled" json:"enabled"`
 	// Verify runs a restore test of each backup the schedule makes.
 	Verify    bool      `bun:"verify" json:"verify"`
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+}
+
+type Scope string
+
+const (
+	ScopeRead   Scope = "read"   // look only
+	ScopeDeploy Scope = "deploy" // plus deploy, rollback, start/stop, backups
+	ScopeAdmin  Scope = "admin"  // everything
+)
+
+// Allows reports whether a holder of s may do what needs want.
+func (s Scope) Allows(want Scope) bool {
+	rank := map[Scope]int{ScopeRead: 1, ScopeDeploy: 2, ScopeAdmin: 3}
+	return rank[s] >= rank[want] && rank[want] > 0
+}
+
+type APIToken struct {
+	bun.BaseModel `bun:"table:api_tokens,alias:token" json:"-"`
+
+	ID         string     `bun:"id,pk" json:"id"`
+	Name       string     `bun:"name" json:"name"`
+	TokenHash  string     `bun:"token_hash" json:"-"`
+	Scope      Scope      `bun:"scope" json:"scope"`
+	CreatedAt  time.Time  `bun:"created_at" json:"createdAt"`
+	LastUsedAt *time.Time `bun:"last_used_at" json:"lastUsedAt,omitempty"`
+}
+
+type AuditEntry struct {
+	bun.BaseModel `bun:"table:audit_log,alias:audit" json:"-"`
+
+	ID string `bun:"id,pk" json:"id"`
+	// Actor is "user:<name>" or "token:<name>".
+	Actor     string    `bun:"actor" json:"actor"`
+	Action    string    `bun:"action" json:"action"`
+	Target    string    `bun:"target" json:"target"`
+	Status    int       `bun:"status" json:"status"`
+	Error     string    `bun:"error" json:"error,omitempty"`
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 }

@@ -304,3 +304,57 @@ func TestSnapshot(t *testing.T) {
 		t.Fatalf("snapshot content: %v %v", ps, err)
 	}
 }
+
+func TestTokensAndAudit(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	tok, err := s.CreateAPIToken(ctx, store.APIToken{Name: "ci", TokenHash: "h1", Scope: store.ScopeDeploy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetAPITokenByHash(ctx, "h1")
+	if err != nil || got.ID != tok.ID || got.LastUsedAt == nil {
+		t.Fatalf("by hash: %+v %v", got, err)
+	}
+	if _, err := s.GetAPITokenByHash(ctx, "nope"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("unknown token: %v", err)
+	}
+	if err := s.DeleteAPIToken(ctx, tok.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range []string{"deploy", "stop"} {
+		if err := s.AddAudit(ctx, store.AuditEntry{Actor: "user:admin", Action: a, Status: 200}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	es, err := s.ListAudit(ctx, 10)
+	if err != nil || len(es) != 2 || es[0].Action != "stop" {
+		t.Fatalf("audit: %+v %v", es, err)
+	}
+	if err := s.PruneAudit(ctx, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if es, _ := s.ListAudit(ctx, 10); len(es) != 0 {
+		t.Fatalf("prune: %v", es)
+	}
+}
+
+func TestScopeAllows(t *testing.T) {
+	cases := []struct {
+		have, want store.Scope
+		ok         bool
+	}{
+		{store.ScopeRead, store.ScopeRead, true},
+		{store.ScopeRead, store.ScopeDeploy, false},
+		{store.ScopeDeploy, store.ScopeRead, true},
+		{store.ScopeDeploy, store.ScopeAdmin, false},
+		{store.ScopeAdmin, store.ScopeDeploy, true},
+		{"bogus", store.ScopeRead, false},
+		{store.ScopeAdmin, "bogus", false},
+	}
+	for _, c := range cases {
+		if got := c.have.Allows(c.want); got != c.ok {
+			t.Errorf("%s allows %s = %v", c.have, c.want, got)
+		}
+	}
+}
