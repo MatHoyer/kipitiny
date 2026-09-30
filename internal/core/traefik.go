@@ -47,7 +47,9 @@ func (c *Core) ensureTraefik(ctx context.Context, sv store.Server) error {
 		}
 		managerURL = u
 	}
-	opts, files := c.traefikSpec(socket, managerURL)
+	opts, files := c.traefikSpec(socket, managerURL, c.viaTunnel(sv.ID))
+	// Keep this formula stable: any change recreates Traefik on every server
+	// at upgrade, a short outage for all apps. Tunnel mode changes Cmd.
 	hash := specHash(cfg.Image, opts.Config.Cmd, cfg.HTTPPort, cfg.HTTPSPort, socket, files)
 	opts.Config.Labels[docker.LabelConfigHash] = hash
 
@@ -104,9 +106,23 @@ func (c *Core) managerUpstream(ctx context.Context, dk *docker.Client) (string, 
 	return "http://" + managerHost + ":" + port, nil
 }
 
+// viaTunnel reports whether a server's public traffic comes through the
+// Cloudflare tunnel, which only runs on the manager's own server.
+func (c *Core) viaTunnel(serverID string) bool {
+	return c.cfg.Tunnel.Token != "" && (serverID == "" || serverID == store.LocalServerID)
+}
+
+// acme reports whether routers on a server get Let's Encrypt certificates.
+// Behind the tunnel Cloudflare terminates TLS, and the challenge can't reach
+// Traefik anyway: Traefik's default certificate is enough.
+func (c *Core) acme(serverID string) bool {
+	return !c.viaTunnel(serverID)
+}
+
 // traefikSpec builds the Traefik container. A non-empty managerURL routes
-// the manager's domain to it through a file provider.
-func (c *Core) traefikSpec(socket, managerURL string) (client.ContainerCreateOptions, []docker.File) {
+// the manager's domain to it through a file provider. Behind the tunnel it
+// publishes no ports and runs no ACME.
+func (c *Core) traefikSpec(socket, managerURL string, tunnel bool) (client.ContainerCreateOptions, []docker.File) {
 	cfg := c.cfg.Traefik
 
 	// Redirect to the public HTTPS port, which differs from 443 in dev setups.
@@ -132,23 +148,34 @@ func (c *Core) traefikSpec(socket, managerURL string) (client.ContainerCreateOpt
 		"--entrypoints.web.http.redirections.entrypoint.to=" + redirectTo,
 		"--entrypoints.web.http.redirections.entrypoint.scheme=https",
 		"--entrypoints.websecure.address=:443",
-		"--certificatesresolvers." + certResolver + ".acme.tlschallenge=true",
-		"--certificatesresolvers." + certResolver + ".acme.storage=/acme/acme.json",
 	}
-	if cfg.ACMEEmail != "" {
-		args = append(args, "--certificatesresolvers."+certResolver+".acme.email="+cfg.ACMEEmail)
+	if !tunnel {
+		args = append(args,
+			"--certificatesresolvers."+certResolver+".acme.tlschallenge=true",
+			"--certificatesresolvers."+certResolver+".acme.storage=/acme/acme.json",
+		)
+		if cfg.ACMEEmail != "" {
+			args = append(args, "--certificatesresolvers."+certResolver+".acme.email="+cfg.ACMEEmail)
+		}
 	}
 	var files []docker.File
 	var extraHosts []string
 	if managerURL != "" {
 		args = append(args, "--providers.file.filename="+managerRouteFile)
-		files = append(files, docker.File{Path: managerRouteFile, Content: managerRoute(c.cfg.Domain, managerURL)})
+		files = append(files, docker.File{Path: managerRouteFile, Content: managerRoute(c.cfg.Domain, managerURL, !tunnel)})
 		if strings.Contains(managerURL, "//"+managerHost+":") {
 			extraHosts = append(extraHosts, managerHost+":host-gateway")
 		}
 	}
 
 	http, https := network.MustParsePort("80/tcp"), network.MustParsePort("443/tcp")
+	ports := network.PortMap{
+		http:  {{HostPort: cfg.HTTPPort}},
+		https: {{HostPort: cfg.HTTPSPort}},
+	}
+	if tunnel {
+		ports = nil // cloudflared reaches Traefik over the proxy network
+	}
 	return client.ContainerCreateOptions{
 		Name: traefikName,
 		Config: &container.Config{
@@ -161,10 +188,7 @@ func (c *Core) traefikSpec(socket, managerURL string) (client.ContainerCreateOpt
 			},
 		},
 		HostConfig: &container.HostConfig{
-			PortBindings: network.PortMap{
-				http:  {{HostPort: cfg.HTTPPort}},
-				https: {{HostPort: cfg.HTTPSPort}},
-			},
+			PortBindings: ports,
 			Mounts: []mount.Mount{
 				{Type: mount.TypeBind, Source: socket, Target: "/var/run/docker.sock", ReadOnly: true},
 				{Type: mount.TypeVolume, Source: traefikACMEVolume, Target: "/acme"},
@@ -181,9 +205,9 @@ func (c *Core) traefikSpec(socket, managerURL string) (client.ContainerCreateOpt
 
 // managerRoute is Traefik dynamic configuration serving domain from url. JSON
 // is valid YAML, which the file provider reads.
-func managerRoute(domain, url string) []byte {
+func managerRoute(domain, url string, acme bool) []byte {
 	tls := map[string]any{}
-	if !isLocalDomain(domain) {
+	if acme && !isLocalDomain(domain) {
 		tls["certResolver"] = certResolver
 	}
 	b, _ := json.MarshalIndent(map[string]any{
@@ -202,8 +226,9 @@ func managerRoute(domain, url string) []byte {
 	return b
 }
 
-// traefikLabels routes HTTPS traffic for svc.Domain to svc.Port.
-func traefikLabels(svc store.Service) map[string]string {
+// traefikLabels routes HTTPS traffic for svc.Domain to svc.Port, with a Let's
+// Encrypt certificate when acme is set.
+func traefikLabels(svc store.Service, acme bool) map[string]string {
 	name := "kipitiny-" + strings.ToLower(svc.ID)
 	labels := map[string]string{
 		"traefik.enable":                                "true",
@@ -218,7 +243,7 @@ func traefikLabels(svc store.Service) map[string]string {
 		"traefik.http.middlewares." + name + "-retry.retry.initialinterval": "100ms",
 		"traefik.http.services." + name + ".loadbalancer.server.port":       fmt.Sprint(svc.Port),
 	}
-	if isLocalDomain(svc.Domain) {
+	if !acme || isLocalDomain(svc.Domain) {
 		// Let's Encrypt can't issue for these; Traefik's default cert is used.
 		labels["traefik.http.routers."+name+".tls"] = "true"
 	} else {

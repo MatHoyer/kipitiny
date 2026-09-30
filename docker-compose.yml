@@ -12,6 +12,7 @@ services:
     environment:
       KIPITINY_DOMAIN: ${KIPITINY_DOMAIN:-}
       KIPITINY_ACME_EMAIL: ${KIPITINY_ACME_EMAIL:-}
+      KIPITINY_CLOUDFLARE_TUNNEL_TOKEN: ${KIPITINY_CLOUDFLARE_TUNNEL_TOKEN:-}
     restart: unless-stopped
 
 volumes:

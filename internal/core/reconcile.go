@@ -149,6 +149,9 @@ func (c *Core) reconcileServer(ctx context.Context, sv store.Server, svcs []stor
 		if err := c.ensureTraefik(ctx, sv); err != nil {
 			c.log.Warn("reconcile: traefik", "server", sv.Name, "err", err)
 		}
+		if err := c.ensureTunnel(ctx, sv); err != nil {
+			c.log.Warn("reconcile: cloudflared", "server", sv.Name, "err", err)
+		}
 	}
 	all, err := dk.ListContainers(ctx, map[string]string{docker.LabelManaged: "true"})
 	if err != nil {
@@ -305,6 +308,6 @@ func (c *Core) recreateReplica(ctx context.Context, project store.Project, svc s
 	if err != nil {
 		return err
 	}
-	_, err = dk.Run(ctx, replicaSpec(project, svc, db, deployID, replica, probe))
+	_, err = dk.Run(ctx, replicaSpec(project, svc, db, deployID, replica, probe, c.acme(svc.ServerID)))
 	return err
 }

@@ -115,14 +115,18 @@ func TestLoginRateLimit(t *testing.T) {
 
 func TestClientIP(t *testing.T) {
 	tests := []struct {
-		name, remote, xff, want string
+		name, remote, xff, cf, want string
+		tunnel                      bool
 	}{
-		{"direct", "203.0.113.7:5000", "", "203.0.113.7"},
-		{"public peer can't spoof", "203.0.113.7:5000", "198.51.100.1", "203.0.113.7"},
-		{"behind traefik", "172.18.0.2:5000", "198.51.100.1", "198.51.100.1"},
-		{"last hop wins", "172.18.0.2:5000", "10.0.0.1, 198.51.100.1", "198.51.100.1"},
-		{"garbage header", "172.18.0.2:5000", "nope", "172.18.0.2"},
-		{"loopback without header", "127.0.0.1:5000", "", "127.0.0.1"},
+		{"direct", "203.0.113.7:5000", "", "", "203.0.113.7", false},
+		{"public peer can't spoof", "203.0.113.7:5000", "198.51.100.1", "", "203.0.113.7", false},
+		{"behind traefik", "172.18.0.2:5000", "198.51.100.1", "", "198.51.100.1", false},
+		{"last hop wins", "172.18.0.2:5000", "10.0.0.1, 198.51.100.1", "", "198.51.100.1", false},
+		{"garbage header", "172.18.0.2:5000", "nope", "", "172.18.0.2", false},
+		{"loopback without header", "127.0.0.1:5000", "", "", "127.0.0.1", false},
+		{"tunnel uses cloudflare header", "172.18.0.2:5000", "172.18.0.9", "198.51.100.1", "198.51.100.1", true},
+		{"cloudflare header ignored without tunnel", "172.18.0.2:5000", "198.51.100.2", "198.51.100.1", "198.51.100.2", false},
+		{"public peer can't spoof cloudflare", "203.0.113.7:5000", "", "198.51.100.1", "203.0.113.7", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -131,7 +135,10 @@ func TestClientIP(t *testing.T) {
 			if tt.xff != "" {
 				r.Header.Set("X-Forwarded-For", tt.xff)
 			}
-			if got := clientIP(r); got != tt.want {
+			if tt.cf != "" {
+				r.Header.Set("CF-Connecting-IP", tt.cf)
+			}
+			if got := clientIP(r, tt.tunnel); got != tt.want {
 				t.Errorf("clientIP = %q, want %q", got, tt.want)
 			}
 		})

@@ -27,7 +27,16 @@ type Config struct {
 	BuilderImage string
 
 	Traefik       Traefik
+	Tunnel        Tunnel
 	ManagerBackup ManagerBackup
+}
+
+// Tunnel receives public traffic through a Cloudflare Tunnel instead of
+// ports 80/443, on the manager's own server.
+type Tunnel struct {
+	// Token of a remotely-managed tunnel; empty disables it.
+	Token string
+	Image string
 }
 
 // ManagerBackup schedules backups of the manager's own SQLite state.
@@ -66,6 +75,10 @@ func Load() Config {
 			HTTPSPort:    env("KIPITINY_HTTPS_PORT", "443"),
 			ACMEEmail:    env("KIPITINY_ACME_EMAIL", ""),
 			DockerSocket: env("KIPITINY_DOCKER_SOCKET", "/var/run/docker.sock"),
+		},
+		Tunnel: Tunnel{
+			Token: env("KIPITINY_CLOUDFLARE_TUNNEL_TOKEN", ""),
+			Image: env("KIPITINY_CLOUDFLARED_IMAGE", "cloudflare/cloudflared:2026.9.3"),
 		},
 		ManagerBackup: ManagerBackup{
 			Cron:     managerCron(env("KIPITINY_MANAGER_BACKUP_CRON", "@daily")),

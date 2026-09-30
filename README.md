@@ -179,6 +179,8 @@ make docker    # image `kipitiny`
 | `KIPITINY_TRAEFIK_IMAGE` | `traefik:v3.7` | |
 | `KIPITINY_HTTP_PORT` / `KIPITINY_HTTPS_PORT` | `80` / `443` | Host ports Traefik binds |
 | `KIPITINY_ACME_EMAIL` | — | Let's Encrypt account email (optional) |
+| `KIPITINY_CLOUDFLARE_TUNNEL_TOKEN` | — | Receive traffic through a Cloudflare Tunnel instead of ports 80/443 |
+| `KIPITINY_CLOUDFLARED_IMAGE` | `cloudflare/cloudflared:2026.9.3` | |
 | `KIPITINY_MANAGER_BACKUP_CRON` | `@daily` | Snapshot of the manager's state (`off` to disable) |
 | `KIPITINY_MANAGER_BACKUP_TARGET` | `local` | Target ID for those snapshots |
 | `KIPITINY_MANAGER_BACKUP_KEEP` | `14` | Snapshots kept per target |
@@ -199,6 +201,33 @@ so port 3000 no longer needs to be published: drop it from the compose file or
 bind it to `127.0.0.1` for SSH-tunnel access. Run on the host, the manager is
 reached through `host.docker.internal`, so it must listen on the Docker bridge
 (the default `:3000` does).
+
+### Cloudflare Tunnel (no open ports)
+
+To keep ports 80/443 closed, let traffic come in through a
+[Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/):
+
+1. In Cloudflare Zero Trust, create a tunnel (Networks → Tunnels, type
+   *cloudflared*) and copy its token.
+2. Add public hostnames `example.com` and `*.example.com`, both with service
+   **HTTPS** `kipitiny-traefik:443`, and under TLS enable **No TLS Verify** and
+   **Match SNI to Host**. Check that DNS has a proxied
+   `* CNAME <tunnel-id>.cfargotunnel.com` record, and add it if the dashboard
+   didn't.
+3. Start the manager with `KIPITINY_CLOUDFLARE_TUNNEL_TOKEN=<token>` (and
+   `KIPITINY_DOMAIN`), and publish no port in the compose file.
+
+The manager then runs `kipitiny-cloudflared` next to Traefik, and Traefik
+publishes no ports and requests no Let's Encrypt certificates: Cloudflare
+serves the public certificate, and Traefik's own certificate only protects the
+hop from cloudflared. Service domains need no per-app setup as long as they
+match a hostname of the tunnel. Cloudflare's free certificate covers one level
+of subdomain (`app.example.com`, not `a.b.example.com`).
+
+This only applies to the manager's own server; remote servers keep using their
+ports. Apps deployed before switching keep working, but redeploy them to drop
+their Let's Encrypt labels (Traefik logs a "nonexistent certificate resolver"
+error until then).
 
 For local testing use a `*.localhost` domain and alternate ports, e.g.
 `KIPITINY_HTTP_PORT=8081 KIPITINY_HTTPS_PORT=8443`, then

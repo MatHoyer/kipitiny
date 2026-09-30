@@ -57,7 +57,7 @@ func TestAppContainerSpec(t *testing.T) {
 		Env: map[string]string{"B": "2", "A": "1"},
 	}
 
-	spec := containerSpec(p, svc, nil, "D1", 2)
+	spec := containerSpec(p, svc, nil, "D1", 2, true)
 	if spec.Name != "shop-web-2-d1" {
 		t.Errorf("name = %q", spec.Name)
 	}
@@ -77,7 +77,7 @@ func TestAppContainerSpec(t *testing.T) {
 	}
 
 	svc.Domain, svc.Port = "shop.example.com", 8080
-	spec = containerSpec(p, svc, nil, "D1", 1)
+	spec = containerSpec(p, svc, nil, "D1", 1, true)
 	l = spec.Config.Labels
 	if l["traefik.enable"] != "true" || l["traefik.docker.network"] != docker.ProxyNetwork {
 		t.Errorf("traefik labels missing: %v", l)
@@ -95,7 +95,7 @@ func TestAppContainerSpec(t *testing.T) {
 		t.Error("retry middleware missing")
 	}
 	svc.Domain = "shop.localhost"
-	l = containerSpec(p, svc, nil, "D1", 1).Config.Labels
+	l = containerSpec(p, svc, nil, "D1", 1, true).Config.Labels
 	if _, acme := l["traefik.http.routers.kipitiny-01abc.tls.certresolver"]; acme || l["traefik.http.routers.kipitiny-01abc.tls"] != "true" {
 		t.Error(".localhost must not request an ACME certificate")
 	}
@@ -120,12 +120,12 @@ func TestMasked(t *testing.T) {
 
 func TestTraefikManagerRoute(t *testing.T) {
 	c := &Core{cfg: config.Config{Domain: "kipitiny.example.com"}}
-	opts, files := c.traefikSpec("/var/run/docker.sock", "")
+	opts, files := c.traefikSpec("/var/run/docker.sock", "", false)
 	if len(files) != 0 || slices.ContainsFunc(opts.Config.Cmd, func(a string) bool { return strings.HasPrefix(a, "--providers.file") }) {
 		t.Error("no manager URL must mean no file provider")
 	}
 
-	opts, files = c.traefikSpec("/var/run/docker.sock", "http://kipitiny-manager:3000")
+	opts, files = c.traefikSpec("/var/run/docker.sock", "http://kipitiny-manager:3000", false)
 	if len(files) != 1 || !slices.Contains(opts.Config.Cmd, "--providers.file.filename="+files[0].Path) {
 		t.Fatalf("file provider not wired: %v", opts.Config.Cmd)
 	}
@@ -154,8 +154,39 @@ func TestTraefikManagerRoute(t *testing.T) {
 		t.Error("container upstream needs no host-gateway")
 	}
 
-	opts, _ = c.traefikSpec("/var/run/docker.sock", "http://host.docker.internal:3000")
+	opts, _ = c.traefikSpec("/var/run/docker.sock", "http://host.docker.internal:3000", false)
 	if !slices.Equal(opts.HostConfig.ExtraHosts, []string{"host.docker.internal:host-gateway"}) {
 		t.Errorf("extra hosts = %v", opts.HostConfig.ExtraHosts)
+	}
+}
+
+func TestTunnelMode(t *testing.T) {
+	c := &Core{cfg: config.Config{Domain: "kipitiny.example.com", Tunnel: config.Tunnel{Token: "tok", Image: "cloudflare/cloudflared"}}}
+	if !c.viaTunnel(store.LocalServerID) || !c.viaTunnel("") || c.viaTunnel("01REMOTE") {
+		t.Error("the tunnel only serves the manager's own server")
+	}
+
+	opts, files := c.traefikSpec("/var/run/docker.sock", "http://kipitiny-manager:3000", true)
+	if len(opts.HostConfig.PortBindings) != 0 {
+		t.Errorf("tunnel mode must publish no ports: %v", opts.HostConfig.PortBindings)
+	}
+	if slices.ContainsFunc(opts.Config.Cmd, func(a string) bool { return strings.Contains(a, "certificatesresolvers") }) {
+		t.Error("tunnel mode must not run ACME")
+	}
+	if strings.Contains(string(files[0].Content), "certResolver") {
+		t.Error("manager route must not reference the ACME resolver")
+	}
+
+	l := traefikLabels(store.Service{ID: "01ABC", Domain: "shop.example.com", Port: 80}, false)
+	if _, acme := l["traefik.http.routers.kipitiny-01abc.tls.certresolver"]; acme || l["traefik.http.routers.kipitiny-01abc.tls"] != "true" {
+		t.Errorf("tunnel labels = %v", l)
+	}
+
+	spec := c.tunnelSpec()
+	if !slices.Contains(spec.Config.Env, "TUNNEL_TOKEN=tok") || slices.Contains(spec.Config.Cmd, "tok") {
+		t.Error("token must be passed through the environment only")
+	}
+	if _, ok := spec.NetworkingConfig.EndpointsConfig[docker.ProxyNetwork]; !ok {
+		t.Error("cloudflared must reach Traefik on the proxy network")
 	}
 }

@@ -202,7 +202,7 @@ func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Se
 			return err
 		}
 	}
-	spec := containerSpec(project, svc, nil, dep.ID, 1)
+	spec := containerSpec(project, svc, nil, dep.ID, 1, c.acme(svc.ServerID))
 	logf("Starting %s", spec.Name)
 	id, err := dk.Run(ctx, spec)
 	if err != nil {
@@ -260,7 +260,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 		}
 	}
 	for i := 1; i <= svc.Replicas; i++ {
-		spec := replicaSpec(project, svc, db, dep.ID, i, probe)
+		spec := replicaSpec(project, svc, db, dep.ID, i, probe, c.acme(svc.ServerID))
 		logf("Starting %s", spec.Name)
 		id, err := dk.Run(ctx, spec)
 		if err != nil {
@@ -333,7 +333,7 @@ func readinessMode(svc store.Service) string {
 
 // containerSpec builds the container for one replica. db is the linked
 // database of an app, if any.
-func containerSpec(project store.Project, svc store.Service, db *store.Service, deployID string, replica int) client.ContainerCreateOptions {
+func containerSpec(project store.Project, svc store.Service, db *store.Service, deployID string, replica int, acme bool) client.ContainerCreateOptions {
 	labels := map[string]string{
 		docker.LabelManaged: "true",
 		docker.LabelProject: project.ID,
@@ -346,7 +346,7 @@ func containerSpec(project store.Project, svc store.Service, db *store.Service, 
 		docker.ProjectNetwork(project.ID): {Aliases: []string{svc.Name}},
 	}
 	if svc.Domain != "" {
-		maps.Copy(labels, traefikLabels(svc))
+		maps.Copy(labels, traefikLabels(svc, acme))
 		endpoints[docker.ProxyNetwork] = &network.EndpointSettings{}
 	}
 

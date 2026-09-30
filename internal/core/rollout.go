@@ -28,7 +28,7 @@ func (c *Core) preDeploy(ctx context.Context, project store.Project, svc store.S
 	ctx, cancel := context.WithTimeout(ctx, preDeployTimeout)
 	defer cancel()
 
-	spec := containerSpec(project, svc, db, dep.ID, 0)
+	spec := containerSpec(project, svc, db, dep.ID, 0, false) // never routed
 	spec.Name = fmt.Sprintf("%s-%s-predeploy-%s", project.Name, svc.Name, deploySuffix(dep.ID))
 	spec.Config.Cmd = []string{"sh", "-c", svc.PreDeploy}
 	spec.Config.Entrypoint = []string{}

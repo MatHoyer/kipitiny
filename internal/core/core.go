@@ -72,6 +72,9 @@ func (c *Core) Bootstrap(ctx context.Context) error {
 	if c.cfg.Domain != "" && !c.cfg.Traefik.Enabled {
 		c.log.Warn("KIPITINY_DOMAIN is ignored without the managed Traefik; route it in your own proxy", "domain", c.cfg.Domain)
 	}
+	if c.cfg.Tunnel.Token != "" && !c.cfg.Traefik.Enabled {
+		c.log.Warn("KIPITINY_CLOUDFLARE_TUNNEL_TOKEN is ignored without the managed Traefik")
+	}
 	servers, err := c.store.ListServers(ctx)
 	if err != nil {
 		return err
@@ -99,6 +102,9 @@ func (c *Core) bootstrapServer(ctx context.Context, sv store.Server) error {
 		if err := c.ensureTraefik(ctx, sv); err != nil {
 			return fmt.Errorf("traefik: %w", err)
 		}
+		if err := c.ensureTunnel(ctx, sv); err != nil {
+			return fmt.Errorf("cloudflared: %w", err)
+		}
 	}
 	return nil
 }
@@ -118,6 +124,12 @@ func (c *Core) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// BehindTunnel reports whether the manager's traffic arrives through the
+// Cloudflare tunnel.
+func (c *Core) BehindTunnel() bool {
+	return c.cfg.Traefik.Enabled && c.viaTunnel(store.LocalServerID)
 }
 
 // dockerFor returns the Docker client of a server ("" or "local": this one).
