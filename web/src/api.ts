@@ -33,6 +33,12 @@ export type Service = {
   preDeploy: string;
   currentDeploymentId: string;
   stopped: boolean;
+  source: "image" | "git";
+  gitUrl: string;
+  gitBranch: string;
+  gitToken: string;
+  dockerfile: string;
+  buildContext: string;
   createdAt: string;
   updatedAt: string;
   containers: Container[];
@@ -50,6 +56,12 @@ export type ServiceInput = {
   databaseId?: string;
   healthPath?: string;
   preDeploy?: string;
+  source?: "image" | "git";
+  gitUrl?: string;
+  gitBranch?: string;
+  gitToken?: string;
+  dockerfile?: string;
+  buildContext?: string;
 };
 
 export type Connection = {
@@ -68,6 +80,7 @@ export type Deployment = {
   serviceId: string;
   status: "running" | "succeeded" | "failed";
   image: string;
+  gitCommit?: string;
   error?: string;
   createdAt: string;
   finishedAt?: string;
@@ -204,6 +217,7 @@ export const api = {
   updateService: (id: string, patch: ServicePatch) => request<Service>(`/services/${id}`, json("PATCH", patch)),
   deleteService: (id: string, confirm = "") =>
     request<void>(`/services/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),
+  webhook: (id: string) => request<{ url: string; secret: string }>(`/services/${id}/webhook`),
   connection: (id: string) => request<Connection>(`/services/${id}/connection`),
   serviceAction: (id: string, action: "start" | "stop" | "restart") =>
     request<Service>(`/services/${id}/${action}`, { method: "POST" }),

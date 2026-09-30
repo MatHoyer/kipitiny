@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { BackupList } from "./BackupList";
+import { GitFields } from "./Project";
 import { Schedules } from "./Schedules";
 import { api, type Connection, type Deployment, type LogLine, type Service as ServiceT } from "../api";
 import {
@@ -147,6 +148,7 @@ export function Service() {
       </Card>
 
       {svc.kind === "postgres" && <ConnectionCard serviceId={svc.id} host={svc.name} />}
+      {svc.source === "git" && <WebhookCard serviceId={svc.id} branch={svc.gitBranch} />}
       {svc.kind === "postgres" && <BackupsCard serviceId={svc.id} name={svc.name} />}
 
       {svc.containers.length > 0 && (
@@ -186,6 +188,11 @@ function Settings({ svc }: { svc: ServiceT }) {
     databaseId: svc.databaseId,
     healthPath: svc.healthPath,
     preDeploy: svc.preDeploy,
+    gitUrl: svc.gitUrl,
+    gitBranch: svc.gitBranch,
+    gitToken: svc.gitToken,
+    dockerfile: svc.dockerfile,
+    buildContext: svc.buildContext,
     env: formatEnv(svc.env),
   }));
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
@@ -197,7 +204,15 @@ function Settings({ svc }: { svc: ServiceT }) {
         isDb
           ? { image: form.image.trim(), memoryMb: Number(form.memory) || 0, env: parseEnv(form.env) }
           : {
-              image: form.image.trim(),
+              ...(svc.source === "git"
+                ? {
+                    gitUrl: form.gitUrl.trim(),
+                    gitBranch: form.gitBranch.trim(),
+                    gitToken: form.gitToken,
+                    dockerfile: form.dockerfile.trim(),
+                    buildContext: form.buildContext.trim(),
+                  }
+                : { image: form.image.trim() }),
               domain: form.domain.trim(),
               port: Number(form.port) || 0,
               replicas: Number(form.replicas) || 1,
@@ -219,9 +234,15 @@ function Settings({ svc }: { svc: ServiceT }) {
   return (
     <Card title="Settings">
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Image" hint={isDb ? "Minor upgrades only; major versions need a dump and restore." : undefined}>
-          <Input required value={form.image} onChange={set("image")} />
-        </Field>
+        {svc.source === "git" ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <GitFields form={form} set={set} tokenHint="******** keeps the saved token." />
+          </div>
+        ) : (
+          <Field label="Image" hint={isDb ? "Minor upgrades only; major versions need a dump and restore." : undefined}>
+            <Input required value={form.image} onChange={set("image")} />
+          </Field>
+        )}
         {!isDb && (
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-3 sm:col-span-1">
@@ -343,6 +364,56 @@ function BackupsCard({ serviceId, name }: { serviceId: string; name: string }) {
   );
 }
 
+function WebhookCard({ serviceId, branch }: { serviceId: string; branch: string }) {
+  const [hook, setHook] = useState<{ url: string; secret: string } | null>(null);
+  const reveal = useMutation({ mutationFn: () => api.webhook(serviceId), onSuccess: setHook });
+  const url = hook ? window.location.origin + hook.url : "";
+  return (
+    <Card
+      title="Deploy on push"
+      actions={
+        <Button
+          variant="secondary"
+          className="!py-0.5 text-xs"
+          onClick={() => (hook ? setHook(null) : reveal.mutate())}
+          disabled={reveal.isPending}
+        >
+          {hook ? "Hide" : "Show webhook"}
+        </Button>
+      }
+    >
+      {hook ? (
+        <dl className="grid grid-cols-[6rem_1fr] gap-y-1.5 text-sm">
+          {[
+            ["Payload URL", url],
+            ["Secret", hook.secret],
+          ].map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="text-zinc-500">{k}</dt>
+              <dd className="flex items-center gap-2 font-mono text-xs break-all">
+                {v}
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(v)}
+                  className="text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                >
+                  copy
+                </button>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="text-sm text-zinc-500">
+          Add a push webhook (GitHub: content type <span className="font-mono">application/json</span>; GitLab: secret
+          token) and every push to <span className="font-mono">{branch}</span> builds and deploys.
+        </p>
+      )}
+      <ErrorText error={reveal.error} />
+    </Card>
+  );
+}
+
 function ConnectionCard({ serviceId, host }: { serviceId: string; host: string }) {
   const [conn, setConn] = useState<Connection | null>(null);
   const reveal = useMutation({ mutationFn: () => api.connection(serviceId), onSuccess: setConn });
@@ -435,7 +506,7 @@ function Deployments({
                 >
                   <StateBadge state={d.status} />
                   <span className="flex-1 truncate font-mono text-xs text-zinc-500">
-                    {d.image}
+                    {d.gitCommit ? `commit ${d.gitCommit.slice(0, 7)}` : d.image}
                     {d.id === svc.currentDeploymentId && (
                       <span className="ml-2 font-sans text-emerald-600">current</span>
                     )}

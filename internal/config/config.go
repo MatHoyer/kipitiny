@@ -21,6 +21,9 @@ type Config struct {
 	// that is required to create the admin account.
 	SetupToken string
 
+	// BuilderImage runs `docker build` for git services (BuildKit via the CLI).
+	BuilderImage string
+
 	Traefik       Traefik
 	ManagerBackup ManagerBackup
 }
@@ -48,10 +51,11 @@ type Traefik struct {
 
 func Load() Config {
 	return Config{
-		Addr:       env("KIPITINY_ADDR", ":3000"),
-		DataDir:    env("KIPITINY_DATA_DIR", "/data"),
-		LogLevel:   env("KIPITINY_LOG_LEVEL", "info"),
-		SetupToken: env("KIPITINY_SETUP_TOKEN", ""),
+		Addr:         env("KIPITINY_ADDR", ":3000"),
+		DataDir:      env("KIPITINY_DATA_DIR", "/data"),
+		LogLevel:     env("KIPITINY_LOG_LEVEL", "info"),
+		SetupToken:   env("KIPITINY_SETUP_TOKEN", ""),
+		BuilderImage: env("KIPITINY_BUILDER_IMAGE", "docker:cli"),
 		Traefik: Traefik{
 			Enabled:      env("KIPITINY_TRAEFIK", "true") != "false",
 			Image:        env("KIPITINY_TRAEFIK_IMAGE", "traefik:v3.7"),

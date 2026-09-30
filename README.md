@@ -31,6 +31,19 @@ docker compose exec -it manager /kipitiny reset-password admin
   database and it receives `DATABASE_URL` (an explicit `DATABASE_URL` env var wins).
 - Deleting a database or a project destroys data and must be confirmed by typing its name.
 
+## Builds from Git
+
+An app can come from a Git repository instead of an image: every deploy clones
+the branch (pure Go, HTTPS, optional access token for private repos) and builds
+its Dockerfile with BuildKit through a short-lived `docker:cli` container that
+receives the source as a tar stream, so neither the host nor the manager needs
+`git` or the Docker CLI. Images are tagged per deployment (the last 5 are kept
+for rollback) and removed with the service.
+
+**Deploy on push**: point a webhook at `/api/hooks/<service-id>` with the
+service's secret: GitHub (`X-Hub-Signature-256`), GitLab (`X-Gitlab-Token`) or
+`Authorization: Bearer <secret>`. Pushes to other branches are ignored.
+
 ## Deploys
 
 Apps deploy blue-green: every new replica starts next to the old ones, and old
@@ -131,6 +144,7 @@ make docker    # image `kipitiny`
 | `KIPITINY_MANAGER_BACKUP_CRON` | `@daily` | Snapshot of the manager's state (`off` to disable) |
 | `KIPITINY_MANAGER_BACKUP_TARGET` | `local` | Target ID for those snapshots |
 | `KIPITINY_MANAGER_BACKUP_KEEP` | `14` | Snapshots kept per target |
+| `KIPITINY_BUILDER_IMAGE` | `docker:cli` | Image running `docker build` for Git services |
 | `KIPITINY_DOCKER_SOCKET` | `/var/run/docker.sock` | Host socket path mounted into Traefik |
 | `DOCKER_HOST`        | socket  | Standard Docker client env vars apply |
 

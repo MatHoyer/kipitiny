@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -70,6 +71,34 @@ func (a *API) connection(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, conn)
+}
+
+func (a *API) webhook(w http.ResponseWriter, r *http.Request) {
+	hook, err := a.core.ServiceWebhook(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, hook)
+}
+
+// hook receives push webhooks (GitHub, GitLab, generic bearer token).
+func (a *API) hook(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 5<<20))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "payload too large")
+		return
+	}
+	dep, err := a.core.HandleWebhook(r.Context(), r.PathValue("id"), r.Header.Get, body)
+	switch {
+	case errors.Is(err, core.ErrIgnored):
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
+	case err != nil:
+		a.fail(w, err)
+	default:
+		writeJSON(w, http.StatusAccepted, dep)
+	}
 }
 
 func (a *API) deployService(w http.ResponseWriter, r *http.Request) {

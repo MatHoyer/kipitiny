@@ -27,6 +27,8 @@ type Store interface {
 	ListServices(ctx context.Context, projectID string) ([]Service, error)
 	UpdateService(ctx context.Context, s Service) (Service, error)
 	SetCurrentDeployment(ctx context.Context, serviceID, deploymentID string) error
+	// SetDeploymentBuild records the image built for a deployment.
+	SetDeploymentBuild(ctx context.Context, id, image, commit string, config Service) error
 	SetServiceStopped(ctx context.Context, serviceID string, stopped bool) error
 	// ListAllServices returns every service of every project.
 	ListAllServices(ctx context.Context) ([]Service, error)
@@ -115,6 +117,13 @@ type Project struct {
 	UpdatedAt time.Time `bun:"updated_at" json:"updatedAt"`
 }
 
+type ServiceSource string
+
+const (
+	SourceImage ServiceSource = "image"
+	SourceGit   ServiceSource = "git"
+)
+
 type ServiceKind string
 
 const (
@@ -149,9 +158,20 @@ type Service struct {
 	PreDeploy           string `bun:"pre_deploy" json:"preDeploy"`
 	CurrentDeploymentID string `bun:"current_deployment_id" json:"currentDeploymentId"`
 	// Stopped is the desired run state after the user stopped the service.
-	Stopped   bool      `bun:"stopped" json:"stopped"`
-	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
-	UpdatedAt time.Time `bun:"updated_at" json:"updatedAt"`
+	Stopped bool `bun:"stopped" json:"stopped"`
+
+	// Source is image (pull Image) or git (build GitURL's Dockerfile).
+	Source    ServiceSource `bun:"source" json:"source"`
+	GitURL    string        `bun:"git_url" json:"gitUrl"`
+	GitBranch string        `bun:"git_branch" json:"gitBranch"`
+	// GitToken authenticates HTTPS clones of private repositories.
+	GitToken     string `bun:"git_token" json:"gitToken"`
+	Dockerfile   string `bun:"dockerfile" json:"dockerfile"`
+	BuildContext string `bun:"build_context" json:"buildContext"`
+	// WebhookSecret authenticates push webhooks that trigger a deploy.
+	WebhookSecret string    `bun:"webhook_secret" json:"-"`
+	CreatedAt     time.Time `bun:"created_at" json:"createdAt"`
+	UpdatedAt     time.Time `bun:"updated_at" json:"updatedAt"`
 }
 
 type DeploymentStatus string
@@ -170,6 +190,7 @@ type Deployment struct {
 	Status    DeploymentStatus `bun:"status" json:"status"`
 	Image     string           `bun:"image" json:"image"`
 	Error     string           `bun:"error" json:"error,omitempty"`
+	GitCommit string           `bun:"git_commit" json:"gitCommit,omitempty"`
 	// Config is the service as deployed (image included).
 	Config     Service    `bun:"config,type:text" json:"-"`
 	CreatedAt  time.Time  `bun:"created_at" json:"createdAt"`

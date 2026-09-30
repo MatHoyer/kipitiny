@@ -238,7 +238,11 @@ func (c *Core) recreateReplica(ctx context.Context, project store.Project, svc s
 		}
 		db = &d
 	}
-	if err := c.docker.EnsureImage(ctx, svc.Image); err != nil {
+	if isBuiltImage(svc.Image) {
+		if _, err := c.docker.ImageInspect(ctx, svc.Image); err != nil {
+			return fmt.Errorf("build %s is gone; redeploy: %w", svc.Image, err)
+		}
+	} else if err := c.docker.EnsureImage(ctx, svc.Image); err != nil {
 		return err
 	}
 	probe, err := c.probeFor(ctx, svc)

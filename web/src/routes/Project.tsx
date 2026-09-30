@@ -98,7 +98,7 @@ export function Project() {
                 <span className="font-medium">{s.name}</span>
                 <StateBadge state={serviceState(s.containers)} />
               </div>
-              <p className="truncate font-mono text-xs text-zinc-500">{s.image}</p>
+              <p className="truncate font-mono text-xs text-zinc-500">{s.source === "git" ? `${s.gitUrl.replace(/^https?:\/\//, "")}@${s.gitBranch}` : s.image}</p>
               <p className="text-xs text-zinc-500">
                 {s.kind === "postgres"
                   ? `PostgreSQL · ${s.memoryMb} MB`
@@ -119,6 +119,7 @@ function NewServiceForm({ projectId, onDone }: { projectId: string; onDone: () =
   const databases = services.data?.filter((s) => s.kind === "postgres") ?? [];
 
   const [kind, setKind] = useState<"app" | "postgres">("app");
+  const [source, setSource] = useState<"image" | "git">("image");
   const [form, setForm] = useState({
     name: "",
     image: "",
@@ -129,6 +130,11 @@ function NewServiceForm({ projectId, onDone }: { projectId: string; onDone: () =
     version: "17",
     memory: "512",
     databaseId: "",
+    gitUrl: "",
+    gitBranch: "main",
+    gitToken: "",
+    dockerfile: "Dockerfile",
+    buildContext: "",
   });
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
   // Default an app to the project's only database.
@@ -147,7 +153,16 @@ function NewServiceForm({ projectId, onDone }: { projectId: string; onDone: () =
           : {
               kind,
               name: form.name.trim(),
-              image: form.image.trim(),
+              ...(source === "git"
+                ? {
+                    source,
+                    gitUrl: form.gitUrl.trim(),
+                    gitBranch: form.gitBranch.trim(),
+                    gitToken: form.gitToken.trim(),
+                    dockerfile: form.dockerfile.trim(),
+                    buildContext: form.buildContext.trim(),
+                  }
+                : { image: form.image.trim() }),
               port: Number(form.port) || 0,
               domain: form.domain.trim(),
               replicas: Number(form.replicas) || 1,
@@ -209,9 +224,21 @@ function NewServiceForm({ projectId, onDone }: { projectId: string; onDone: () =
           </>
         ) : (
           <>
-            <Field label="Image">
-              <Input required value={form.image} onChange={set("image")} placeholder="ghcr.io/org/app:latest" />
+            <Field label="Source">
+              <Select value={source} onChange={(e) => setSource(e.target.value as "image" | "git")}>
+                <option value="image">Docker image</option>
+                <option value="git">Git repository (Dockerfile)</option>
+              </Select>
             </Field>
+            {source === "image" ? (
+              <div className="sm:col-span-2">
+                <Field label="Image">
+                  <Input required value={form.image} onChange={set("image")} placeholder="ghcr.io/org/app:latest" />
+                </Field>
+              </div>
+            ) : (
+              <GitFields form={form} set={set} />
+            )}
             <Field label="Domain" hint="Leave empty for a private service (reachable only inside the project).">
               <Input value={form.domain} onChange={set("domain")} placeholder="app.example.com" />
             </Field>
@@ -244,5 +271,39 @@ function NewServiceForm({ projectId, onDone }: { projectId: string; onDone: () =
         </div>
       </form>
     </Card>
+  );
+}
+
+type GitForm = { gitUrl: string; gitBranch: string; gitToken: string; dockerfile: string; buildContext: string };
+
+export function GitFields({
+  form,
+  set,
+  tokenHint,
+}: {
+  form: GitForm;
+  set: (k: keyof GitForm) => (e: { target: { value: string } }) => void;
+  tokenHint?: string;
+}) {
+  return (
+    <>
+      <div className="sm:col-span-2">
+        <Field label="Repository" hint="HTTPS URL; built with its Dockerfile on every deploy.">
+          <Input required value={form.gitUrl} onChange={set("gitUrl")} placeholder="https://github.com/org/app" />
+        </Field>
+      </div>
+      <Field label="Branch">
+        <Input required value={form.gitBranch} onChange={set("gitBranch")} />
+      </Field>
+      <Field label="Access token" hint={tokenHint ?? "Only for private repositories."}>
+        <Input type="password" value={form.gitToken} onChange={set("gitToken")} autoComplete="off" />
+      </Field>
+      <Field label="Dockerfile">
+        <Input value={form.dockerfile} onChange={set("dockerfile")} className="font-mono" />
+      </Field>
+      <Field label="Build context" hint="Folder inside the repository; empty for the root.">
+        <Input value={form.buildContext} onChange={set("buildContext")} placeholder="." className="font-mono" />
+      </Field>
+    </>
   );
 }

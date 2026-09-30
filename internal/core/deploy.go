@@ -70,10 +70,10 @@ func (c *Core) startDeploy(ctx context.Context, serviceID, image string) (store.
 		unlock()
 		return store.Deployment{}, err
 	}
-	if image == "" {
+	if image == "" && svc.Source != store.SourceGit {
 		image = svc.Image
 	}
-	svc.Image = image
+	svc.Image = image // empty for a git service: built during the deploy
 	dep, err := c.store.CreateDeployment(ctx, store.Deployment{
 		ServiceID: svc.ID,
 		Status:    store.DeploymentRunning,
@@ -146,14 +146,43 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 		logf("Injecting DATABASE_URL for database %s", d.Name)
 	}
 
-	logf("Pulling %s", svc.Image)
-	if err := c.docker.PullImage(ctx, svc.Image, out); err != nil {
-		return fmt.Errorf("pull %s: %w", svc.Image, err)
+	switch {
+	case svc.Image == "": // git service: build it
+		tag, commit, err := c.buildImage(ctx, project, svc, dep, out, logf)
+		if err != nil {
+			return err
+		}
+		svc.Image = tag
+		if err := c.store.SetDeploymentBuild(ctx, dep.ID, tag, commit, svc); err != nil {
+			return err
+		}
+	case isBuiltImage(svc.Image): // rollback to an earlier build: local only
+		if _, err := c.docker.ImageInspect(ctx, svc.Image); err != nil {
+			return fmt.Errorf("build %s is no longer available: %w", svc.Image, err)
+		}
+	default:
+		logf("Pulling %s", svc.Image)
+		if err := c.docker.PullImage(ctx, svc.Image, out); err != nil {
+			return fmt.Errorf("pull %s: %w", svc.Image, err)
+		}
 	}
 	if svc.Kind == store.ServiceKindPostgres {
 		return c.recreate(ctx, project, svc, dep, logf)
 	}
-	return c.rollout(ctx, project, svc, db, dep, out, logf)
+	if err := c.rollout(ctx, project, svc, db, dep, out, logf); err != nil {
+		return err
+	}
+	if svc.Source == store.SourceGit {
+		svc.CurrentDeploymentID = dep.ID
+		c.pruneBuilds(ctx, svc)
+	}
+	return nil
+}
+
+// isBuiltImage reports whether an image was built by the manager (and so
+// exists only locally).
+func isBuiltImage(image string) bool {
+	return strings.HasPrefix(image, "kipitiny/")
 }
 
 // recreate replaces a database's container in place: its volume can't be
