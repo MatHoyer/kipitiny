@@ -1,7 +1,7 @@
 package api
 
 import (
-	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -15,14 +15,6 @@ import (
 
 const sessionCookie = "kipitiny_session"
 
-type ctxKey struct{}
-
-// UserFrom returns the authenticated user of the request.
-func UserFrom(ctx context.Context) (store.User, bool) {
-	u, ok := ctx.Value(ctxKey{}).(store.User)
-	return u, ok
-}
-
 // publicRoutes are reachable without a session.
 var publicRoutes = map[string]bool{
 	"GET /api/health":      true,
@@ -31,28 +23,127 @@ var publicRoutes = map[string]bool{
 	"POST /api/auth/login": true,
 }
 
-// protect enforces same-origin mutations and a valid session on every
-// non-public route.
-func (a *API) protect(next http.Handler) http.Handler {
+// sessionOnly routes can't be used with an API token (a token must not mint
+// tokens or act as a signed-in user).
+func sessionOnly(pattern string) bool {
+	return strings.Contains(pattern, "/api/auth/") || strings.Contains(pattern, "/api/tokens")
+}
+
+// deployRoutes are the mutations a deploy-scoped token may perform.
+var deployRoutes = map[string]bool{
+	"POST /api/services/{id}/deploy":   true,
+	"POST /api/services/{id}/rollback": true,
+	"POST /api/services/{id}/{action}": true, // start, stop, restart
+	"POST /api/services/{id}/backups":  true,
+	"POST /api/projects/{id}/backups":  true,
+	"POST /api/backups/{id}/verify":    true,
+}
+
+// secretReads reveal credentials or backup contents: admin only.
+var secretReads = map[string]bool{
+	"GET /api/services/{id}/connection": true,
+	"GET /api/services/{id}/webhook":    true,
+	"GET /api/backup-targets/{id}/key":  true,
+	"GET /api/backups/{id}/download":    true,
+	"GET /api/audit":                    true,
+}
+
+// requiredScope maps a route to the scope an API token needs.
+func requiredScope(pattern string) store.Scope {
+	switch {
+	case secretReads[pattern]:
+		return store.ScopeAdmin
+	case strings.HasPrefix(pattern, "GET "):
+		return store.ScopeRead
+	case deployRoutes[pattern]:
+		return store.ScopeDeploy
+	}
+	return store.ScopeAdmin
+}
+
+// protect enforces same-origin mutations, authentication (session cookie or
+// bearer token), token scopes, and records every mutation in the audit log.
+func (a *API) protect(mux *http.ServeMux) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !sameOrigin(r) {
 			writeError(w, http.StatusForbidden, "cross-origin request refused")
 			return
 		}
+		_, pattern := mux.Handler(r)
 		// Push webhooks authenticate with their own secret.
-		isHook := r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/hooks/")
-		if publicRoutes[r.Method+" "+r.URL.Path] || isHook {
-			next.ServeHTTP(w, r)
+		if publicRoutes[pattern] || pattern == "POST /api/hooks/{id}" {
+			mux.ServeHTTP(w, r)
 			return
 		}
-		u, err := a.core.Authenticate(r.Context(), sessionToken(r))
+		actor, isToken, err := a.authenticate(r)
 		if err != nil {
 			a.fail(w, err)
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, u)))
+		if isToken && sessionOnly(pattern) {
+			writeError(w, http.StatusForbidden, "not available to API tokens")
+			return
+		}
+		if !actor.Scope.Allows(requiredScope(pattern)) {
+			writeError(w, http.StatusForbidden, fmt.Sprintf("this token's scope (%s) does not allow that", actor.Scope))
+			return
+		}
+		ctx := core.WithActor(r.Context(), actor)
+		if r.Method == http.MethodGet || r.Method == http.MethodHead {
+			mux.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		mux.ServeHTTP(rec, r.WithContext(ctx))
+		if !strings.HasPrefix(pattern, "POST /api/auth/") {
+			a.core.Audit(ctx, pattern, r.PathValue("id"), rec.status, nil)
+		}
 	})
 }
+
+// Authenticated protects a non-API handler (e.g. /mcp) with the same session
+// or token authentication; the handler enforces scopes itself.
+func (a *API) Authenticated(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !sameOrigin(r) {
+			writeError(w, http.StatusForbidden, "cross-origin request refused")
+			return
+		}
+		actor, _, err := a.authenticate(r)
+		if err != nil {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="kipitiny"`)
+			a.fail(w, err)
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(core.WithActor(r.Context(), actor)))
+	})
+}
+
+// authenticate resolves the caller from a bearer token or the session cookie.
+func (a *API) authenticate(r *http.Request) (core.Actor, bool, error) {
+	if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+		actor, err := a.core.AuthenticateToken(r.Context(), strings.TrimSpace(token))
+		return actor, true, err
+	}
+	u, err := a.core.Authenticate(r.Context(), sessionToken(r))
+	if err != nil {
+		return core.Actor{}, false, err
+	}
+	return core.Actor{Kind: "user", Name: u.Username, Scope: store.ScopeAdmin}, false, nil
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusRecorder) WriteHeader(code int) {
+	s.status = code
+	s.ResponseWriter.WriteHeader(code)
+}
+
+// Unwrap lets http.ResponseController reach Flush on the real writer.
+func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
 // sameOrigin rejects state-changing requests whose Origin doesn't match the
 // host. SameSite=Lax cookies already block most CSRF; this closes the rest.

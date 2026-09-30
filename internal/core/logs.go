@@ -93,3 +93,39 @@ func (c *Core) followContainer(ctx context.Context, id, name string, tail int, o
 	}
 	return sc.Err()
 }
+
+// RecentLogs returns the last lines of every active container of a service,
+// oldest first per container.
+func (c *Core) RecentLogs(ctx context.Context, serviceID string, tail int) ([]LogLine, error) {
+	svc, err := c.store.GetService(ctx, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	cts, err := c.activeContainers(ctx, svc)
+	if err != nil {
+		return nil, err
+	}
+	var lines []LogLine
+	for _, ct := range cts {
+		rc, err := c.docker.ContainerLogs(ctx, ct.ID, client.ContainerLogsOptions{
+			ShowStdout: true, ShowStderr: true, Tail: strconv.Itoa(tail),
+		})
+		if err != nil {
+			return nil, err
+		}
+		pr, pw := io.Pipe()
+		go func() {
+			_, err := stdcopy.StdCopy(pw, pw, rc)
+			pw.CloseWithError(err)
+		}()
+		sc := bufio.NewScanner(pr)
+		sc.Buffer(make([]byte, 64*1024), 1024*1024)
+		name := strings.TrimPrefix(ct.Names[0], "/")
+		for sc.Scan() {
+			lines = append(lines, LogLine{Container: name, Text: sc.Text()})
+		}
+		rc.Close()
+		pr.Close()
+	}
+	return lines, nil
+}

@@ -499,6 +499,56 @@ func (s *Store) FailRunningOperations(ctx context.Context, errMsg string) error 
 	})
 }
 
+func (s *Store) CreateAPIToken(ctx context.Context, t store.APIToken) (store.APIToken, error) {
+	t.ID, t.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&t).Exec(ctx); err != nil {
+		return store.APIToken{}, mapErr(err)
+	}
+	return t, nil
+}
+
+func (s *Store) ListAPITokens(ctx context.Context) ([]store.APIToken, error) {
+	ts := []store.APIToken{}
+	err := s.db.NewSelect().Model(&ts).Order("created_at DESC").Scan(ctx)
+	return ts, mapErr(err)
+}
+
+func (s *Store) GetAPITokenByHash(ctx context.Context, hash string) (store.APIToken, error) {
+	var t store.APIToken
+	if err := s.db.NewSelect().Model(&t).Where("token_hash = ?", hash).Scan(ctx); err != nil {
+		return store.APIToken{}, mapErr(err)
+	}
+	// Minute resolution is plenty and keeps writes rare.
+	if t.LastUsedAt == nil || time.Since(*t.LastUsedAt) > time.Minute {
+		used := now()
+		t.LastUsedAt = &used
+		_, _ = s.db.NewUpdate().Model(&t).Column("last_used_at").WherePK().Exec(ctx)
+	}
+	return t, nil
+}
+
+func (s *Store) DeleteAPIToken(ctx context.Context, id string) error {
+	return deleteByID(ctx, s.db, "api_tokens", id)
+}
+
+func (s *Store) AddAudit(ctx context.Context, e store.AuditEntry) error {
+	e.ID, e.CreatedAt = ids.New(), now()
+	_, err := s.db.NewInsert().Model(&e).Exec(ctx)
+	return mapErr(err)
+}
+
+func (s *Store) ListAudit(ctx context.Context, limit int) ([]store.AuditEntry, error) {
+	es := []store.AuditEntry{}
+	err := s.db.NewSelect().Model(&es).Order("created_at DESC").Limit(limit).Scan(ctx)
+	return es, mapErr(err)
+}
+
+func (s *Store) PruneAudit(ctx context.Context, before time.Time) error {
+	_, err := s.db.NewDelete().Model((*store.AuditEntry)(nil)).
+		Where("created_at < ?", before.UTC().Truncate(time.Microsecond)).Exec(ctx)
+	return mapErr(err)
+}
+
 // now matches the microsecond precision bun persists, so returned structs
 // equal what a later read yields.
 func now() time.Time {

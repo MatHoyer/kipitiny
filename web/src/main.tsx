@@ -9,6 +9,7 @@ import { Layout } from "./routes/Layout";
 import { Project } from "./routes/Project";
 import { Projects } from "./routes/Projects";
 import { Service } from "./routes/Service";
+import { Settings } from "./routes/Settings";
 
 // A 401 anywhere means the session is gone: re-check auth to show the login.
 const onError = (err: Error) => {
@@ -31,6 +32,7 @@ const router = createBrowserRouter([
       { path: "projects/:id", element: <Project /> },
       { path: "services/:id", element: <Service /> },
       { path: "backups", element: <Backups /> },
+      { path: "settings", element: <Settings /> },
     ],
   },
 ]);

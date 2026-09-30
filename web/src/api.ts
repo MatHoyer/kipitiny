@@ -157,6 +157,20 @@ export type Restore = {
   finishedAt?: string;
 };
 
+export type Scope = "read" | "deploy" | "admin";
+
+export type ApiToken = { id: string; name: string; scope: Scope; createdAt: string; lastUsedAt?: string };
+
+export type AuditEntry = {
+  id: string;
+  actor: string;
+  action: string;
+  target: string;
+  status: number;
+  error?: string;
+  createdAt: string;
+};
+
 export type LogLine = { container: string; text: string };
 
 export type User = { id: string; username: string; createdAt: string };
@@ -252,6 +266,12 @@ export const api = {
   backupProject: (projectId: string, targetId = "") =>
     request<{ backups: Backup[]; error?: string }>(`/projects/${projectId}/backups`, json("POST", { targetId })),
   restores: (serviceId: string) => request<Restore[]>(`/services/${serviceId}/restores`),
+
+  tokens: () => request<ApiToken[]>("/tokens"),
+  createToken: (name: string, scope: Scope) =>
+    request<ApiToken & { token: string }>("/tokens", json("POST", { name, scope })),
+  deleteToken: (id: string) => request<void>(`/tokens/${id}`, { method: "DELETE" }),
+  audit: () => request<AuditEntry[]>("/audit?limit=200"),
 
   logsUrl: (serviceId: string, tail = 200) => `/api/services/${serviceId}/logs?tail=${tail}`,
 };

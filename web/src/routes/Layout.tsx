@@ -30,6 +30,7 @@ function App({ username }: { username: string }) {
             {[
               ["/", "Projects"],
               ["/backups", "Backups"],
+              ["/settings", "Settings"],
             ].map(([to, label]) => (
               <NavLink
                 key={to}

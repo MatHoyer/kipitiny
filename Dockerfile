@@ -14,7 +14,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=ui /src/web/dist ./web/dist
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/kipitiny ./cmd/kipitiny
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/kipitiny ./cmd/kipitiny
 
 # Runs as root: it needs the host Docker socket, which is root-equivalent anyway.
 FROM gcr.io/distroless/static-debian12

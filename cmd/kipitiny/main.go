@@ -18,10 +18,14 @@ import (
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/core"
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/mcp"
 	"github.com/MatHoyer/kipitiny/internal/probe"
 	"github.com/MatHoyer/kipitiny/internal/store/sqlite"
 	"github.com/MatHoyer/kipitiny/web"
 )
+
+// version is set at build time (-ldflags "-X main.version=...").
+var version = "dev"
 
 func main() {
 	run := serve
@@ -90,7 +94,9 @@ func serve() error {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/api/", api.New(c, log))
+	a := api.New(c, log)
+	mux.Handle("/api/", a)
+	mux.Handle("/mcp", a.Authenticated(mcp.Handler(c, version)))
 	mux.Handle("/", web.Handler())
 
 	srv := &http.Server{
