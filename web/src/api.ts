@@ -103,6 +103,10 @@ export type Backup = {
   error?: string;
   createdAt: string;
   finishedAt?: string;
+  verifyStatus?: OpStatus;
+  verifyError?: string;
+  verifyDetails: { tables: number; rows: number; dbBytes: number; durationMs: number };
+  verifiedAt?: string;
 };
 
 export type ScheduleInput = {
@@ -113,6 +117,7 @@ export type ScheduleInput = {
   keepWeekly: number;
   keepMonthly: number;
   enabled: boolean;
+  verify: boolean;
 };
 
 export type Schedule = ScheduleInput & {
@@ -211,6 +216,7 @@ export const api = {
   serviceBackups: (serviceId: string) => request<Backup[]>(`/services/${serviceId}/backups`),
   backup: (serviceId: string, targetId: string) =>
     request<Backup>(`/services/${serviceId}/backups`, json("POST", { targetId })),
+  verifyBackup: (id: string) => request<Backup>(`/backups/${id}/verify`, { method: "POST" }),
   deleteBackup: (id: string) => request<void>(`/backups/${id}`, { method: "DELETE" }),
   downloadUrl: (id: string) => `/api/backups/${id}/download`,
   restore: (backupId: string, confirm: string, serviceId = "") =>

@@ -76,6 +76,7 @@ const stateColors: Record<string, string> = {
   starting: "animate-pulse bg-amber-500",
   unhealthy: "bg-red-500",
   succeeded: "bg-emerald-500",
+  passed: "bg-emerald-500",
   deploying: "animate-pulse bg-sky-500",
   degraded: "bg-amber-500",
   restarting: "bg-amber-500",

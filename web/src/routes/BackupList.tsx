@@ -22,6 +22,7 @@ export function BackupList({
     qc.invalidateQueries({ queryKey: ["restores"] });
   };
   const remove = useMutation({ mutationFn: api.deleteBackup, onSuccess: invalidate });
+  const verify = useMutation({ mutationFn: api.verifyBackup, onSuccess: invalidate });
   const restore = useMutation({
     mutationFn: ({ id, confirm }: { id: string; confirm: string }) => api.restore(id, confirm),
     onSuccess: invalidate,
@@ -36,6 +37,7 @@ export function BackupList({
           <thead className="text-xs text-zinc-500">
             <tr>
               <th className="pb-2 font-medium">Status</th>
+              <th className="pb-2 font-medium">Restore test</th>
               {showService && <th className="pb-2 font-medium">Database</th>}
               <th className="pb-2 font-medium">Target</th>
               <th className="pb-2 font-medium">Size</th>
@@ -50,6 +52,9 @@ export function BackupList({
                 <td className="py-1.5">
                   <StateBadge state={b.status} />
                   {b.error && <p className="max-w-xs truncate text-xs text-red-600" title={b.error}>{b.error}</p>}
+                </td>
+                <td className="py-1.5 text-xs">
+                  <Verification backup={b} />
                 </td>
                 {showService && (
                   <td className="py-1.5 text-xs">
@@ -73,6 +78,11 @@ export function BackupList({
                 <td className="space-x-3 py-1.5 text-right text-xs whitespace-nowrap">
                   {b.status === "succeeded" && (
                     <>
+                      {b.kind === "postgres" && b.verifyStatus !== "running" && (
+                        <button className="hover:underline" onClick={() => verify.mutate(b.id)}>
+                          Verify
+                        </button>
+                      )}
                       <a href={api.downloadUrl(b.id)} className="hover:underline">
                         Download
                       </a>
@@ -106,7 +116,28 @@ export function BackupList({
           </tbody>
         </table>
       </div>
-      <ErrorText error={remove.error ?? restore.error} />
+      <ErrorText error={remove.error ?? restore.error ?? verify.error} />
     </div>
+  );
+}
+
+function Verification({ backup: b }: { backup: Backup }) {
+  if (b.kind !== "postgres" || b.status !== "succeeded") return <span className="text-zinc-400">—</span>;
+  if (!b.verifyStatus) return <span className="text-zinc-400">not tested</span>;
+  if (b.verifyStatus === "running") return <StateBadge state="running" />;
+  const d = b.verifyDetails;
+  const title =
+    b.verifyStatus === "succeeded"
+      ? `Restored in ${formatDuration(d.durationMs)}: ${d.tables} tables, ~${d.rows.toLocaleString()} rows, ${formatBytes(d.dbBytes)}`
+      : b.verifyError;
+  return (
+    <span title={title}>
+      <StateBadge state={b.verifyStatus === "succeeded" ? "passed" : "failed"} />
+      {b.verifyStatus === "succeeded" && (
+        <span className="ml-1 text-zinc-500">
+          {d.tables} tables · {timeAgo(b.verifiedAt!)}
+        </span>
+      )}
+    </span>
   );
 }

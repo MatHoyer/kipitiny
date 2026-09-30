@@ -213,3 +213,12 @@ func (c *Client) WaitHealthy(ctx context.Context, id string, timeout time.Durati
 		}
 	}
 }
+
+// RemoveContainerAndVolumes force-removes a container with its anonymous volumes.
+func (c *Client) RemoveContainerAndVolumes(ctx context.Context, id string) error {
+	_, err := c.ContainerRemove(ctx, id, client.ContainerRemoveOptions{Force: true, RemoveVolumes: true})
+	if err != nil && !cerrdefs.IsNotFound(err) {
+		return fmt.Errorf("remove container: %w", err)
+	}
+	return nil
+}

@@ -41,6 +41,8 @@ type ScheduleInput struct {
 	KeepWeekly  int    `json:"keepWeekly"`
 	KeepMonthly int    `json:"keepMonthly"`
 	Enabled     bool   `json:"enabled"`
+	// Verify restore-tests each backup the schedule makes.
+	Verify bool `json:"verify"`
 }
 
 type ScheduleView struct {
@@ -134,6 +136,19 @@ func (c *Core) runScheduledBackup(scheduleID string) {
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+// afterScheduledBackup prunes old backups, then restore-tests the new one if
+// the schedule asks for it.
+func (c *Core) afterScheduledBackup(scheduleID, backupID string) {
+	c.applyRetention(scheduleID)
+	sc, err := c.store.GetBackupSchedule(c.bg, scheduleID)
+	if err != nil || !sc.Verify {
+		return
+	}
+	if _, err := c.VerifyBackup(c.bg, backupID); err != nil {
+		c.log.Warn("cannot start restore test", "backup", backupID, "err", err)
 	}
 }
 
@@ -259,7 +274,7 @@ func (c *Core) applyScheduleInput(ctx context.Context, sc *store.BackupSchedule,
 	} else if err != nil {
 		return err
 	}
-	sc.TargetID, sc.Cron, sc.Enabled = in.TargetID, in.Cron, in.Enabled
+	sc.TargetID, sc.Cron, sc.Enabled, sc.Verify = in.TargetID, in.Cron, in.Enabled, in.Verify
 	sc.KeepLast, sc.KeepDaily, sc.KeepWeekly, sc.KeepMonthly = in.KeepLast, in.KeepDaily, in.KeepWeekly, in.KeepMonthly
 	return nil
 }

@@ -61,6 +61,7 @@ type Store interface {
 	GetBackup(ctx context.Context, id string) (Backup, error)
 	ListBackups(ctx context.Context, f BackupFilter) ([]Backup, error)
 	FinishBackup(ctx context.Context, b Backup) error
+	SetBackupVerification(ctx context.Context, id string, v Verification) error
 	DeleteBackup(ctx context.Context, id string) error
 
 	ListBackupSchedules(ctx context.Context, serviceID string) ([]BackupSchedule, error)
@@ -223,6 +224,22 @@ type Backup struct {
 	Error       string     `bun:"error" json:"error,omitempty"`
 	CreatedAt   time.Time  `bun:"created_at" json:"createdAt"`
 	FinishedAt  *time.Time `bun:"finished_at" json:"finishedAt,omitempty"`
+	Verification
+}
+
+// Verification is the result of restoring a backup into a throwaway server.
+type Verification struct {
+	VerifyStatus  OpStatus            `bun:"verify_status" json:"verifyStatus,omitempty"`
+	VerifyError   string              `bun:"verify_error" json:"verifyError,omitempty"`
+	VerifyDetails VerificationDetails `bun:"verify_details" json:"verifyDetails"`
+	VerifiedAt    *time.Time          `bun:"verified_at" json:"verifiedAt,omitempty"`
+}
+
+type VerificationDetails struct {
+	Tables     int   `json:"tables"`
+	Rows       int64 `json:"rows"`
+	DBBytes    int64 `json:"dbBytes"`
+	DurationMS int64 `json:"durationMs"`
 }
 
 type BackupKind string
@@ -267,9 +284,11 @@ type BackupSchedule struct {
 	KeepLast int `bun:"keep_last" json:"keepLast"`
 	// KeepDaily/Weekly/Monthly keep the newest backup of each of the last N
 	// days/ISO weeks/months that have one.
-	KeepDaily   int       `bun:"keep_daily" json:"keepDaily"`
-	KeepWeekly  int       `bun:"keep_weekly" json:"keepWeekly"`
-	KeepMonthly int       `bun:"keep_monthly" json:"keepMonthly"`
-	Enabled     bool      `bun:"enabled" json:"enabled"`
-	CreatedAt   time.Time `bun:"created_at" json:"createdAt"`
+	KeepDaily   int  `bun:"keep_daily" json:"keepDaily"`
+	KeepWeekly  int  `bun:"keep_weekly" json:"keepWeekly"`
+	KeepMonthly int  `bun:"keep_monthly" json:"keepMonthly"`
+	Enabled     bool `bun:"enabled" json:"enabled"`
+	// Verify runs a restore test of each backup the schedule makes.
+	Verify    bool      `bun:"verify" json:"verify"`
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 }

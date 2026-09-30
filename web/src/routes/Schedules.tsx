@@ -29,8 +29,8 @@ export function Schedules({ serviceId, targets }: { serviceId: string; targets: 
   const [adding, setAdding] = useState(false);
   const invalidate = () => qc.invalidateQueries({ queryKey: ["schedules", serviceId] });
   const toggle = useMutation({
-    mutationFn: ({ id, targetId, cron, keepLast, keepDaily, keepWeekly, keepMonthly, enabled }: Schedule) =>
-      api.updateSchedule(id, { targetId, cron, keepLast, keepDaily, keepWeekly, keepMonthly, enabled: !enabled }),
+    mutationFn: ({ id, targetId, cron, keepLast, keepDaily, keepWeekly, keepMonthly, enabled, verify }: Schedule) =>
+      api.updateSchedule(id, { targetId, cron, keepLast, keepDaily, keepWeekly, keepMonthly, verify, enabled: !enabled }),
     onSuccess: invalidate,
   });
   const remove = useMutation({ mutationFn: api.deleteSchedule, onSuccess: invalidate });
@@ -57,6 +57,7 @@ export function Schedules({ serviceId, targets }: { serviceId: string; targets: 
               <span className="text-zinc-500"> → {targetName(s.targetId)}</span>
               <p className="text-xs text-zinc-500">
                 {describeRetention(s)}
+                {s.verify && " · restore-tested"}
                 {s.enabled && s.nextRun && ` · next ${new Date(s.nextRun).toLocaleString()}`}
               </p>
             </div>
@@ -93,6 +94,7 @@ function ScheduleForm({
   const [preset, setPreset] = useState(presets[1][0]);
   const [custom, setCustom] = useState("");
   const [form, setForm] = useState({ targetId: "local", keepLast: "0", keepDaily: "7", keepWeekly: "4", keepMonthly: "6" });
+  const [verify, setVerify] = useState(true);
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
   const create = useMutation({
@@ -105,6 +107,7 @@ function ScheduleForm({
         keepWeekly: Number(form.keepWeekly) || 0,
         keepMonthly: Number(form.keepMonthly) || 0,
         enabled: true,
+        verify,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["schedules", serviceId] });
@@ -160,6 +163,16 @@ function ScheduleForm({
           <Input type="number" min={0} value={form.keepMonthly} onChange={set("keepMonthly")} />
         </Field>
       </div>
+      <label className="flex items-start gap-2 text-sm">
+        <input type="checkbox" className="mt-1" checked={verify} onChange={(e) => setVerify(e.target.checked)} />
+        <span>
+          Restore-test every backup
+          <span className="block text-xs text-zinc-500">
+            Restores it into a throwaway, network-less PostgreSQL container and checks the result. A backup you have
+            never restored is a hope, not a backup.
+          </span>
+        </span>
+      </label>
       <p className="text-xs text-zinc-500">
         After each run, older backups from this schedule are deleted unless a rule keeps them (newest of each day,
         week, month). All zeros keeps everything. Manual backups are never pruned.
