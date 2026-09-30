@@ -114,8 +114,67 @@ func (s *Store) ListServices(ctx context.Context, projectID string) ([]store.Ser
 	return svcs, mapErr(err)
 }
 
+func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Service, error) {
+	svc.UpdatedAt = now()
+	res, err := s.db.NewUpdate().Model(&svc).
+		Column("image", "replicas", "port", "domain", "env", "updated_at").
+		WherePK().Exec(ctx)
+	if err != nil {
+		return store.Service{}, mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.Service{}, store.ErrNotFound
+	}
+	return svc, nil
+}
+
 func (s *Store) DeleteService(ctx context.Context, id string) error {
 	return deleteByID(ctx, s.db, "services", id)
+}
+
+func (s *Store) CreateDeployment(ctx context.Context, d store.Deployment) (store.Deployment, error) {
+	d.ID, d.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&d).Exec(ctx); err != nil {
+		return store.Deployment{}, mapErr(err)
+	}
+	return d, nil
+}
+
+func (s *Store) GetDeployment(ctx context.Context, id string) (store.Deployment, error) {
+	var d store.Deployment
+	err := s.db.NewSelect().Model(&d).Where("id = ?", id).Scan(ctx)
+	return d, mapErr(err)
+}
+
+func (s *Store) ListDeployments(ctx context.Context, serviceID string, limit int) ([]store.Deployment, error) {
+	ds := []store.Deployment{}
+	err := s.db.NewSelect().Model(&ds).Where("service_id = ?", serviceID).
+		Order("created_at DESC").Limit(limit).Scan(ctx)
+	return ds, mapErr(err)
+}
+
+func (s *Store) FinishDeployment(ctx context.Context, id string, status store.DeploymentStatus, errMsg string) error {
+	res, err := s.db.NewUpdate().Model((*store.Deployment)(nil)).
+		Set("status = ?", status).Set("error = ?", errMsg).Set("finished_at = ?", now()).
+		Where("id = ?", id).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) FailRunningDeployments(ctx context.Context, errMsg string) (int, error) {
+	res, err := s.db.NewUpdate().Model((*store.Deployment)(nil)).
+		Set("status = ?", store.DeploymentFailed).Set("error = ?", errMsg).Set("finished_at = ?", now()).
+		Where("status = ?", store.DeploymentRunning).Exec(ctx)
+	if err != nil {
+		return 0, mapErr(err)
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
 }
 
 // now matches the microsecond precision bun persists, so returned structs

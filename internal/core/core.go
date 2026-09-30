@@ -6,29 +6,83 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"regexp"
+	"sync"
+	"time"
 
+	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
-var ErrInvalid = errors.New("invalid input")
+var (
+	ErrInvalid = errors.New("invalid input")
+	// ErrBusy means another operation (usually a deploy) holds the service.
+	ErrBusy = errors.New("operation in progress")
+)
 
 // Names end up in container, network and DNS names, so keep them DNS-safe.
 var nameRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 
 type Core struct {
+	cfg    config.Config
 	store  store.Store
 	docker *docker.Client
+	log    *slog.Logger
+
+	// Background work (deploys) runs under bg and is awaited on Shutdown.
+	bg     context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+	locks  sync.Map // service ID -> *sync.Mutex
 }
 
-func New(s store.Store, d *docker.Client) *Core {
-	return &Core{store: s, docker: d}
+func New(cfg config.Config, s store.Store, d *docker.Client, log *slog.Logger) *Core {
+	bg, cancel := context.WithCancel(context.Background())
+	return &Core{cfg: cfg, store: s, docker: d, log: log, bg: bg, cancel: cancel}
 }
 
 // Bootstrap prepares host-level resources the manager relies on.
 func (c *Core) Bootstrap(ctx context.Context) error {
-	return c.docker.EnsureNetwork(ctx, docker.ProxyNetwork)
+	if n, err := c.store.FailRunningDeployments(ctx, "interrupted by manager restart"); err != nil {
+		return err
+	} else if n > 0 {
+		c.log.Warn("marked interrupted deployments as failed", "count", n)
+	}
+	if err := c.docker.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil {
+		return err
+	}
+	if c.cfg.Traefik.Enabled {
+		if err := c.ensureTraefik(ctx); err != nil {
+			return fmt.Errorf("traefik: %w", err)
+		}
+	}
+	return nil
+}
+
+// Shutdown cancels background work and waits for it to wind down.
+func (c *Core) Shutdown(ctx context.Context) error {
+	c.cancel()
+	done := make(chan struct{})
+	go func() { c.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// lockService serializes mutating operations on one service. It never
+// blocks: a second caller gets ErrBusy.
+func (c *Core) lockService(id string) (unlock func(), err error) {
+	m, _ := c.locks.LoadOrStore(id, &sync.Mutex{})
+	mu := m.(*sync.Mutex)
+	if !mu.TryLock() {
+		return nil, ErrBusy
+	}
+	return mu.Unlock, nil
 }
 
 type Status struct {
@@ -66,11 +120,32 @@ func (c *Core) GetProject(ctx context.Context, id string) (store.Project, error)
 	return c.store.GetProject(ctx, id)
 }
 
-// DeleteProject removes the project record and its private network.
-// Container teardown comes with the reconciler.
+// DeleteProject removes every container of the project, its record and its
+// private network.
 func (c *Core) DeleteProject(ctx context.Context, id string) error {
+	if _, err := c.store.GetProject(ctx, id); err != nil {
+		return err
+	}
+	cts, err := c.docker.ListContainers(ctx, map[string]string{docker.LabelProject: id})
+	if err != nil {
+		return err
+	}
+	for _, ct := range cts {
+		if err := c.docker.RemoveContainer(ctx, ct.ID, stopTimeout); err != nil {
+			return err
+		}
+	}
+	svcs, err := c.store.ListServices(ctx, id)
+	if err != nil {
+		return err
+	}
 	if err := c.store.DeleteProject(ctx, id); err != nil {
 		return err
 	}
+	for _, s := range svcs {
+		c.removeDeployLogs(s.ID)
+	}
 	return c.docker.RemoveNetwork(ctx, docker.ProjectNetwork(id))
 }
+
+const stopTimeout = 10 * time.Second

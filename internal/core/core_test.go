@@ -1,0 +1,105 @@
+package core
+
+import (
+	"errors"
+	"slices"
+	"testing"
+
+	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/store"
+)
+
+func TestValidateService(t *testing.T) {
+	ok := store.Service{Image: "nginx:1.27", Replicas: 1}
+	tests := []struct {
+		name    string
+		mutate  func(*store.Service)
+		wantErr bool
+	}{
+		{"private service", func(*store.Service) {}, false},
+		{"public service", func(s *store.Service) { s.Domain, s.Port = "shop.example.com", 80 }, false},
+		{"localhost subdomain", func(s *store.Service) { s.Domain, s.Port = "shop.localhost", 80 }, false},
+		{"registry image", func(s *store.Service) { s.Image = "ghcr.io/org/app@sha256:" + sha }, false},
+		{"empty image", func(s *store.Service) { s.Image = "" }, true},
+		{"uppercase image", func(s *store.Service) { s.Image = "Nginx" }, true},
+		{"domain without port", func(s *store.Service) { s.Domain = "shop.example.com" }, true},
+		{"bad domain", func(s *store.Service) { s.Domain, s.Port = "shop_example.com", 80 }, true},
+		{"domain with scheme", func(s *store.Service) { s.Domain, s.Port = "https://shop.example.com", 80 }, true},
+		{"zero replicas", func(s *store.Service) { s.Replicas = 0 }, true},
+		{"too many replicas", func(s *store.Service) { s.Replicas = maxReplicas + 1 }, true},
+		{"bad env key", func(s *store.Service) { s.Env = map[string]string{"A-B": "1"} }, true},
+		{"good env key", func(s *store.Service) { s.Env = map[string]string{"_A1": "1"} }, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := ok
+			tt.mutate(&s)
+			err := validateService(s)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("got %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil && !errors.Is(err, ErrInvalid) {
+				t.Fatalf("error should wrap ErrInvalid: %v", err)
+			}
+		})
+	}
+}
+
+const sha = "0000000000000000000000000000000000000000000000000000000000000000"
+
+func TestAppContainerSpec(t *testing.T) {
+	p := store.Project{ID: "P1", Name: "shop"}
+	svc := store.Service{
+		ID: "01ABC", ProjectID: "P1", Name: "web", Image: "nginx", Replicas: 2,
+		Env: map[string]string{"B": "2", "A": "1"},
+	}
+
+	spec := appContainerSpec(p, svc, "D1", 2)
+	if spec.Name != "shop-web-2" {
+		t.Errorf("name = %q", spec.Name)
+	}
+	if !slices.Equal(spec.Config.Env, []string{"A=1", "B=2"}) {
+		t.Errorf("env = %v, want sorted", spec.Config.Env)
+	}
+	l := spec.Config.Labels
+	if l[docker.LabelProject] != "P1" || l[docker.LabelService] != "01ABC" || l[docker.LabelReplica] != "2" || l[docker.LabelDeploy] != "D1" {
+		t.Errorf("labels = %v", l)
+	}
+	if _, ok := l["traefik.enable"]; ok {
+		t.Error("private service must not be exposed to traefik")
+	}
+	eps := spec.NetworkingConfig.EndpointsConfig
+	if len(eps) != 1 || !slices.Equal(eps[docker.ProjectNetwork("P1")].Aliases, []string{"web"}) {
+		t.Errorf("endpoints = %v", eps)
+	}
+
+	svc.Domain, svc.Port = "shop.example.com", 8080
+	spec = appContainerSpec(p, svc, "D1", 1)
+	l = spec.Config.Labels
+	if l["traefik.enable"] != "true" || l["traefik.docker.network"] != docker.ProxyNetwork {
+		t.Errorf("traefik labels missing: %v", l)
+	}
+	if l["traefik.http.routers.kipitiny-01abc.rule"] != "Host(`shop.example.com`)" {
+		t.Errorf("router rule = %q", l["traefik.http.routers.kipitiny-01abc.rule"])
+	}
+	if l["traefik.http.services.kipitiny-01abc.loadbalancer.server.port"] != "8080" {
+		t.Error("service port label wrong")
+	}
+	if _, ok := spec.NetworkingConfig.EndpointsConfig[docker.ProxyNetwork]; !ok {
+		t.Error("public service must join the proxy network")
+	}
+}
+
+func TestMasked(t *testing.T) {
+	s := store.Service{Env: map[string]string{"SECRET": "hunter2"}}
+	m := masked(s)
+	if m.Env["SECRET"] != SecretMask {
+		t.Errorf("value not masked: %v", m.Env)
+	}
+	if s.Env["SECRET"] != "hunter2" {
+		t.Error("masking mutated the original map")
+	}
+	if masked(store.Service{}).Env == nil {
+		t.Error("nil env should serialize as {}")
+	}
+}

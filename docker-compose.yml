@@ -7,6 +7,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - manager-data:/data
+    environment:
+      KIPITINY_ACME_EMAIL: ${KIPITINY_ACME_EMAIL:-}
     restart: unless-stopped
 
 volumes:

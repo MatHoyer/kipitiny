@@ -4,7 +4,9 @@ import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router";
 import "./index.css";
 import { Layout } from "./routes/Layout";
+import { Project } from "./routes/Project";
 import { Projects } from "./routes/Projects";
+import { Service } from "./routes/Service";
 
 const queryClient = new QueryClient();
 
@@ -12,7 +14,11 @@ const router = createBrowserRouter([
   {
     path: "/",
     element: <Layout />,
-    children: [{ index: true, element: <Projects /> }],
+    children: [
+      { index: true, element: <Projects /> },
+      { path: "projects/:id", element: <Project /> },
+      { path: "services/:id", element: <Service /> },
+    ],
   },
 ]);
 
