@@ -1,0 +1,56 @@
+- name: Warn about a UI without HTTPS
+  ansible.builtin.debug:
+    msg: >-
+      No kipitiny_domain: the UI is served over plain HTTP on port 3000 to
+      everyone. Set a domain (or a Cloudflare tunnel) for production.
+  when: not kipitiny_domain
+
+- name: Create {{ kipitiny_dir }}
+  ansible.builtin.file:
+    path: "{{ kipitiny_dir }}"
+    state: directory
+    mode: "0750"
+
+- name: Install the compose file
+  ansible.builtin.copy:
+    # The repository's own, so both stay in sync.
+    src: "{{ role_path }}/../../../../docker-compose.yml"
+    dest: "{{ kipitiny_dir }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Write settings
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ kipitiny_dir }}/.env"
+    mode: "0600" # may hold the tunnel token
+
+- name: Start the manager
+  community.docker.docker_compose_v2:
+    project_src: "{{ kipitiny_dir }}"
+    # Upgrades go through the UI (or `docker compose pull`), not re-runs.
+    pull: missing
+    wait: true
+    wait_timeout: 180
+
+- name: Check whether an admin account exists
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ kipitiny_ui_port | string | split(':') | last }}/api/auth/state"
+  register: kipitiny_auth
+  retries: 10
+  delay: 3
+  until: kipitiny_auth.status == 200
+
+- name: Read the first-run setup token
+  ansible.builtin.command:
+    cmd: docker compose logs manager
+    chdir: "{{ kipitiny_dir }}"
+  register: kipitiny_logs
+  changed_when: false
+  when: kipitiny_auth.json.setupRequired
+
+- name: Show how to finish the setup
+  ansible.builtin.debug:
+    msg:
+      - "Open {{ ('https://' + kipitiny_domain) if kipitiny_domain else ('http://' + inventory_hostname + ':3000') }} and create the admin account."
+      - "Setup token: {{ kipitiny_logs.stdout | regex_findall('setup_token=(\\S+)') | last }}"
+  when: kipitiny_auth.json.setupRequired

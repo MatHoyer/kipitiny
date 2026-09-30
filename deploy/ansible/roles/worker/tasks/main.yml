@@ -1,0 +1,46 @@
+- name: Check the manager's key is set
+  ansible.builtin.assert:
+    that: kipitiny_manager_ssh_key is match('^ssh-ed25519 ')
+    fail_msg: >-
+      Set kipitiny_manager_ssh_key to the key shown in the manager under
+      Settings → Servers → Add server.
+
+- name: Create the {{ worker_user }} user
+  ansible.builtin.user:
+    name: "{{ worker_user }}"
+    groups: docker
+    append: true
+    shell: /usr/sbin/nologin
+    password: "!"
+
+- name: Authorize the manager's key
+  ansible.posix.authorized_key:
+    user: "{{ worker_user }}"
+    key: "{{ kipitiny_manager_ssh_key }}"
+    exclusive: true
+
+# The manager only opens the Docker socket through SSH: no shell or TTY for
+# this user. sshd also requires TCP forwarding for socket forwarding; "local"
+# is the narrowest setting that works.
+- name: Restrict {{ worker_user }} to the Docker socket
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/20-kipitiny-worker.conf
+    content: |
+      # Managed by kipitiny's Ansible playbook.
+      Match User {{ worker_user }}
+          AllowStreamLocalForwarding local
+          AllowTcpForwarding local
+          AllowAgentForwarding no
+          X11Forwarding no
+          PermitTTY no
+          ForceCommand /usr/sbin/nologin
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload ssh
+
+- name: Show how to add this server
+  ansible.builtin.debug:
+    msg: >-
+      In the manager: Settings → Servers → Add server, host
+      {{ ansible_host | default(inventory_hostname) }}, user {{ worker_user }},
+      port {{ ansible_port | default(22) }}.

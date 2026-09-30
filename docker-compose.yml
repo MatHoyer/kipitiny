@@ -9,9 +9,10 @@ services:
     # would be undone by the next `up` with a pinned version.
     image: ghcr.io/mathoyer/kipitiny:${KIPITINY_VERSION:-latest}
     # Direct access to the UI. With KIPITINY_DOMAIN set, the UI is served over
-    # HTTPS by Traefik and this can be removed, or bound to 127.0.0.1.
+    # HTTPS by Traefik: use KIPITINY_UI_PORT=127.0.0.1:3000 (Docker's published
+    # ports bypass host firewalls like ufw).
     ports:
-      - "3000:3000"
+      - "${KIPITINY_UI_PORT:-3000}:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - manager-data:/data

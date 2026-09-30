@@ -1,0 +1,17 @@
+# Keys only, no root password login. Skipped (with a warning) when the
+# connecting user has no authorized key, so a playbook can't lock you out.
+base_ssh_harden: true
+base_login_user: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+
+# ufw: SSH is always allowed. 80/443 for Traefik, unless traffic comes through
+# a Cloudflare tunnel. Note that ports published by Docker bypass ufw.
+base_firewall: true
+base_web_ports: "{{ (kipitiny_cloudflare_tunnel_token | default('')) == '' }}"
+base_extra_ports: [] # e.g. ["8080/tcp"]
+
+base_packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - ufw
+  - unattended-upgrades

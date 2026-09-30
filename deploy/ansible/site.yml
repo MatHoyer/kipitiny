@@ -1,0 +1,22 @@
+# Prepares fresh Debian/Ubuntu servers for kipitiny.
+#   ansible-galaxy collection install -r requirements.yml
+#   ansible-playbook site.yml                 # everything
+#   ansible-playbook site.yml --limit workers # add a server later
+- name: Base system and Docker
+  hosts: all
+  become: true
+  roles:
+    - base
+    - docker
+
+- name: kipitiny manager
+  hosts: manager
+  become: true
+  roles:
+    - kipitiny
+
+- name: Remote Docker servers
+  hosts: workers
+  become: true
+  roles:
+    - worker

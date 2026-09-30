@@ -1,0 +1,6 @@
+# Restart, not reload: on Ubuntu 24.04 sshd is socket-activated. Existing
+# sessions (this one included) survive.
+- name: Reload ssh
+  ansible.builtin.service:
+    name: ssh
+    state: restarted

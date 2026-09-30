@@ -1,0 +1,100 @@
+- name: Check the OS
+  ansible.builtin.assert:
+    that: ansible_facts.os_family == "Debian"
+    fail_msg: Only Debian and Ubuntu are supported.
+
+- name: Upgrade packages
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    upgrade: safe
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ base_packages }}"
+
+- name: Enable automatic security updates
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    mode: "0644"
+
+- name: SSH hardening
+  when: base_ssh_harden
+  block:
+    - name: Look up the connecting user
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ base_login_user }}"
+
+    - name: Find their authorized keys
+      ansible.builtin.stat:
+        path: "{{ getent_passwd[base_login_user][4] }}/.ssh/authorized_keys"
+      register: base_authorized_keys
+
+    - name: Refuse to disable passwords without a key
+      ansible.builtin.debug:
+        msg: >-
+          {{ base_login_user }} has no authorized SSH key: password login stays
+          enabled. Add a key and run again.
+      when: not (base_authorized_keys.stat.exists and base_authorized_keys.stat.size > 0)
+
+    - name: Keys only, no root password login
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/10-kipitiny.conf
+        content: |
+          # Managed by kipitiny's Ansible playbook.
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PermitRootLogin prohibit-password
+        mode: "0644"
+        validate: /usr/sbin/sshd -t -f %s
+      when: base_authorized_keys.stat.exists and base_authorized_keys.stat.size > 0
+      notify: Reload ssh
+
+- name: Firewall
+  when: base_firewall
+  block:
+    # The port sshd listens on, not ansible_port: they differ behind NAT or
+    # port forwarding, and allowing the wrong one locks everyone out.
+    - name: Find sshd's ports
+      ansible.builtin.command: sshd -T
+      register: base_sshd_config
+      changed_when: false
+
+    # "allow", not "limit": with keys only there's nothing to brute-force,
+    # and limit (6 connections / 30 s) locks out Ansible's own runs.
+    - name: Allow SSH
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: "{{ base_sshd_config.stdout_lines | select('match', '^port ') | map('split') | map('last') | list }}"
+
+    - name: Allow HTTP and HTTPS
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: ["80", "443"]
+      when: base_web_ports | bool
+
+    - name: Allow extra ports
+      community.general.ufw:
+        rule: allow
+        port: "{{ item.split('/')[0] }}"
+        proto: "{{ item.split('/')[1] | default('tcp') }}"
+      loop: "{{ base_extra_ports }}"
+
+    - name: Make sure SSH stays reachable
+      ansible.builtin.assert:
+        that: base_sshd_config.stdout_lines | select('match', '^port ') | list | length > 0
+        fail_msg: Could not find sshd's port; not enabling the firewall.
+
+    - name: Enable ufw, denying other incoming traffic
+      community.general.ufw:
+        state: enabled
+        policy: deny
+        direction: incoming

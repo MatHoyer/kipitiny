@@ -1,0 +1,4 @@
+# User the manager logs in as (Settings → Servers → user).
+worker_user: kipitiny
+# The manager's public key, from Settings → Servers → Add server.
+kipitiny_manager_ssh_key: ""

@@ -1,0 +1,17 @@
+kipitiny_dir: /opt/kipitiny
+# "latest" lets the UI's update button stick; a pinned x.y.z would be restored
+# by the next `docker compose up`.
+kipitiny_version: latest
+
+# HTTPS for the UI through Traefik. DNS must point here before the first run.
+kipitiny_domain: ""
+kipitiny_acme_email: ""
+# Remotely-managed Cloudflare tunnel: no 80/443 opened (see the README).
+kipitiny_cloudflare_tunnel_token: ""
+
+# With a domain the UI is only reachable locally on 3000 (SSH tunnel), since
+# Docker's published ports would bypass the firewall.
+kipitiny_ui_port: "{{ '127.0.0.1:3000' if kipitiny_domain else '3000' }}"
+
+# Any other KIPITINY_* setting, e.g. {KIPITINY_MANAGER_BACKUP_TARGET: "..."}.
+kipitiny_env: {}

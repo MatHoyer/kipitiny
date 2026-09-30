@@ -7,7 +7,9 @@ See [docs/design.md](docs/design.md) for the full design.
 
 ## Run
 
-Only this repo's `docker-compose.yml` is needed on the server:
+To set up a fresh server (firewall, SSH hardening, Docker, kipitiny), use the
+Ansible playbook in [`deploy/ansible`](deploy/ansible/README.md). By hand, only
+this repo's `docker-compose.yml` is needed on the server:
 
 ```sh
 docker compose up -d   # http://localhost:3000

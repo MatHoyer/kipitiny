@@ -1,0 +1,6 @@
+# Shared settings; override per host in inventory.yml. Role defaults
+# (roles/*/defaults/main.yml) list every variable.
+
+# Public key of the manager (Settings → Servers → Add server), authorized on
+# workers. Needed only when there are workers.
+# kipitiny_manager_ssh_key: "ssh-ed25519 AAAA... kipitiny"
