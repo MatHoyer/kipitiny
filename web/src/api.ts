@@ -13,6 +13,7 @@ export type Container = {
   image: string;
   state: string;
   status: string;
+  health?: string;
 };
 
 export type Service = {
@@ -25,6 +26,8 @@ export type Service = {
   port: number;
   domain: string;
   env: Record<string, string>;
+  memoryMb: number;
+  databaseId: string;
   createdAt: string;
   updatedAt: string;
   containers: Container[];
@@ -32,11 +35,23 @@ export type Service = {
 
 export type ServiceInput = {
   name: string;
-  image: string;
-  replicas: number;
+  kind?: "app" | "postgres";
+  image?: string;
+  replicas?: number;
+  port?: number;
+  domain?: string;
+  env?: Record<string, string>;
+  memoryMb?: number;
+  databaseId?: string;
+};
+
+export type Connection = {
+  host: string;
   port: number;
-  domain: string;
-  env: Record<string, string>;
+  database: string;
+  user: string;
+  password: string;
+  url: string;
 };
 
 export type ServicePatch = Partial<Omit<ServiceInput, "name">>;
@@ -101,14 +116,17 @@ export const api = {
   projects: () => request<Project[]>("/projects"),
   project: (id: string) => request<Project>(`/projects/${id}`),
   createProject: (name: string) => request<Project>("/projects", json("POST", { name })),
-  deleteProject: (id: string) => request<void>(`/projects/${id}`, { method: "DELETE" }),
+  deleteProject: (id: string, confirm: string) =>
+    request<void>(`/projects/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),
 
   services: (projectId: string) => request<Service[]>(`/projects/${projectId}/services`),
   service: (id: string) => request<Service>(`/services/${id}`),
   createService: (projectId: string, input: ServiceInput) =>
     request<Service>(`/projects/${projectId}/services`, json("POST", input)),
   updateService: (id: string, patch: ServicePatch) => request<Service>(`/services/${id}`, json("PATCH", patch)),
-  deleteService: (id: string) => request<void>(`/services/${id}`, { method: "DELETE" }),
+  deleteService: (id: string, confirm = "") =>
+    request<void>(`/services/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),
+  connection: (id: string) => request<Connection>(`/services/${id}/connection`),
   serviceAction: (id: string, action: "start" | "stop" | "restart") =>
     request<Service>(`/services/${id}/${action}`, { method: "POST" }),
 

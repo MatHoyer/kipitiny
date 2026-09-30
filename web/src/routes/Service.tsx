@@ -1,15 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { api, type Deployment, type LogLine, type Service as ServiceT } from "../api";
+import { api, type Connection, type Deployment, type LogLine, type Service as ServiceT } from "../api";
 import {
   Button,
   Card,
+  confirmByName,
   ErrorText,
   Field,
   formatEnv,
   Input,
   parseEnv,
+  Select,
   serviceState,
   StateBadge,
   Textarea,
@@ -53,7 +55,7 @@ export function Service() {
     onSuccess: (svc) => qc.setQueryData(["service", id], svc),
   });
   const remove = useMutation({
-    mutationFn: () => api.deleteService(id),
+    mutationFn: (confirm: string) => api.deleteService(id, confirm),
     onSuccess: () => navigate(`/projects/${service.data?.projectId}`),
   });
 
@@ -103,7 +105,14 @@ export function Service() {
           <Button
             variant="danger"
             disabled={busy}
-            onClick={() => confirm(`Delete service ${svc.name} and its containers?`) && remove.mutate()}
+            onClick={() => {
+              if (svc.kind !== "postgres") {
+                if (confirm(`Delete service ${svc.name} and its containers?`)) remove.mutate("");
+                return;
+              }
+              const name = confirmByName(`Delete database ${svc.name}? Its data volume will be destroyed.`, svc.name);
+              if (name) remove.mutate(name);
+            }}
           >
             Delete
           </Button>
@@ -121,7 +130,7 @@ export function Service() {
                 <tr key={c.id}>
                   <td className="py-1.5 font-mono text-xs">{c.name}</td>
                   <td className="py-1.5">
-                    <StateBadge state={c.state} />
+                    <StateBadge state={c.health ?? c.state} />
                   </td>
                   <td className="py-1.5 text-xs text-zinc-500">{c.status}</td>
                 </tr>
@@ -130,6 +139,8 @@ export function Service() {
           </table>
         )}
       </Card>
+
+      {svc.kind === "postgres" && <ConnectionCard serviceId={svc.id} host={svc.name} />}
 
       {svc.containers.length > 0 && (
         // Remount (and reconnect) whenever the set of containers changes.
@@ -146,25 +157,40 @@ export function Service() {
 
 function Settings({ svc }: { svc: ServiceT }) {
   const qc = useQueryClient();
-  const initial = () => ({
+  const isDb = svc.kind === "postgres";
+  const siblings = useQuery({
+    queryKey: ["services", svc.projectId],
+    queryFn: () => api.services(svc.projectId),
+    enabled: !isDb,
+  });
+  const databases = siblings.data?.filter((s) => s.kind === "postgres") ?? [];
+  const [form, setForm] = useState(() => ({
     image: svc.image,
     domain: svc.domain,
     port: svc.port ? String(svc.port) : "",
     replicas: String(svc.replicas),
+    memory: svc.memoryMb ? String(svc.memoryMb) : "",
+    databaseId: svc.databaseId,
     env: formatEnv(svc.env),
-  });
-  const [form, setForm] = useState(initial);
+  }));
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
   const save = useMutation({
     mutationFn: () =>
-      api.updateService(svc.id, {
-        image: form.image.trim(),
-        domain: form.domain.trim(),
-        port: Number(form.port) || 0,
-        replicas: Number(form.replicas) || 1,
-        env: parseEnv(form.env),
-      }),
+      api.updateService(
+        svc.id,
+        isDb
+          ? { image: form.image.trim(), memoryMb: Number(form.memory) || 0, env: parseEnv(form.env) }
+          : {
+              image: form.image.trim(),
+              domain: form.domain.trim(),
+              port: Number(form.port) || 0,
+              replicas: Number(form.replicas) || 1,
+              memoryMb: Number(form.memory) || 0,
+              databaseId: form.databaseId,
+              env: parseEnv(form.env),
+            },
+      ),
     onSuccess: (updated) => qc.setQueryData(["service", svc.id], updated),
   });
 
@@ -176,23 +202,49 @@ function Settings({ svc }: { svc: ServiceT }) {
   return (
     <Card title="Settings">
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Image">
+        <Field label="Image" hint={isDb ? "Minor upgrades only; major versions need a dump and restore." : undefined}>
           <Input required value={form.image} onChange={set("image")} />
         </Field>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="col-span-3 sm:col-span-1">
-            <Field label="Domain">
-              <Input value={form.domain} onChange={set("domain")} placeholder="private" />
+        {!isDb && (
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-3 sm:col-span-1">
+              <Field label="Domain">
+                <Input value={form.domain} onChange={set("domain")} placeholder="private" />
+              </Field>
+            </div>
+            <Field label="Port">
+              <Input type="number" min={0} max={65535} value={form.port} onChange={set("port")} />
+            </Field>
+            <Field label="Replicas">
+              <Input type="number" min={1} max={10} value={form.replicas} onChange={set("replicas")} />
             </Field>
           </div>
-          <Field label="Port">
-            <Input type="number" min={0} max={65535} value={form.port} onChange={set("port")} />
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Memory (MB)" hint={isDb ? undefined : "Empty for no limit."}>
+            <Input type="number" min={0} step={64} value={form.memory} onChange={set("memory")} />
           </Field>
-          <Field label="Replicas">
-            <Input type="number" min={1} max={10} value={form.replicas} onChange={set("replicas")} />
-          </Field>
+          {!isDb && (
+            <Field label="Database" hint="Injects DATABASE_URL.">
+              <Select value={form.databaseId} onChange={set("databaseId")}>
+                <option value="">None</option>
+                {databases.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
         </div>
-        <Field label="Environment" hint="Hidden values (********) are kept as-is. Remove a line to delete a variable.">
+        <Field
+          label="Environment"
+          hint={
+            isDb
+              ? "POSTGRES_* credentials are fixed at creation."
+              : "Hidden values (********) are kept as-is. Remove a line to delete a variable."
+          }
+        >
           <Textarea rows={5} value={form.env} onChange={set("env")} />
         </Field>
         <div className="flex items-center gap-3">
@@ -201,6 +253,61 @@ function Settings({ svc }: { svc: ServiceT }) {
           <ErrorText error={save.error} />
         </div>
       </form>
+    </Card>
+  );
+}
+
+function ConnectionCard({ serviceId, host }: { serviceId: string; host: string }) {
+  const [conn, setConn] = useState<Connection | null>(null);
+  const reveal = useMutation({ mutationFn: () => api.connection(serviceId), onSuccess: setConn });
+  const rows: [string, string][] = conn
+    ? [
+        ["Host", `${conn.host}:${conn.port}`],
+        ["Database", conn.database],
+        ["User", conn.user],
+        ["Password", conn.password],
+        ["URL", conn.url],
+      ]
+    : [];
+  return (
+    <Card
+      title="Connection"
+      actions={
+        <Button
+          variant="secondary"
+          className="!py-0.5 text-xs"
+          onClick={() => (conn ? setConn(null) : reveal.mutate())}
+          disabled={reveal.isPending}
+        >
+          {conn ? "Hide" : "Reveal credentials"}
+        </Button>
+      }
+    >
+      {conn ? (
+        <dl className="grid grid-cols-[6rem_1fr] gap-y-1.5 text-sm">
+          {rows.map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="text-zinc-500">{k}</dt>
+              <dd className="flex items-center gap-2 font-mono text-xs break-all">
+                {v}
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(v)}
+                  className="text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                >
+                  copy
+                </button>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="text-sm text-zinc-500">
+          Reachable only inside the project at <span className="font-mono">{host}:5432</span>. Link it
+          from an app to inject <span className="font-mono">DATABASE_URL</span>.
+        </p>
+      )}
+      <ErrorText error={reveal.error} />
     </Card>
   );
 }

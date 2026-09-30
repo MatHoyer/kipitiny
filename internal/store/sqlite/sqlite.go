@@ -117,7 +117,7 @@ func (s *Store) ListServices(ctx context.Context, projectID string) ([]store.Ser
 func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Service, error) {
 	svc.UpdatedAt = now()
 	res, err := s.db.NewUpdate().Model(&svc).
-		Column("image", "replicas", "port", "domain", "env", "updated_at").
+		Column("image", "replicas", "port", "domain", "env", "memory_mb", "database_id", "updated_at").
 		WherePK().Exec(ctx)
 	if err != nil {
 		return store.Service{}, mapErr(err)

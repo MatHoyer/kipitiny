@@ -172,3 +172,44 @@ func DefaultLogConfig() container.LogConfig {
 		Config: map[string]string{"max-size": "10m", "max-file": "3"},
 	}
 }
+
+// RemoveVolume deletes a volume, ignoring ones that are already gone.
+func (c *Client) RemoveVolume(ctx context.Context, name string) error {
+	_, err := c.VolumeRemove(ctx, name, client.VolumeRemoveOptions{})
+	if err != nil && !cerrdefs.IsNotFound(err) {
+		return fmt.Errorf("remove volume %s: %w", name, err)
+	}
+	return nil
+}
+
+// WaitHealthy polls a container until its healthcheck passes. Containers
+// without a healthcheck count as healthy once running.
+func (c *Client) WaitHealthy(ctx context.Context, id string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	for {
+		res, err := c.ContainerInspect(ctx, id, client.ContainerInspectOptions{})
+		if err != nil {
+			return err
+		}
+		st := res.Container.State
+		switch {
+		case st == nil:
+		case !st.Running && st.Status != container.StateCreated:
+			return fmt.Errorf("container exited (code %d)", st.ExitCode)
+		case st.Health == nil && st.Running:
+			return nil
+		case st.Health != nil && st.Health.Status == container.Healthy:
+			return nil
+		case st.Health != nil && st.Health.Status == container.Unhealthy:
+			return errors.New("container is unhealthy")
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("not healthy after %s", timeout)
+		case <-tick.C:
+		}
+	}
+}

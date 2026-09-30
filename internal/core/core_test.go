@@ -54,7 +54,7 @@ func TestAppContainerSpec(t *testing.T) {
 		Env: map[string]string{"B": "2", "A": "1"},
 	}
 
-	spec := appContainerSpec(p, svc, "D1", 2)
+	spec := containerSpec(p, svc, nil, "D1", 2)
 	if spec.Name != "shop-web-2" {
 		t.Errorf("name = %q", spec.Name)
 	}
@@ -74,7 +74,7 @@ func TestAppContainerSpec(t *testing.T) {
 	}
 
 	svc.Domain, svc.Port = "shop.example.com", 8080
-	spec = appContainerSpec(p, svc, "D1", 1)
+	spec = containerSpec(p, svc, nil, "D1", 1)
 	l = spec.Config.Labels
 	if l["traefik.enable"] != "true" || l["traefik.docker.network"] != docker.ProxyNetwork {
 		t.Errorf("traefik labels missing: %v", l)
