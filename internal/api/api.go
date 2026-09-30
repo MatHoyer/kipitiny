@@ -37,6 +37,7 @@ func New(c *core.Core, log *slog.Logger) http.Handler {
 	mux.HandleFunc("PATCH /api/services/{id}", a.updateService)
 	mux.HandleFunc("DELETE /api/services/{id}", a.deleteService)
 	mux.HandleFunc("POST /api/services/{id}/deploy", a.deployService)
+	mux.HandleFunc("POST /api/services/{id}/rollback", a.rollbackService)
 	mux.HandleFunc("POST /api/services/{id}/{action}", a.serviceAction)
 	mux.HandleFunc("GET /api/services/{id}/deployments", a.listDeployments)
 	mux.HandleFunc("GET /api/services/{id}/logs", a.streamLogs)

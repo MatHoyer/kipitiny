@@ -31,6 +31,23 @@ docker compose exec -it manager /kipitiny reset-password admin
   database and it receives `DATABASE_URL` (an explicit `DATABASE_URL` env var wins).
 - Deleting a database or a project destroys data and must be confirmed by typing its name.
 
+## Deploys
+
+Apps deploy blue-green: every new replica starts next to the old ones, and old
+replicas are only stopped once *all* new ones are ready. If one crashes or never
+gets ready, the new containers are removed and the old version keeps serving.
+
+- **Ready** means the image's own `HEALTHCHECK` passes, or else an injected probe
+  (the manager's static binary, mounted read-only) sees the port accept
+  connections or the *health path* answer `< 400`. Traefik only routes to healthy
+  containers, so traffic never reaches a replica that isn't serving. Services
+  without a port just need to stay up for 5 s.
+- A **pre-deploy command** (e.g. migrations) runs once with `sh -c` in a one-off
+  container before any replica starts; a failure aborts the deploy.
+- Old replicas are stopped one by one and kept (stopped) until the next deploy so
+  their logs stay readable. **Roll back** redeploys an earlier image.
+- Databases are recreated in place (a volume can't be shared by two servers).
+
 ## Backups
 
 - `pg_dump -Fc` runs **inside** the database container (client always matches the

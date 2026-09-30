@@ -74,6 +74,11 @@ func (c *Core) traefikSpec() client.ContainerCreateOptions {
 		"--global.sendanonymoususage=false",
 		"--log.level=INFO",
 		"--providers.docker=true",
+		// React to container start/stop quickly (default batches for 2s).
+		"--providers.providersthrottleduration=200ms",
+		// Backends are on a local bridge: a connect that takes over a second
+		// means the container is gone, so fail fast and let retry pick another.
+		"--serverstransport.forwardingtimeouts.dialtimeout=1s",
 		"--providers.docker.exposedbydefault=false",
 		"--providers.docker.network=" + docker.ProxyNetwork,
 		// Ignore containers the manager does not own.
@@ -122,19 +127,34 @@ func (c *Core) traefikSpec() client.ContainerCreateOptions {
 // traefikLabels routes HTTPS traffic for svc.Domain to svc.Port.
 func traefikLabels(svc store.Service) map[string]string {
 	name := "kipitiny-" + strings.ToLower(svc.ID)
-	return map[string]string{
-		"traefik.enable":                                              "true",
-		"traefik.docker.network":                                      docker.ProxyNetwork,
-		"traefik.http.routers." + name + ".rule":                      "Host(`" + svc.Domain + "`)",
-		"traefik.http.routers." + name + ".entrypoints":               "websecure",
-		"traefik.http.routers." + name + ".tls.certresolver":          certResolver,
-		"traefik.http.routers." + name + ".service":                   name,
-		"traefik.http.services." + name + ".loadbalancer.server.port": fmt.Sprint(svc.Port),
+	labels := map[string]string{
+		"traefik.enable":                                "true",
+		"traefik.docker.network":                        docker.ProxyNetwork,
+		"traefik.http.routers." + name + ".rule":        "Host(`" + svc.Domain + "`)",
+		"traefik.http.routers." + name + ".entrypoints": "websecure",
+		"traefik.http.routers." + name + ".service":     name,
+		// Connection failures (a replica stopping during a rollout, before
+		// Traefik sees the event) are retried on another replica.
+		"traefik.http.routers." + name + ".middlewares":                     name + "-retry@docker",
+		"traefik.http.middlewares." + name + "-retry.retry.attempts":        "3",
+		"traefik.http.middlewares." + name + "-retry.retry.initialinterval": "100ms",
+		"traefik.http.services." + name + ".loadbalancer.server.port":       fmt.Sprint(svc.Port),
 	}
+	if isLocalDomain(svc.Domain) {
+		// Let's Encrypt can't issue for these; Traefik's default cert is used.
+		labels["traefik.http.routers."+name+".tls"] = "true"
+	} else {
+		labels["traefik.http.routers."+name+".tls.certresolver"] = certResolver
+	}
+	return labels
 }
 
 func specHash(parts ...any) string {
 	b, _ := json.Marshal(parts)
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:8])
+}
+
+func isLocalDomain(d string) bool {
+	return d == "localhost" || strings.HasSuffix(d, ".localhost")
 }

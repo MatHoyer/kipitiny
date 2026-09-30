@@ -124,7 +124,7 @@ func (s *Store) ListServices(ctx context.Context, projectID string) ([]store.Ser
 func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Service, error) {
 	svc.UpdatedAt = now()
 	res, err := s.db.NewUpdate().Model(&svc).
-		Column("image", "replicas", "port", "domain", "env", "memory_mb", "database_id", "updated_at").
+		Column("image", "replicas", "port", "domain", "env", "memory_mb", "database_id", "health_path", "pre_deploy", "updated_at").
 		WherePK().Exec(ctx)
 	if err != nil {
 		return store.Service{}, mapErr(err)
@@ -133,6 +133,18 @@ func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Ser
 		return store.Service{}, store.ErrNotFound
 	}
 	return svc, nil
+}
+
+func (s *Store) SetCurrentDeployment(ctx context.Context, serviceID, deploymentID string) error {
+	res, err := s.db.NewUpdate().Model((*store.Service)(nil)).
+		Set("current_deployment_id = ?", deploymentID).Where("id = ?", serviceID).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) DeleteService(ctx context.Context, id string) error {

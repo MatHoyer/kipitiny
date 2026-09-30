@@ -18,6 +18,7 @@ import (
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/core"
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/probe"
 	"github.com/MatHoyer/kipitiny/internal/store/sqlite"
 	"github.com/MatHoyer/kipitiny/web"
 )
@@ -28,6 +29,12 @@ func main() {
 		switch os.Args[1] {
 		case "reset-password":
 			run = resetPassword
+		case "probe":
+			// Healthcheck injected into app containers: keep it dependency-free.
+			if len(os.Args) != 3 || probe.Check(os.Args[2]) != nil {
+				os.Exit(1)
+			}
+			os.Exit(0)
 		default:
 			fmt.Fprintf(os.Stderr, "usage: %s [reset-password <username>]\n", os.Args[0])
 			os.Exit(2)

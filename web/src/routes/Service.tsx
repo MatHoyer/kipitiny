@@ -65,8 +65,9 @@ export function Service() {
   const svc = service.data;
   if (!svc) return <p className="text-sm text-zinc-500">Loading…</p>;
 
-  const state = deploying ? "deploying" : serviceState(svc.containers);
-  const allStopped = svc.containers.length > 0 && svc.containers.every((c) => c.state !== "running");
+  const state = deploying ? "deploying" : serviceState(svc.containers.filter((c) => !c.retired));
+  const active = svc.containers.filter((c) => !c.retired);
+  const allStopped = active.length > 0 && active.every((c) => c.state !== "running");
   const busy = deploying || deploy.isPending || action.isPending || remove.isPending;
 
   return (
@@ -129,8 +130,11 @@ export function Service() {
           <table className="w-full text-left text-sm">
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {svc.containers.map((c) => (
-                <tr key={c.id}>
-                  <td className="py-1.5 font-mono text-xs">{c.name}</td>
+                <tr key={c.id} className={c.retired ? "text-zinc-400" : ""}>
+                  <td className="py-1.5 font-mono text-xs">
+                    {c.name}
+                    {c.retired && <span className="ml-2 font-sans">previous deploy, kept for its logs</span>}
+                  </td>
                   <td className="py-1.5">
                     <StateBadge state={c.health ?? c.state} />
                   </td>
@@ -147,12 +151,18 @@ export function Service() {
 
       {svc.containers.length > 0 && (
         // Remount (and reconnect) whenever the set of containers changes.
-        <LiveLogs key={svc.containers.map((c) => c.id).join()} serviceId={id} />
+        <LiveLogs key={active.map((c) => c.id).join()} serviceId={id} />
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Settings svc={svc} />
-        <Deployments deployments={deployments.data ?? []} selected={selected} onSelect={setSelected} />
+        <Deployments
+          svc={svc}
+          deployments={deployments.data ?? []}
+          selected={selected}
+          onSelect={setSelected}
+          busy={busy}
+        />
       </div>
     </div>
   );
@@ -174,6 +184,8 @@ function Settings({ svc }: { svc: ServiceT }) {
     replicas: String(svc.replicas),
     memory: svc.memoryMb ? String(svc.memoryMb) : "",
     databaseId: svc.databaseId,
+    healthPath: svc.healthPath,
+    preDeploy: svc.preDeploy,
     env: formatEnv(svc.env),
   }));
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
@@ -191,6 +203,8 @@ function Settings({ svc }: { svc: ServiceT }) {
               replicas: Number(form.replicas) || 1,
               memoryMb: Number(form.memory) || 0,
               databaseId: form.databaseId,
+              healthPath: form.healthPath.trim(),
+              preDeploy: form.preDeploy.trim(),
               env: parseEnv(form.env),
             },
       ),
@@ -240,6 +254,16 @@ function Settings({ svc }: { svc: ServiceT }) {
             </Field>
           )}
         </div>
+        {!isDb && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Health path" hint="New replicas get traffic once this answers < 400. Empty: port accepts connections.">
+              <Input value={form.healthPath} onChange={set("healthPath")} placeholder="/healthz" />
+            </Field>
+            <Field label="Pre-deploy command" hint="Runs once (sh -c) before replicas start, e.g. migrations.">
+              <Input value={form.preDeploy} onChange={set("preDeploy")} placeholder="npm run migrate" className="font-mono" />
+            </Field>
+          </div>
+        )}
         <Field
           label="Environment"
           hint={
@@ -371,14 +395,26 @@ function ConnectionCard({ serviceId, host }: { serviceId: string; host: string }
 }
 
 function Deployments({
+  svc,
   deployments,
   selected,
   onSelect,
+  busy,
 }: {
+  svc: ServiceT;
   deployments: Deployment[];
   selected: string | null;
   onSelect: (id: string | null) => void;
+  busy: boolean;
 }) {
+  const qc = useQueryClient();
+  const rollback = useMutation({
+    mutationFn: (deploymentId: string) => api.rollback(svc.id, deploymentId),
+    onSuccess: (d) => {
+      onSelect(d.id);
+      qc.invalidateQueries({ queryKey: ["deployments", svc.id] });
+    },
+  });
   const current = deployments.find((d) => d.id === selected);
   return (
     <Card title="Deployments">
@@ -394,12 +430,35 @@ function Deployments({
                   className={`flex w-full items-center justify-between gap-3 px-1 py-1.5 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 ${d.id === selected ? "bg-zinc-100 dark:bg-zinc-800" : ""}`}
                 >
                   <StateBadge state={d.status} />
-                  <span className="flex-1 truncate font-mono text-xs text-zinc-500">{d.image}</span>
+                  <span className="flex-1 truncate font-mono text-xs text-zinc-500">
+                    {d.image}
+                    {d.id === svc.currentDeploymentId && (
+                      <span className="ml-2 font-sans text-emerald-600">current</span>
+                    )}
+                  </span>
+                  {svc.kind === "app" && d.status === "succeeded" && d.id !== svc.currentDeploymentId && !busy && (
+                    <span
+                      role="button"
+                      className="text-xs hover:underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (
+                          confirm(
+                            `Roll back to ${d.image}? Current settings are kept; the next regular deploy uses the image in Settings again.`,
+                          )
+                        )
+                          rollback.mutate(d.id);
+                      }}
+                    >
+                      Roll back
+                    </span>
+                  )}
                   <span className="text-xs text-zinc-500">{timeAgo(d.createdAt)}</span>
                 </button>
               </li>
             ))}
           </ul>
+          <ErrorText error={rollback.error} />
           {current && <DeploymentLog deployment={current} />}
         </div>
       )}
