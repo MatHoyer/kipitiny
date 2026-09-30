@@ -245,12 +245,25 @@ func (a *API) logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// clientIP uses the socket address only: trusting X-Forwarded-For would let
-// anyone bypass the login limiter.
+// clientIP is the socket address, except behind a proxy on a private network
+// (Traefik), where it is the last X-Forwarded-For hop: the one the proxy
+// added. Trusting the header from public peers would let anyone bypass the
+// login limiter; ignoring it behind Traefik would lock everyone out at once.
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
+	}
+	if ip := net.ParseIP(host); ip == nil || !(ip.IsPrivate() || ip.IsLoopback()) {
+		return host
+	}
+	xff := r.Header.Values("X-Forwarded-For")
+	if len(xff) == 0 {
+		return host
+	}
+	hops := strings.Split(xff[len(xff)-1], ",")
+	if last := strings.TrimSpace(hops[len(hops)-1]); net.ParseIP(last) != nil {
+		return last
 	}
 	return host
 }

@@ -2,12 +2,15 @@ services:
   manager:
     build: .
     image: kipitiny
+    # Direct access to the UI. With KIPITINY_DOMAIN set, the UI is served over
+    # HTTPS by Traefik and this can be removed, or bound to 127.0.0.1.
     ports:
       - "3000:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - manager-data:/data
     environment:
+      KIPITINY_DOMAIN: ${KIPITINY_DOMAIN:-}
       KIPITINY_ACME_EMAIL: ${KIPITINY_ACME_EMAIL:-}
     restart: unless-stopped
 

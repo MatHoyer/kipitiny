@@ -244,6 +244,9 @@ func (c *Core) validate(ctx context.Context, s store.Service) error {
 	if err := validateService(s); err != nil {
 		return err
 	}
+	if s.Domain != "" && s.Domain == c.cfg.Domain {
+		return fmt.Errorf("%w: domain %q is the manager's own", ErrInvalid, s.Domain)
+	}
 	if s.DatabaseID == "" {
 		return nil
 	}

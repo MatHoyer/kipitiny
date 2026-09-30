@@ -171,6 +171,7 @@ make docker    # image `kipitiny`
 | Env var              | Default | |
 |----------------------|---------|---|
 | `KIPITINY_ADDR`      | `:3000` | HTTP listen address |
+| `KIPITINY_DOMAIN`    | — | Serve the UI/API over HTTPS on this domain, through Traefik |
 | `KIPITINY_DATA_DIR`  | `/data` | SQLite DB, deploy logs, local backups. Local disk only. |
 | `KIPITINY_LOG_LEVEL` | `info`  | `debug`, `info`, `warn`, `error` |
 | `KIPITINY_SETUP_TOKEN` | random | Fix the first-run setup token instead of generating one |
@@ -188,6 +189,16 @@ make docker    # image `kipitiny`
 Traefik is (re)created on startup whenever its configuration changes; it keeps
 running across manager restarts. HTTP redirects to HTTPS, certificates come from
 Let's Encrypt (TLS-ALPN challenge, so port 443 must be reachable publicly).
+
+### HTTPS for the manager
+
+Set `KIPITINY_DOMAIN=kipitiny.example.com` (DNS pointing at the server) and the
+manager's Traefik routes that domain to the UI with a Let's Encrypt certificate,
+like any app. In a container, the manager attaches itself to the proxy network,
+so port 3000 no longer needs to be published: drop it from the compose file or
+bind it to `127.0.0.1` for SSH-tunnel access. Run on the host, the manager is
+reached through `host.docker.internal`, so it must listen on the Docker bridge
+(the default `:3000` does).
 
 For local testing use a `*.localhost` domain and alternate ports, e.g.
 `KIPITINY_HTTP_PORT=8081 KIPITINY_HTTPS_PORT=8443`, then

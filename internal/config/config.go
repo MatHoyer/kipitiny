@@ -11,6 +11,8 @@ import (
 type Config struct {
 	// Addr is the HTTP listen address for the UI and API.
 	Addr string
+	// Domain, if set, serves the UI and API over HTTPS through Traefik.
+	Domain string
 	// DataDir holds the SQLite database, deploy logs and local backups.
 	// Must be on a local disk (never NFS/SMB).
 	DataDir string
@@ -52,6 +54,7 @@ type Traefik struct {
 func Load() Config {
 	return Config{
 		Addr:         env("KIPITINY_ADDR", ":3000"),
+		Domain:       strings.ToLower(strings.TrimSpace(env("KIPITINY_DOMAIN", ""))),
 		DataDir:      env("KIPITINY_DATA_DIR", "/data"),
 		LogLevel:     env("KIPITINY_LOG_LEVEL", "info"),
 		SetupToken:   env("KIPITINY_SETUP_TOKEN", ""),

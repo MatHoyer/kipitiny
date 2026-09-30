@@ -94,6 +94,7 @@ Internet → Traefik ──→ app1-web        app2-web          │
 - Routing declared with labels on app containers; Traefik watches Docker and reconfigures instantly.
 - Automatic HTTPS via Let's Encrypt.
 - Separate container (not embedded) so manager restarts/updates never take apps offline.
+- The manager's own UI (`KIPITINY_DOMAIN`) is routed by a file-provider config written into the Traefik container: the manager is created outside our control (compose), so it can't carry labels. It joins `kipitiny-proxy` itself (alias `kipitiny-manager`), or is reached via `host.docker.internal` when run on the host.
 
 ```go
 Labels: map[string]string{

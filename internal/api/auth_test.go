@@ -112,3 +112,28 @@ func TestLoginRateLimit(t *testing.T) {
 	expect(t, "locked out even with the right password",
 		c.do("POST", "/api/auth/login", `{"username":"admin","password":"correct-horse"}`), 429)
 }
+
+func TestClientIP(t *testing.T) {
+	tests := []struct {
+		name, remote, xff, want string
+	}{
+		{"direct", "203.0.113.7:5000", "", "203.0.113.7"},
+		{"public peer can't spoof", "203.0.113.7:5000", "198.51.100.1", "203.0.113.7"},
+		{"behind traefik", "172.18.0.2:5000", "198.51.100.1", "198.51.100.1"},
+		{"last hop wins", "172.18.0.2:5000", "10.0.0.1, 198.51.100.1", "198.51.100.1"},
+		{"garbage header", "172.18.0.2:5000", "nope", "172.18.0.2"},
+		{"loopback without header", "127.0.0.1:5000", "", "127.0.0.1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPost, "/api/login", nil)
+			r.RemoteAddr = tt.remote
+			if tt.xff != "" {
+				r.Header.Set("X-Forwarded-For", tt.xff)
+			}
+			if got := clientIP(r); got != tt.want {
+				t.Errorf("clientIP = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

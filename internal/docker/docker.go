@@ -3,10 +3,15 @@
 package docker
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"path"
+	"slices"
+	"strings"
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
@@ -164,17 +169,64 @@ func (c *Client) EnsureImage(ctx context.Context, ref string) error {
 	return c.PullImage(ctx, ref, io.Discard)
 }
 
-// Run creates and starts a container. If start fails the container is removed.
-func (c *Client) Run(ctx context.Context, opts client.ContainerCreateOptions) (string, error) {
+// File is written into a container before it starts.
+type File struct {
+	Path    string // absolute
+	Content []byte
+}
+
+// Run creates and starts a container, first writing files into it. If
+// anything fails the container is removed.
+func (c *Client) Run(ctx context.Context, opts client.ContainerCreateOptions, files ...File) (string, error) {
 	res, err := c.ContainerCreate(ctx, opts)
 	if err != nil {
 		return "", fmt.Errorf("create container %s: %w", opts.Name, err)
 	}
-	if _, err := c.ContainerStart(ctx, res.ID, client.ContainerStartOptions{}); err != nil {
+	remove := func() {
 		_, _ = c.ContainerRemove(context.WithoutCancel(ctx), res.ID, client.ContainerRemoveOptions{Force: true})
+	}
+	if len(files) > 0 {
+		archive, err := tarFiles(files)
+		if err == nil {
+			_, err = c.CopyToContainer(ctx, res.ID, client.CopyToContainerOptions{DestinationPath: "/", Content: archive})
+		}
+		if err != nil {
+			remove()
+			return "", fmt.Errorf("copy files into %s: %w", opts.Name, err)
+		}
+	}
+	if _, err := c.ContainerStart(ctx, res.ID, client.ContainerStartOptions{}); err != nil {
+		remove()
 		return "", fmt.Errorf("start container %s: %w", opts.Name, err)
 	}
 	return res.ID, nil
+}
+
+// tarFiles archives files relative to "/", with their parent directories.
+func tarFiles(files []File) (io.Reader, error) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	dirs := map[string]bool{}
+	for _, f := range files {
+		rel := strings.TrimPrefix(path.Clean(f.Path), "/")
+		var parents []string
+		for d := path.Dir(rel); d != "." && !dirs[d]; d = path.Dir(d) {
+			dirs[d] = true
+			parents = append(parents, d)
+		}
+		for _, d := range slices.Backward(parents) {
+			if err := tw.WriteHeader(&tar.Header{Typeflag: tar.TypeDir, Name: d + "/", Mode: 0o755}); err != nil {
+				return nil, err
+			}
+		}
+		if err := tw.WriteHeader(&tar.Header{Name: rel, Mode: 0o644, Size: int64(len(f.Content))}); err != nil {
+			return nil, err
+		}
+		if _, err := tw.Write(f.Content); err != nil {
+			return nil, err
+		}
+	}
+	return &buf, tw.Close()
 }
 
 // DefaultLogConfig caps on-disk container logs (local driver is compressed).

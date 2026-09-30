@@ -1,10 +1,13 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -112,5 +115,47 @@ func TestMasked(t *testing.T) {
 	}
 	if masked(store.Service{}).Env == nil {
 		t.Error("nil env should serialize as {}")
+	}
+}
+
+func TestTraefikManagerRoute(t *testing.T) {
+	c := &Core{cfg: config.Config{Domain: "kipitiny.example.com"}}
+	opts, files := c.traefikSpec("/var/run/docker.sock", "")
+	if len(files) != 0 || slices.ContainsFunc(opts.Config.Cmd, func(a string) bool { return strings.HasPrefix(a, "--providers.file") }) {
+		t.Error("no manager URL must mean no file provider")
+	}
+
+	opts, files = c.traefikSpec("/var/run/docker.sock", "http://kipitiny-manager:3000")
+	if len(files) != 1 || !slices.Contains(opts.Config.Cmd, "--providers.file.filename="+files[0].Path) {
+		t.Fatalf("file provider not wired: %v", opts.Config.Cmd)
+	}
+	var route struct {
+		HTTP struct {
+			Routers map[string]struct {
+				Rule string
+				TLS  struct{ CertResolver string } `json:"tls"`
+			}
+			Services map[string]struct {
+				LoadBalancer struct{ Servers []struct{ URL string } }
+			}
+		}
+	}
+	if err := json.Unmarshal(files[0].Content, &route); err != nil {
+		t.Fatal(err)
+	}
+	r := route.HTTP.Routers[managerAlias]
+	if r.Rule != "Host(`kipitiny.example.com`)" || r.TLS.CertResolver != certResolver {
+		t.Errorf("router = %+v", r)
+	}
+	if s := route.HTTP.Services[managerAlias].LoadBalancer.Servers; len(s) != 1 || s[0].URL != "http://kipitiny-manager:3000" {
+		t.Errorf("servers = %+v", s)
+	}
+	if len(opts.HostConfig.ExtraHosts) != 0 {
+		t.Error("container upstream needs no host-gateway")
+	}
+
+	opts, _ = c.traefikSpec("/var/run/docker.sock", "http://host.docker.internal:3000")
+	if !slices.Equal(opts.HostConfig.ExtraHosts, []string{"host.docker.internal:host-gateway"}) {
+		t.Errorf("extra hosts = %v", opts.HostConfig.ExtraHosts)
 	}
 }
