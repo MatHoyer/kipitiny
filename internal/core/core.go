@@ -33,10 +33,12 @@ type Core struct {
 	pool  *docker.Pool
 	log   *slog.Logger
 
-	// Background work (deploys) runs under bg and is awaited on Shutdown.
+	// Background work runs under bg. On Shutdown, operations (deploys,
+	// backups) get to finish first; loops (reconciler) just stop with bg.
 	bg     context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	wg     sync.WaitGroup // all background work
+	ops    sync.WaitGroup // operations only
 	bgMu   sync.Mutex
 	closed bool
 	locks  sync.Map // service ID -> *sync.Mutex
@@ -48,6 +50,7 @@ type Core struct {
 	verifySem     chan struct{}
 	reconcileKick chan struct{}
 	probes        sync.Map // server ID -> *mount.Mount (nil: no probe there)
+	update        updateState
 }
 
 // New builds the core around the local Docker client; remote servers are
@@ -98,6 +101,9 @@ func (c *Core) bootstrapServer(ctx context.Context, sv store.Server) error {
 	if err := c.cleanupRestoreTests(ctx, dk); err != nil {
 		return err
 	}
+	if sv.Kind == store.ServerLocal {
+		c.cleanupUpdater(ctx, dk)
+	}
 	if c.cfg.Traefik.Enabled {
 		if err := c.ensureTraefik(ctx, sv); err != nil {
 			return fmt.Errorf("traefik: %w", err)
@@ -109,21 +115,47 @@ func (c *Core) bootstrapServer(ctx context.Context, sv store.Server) error {
 	return nil
 }
 
-// Shutdown cancels background work and waits for it to wind down.
+// DrainTimeout bounds how long Shutdown waits for running operations. The
+// container's stop timeout must exceed it plus shutdownCancelGrace.
+const DrainTimeout = 4*time.Minute + 30*time.Second
+
+// shutdownCancelGrace is how long cancelled work gets to clean up.
+const shutdownCancelGrace = 15 * time.Second
+
+// Shutdown refuses new operations, waits until ctx for running ones (a deploy
+// cut short by an upgrade would have to be redone), then cancels whatever is
+// left and waits briefly for it to wind down.
 func (c *Core) Shutdown(ctx context.Context) error {
 	c.stopScheduler()
 	c.bgMu.Lock()
 	c.closed = true
 	c.bgMu.Unlock()
-	c.cancel()
-	done := make(chan struct{})
-	go func() { c.wg.Wait(); close(done) }()
+
+	var err error
 	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+	case <-waitDone(&c.ops):
+	default:
+		c.log.Info("waiting for running operations to finish")
+		select {
+		case <-waitDone(&c.ops):
+		case <-ctx.Done():
+			c.log.Warn("cancelling unfinished operations")
+			err = ctx.Err()
+		}
 	}
+	c.cancel()
+	select {
+	case <-waitDone(&c.wg):
+	case <-time.After(shutdownCancelGrace):
+		err = errors.New("background work did not stop after cancellation")
+	}
+	return err
+}
+
+func waitDone(wg *sync.WaitGroup) <-chan struct{} {
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	return done
 }
 
 // BehindTunnel reports whether the manager's traffic arrives through the
@@ -137,16 +169,32 @@ func (c *Core) dockerFor(serverID string) *docker.Client {
 	return c.pool.For(serverID)
 }
 
-// goBackground runs f as tracked background work, unless shutdown started.
+// goBackground runs f as an operation that Shutdown lets finish, unless
+// shutdown started.
 func (c *Core) goBackground(f func()) error {
+	return c.track(f, true)
+}
+
+// goLoop runs f until bg is cancelled; Shutdown doesn't wait for it first.
+func (c *Core) goLoop(f func()) error {
+	return c.track(f, false)
+}
+
+func (c *Core) track(f func(), op bool) error {
 	c.bgMu.Lock()
 	defer c.bgMu.Unlock()
 	if c.closed {
 		return ErrShuttingDown
 	}
 	c.wg.Add(1)
+	if op {
+		c.ops.Add(1)
+	}
 	go func() {
 		defer c.wg.Done()
+		if op {
+			defer c.ops.Done()
+		}
 		f()
 	}()
 	return nil
@@ -164,16 +212,21 @@ func (c *Core) lockService(id string) (unlock func(), err error) {
 }
 
 type Status struct {
+	Version     string       `json:"version"`
+	Update      UpdateInfo   `json:"update"`
 	Docker      *docker.Info `json:"docker"`
 	DockerError string       `json:"dockerError,omitempty"`
 }
 
 func (c *Core) Status(ctx context.Context) Status {
+	st := Status{Version: c.cfg.Version, Update: c.Update()}
 	info, err := c.dockerFor(store.LocalServerID).Info(ctx)
 	if err != nil {
-		return Status{DockerError: err.Error()}
+		st.DockerError = err.Error()
+		return st
 	}
-	return Status{Docker: &info}
+	st.Docker = &info
+	return st
 }
 
 func (c *Core) ListProjects(ctx context.Context) ([]store.Project, error) {

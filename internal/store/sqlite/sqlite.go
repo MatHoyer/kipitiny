@@ -8,6 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pressly/goose/v3"
@@ -43,14 +48,19 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	// Single writer: serialize all access through one connection.
 	sqldb.SetMaxOpenConns(1)
 
-	if err := migrate(ctx, sqldb); err != nil {
+	if err := migrate(ctx, sqldb, path); err != nil {
 		sqldb.Close()
 		return nil, err
 	}
 	return &Store{db: bun.NewDB(sqldb, sqlitedialect.New())}, nil
 }
 
-func migrate(ctx context.Context, db *sql.DB) error {
+// keepPreMigrate is how many pre-migration snapshots are kept next to the DB.
+const keepPreMigrate = 3
+
+// migrate applies pending migrations, first snapshotting an existing database
+// to <path>.pre-migrate-<version> so an upgrade can be undone.
+func migrate(ctx context.Context, db *sql.DB, path string) error {
 	sub, err := fs.Sub(migrations, "migrations")
 	if err != nil {
 		return err
@@ -59,10 +69,40 @@ func migrate(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("goose: %w", err)
 	}
+	pending, err := p.HasPending(ctx)
+	if err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	if !pending {
+		return nil
+	}
+	if v, err := p.GetDBVersion(ctx); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	} else if v > 0 {
+		snap := fmt.Sprintf("%s.pre-migrate-%d", path, v)
+		_ = os.Remove(snap) // VACUUM INTO refuses to overwrite
+		if _, err := db.ExecContext(ctx, "VACUUM INTO ?", snap); err != nil {
+			return fmt.Errorf("snapshot before migrating: %w", err)
+		}
+		prunePreMigrate(path)
+	}
 	if _, err := p.Up(ctx); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
 	return nil
+}
+
+// prunePreMigrate keeps the newest keepPreMigrate snapshots.
+func prunePreMigrate(path string) {
+	snaps, _ := filepath.Glob(path + ".pre-migrate-*")
+	version := func(p string) int {
+		n, _ := strconv.Atoi(p[strings.LastIndex(p, "-")+1:])
+		return n
+	}
+	slices.SortFunc(snaps, func(a, b string) int { return version(b) - version(a) })
+	for _, old := range snaps[min(len(snaps), keepPreMigrate):] {
+		_ = os.Remove(old)
+	}
 }
 
 func (s *Store) Close() error { return s.db.Close() }

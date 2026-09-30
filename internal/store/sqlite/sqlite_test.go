@@ -2,10 +2,17 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
+
+	"github.com/pressly/goose/v3"
 
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -399,5 +406,62 @@ func TestServersAndSettings(t *testing.T) {
 	}
 	if v, _ := s.GetSetting(ctx, "k"); v != "b" {
 		t.Fatalf("setting upsert: %q", v)
+	}
+}
+
+func TestSnapshotBeforeMigrating(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "k.db")
+
+	// A database created by an older version: every migration but the last.
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, _ := fs.Sub(migrations, "migrations")
+	p, err := goose.NewProvider(goose.DialectSQLite3, db, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcs := p.ListSources()
+	prev := srcs[len(srcs)-2].Version
+	if _, err := p.UpTo(ctx, prev); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	snap := fmt.Sprintf("%s.pre-migrate-%d", path, prev)
+	if _, err := os.Stat(snap); err != nil {
+		t.Fatalf("no snapshot before migrating: %v", err)
+	}
+
+	// Up to date: no new snapshot.
+	os.Remove(snap)
+	s, err = Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if _, err := os.Stat(snap); !os.IsNotExist(err) {
+		t.Error("snapshot taken without pending migrations")
+	}
+}
+
+func TestPrunePreMigrate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "k.db")
+	for _, v := range []int{2, 9, 10, 11, 12} {
+		os.WriteFile(fmt.Sprintf("%s.pre-migrate-%d", path, v), nil, 0o600)
+	}
+	prunePreMigrate(path)
+	left, _ := filepath.Glob(path + ".pre-migrate-*")
+	slices.Sort(left)
+	want := []string{path + ".pre-migrate-10", path + ".pre-migrate-11", path + ".pre-migrate-12"}
+	if !slices.Equal(left, want) {
+		t.Errorf("left %v, want %v", left, want)
 	}
 }

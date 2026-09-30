@@ -7,8 +7,10 @@ See [docs/design.md](docs/design.md) for the full design.
 
 ## Run
 
+Only this repo's `docker-compose.yml` is needed on the server:
+
 ```sh
-docker compose up -d --build   # http://localhost:3000
+docker compose up -d   # http://localhost:3000
 ```
 
 The manager controls the host Docker daemon through the mounted socket.
@@ -21,6 +23,35 @@ the admin account. Forgot the password?
 ```sh
 docker compose exec -it manager /kipitiny reset-password admin
 ```
+
+## Upgrading
+
+The sidebar shows **Update available** when a newer version is published
+(checked every 6 hours); **Update now** installs it. Or from the shell:
+
+```sh
+docker compose pull && docker compose up -d
+```
+
+Either way only the manager restarts: apps, databases and Traefik keep running.
+Running deploys and backups finish first (up to 5 minutes), and before database
+migrations the manager keeps a copy of its state as
+`/data/kipitiny.db.pre-migrate-<version>` (last 3 kept).
+
+The UI update pulls the new image and starts a short-lived `kipitiny-updater`
+container that swaps the manager's container, keeping its configuration,
+volumes and networks. If the new version isn't healthy within 3 minutes, the
+previous one is restored; the updater's output ends up in the manager's log.
+It needs the manager to run in Docker, and a compose file on `latest` (with a
+pinned `KIPITINY_VERSION`, the next `up` goes back to that version).
+
+### Releasing
+
+Push a tag `x.y.z` (no `v`): GitHub Actions publishes
+`ghcr.io/mathoyer/kipitiny:x.y.z` and `:latest` for amd64 and arm64, and a
+GitHub release. After the first release, make the package public (GitHub →
+Packages → kipitiny → Package settings), or managers can neither see nor pull
+updates.
 
 ## Services
 
@@ -163,7 +194,8 @@ make dev-ui    # Vite on :5173, proxies /api to :8080
 make test      # go test ./...
 make lint      # go vet + tsc
 make build     # UI + static binary in bin/
-make docker    # image `kipitiny`
+make docker    # images `kipitiny` and `ghcr.io/mathoyer/kipitiny:dev`
+KIPITINY_VERSION=dev docker compose up -d   # run that build
 ```
 
 ## Configuration
@@ -172,6 +204,8 @@ make docker    # image `kipitiny`
 |----------------------|---------|---|
 | `KIPITINY_ADDR`      | `:3000` | HTTP listen address |
 | `KIPITINY_DOMAIN`    | — | Serve the UI/API over HTTPS on this domain, through Traefik |
+| `KIPITINY_IMAGE`     | `ghcr.io/mathoyer/kipitiny` | Where new versions are looked up and pulled |
+| `KIPITINY_UPDATE_CHECK` | `on` | `off` stops looking for new versions |
 | `KIPITINY_DATA_DIR`  | `/data` | SQLite DB, deploy logs, local backups. Local disk only. |
 | `KIPITINY_LOG_LEVEL` | `info`  | `debug`, `info`, `warn`, `error` |
 | `KIPITINY_SETUP_TOKEN` | random | Fix the first-run setup token instead of generating one |

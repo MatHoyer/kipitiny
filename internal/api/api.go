@@ -28,6 +28,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("POST /api/auth/login", a.login)
 	mux.HandleFunc("POST /api/auth/logout", a.logout)
 	mux.HandleFunc("GET /api/status", a.status)
+	mux.HandleFunc("POST /api/update", a.applyUpdate)
 	mux.HandleFunc("GET /api/projects", a.listProjects)
 	mux.HandleFunc("POST /api/projects", a.createProject)
 	mux.HandleFunc("GET /api/projects/{id}", a.getProject)
@@ -90,6 +91,15 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) status(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a.core.Status(r.Context()))
+}
+
+func (a *API) applyUpdate(w http.ResponseWriter, r *http.Request) {
+	info, err := a.core.ApplyUpdate(r.Context())
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, info)
 }
 
 func (a *API) listProjects(w http.ResponseWriter, r *http.Request) {

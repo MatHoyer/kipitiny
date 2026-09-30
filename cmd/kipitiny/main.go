@@ -39,6 +39,9 @@ func main() {
 				os.Exit(1)
 			}
 			os.Exit(0)
+		case "self-update":
+			// Run by the updater container the manager starts (core.ApplyUpdate).
+			run = selfUpdate
 		case "healthcheck":
 			// Docker HEALTHCHECK for the manager image, which has no curl.
 			if probe.Check(healthURL(config.Load().Addr)) != nil {
@@ -58,6 +61,7 @@ func main() {
 
 func serve() error {
 	cfg := config.Load()
+	cfg.Version = version
 
 	var level slog.Level
 	if err := level.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
@@ -98,6 +102,9 @@ func serve() error {
 	if err := c.StartReconciler(ctx); err != nil {
 		return err
 	}
+	if err := c.StartUpdateChecker(); err != nil {
+		return err
+	}
 
 	mux := http.NewServeMux()
 	a := api.New(c, log)
@@ -129,13 +136,31 @@ func serve() error {
 		log.Info("shutting down")
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	httpCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	srvErr := srv.Shutdown(shutdownCtx)
-	if err := c.Shutdown(shutdownCtx); err != nil {
+	srvErr := srv.Shutdown(httpCtx)
+	// Running deploys and backups get to finish, within Docker's stop timeout
+	// (stop_grace_period in the compose file; the updater uses the same).
+	drainCtx, cancelDrain := context.WithTimeout(context.Background(), core.DrainTimeout)
+	defer cancelDrain()
+	if err := c.Shutdown(drainCtx); err != nil {
 		log.Warn("background work did not stop in time", "err", err)
 	}
 	return srvErr
+}
+
+// selfUpdate replaces the manager container os.Args[2] with image os.Args[3].
+func selfUpdate() error {
+	if len(os.Args) != 4 {
+		return errors.New("usage: self-update <container> <image>")
+	}
+	dc, err := docker.New()
+	if err != nil {
+		return err
+	}
+	defer dc.Close()
+	logf := func(format string, args ...any) { slog.Info(fmt.Sprintf(format, args...)) }
+	return dc.ReplaceContainer(context.Background(), os.Args[2], os.Args[3], core.StopTimeout, core.UpdateHealthTimeout, logf)
 }
 
 // healthURL is the manager's health endpoint as seen from inside its container.

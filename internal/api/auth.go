@@ -26,7 +26,8 @@ var publicRoutes = map[string]bool{
 // sessionOnly routes can't be used with an API token (a token must not mint
 // tokens or act as a signed-in user).
 func sessionOnly(pattern string) bool {
-	return strings.Contains(pattern, "/api/auth/") || strings.Contains(pattern, "/api/tokens")
+	return strings.Contains(pattern, "/api/auth/") || strings.Contains(pattern, "/api/tokens") ||
+		pattern == "POST /api/update"
 }
 
 // deployRoutes are the mutations a deploy-scoped token may perform.

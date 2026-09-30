@@ -201,7 +201,21 @@ export type User = { id: string; username: string; createdAt: string };
 
 export type AuthState = { setupRequired: boolean; user?: User };
 
+export type UpdateInfo = {
+  current: string;
+  latest?: string;
+  available: boolean;
+  /** False when the manager can't replace itself; reason says why. */
+  canApply: boolean;
+  reason?: string;
+  updating: boolean;
+  checkedAt?: string;
+  error?: string;
+};
+
 export type Status = {
+  version: string;
+  update: UpdateInfo;
   docker?: { version: string; apiVersion: string; os: string; arch: string };
   dockerError?: string;
 };
@@ -241,6 +255,7 @@ export const api = {
   logout: () => request<void>("/auth/logout", { method: "POST" }),
 
   status: () => request<Status>("/status"),
+  applyUpdate: () => request<UpdateInfo>("/update", { method: "POST" }),
 
   projects: () => request<Project[]>("/projects"),
   project: (id: string) => request<Project>(`/projects/${id}`),

@@ -4,6 +4,7 @@ import {
   ChevronsUpDown,
   DatabaseBackup,
   FolderKanban,
+  LoaderCircle,
   LogOut,
   Monitor,
   Moon,
@@ -12,7 +13,11 @@ import {
   SunMoon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -77,6 +82,7 @@ function App({ username }: { username: string }) {
           <ProjectsNav />
         </SidebarContent>
         <SidebarFooter>
+          <UpdateNotice />
           <DockerStatus />
           <NavUser username={username} />
         </SidebarFooter>
@@ -133,13 +139,104 @@ function ProjectsNav() {
   );
 }
 
+const UPDATE_GIVE_UP_MS = 10 * 60_000;
+
+/** Offers a newer published version and follows the manager's restart. */
+function UpdateNotice() {
+  const status = useQuery({ queryKey: ["status"], queryFn: api.status, refetchInterval: 15_000 });
+  const update = status.data?.update;
+  const [waiting, setWaiting] = useState(false);
+  const from = useRef("");
+  const apply = useMutation({
+    mutationFn: api.applyUpdate,
+    onSuccess: (u) => {
+      from.current = u.current;
+      setWaiting(true);
+    },
+  });
+  const updating = waiting || !!update?.updating;
+
+  // The manager goes away while it's replaced: reload once another version
+  // answers. The same version answering after an outage means the new one
+  // failed its health check and the previous one was restored.
+  useEffect(() => {
+    if (!updating) return;
+    const start = Date.now();
+    const version = from.current || update?.current;
+    let wentDown = false;
+    const stop = (message: string) => {
+      setWaiting(false);
+      toast.error(message, { description: "The manager's log has the details." });
+    };
+    const id = setInterval(async () => {
+      try {
+        const s = await api.status();
+        if (s.version !== version) return window.location.reload();
+        if (wentDown) stop("The update failed; the previous version was restored");
+        else if (!s.update.updating && s.update.error) setWaiting(false);
+      } catch {
+        wentDown = true;
+      }
+      if (Date.now() - start > UPDATE_GIVE_UP_MS) stop("The update is taking too long");
+    }, 3000);
+    return () => clearInterval(id);
+  }, [updating]); // runs per update attempt, not per status refresh
+
+  if (!update || (!update.available && !updating)) return null;
+  return (
+    <div className="mx-2 rounded-lg border bg-sidebar-accent/50 p-3 text-xs">
+      {updating ? (
+        <div className="flex items-center gap-2">
+          <LoaderCircle className="size-3.5 shrink-0 animate-spin" />
+          <span>Updating to {update.latest}… The page reloads when it's done.</span>
+        </div>
+      ) : (
+        <>
+          <div className="text-sm font-medium">Update available</div>
+          <div className="text-muted-foreground">
+            {update.current} → {update.latest} ·{" "}
+            <a
+              className="underline underline-offset-2"
+              href={`https://github.com/MatHoyer/kipitiny/releases/tag/${update.latest}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              notes
+            </a>
+          </div>
+          {update.canApply ? (
+            <ConfirmDialog
+              trigger={
+                <Button size="sm" className="mt-2 w-full" disabled={apply.isPending}>
+                  Update now
+                </Button>
+              }
+              title={`Update to ${update.latest}?`}
+              description="The manager restarts on the new version. Apps, databases and Traefik keep running, and running deploys finish first. If the new version doesn't start, the previous one is restored."
+              confirmLabel="Update"
+              destructive={false}
+              onConfirm={() => apply.mutate()}
+            />
+          ) : (
+            <div className="mt-1 text-muted-foreground">{update.reason}</div>
+          )}
+          {update.error && <div className="mt-1 text-destructive">{update.error}</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
 function DockerStatus() {
   const status = useQuery({ queryKey: ["status"], queryFn: api.status, refetchInterval: 15_000 });
   const docker = status.data?.docker;
   return (
     <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground" title={status.data?.dockerError}>
       <span className={cn("size-2 shrink-0 rounded-full", docker ? "bg-emerald-500" : "bg-red-500")} />
-      <span className="truncate">{docker ? `Docker ${docker.version}` : "Docker unreachable"}</span>
+      <span className="truncate">
+        {status.data && `kipitiny ${status.data.version} · `}
+        {docker ? `Docker ${docker.version}` : "Docker unreachable"}
+      </span>
     </div>
   );
 }

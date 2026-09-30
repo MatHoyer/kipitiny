@@ -27,7 +27,7 @@ const (
 // It runs every 30 s, after changes, and when a managed container dies or
 // disappears.
 func (c *Core) StartReconciler(ctx context.Context) error {
-	return c.goBackground(func() {
+	return c.goLoop(func() {
 		watchers := map[string]context.CancelFunc{}
 		defer func() {
 			for _, stop := range watchers {
@@ -152,6 +152,9 @@ func (c *Core) reconcileServer(ctx context.Context, sv store.Server, svcs []stor
 		if err := c.ensureTunnel(ctx, sv); err != nil {
 			c.log.Warn("reconcile: cloudflared", "server", sv.Name, "err", err)
 		}
+	}
+	if sv.Kind == store.ServerLocal {
+		c.cleanupUpdater(ctx, dk)
 	}
 	all, err := dk.ListContainers(ctx, map[string]string{docker.LabelManaged: "true"})
 	if err != nil {

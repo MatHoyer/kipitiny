@@ -26,9 +26,21 @@ type Config struct {
 	// BuilderImage runs `docker build` for git services (BuildKit via the CLI).
 	BuilderImage string
 
+	// Version is the running build (set by main, not the environment).
+	Version string
+	Update  Update
+
 	Traefik       Traefik
 	Tunnel        Tunnel
 	ManagerBackup ManagerBackup
+}
+
+// Update is where the manager looks for new versions of itself.
+type Update struct {
+	// Image is the published manager image, without tag.
+	Image string
+	// Check is false when KIPITINY_UPDATE_CHECK=off.
+	Check bool
 }
 
 // Tunnel receives public traffic through a Cloudflare Tunnel instead of
@@ -75,6 +87,10 @@ func Load() Config {
 			HTTPSPort:    env("KIPITINY_HTTPS_PORT", "443"),
 			ACMEEmail:    env("KIPITINY_ACME_EMAIL", ""),
 			DockerSocket: env("KIPITINY_DOCKER_SOCKET", "/var/run/docker.sock"),
+		},
+		Update: Update{
+			Image: env("KIPITINY_IMAGE", "ghcr.io/mathoyer/kipitiny"),
+			Check: !strings.EqualFold(env("KIPITINY_UPDATE_CHECK", "on"), "off"),
 		},
 		Tunnel: Tunnel{
 			Token: env("KIPITINY_CLOUDFLARE_TUNNEL_TOKEN", ""),

@@ -1,7 +1,13 @@
+# Production: `docker compose up -d`. Upgrade from the UI, or with
+# `docker compose pull && docker compose up -d`.
+# Local build: `make docker`, then `KIPITINY_VERSION=dev docker compose up -d`.
+name: kipitiny
+
 services:
   manager:
-    build: .
-    image: kipitiny
+    # Pin with KIPITINY_VERSION=1.2.3 to upgrade only by hand: a UI update
+    # would be undone by the next `up` with a pinned version.
+    image: ghcr.io/mathoyer/kipitiny:${KIPITINY_VERSION:-latest}
     # Direct access to the UI. With KIPITINY_DOMAIN set, the UI is served over
     # HTTPS by Traefik and this can be removed, or bound to 127.0.0.1.
     ports:
@@ -13,6 +19,9 @@ services:
       KIPITINY_DOMAIN: ${KIPITINY_DOMAIN:-}
       KIPITINY_ACME_EMAIL: ${KIPITINY_ACME_EMAIL:-}
       KIPITINY_CLOUDFLARE_TUNNEL_TOKEN: ${KIPITINY_CLOUDFLARE_TUNNEL_TOKEN:-}
+    # Running deploys and backups finish before the manager stops
+    # (core.StopTimeout).
+    stop_grace_period: 5m
     restart: unless-stopped
 
 volumes:
