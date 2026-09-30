@@ -89,13 +89,14 @@ func (c *Core) verify(ctx context.Context, b store.Backup) (store.VerificationDe
 	if err != nil {
 		return d, err
 	}
-	image := c.verifyImage(ctx, b)
-	if err := c.docker.EnsureImage(ctx, image); err != nil {
+	image, serverID := c.verifyImage(ctx, b)
+	dk := c.dockerFor(serverID)
+	if err := dk.EnsureImage(ctx, image); err != nil {
 		return d, fmt.Errorf("pull %s: %w", image, err)
 	}
 
 	const user, db = "app", "app"
-	id, err := c.docker.Run(ctx, client.ContainerCreateOptions{
+	id, err := dk.Run(ctx, client.ContainerCreateOptions{
 		Name: "kipitiny-verify-" + strings.ToLower(b.ID),
 		Config: &container.Config{
 			Image: image,
@@ -119,11 +120,11 @@ func (c *Core) verify(ctx context.Context, b store.Backup) (store.VerificationDe
 	}
 	defer func() {
 		// The data directory is an anonymous volume: remove it too.
-		if err := c.docker.RemoveContainerAndVolumes(context.WithoutCancel(ctx), id); err != nil {
+		if err := dk.RemoveContainerAndVolumes(context.WithoutCancel(ctx), id); err != nil {
 			c.log.Warn("cannot remove restore test container", "id", id[:12], "err", err)
 		}
 	}()
-	if err := c.docker.WaitHealthy(ctx, id, postgresReadyTimeout); err != nil {
+	if err := dk.WaitHealthy(ctx, id, postgresReadyTimeout); err != nil {
 		return d, fmt.Errorf("throwaway server: %w", err)
 	}
 
@@ -132,7 +133,7 @@ func (c *Core) verify(ctx context.Context, b store.Backup) (store.VerificationDe
 		return d, fmt.Errorf("open backup: %w", err)
 	}
 	defer rc.Close()
-	if err := c.pgRestore(ctx, id, user, db, rc, target, b); err != nil {
+	if err := c.pgRestore(ctx, dk, id, user, db, rc, target, b); err != nil {
 		return d, err
 	}
 
@@ -142,7 +143,7 @@ SELECT (SELECT count(*) FROM pg_stat_user_tables),
        (SELECT coalesce(sum(n_live_tup), 0) FROM pg_stat_user_tables),
        pg_database_size(current_database());`
 	var out strings.Builder
-	if err := c.docker.Exec(ctx, id, docker.ExecOptions{
+	if err := dk.Exec(ctx, id, docker.ExecOptions{
 		Cmd:    []string{"psql", "-U", user, "-d", db, "-v", "ON_ERROR_STOP=1", "-tAq", "-c", query},
 		Stdout: &out,
 	}); err != nil {
@@ -171,27 +172,33 @@ func parseVerifyOutput(s string) (store.VerificationDetails, error) {
 	return d, nil
 }
 
-// verifyImage uses the database's own image when it still exists and runs
-// the backup's major version, otherwise the official image of that major.
-func (c *Core) verifyImage(ctx context.Context, b store.Backup) string {
+// verifyImage picks where and with what a restore test runs: on the
+// database's server with its own image when it still exists and runs the
+// backup's major version, otherwise here with the official image of that major.
+func (c *Core) verifyImage(ctx context.Context, b store.Backup) (image, serverID string) {
 	major := pgMajorFromVersion(b.PGVersion)
-	if svc, err := c.store.GetService(ctx, b.ServiceID); err == nil && postgresMajor(svc.Image) == major {
-		return svc.Image
+	svc, err := c.store.GetService(ctx, b.ServiceID)
+	if err == nil && postgresMajor(svc.Image) == major {
+		return svc.Image, svc.ServerID
+	}
+	serverID = store.LocalServerID
+	if err == nil {
+		serverID = svc.ServerID
 	}
 	if major == 0 {
-		return DefaultPostgresImage
+		return DefaultPostgresImage, serverID
 	}
-	return fmt.Sprintf("postgres:%d-alpine", major)
+	return fmt.Sprintf("postgres:%d-alpine", major), serverID
 }
 
 // cleanupRestoreTests removes throwaway containers left by a crash.
-func (c *Core) cleanupRestoreTests(ctx context.Context) error {
-	cts, err := c.docker.ListContainers(ctx, map[string]string{docker.LabelComponent: verifyComponent})
+func (c *Core) cleanupRestoreTests(ctx context.Context, dk *docker.Client) error {
+	cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: verifyComponent})
 	if err != nil {
 		return err
 	}
 	for _, ct := range cts {
-		if err := c.docker.RemoveContainerAndVolumes(ctx, ct.ID); err != nil {
+		if err := dk.RemoveContainerAndVolumes(ctx, ct.ID); err != nil {
 			return err
 		}
 	}

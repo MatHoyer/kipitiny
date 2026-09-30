@@ -10,6 +10,8 @@ import (
 
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/client"
+
+	"github.com/MatHoyer/kipitiny/internal/docker"
 )
 
 type LogLine struct {
@@ -41,8 +43,9 @@ func (c *Core) StreamLogs(ctx context.Context, serviceID string, tail int, emit 
 	var wg sync.WaitGroup
 	for _, ct := range cts {
 		name := strings.TrimPrefix(ct.Names[0], "/")
+		dk := c.dockerFor(svc.ServerID)
 		wg.Go(func() {
-			if err := c.followContainer(ctx, ct.ID, name, tail, lines); err != nil && ctx.Err() == nil {
+			if err := followContainer(ctx, dk, ct.ID, name, tail, lines); err != nil && ctx.Err() == nil {
 				c.log.Debug("log stream ended", "container", name, "err", err)
 			}
 		})
@@ -62,8 +65,8 @@ func (c *Core) StreamLogs(ctx context.Context, serviceID string, tail int, emit 
 	}
 }
 
-func (c *Core) followContainer(ctx context.Context, id, name string, tail int, out chan<- LogLine) error {
-	rc, err := c.docker.ContainerLogs(ctx, id, client.ContainerLogsOptions{
+func followContainer(ctx context.Context, dk *docker.Client, id, name string, tail int, out chan<- LogLine) error {
+	rc, err := dk.ContainerLogs(ctx, id, client.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     true,
@@ -107,7 +110,7 @@ func (c *Core) RecentLogs(ctx context.Context, serviceID string, tail int) ([]Lo
 	}
 	var lines []LogLine
 	for _, ct := range cts {
-		rc, err := c.docker.ContainerLogs(ctx, ct.ID, client.ContainerLogsOptions{
+		rc, err := c.dockerFor(svc.ServerID).ContainerLogs(ctx, ct.ID, client.ContainerLogsOptions{
 			ShowStdout: true, ShowStderr: true, Tail: strconv.Itoa(tail),
 		})
 		if err != nil {

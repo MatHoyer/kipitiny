@@ -299,7 +299,7 @@ func (t *tools) findOrCreateProject(ctx context.Context, name string) (store.Pro
 			return p, nil
 		}
 	}
-	return t.c.CreateProject(ctx, name)
+	return t.c.CreateProject(ctx, name, "")
 }
 
 type rollbackIn struct {

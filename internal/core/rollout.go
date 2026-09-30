@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"sync"
 	"time"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
@@ -45,13 +43,14 @@ func (c *Core) preDeploy(ctx context.Context, project store.Project, svc store.S
 	delete(spec.NetworkingConfig.EndpointsConfig, docker.ProxyNetwork)
 
 	logf("Running pre-deploy command: %s", svc.PreDeploy)
-	id, err := c.docker.Run(ctx, spec)
+	dk := c.dockerFor(svc.ServerID)
+	id, err := dk.Run(ctx, spec)
 	if err != nil {
 		return fmt.Errorf("pre-deploy: %w", err)
 	}
-	defer c.docker.RemoveContainer(context.WithoutCancel(ctx), id, stopTimeout)
+	defer dk.RemoveContainer(context.WithoutCancel(ctx), id, stopTimeout)
 
-	wait := c.docker.ContainerWait(ctx, id, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
+	wait := dk.ContainerWait(ctx, id, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
 	var code int64
 	select {
 	case res := <-wait.Result:
@@ -59,7 +58,7 @@ func (c *Core) preDeploy(ctx context.Context, project store.Project, svc store.S
 	case err := <-wait.Error:
 		return fmt.Errorf("pre-deploy: %w", err)
 	}
-	c.copyContainerLogs(ctx, []string{id}, out)
+	copyContainerLogs(ctx, dk, []string{id}, out)
 	if code != 0 {
 		return fmt.Errorf("pre-deploy command exited with code %d", code)
 	}
@@ -70,14 +69,14 @@ func (c *Core) preDeploy(ctx context.Context, project store.Project, svc store.S
 // waitReady waits until a new replica can take traffic: its healthcheck
 // (image or injected probe) passes, or, without one, it stays up for a few
 // seconds. A container that exits or restarts fails immediately.
-func (c *Core) waitReady(ctx context.Context, svc store.Service, id string) error {
+func (c *Core) waitReady(ctx context.Context, dk *docker.Client, id string) error {
 	ctx, cancel := context.WithTimeout(ctx, readyTimeout)
 	defer cancel()
 	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
 	var stableSince time.Time
 	for {
-		res, err := c.docker.ContainerInspect(ctx, id, client.ContainerInspectOptions{})
+		res, err := dk.ContainerInspect(ctx, id, client.ContainerInspectOptions{})
 		if err != nil {
 			return err
 		}
@@ -115,28 +114,12 @@ func exitCode(st *container.State) int {
 	return st.ExitCode
 }
 
-// selfContainer returns the manager's container ID when it runs in Docker
-// (the default hostname of a container is its short ID).
-func (c *Core) selfContainer(ctx context.Context) string {
-	c.selfOnce.Do(func() {
-		host, err := os.Hostname()
-		if err != nil {
-			return
-		}
-		res, err := c.docker.ContainerInspect(ctx, host, client.ContainerInspectOptions{})
-		if err == nil {
-			c.self = res.Container.ID
-		}
-	})
-	return c.self
-}
-
 // copyContainerLogs appends the last lines of containers' logs to the
 // deploy log, so a failed rollout shows why.
-func (c *Core) copyContainerLogs(ctx context.Context, ids []string, out io.Writer) {
+func copyContainerLogs(ctx context.Context, dk *docker.Client, ids []string, out io.Writer) {
 	ctx = context.WithoutCancel(ctx)
 	for _, id := range ids {
-		rc, err := c.docker.ContainerLogs(ctx, id, client.ContainerLogsOptions{
+		rc, err := dk.ContainerLogs(ctx, id, client.ContainerLogsOptions{
 			ShowStdout: true, ShowStderr: true, Tail: "50",
 		})
 		if err != nil {
@@ -146,9 +129,4 @@ func (c *Core) copyContainerLogs(ctx context.Context, ids []string, out io.Write
 		_, _ = stdcopy.StdCopy(out, out, rc)
 		rc.Close()
 	}
-}
-
-type selfState struct {
-	selfOnce sync.Once
-	self     string
 }

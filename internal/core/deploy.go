@@ -136,6 +136,7 @@ func (c *Core) runDeploy(project store.Project, svc store.Service, dep store.Dep
 func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Service, dep store.Deployment,
 	out io.Writer, logf func(string, ...any)) error {
 
+	dk := c.dockerFor(svc.ServerID)
 	var db *store.Service
 	if svc.DatabaseID != "" {
 		d, err := c.store.GetService(ctx, svc.DatabaseID)
@@ -157,12 +158,12 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 			return err
 		}
 	case isBuiltImage(svc.Image): // rollback to an earlier build: local only
-		if _, err := c.docker.ImageInspect(ctx, svc.Image); err != nil {
+		if _, err := dk.ImageInspect(ctx, svc.Image); err != nil {
 			return fmt.Errorf("build %s is no longer available: %w", svc.Image, err)
 		}
 	default:
 		logf("Pulling %s", svc.Image)
-		if err := c.docker.PullImage(ctx, svc.Image, out); err != nil {
+		if err := dk.PullImage(ctx, svc.Image, out); err != nil {
 			return fmt.Errorf("pull %s: %w", svc.Image, err)
 		}
 	}
@@ -190,24 +191,25 @@ func isBuiltImage(image string) bool {
 func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Service, dep store.Deployment,
 	logf func(string, ...any)) error {
 
+	dk := c.dockerFor(svc.ServerID)
 	existing, err := c.serviceContainers(ctx, svc)
 	if err != nil {
 		return err
 	}
 	for _, old := range existing {
 		logf("Stopping %s", old.Names[0][1:])
-		if err := c.docker.RemoveContainer(ctx, old.ID, stopTimeoutFor(svc)); err != nil {
+		if err := dk.RemoveContainer(ctx, old.ID, stopTimeoutFor(svc)); err != nil {
 			return err
 		}
 	}
 	spec := containerSpec(project, svc, nil, dep.ID, 1)
 	logf("Starting %s", spec.Name)
-	id, err := c.docker.Run(ctx, spec)
+	id, err := dk.Run(ctx, spec)
 	if err != nil {
 		return err
 	}
 	logf("Waiting for postgres to accept connections")
-	if err := c.docker.WaitHealthy(ctx, id, postgresReadyTimeout); err != nil {
+	if err := dk.WaitHealthy(ctx, id, postgresReadyTimeout); err != nil {
 		return fmt.Errorf("postgres did not become ready: %w", err)
 	}
 	if err := c.store.SetServiceStopped(ctx, svc.ID, false); err != nil {
@@ -222,6 +224,7 @@ func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Se
 func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Service, db *store.Service,
 	dep store.Deployment, out io.Writer, logf func(string, ...any)) error {
 
+	dk := c.dockerFor(svc.ServerID)
 	existing, err := c.serviceContainers(ctx, svc)
 	if err != nil {
 		return err
@@ -234,7 +237,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 		}
 		// Retired by an earlier deploy (kept for its logs) or left by a failed one.
 		logf("Removing retired container %s", ct.Names[0][1:])
-		if err := c.docker.RemoveContainer(ctx, ct.ID, stopTimeout); err != nil {
+		if err := dk.RemoveContainer(ctx, ct.ID, stopTimeout); err != nil {
 			return err
 		}
 	}
@@ -253,13 +256,13 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 	var started []string
 	cleanup := func() {
 		for _, id := range started {
-			_ = c.docker.RemoveContainer(context.WithoutCancel(ctx), id, stopTimeout)
+			_ = dk.RemoveContainer(context.WithoutCancel(ctx), id, stopTimeout)
 		}
 	}
 	for i := 1; i <= svc.Replicas; i++ {
 		spec := replicaSpec(project, svc, db, dep.ID, i, probe)
 		logf("Starting %s", spec.Name)
-		id, err := c.docker.Run(ctx, spec)
+		id, err := dk.Run(ctx, spec)
 		if err != nil {
 			cleanup()
 			return err
@@ -270,7 +273,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 	logf("Waiting for %d new replica(s) to become ready (%s)", len(started), readinessMode(svc))
 	errs := make(chan error, len(started))
 	for _, id := range started {
-		go func() { errs <- c.waitReady(ctx, svc, id) }()
+		go func() { errs <- c.waitReady(ctx, dk, id) }()
 	}
 	var readyErr error
 	for range started {
@@ -279,7 +282,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 		}
 	}
 	if readyErr != nil {
-		c.copyContainerLogs(ctx, started, out)
+		copyContainerLogs(ctx, dk, started, out)
 		logf("Rolling back: removing new containers, the previous version keeps serving")
 		cleanup()
 		return fmt.Errorf("new version not ready: %w", readyErr)
@@ -302,7 +305,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 			time.Sleep(retireGap)
 		}
 		logf("Retiring %s", old.Names[0][1:])
-		if _, err := c.docker.ContainerStop(ctx, old.ID, client.ContainerStopOptions{Timeout: &secs}); err != nil {
+		if _, err := dk.ContainerStop(ctx, old.ID, client.ContainerStopOptions{Timeout: &secs}); err != nil {
 			logf("Warning: could not stop %s: %v", old.Names[0][1:], err)
 		}
 	}

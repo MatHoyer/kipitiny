@@ -94,9 +94,10 @@ func (a *API) protect(mux *http.ServeMux) http.Handler {
 			return
 		}
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-		mux.ServeHTTP(rec, r.WithContext(ctx))
+		req := r.WithContext(ctx)
+		mux.ServeHTTP(rec, req) // the mux sets path values on req
 		if !strings.HasPrefix(pattern, "POST /api/auth/") {
-			a.core.Audit(ctx, pattern, r.PathValue("id"), rec.status, nil)
+			a.core.Audit(ctx, pattern, req.PathValue("id"), rec.status, nil)
 		}
 	})
 }

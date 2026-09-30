@@ -45,12 +45,15 @@ func TestTokenScopes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer res.Body.Close()
-	var entries []struct{ Actor, Action string }
+	var entries []struct{ Actor, Action, Target string }
 	json.NewDecoder(res.Body).Decode(&entries)
 	found := false
 	for _, e := range entries {
 		if e.Actor == "token:t-admin" && e.Action == "POST /api/projects" {
 			found = true
+		}
+		if e.Action == "POST /api/services/{id}/deploy" && e.Target != "X" {
+			t.Errorf("audit target not recorded: %+v", e)
 		}
 	}
 	if !found {

@@ -36,6 +36,18 @@ func ProjectNetwork(projectID string) string {
 
 type Client struct {
 	*client.Client
+	closer interface{ Close() error } // SSH connection, for remote clients
+}
+
+// Close releases the client and, for remote servers, its SSH connection.
+func (c *Client) Close() error {
+	err := c.Client.Close()
+	if c.closer != nil {
+		if cerr := c.closer.Close(); err == nil {
+			err = cerr
+		}
+	}
+	return err
 }
 
 // New connects using DOCKER_HOST et al., defaulting to the local socket.
@@ -44,7 +56,7 @@ func New() (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{c}, nil
+	return &Client{Client: c}, nil
 }
 
 type Info struct {
