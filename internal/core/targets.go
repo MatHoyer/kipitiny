@@ -21,6 +21,8 @@ type TargetInput struct {
 	// SecretKey equal to SecretMask keeps the stored value on update.
 	SecretKey string `json:"secretKey"`
 	UseSSL    bool   `json:"useSsl"`
+	// Encrypt generates an age key for the target; only honoured on creation.
+	Encrypt bool `json:"encrypt"`
 }
 
 func (c *Core) ListBackupTargets(ctx context.Context) ([]store.BackupTarget, error) {
@@ -36,6 +38,12 @@ func (c *Core) CreateBackupTarget(ctx context.Context, in TargetInput) (store.Ba
 	applyTargetInput(&t, in)
 	if err := c.checkTarget(ctx, t); err != nil {
 		return store.BackupTarget{}, err
+	}
+	if in.Encrypt {
+		var err error
+		if t.AgeIdentity, t.AgeRecipient, err = newAgeKey(); err != nil {
+			return store.BackupTarget{}, err
+		}
 	}
 	t, err := c.store.CreateBackupTarget(ctx, t)
 	return maskedTarget(t), err
@@ -66,6 +74,24 @@ func (c *Core) DeleteBackupTarget(ctx context.Context, id string) error {
 		return fmt.Errorf("%w: %v; delete them first", ErrInvalid, err)
 	}
 	return err
+}
+
+type TargetKey struct {
+	Identity  string `json:"identity"`
+	Recipient string `json:"recipient"`
+}
+
+// BackupTargetKey reveals a target's age key. Keep a copy offline: without
+// it, encrypted backups can't be read if the manager's data is lost.
+func (c *Core) BackupTargetKey(ctx context.Context, id string) (TargetKey, error) {
+	t, err := c.store.GetBackupTarget(ctx, id)
+	if err != nil {
+		return TargetKey{}, err
+	}
+	if !t.Encrypted() {
+		return TargetKey{}, fmt.Errorf("%w: target is not encrypted", ErrInvalid)
+	}
+	return TargetKey{Identity: t.AgeIdentity, Recipient: t.AgeRecipient}, nil
 }
 
 func applyTargetInput(t *store.BackupTarget, in TargetInput) {

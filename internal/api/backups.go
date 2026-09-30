@@ -204,3 +204,28 @@ func (a *API) deleteSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (a *API) targetKey(w http.ResponseWriter, r *http.Request) {
+	key, err := a.core.BackupTargetKey(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, key)
+}
+
+func (a *API) backupManager(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		TargetID string `json:"targetId"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	b, err := a.core.BackupManager(r.Context(), body.TargetID)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, b)
+}

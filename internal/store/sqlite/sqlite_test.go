@@ -190,12 +190,12 @@ func TestBackups(t *testing.T) {
 		t.Fatalf("deleting a target in use: %v", err)
 	}
 
-	b.Status, b.SizeBytes, b.SHA256, b.PGVersion, b.DurationMS = store.OpSucceeded, 1234, "abc", "17.2", 99
+	b.Status, b.SizeBytes, b.SHA256, b.PGVersion, b.DurationMS, b.Encrypted = store.OpSucceeded, 1234, "abc", "17.2", 99, true
 	if err := s.FinishBackup(ctx, b); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.GetBackup(ctx, b.ID)
-	if err != nil || got.SizeBytes != 1234 || got.PGVersion != "17.2" || got.FinishedAt == nil {
+	if err != nil || got.SizeBytes != 1234 || got.PGVersion != "17.2" || got.FinishedAt == nil || !got.Encrypted {
 		t.Fatalf("backup round-trip: %+v %v", got, err)
 	}
 
@@ -259,5 +259,26 @@ func TestBackupSchedules(t *testing.T) {
 	}
 	if bs, _ := s.ListBackups(ctx, store.BackupFilter{}); len(bs) != 1 {
 		t.Fatalf("backups must outlive the database: %v", bs)
+	}
+}
+
+func TestSnapshot(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	if _, err := s.CreateProject(ctx, store.Project{Name: "shop"}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "snap.db")
+	if err := s.Snapshot(ctx, path); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer snap.Close()
+	ps, err := snap.ListProjects(ctx)
+	if err != nil || len(ps) != 1 || ps[0].Name != "shop" {
+		t.Fatalf("snapshot content: %v %v", ps, err)
 	}
 }

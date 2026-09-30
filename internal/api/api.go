@@ -57,6 +57,8 @@ func New(c *core.Core, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/backup-targets", a.createTarget)
 	mux.HandleFunc("PUT /api/backup-targets/{id}", a.updateTarget)
 	mux.HandleFunc("DELETE /api/backup-targets/{id}", a.deleteTarget)
+	mux.HandleFunc("GET /api/backup-targets/{id}/key", a.targetKey)
+	mux.HandleFunc("POST /api/manager/backups", a.backupManager)
 	mux.HandleFunc("GET /api/deployments/{id}", a.getDeployment)
 	mux.HandleFunc("GET /api/deployments/{id}/log", a.deploymentLog)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

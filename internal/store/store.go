@@ -77,6 +77,9 @@ type Store interface {
 	// previous process as failed.
 	FailRunningOperations(ctx context.Context, errMsg string) error
 
+	// Snapshot writes a consistent copy of the whole store to path.
+	Snapshot(ctx context.Context, path string) error
+
 	Close() error
 }
 
@@ -180,8 +183,14 @@ type BackupTarget struct {
 	AccessKey string           `bun:"access_key" json:"accessKey"`
 	SecretKey string           `bun:"secret_key" json:"secretKey"`
 	UseSSL    bool             `bun:"use_ssl" json:"useSsl"`
-	CreatedAt time.Time        `bun:"created_at" json:"createdAt"`
+	// AgeRecipient/AgeIdentity are set when backups on this target are
+	// encrypted with age (X25519).
+	AgeRecipient string    `bun:"age_recipient" json:"ageRecipient"`
+	AgeIdentity  string    `bun:"age_identity" json:"-"`
+	CreatedAt    time.Time `bun:"created_at" json:"createdAt"`
 }
+
+func (t BackupTarget) Encrypted() bool { return t.AgeRecipient != "" }
 
 // OpStatus is the lifecycle of a background operation (backup, restore).
 type OpStatus string
@@ -195,7 +204,9 @@ const (
 type Backup struct {
 	bun.BaseModel `bun:"table:backups,alias:backup" json:"-"`
 
-	ID          string     `bun:"id,pk" json:"id"`
+	ID string `bun:"id,pk" json:"id"`
+	// Kind is postgres (a database) or manager (the manager's own state).
+	Kind        BackupKind `bun:"kind" json:"kind"`
 	ServiceID   string     `bun:"service_id" json:"serviceId"`
 	ProjectID   string     `bun:"project_id" json:"projectId"`
 	ServiceName string     `bun:"service_name" json:"serviceName"`
@@ -206,6 +217,7 @@ type Backup struct {
 	Status      OpStatus   `bun:"status" json:"status"`
 	SizeBytes   int64      `bun:"size_bytes" json:"sizeBytes"`
 	SHA256      string     `bun:"sha256" json:"sha256"`
+	Encrypted   bool       `bun:"encrypted" json:"encrypted"`
 	PGVersion   string     `bun:"pg_version" json:"pgVersion"`
 	DurationMS  int64      `bun:"duration_ms" json:"durationMs"`
 	Error       string     `bun:"error" json:"error,omitempty"`
@@ -213,7 +225,15 @@ type Backup struct {
 	FinishedAt  *time.Time `bun:"finished_at" json:"finishedAt,omitempty"`
 }
 
+type BackupKind string
+
+const (
+	BackupKindPostgres BackupKind = "postgres"
+	BackupKindManager  BackupKind = "manager"
+)
+
 type BackupFilter struct {
+	Kind       BackupKind
 	ServiceID  string
 	ScheduleID string
 	ProjectID  string

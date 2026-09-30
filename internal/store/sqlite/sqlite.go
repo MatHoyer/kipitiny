@@ -67,6 +67,13 @@ func migrate(ctx context.Context, db *sql.DB) error {
 
 func (s *Store) Close() error { return s.db.Close() }
 
+// Snapshot uses VACUUM INTO: a consistent, compacted copy taken without
+// blocking writers for long.
+func (s *Store) Snapshot(ctx context.Context, path string) error {
+	_, err := s.db.ExecContext(ctx, "VACUUM INTO ?", path)
+	return err
+}
+
 func (s *Store) CreateProject(ctx context.Context, p store.Project) (store.Project, error) {
 	now := now()
 	p.ID, p.CreatedAt, p.UpdatedAt = ids.New(), now, now
@@ -288,6 +295,9 @@ func (s *Store) DeleteBackupTarget(ctx context.Context, id string) error {
 
 func (s *Store) CreateBackup(ctx context.Context, b store.Backup) (store.Backup, error) {
 	b.ID, b.CreatedAt = ids.New(), now()
+	if b.Kind == "" {
+		b.Kind = store.BackupKindPostgres
+	}
 	if _, err := s.db.NewInsert().Model(&b).Exec(ctx); err != nil {
 		return store.Backup{}, mapErr(err)
 	}
@@ -309,6 +319,9 @@ func (s *Store) ListBackups(ctx context.Context, f store.BackupFilter) ([]store.
 	if f.ProjectID != "" {
 		q = q.Where("project_id = ?", f.ProjectID)
 	}
+	if f.Kind != "" {
+		q = q.Where("kind = ?", f.Kind)
+	}
 	if f.ScheduleID != "" {
 		q = q.Where("schedule_id = ?", f.ScheduleID)
 	}
@@ -326,7 +339,7 @@ func (s *Store) FinishBackup(ctx context.Context, b store.Backup) error {
 	t := now()
 	b.FinishedAt = &t
 	res, err := s.db.NewUpdate().Model(&b).
-		Column("status", "size_bytes", "sha256", "pg_version", "duration_ms", "error", "finished_at").
+		Column("status", "size_bytes", "sha256", "encrypted", "pg_version", "duration_ms", "error", "finished_at").
 		WherePK().Exec(ctx)
 	if err != nil {
 		return mapErr(err)

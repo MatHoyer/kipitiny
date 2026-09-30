@@ -79,13 +79,16 @@ export type BackupTarget = {
   accessKey: string;
   secretKey: string;
   useSsl: boolean;
+  ageRecipient: string;
   createdAt: string;
 };
 
-export type TargetInput = Omit<BackupTarget, "id" | "kind" | "createdAt">;
+export type TargetInput = Omit<BackupTarget, "id" | "kind" | "createdAt" | "ageRecipient"> & { encrypt?: boolean };
 
 export type Backup = {
   id: string;
+  kind: "postgres" | "manager";
+  encrypted: boolean;
   serviceId: string;
   projectId: string;
   serviceName: string;
@@ -200,6 +203,8 @@ export const api = {
   backupTargets: () => request<BackupTarget[]>("/backup-targets"),
   createBackupTarget: (t: TargetInput) => request<BackupTarget>("/backup-targets", json("POST", t)),
   updateBackupTarget: (id: string, t: TargetInput) => request<BackupTarget>(`/backup-targets/${id}`, json("PUT", t)),
+  backupTargetKey: (id: string) => request<{ identity: string; recipient: string }>(`/backup-targets/${id}/key`),
+  backupManager: (targetId: string) => request<Backup>("/manager/backups", json("POST", { targetId })),
   deleteBackupTarget: (id: string) => request<void>(`/backup-targets/${id}`, { method: "DELETE" }),
 
   backups: (projectId?: string) => request<Backup[]>(`/backups${projectId ? `?projectId=${projectId}` : ""}`),

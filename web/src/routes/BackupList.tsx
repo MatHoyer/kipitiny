@@ -53,10 +53,17 @@ export function BackupList({
                 </td>
                 {showService && (
                   <td className="py-1.5 text-xs">
-                    {b.projectName}/{b.serviceName}
+                    {b.kind === "manager" ? <span className="italic">manager state</span> : `${b.projectName}/${b.serviceName}`}
                   </td>
                 )}
-                <td className="py-1.5 text-xs">{targetName(b.targetId)}</td>
+                <td className="py-1.5 text-xs">
+                  {targetName(b.targetId)}
+                  {b.encrypted && (
+                    <span className="ml-1 rounded bg-zinc-100 px-1 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                      age
+                    </span>
+                  )}
+                </td>
                 <td className="py-1.5 text-xs">{b.status === "succeeded" ? formatBytes(b.sizeBytes) : "—"}</td>
                 <td className="py-1.5 text-xs">{b.finishedAt ? formatDuration(b.durationMs) : "—"}</td>
                 <td className="py-1.5 text-xs text-zinc-500" title={new Date(b.createdAt).toLocaleString()}>
@@ -69,7 +76,7 @@ export function BackupList({
                       <a href={api.downloadUrl(b.id)} className="hover:underline">
                         Download
                       </a>
-                      {restoreInto && (
+                      {restoreInto && b.kind === "postgres" && (
                         <button
                           className="hover:underline"
                           onClick={() => {
