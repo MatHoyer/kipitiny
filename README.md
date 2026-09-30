@@ -12,7 +12,15 @@ docker compose up -d --build   # http://localhost:3000
 ```
 
 The manager controls the host Docker daemon through the mounted socket.
-**Access to the socket is root on the host** — put strong auth in front of it.
+**Access to the socket is root on the host**, so the UI and API require a login.
+
+On first start the manager logs a one-time **setup token**
+(`docker compose logs manager | grep setup_token`); the UI asks for it to create
+the admin account. Forgot the password?
+
+```sh
+docker compose exec -it manager /kipitiny reset-password admin
+```
 
 ## Develop
 
@@ -34,6 +42,7 @@ make docker    # image `kipitiny`
 | `KIPITINY_ADDR`      | `:3000` | HTTP listen address |
 | `KIPITINY_DATA_DIR`  | `/data` | SQLite DB, deploy logs, local backups. Local disk only. |
 | `KIPITINY_LOG_LEVEL` | `info`  | `debug`, `info`, `warn`, `error` |
+| `KIPITINY_SETUP_TOKEN` | random | Fix the first-run setup token instead of generating one |
 | `KIPITINY_TRAEFIK`   | `true`  | Run and maintain the Traefik container (`false` to bring your own) |
 | `KIPITINY_TRAEFIK_IMAGE` | `traefik:v3.7` | |
 | `KIPITINY_HTTP_PORT` / `KIPITINY_HTTPS_PORT` | `80` / `443` | Host ports Traefik binds |

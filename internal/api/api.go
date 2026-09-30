@@ -6,20 +6,26 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/MatHoyer/kipitiny/internal/core"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
 type API struct {
-	core *core.Core
-	log  *slog.Logger
+	core    *core.Core
+	log     *slog.Logger
+	limiter *failLimiter
 }
 
 func New(c *core.Core, log *slog.Logger) http.Handler {
-	a := &API{core: c, log: log}
+	a := &API{core: c, log: log, limiter: newFailLimiter(10, 15*time.Minute)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", a.health)
+	mux.HandleFunc("GET /api/auth/state", a.authState)
+	mux.HandleFunc("POST /api/auth/setup", a.setup)
+	mux.HandleFunc("POST /api/auth/login", a.login)
+	mux.HandleFunc("POST /api/auth/logout", a.logout)
 	mux.HandleFunc("GET /api/status", a.status)
 	mux.HandleFunc("GET /api/projects", a.listProjects)
 	mux.HandleFunc("POST /api/projects", a.createProject)
@@ -39,7 +45,7 @@ func New(c *core.Core, log *slog.Logger) http.Handler {
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 	})
-	return mux
+	return a.protect(mux)
 }
 
 func (a *API) health(w http.ResponseWriter, r *http.Request) {
@@ -93,6 +99,8 @@ func (a *API) deleteProject(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) fail(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, core.ErrUnauthorized):
+		writeError(w, http.StatusUnauthorized, err.Error())
 	case errors.Is(err, core.ErrInvalid):
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, store.ErrNotFound):

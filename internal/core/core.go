@@ -36,6 +36,9 @@ type Core struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 	locks  sync.Map // service ID -> *sync.Mutex
+
+	setupMu    sync.Mutex
+	setupToken string // set while no admin exists
 }
 
 func New(cfg config.Config, s store.Store, d *docker.Client, log *slog.Logger) *Core {

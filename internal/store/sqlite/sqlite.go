@@ -177,6 +177,70 @@ func (s *Store) FailRunningDeployments(ctx context.Context, errMsg string) (int,
 	return int(n), nil
 }
 
+func (s *Store) CountUsers(ctx context.Context) (int, error) {
+	n, err := s.db.NewSelect().Model((*store.User)(nil)).Count(ctx)
+	return n, mapErr(err)
+}
+
+func (s *Store) CreateUser(ctx context.Context, u store.User) (store.User, error) {
+	u.ID, u.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&u).Exec(ctx); err != nil {
+		return store.User{}, mapErr(err)
+	}
+	return u, nil
+}
+
+func (s *Store) GetUser(ctx context.Context, id string) (store.User, error) {
+	var u store.User
+	err := s.db.NewSelect().Model(&u).Where("id = ?", id).Scan(ctx)
+	return u, mapErr(err)
+}
+
+func (s *Store) GetUserByUsername(ctx context.Context, username string) (store.User, error) {
+	var u store.User
+	err := s.db.NewSelect().Model(&u).Where("username = ?", username).Scan(ctx)
+	return u, mapErr(err)
+}
+
+func (s *Store) SetPassword(ctx context.Context, userID, passwordHash string) error {
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		res, err := tx.NewUpdate().Model((*store.User)(nil)).
+			Set("password_hash = ?", passwordHash).Where("id = ?", userID).Exec(ctx)
+		if err != nil {
+			return mapErr(err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return store.ErrNotFound
+		}
+		_, err = tx.NewDelete().Model((*store.Session)(nil)).Where("user_id = ?", userID).Exec(ctx)
+		return mapErr(err)
+	})
+}
+
+func (s *Store) CreateSession(ctx context.Context, sess store.Session) error {
+	sess.CreatedAt = now()
+	sess.ExpiresAt = sess.ExpiresAt.UTC().Truncate(time.Microsecond)
+	_, err := s.db.NewInsert().Model(&sess).Exec(ctx)
+	return mapErr(err)
+}
+
+func (s *Store) GetSession(ctx context.Context, tokenHash string) (store.Session, error) {
+	var sess store.Session
+	err := s.db.NewSelect().Model(&sess).
+		Where("token_hash = ?", tokenHash).Where("expires_at > ?", now()).Scan(ctx)
+	return sess, mapErr(err)
+}
+
+func (s *Store) DeleteSession(ctx context.Context, tokenHash string) error {
+	_, err := s.db.NewDelete().Model((*store.Session)(nil)).Where("token_hash = ?", tokenHash).Exec(ctx)
+	return mapErr(err)
+}
+
+func (s *Store) DeleteExpiredSessions(ctx context.Context) error {
+	_, err := s.db.NewDelete().Model((*store.Session)(nil)).Where("expires_at <= ?", now()).Exec(ctx)
+	return mapErr(err)
+}
+
 // now matches the microsecond precision bun persists, so returned structs
 // equal what a later read yields.
 func now() time.Time {
