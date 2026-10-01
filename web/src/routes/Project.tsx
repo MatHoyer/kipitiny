@@ -126,7 +126,7 @@ export function Project() {
                     <Card size="sm" className="h-full transition-colors group-hover:bg-muted/50">
                       <CardHeader className="flex items-center justify-between gap-2">
                         <CardTitle className="flex min-w-0 items-center gap-2">
-                          {s.kind === "postgres" && <Database className="size-4 shrink-0 text-muted-foreground" />}
+                          {s.kind === "postgres" && <PostgresIcon aria-label="PostgreSQL" className="size-4 shrink-0 text-[#4169E1]" />}
                           <span className="truncate">{s.name}</span>
                         </CardTitle>
                         <StateBadge state={serviceState(s.containers)} />
