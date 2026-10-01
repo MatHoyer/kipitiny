@@ -496,3 +496,38 @@ func TestDomains(t *testing.T) {
 		t.Errorf("after delete: %+v", ds)
 	}
 }
+
+func TestNotificationChannels(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+
+	ch, err := s.CreateNotificationChannel(ctx, store.NotificationChannel{
+		Name: "ops", Kind: "discord", Config: map[string]string{"webhookUrl": "u"}, Events: []string{"deploy.failed"}, Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateNotificationChannel(ctx, store.NotificationChannel{Name: "ops", Kind: "discord"}); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("duplicate name: got %v, want ErrConflict", err)
+	}
+	ch.Name, ch.Events, ch.Enabled = "alerts", []string{"backup.failed", "deploy.failed"}, false
+	if _, err := s.UpdateNotificationChannel(ctx, ch); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetNotificationChannel(ctx, ch.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "alerts" || got.Enabled || got.Config["webhookUrl"] != "u" || !slices.Equal(got.Events, ch.Events) {
+		t.Errorf("got %+v", got)
+	}
+	if _, err := s.UpdateNotificationChannel(ctx, store.NotificationChannel{ID: "missing"}); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("update missing: %v", err)
+	}
+	if err := s.DeleteNotificationChannel(ctx, ch.ID); err != nil {
+		t.Fatal(err)
+	}
+	if chs, _ := s.ListNotificationChannels(ctx); len(chs) != 0 {
+		t.Errorf("after delete: %+v", chs)
+	}
+}

@@ -17,6 +17,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/notify"
 	"github.com/MatHoyer/kipitiny/internal/registry"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -59,6 +60,8 @@ type updateState struct {
 	// next `docker compose up` would bring back after an update.
 	pinned    string
 	inspected bool
+	// notified is the latest version already announced to channels.
+	notified string
 }
 
 var versionRe = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)$`)
@@ -151,6 +154,15 @@ func (c *Core) checkUpdate(ctx context.Context) {
 	u.latest = latestVersion(tags)
 	if newer(u.latest, c.cfg.Version) {
 		c.log.Info("a new version is available", "current", c.cfg.Version, "latest", u.latest)
+		if u.notified != u.latest {
+			u.notified = u.latest
+			c.notify(notify.Event{
+				Type:    EventUpdateAvailable,
+				Level:   notify.Info,
+				Title:   "kipitiny " + u.latest + " is available",
+				Message: "Running " + c.cfg.Version + ". Update from the sidebar or Settings › Version.",
+			}, "/settings", "")
+		}
 	}
 }
 

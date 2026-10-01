@@ -85,6 +85,7 @@ func (c *Core) runManagerBackup(st storage.Storage, target store.BackupTarget, b
 	if err := c.store.FinishBackup(context.WithoutCancel(ctx), b); err != nil {
 		c.log.Error("cannot record manager backup", "err", err)
 	}
+	c.notifyBackup(b, target, "")
 	if b.Status == store.OpSucceeded {
 		c.pruneManagerBackups(ctx, target.ID)
 	}

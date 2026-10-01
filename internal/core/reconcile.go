@@ -13,6 +13,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/notify"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -269,6 +270,13 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 				return fmt.Errorf("start %s: %w", ct.Names[0][1:], err)
 			}
 			log.Info("reconcile: started stopped replica", "container", ct.Names[0][1:])
+			c.notify(notify.Event{
+				Type:    EventServiceRestarted,
+				Level:   notify.Warning,
+				Title:   fmt.Sprintf("%s/%s restarted", project.Name, svc.Name),
+				Message: fmt.Sprintf("Replica %d had stopped (%s); kipitiny started it again. Further restarts are not reported for %s.", i, ct.Status, notifyCooldown),
+				Fields:  []notify.Field{{Name: "Project", Value: project.Name}, {Name: "Service", Value: svc.Name}},
+			}, "/services/"+svc.ID, "restarted:"+svc.ID)
 		}
 	}
 

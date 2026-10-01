@@ -20,6 +20,7 @@ import { timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, type Scope, type Status } from "../api";
 import { Cleanup } from "./Cleanup";
+import { Notifications } from "./Notifications";
 import { Servers } from "./Servers";
 
 const scopes: [Scope, string][] = [
@@ -38,6 +39,7 @@ export function Settings() {
         <CloudflareSection />
         <Servers />
         <Cleanup />
+        <Notifications />
         <Tokens />
         <Audit />
       </PageBody>
