@@ -32,3 +32,26 @@ func TestLatestVersion(t *testing.T) {
 		t.Errorf("no version tags: %q", got)
 	}
 }
+
+func TestComposePin(t *testing.T) {
+	compose := map[string]string{"com.docker.compose.project": "kipitiny"}
+	tests := []struct {
+		ref    string
+		labels map[string]string
+		want   string
+	}{
+		{"ghcr.io/mathoyer/kipitiny:1.2.3", compose, "1.2.3"},
+		{"ghcr.io/mathoyer/kipitiny:1.2.3@sha256:abc", compose, "1.2.3"},
+		{"localhost:5000/kipitiny:1.2.3", compose, "1.2.3"},
+		{"ghcr.io/mathoyer/kipitiny:latest", compose, ""}, // retagged by the updater
+		{"ghcr.io/mathoyer/kipitiny", compose, ""},
+		{"localhost:5000/kipitiny", compose, ""}, // port, not a tag
+		{"ghcr.io/mathoyer/kipitiny:dev", compose, ""},
+		{"ghcr.io/mathoyer/kipitiny:1.2.3", nil, ""}, // docker run: the swap sticks
+	}
+	for _, tt := range tests {
+		if got := composePin(tt.ref, tt.labels); got != tt.want {
+			t.Errorf("composePin(%q) = %q, want %q", tt.ref, got, tt.want)
+		}
+	}
+}
