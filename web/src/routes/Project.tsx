@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Box, Database, DatabaseBackup, GitBranch, Globe, Layers, Lock, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { Activity, Box, ChevronLeft, Database, DatabaseBackup, GitBranch, Globe, Layers, Lock, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { PostgresIcon } from "@/components/brand-icons";
-import { CopyButton, DangerZone, Empty, EmptyState, ErrorText, IconTile, Mono, Section, StatCard, StateBadge, Tag } from "@/components/common";
+import { ChoiceTile, CopyButton, DangerZone, Empty, EmptyState, ErrorText, IconTile, Mono, Section, StatCard, StateBadge, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
@@ -23,9 +23,7 @@ import {
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useTab } from "@/hooks/use-tab";
-import { cn } from "@/lib/utils";
 import { dbFields, dbRef, envMap, envRows, envSecrets, liveState, troubled, type EnvRow } from "@/lib/format";
 import { api, type Project as ProjectT, type Service as ServiceT, type ServiceInput } from "../api";
 
@@ -302,6 +300,35 @@ const emptyForm = {
   buildContext: "",
 };
 
+type Choice = "image" | "git" | "postgres";
+
+const choiceGroups: { label: string; choices: { id: Choice; icon: ReactNode; title: string; description: string }[] }[] = [
+  {
+    label: "Apps",
+    choices: [
+      { id: "image", icon: <Box />, title: "Docker image", description: "Run a published image." },
+      { id: "git", icon: <GitBranch />, title: "Git repository", description: "Build its Dockerfile on every deploy." },
+    ],
+  },
+  {
+    label: "Databases",
+    choices: [
+      {
+        id: "postgres",
+        icon: <PostgresIcon className="text-[#4169E1]" />,
+        title: "PostgreSQL",
+        description: "Relational database, backed up on a schedule.",
+      },
+    ],
+  },
+];
+
+const choiceTitles: Record<Choice, string> = {
+  image: "New app from a Docker image",
+  git: "New app from a Git repository",
+  postgres: "New PostgreSQL database",
+};
+
 function NewServiceDialog({ projectId }: { projectId: string }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -311,10 +338,10 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
 
   const [open, setOpen] = useState(false);
   const [env, setEnv] = useState<EnvRow[]>([]);
-  const [tab, setTab] = useState<"app" | "databases">("app");
-  const [engine, setEngine] = useState<"postgres">("postgres");
-  const kind = tab === "app" ? "app" : engine;
-  const [source, setSource] = useState<"image" | "git">("image");
+  // First step: what to create; the form follows.
+  const [choice, setChoice] = useState<Choice | null>(null);
+  const kind = choice === "postgres" ? "postgres" : "app";
+  const source = choice === "git" ? "git" : "image";
   const [form, setForm] = useState(emptyForm);
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
@@ -359,14 +386,11 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
     },
   });
 
-  // Every new service starts as an app from a Docker image.
   const close = () => {
     setOpen(false);
     setForm(emptyForm);
     setEnv([]);
-    setTab("app");
-    setEngine("postgres");
-    setSource("image");
+    setChoice(null);
     create.reset();
   };
   const onOpenChange = (next: boolean) => {
@@ -390,156 +414,109 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
-        <form onSubmit={onSubmit} className="contents">
-          <DialogHeader>
-            <DialogTitle>New service</DialogTitle>
-            <DialogDescription>It is deployed as soon as it is created.</DialogDescription>
-          </DialogHeader>
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            spacing={0}
-            value={tab}
-            onValueChange={(v) => v && setTab(v as "app" | "databases")}
-            className="w-full"
-          >
-            <ToggleGroupItem value="app" className="flex-1 aria-checked:bg-muted">
-              <Box />
-              App
-            </ToggleGroupItem>
-            <ToggleGroupItem value="databases" className="flex-1 aria-checked:bg-muted">
-              <Database />
-              Databases
-            </ToggleGroupItem>
-          </ToggleGroup>
-          {tab === "databases" && (
-            <div role="radiogroup" aria-label="Database engine" className="grid gap-4 sm:grid-cols-3">
-              <EngineCard
-                selected={engine === "postgres"}
-                onSelect={() => setEngine("postgres")}
-                icon={<PostgresIcon className="size-7 text-[#4169E1]" />}
-                title="PostgreSQL"
-                description="Relational database"
+        {!choice ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>New service</DialogTitle>
+              <DialogDescription>What do you want to run?</DialogDescription>
+            </DialogHeader>
+            {choiceGroups.map((g) => (
+              <div key={g.label} className="space-y-2">
+                <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{g.label}</h3>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {g.choices.map((c) => (
+                    <ChoiceTile key={c.id} icon={c.icon} title={c.title} description={c.description} onClick={() => setChoice(c.id)} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </>
+        ) : (
+          <form onSubmit={onSubmit} className="contents">
+            <DialogHeader>
+              <DialogTitle>{choiceTitles[choice]}</DialogTitle>
+              <DialogDescription>It is deployed as soon as it is created.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FloatingInput
+                label="Name"
+                required
+                autoFocus
+                value={form.name}
+                onChange={set("name")}
+                placeholder={kind === "postgres" ? "db" : "web"}
+                description={kind === "postgres" ? "Also the hostname apps use to connect." : undefined}
               />
-            </div>
-          )}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FloatingInput
-              label="Name"
-              required
-              autoFocus
-              value={form.name}
-              onChange={set("name")}
-              placeholder={kind === "postgres" ? "db" : "web"}
-              description={kind === "postgres" ? "Also the hostname apps use to connect." : undefined}
-            />
-            {kind === "postgres" ? (
-              <>
-                <FloatingSelect
-                  // Its own instance: Radix keeps the Source select's item text otherwise.
-                  key="version"
-                  label="Version"
-                  value={form.version}
-                  onValueChange={(v) => setForm({ ...form, version: v })}
-                  options={["18", "17", "16", "15"].map((v) => ({ value: v, label: `PostgreSQL ${v}` }))}
-                />
-                <FloatingInput
-                  label="Memory (MB)"
-                  type="number"
-                  min={128}
-                  step={128}
-                  value={form.memory}
-                  onChange={set("memory")}
-                  description="Container limit; shared_buffers is sized from it."
-                />
-              </>
-            ) : (
-              <>
-                <FloatingSelect
-                  label="Source"
-                  value={source}
-                  onValueChange={(v) => setSource(v as "image" | "git")}
-                  options={[
-                    { value: "image", label: "Docker image" },
-                    { value: "git", label: "Git repository (Dockerfile)" },
-                  ]}
-                />
-                {source === "image" ? (
+              {kind === "postgres" ? (
+                <>
+                  <FloatingSelect
+                    // Its own instance: Radix keeps the Source select's item text otherwise.
+                    key="version"
+                    label="Version"
+                    value={form.version}
+                    onValueChange={(v) => setForm({ ...form, version: v })}
+                    options={["18", "17", "16", "15"].map((v) => ({ value: v, label: `PostgreSQL ${v}` }))}
+                  />
                   <FloatingInput
-                    label="Image"
-                    required
-                    value={form.image}
-                    onChange={set("image")}
-                    placeholder="ghcr.io/org/app:latest"
+                    label="Memory (MB)"
+                    type="number"
+                    min={128}
+                    step={128}
+                    value={form.memory}
+                    onChange={set("memory")}
+                    description="Container limit; shared_buffers is sized from it."
+                  />
+                </>
+              ) : (
+                <>
+                  {source === "image" ? (
+                    <FloatingInput
+                      label="Image"
+                      required
+                      value={form.image}
+                      onChange={set("image")}
+                      placeholder="ghcr.io/org/app:latest"
+                      className="sm:col-span-2"
+                    />
+                  ) : (
+                    <GitFields form={form} set={set} />
+                  )}
+                  <DomainField value={form.domain} onChange={(domain) => setForm({ ...form, domain })} className="sm:col-span-2" />
+                  <FloatingInput
+                    label="Container port"
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={form.port}
+                    onChange={set("port")}
+                    placeholder="3000"
+                    description="The port your app listens on. Required with a domain."
+                  />
+                  <FloatingInput label="Replicas" type="number" min={1} max={10} value={form.replicas} onChange={set("replicas")} />
+                  <EnvEditor
+                    rows={env}
+                    onChange={setEnv}
+                    vars={Object.keys(project.data?.env ?? {}).sort()}
+                    secretVars={project.data?.secrets}
+                    databases={databases.map((d) => d.name)}
                     className="sm:col-span-2"
                   />
-                ) : (
-                  <GitFields form={form} set={set} />
-                )}
-                <DomainField value={form.domain} onChange={(domain) => setForm({ ...form, domain })} className="sm:col-span-2" />
-                <FloatingInput
-                  label="Container port"
-                  type="number"
-                  min={1}
-                  max={65535}
-                  value={form.port}
-                  onChange={set("port")}
-                  placeholder="3000"
-                  description="The port your app listens on. Required with a domain."
-                />
-                <FloatingInput label="Replicas" type="number" min={1} max={10} value={form.replicas} onChange={set("replicas")} />
-                <EnvEditor
-                  rows={env}
-                  onChange={setEnv}
-                  vars={Object.keys(project.data?.env ?? {}).sort()}
-                  secretVars={project.data?.secrets}
-                  databases={databases.map((d) => d.name)}
-                  className="sm:col-span-2"
-                />
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={create.isPending}>
-              {create.isPending ? "Creating…" : "Create & deploy"}
-            </Button>
-          </DialogFooter>
-        </form>
+                </>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="ghost" disabled={create.isPending} onClick={() => setChoice(null)}>
+                <ChevronLeft data-icon="inline-start" />
+                Back
+              </Button>
+              <Button type="submit" disabled={create.isPending}>
+                {create.isPending ? "Creating…" : "Create & deploy"}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
-  );
-}
-
-function EngineCard({
-  selected,
-  onSelect,
-  icon,
-  title,
-  description,
-}: {
-  selected: boolean;
-  onSelect: () => void;
-  icon: ReactNode;
-  title: string;
-  description: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onSelect}
-      className={cn(
-        "flex items-center gap-3 rounded-xl border p-3 text-left transition-colors outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50",
-        selected && "border-foreground/40 bg-muted/50",
-      )}
-    >
-      {icon}
-      <span className="min-w-0">
-        <span className="block text-sm font-medium">{title}</span>
-        <span className="block truncate text-xs text-muted-foreground">{description}</span>
-      </span>
-    </button>
   );
 }
 

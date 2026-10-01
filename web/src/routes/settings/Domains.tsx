@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
+import { Globe, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { CheckboxField, Empty, Mono, Section, Tag } from "@/components/common";
+import { CheckboxField, EmptyState, Mono, Section, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
@@ -59,7 +59,7 @@ function Domains() {
         </Button>
       </form>
       {domains.data?.length === 0 ? (
-        <Empty>No domains yet.</Empty>
+        <EmptyState icon={Globe} title="No domains yet" description="Add a domain you own to give services public addresses on it." />
       ) : (
         <ul className="mt-2 divide-y">
           {domains.data?.map((d) => (
