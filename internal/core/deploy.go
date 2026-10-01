@@ -163,10 +163,14 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 	out io.Writer, logf func(string, ...any)) error {
 
 	dk := c.dockerFor(svc.ServerID)
-	dbs, err := c.projectDatabases(ctx, svc.ProjectID)
+	if n := len(secretRefs(svc.Env, project.Env)); n > 0 {
+		logf("Fetching %d secret(s) from password managers", n)
+	}
+	src, err := c.envSources(ctx, project, svc)
 	if err != nil {
 		return err
 	}
+	dbs := src.dbs
 	for _, name := range slices.Sorted(maps.Keys(dbs)) {
 		if usesDatabase(svc.Env, name) {
 			logf("Using credentials of database %s", name)
@@ -194,9 +198,9 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 		}
 	}
 	if svc.Kind == store.ServiceKindPostgres {
-		return c.recreate(ctx, project, svc, dep, logf)
+		return c.recreate(ctx, project, svc, src, dep, logf)
 	}
-	if err := c.rollout(ctx, project, svc, dbs, dep, out, logf); err != nil {
+	if err := c.rollout(ctx, project, svc, src, dep, out, logf); err != nil {
 		return err
 	}
 	if svc.Source == store.SourceGit {
@@ -214,7 +218,7 @@ func isBuiltImage(image string) bool {
 
 // recreate replaces a database's container in place: its volume can't be
 // shared by two servers, so a short restart is unavoidable.
-func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Service, dep store.Deployment,
+func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Service, src envSources, dep store.Deployment,
 	logf func(string, ...any)) error {
 
 	dk := c.dockerFor(svc.ServerID)
@@ -228,7 +232,7 @@ func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Se
 			return err
 		}
 	}
-	spec := containerSpec(project, svc, nil, dep.ID, 1, c.certResolver(ctx, svc.ServerID, svc.Domain))
+	spec := containerSpec(project, svc, src, dep.ID, 1, c.certResolver(ctx, svc.ServerID, svc.Domain))
 	logf("Starting %s", spec.Name)
 	id, err := dk.Run(ctx, spec)
 	if err != nil {
@@ -247,7 +251,7 @@ func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Se
 // rollout is a blue-green deploy: every new replica starts next to the old
 // ones and must become ready before any old one stops. If one fails, all new
 // containers are removed and the old version keeps serving.
-func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Service, dbs map[string]store.Service,
+func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Service, src envSources,
 	dep store.Deployment, out io.Writer, logf func(string, ...any)) error {
 
 	dk := c.dockerFor(svc.ServerID)
@@ -269,7 +273,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 	}
 
 	if svc.PreDeploy != "" {
-		if err := c.preDeploy(ctx, project, svc, dbs, dep, out, logf); err != nil {
+		if err := c.preDeploy(ctx, project, svc, src, dep, out, logf); err != nil {
 			return err
 		}
 	}
@@ -286,7 +290,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 		}
 	}
 	for i := 1; i <= svc.Replicas; i++ {
-		spec := replicaSpec(project, svc, dbs, dep.ID, i, probe, c.certResolver(ctx, svc.ServerID, svc.Domain))
+		spec := replicaSpec(project, svc, src, dep.ID, i, probe, c.certResolver(ctx, svc.ServerID, svc.Domain))
 		logf("Starting %s", spec.Name)
 		id, err := dk.Run(ctx, spec)
 		if err != nil {
@@ -357,9 +361,9 @@ func readinessMode(svc store.Service) string {
 	return "running for 5s"
 }
 
-// containerSpec builds the container for one replica. dbs are the project's
-// databases, for env references.
-func containerSpec(project store.Project, svc store.Service, dbs map[string]store.Service, deployID string, replica int, resolver string) client.ContainerCreateOptions {
+// containerSpec builds the container for one replica. src resolves env
+// references.
+func containerSpec(project store.Project, svc store.Service, src envSources, deployID string, replica int, resolver string) client.ContainerCreateOptions {
 	labels := map[string]string{
 		docker.LabelManaged: "true",
 		docker.LabelProject: project.ID,
@@ -376,7 +380,7 @@ func containerSpec(project store.Project, svc store.Service, dbs map[string]stor
 		endpoints[docker.ProxyNetwork] = &network.EndpointSettings{}
 	}
 
-	envMap := resolveEnv(svc.Env, envSources{project: project.Env, dbs: dbs})
+	envMap := resolveEnv(svc.Env, src)
 	env := make([]string, 0, len(envMap))
 	for _, k := range slices.Sorted(maps.Keys(envMap)) {
 		env = append(env, k+"="+envMap[k])

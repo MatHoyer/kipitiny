@@ -1,4 +1,4 @@
-import { Braces, Code, Database, KeyRound, Link2, List, Plus, Trash2, X } from "lucide-react";
+import { Braces, Code, Database, KeyRound, Link2, List, Plus, Trash2, Vault, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { PostgresIcon } from "@/components/brand-icons";
 import { Button } from "@/components/ui/button";
@@ -78,10 +78,12 @@ export function EnvEditor({
     onChange([...rows, ...added]);
   };
   const refs = !!vars || !!databases;
+  // Password manager references are checked by the manager on save.
   const known = (r: EnvReference) =>
-    r.kind === "project"
+    r.kind === "secret" ||
+    (r.kind === "project"
       ? !!vars?.includes(r.name)
-      : !!databases?.includes(r.db) && (dbFields as readonly string[]).includes(r.field);
+      : !!databases?.includes(r.db) && (dbFields as readonly string[]).includes(r.field));
   // A name for a database's entry: the usual one, or prefixed by the database
   // when taken (several databases, one service).
   const dbEntryName = (db: string, key: string) =>
@@ -320,10 +322,14 @@ function ValueField({
         >
           {ref.kind === "db" ? (
             <PostgresIcon className="size-3 shrink-0 text-[#4169E1]" />
+          ) : ref.kind === "secret" ? (
+            <Vault className="size-3 shrink-0" />
           ) : (
             <Link2 className="size-3 shrink-0" />
           )}
-          <span className="truncate">{ref.kind === "db" ? `${ref.db}.${ref.field}` : ref.name}</span>
+          <span className="truncate">
+            {ref.kind === "db" ? `${ref.db}.${ref.field}` : ref.kind === "secret" ? ref.ref : ref.name}
+          </span>
           <button
             type="button"
             aria-label="Remove reference"

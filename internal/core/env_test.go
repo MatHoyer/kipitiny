@@ -149,3 +149,34 @@ func TestSetProjectEnv(t *testing.T) {
 		t.Errorf("unknown reference: got %v, want ErrInvalid", err)
 	}
 }
+
+func TestSecretRefs(t *testing.T) {
+	project := map[string]string{"TOKEN": "{{ pass://Work/API/token }}", "PLAIN": "p"}
+	env := map[string]string{
+		"A": "{{ pass://My Vault/My Item/password }}",
+		"B": "user:{{pass://Work/DB/password}}@{{ project.PLAIN }}",
+		"C": "{{ project.TOKEN }}",
+	}
+	want := []string{"pass://My Vault/My Item/password", "pass://Work/API/token", "pass://Work/DB/password"}
+	if got := secretRefs(env, project); !slices.Equal(got, want) {
+		t.Errorf("secretRefs = %v, want %v", got, want)
+	}
+
+	// Checking references doesn't fetch secrets: they count as resolvable.
+	if got := unresolved(env, envSources{project: project}); len(got) != 0 {
+		t.Errorf("unresolved = %v", got)
+	}
+
+	src := envSources{project: project, secrets: map[string]string{
+		want[0]: "s3cret", want[1]: "tok", want[2]: "dbpw",
+	}}
+	wantEnv := map[string]string{"A": "s3cret", "B": "user:dbpw@p", "C": "tok"}
+	if got := resolveEnv(env, src); !maps.Equal(got, wantEnv) {
+		t.Errorf("resolveEnv = %v, want %v", got, wantEnv)
+	}
+
+	// A secret that only references a password manager stays readable.
+	if got := maskEnv(env, []string{"A", "B"}); got["A"] != env["A"] || got["B"] != SecretMask {
+		t.Errorf("maskEnv = %v", got)
+	}
+}
