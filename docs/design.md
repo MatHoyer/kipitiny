@@ -50,6 +50,12 @@ The manager runs as a container and controls the **host** Docker daemon via the 
 - Never expose the Docker API over TCP without TLS.
 - Mask secrets (env vars, DB passwords, keys) in API read responses by default.
 
+### Password managers
+
+- `internal/secrets`: a `Provider` per password manager, each owning a reference scheme (`pass://` for Proton Pass; `op://` for 1Password would be another provider). Core and the UI only see the interface.
+- Providers wrap the vendor's official CLI (Proton has no public API): bundled in the image, run as short-lived processes, no resident RAM. The manager starts itself (`kipitiny secrets-env`) under the CLI's `run` command to read resolved values back.
+- Logged in with a scoped token kept in settings; the CLI session lives in `$DATA_DIR/secrets/<provider>` and is recreated from the token when lost or expired.
+
 ## 5. Core concepts
 
 - **Project:** a group of services (apps + databases) sharing a private network.
@@ -216,7 +222,7 @@ Later: optional VictoriaLogs or Loki, opt-in.
 - React SPA (Vite), React Router, TanStack Query, Tailwind. No Next.js / Node at runtime.
 - Embedded in the binary (`web/embed.go`), SPA fallback to `index.html`.
 - Dev: Go on `:8080`, Vite dev server proxies `/api`.
-- Release: multi-stage Dockerfile → distroless static image.
+- Release: multi-stage Dockerfile → distroless image (`cc` variant, for the bundled `pass-cli`; kipitiny itself is static).
 
 ## 14. API and MCP
 

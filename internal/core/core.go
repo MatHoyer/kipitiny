@@ -15,6 +15,7 @@ import (
 
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/secrets"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -58,6 +59,7 @@ type Core struct {
 	cleaning      atomic.Bool  // a cleanup is running
 	notified      sync.Map     // notification key -> time.Time last sent
 	notifyHTTP    *http.Client // nil: notify's default; tests redirect it
+	secrets       []secrets.Provider
 }
 
 // New builds the core around the local Docker client; remote servers are
@@ -66,6 +68,7 @@ func New(cfg config.Config, s store.Store, local *docker.Client, log *slog.Logge
 	bg, cancel := context.WithCancel(context.Background())
 	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1), dnsKick: make(chan struct{}, 1)}
 	c.pool = docker.NewPool(local, c.connectServer)
+	c.secrets = secretProviders(cfg)
 	return c
 }
 

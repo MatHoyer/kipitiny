@@ -236,6 +236,20 @@ export type Cloudflare = {
   syncedAt?: string;
 };
 
+/** A password manager whose references (scheme://…) service env can use. */
+export type SecretProvider = {
+  id: string;
+  name: string;
+  scheme: string;
+  tokenLabel: string;
+  example: string;
+  /** How to get a token; `code` spans are commands. */
+  help: string;
+  /** False when it can't run on the manager (its CLI is missing). */
+  available: boolean;
+  connected: boolean;
+};
+
 export type CleanupSettings = {
   enabled: boolean;
   cron: string;
@@ -424,6 +438,10 @@ export const api = {
   cloudflare: () => request<Cloudflare>("/cloudflare"),
   connectCloudflare: (token: string) => request<Cloudflare>("/cloudflare", json("PUT", { token })),
   disconnectCloudflare: () => request<void>("/cloudflare", { method: "DELETE" }),
+  secretProviders: () => request<SecretProvider[]>("/secret-providers"),
+  connectSecretProvider: (id: string, token: string) =>
+    request<SecretProvider>(`/secret-providers/${id}`, json("PUT", { token })),
+  disconnectSecretProvider: (id: string) => request<void>(`/secret-providers/${id}`, { method: "DELETE" }),
   setServerNetwork: (id: string, n: ServerNetwork) => request<Server>(`/servers/${id}/network`, json("PUT", n)),
   cleanup: () => request<Cleanup>("/cleanup"),
   setCleanup: (s: CleanupSettings) => request<Cleanup>("/cleanup", json("PUT", s)),
