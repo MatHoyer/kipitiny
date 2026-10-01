@@ -291,13 +291,9 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 }
 
 func (c *Core) recreateReplica(ctx context.Context, project store.Project, svc store.Service, deployID string, replica int) error {
-	var db *store.Service
-	if svc.DatabaseID != "" {
-		d, err := c.store.GetService(ctx, svc.DatabaseID)
-		if err != nil {
-			return fmt.Errorf("linked database: %w", err)
-		}
-		db = &d
+	dbs, err := c.projectDatabases(ctx, svc.ProjectID)
+	if err != nil {
+		return err
 	}
 	dk := c.dockerFor(svc.ServerID)
 	if isBuiltImage(svc.Image) {
@@ -311,6 +307,6 @@ func (c *Core) recreateReplica(ctx context.Context, project store.Project, svc s
 	if err != nil {
 		return err
 	}
-	_, err = dk.Run(ctx, replicaSpec(project, svc, db, deployID, replica, probe, c.certResolver(ctx, svc.ServerID, svc.Domain)))
+	_, err = dk.Run(ctx, replicaSpec(project, svc, dbs, deployID, replica, probe, c.certResolver(ctx, svc.ServerID, svc.Domain)))
 	return err
 }

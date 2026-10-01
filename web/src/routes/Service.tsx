@@ -10,9 +10,10 @@ import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingSelect } from "@/components/ui/floating-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { envMap, envRows, serviceState, timeAgo, type EnvRow } from "@/lib/format";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useTab } from "@/hooks/use-tab";
+import { envMap, envRows, envSecrets, serviceState, timeAgo, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, type Connection, type Deployment, type LogLine, type Service as ServiceT } from "../api";
 import { BackupList } from "./BackupList";
@@ -65,6 +66,7 @@ export function Service() {
     onSuccess: () => navigate(`/projects/${service.data?.projectId}`),
   });
 
+  const [tab, setTab] = useTab(["overview", "environment"], "overview");
   const svc = service.data;
   const crumbs = [
     { label: "Projects", to: "/" },
@@ -144,37 +146,48 @@ export function Service() {
         )}
         <ErrorText error={deploy.error ?? action.error ?? remove.error} />
 
-        <Section title="Containers">
-          {svc.containers.length === 0 ? (
-            <Empty>Not deployed yet.</Empty>
-          ) : (
-            <ul className="-my-2 divide-y">
-              {svc.containers.map((c) => (
-                <li key={c.id} className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 py-2", c.retired && "opacity-50")}>
-                  <span className="font-mono text-xs">{c.name}</span>
-                  <StateBadge state={c.health ?? c.state} />
-                  <span className="flex-1 text-right text-xs text-muted-foreground">
-                    {c.retired ? "previous deploy, kept for its logs" : c.status}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList variant="line">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="environment">Environment</TabsTrigger>
+          </TabsList>
+          <TabsContent value="overview" className="space-y-4">
+            <Section title="Containers">
+              {svc.containers.length === 0 ? (
+                <Empty>Not deployed yet.</Empty>
+              ) : (
+                <ul className="-my-2 divide-y">
+                  {svc.containers.map((c) => (
+                    <li key={c.id} className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 py-2", c.retired && "opacity-50")}>
+                      <span className="font-mono text-xs">{c.name}</span>
+                      <StateBadge state={c.health ?? c.state} />
+                      <span className="flex-1 text-right text-xs text-muted-foreground">
+                        {c.retired ? "previous deploy, kept for its logs" : c.status}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
 
-        {isDb && <ConnectionCard serviceId={svc.id} host={svc.name} />}
-        {svc.source === "git" && <WebhookCard serviceId={svc.id} branch={svc.gitBranch} />}
-        {isDb && <BackupsCard serviceId={svc.id} name={svc.name} />}
+            {isDb && <ConnectionCard serviceId={svc.id} host={svc.name} />}
+            {svc.source === "git" && <WebhookCard serviceId={svc.id} branch={svc.gitBranch} />}
+            {isDb && <BackupsCard serviceId={svc.id} name={svc.name} />}
 
-        {svc.containers.length > 0 && (
-          // Remount (and reconnect) whenever the set of containers changes.
-          <LiveLogs key={active.map((c) => c.id).join()} serviceId={id} />
-        )}
+            {svc.containers.length > 0 && (
+              // Remount (and reconnect) whenever the set of containers changes.
+              <LiveLogs key={active.map((c) => c.id).join()} serviceId={id} />
+            )}
 
-        <div className="grid items-start gap-4 lg:grid-cols-2">
-          <Settings svc={svc} />
-          <Deployments svc={svc} deployments={deployments.data ?? []} selected={selected} onSelect={setSelected} busy={busy} />
-        </div>
+            <div className="grid items-start gap-4 lg:grid-cols-2">
+              <Settings svc={svc} />
+              <Deployments svc={svc} deployments={deployments.data ?? []} selected={selected} onSelect={setSelected} busy={busy} />
+            </div>
+          </TabsContent>
+          <TabsContent value="environment">
+            <EnvironmentCard key={svc.id} svc={svc} />
+          </TabsContent>
+        </Tabs>
       </PageBody>
     </>
   );
@@ -183,21 +196,12 @@ export function Service() {
 function Settings({ svc }: { svc: ServiceT }) {
   const qc = useQueryClient();
   const isDb = svc.kind === "postgres";
-  const siblings = useQuery({
-    queryKey: ["services", svc.projectId],
-    queryFn: () => api.services(svc.projectId),
-    enabled: !isDb,
-  });
-  const databases = siblings.data?.filter((s) => s.kind === "postgres") ?? [];
-  const project = useQuery({ queryKey: ["project", svc.projectId], queryFn: () => api.project(svc.projectId) });
-  const [env, setEnv] = useState<EnvRow[]>(() => envRows(svc.env));
   const [form, setForm] = useState(() => ({
     image: svc.image,
     domain: svc.domain,
     port: svc.port ? String(svc.port) : "",
     replicas: String(svc.replicas),
     memory: svc.memoryMb ? String(svc.memoryMb) : "",
-    databaseId: svc.databaseId,
     healthPath: svc.healthPath,
     preDeploy: svc.preDeploy,
     gitUrl: svc.gitUrl,
@@ -213,7 +217,7 @@ function Settings({ svc }: { svc: ServiceT }) {
       api.updateService(
         svc.id,
         isDb
-          ? { image: form.image.trim(), memoryMb: Number(form.memory) || 0, env: envMap(env) }
+          ? { image: form.image.trim(), memoryMb: Number(form.memory) || 0, }
           : {
               ...(svc.source === "git"
                 ? {
@@ -228,10 +232,8 @@ function Settings({ svc }: { svc: ServiceT }) {
               port: Number(form.port) || 0,
               replicas: Number(form.replicas) || 1,
               memoryMb: Number(form.memory) || 0,
-              databaseId: form.databaseId,
               healthPath: form.healthPath.trim(),
               preDeploy: form.preDeploy.trim(),
-              env: envMap(env),
             },
       ),
     onSuccess: (updated) => {
@@ -277,17 +279,10 @@ function Settings({ svc }: { svc: ServiceT }) {
           value={form.memory}
           onChange={set("memory")}
           description={isDb ? undefined : "Empty for no limit."}
-          className={isDb ? "sm:col-span-2" : undefined}
+          className="sm:col-span-2"
         />
         {!isDb && (
           <>
-            <FloatingSelect
-              label="Database"
-              value={form.databaseId || "none"}
-              onValueChange={(v) => setForm({ ...form, databaseId: v === "none" ? "" : v })}
-              options={[{ value: "none", label: "None" }, ...databases.map((d) => ({ value: d.id, label: d.name }))]}
-              description="Injects DATABASE_URL."
-            />
             <FloatingInput
               label="Health path"
               value={form.healthPath}
@@ -307,20 +302,58 @@ function Settings({ svc }: { svc: ServiceT }) {
             />
           </>
         )}
-        <EnvEditor
-          rows={env}
-          onChange={setEnv}
-          vars={Object.keys(project.data?.env ?? {}).sort()}
-          className="sm:col-span-2"
-          description={
-            <>
-              {isDb && "POSTGRES_* credentials are fixed at creation. "}
-              Hidden values (********) are kept as-is. Use a project variable with{" "}
-              <Mono>{"{{ project.NAME }}"}</Mono>.
-            </>
-          }
-        />
         <div className="flex items-center justify-end gap-3 sm:col-span-2">
+          <ErrorText error={save.error} />
+          <Button type="submit" disabled={save.isPending}>
+            {save.isPending ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </form>
+    </Section>
+  );
+}
+
+function EnvironmentCard({ svc }: { svc: ServiceT }) {
+  const qc = useQueryClient();
+  const isDb = svc.kind === "postgres";
+  const project = useQuery({ queryKey: ["project", svc.projectId], queryFn: () => api.project(svc.projectId) });
+  const siblings = useQuery({ queryKey: ["services", svc.projectId], queryFn: () => api.services(svc.projectId) });
+  const databases = siblings.data?.filter((s) => s.kind === "postgres" && s.id !== svc.id).map((s) => s.name);
+  const [rows, setRows] = useState<EnvRow[]>(() => envRows(svc.env, svc.secrets));
+  const save = useMutation({
+    mutationFn: () => api.updateService(svc.id, { env: envMap(rows), secrets: envSecrets(rows) }),
+    onSuccess: (updated) => {
+      qc.setQueryData(["service", svc.id], updated);
+      setRows(envRows(updated.env, updated.secrets));
+      toast.success("Environment saved", { description: "Deploy to apply." });
+    },
+  });
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    save.mutate();
+  };
+
+  return (
+    <Section
+      title="Environment"
+      description={
+        <>
+          Use the project&apos;s shared entries with <Mono>{"{{ project.NAME }}"}</Mono> and its databases with{" "}
+          <Mono>{"{{ db.NAME.URL }}"}</Mono>. Changes apply on the next deploy.
+        </>
+      }
+    >
+      <form onSubmit={onSubmit} className="space-y-4">
+        <EnvEditor
+          showLabel={false}
+          rows={rows}
+          onChange={setRows}
+          vars={Object.keys(project.data?.env ?? {}).sort()}
+          secretVars={project.data?.secrets}
+          databases={databases}
+          description={isDb ? "POSTGRES_* credentials are fixed at creation." : undefined}
+        />
+        <div className="flex items-center justify-end gap-3">
           <ErrorText error={save.error} />
           <Button type="submit" disabled={save.isPending}>
             {save.isPending ? "Saving…" : "Save"}
@@ -447,8 +480,8 @@ function ConnectionCard({ serviceId, host }: { serviceId: string; host: string }
       title="Connection"
       description={
         <>
-          Reachable only inside the project at <Mono>{host}:5432</Mono>. Link it from an app to inject{" "}
-          <Mono>DATABASE_URL</Mono>.
+          Reachable only inside the project at <Mono>{host}:5432</Mono>. Apps use it from their Environment
+          (Secrets → Connect database), e.g. <Mono>{`DATABASE_URL={{ db.${host}.URL }}`}</Mono>.
         </>
       }
       actions={

@@ -21,7 +21,7 @@ type Store interface {
 	GetProject(ctx context.Context, id string) (Project, error)
 	ListProjects(ctx context.Context) ([]Project, error)
 	DeleteProject(ctx context.Context, id string) error
-	SetProjectEnv(ctx context.Context, id string, env map[string]string) (Project, error)
+	SetProjectEnv(ctx context.Context, id string, env map[string]string, secrets []string) (Project, error)
 
 	CreateService(ctx context.Context, s Service) (Service, error)
 	GetService(ctx context.Context, id string) (Service, error)
@@ -146,9 +146,11 @@ type Project struct {
 	ServerID string `bun:"server_id" json:"serverId"`
 	// Env holds variables shared by the services, which reference them as
 	// {{ project.NAME }}.
-	Env       map[string]string `bun:"env" json:"env"`
-	CreatedAt time.Time         `bun:"created_at" json:"createdAt"`
-	UpdatedAt time.Time         `bun:"updated_at" json:"updatedAt"`
+	Env map[string]string `bun:"env" json:"env"`
+	// Secrets names the Env entries that are write-only.
+	Secrets   []string  `bun:"secrets" json:"secrets"`
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+	UpdatedAt time.Time `bun:"updated_at" json:"updatedAt"`
 }
 
 type ServiceSource string
@@ -182,10 +184,11 @@ type Service struct {
 	// Domain is the public hostname; empty when not public.
 	Domain string            `bun:"domain" json:"domain"`
 	Env    map[string]string `bun:"env" json:"env"`
+	// Secrets names the Env entries that are write-only; the others are
+	// plain variables.
+	Secrets []string `bun:"secrets" json:"secrets"`
 	// MemoryMB is the container memory limit; 0 means unlimited.
 	MemoryMB int `bun:"memory_mb" json:"memoryMb"`
-	// DatabaseID links an app to a postgres service of the same project.
-	DatabaseID string `bun:"database_id" json:"databaseId"`
 	// HealthPath is an HTTP path that must answer 2xx/3xx before a new
 	// replica takes over; empty uses the image healthcheck or a stability wait.
 	HealthPath string `bun:"health_path" json:"healthPath"`

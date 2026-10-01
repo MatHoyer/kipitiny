@@ -2,8 +2,10 @@ export type Project = {
   id: string;
   name: string;
   serverId: string;
-  /** Shared variables; services reference them as {{ project.NAME }}. Values come back masked. */
+  /** Shared variables and secrets; services reference them as {{ project.NAME }}. */
   env: Record<string, string>;
+  /** Names of the env entries that are secrets: their values come back masked. */
+  secrets: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -30,8 +32,9 @@ export type Service = {
   port: number;
   domain: string;
   env: Record<string, string>;
+  /** Names of the env entries that are secrets: their values come back masked. */
+  secrets: string[];
   memoryMb: number;
-  databaseId: string;
   healthPath: string;
   preDeploy: string;
   currentDeploymentId: string;
@@ -57,8 +60,8 @@ export type ServiceInput = {
   port?: number;
   domain?: string;
   env?: Record<string, string>;
+  secrets?: string[];
   memoryMb?: number;
-  databaseId?: string;
   healthPath?: string;
   preDeploy?: string;
   source?: "image" | "git";
@@ -294,7 +297,7 @@ export type Status = {
   dockerError?: string;
 };
 
-/** Env values come back masked; sending the mask keeps the stored value. */
+/** Secret values come back masked; sending the mask keeps the stored value. */
 export const SECRET_MASK = "********";
 
 export class ApiError extends Error {
@@ -335,7 +338,8 @@ export const api = {
   projects: () => request<Project[]>("/projects"),
   project: (id: string) => request<Project>(`/projects/${id}`),
   createProject: (name: string, serverId = "") => request<Project>("/projects", json("POST", { name, serverId })),
-  setProjectEnv: (id: string, env: Record<string, string>) => request<Project>(`/projects/${id}/env`, json("PUT", env)),
+  setProjectEnv: (id: string, env: Record<string, string>, secrets: string[]) =>
+    request<Project>(`/projects/${id}/env`, json("PUT", { env, secrets })),
   deleteProject: (id: string, confirm: string) =>
     request<void>(`/projects/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),
 

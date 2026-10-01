@@ -62,8 +62,11 @@ updates.
 - **Apps** run from an image, optionally public on a domain (HTTPS via Traefik), 1–10 replicas.
 - **PostgreSQL** services get generated credentials, a named data volume, a memory
   limit with matching `shared_buffers`, and a `pg_isready` healthcheck. They are
-  only reachable inside their project, at `<service-name>:5432`. Link an app to a
-  database and it receives `DATABASE_URL` (an explicit `DATABASE_URL` env var wins).
+  only reachable inside their project, at `<service-name>:5432`. An app uses one or
+  more databases through env references, e.g. `DATABASE_URL={{ db.main.URL }}`
+  (fields: `URL`, `HOST`, `PORT`, `USER`, `PASSWORD`, `DATABASE`).
+- **Environment**: variables are readable, secrets write-only. A project holds shared
+  ones that services reference as `{{ project.NAME }}`. References resolve at deploy.
 - Deleting a database or a project destroys data and must be confirmed by typing its name.
 
 ## Builds from Git
@@ -112,7 +115,7 @@ stays stopped. Services busy with a deploy, backup or restore are left alone.
   backup records size, SHA-256, server version and duration.
 - Restores load the dump into a scratch database and swap it in by rename, so the
   result is exactly the backup and a failed restore leaves live data untouched.
-  Apps linked to the database are stopped meanwhile. The checksum is verified.
+  Apps referencing the database are stopped meanwhile. The checksum is verified.
 - Backups outlive their database and project; delete them explicitly.
 - **Schedules** (cron, UTC unless `CRON_TZ=` is given) back up a database to a
   target and then apply retention to *their own* backups: keep the last N, plus

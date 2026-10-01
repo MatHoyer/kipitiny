@@ -334,7 +334,7 @@ func (c *Core) runRestore(svc store.Service, containerID string, st storage.Stor
 	// Bring apps back even if the restore failed: the transaction rolled back.
 	for _, id := range stopped {
 		if _, serr := c.dockerFor(svc.ServerID).ContainerStart(context.WithoutCancel(ctx), id, client.ContainerStartOptions{}); serr != nil {
-			log.Error("cannot restart linked app", "container", id, "err", serr)
+			log.Error("cannot restart app using the database", "container", id, "err", serr)
 		}
 	}
 
@@ -389,7 +389,7 @@ func (c *Core) restore(ctx context.Context, svc store.Service, containerID strin
 
 	// Swap. Each statement runs on its own: DROP DATABASE can't run in the
 	// implicit transaction of a multi-statement query. Remaining connections
-	// (linked apps are stopped already) are cut so the rename can proceed.
+	// (apps using it are stopped already) are cut so the rename can proceed.
 	if err := admin(fmt.Sprintf(`DROP DATABASE IF EXISTS %s WITH (FORCE)`, pgIdent(old))); err != nil {
 		dropScratch()
 		return fmt.Errorf("swap databases: %w", err)
@@ -459,8 +459,8 @@ func pgIdent(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 }
 
-// stopLinkedApps stops running containers of apps using db and returns
-// their IDs so they can be started again.
+// stopLinkedApps stops running containers of apps whose env references db
+// and returns their IDs so they can be started again.
 func (c *Core) stopLinkedApps(ctx context.Context, db store.Service) ([]string, error) {
 	svcs, err := c.store.ListServices(ctx, db.ProjectID)
 	if err != nil {
@@ -468,7 +468,7 @@ func (c *Core) stopLinkedApps(ctx context.Context, db store.Service) ([]string, 
 	}
 	var stopped []string
 	for _, s := range svcs {
-		if s.DatabaseID != db.ID {
+		if s.ID == db.ID || !usesDatabase(s.Env, db.Name) {
 			continue
 		}
 		cts, err := c.serviceContainers(ctx, s)

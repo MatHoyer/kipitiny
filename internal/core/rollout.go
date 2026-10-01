@@ -22,13 +22,13 @@ const (
 
 // preDeploy runs the service's pre-deploy command once in a one-off
 // container with the new image and the same environment and network.
-func (c *Core) preDeploy(ctx context.Context, project store.Project, svc store.Service, db *store.Service,
+func (c *Core) preDeploy(ctx context.Context, project store.Project, svc store.Service, dbs map[string]store.Service,
 	dep store.Deployment, out io.Writer, logf func(string, ...any)) error {
 
 	ctx, cancel := context.WithTimeout(ctx, preDeployTimeout)
 	defer cancel()
 
-	spec := containerSpec(project, svc, db, dep.ID, 0, "") // never routed
+	spec := containerSpec(project, svc, dbs, dep.ID, 0, "") // never routed
 	spec.Name = fmt.Sprintf("%s-%s-predeploy-%s", project.Name, svc.Name, deploySuffix(dep.ID))
 	spec.Config.Cmd = []string{"sh", "-c", svc.PreDeploy}
 	spec.Config.Entrypoint = []string{}

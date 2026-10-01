@@ -46,7 +46,8 @@ func TestTools(t *testing.T) {
 	// Seed a project and a database service without touching Docker.
 	p, _ := st.CreateProject(ctx, store.Project{Name: "shop"})
 	if _, err := st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindPostgres,
-		Image: "postgres:17", Replicas: 1, Env: map[string]string{"POSTGRES_PASSWORD": "hunter2"}}); err != nil {
+		Image: "postgres:17", Replicas: 1, Env: map[string]string{"POSTGRES_PASSWORD": "hunter2"},
+		Secrets: []string{"POSTGRES_PASSWORD"}}); err != nil {
 		t.Fatal(err)
 	}
 	readTok, _ := c.CreateAPIToken(ctx, "agent", store.ScopeRead)

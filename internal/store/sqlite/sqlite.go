@@ -123,6 +123,9 @@ func (s *Store) CreateProject(ctx context.Context, p store.Project) (store.Proje
 	if p.Env == nil {
 		p.Env = map[string]string{}
 	}
+	if p.Secrets == nil {
+		p.Secrets = []string{}
+	}
 	if _, err := s.db.NewInsert().Model(&p).Exec(ctx); err != nil {
 		return store.Project{}, mapErr(err)
 	}
@@ -141,12 +144,15 @@ func (s *Store) ListProjects(ctx context.Context) ([]store.Project, error) {
 	return ps, mapErr(err)
 }
 
-func (s *Store) SetProjectEnv(ctx context.Context, id string, env map[string]string) (store.Project, error) {
+func (s *Store) SetProjectEnv(ctx context.Context, id string, env map[string]string, secrets []string) (store.Project, error) {
 	if env == nil {
 		env = map[string]string{}
 	}
-	p := store.Project{ID: id, Env: env, UpdatedAt: now()}
-	res, err := s.db.NewUpdate().Model(&p).Column("env", "updated_at").WherePK().Exec(ctx)
+	if secrets == nil {
+		secrets = []string{}
+	}
+	p := store.Project{ID: id, Env: env, Secrets: secrets, UpdatedAt: now()}
+	res, err := s.db.NewUpdate().Model(&p).Column("env", "secrets", "updated_at").WherePK().Exec(ctx)
 	if err != nil {
 		return store.Project{}, mapErr(err)
 	}
@@ -165,6 +171,9 @@ func (s *Store) CreateService(ctx context.Context, svc store.Service) (store.Ser
 	svc.ID, svc.CreatedAt, svc.UpdatedAt = ids.New(), now, now
 	if svc.Source == "" {
 		svc.Source = store.SourceImage
+	}
+	if svc.Secrets == nil {
+		svc.Secrets = []string{}
 	}
 	// Services always run on their project's server.
 	err := s.db.NewSelect().Model((*store.Project)(nil)).Column("server_id").
@@ -194,7 +203,7 @@ func (s *Store) ListServices(ctx context.Context, projectID string) ([]store.Ser
 func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Service, error) {
 	svc.UpdatedAt = now()
 	res, err := s.db.NewUpdate().Model(&svc).
-		Column("image", "replicas", "port", "domain", "env", "memory_mb", "database_id", "health_path", "pre_deploy",
+		Column("image", "replicas", "port", "domain", "env", "secrets", "memory_mb", "health_path", "pre_deploy",
 			"git_url", "git_branch", "git_token", "dockerfile", "build_context", "updated_at").
 		WherePK().Exec(ctx)
 	if err != nil {

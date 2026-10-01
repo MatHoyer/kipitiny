@@ -25,31 +25,85 @@ func TestResolveEnv(t *testing.T) {
 		"C": "",
 		"D": "{{ other.HOST }}",
 	}
-	if got := resolveEnv(env, project); !maps.Equal(got, want) {
+	src := envSources{project: project}
+	if got := resolveEnv(env, src); !maps.Equal(got, want) {
 		t.Errorf("resolveEnv = %v, want %v", got, want)
 	}
-	if got := missingRefs(env, project); !slices.Equal(got, []string{"NOPE"}) {
-		t.Errorf("missingRefs = %v", got)
+	if got := unresolved(env, src); !slices.Equal(got, []string{"project.NOPE"}) {
+		t.Errorf("unresolved = %v", got)
+	}
+}
+
+func TestResolveDatabaseRefs(t *testing.T) {
+	db := pgService()
+	src := envSources{dbs: map[string]store.Service{db.Name: db}}
+	env := map[string]string{
+		"DATABASE_URL": "{{ db." + db.Name + ".URL }}",
+		"PGHOST":       "{{ db." + db.Name + ".HOST }}",
+		"PGPORT":       "{{db." + db.Name + ".PORT}}",
+		"PGUSER":       "{{ db." + db.Name + ".USER }}",
+		"PGPASSWORD":   "{{ db." + db.Name + ".PASSWORD }}",
+		"PGDATABASE":   "{{ db." + db.Name + ".DATABASE }}",
+		"BAD_FIELD":    "{{ db." + db.Name + ".NOPE }}",
+		"BAD_DB":       "{{ db.gone.URL }}",
+	}
+	got := resolveEnv(env, src)
+	want := map[string]string{
+		"DATABASE_URL": DatabaseURL(db), "PGHOST": db.Name, "PGPORT": "5432",
+		"PGUSER": db.Env[pgUser], "PGPASSWORD": db.Env[pgPassword], "PGDATABASE": db.Env[pgDatabase],
+		"BAD_FIELD": "", "BAD_DB": "",
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("resolveEnv = %v, want %v", got, want)
+	}
+	if got, want := unresolved(env, src), []string{"db." + db.Name + ".NOPE", "db.gone.URL"}; !slices.Equal(got, want) {
+		t.Errorf("unresolved = %v, want %v", got, want)
+	}
+	if !usesDatabase(env, db.Name) || usesDatabase(map[string]string{"A": "{{ project.X }}"}, db.Name) {
+		t.Error("usesDatabase")
+	}
+	if !soleRefRe.MatchString(env["PGHOST"]) {
+		t.Error("a database reference must count as a sole reference (not masked)")
 	}
 }
 
 func TestMaskEnv(t *testing.T) {
-	got := maskEnv(map[string]string{
-		"REF":   "{{ project.A }}",
-		"REFS":  "{{ project.A }} {{project.B}}",
-		"MIXED": "x{{ project.A }}",
-		"LIT":   "secret",
-		"EMPTY": "",
-	})
-	want := map[string]string{
-		"REF":   "{{ project.A }}",
-		"REFS":  "{{ project.A }} {{project.B}}",
-		"MIXED": SecretMask,
-		"LIT":   SecretMask,
-		"EMPTY": SecretMask,
-	}
+	got := maskEnv(map[string]string{"VAR": "v", "KEY": "k", "REF": "{{ project.KEY }}", "MIX": "x{{ project.KEY }}"},
+		[]string{"KEY", "REF", "MIX"})
+	want := map[string]string{"VAR": "v", "KEY": SecretMask, "REF": "{{ project.KEY }}", "MIX": SecretMask}
 	if !maps.Equal(got, want) {
 		t.Errorf("maskEnv = %v, want %v", got, want)
+	}
+}
+
+func TestMergeEnv(t *testing.T) {
+	old := map[string]string{"VAR": "v", "KEY": "k", "TOKEN": "t"}
+	oldSecrets := []string{"KEY", "TOKEN"}
+
+	env, secrets, err := mergeEnv(map[string]string{"VAR": "v2", "KEY": SecretMask, "TOKEN": "new", "NEW": "n"},
+		[]string{"KEY", "NEW"}, old, oldSecrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]string{"VAR": "v2", "KEY": "k", "TOKEN": "new", "NEW": "n"}; !maps.Equal(env, want) {
+		t.Errorf("env = %v, want %v", env, want)
+	}
+	if want := []string{"KEY", "NEW"}; !slices.Equal(secrets, want) {
+		t.Errorf("secrets = %v, want %v (TOKEN became a variable with a new value)", secrets, want)
+	}
+
+	// A masked secret can't become a variable: that would reveal it.
+	if _, _, err := mergeEnv(map[string]string{"KEY": SecretMask}, []string{}, old, oldSecrets); !errors.Is(err, ErrInvalid) {
+		t.Errorf("unmasking a secret: got %v, want ErrInvalid", err)
+	}
+
+	// Without flags, stored ones are kept and new entries are secrets.
+	_, secrets, err = mergeEnv(map[string]string{"VAR": "v", "KEY": SecretMask, "NEW": "n"}, nil, old, oldSecrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"KEY", "NEW"}; !slices.Equal(secrets, want) {
+		t.Errorf("default secrets = %v, want %v", secrets, want)
 	}
 }
 
@@ -61,14 +115,14 @@ func TestSetProjectEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"HOST": "db", "PASS": "s3cret"})
+	got, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"HOST": "db", "PASS": "s3cret"}, []string{"PASS"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Env["PASS"] != SecretMask {
-		t.Errorf("returned env not masked: %v", got.Env)
+	if got.Env["PASS"] != SecretMask || got.Env["HOST"] != "db" {
+		t.Errorf("returned env: %v, want the secret masked and the variable readable", got.Env)
 	}
-	if _, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"BAD-KEY": "1"}); !errors.Is(err, ErrInvalid) {
+	if _, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"BAD-KEY": "1"}, nil); !errors.Is(err, ErrInvalid) {
 		t.Errorf("bad key: got %v, want ErrInvalid", err)
 	}
 
@@ -78,11 +132,11 @@ func TestSetProjectEnv(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// Masked values keep the stored ones; a referenced variable can't go.
-	if _, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"PASS": SecretMask}); !errors.Is(err, ErrInvalid) {
+	// A variable referenced by a service can't go.
+	if _, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"PASS": SecretMask}, []string{"PASS"}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("removing a referenced variable: got %v, want ErrInvalid", err)
 	}
-	if _, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"HOST": SecretMask}); err != nil {
+	if _, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"HOST": "db"}, []string{}); err != nil {
 		t.Fatal(err)
 	}
 	stored, _ := c.store.GetProject(ctx, p.ID)

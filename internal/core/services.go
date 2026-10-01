@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"regexp"
@@ -37,11 +36,11 @@ type ServiceInput struct {
 	Port     int               `json:"port"`
 	Domain   string            `json:"domain"`
 	Env      map[string]string `json:"env"`
-	MemoryMB int               `json:"memoryMb"`
-	// DatabaseID links an app to a postgres service of the same project.
-	DatabaseID string `json:"databaseId"`
-	HealthPath string `json:"healthPath"`
-	PreDeploy  string `json:"preDeploy"`
+	// Secrets names the write-only Env entries; nil makes them all secrets.
+	Secrets    []string `json:"secrets"`
+	MemoryMB   int      `json:"memoryMb"`
+	HealthPath string   `json:"healthPath"`
+	PreDeploy  string   `json:"preDeploy"`
 	// Git source (Source "git"): Image is then ignored.
 	Source       store.ServiceSource `json:"source"`
 	GitURL       string              `json:"gitUrl"`
@@ -52,15 +51,16 @@ type ServiceInput struct {
 }
 
 // ServicePatch updates only the fields that are set. Env replaces the whole
-// map; values equal to SecretMask keep their stored value.
+// map; secrets equal to SecretMask keep their stored value. Secrets names the
+// write-only entries; nil keeps the stored flags.
 type ServicePatch struct {
 	Image      *string           `json:"image"`
 	Replicas   *int              `json:"replicas"`
 	Port       *int              `json:"port"`
 	Domain     *string           `json:"domain"`
 	Env        map[string]string `json:"env"`
+	Secrets    []string          `json:"secrets"`
 	MemoryMB   *int              `json:"memoryMb"`
-	DatabaseID *string           `json:"databaseId"`
 	HealthPath *string           `json:"healthPath"`
 	PreDeploy  *string           `json:"preDeploy"`
 	GitURL     *string           `json:"gitUrl"`
@@ -113,7 +113,6 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		Domain:       strings.ToLower(strings.TrimSpace(in.Domain)),
 		Env:          in.Env,
 		MemoryMB:     in.MemoryMB,
-		DatabaseID:   in.DatabaseID,
 		HealthPath:   strings.TrimSpace(in.HealthPath),
 		PreDeploy:    strings.TrimSpace(in.PreDeploy),
 		Source:       in.Source,
@@ -139,6 +138,11 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
 	}
+	env, secrets, envErr := mergeEnv(svc.Env, in.Secrets, nil, nil)
+	if envErr != nil {
+		return ServiceView{}, envErr
+	}
+	svc.Env, svc.Secrets = env, secrets
 	if !nameRe.MatchString(svc.Name) {
 		return ServiceView{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
@@ -153,6 +157,10 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		}
 		// Generated credentials win over anything sent in.
 		maps.Copy(svc.Env, newPostgresEnv())
+		if !slices.Contains(svc.Secrets, pgPassword) {
+			svc.Secrets = append(svc.Secrets, pgPassword)
+			slices.Sort(svc.Secrets)
+		}
 	default:
 		return ServiceView{}, fmt.Errorf("%w: unknown service kind %q", ErrInvalid, svc.Kind)
 	}
@@ -188,14 +196,17 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	if p.Domain != nil {
 		svc.Domain = strings.ToLower(strings.TrimSpace(*p.Domain))
 	}
-	if p.Env != nil {
-		svc.Env = mergeMasked(p.Env, svc.Env)
+	if p.Env != nil || p.Secrets != nil {
+		in := p.Env
+		if in == nil {
+			in = maskEnv(svc.Env, svc.Secrets)
+		}
+		if svc.Env, svc.Secrets, err = mergeEnv(in, p.Secrets, old.Env, old.Secrets); err != nil {
+			return ServiceView{}, err
+		}
 	}
 	if p.MemoryMB != nil {
 		svc.MemoryMB = *p.MemoryMB
-	}
-	if p.DatabaseID != nil {
-		svc.DatabaseID = *p.DatabaseID
 	}
 	if p.HealthPath != nil {
 		svc.HealthPath = strings.TrimSpace(*p.HealthPath)
@@ -240,7 +251,7 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	return c.view(ctx, svc)
 }
 
-// validate checks a service's fields and its link to a database.
+// validate checks a service's fields and that its env references resolve.
 func (c *Core) validate(ctx context.Context, s store.Service) error {
 	if err := validateService(s); err != nil {
 		return err
@@ -252,17 +263,11 @@ func (c *Core) validate(ctx context.Context, s store.Service) error {
 	if err != nil {
 		return err
 	}
-	if err := checkRefs(s.Env, project.Env); err != nil {
+	dbs, err := c.projectDatabases(ctx, s.ProjectID)
+	if err != nil {
 		return err
 	}
-	if s.DatabaseID == "" {
-		return nil
-	}
-	db, err := c.store.GetService(ctx, s.DatabaseID)
-	if errors.Is(err, store.ErrNotFound) || (err == nil && (db.ProjectID != s.ProjectID || db.Kind != store.ServiceKindPostgres)) {
-		return fmt.Errorf("%w: linked database must be a postgres service of the same project", ErrInvalid)
-	}
-	return err
+	return checkRefs(s.Env, envSources{project: project.Env, dbs: dbs})
 }
 
 func validateService(s store.Service) error {
@@ -288,9 +293,6 @@ func validateService(s store.Service) error {
 		return fmt.Errorf("%w: memory must be positive", ErrInvalid)
 	}
 	if s.Kind == store.ServiceKindPostgres {
-		if s.DatabaseID != "" {
-			return fmt.Errorf("%w: a database cannot link another database", ErrInvalid)
-		}
 		if s.HealthPath != "" || s.PreDeploy != "" {
 			return fmt.Errorf("%w: databases have a built-in healthcheck and no pre-deploy command", ErrInvalid)
 		}
@@ -444,7 +446,10 @@ func masked(s store.Service) store.Service {
 	if s.GitToken != "" {
 		s.GitToken = SecretMask
 	}
-	s.Env = maskEnv(s.Env)
+	s.Env = maskEnv(s.Env, s.Secrets)
+	if s.Secrets == nil {
+		s.Secrets = []string{}
+	}
 	return s
 }
 
@@ -471,8 +476,8 @@ func (c *Core) DeleteService(ctx context.Context, id, confirm string) error {
 			return err
 		}
 		for _, s := range siblings {
-			if s.DatabaseID == svc.ID {
-				return fmt.Errorf("%w: database is used by %q; unlink it first", ErrInvalid, s.Name)
+			if s.ID != svc.ID && usesDatabase(s.Env, svc.Name) {
+				return fmt.Errorf("%w: database is used by %q; remove its references first", ErrInvalid, s.Name)
 			}
 		}
 	}
