@@ -126,7 +126,7 @@ export function Service() {
             DNS {svc.dns.state}: {svc.dns.message}
           </p>
         )}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Card size="sm" className="gap-1.5 px-3">
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               {isDb ? <PostgresIcon className="size-3.5 text-[#4169E1]" /> : <Activity className="size-3.5" />}
@@ -180,7 +180,7 @@ export function Service() {
             {isDb && <TabsTrigger value="backups">Backups</TabsTrigger>}
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
-          <TabsContent value="overview" className="space-y-4">
+          <TabsContent value="overview" className="space-y-6">
             <Section title="Containers">
               {svc.containers.length === 0 ? (
                 <Empty>Not deployed yet.</Empty>
@@ -219,7 +219,7 @@ export function Service() {
               <BackupsCard serviceId={svc.id} name={svc.name} />
             </TabsContent>
           )}
-          <TabsContent value="settings" className="space-y-4">
+          <TabsContent value="settings" className="space-y-6">
             <Settings svc={svc} />
             {svc.source === "git" && <WebhookCard serviceId={svc.id} branch={svc.gitBranch} />}
             <DangerZone description={isDb ? "Deleting the database destroys its data volume." : "Deleting the service removes its containers."}>

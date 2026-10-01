@@ -122,7 +122,7 @@ export function Cleanup() {
             description="Older history and build logs are deleted. 0 keeps all, otherwise at least 10."
           />
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-3">
           <CheckboxField
             label="Build cache"
             description="Layers cached by Git builds."

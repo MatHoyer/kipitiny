@@ -25,7 +25,7 @@ export function PageHeader({ crumbs, actions }: { crumbs: Crumb[]; actions?: Rea
     <header className="sticky top-0 z-20 shrink-0 border-b bg-background/90 backdrop-blur">
       {/* The breadcrumb stands in for a visible title; screen readers still get a heading. */}
       {typeof current === "string" && <h1 className="sr-only">{current}</h1>}
-      <div className="flex min-h-12 flex-wrap items-center gap-2 px-2 py-1.5 sm:px-4">
+      <div className="flex min-h-14 flex-wrap items-center gap-2 px-3 py-2 sm:px-6">
         <SidebarTrigger />
         <Separator orientation="vertical" className="mr-1 data-vertical:h-4 data-vertical:self-center" />
         <Breadcrumb className="min-w-0 flex-1">
@@ -59,5 +59,5 @@ export function PageHeader({ crumbs, actions }: { crumbs: Crumb[]; actions?: Rea
 
 /** Page body under the header. */
 export function PageBody({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("mx-auto w-full max-w-5xl space-y-4 p-4", className)}>{children}</div>;
+  return <div className={cn("mx-auto w-full max-w-6xl space-y-6 px-4 py-6 sm:px-6 lg:px-8", className)}>{children}</div>;
 }

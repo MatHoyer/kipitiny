@@ -81,7 +81,7 @@ export function Project() {
       <PageHeader crumbs={crumbs} actions={project.data && <NewServiceDialog projectId={id} />} />
       <PageBody>
         {list.length > 0 && (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatCard icon={Layers} label="Services" value={list.length} />
             <StatCard icon={Activity} label="Running" value={states.filter((s) => s === "running").length} tone="good" />
             <StatCard icon={Database} label="Databases" value={dbs.length} />
@@ -118,11 +118,11 @@ export function Project() {
               </>
             )}
           </TabsContent>
-          <TabsContent value="environment" className="space-y-4">
+          <TabsContent value="environment" className="space-y-6">
             {project.data && <SharedVariables key={project.data.id} project={project.data} />}
             <DatabaseReferences names={dbs.map((s) => s.name)} />
           </TabsContent>
-          <TabsContent value="settings" className="space-y-4">
+          <TabsContent value="settings" className="space-y-6">
             {hasDatabases && (
               <Section
                 title="Back up databases"
@@ -163,7 +163,7 @@ function ServiceGroup({ title, services }: { title: string; services: ServiceT[]
   return (
     <section className="space-y-2">
       <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</h2>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {services.map((s) => (
           <ServiceCard key={s.id} svc={s} />
         ))}
@@ -180,8 +180,8 @@ function ServiceCard({ svc: s }: { svc: ServiceT }) {
       <Card className="h-full gap-3 px-4 transition-all group-hover:-translate-y-px group-hover:shadow-md group-hover:ring-foreground/20">
         <div className="flex items-start gap-3">
           {isDb ? (
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#4169E1]/10">
-              <PostgresIcon aria-label="PostgreSQL" className="size-4.5 text-[#4169E1]" />
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[#4169E1]/10">
+              <PostgresIcon aria-label="PostgreSQL" className="size-5 text-[#4169E1]" />
             </span>
           ) : (
             <IconTile icon={s.source === "git" ? GitBranch : Box} />
@@ -413,7 +413,7 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
             </ToggleGroupItem>
           </ToggleGroup>
           {tab === "databases" && (
-            <div role="radiogroup" aria-label="Database engine" className="grid gap-3 sm:grid-cols-3">
+            <div role="radiogroup" aria-label="Database engine" className="grid gap-4 sm:grid-cols-3">
               <EngineCard
                 selected={engine === "postgres"}
                 onSelect={() => setEngine("postgres")}

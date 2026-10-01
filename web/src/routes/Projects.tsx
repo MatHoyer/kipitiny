@@ -55,7 +55,7 @@ export function Projects() {
           />
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <StatCard icon={FolderKanban} label="Projects" value={projects.data.length} />
               <StatCard icon={Layers} label="Services" value={all.length} hint={`${all.filter((s) => s.kind === "postgres").length} databases`} />
               <StatCard icon={Activity} label="Running" value={states.filter((s) => s === "running").length} tone="good" />
@@ -66,7 +66,7 @@ export function Projects() {
                 tone={states.some(troubled) ? "bad" : undefined}
               />
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {projects.data.map((p, i) => (
                 <ProjectCard key={p.id} project={p} services={services[i]?.data} server={multi ? serverName(p.serverId) : undefined} />
               ))}
