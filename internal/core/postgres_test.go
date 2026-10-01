@@ -38,11 +38,12 @@ func TestValidatePostgres(t *testing.T) {
 		t.Fatalf("valid service rejected: %v", err)
 	}
 	for name, mutate := range map[string]func(*store.Service){
-		"replicas":    func(s *store.Service) { s.Replicas = 2 },
-		"public":      func(s *store.Service) { s.Domain, s.Port = "db.example.com", 5432 },
-		"low memory":  func(s *store.Service) { s.MemoryMB = 64 },
-		"unpinned":    func(s *store.Service) { s.Image = "postgres:latest" },
-		"no password": func(s *store.Service) { delete(s.Env, pgPassword) },
+		"replicas":     func(s *store.Service) { s.Replicas = 2 },
+		"public":       func(s *store.Service) { s.Domain, s.Port = "db.example.com", 5432 },
+		"low memory":   func(s *store.Service) { s.MemoryMB = 64 },
+		"unpinned":     func(s *store.Service) { s.Image = "postgres:latest" },
+		"no password":  func(s *store.Service) { delete(s.Env, pgPassword) },
+		"db reference": func(s *store.Service) { s.Env["OTHER"] = "{{ project.A }}/{{ db.other.URL }}" },
 	} {
 		s := pgService()
 		mutate(&s)

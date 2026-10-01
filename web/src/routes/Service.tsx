@@ -321,8 +321,9 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
   const qc = useQueryClient();
   const isDb = svc.kind === "postgres";
   const project = useQuery({ queryKey: ["project", svc.projectId], queryFn: () => api.project(svc.projectId) });
-  const siblings = useQuery({ queryKey: ["services", svc.projectId], queryFn: () => api.services(svc.projectId) });
-  const databases = siblings.data?.filter((s) => s.kind === "postgres" && s.id !== svc.id).map((s) => s.name);
+  const siblings = useQuery({ queryKey: ["services", svc.projectId], queryFn: () => api.services(svc.projectId), enabled: !isDb });
+  // A database can't reference another one.
+  const databases = isDb ? undefined : siblings.data?.filter((s) => s.kind === "postgres").map((s) => s.name);
   const [rows, setRows] = useState<EnvRow[]>(() => envRows(svc.env, svc.secrets));
   const save = useMutation({
     meta: { error: "Couldn't save the environment" },
@@ -343,8 +344,14 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
       title="Environment"
       description={
         <>
-          Use the project&apos;s shared entries with <Mono>{"{{ project.NAME }}"}</Mono> and its databases with{" "}
-          <Mono>{"{{ db.NAME.URL }}"}</Mono>. Changes apply on the next deploy.
+          Use the project&apos;s shared entries with <Mono>{"{{ project.NAME }}"}</Mono>
+          {!isDb && (
+            <>
+              {" "}
+              and its databases with <Mono>{"{{ db.NAME.URL }}"}</Mono>
+            </>
+          )}
+          . Changes apply on the next deploy.
         </>
       }
     >

@@ -89,6 +89,13 @@ func validatePostgres(s store.Service) error {
 			return fmt.Errorf("%w: %s is required", ErrInvalid, k)
 		}
 	}
+	for k, v := range s.Env {
+		for _, m := range envRefRe.FindAllStringSubmatch(v, -1) {
+			if m[2] != "" {
+				return fmt.Errorf("%w: %s: a database can't reference another database (%s)", ErrInvalid, k, refName(m))
+			}
+		}
+	}
 	return nil
 }
 
