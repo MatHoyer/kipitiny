@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Pencil, Plus, Trash2 } from "lucide-react";
+import { Cloud, HardDrive, History, KeyRound, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { CheckboxField, CopyField, ErrorText, Mono, Section, Tag } from "@/components/common";
+import { CheckboxField, CopyField, ErrorText, IconTile, Mono, Section, StatCard, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +15,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
-import { api, type BackupTarget, type TargetInput } from "../api";
+import { formatBytes, timeAgo } from "@/lib/format";
+import { api, type Backup, type BackupTarget, type TargetInput } from "../api";
 import { BackupList } from "./BackupList";
 import { BackupNow } from "./Service";
 
@@ -30,6 +32,7 @@ export function Backups() {
     <>
       <PageHeader crumbs={[{ label: "Backups" }]} />
       <PageBody>
+        <BackupStats backups={backups.data} targets={targets.data?.length} />
         <Targets targets={targets.data ?? []} />
         <ManagerBackup targets={targets.data ?? []} />
         <Section title="All backups">
@@ -38,6 +41,21 @@ export function Backups() {
         </Section>
       </PageBody>
     </>
+  );
+}
+
+function BackupStats({ backups, targets }: { backups?: Backup[]; targets?: number }) {
+  if (!backups) return null;
+  const done = backups.filter((b) => b.status === "succeeded");
+  const failed = backups.filter((b) => b.status === "failed").length;
+  const last = done[0];
+  return (
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <StatCard icon={History} label="Last backup" value={last ? timeAgo(last.createdAt) : "never"} hint={last && (last.serviceName || "manager")} />
+      <StatCard icon={HardDrive} label="Stored" value={formatBytes(done.reduce((n, b) => n + b.sizeBytes, 0))} hint={`${done.length} backups`} />
+      <StatCard icon={TriangleAlert} label="Failed" value={failed} tone={failed ? "bad" : undefined} />
+      <StatCard icon={Cloud} label="Targets" value={targets ?? "…"} />
+    </div>
   );
 }
 
@@ -83,41 +101,44 @@ function Targets({ targets }: { targets: BackupTarget[] }) {
         </Button>
       }
     >
-      <ul className="-my-2 divide-y">
+      <div className="grid gap-3 lg:grid-cols-2">
         {targets.map((t) => (
-          <li key={t.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2.5">
-            <div className="min-w-0">
-              <p className="flex items-center gap-2 text-sm font-medium">
-                {t.name}
-                {t.ageRecipient && <Tag className="bg-emerald-500/10 text-emerald-600">encrypted (age)</Tag>}
-              </p>
-              <p className="truncate font-mono text-xs text-muted-foreground">
-                {t.kind === "local"
-                  ? "/data/backups on the manager's volume"
-                  : `${t.useSsl ? "https" : "http"}://${t.endpoint}/${t.bucket}/${t.prefix}`}
-              </p>
-            </div>
-            {t.kind === "s3" && (
-              <div className="flex gap-0.5">
-                {t.ageRecipient && <KeyButton targetId={t.id} name={t.name} />}
-                <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={() => setEditing(t)}>
-                  <Pencil />
-                </Button>
-                <ConfirmDialog
-                  trigger={
-                    <Button variant="ghost" size="icon-sm" title="Delete" aria-label="Delete" className="text-muted-foreground hover:text-destructive">
-                      <Trash2 />
-                    </Button>
-                  }
-                  title={`Delete target ${t.name}?`}
-                  description="Backups already stored there are not deleted."
-                  onConfirm={() => remove.mutate(t.id)}
-                />
+          <Card key={t.id} size="sm" className="px-3">
+            <div className="flex items-start gap-3">
+              <IconTile icon={t.kind === "local" ? HardDrive : Cloud} />
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-center gap-2 font-medium">
+                  {t.name}
+                  {t.ageRecipient && <Tag className="bg-emerald-500/10 text-emerald-600">encrypted (age)</Tag>}
+                </p>
+                <p className="truncate font-mono text-xs text-muted-foreground">
+                  {t.kind === "local"
+                    ? "/data/backups on the manager's volume"
+                    : `${t.useSsl ? "https" : "http"}://${t.endpoint}/${t.bucket}/${t.prefix}`}
+                </p>
               </div>
-            )}
-          </li>
+              {t.kind === "s3" && (
+                <div className="-mt-1 -mr-1 flex">
+                  {t.ageRecipient && <KeyButton targetId={t.id} name={t.name} />}
+                  <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={() => setEditing(t)}>
+                    <Pencil />
+                  </Button>
+                  <ConfirmDialog
+                    trigger={
+                      <Button variant="ghost" size="icon-sm" title="Delete" aria-label="Delete" className="text-muted-foreground hover:text-destructive">
+                        <Trash2 />
+                      </Button>
+                    }
+                    title={`Delete target ${t.name}?`}
+                    description="Backups already stored there are not deleted."
+                    onConfirm={() => remove.mutate(t.id)}
+                  />
+                </div>
+              )}
+            </div>
+          </Card>
         ))}
-      </ul>
+      </div>
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
           {editing && (
