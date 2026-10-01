@@ -1,5 +1,6 @@
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { CheckIcon, ChevronRight, CopyIcon, type LucideIcon } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
+import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -156,5 +157,123 @@ export function CheckboxField({
         {description && <p className="text-xs text-muted-foreground">{description}</p>}
       </div>
     </div>
+  );
+}
+
+/** An icon in a tinted rounded square, the visual anchor of a card. */
+export function IconTile({ icon: Icon, className }: { icon: LucideIcon; className?: string }) {
+  return (
+    <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary", className)}>
+      <Icon className="size-4.5" />
+    </span>
+  );
+}
+
+const linkCardClass =
+  "group block rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
+const liftClass = "transition-all group-hover:-translate-y-px group-hover:shadow-md group-hover:ring-foreground/20";
+
+/** A card that opens a page: icon, title, description and a live summary line. */
+export function LinkCard({
+  to,
+  icon,
+  title,
+  description,
+  meta,
+}: {
+  to: string;
+  icon: LucideIcon;
+  title: ReactNode;
+  description?: ReactNode;
+  meta?: ReactNode;
+}) {
+  return (
+    <Link to={to} className={linkCardClass}>
+      <Card className={cn("h-full px-4", liftClass)}>
+        <div className="flex items-start gap-3">
+          <IconTile icon={icon} />
+          <div className="min-w-0 flex-1 space-y-1">
+            <p className="flex items-center gap-1 font-medium">
+              {title}
+              <ChevronRight className="ml-auto size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            </p>
+            {description && <p className="text-xs text-muted-foreground">{description}</p>}
+          </div>
+        </div>
+        {meta && <div className="mt-auto border-t pt-3 text-xs text-muted-foreground">{meta}</div>}
+      </Card>
+    </Link>
+  );
+}
+
+/** A small metric tile, e.g. "Services 4". */
+export function StatCard({
+  icon: Icon,
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  icon: LucideIcon;
+  label: ReactNode;
+  value: ReactNode;
+  hint?: ReactNode;
+  tone?: "good" | "warn" | "bad";
+}) {
+  return (
+    <Card size="sm" className="gap-1 px-3">
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Icon className="size-3.5" />
+        {label}
+      </p>
+      <p
+        className={cn(
+          "text-2xl font-semibold tabular-nums",
+          tone === "good" && "text-emerald-600 dark:text-emerald-400",
+          tone === "warn" && "text-amber-600 dark:text-amber-400",
+          tone === "bad" && "text-destructive",
+        )}
+      >
+        {value}
+      </p>
+      {hint && <p className="truncate text-xs text-muted-foreground">{hint}</p>}
+    </Card>
+  );
+}
+
+/** What a list shows before it has anything, with the action that fills it. */
+export function EmptyState({
+  icon,
+  title,
+  description,
+  action,
+}: {
+  icon: LucideIcon;
+  title: ReactNode;
+  description?: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <Card className="items-center gap-3 border border-dashed py-12 text-center ring-0">
+      <IconTile icon={icon} className="size-11" />
+      <div className="space-y-1">
+        <p className="font-medium">{title}</p>
+        {description && <p className="mx-auto max-w-sm text-sm text-muted-foreground">{description}</p>}
+      </div>
+      {action}
+    </Card>
+  );
+}
+
+/** A card holding irreversible actions. */
+export function DangerZone({ children, description }: { children: ReactNode; description?: ReactNode }) {
+  return (
+    <Card className="ring-destructive/30">
+      <CardHeader>
+        <CardTitle className="text-destructive">Danger zone</CardTitle>
+        {description && <CardDescription>{description}</CardDescription>}
+        <CardAction className="flex items-center gap-2">{children}</CardAction>
+      </CardHeader>
+    </Card>
   );
 }
