@@ -1,16 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Box, Database, DatabaseBackup, Plus, Trash2 } from "lucide-react";
+import { Activity, Box, Database, DatabaseBackup, GitBranch, Globe, Layers, Lock, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { PostgresIcon } from "@/components/brand-icons";
-import { CopyButton, Empty, ErrorText, Mono, Section, StateBadge } from "@/components/common";
+import { CopyButton, DangerZone, Empty, EmptyState, ErrorText, IconTile, Mono, Section, StatCard, StateBadge, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -26,15 +26,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useTab } from "@/hooks/use-tab";
 import { cn } from "@/lib/utils";
-import { dbFields, dbRef, envMap, envRows, envSecrets, serviceState, type EnvRow } from "@/lib/format";
-import { api, type Project as ProjectT, type ServiceInput } from "../api";
+import { dbFields, dbRef, envMap, envRows, envSecrets, liveState, troubled, type EnvRow } from "@/lib/format";
+import { api, type Project as ProjectT, type Service as ServiceT, type ServiceInput } from "../api";
 
 export function Project() {
   const { id = "" } = useParams();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const project = useQuery({ queryKey: ["project", id], queryFn: () => api.project(id) });
-  const [tab, setTab] = useTab(["services", "environment"], "services");
+  const [tab, setTab] = useTab(["services", "environment", "settings"], "services");
   const services = useQuery({
     queryKey: ["services", id],
     queryFn: () => api.services(id),
@@ -71,90 +71,146 @@ export function Project() {
       </>
     );
 
+  const list = services.data ?? [];
+  const apps = list.filter((s) => s.kind !== "postgres");
+  const dbs = list.filter((s) => s.kind === "postgres");
+  const states = list.map(liveState);
+
   return (
     <>
-      <PageHeader
-        crumbs={crumbs}
-        actions={
-          project.data && (
-            <>
-              {hasDatabases && (
-                <Button variant="outline" size="sm" disabled={backupAll.isPending} onClick={() => backupAll.mutate()}>
-                  <DatabaseBackup data-icon="inline-start" />
-                  Back up databases
-                </Button>
-              )}
-              <NewServiceDialog projectId={id} />
-              <ConfirmDialog
-                trigger={
-                  <Button variant="destructive" size="icon-sm" aria-label="Delete project" disabled={remove.isPending}>
-                    <Trash2 />
-                  </Button>
-                }
-                title={`Delete project ${project.data.name}?`}
-                description="All its containers and database data will be destroyed."
-                typeToConfirm={project.data.name}
-                onConfirm={(name) => remove.mutate(name)}
-              />
-            </>
-          )
-        }
-      />
+      <PageHeader crumbs={crumbs} actions={project.data && <NewServiceDialog projectId={id} />} />
       <PageBody>
+        {list.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <StatCard icon={Layers} label="Services" value={list.length} />
+            <StatCard icon={Activity} label="Running" value={states.filter((s) => s === "running").length} tone="good" />
+            <StatCard icon={Database} label="Databases" value={dbs.length} />
+            <StatCard
+              icon={TriangleAlert}
+              label="Need attention"
+              value={states.filter(troubled).length}
+              tone={states.some(troubled) ? "bad" : undefined}
+            />
+          </div>
+        )}
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList variant="line">
             <TabsTrigger value="services">Services</TabsTrigger>
             <TabsTrigger value="environment">Environment</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
-          <TabsContent value="services">
+          <TabsContent value="services" className="space-y-6">
             {services.error ? (
               <ErrorText error={services.error} />
             ) : !services.data ? (
               <Empty>Loading…</Empty>
-            ) : services.data.length === 0 ? (
-              <Card className="items-center gap-2 py-10 text-center">
-                <p className="font-medium">No services yet</p>
-                <p className="text-sm text-muted-foreground">Add an app from an image or a Git repository, or a PostgreSQL database.</p>
-              </Card>
+            ) : list.length === 0 ? (
+              <EmptyState
+                icon={Layers}
+                title="No services yet"
+                description="Add an app from an image or a Git repository, or a PostgreSQL database."
+                action={<NewServiceDialog projectId={id} />}
+              />
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {services.data.map((s) => (
-                  <Link
-                    key={s.id}
-                    to={`/services/${s.id}`}
-                    className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                  >
-                    <Card size="sm" className="h-full transition-colors group-hover:bg-muted/50">
-                      <CardHeader className="flex items-center justify-between gap-2">
-                        <CardTitle className="flex min-w-0 items-center gap-2">
-                          {s.kind === "postgres" && <PostgresIcon aria-label="PostgreSQL" className="size-4 shrink-0 text-[#4169E1]" />}
-                          <span className="truncate">{s.name}</span>
-                        </CardTitle>
-                        <StateBadge state={serviceState(s.containers)} />
-                      </CardHeader>
-                      <CardContent className="space-y-1">
-                        <p className="truncate font-mono text-xs text-muted-foreground">
-                          {s.source === "git" ? `${s.gitUrl.replace(/^https?:\/\//, "")}@${s.gitBranch}` : s.image}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {s.kind === "postgres"
-                            ? `PostgreSQL · ${s.memoryMb} MB`
-                            : `${s.domain || "private"} · ${s.replicas} replica${s.replicas > 1 ? "s" : ""}`}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))}
-              </div>
+              <>
+                <ServiceGroup title="Apps" services={apps} />
+                <ServiceGroup title="Databases" services={dbs} />
+              </>
             )}
           </TabsContent>
           <TabsContent value="environment" className="space-y-4">
             {project.data && <SharedVariables key={project.data.id} project={project.data} />}
-            <DatabaseReferences names={services.data?.filter((s) => s.kind === "postgres").map((s) => s.name) ?? []} />
+            <DatabaseReferences names={dbs.map((s) => s.name)} />
+          </TabsContent>
+          <TabsContent value="settings" className="space-y-4">
+            {hasDatabases && (
+              <Section
+                title="Back up databases"
+                description="Back up every database of the project now, to each one's default target."
+                actions={
+                  <Button variant="outline" size="sm" disabled={backupAll.isPending} onClick={() => backupAll.mutate()}>
+                    <DatabaseBackup data-icon="inline-start" />
+                    Back up now
+                  </Button>
+                }
+              />
+            )}
+            {project.data && (
+              <DangerZone description="Deleting the project destroys all its containers and database data.">
+                <ConfirmDialog
+                  trigger={
+                    <Button variant="destructive" size="sm" disabled={remove.isPending}>
+                      <Trash2 data-icon="inline-start" />
+                      Delete project
+                    </Button>
+                  }
+                  title={`Delete project ${project.data.name}?`}
+                  description="All its containers and database data will be destroyed."
+                  typeToConfirm={project.data.name}
+                  onConfirm={(name) => remove.mutate(name)}
+                />
+              </DangerZone>
+            )}
           </TabsContent>
         </Tabs>
       </PageBody>
     </>
+  );
+}
+
+function ServiceGroup({ title, services }: { title: string; services: ServiceT[] }) {
+  if (services.length === 0) return null;
+  return (
+    <section className="space-y-2">
+      <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</h2>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {services.map((s) => (
+          <ServiceCard key={s.id} svc={s} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ServiceCard({ svc: s }: { svc: ServiceT }) {
+  const isDb = s.kind === "postgres";
+  const live = s.containers.filter((c) => !c.retired);
+  return (
+    <Link to={`/services/${s.id}`} className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+      <Card className="h-full gap-3 px-4 transition-all group-hover:-translate-y-px group-hover:shadow-md group-hover:ring-foreground/20">
+        <div className="flex items-start gap-3">
+          {isDb ? (
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#4169E1]/10">
+              <PostgresIcon aria-label="PostgreSQL" className="size-4.5 text-[#4169E1]" />
+            </span>
+          ) : (
+            <IconTile icon={s.source === "git" ? GitBranch : Box} />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium">{s.name}</p>
+            <p className="truncate font-mono text-xs text-muted-foreground">
+              {s.source === "git" ? `${s.gitUrl.replace(/^https?:\/\//, "")}@${s.gitBranch}` : s.image}
+            </p>
+          </div>
+          <StateBadge state={liveState(s)} />
+        </div>
+        <div className="mt-auto flex flex-wrap items-center gap-1.5">
+          {isDb ? (
+            <Tag>{s.memoryMb} MB</Tag>
+          ) : (
+            <>
+              <Tag className="flex items-center gap-1 font-mono font-normal">
+                {s.domain ? <Globe className="size-3" /> : <Lock className="size-3" />}
+                {s.domain || "private"}
+              </Tag>
+              <Tag>
+                {live.filter((c) => c.state === "running").length}/{s.replicas} replica{s.replicas > 1 ? "s" : ""}
+              </Tag>
+            </>
+          )}
+        </div>
+      </Card>
+    </Link>
   );
 }
 
