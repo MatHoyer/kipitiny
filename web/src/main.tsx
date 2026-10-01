@@ -2,7 +2,7 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@ta
 import { ThemeProvider } from "next-themes";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserRouter, RouterProvider } from "react-router";
+import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
 import { toast } from "sonner";
 import { ApiError } from "./api";
 import { Toaster } from "./components/ui/sonner";
@@ -14,7 +14,7 @@ import { Layout } from "./routes/Layout";
 import { Project } from "./routes/Project";
 import { Projects } from "./routes/Projects";
 import { Service } from "./routes/Service";
-import { SettingsHub, SettingsShell } from "./routes/settings";
+import { SettingsShell } from "./routes/settings";
 
 // A 401 anywhere means the session is gone: re-check auth to show the login.
 const onError = (err: Error) => {
@@ -51,7 +51,7 @@ const router = createBrowserRouter([
       { path: "projects/:id", element: <Project /> },
       { path: "services/:id", element: <Service /> },
       { path: "backups", element: <Backups /> },
-      { path: "settings", element: <SettingsHub /> },
+      { path: "settings", element: <Navigate to="/settings/servers" replace /> },
       { path: "settings/:page", element: <SettingsShell /> },
     ],
   },

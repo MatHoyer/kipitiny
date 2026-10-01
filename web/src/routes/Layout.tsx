@@ -5,7 +5,6 @@ import {
   ChevronsUpDown,
   DatabaseBackup,
   FolderKanban,
-  LayoutGrid,
   LoaderCircle,
   LogOut,
   Monitor,
@@ -143,14 +142,6 @@ function SettingsNav() {
         </Collapsible.Trigger>
         <Collapsible.Content>
           <SidebarMenuSub>
-            <SidebarMenuSubItem>
-              <SidebarMenuSubButton asChild isActive={pathname === "/settings"}>
-                <NavLink to="/settings" end onClick={() => setOpenMobile(false)}>
-                  <LayoutGrid />
-                  <span>Overview</span>
-                </NavLink>
-              </SidebarMenuSubButton>
-            </SidebarMenuSubItem>
             {settingsPages.map(({ slug, label, icon: Icon }) => (
               <SidebarMenuSubItem key={slug}>
                 <SidebarMenuSubButton asChild isActive={pathname === `/settings/${slug}`}>
