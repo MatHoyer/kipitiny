@@ -31,6 +31,7 @@ type scheduler struct {
 	mu      sync.Mutex
 	cron    *cron.Cron
 	entries map[string]cron.EntryID // schedule ID -> entry
+	cleanup cron.EntryID            // 0 when cleanup is off
 }
 
 type ScheduleInput struct {
@@ -61,6 +62,9 @@ func (c *Core) StartScheduler(ctx context.Context) error {
 		return err
 	}
 	if err := c.scheduleManagerBackup(); err != nil {
+		return err
+	}
+	if err := c.scheduleCleanup(ctx); err != nil {
 		return err
 	}
 	if _, err := c.sched.cron.AddFunc("@daily", func() { c.pruneAudit(c.bg) }); err != nil {

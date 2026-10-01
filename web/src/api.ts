@@ -231,6 +231,45 @@ export type Cloudflare = {
   syncedAt?: string;
 };
 
+export type CleanupSettings = {
+  enabled: boolean;
+  cron: string;
+  minAgeHours: number;
+  images: "off" | "dangling" | "unused";
+  volumes: "off" | "anonymous" | "unused";
+  buildCache: boolean;
+  containers: boolean;
+  networks: boolean;
+  /** Deployments kept per service; 0 keeps all. */
+  keepDeployments: number;
+};
+
+export type CleanupResult = {
+  server: string;
+  containers: number;
+  images: number;
+  volumes: number;
+  networks: number;
+  buildCache: number;
+  /** Approximate: images share layers. */
+  reclaimed: number;
+  errors?: string[];
+};
+
+export type Cleanup = {
+  settings: CleanupSettings;
+  running: boolean;
+  nextRun?: string;
+  lastRun?: {
+    trigger: "schedule" | "manual";
+    startedAt: string;
+    finishedAt?: string;
+    servers: CleanupResult[];
+    deployments: number;
+    error?: string;
+  };
+};
+
 /** State of a service domain's managed Cloudflare record. */
 export type DNSStatus = { state: "synced" | "conflict" | "error"; message?: string };
 
@@ -352,6 +391,9 @@ export const api = {
   connectCloudflare: (token: string) => request<Cloudflare>("/cloudflare", json("PUT", { token })),
   disconnectCloudflare: () => request<void>("/cloudflare", { method: "DELETE" }),
   setServerNetwork: (id: string, n: ServerNetwork) => request<Server>(`/servers/${id}/network`, json("PUT", n)),
+  cleanup: () => request<Cleanup>("/cleanup"),
+  setCleanup: (s: CleanupSettings) => request<Cleanup>("/cleanup", json("PUT", s)),
+  runCleanup: () => request<Cleanup>("/cleanup/run", { method: "POST" }),
   tokens: () => request<ApiToken[]>("/tokens"),
   createToken: (name: string, scope: Scope) =>
     request<ApiToken & { token: string }>("/tokens", json("POST", { name, scope })),

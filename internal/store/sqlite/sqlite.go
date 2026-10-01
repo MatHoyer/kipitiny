@@ -255,6 +255,10 @@ func (s *Store) ListDeployments(ctx context.Context, serviceID string, limit int
 	return ds, mapErr(err)
 }
 
+func (s *Store) DeleteDeployment(ctx context.Context, id string) error {
+	return deleteByID(ctx, s.db, "deployments", id)
+}
+
 func (s *Store) FinishDeployment(ctx context.Context, id string, status store.DeploymentStatus, errMsg string) error {
 	res, err := s.db.NewUpdate().Model((*store.Deployment)(nil)).
 		Set("status = ?", status).Set("error = ?", errMsg).Set("finished_at = ?", now()).

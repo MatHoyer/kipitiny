@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MatHoyer/kipitiny/internal/config"
@@ -53,6 +54,7 @@ type Core struct {
 	update        updateState
 	dns           dnsState
 	dnsKick       chan struct{}
+	cleaning      atomic.Bool // a cleanup is running
 }
 
 // New builds the core around the local Docker client; remote servers are

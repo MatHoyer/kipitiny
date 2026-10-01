@@ -36,7 +36,9 @@ type Store interface {
 
 	CreateDeployment(ctx context.Context, d Deployment) (Deployment, error)
 	GetDeployment(ctx context.Context, id string) (Deployment, error)
+	// ListDeployments returns the newest first; limit <= 0 returns all.
 	ListDeployments(ctx context.Context, serviceID string, limit int) ([]Deployment, error)
+	DeleteDeployment(ctx context.Context, id string) error
 	// FinishDeployment sets the final status, error and finish time.
 	FinishDeployment(ctx context.Context, id string, status DeploymentStatus, errMsg string) error
 	// FailRunningDeployments marks deployments left running by a previous

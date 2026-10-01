@@ -19,6 +19,7 @@ import { FloatingSelect } from "@/components/ui/floating-select";
 import { timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, type Scope } from "../api";
+import { Cleanup } from "./Cleanup";
 import { Servers } from "./Servers";
 
 const scopes: [Scope, string][] = [
@@ -35,6 +36,7 @@ export function Settings() {
         <Domains />
         <CloudflareSection />
         <Servers />
+        <Cleanup />
         <Tokens />
         <Audit />
       </PageBody>
