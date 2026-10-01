@@ -5,7 +5,6 @@ import { CheckboxField, CopyField, ErrorText, IconTile, Mono, Section, StatCard,
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -101,9 +100,9 @@ function Targets({ targets }: { targets: BackupTarget[] }) {
         </Button>
       }
     >
-      <div className="grid gap-4 lg:grid-cols-2">
+      <ul className="-my-4 divide-y">
         {targets.map((t) => (
-          <Card key={t.id} size="sm" className="px-3">
+          <li key={t.id} className="py-4">
             <div className="flex items-start gap-3">
               <IconTile icon={t.kind === "local" ? HardDrive : Cloud} />
               <div className="min-w-0 flex-1">
@@ -136,9 +135,9 @@ function Targets({ targets }: { targets: BackupTarget[] }) {
                 </div>
               )}
             </div>
-          </Card>
+          </li>
         ))}
-      </div>
+      </ul>
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
           {editing && (

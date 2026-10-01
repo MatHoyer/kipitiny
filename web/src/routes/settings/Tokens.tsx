@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { CopyField, Empty, Mono, Section, Tag } from "@/components/common";
+import { CopyField, Empty, Section, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { timeAgo } from "@/lib/format";
 import { api, type Scope } from "@/api";
+import { SettingsPage } from "./page";
 
 const scopes: [Scope, string][] = [
   ["read", "Read: status, logs, backups list"],
@@ -26,10 +27,10 @@ const scopes: [Scope, string][] = [
 
 export function TokensPage() {
   return (
-    <>
+    <SettingsPage actions={<TokenDialog />}>
       <Mcp />
       <Tokens />
-    </>
+    </SettingsPage>
   );
 }
 
@@ -37,10 +38,7 @@ export function TokensPage() {
 function Mcp() {
   const url = `${window.location.origin}/mcp`;
   return (
-    <Section
-      title="MCP endpoint"
-      description="AI agents manage kipitiny over the Model Context Protocol (Streamable HTTP), with a token below."
-    >
+    <Section title="MCP endpoint">
       <CopyField value={url} />
       <p className="text-sm text-muted-foreground">Connect Claude Code:</p>
       <CopyField value={`claude mcp add --transport http kipitiny ${url} --header "Authorization: Bearer <token>"`} />
@@ -58,16 +56,7 @@ function Tokens() {
   });
 
   return (
-    <Section
-      title="API tokens & MCP"
-      description={
-        <>
-          Tokens authenticate scripts (<Mono>Authorization: Bearer …</Mono> on <Mono>/api</Mono>) and AI agents on the
-          MCP endpoint <Mono>{window.location.origin}/mcp</Mono>. Every change they make is in the audit log.
-        </>
-      }
-      actions={<TokenDialog />}
-    >
+    <Section>
       {tokens.data?.length === 0 ? (
         <Empty>No tokens yet.</Empty>
       ) : (
@@ -133,7 +122,7 @@ function TokenDialog() {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button size="sm">
           <Plus data-icon="inline-start" />
           Create token
         </Button>

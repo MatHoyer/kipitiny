@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { friendlyError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
-/** A titled card; every block of a page is one. */
+/** A card, titled unless the page header already names it; every block of a page is one. */
 export function Section({
   title,
   description,
@@ -15,7 +15,7 @@ export function Section({
   children,
   className,
 }: {
-  title: ReactNode;
+  title?: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
   children?: ReactNode;
@@ -23,11 +23,13 @@ export function Section({
 }) {
   return (
     <Card className={className}>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
-        {actions && <CardAction className="flex items-center gap-2">{actions}</CardAction>}
-      </CardHeader>
+      {(title || description || actions) && (
+        <CardHeader>
+          {title && <CardTitle>{title}</CardTitle>}
+          {description && <CardDescription>{description}</CardDescription>}
+          {actions && <CardAction className="flex items-center gap-2">{actions}</CardAction>}
+        </CardHeader>
+      )}
       {children && <CardContent className="space-y-4">{children}</CardContent>}
     </Card>
   );

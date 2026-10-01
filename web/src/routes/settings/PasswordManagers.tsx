@@ -5,26 +5,21 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { api, type SecretProvider } from "@/api";
+import { SettingsPage } from "./page";
 
 /** Password managers that service env can reference (e.g. pass://Vault/Item/field). */
 export function PasswordManagers() {
   const providers = useQuery({ queryKey: ["secret-providers"], queryFn: api.secretProviders });
   return (
-    <Section
-      title="Password managers"
-      description={
-        <>
-          Reference a secret in a service's env instead of pasting it, e.g.{" "}
-          <Mono>{"{{ pass://Vault/Item/password }}"}</Mono>. kipitiny fetches it on each deploy and never stores it.
-        </>
-      }
-    >
-      <ul className="-my-2 divide-y">
-        {providers.data?.map((p) => (
-          <SecretProviderRow key={p.id} provider={p} />
-        ))}
-      </ul>
-    </Section>
+    <SettingsPage>
+      <Section>
+        <ul className="-my-2 divide-y">
+          {providers.data?.map((p) => (
+            <SecretProviderRow key={p.id} provider={p} />
+          ))}
+        </ul>
+      </Section>
+    </SettingsPage>
   );
 }
 
@@ -73,6 +68,11 @@ function SecretProviderRow({ provider: p }: { provider: SecretProvider }) {
         )}
       </div>
       {!p.connected && p.help && <p className="text-xs text-muted-foreground">{withCode(p.help)}</p>}
+      {p.connected && (
+        <p className="text-xs text-muted-foreground">
+          Reference a secret in env as <Mono>{`{{ ${p.example} }}`}</Mono>; it's fetched on each deploy, never stored.
+        </p>
+      )}
       {!p.available ? (
         <p className="text-sm text-muted-foreground">Not available: its CLI isn't installed on the manager.</p>
       ) : (
