@@ -1,5 +1,6 @@
 import { Braces, Code, Database, KeyRound, Link2, List, Plus, Trash2, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { PostgresIcon } from "@/components/brand-icons";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -317,7 +318,11 @@ function ValueField({
           )}
           title={value.trim()}
         >
-          {ref.kind === "db" ? <Database className="size-3 shrink-0" /> : <Link2 className="size-3 shrink-0" />}
+          {ref.kind === "db" ? (
+            <PostgresIcon className="size-3 shrink-0 text-[#4169E1]" />
+          ) : (
+            <Link2 className="size-3 shrink-0" />
+          )}
           <span className="truncate">{ref.kind === "db" ? `${ref.db}.${ref.field}` : ref.name}</span>
           <button
             type="button"

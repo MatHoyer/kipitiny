@@ -3,6 +3,7 @@ import { ExternalLink, Play, RefreshCw, RotateCcw, Rocket, Square, Trash2 } from
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
+import { PostgresIcon } from "@/components/brand-icons";
 import { Empty, ErrorText, Mono, SecretList, Section, StateBadge, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
@@ -125,6 +126,7 @@ export function Service() {
       />
       <PageBody>
         <div className="flex flex-wrap items-center gap-3">
+          {isDb && <PostgresIcon aria-label="PostgreSQL" className="size-5 text-[#4169E1]" />}
           <StateBadge state={state} />
           {svc.domain && (
             <a
