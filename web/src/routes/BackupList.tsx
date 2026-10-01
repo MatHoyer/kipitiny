@@ -1,165 +1,118 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArchiveRestore, Download, ShieldCheck, Trash2 } from "lucide-react";
-import { Empty, StateBadge, Tag } from "@/components/common";
-import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Button } from "@/components/ui/button";
+import { ChevronRight, DatabaseBackup, ShieldAlert, ShieldCheck } from "lucide-react";
+import type { ReactNode } from "react";
+import { Link } from "react-router";
+import { PostgresIcon } from "@/components/brand-icons";
+import { EmptyState, StateBadge, Tag } from "@/components/common";
 import { formatBytes, formatDuration, timeAgo } from "@/lib/format";
-import { api, type Backup, type BackupTarget } from "../api";
+import { cn } from "@/lib/utils";
+import type { Backup, BackupTarget } from "../api";
 
-/** Table of backups with download / restore / delete actions. */
+/** Backups as rows grouped by day; each opens its page. */
 export function BackupList({
   backups,
   targets,
   showService = false,
-  restoreInto,
+  empty,
 }: {
   backups: Backup[];
   targets: BackupTarget[];
   showService?: boolean;
-  /** Name of the database restores overwrite (for the confirmation prompt). */
-  restoreInto?: string;
+  empty?: ReactNode;
 }) {
-  const qc = useQueryClient();
+  if (backups.length === 0)
+    return (
+      empty ?? <EmptyState icon={DatabaseBackup} title="No backups yet" description="Back up a database, or let a schedule do it." />
+    );
   const targetName = (id: string) => targets.find((t) => t.id === id)?.name ?? "deleted target";
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["backups"] });
-    qc.invalidateQueries({ queryKey: ["restores"] });
-  };
-  const remove = useMutation({ meta: { error: "Couldn't delete the backup" }, mutationFn: api.deleteBackup, onSuccess: invalidate });
-  const verify = useMutation({ meta: { error: "Couldn't start the restore test" }, mutationFn: api.verifyBackup, onSuccess: invalidate });
-  const restore = useMutation({
-    meta: { error: "Couldn't restore the backup" },
-    mutationFn: ({ id, confirm }: { id: string; confirm: string }) => api.restore(id, confirm),
-    onSuccess: invalidate,
-  });
 
-  if (backups.length === 0) return <Empty>No backups yet.</Empty>;
-
-  const th = "px-2 pb-2 font-medium";
-  const td = "px-2 py-2";
   return (
-    <div className="space-y-2">
-      <div className="-mx-2 overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="text-xs text-muted-foreground">
-            <tr className="border-b">
-              <th className={th}>Status</th>
-              <th className={th}>Restore test</th>
-              {showService && <th className={th}>Database</th>}
-              <th className={th}>Target</th>
-              <th className={th}>Size</th>
-              <th className={th}>Took</th>
-              <th className={th}>When</th>
-              <th className={th}>
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {backups.map((b) => (
-              <tr key={b.id} className="align-top transition-colors hover:bg-muted/50">
-                <td className={td}>
-                  <StateBadge state={b.status} />
-                  {b.error && (
-                    <p className="mt-1 max-w-xs truncate text-xs text-destructive" title={b.error}>
-                      {b.error}
+    <div className="space-y-6">
+      {byDay(backups).map(([day, rows]) => (
+        <section key={day} className="space-y-2">
+          <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{day}</h3>
+          <ul className="divide-y overflow-hidden rounded-xl border">
+            {rows.map((b) => (
+              <li key={b.id}>
+                <Link
+                  to={`/backups/${b.id}`}
+                  className="group flex items-center gap-3 px-4 py-3 transition-colors outline-none hover:bg-muted/50 focus-visible:bg-muted/50"
+                >
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                    {b.kind === "postgres" ? (
+                      <PostgresIcon className="size-4.5 text-[#4169E1]" />
+                    ) : (
+                      <DatabaseBackup className="size-4.5" />
+                    )}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                      <span className="truncate">{backupTitle(b, showService)}</span>
+                      {b.status !== "succeeded" && <StateBadge state={b.status} />}
                     </p>
-                  )}
-                </td>
-                <td className={`${td} text-xs`}>
-                  <Verification backup={b} />
-                </td>
-                {showService && (
-                  <td className={`${td} text-xs`}>
-                    {b.kind === "manager" ? <span className="italic">manager state</span> : `${b.projectName}/${b.serviceName}`}
-                  </td>
-                )}
-                <td className={`${td} text-xs whitespace-nowrap`}>
-                  {targetName(b.targetId)}
-                  {b.encrypted && <Tag className="ml-1.5 text-[10px]">age</Tag>}
-                </td>
-                <td className={`${td} text-xs whitespace-nowrap`}>{b.status === "succeeded" ? formatBytes(b.sizeBytes) : "—"}</td>
-                <td className={`${td} text-xs whitespace-nowrap`}>{b.finishedAt ? formatDuration(b.durationMs) : "—"}</td>
-                <td className={`${td} text-xs whitespace-nowrap text-muted-foreground`} title={new Date(b.createdAt).toLocaleString()}>
-                  {timeAgo(b.createdAt)}
-                  {b.pgVersion && <span className="ml-1">· pg {b.pgVersion}</span>}
-                </td>
-                <td className={`${td} py-1.5`}>
-                  <div className="flex justify-end gap-0.5">
-                    {b.status === "succeeded" && (
-                      <>
-                        {b.kind === "postgres" && b.verifyStatus !== "running" && (
-                          <Button variant="ghost" size="icon-xs" title="Restore-test" aria-label="Restore-test" onClick={() => verify.mutate(b.id)}>
-                            <ShieldCheck />
-                          </Button>
-                        )}
-                        <Button asChild variant="ghost" size="icon-xs" title="Download">
-                          <a href={api.downloadUrl(b.id)} aria-label="Download">
-                            <Download />
-                          </a>
-                        </Button>
-                        {restoreInto && b.kind === "postgres" && (
-                          <ConfirmDialog
-                            trigger={
-                              <Button variant="ghost" size="icon-xs" title="Restore" aria-label="Restore">
-                                <ArchiveRestore />
-                              </Button>
-                            }
-                            title={`Restore into ${restoreInto}?`}
-                            description="Current data will be replaced; apps using this database are stopped meanwhile."
-                            confirmLabel="Restore"
-                            typeToConfirm={restoreInto}
-                            onConfirm={(name) => restore.mutate({ id: b.id, confirm: name })}
-                          />
-                        )}
-                      </>
-                    )}
-                    {b.status !== "running" && (
-                      <ConfirmDialog
-                        trigger={
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            title="Delete"
-                            aria-label="Delete"
-                            className="text-muted-foreground hover:text-destructive"
-                          >
-                            <Trash2 />
-                          </Button>
-                        }
-                        title="Delete this backup?"
-                        description="It is removed from its target permanently."
-                        onConfirm={() => remove.mutate(b.id)}
-                      />
-                    )}
+                    <p className="truncate text-xs text-muted-foreground">
+                      {new Date(b.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {targetName(b.targetId)}
+                      {b.finishedAt && b.status === "succeeded" && ` · ${formatDuration(b.durationMs)}`}
+                      {b.error && <span className="text-destructive"> · {b.error}</span>}
+                    </p>
                   </div>
-                </td>
-              </tr>
+                  <div className="flex shrink-0 items-center gap-2 max-sm:hidden">
+                    {b.encrypted && <Tag>age</Tag>}
+                    <Verification backup={b} />
+                  </div>
+                  <span className="w-16 shrink-0 text-right text-sm tabular-nums">
+                    {b.status === "succeeded" ? formatBytes(b.sizeBytes) : "—"}
+                  </span>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                </Link>
+              </li>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </ul>
+        </section>
+      ))}
     </div>
   );
 }
 
-function Verification({ backup: b }: { backup: Backup }) {
-  if (b.kind !== "postgres" || b.status !== "succeeded") return <span className="text-muted-foreground">—</span>;
-  if (!b.verifyStatus) return <span className="text-muted-foreground">not tested</span>;
-  if (b.verifyStatus === "running") return <StateBadge state="running" />;
-  const d = b.verifyDetails;
-  const title =
-    b.verifyStatus === "succeeded"
-      ? `Restored in ${formatDuration(d.durationMs)}: ${d.tables} tables, ~${d.rows.toLocaleString()} rows, ${formatBytes(d.dbBytes)}`
-      : b.verifyError;
+export function backupTitle(b: Backup, withProject = true) {
+  if (b.kind === "manager") return "Manager state";
+  return withProject ? `${b.projectName} / ${b.serviceName}` : b.serviceName;
+}
+
+/** Groups backups (newest first) under "Today", "Yesterday" or their date. */
+function byDay(backups: Backup[]): [string, Backup[]][] {
+  const groups = new Map<string, Backup[]>();
+  const today = new Date().toDateString();
+  const yesterday = new Date(Date.now() - 86_400_000).toDateString();
+  for (const b of backups) {
+    const d = new Date(b.createdAt);
+    const key =
+      d.toDateString() === today
+        ? "Today"
+        : d.toDateString() === yesterday
+          ? "Yesterday"
+          : d.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    groups.set(key, [...(groups.get(key) ?? []), b]);
+  }
+  return [...groups];
+}
+
+/** The restore test's outcome, compact. */
+export function Verification({ backup: b, className }: { backup: Backup; className?: string }) {
+  if (b.kind !== "postgres" || b.status !== "succeeded") return null;
+  if (b.verifyStatus === "running") return <StateBadge state="running" className={className} />;
+  if (!b.verifyStatus) return <span className={cn("text-xs text-muted-foreground", className)}>not tested</span>;
+  const ok = b.verifyStatus === "succeeded";
   return (
-    <span title={title} className="inline-flex flex-wrap items-center gap-1.5">
-      <StateBadge state={b.verifyStatus === "succeeded" ? "passed" : "failed"} />
-      {b.verifyStatus === "succeeded" && (
-        <span className="text-muted-foreground">
-          {d.tables} tables · {timeAgo(b.verifiedAt!)}
-        </span>
+    <span
+      title={ok ? `Restore test passed ${timeAgo(b.verifiedAt!)}` : b.verifyError}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs",
+        ok ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-destructive/10 text-destructive",
+        className,
       )}
+    >
+      {ok ? <ShieldCheck className="size-3.5" /> : <ShieldAlert className="size-3.5" />}
+      {ok ? "tested" : "test failed"}
     </span>
   );
 }

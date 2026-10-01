@@ -58,6 +58,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("DELETE /api/schedules/{id}", a.deleteSchedule)
 	mux.HandleFunc("POST /api/projects/{id}/backups", a.backupProject)
 	mux.HandleFunc("GET /api/backups", a.listBackups)
+	mux.HandleFunc("GET /api/backups/{id}", a.getBackup)
 	mux.HandleFunc("DELETE /api/backups/{id}", a.deleteBackup)
 	mux.HandleFunc("GET /api/backups/{id}/download", a.downloadBackup)
 	mux.HandleFunc("POST /api/backups/{id}/restore", a.restoreBackup)

@@ -9,6 +9,7 @@ import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import "./index.css";
 import { friendlyError } from "./lib/errors";
+import { Backup } from "./routes/Backup";
 import { Backups } from "./routes/Backups";
 import { Layout } from "./routes/Layout";
 import { Project } from "./routes/Project";
@@ -52,6 +53,7 @@ const router = createBrowserRouter([
       { path: "projects/:id", element: <Project /> },
       { path: "services/:id", element: <Service /> },
       { path: "backups", element: <Backups /> },
+      { path: "backups/:id", element: <Backup /> },
       { path: "settings", element: <Navigate to="/settings/servers" replace /> },
       { path: "settings/:page", element: <SettingsShell /> },
       { path: "settings/servers/:id", element: <ServerPage /> },

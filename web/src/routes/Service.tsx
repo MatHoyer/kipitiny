@@ -216,7 +216,7 @@ export function Service() {
           </TabsContent>
           {isDb && (
             <TabsContent value="backups">
-              <BackupsCard serviceId={svc.id} name={svc.name} />
+              <BackupsCard serviceId={svc.id} />
             </TabsContent>
           )}
           <TabsContent value="settings" className="space-y-6">
@@ -424,7 +424,7 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
   );
 }
 
-function BackupsCard({ serviceId, name }: { serviceId: string; name: string }) {
+function BackupsCard({ serviceId }: { serviceId: string }) {
   const qc = useQueryClient();
   const targets = useQuery({ queryKey: ["backup-targets"], queryFn: api.backupTargets });
   const backups = useQuery({
@@ -460,7 +460,7 @@ function BackupsCard({ serviceId, name }: { serviceId: string; name: string }) {
       <Schedules serviceId={serviceId} targets={targets.data ?? []} />
       <div className="space-y-2">
         <h3 className="text-sm font-medium">History</h3>
-        <BackupList backups={backups.data ?? []} targets={targets.data ?? []} restoreInto={name} />
+        <BackupList backups={backups.data ?? []} targets={targets.data ?? []} />
       </div>
     </Section>
   );
