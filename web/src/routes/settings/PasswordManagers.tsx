@@ -12,8 +12,8 @@ export function PasswordManagers() {
   const providers = useQuery({ queryKey: ["secret-providers"], queryFn: api.secretProviders });
   return (
     <SettingsPage>
-      <Section>
-        <ul className="-my-2 divide-y">
+      <Section plain>
+        <ul className="divide-y border-y">
           {providers.data?.map((p) => (
             <SecretProviderRow key={p.id} provider={p} />
           ))}

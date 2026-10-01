@@ -61,7 +61,7 @@ export function Cleanup() {
         </Button>
       }
     >
-      <Section>
+      <Section plain>
         <form onSubmit={onSubmit} className="space-y-4">
           <CheckboxField
             label="Run on a schedule"

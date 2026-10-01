@@ -301,7 +301,7 @@ function Settings({ svc }: { svc: ServiceT }) {
   };
 
   return (
-    <Section title="Settings">
+    <Section plain>
       <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
         {svc.source === "git" ? (
           <GitFields form={form} set={set} tokenHint="******** keeps the saved token." />
@@ -387,7 +387,7 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
 
   return (
     <Section
-      title="Environment"
+      plain
       description={
         isDb ? (
           "Generated at creation and only read when the database is initialized, so it can't be changed."
@@ -448,7 +448,7 @@ function BackupsCard({ serviceId, name }: { serviceId: string; name: string }) {
 
   return (
     <Section
-      title="Backups"
+      plain
       actions={<BackupNow targets={targets.data ?? []} targetId={targetId} onTarget={setTargetId} disabled={busy || backup.isPending} onBackup={() => backup.mutate()} />}
     >
       {lastRestore && (
@@ -588,7 +588,7 @@ function Deployments({
   });
   const current = deployments.find((d) => d.id === selected);
   return (
-    <Section title="Deployments" description={deployments.length > 0 ? "Select one to see its log." : undefined}>
+    <Section plain description={deployments.length > 0 ? "Select one to see its log." : undefined}>
       {deployments.length === 0 ? (
         <Empty>No deployments yet.</Empty>
       ) : (
@@ -697,7 +697,7 @@ function LiveLogs({ serviceId }: { serviceId: string }) {
 
   return (
     <Section
-      title="Logs"
+      plain
       actions={
         ended && (
           <Button variant="outline" size="sm" onClick={() => setAttempt((n) => n + 1)}>

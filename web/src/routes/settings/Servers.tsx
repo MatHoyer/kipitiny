@@ -36,8 +36,8 @@ export function Servers() {
         </Button>
       }
     >
-      <Section>
-        <ul className="-my-4 divide-y">
+      <Section plain>
+        <ul className="divide-y border-y">
           {servers.data?.map((s) => (
             <li key={s.id} className="space-y-2 py-4">
               <div className="flex items-start gap-3">
