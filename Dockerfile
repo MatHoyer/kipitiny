@@ -35,11 +35,30 @@ RUN case "$TARGETARCH" in \
     echo "$sum  /pass-cli" | sha256sum -c - && \
     chmod 755 /pass-cli
 
+# rclone, for Google Drive and Proton Drive backup targets. Pinned and
+# checksummed from https://downloads.rclone.org/<version>/SHA256SUMS.
+FROM --platform=$BUILDPLATFORM alpine:3.22 AS rclone
+ARG TARGETARCH
+ARG RCLONE_VERSION=1.75.1
+ARG RCLONE_SHA256_AMD64=982b5aa772841168f8e380f139e9e787b2a105403e32b94da8676a0e1c0a13ab
+ARG RCLONE_SHA256_ARM64=03f2504174034b6d004152ed7369251c9a9ec1f7e0836eda420f5c7a5ec0dff9
+RUN case "$TARGETARCH" in \
+      amd64) sum=$RCLONE_SHA256_AMD64 ;; \
+      arm64) sum=$RCLONE_SHA256_ARM64 ;; \
+      *) echo "no rclone for $TARGETARCH" >&2; exit 1 ;; \
+    esac && \
+    wget -qO /rclone.zip "https://downloads.rclone.org/v$RCLONE_VERSION/rclone-v$RCLONE_VERSION-linux-$TARGETARCH.zip" && \
+    echo "$sum  /rclone.zip" | sha256sum -c - && \
+    unzip -q /rclone.zip -d /tmp && \
+    mv /tmp/rclone-*/rclone /rclone && \
+    chmod 755 /rclone
+
 # Runs as root: it needs the host Docker socket, which is root-equivalent anyway.
 # The cc variant has glibc for pass-cli; kipitiny itself stays static.
 FROM gcr.io/distroless/cc-debian12
 COPY --from=build /out/kipitiny /kipitiny
 COPY --from=passcli /pass-cli /usr/local/bin/pass-cli
+COPY --from=rclone /rclone /usr/local/bin/rclone
 ENV KIPITINY_DATA_DIR=/data
 VOLUME /data
 EXPOSE 3000

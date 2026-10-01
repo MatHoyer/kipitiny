@@ -109,8 +109,10 @@ stays stopped. Services busy with a deploy, backup or restore are left alone.
 ## Backups
 
 - `pg_dump -Fc` runs **inside** the database container (client always matches the
-  server) and streams straight to the target: local disk (`/data/backups`) or any
-  S3-compatible bucket. Memory stays constant; nothing touches a temp file.
+  server) and streams straight to the target: local disk (`/data/backups`), any
+  S3-compatible bucket, or a Google Drive / Proton Drive folder. Memory stays
+  constant; nothing touches a temp file (except drives that can't stream an
+  upload, where rclone spools it under `/data/rclone` meanwhile).
 - A backup only counts once `pg_dump` exits 0; partial uploads are deleted. Each
   backup records size, SHA-256, server version and duration.
 - Restores load the dump into a scratch database and swap it in by rename, so the
@@ -133,7 +135,7 @@ and its volume are always removed; one test runs at a time.
 
 ### Encryption
 
-An S3 target can encrypt everything stored on it with [age](https://age-encryption.org)
+An S3 or drive target can encrypt everything stored on it with [age](https://age-encryption.org)
 (chosen at creation; the key never changes). Copy the key (*Show key*) somewhere
 safe: without it, those backups are unreadable if this server is lost. Offline:
 
@@ -150,9 +152,25 @@ snapshots contain every secret the manager holds: prefer an encrypted target.
 To restore one, stop the manager and replace `/data/kipitiny.db` with the file
 (delete `kipitiny.db-wal` and `kipitiny.db-shm` first).
 
-S3 targets are checked (a test object is written and deleted) before they are saved.
+### Drive targets
+
+Google Drive and Proton Drive targets go through [rclone](https://rclone.org), bundled
+in the image (`KIPITINY_RCLONE` to use another binary). Each command gets a config
+written from the target's settings; what rclone changes in it (a refreshed OAuth
+token, a Proton session) is saved back to the database, so the manager's backups
+carry it.
+
+- **Google Drive:** on a computer with a browser, run `rclone authorize "drive"` and
+  paste the token it prints. Optionally use your own OAuth client ID (rclone's shared
+  one is rate limited).
+- **Proton Drive:** your email and password, plus the current 2FA code when
+  two-factor sign-in is on; it's used once, the session is kept afterwards. This
+  uses rclone's unofficial Proton Drive backend.
+
+Targets are checked (a test object is written and deleted) before they are saved.
 `go test ./internal/storage/` runs S3 tests against a real server when
-`KIPITINY_TEST_S3_ENDPOINT` is set (see `internal/storage/s3_test.go`).
+`KIPITINY_TEST_S3_ENDPOINT` is set (see `internal/storage/s3_test.go`), and rclone
+tests (through its local backend) when `KIPITINY_TEST_RCLONE` points at rclone.
 
 ## Multiple servers
 

@@ -50,7 +50,7 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, scheduleID 
 	if err != nil {
 		return store.Backup{}, err
 	}
-	st, err := storage.Open(target, c.cfg.DataDir)
+	st, err := c.openStorage(target)
 	if err != nil {
 		return store.Backup{}, err
 	}
@@ -294,7 +294,7 @@ func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, con
 	if err != nil {
 		return store.Restore{}, err
 	}
-	st, err := storage.Open(target, c.cfg.DataDir)
+	st, err := c.openStorage(target)
 	if err != nil {
 		return store.Restore{}, err
 	}
@@ -633,5 +633,5 @@ func (c *Core) storageFor(ctx context.Context, targetID string) (storage.Storage
 	if err != nil {
 		return nil, err
 	}
-	return storage.Open(t, c.cfg.DataDir)
+	return c.openStorage(t)
 }

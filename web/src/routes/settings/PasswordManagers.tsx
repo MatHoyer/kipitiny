@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, KeyRound, Plus } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { ProtonIcon } from "@/components/brand-icons";
-import { ChoiceTile, EmptyState, ErrorText, Mono, Tag } from "@/components/common";
+import { ChoiceTile, EmptyState, ErrorText, Mono, Tag, withCode } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -182,9 +182,4 @@ function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
       </DialogContent>
     </Dialog>
   );
-}
-
-/** Renders `code` spans of plain text as Mono. */
-function withCode(text: string) {
-  return text.split("`").map((part, i) => (i % 2 ? <Mono key={i}>{part}</Mono> : part));
 }

@@ -96,10 +96,12 @@ export type Deployment = {
 
 export type OpStatus = "running" | "succeeded" | "failed";
 
+export type TargetKindName = "local" | "s3" | "gdrive" | "protondrive";
+
 export type BackupTarget = {
   id: string;
   name: string;
-  kind: "local" | "s3";
+  kind: TargetKindName;
   endpoint: string;
   region: string;
   bucket: string;
@@ -108,10 +110,35 @@ export type BackupTarget = {
   secretKey: string;
   useSsl: boolean;
   ageRecipient: string;
+  /** A drive target's fields, secrets masked. */
+  settings?: Record<string, string>;
   createdAt: string;
 };
 
-export type TargetInput = Omit<BackupTarget, "id" | "kind" | "createdAt" | "ageRecipient"> & { encrypt?: boolean };
+export type TargetInput = Omit<BackupTarget, "id" | "kind" | "createdAt" | "ageRecipient" | "settings"> & {
+  kind?: TargetKindName;
+  encrypt?: boolean;
+  config?: Record<string, string>;
+};
+
+/** A kind of target that can be added; drives need rclone on the manager. */
+export type TargetKind = {
+  kind: TargetKindName;
+  label: string;
+  description: string;
+  available: boolean;
+  /** How to get the credentials; `code` spans are commands. */
+  help?: string;
+  fields: {
+    key: string;
+    label: string;
+    placeholder?: string;
+    description?: string;
+    required: boolean;
+    secret: boolean;
+    multiline?: boolean;
+  }[];
+};
 
 export type Backup = {
   id: string;
@@ -404,6 +431,7 @@ export const api = {
   deployments: (serviceId: string) => request<Deployment[]>(`/services/${serviceId}/deployments`),
   deploymentLog: (id: string) => request<string>(`/deployments/${id}/log`),
 
+  backupTargetKinds: () => request<TargetKind[]>("/backup-target-kinds"),
   backupTargets: () => request<BackupTarget[]>("/backup-targets"),
   createBackupTarget: (t: TargetInput) => request<BackupTarget>("/backup-targets", json("POST", t)),
   updateBackupTarget: (id: string, t: TargetInput) => request<BackupTarget>(`/backup-targets/${id}`, json("PUT", t)),

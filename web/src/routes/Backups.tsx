@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cloud, HardDrive, History, KeyRound, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
-import { useState, type FormEvent } from "react";
-import { CheckboxField, CopyField, ErrorText, IconTile, Mono, Section, StatCard, Tag } from "@/components/common";
+import { ChevronLeft, Cloud, HardDrive, History, KeyRound, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { GoogleDriveIcon, ProtonDriveIcon } from "@/components/brand-icons";
+import { CheckboxField, ChoiceTile, CopyField, ErrorText, Mono, Section, StatCard, Tag, withCode } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -14,8 +16,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
+import { FloatingTextarea } from "@/components/ui/floating-textarea";
 import { formatBytes, timeAgo } from "@/lib/format";
-import { api, type Backup, type BackupTarget, type TargetInput } from "../api";
+import { api, type Backup, type BackupTarget, type TargetInput, type TargetKind, type TargetKindName } from "../api";
 import { BackupList } from "./BackupList";
 import { BackupNow } from "./Service";
 
@@ -80,9 +83,36 @@ function ManagerBackup({ targets }: { targets: BackupTarget[] }) {
   );
 }
 
+/** Brand marks by target kind. */
+const kindIcons: Record<TargetKindName, ReactNode> = {
+  local: <HardDrive />,
+  s3: <Cloud />,
+  gdrive: <GoogleDriveIcon className="text-[#4285F4]" />,
+  protondrive: <ProtonDriveIcon className="text-[#EB508D]" />,
+};
+
+function location(t: BackupTarget) {
+  const folder = t.prefix ? `/${t.prefix}` : "/";
+  switch (t.kind) {
+    case "local":
+      return "/data/backups on the manager's volume";
+    case "s3":
+      return `${t.useSsl ? "https" : "http"}://${t.endpoint}/${t.bucket}/${t.prefix}`;
+    case "gdrive":
+      return `Google Drive ${folder}`;
+    case "protondrive":
+      return `Proton Drive ${folder}${t.settings?.username ? ` · ${t.settings.username}` : ""}`;
+  }
+}
+
+/** What the dialog shows: the kind picker, a new target of a kind, or a target being edited. */
+type Editing = { step: "pick" } | { step: "new"; kind: TargetKind } | { step: "edit"; target: BackupTarget; kind?: TargetKind };
+
 function Targets({ targets }: { targets: BackupTarget[] }) {
   const qc = useQueryClient();
-  const [editing, setEditing] = useState<BackupTarget | "new" | null>(null);
+  const kinds = useQuery({ queryKey: ["backup-target-kinds"], queryFn: api.backupTargetKinds });
+  const kindOf = (name: string) => kinds.data?.find((k) => k.kind === name);
+  const [editing, setEditing] = useState<Editing | null>(null);
   const remove = useMutation({
     meta: { error: "Couldn't delete the backup target" },
     mutationFn: api.deleteBackupTarget,
@@ -94,58 +124,82 @@ function Targets({ targets }: { targets: BackupTarget[] }) {
       title="Targets"
       description="Where backups are stored."
       actions={
-        <Button variant="outline" size="sm" onClick={() => setEditing("new")}>
+        <Button size="sm" onClick={() => setEditing({ step: "pick" })}>
           <Plus data-icon="inline-start" />
-          Add S3 target
+          Add target
         </Button>
       }
     >
-      <ul className="-my-4 divide-y">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {targets.map((t) => (
-          <li key={t.id} className="py-4">
+          <Card key={t.id} size="sm" className="gap-3 px-4">
             <div className="flex items-start gap-3">
-              <IconTile icon={t.kind === "local" ? HardDrive : Cloud} />
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted [&>svg]:size-5">
+                {kindIcons[t.kind]}
+              </span>
               <div className="min-w-0 flex-1">
-                <p className="flex flex-wrap items-center gap-2 font-medium">
-                  {t.name}
-                  {t.ageRecipient && <Tag className="bg-emerald-500/10 text-emerald-600">encrypted (age)</Tag>}
-                </p>
-                <p className="truncate font-mono text-xs text-muted-foreground">
-                  {t.kind === "local"
-                    ? "/data/backups on the manager's volume"
-                    : `${t.useSsl ? "https" : "http"}://${t.endpoint}/${t.bucket}/${t.prefix}`}
-                </p>
+                <p className="truncate font-medium">{t.name}</p>
+                <p className="truncate text-xs text-muted-foreground">{kindOf(t.kind)?.label ?? (t.kind === "local" ? "Built in" : t.kind)}</p>
               </div>
-              {t.kind === "s3" && (
-                <div className="-mt-1 -mr-1 flex">
-                  {t.ageRecipient && <KeyButton targetId={t.id} name={t.name} />}
-                  <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={() => setEditing(t)}>
-                    <Pencil />
-                  </Button>
-                  <ConfirmDialog
-                    trigger={
-                      <Button variant="ghost" size="icon-sm" title="Delete" aria-label="Delete" className="text-muted-foreground hover:text-destructive">
-                        <Trash2 />
-                      </Button>
-                    }
-                    title={`Delete target ${t.name}?`}
-                    description="Backups already stored there are not deleted."
-                    onConfirm={() => remove.mutate(t.id)}
-                  />
-                </div>
-              )}
+              {t.ageRecipient && <Tag className="bg-emerald-500/10 text-emerald-600">encrypted</Tag>}
             </div>
-          </li>
+            <p className="truncate font-mono text-xs text-muted-foreground" title={location(t)}>
+              {location(t)}
+            </p>
+            {t.kind !== "local" && (
+              <div className="mt-auto flex justify-end gap-0.5">
+                {t.ageRecipient && <KeyButton targetId={t.id} name={t.name} />}
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  title="Edit"
+                  aria-label="Edit"
+                  onClick={() => setEditing({ step: "edit", target: t, kind: kindOf(t.kind) })}
+                >
+                  <Pencil />
+                </Button>
+                <ConfirmDialog
+                  trigger={
+                    <Button variant="ghost" size="icon-sm" title="Delete" aria-label="Delete" className="text-muted-foreground hover:text-destructive">
+                      <Trash2 />
+                    </Button>
+                  }
+                  title={`Delete target ${t.name}?`}
+                  description="Backups already stored there are not deleted."
+                  onConfirm={() => remove.mutate(t.id)}
+                />
+              </div>
+            )}
+          </Card>
         ))}
-      </ul>
+      </div>
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
-          {editing && (
-            <TargetForm
-              key={editing === "new" ? "new" : editing.id}
-              target={editing === "new" ? null : editing}
-              onDone={() => setEditing(null)}
-            />
+          {editing?.step === "pick" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Add a target</DialogTitle>
+                <DialogDescription>Where should backups go?</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {kinds.data?.map((k) => (
+                  <ChoiceTile
+                    key={k.kind}
+                    icon={kindIcons[k.kind]}
+                    title={k.label}
+                    description={k.available ? k.description : "rclone isn't installed on the manager."}
+                    disabled={!k.available}
+                    onClick={() => setEditing({ step: "new", kind: k })}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+          {editing?.step === "new" && (
+            <TargetForm key={editing.kind.kind} kind={editing.kind} target={null} onBack={() => setEditing({ step: "pick" })} onDone={() => setEditing(null)} />
+          )}
+          {editing?.step === "edit" && editing.kind && (
+            <TargetForm key={editing.target.id} kind={editing.kind} target={editing.target} onDone={() => setEditing(null)} />
           )}
         </DialogContent>
       </Dialog>
@@ -185,14 +239,27 @@ const emptyTarget: TargetInput = {
   useSsl: true,
 };
 
-function TargetForm({ target, onDone }: { target: BackupTarget | null; onDone: () => void }) {
+function TargetForm({
+  kind,
+  target,
+  onBack,
+  onDone,
+}: {
+  kind: TargetKind;
+  target: BackupTarget | null;
+  onBack?: () => void;
+  onDone: () => void;
+}) {
   const qc = useQueryClient();
+  const isS3 = kind.kind === "s3";
   const [form, setForm] = useState<TargetInput>(() => {
-    if (!target) return emptyTarget;
+    if (!target) return { ...emptyTarget, prefix: isS3 ? "" : "kipitiny", kind: kind.kind, config: {} };
     const { name, endpoint, region, bucket, prefix, accessKey, secretKey, useSsl } = target;
-    return { name, endpoint, region, bucket, prefix, accessKey, secretKey, useSsl };
+    return { name, endpoint, region, bucket, prefix, accessKey, secretKey, useSsl, config: { ...target.settings } };
   });
   const set = (k: keyof TargetInput) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
+  const setConfig = (k: string) => (e: { target: { value: string } }) =>
+    setForm({ ...form, config: { ...form.config, [k]: e.target.value } });
   const save = useMutation({
     meta: { error: "Couldn't save the backup target" },
     mutationFn: () => (target ? api.updateBackupTarget(target.id, form) : api.createBackupTarget(form)),
@@ -208,43 +275,88 @@ function TargetForm({ target, onDone }: { target: BackupTarget | null; onDone: (
   return (
     <form onSubmit={onSubmit} className="contents">
       <DialogHeader>
-        <DialogTitle>{target ? `Edit ${target.name}` : "New S3 target"}</DialogTitle>
-        <DialogDescription>A test object is written and deleted before saving.</DialogDescription>
+        <DialogTitle className="flex items-center gap-2 [&>svg]:size-5">
+          {kindIcons[kind.kind]}
+          {target ? `Edit ${target.name}` : `New ${kind.label} target`}
+        </DialogTitle>
+        <DialogDescription>
+          {kind.help && <>{withCode(kind.help)} </>}A test file is written and deleted before saving.
+        </DialogDescription>
       </DialogHeader>
       <div className="grid gap-4 sm:grid-cols-2">
         <FloatingInput label="Name" required autoFocus value={form.name} onChange={set("name")} placeholder="offsite" />
-        <FloatingInput
-          label="Endpoint"
-          required
-          value={form.endpoint}
-          onChange={set("endpoint")}
-          placeholder="s3.eu-west-1.amazonaws.com"
-          description="host[:port]"
-        />
-        <FloatingInput label="Bucket" required value={form.bucket} onChange={set("bucket")} />
-        <FloatingInput
-          label="Prefix"
-          value={form.prefix}
-          onChange={set("prefix")}
-          placeholder="kipitiny"
-          description="Optional folder inside the bucket."
-        />
-        <FloatingInput label="Access key" required value={form.accessKey} onChange={set("accessKey")} autoComplete="off" />
-        <FloatingInput
-          label="Secret key"
-          required
-          type="password"
-          value={form.secretKey}
-          onChange={set("secretKey")}
-          autoComplete="new-password"
-        />
-        <FloatingInput label="Region" value={form.region} onChange={set("region")} description="Usually optional." />
-        <CheckboxField
-          label="Use HTTPS"
-          checked={form.useSsl}
-          onCheckedChange={(v) => setForm({ ...form, useSsl: v })}
-          className="self-center"
-        />
+        {isS3 ? (
+          <>
+            <FloatingInput
+              label="Endpoint"
+              required
+              value={form.endpoint}
+              onChange={set("endpoint")}
+              placeholder="s3.eu-west-1.amazonaws.com"
+              description="host[:port]"
+            />
+            <FloatingInput label="Bucket" required value={form.bucket} onChange={set("bucket")} />
+            <FloatingInput
+              label="Prefix"
+              value={form.prefix}
+              onChange={set("prefix")}
+              placeholder="kipitiny"
+              description="Optional folder inside the bucket."
+            />
+            <FloatingInput label="Access key" required value={form.accessKey} onChange={set("accessKey")} autoComplete="off" />
+            <FloatingInput
+              label="Secret key"
+              required
+              type="password"
+              value={form.secretKey}
+              onChange={set("secretKey")}
+              autoComplete="new-password"
+            />
+            <FloatingInput label="Region" value={form.region} onChange={set("region")} description="Usually optional." />
+            <CheckboxField
+              label="Use HTTPS"
+              checked={form.useSsl}
+              onCheckedChange={(v) => setForm({ ...form, useSsl: v })}
+              className="self-center"
+            />
+          </>
+        ) : (
+          <>
+            <FloatingInput
+              label="Folder"
+              value={form.prefix}
+              onChange={set("prefix")}
+              placeholder="kipitiny"
+              description="Created if missing. Empty for the drive's root."
+            />
+            {kind.fields.map((f) =>
+              f.multiline ? (
+                <FloatingTextarea
+                  key={f.key}
+                  label={f.label}
+                  required={f.required && !target}
+                  value={form.config?.[f.key] ?? ""}
+                  onChange={setConfig(f.key)}
+                  placeholder={f.placeholder}
+                  description={f.description ?? (target && f.secret ? "Leave as is to keep the saved one." : undefined)}
+                  className="sm:col-span-2 [&_textarea]:font-mono [&_textarea]:text-xs"
+                />
+              ) : (
+                <FloatingInput
+                  key={f.key}
+                  label={f.label}
+                  type={f.secret ? "password" : "text"}
+                  autoComplete={f.secret ? "new-password" : "off"}
+                  required={f.required}
+                  value={form.config?.[f.key] ?? ""}
+                  onChange={setConfig(f.key)}
+                  placeholder={f.placeholder}
+                  description={f.description}
+                />
+              ),
+            )}
+          </>
+        )}
         {!target && (
           <CheckboxField
             label={
@@ -260,6 +372,12 @@ function TargetForm({ target, onDone }: { target: BackupTarget | null; onDone: (
         )}
       </div>
       <DialogFooter>
+        {onBack && (
+          <Button type="button" variant="ghost" disabled={save.isPending} onClick={onBack}>
+            <ChevronLeft data-icon="inline-start" />
+            Back
+          </Button>
+        )}
         <Button type="submit" disabled={save.isPending}>
           {save.isPending ? "Testing…" : target ? "Save" : "Add target"}
         </Button>

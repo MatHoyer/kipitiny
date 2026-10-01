@@ -294,3 +294,8 @@ export function ChoiceTile({
     </button>
   );
 }
+
+/** Renders `code` spans of plain text (e.g. help from the API) as Mono. */
+export function withCode(text: string) {
+  return text.split("`").map((part, i) => (i % 2 ? <Mono key={i}>{part}</Mono> : part));
+}

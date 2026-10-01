@@ -13,7 +13,6 @@ import (
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/notify"
-	"github.com/MatHoyer/kipitiny/internal/storage"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -103,7 +102,7 @@ func (c *Core) verify(ctx context.Context, b store.Backup) (store.VerificationDe
 	if err != nil {
 		return d, err
 	}
-	st, err := storage.Open(target, c.cfg.DataDir)
+	st, err := c.openStorage(target)
 	if err != nil {
 		return d, err
 	}

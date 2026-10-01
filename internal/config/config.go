@@ -29,6 +29,9 @@ type Config struct {
 	// ProtonPassCLI is the pass-cli binary (path or name on PATH).
 	ProtonPassCLI string
 
+	// Rclone is the rclone binary that reaches drive backup targets.
+	Rclone string
+
 	// Version is the running build (set by main, not the environment).
 	Version string
 	Update  Update
@@ -84,6 +87,7 @@ func Load() Config {
 		SetupToken:    env("KIPITINY_SETUP_TOKEN", ""),
 		BuilderImage:  env("KIPITINY_BUILDER_IMAGE", "docker:cli"),
 		ProtonPassCLI: env("KIPITINY_PROTONPASS_CLI", "pass-cli"),
+		Rclone:        env("KIPITINY_RCLONE", "rclone"),
 		Traefik: Traefik{
 			Enabled:      env("KIPITINY_TRAEFIK", "true") != "false",
 			Image:        env("KIPITINY_TRAEFIK_IMAGE", "traefik:v3.7"),
