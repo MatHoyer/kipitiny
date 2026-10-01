@@ -124,8 +124,4 @@ func TestRclone(t *testing.T) {
 		t.Fatalf("leftover session dirs: %v", entries)
 	}
 
-	obscured, err := Obscure(ctx, bin, "s3cret")
-	if err != nil || obscured == "" || obscured == "s3cret" {
-		t.Fatalf("obscure = %q, %v", obscured, err)
-	}
 }

@@ -534,7 +534,7 @@ func TestNotificationChannels(t *testing.T) {
 
 // Rebuilding backup_targets for drive kinds keeps targets, the backups and
 // schedules pointing at them, and foreign keys.
-func TestRcloneTargetsMigration(t *testing.T) {
+func TestDriveTargetsMigration(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "k.db")
 	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(ON)")

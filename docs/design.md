@@ -26,7 +26,7 @@ Lightweight self-hosted PaaS (apps + Postgres with clean backups), similar in sp
 | Query layer | Bun (`github.com/uptrace/bun`), SQLite and Postgres dialects |
 | Migrations | goose (`github.com/pressly/goose/v3`), one folder per dialect |
 | Scheduling | `github.com/robfig/cron/v3` + goroutines (no Redis, no queue) |
-| Backup storage | `github.com/minio/minio-go/v7` (any S3-compatible) + local disk; Google Drive / Proton Drive via the bundled `rclone` CLI |
+| Backup storage | `github.com/minio/minio-go/v7` (any S3-compatible) + local disk; Google Drive via `rclone`, Proton Drive via Proton's `proton-drive` CLI (both bundled) |
 | Backup encryption (optional) | `filippo.io/age` |
 | Reverse proxy | Traefik container, configured via Docker labels |
 | UI | React SPA (Vite), embedded with `embed` |

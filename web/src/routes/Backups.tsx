@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Cloud, HardDrive, History, KeyRound, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
-import { useState, type FormEvent, type ReactNode } from "react";
-import { GoogleDriveIcon, ProtonDriveIcon } from "@/components/brand-icons";
+import { CheckCircle2, ChevronLeft, Cloud, HardDrive, History, KeyRound, LoaderCircle, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { GoogleDriveIcon, ProtonDriveIcon, ProtonIcon } from "@/components/brand-icons";
 import { CheckboxField, ChoiceTile, CopyField, ErrorText, Mono, Section, StatCard, Tag, withCode } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
@@ -18,6 +18,7 @@ import {
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingTextarea } from "@/components/ui/floating-textarea";
 import { formatBytes, timeAgo } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { api, type Backup, type BackupTarget, type TargetInput, type TargetKind, type TargetKindName } from "../api";
 import { BackupList } from "./BackupList";
 import { BackupNow } from "./Service";
@@ -101,7 +102,7 @@ function location(t: BackupTarget) {
     case "gdrive":
       return `Google Drive ${folder}`;
     case "protondrive":
-      return `Proton Drive ${folder}${t.settings?.username ? ` · ${t.settings.username}` : ""}`;
+      return `Proton Drive ${folder}${t.settings?.account ? ` · ${t.settings.account}` : ""}`;
   }
 }
 
@@ -329,6 +330,13 @@ function TargetForm({
               placeholder="kipitiny"
               description="Created if missing. Empty for the drive's root."
             />
+            {kind.signIn && (
+              <ProtonSignIn
+                account={target?.settings?.account}
+                onSignedIn={(login) => setForm({ ...form, login })}
+                className="sm:col-span-2"
+              />
+            )}
             {kind.fields.map((f) =>
               f.multiline ? (
                 <FloatingTextarea
@@ -378,10 +386,82 @@ function TargetForm({
             Back
           </Button>
         )}
-        <Button type="submit" disabled={save.isPending}>
+        <Button type="submit" disabled={save.isPending || (kind.signIn && !target && !form.login)}>
           {save.isPending ? "Testing…" : target ? "Save" : "Add target"}
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+/**
+ * Signs in to Proton in the browser, on any device: the manager waits for it,
+ * and the target is saved with the session. kipitiny never sees the password.
+ */
+function ProtonSignIn({
+  account,
+  onSignedIn,
+  className,
+}: {
+  account?: string;
+  onSignedIn: (login: string) => void;
+  className?: string;
+}) {
+  const start = useMutation({ meta: { error: "Couldn't start the Proton sign-in" }, mutationFn: api.startProtonLogin });
+  const id = start.data?.id;
+  const login = useQuery({
+    queryKey: ["proton-login", id],
+    queryFn: () => api.protonLogin(id!),
+    enabled: !!id,
+    refetchInterval: (q) => (q.state.data?.status === "pending" ? 2000 : false),
+  });
+  const status = login.data?.status ?? (id ? "pending" : undefined);
+  useEffect(() => {
+    if (id && status === "done") onSignedIn(id);
+  }, [id, status]); // once per sign-in
+
+  return (
+    <div className={cn("space-y-3 rounded-xl border p-4", className)}>
+      {status === "done" ? (
+        <p className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+          <CheckCircle2 className="size-4" />
+          Signed in to Proton. Save to use this account.
+        </p>
+      ) : status === "pending" && start.data ? (
+        <>
+          <p className="flex items-center gap-2 text-sm font-medium">
+            <LoaderCircle className="size-4 animate-spin" />
+            Waiting for you to sign in…
+          </p>
+          <p className="text-xs text-muted-foreground">Open this link on any device; it works for 15 minutes.</p>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild size="sm">
+              <a href={start.data.url} target="_blank" rel="noreferrer">
+                <ProtonIcon data-icon="inline-start" />
+                Open Proton sign-in
+              </a>
+            </Button>
+          </div>
+          <CopyField value={start.data.url} />
+        </>
+      ) : (
+        <>
+          <p className="text-sm">
+            {account ? (
+              <>
+                Signed in as <span className="font-medium">{account}</span>.
+              </>
+            ) : (
+              "Sign in with the Proton account whose drive receives the backups."
+            )}
+          </p>
+          {status === "failed" && <p className="text-sm text-destructive">{login.data?.error}</p>}
+          <Button type="button" size="sm" variant={account ? "outline" : "default"} disabled={start.isPending} onClick={() => start.mutate()}>
+            <ProtonIcon data-icon="inline-start" />
+            {account || status === "failed" ? "Sign in again" : "Sign in with Proton"}
+          </Button>
+        </>
+      )}
+    </div>
   );
 }

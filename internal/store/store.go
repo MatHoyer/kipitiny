@@ -249,7 +249,7 @@ type BackupTargetKind string
 const (
 	BackupTargetLocal BackupTargetKind = "local"
 	BackupTargetS3    BackupTargetKind = "s3"
-	// Drives are reached through rclone.
+	// Google Drive goes through rclone, Proton Drive through its own CLI.
 	BackupTargetGoogleDrive BackupTargetKind = "gdrive"
 	BackupTargetProtonDrive BackupTargetKind = "protondrive"
 
@@ -274,8 +274,9 @@ type BackupTarget struct {
 	// encrypted with age (X25519).
 	AgeRecipient string `bun:"age_recipient" json:"ageRecipient"`
 	AgeIdentity  string `bun:"age_identity" json:"-"`
-	// Config is the rclone remote's options (drive targets), credentials
-	// included; Settings is what the API shows of it, secrets masked.
+	// Config is a drive target's credentials: rclone options, or the
+	// proton-drive session files. Settings is what the API shows of it,
+	// secrets masked.
 	Config    map[string]string `bun:"config" json:"-"`
 	Settings  map[string]string `bun:"-" json:"settings,omitempty"`
 	CreatedAt time.Time         `bun:"created_at" json:"createdAt"`
@@ -283,8 +284,8 @@ type BackupTarget struct {
 
 func (t BackupTarget) Encrypted() bool { return t.AgeRecipient != "" }
 
-// Rclone reports whether the target is reached through rclone.
-func (t BackupTarget) Rclone() bool {
+// Drive reports whether the target is a drive reached through a CLI.
+func (t BackupTarget) Drive() bool {
 	return t.Kind == BackupTargetGoogleDrive || t.Kind == BackupTargetProtonDrive
 }
 

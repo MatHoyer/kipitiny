@@ -111,8 +111,9 @@ stays stopped. Services busy with a deploy, backup or restore are left alone.
 - `pg_dump -Fc` runs **inside** the database container (client always matches the
   server) and streams straight to the target: local disk (`/data/backups`), any
   S3-compatible bucket, or a Google Drive / Proton Drive folder. Memory stays
-  constant; nothing touches a temp file (except drives that can't stream an
-  upload, where rclone spools it under `/data/rclone` meanwhile).
+  constant. Nothing touches a temp file, except on drives that can't stream:
+  Proton Drive transfers go through a file under `/data/protondrive`, so it
+  needs room for the largest dump.
 - A backup only counts once `pg_dump` exits 0; partial uploads are deleted. Each
   backup records size, SHA-256, server version and duration.
 - Restores load the dump into a scratch database and swap it in by rename, so the
@@ -154,23 +155,26 @@ To restore one, stop the manager and replace `/data/kipitiny.db` with the file
 
 ### Drive targets
 
-Google Drive and Proton Drive targets go through [rclone](https://rclone.org), bundled
-in the image (`KIPITINY_RCLONE` to use another binary). Each command gets a config
-written from the target's settings; what rclone changes in it (a refreshed OAuth
-token, a Proton session) is saved back to the database, so the manager's backups
-carry it.
+Drive targets go through a CLI bundled in the image. Each command runs with
+credentials written from the database, and what the CLI changes (a refreshed token)
+is saved back, so the manager's backups carry it.
 
-- **Google Drive:** on a computer with a browser, run `rclone authorize "drive"` and
-  paste the token it prints. Optionally use your own OAuth client ID (rclone's shared
-  one is rate limited).
-- **Proton Drive:** your email and password, plus the current 2FA code when
-  two-factor sign-in is on; it's used once, the session is kept afterwards. This
-  uses rclone's unofficial Proton Drive backend.
+- **Google Drive** uses [rclone](https://rclone.org) (`KIPITINY_RCLONE` for another
+  binary). On a computer with a browser, run `rclone authorize "drive"` and paste the
+  token it prints. Optionally use your own OAuth client ID (rclone's shared one is
+  rate limited).
+- **Proton Drive** uses Proton's official
+  [Drive CLI](https://proton.me/support/drive-cli) (`KIPITINY_PROTONDRIVE_CLI`). *Sign
+  in with Proton* gives a link to open on any device; the sign-in (2FA included)
+  happens on Proton's page and kipitiny never sees the password. It keeps the session,
+  which holds the key to your drive: treat the manager's data as you would that
+  password. Objects are trashed then deleted.
 
 Targets are checked (a test object is written and deleted) before they are saved.
 `go test ./internal/storage/` runs S3 tests against a real server when
 `KIPITINY_TEST_S3_ENDPOINT` is set (see `internal/storage/s3_test.go`), and rclone
 tests (through its local backend) when `KIPITINY_TEST_RCLONE` points at rclone.
+Proton Drive is tested against a stand-in CLI.
 
 ## Multiple servers
 

@@ -60,6 +60,7 @@ type Core struct {
 	notified      sync.Map     // notification key -> time.Time last sent
 	notifyHTTP    *http.Client // nil: notify's default; tests redirect it
 	secrets       []secrets.Provider
+	protonLogins  sync.Map // sign-in ID -> *protonLogin
 }
 
 // New builds the core around the local Docker client; remote servers are
