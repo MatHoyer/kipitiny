@@ -4,6 +4,7 @@ import { Select as SelectPrimitive } from "radix-ui"
 import { ChevronDownIcon } from "lucide-react"
 
 import { SelectContent, SelectItem } from "@/components/ui/select"
+import { Spinner } from "@/components/ui/spinner"
 
 type Option = { value: string; label: React.ReactNode }
 
@@ -15,6 +16,8 @@ type FloatingSelectProps = {
   /** Helper text under the field. */
   description?: React.ReactNode
   disabled?: boolean
+  /** Options are still loading: a spinner replaces the chevron. */
+  loading?: boolean
   id?: string
   className?: string
 }
@@ -30,6 +33,7 @@ function FloatingSelect({
   options,
   description,
   disabled,
+  loading,
   id,
   className,
 }: FloatingSelectProps) {
@@ -53,7 +57,11 @@ function FloatingSelect({
           >
             <SelectPrimitive.Value data-slot="select-value" />
             <SelectPrimitive.Icon asChild>
-              <ChevronDownIcon className="pointer-events-none -mt-3.5 size-4 shrink-0 text-muted-foreground" />
+              {loading ? (
+                <Spinner className="pointer-events-none -mt-3.5 shrink-0 text-muted-foreground" />
+              ) : (
+                <ChevronDownIcon className="pointer-events-none -mt-3.5 size-4 shrink-0 text-muted-foreground" />
+              )}
             </SelectPrimitive.Icon>
           </SelectPrimitive.Trigger>
           <label

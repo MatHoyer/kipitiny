@@ -4,12 +4,13 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { PostgresIcon } from "@/components/brand-icons";
-import { ChoiceTile, CopyButton, DangerZone, Empty, EmptyState, ErrorText, IconTile, Mono, Section, StatCard, StateBadge, Tag } from "@/components/common";
+import { ChoiceTile, CopyButton, DangerZone, EmptyState, ErrorText, IconTile, Mono, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
 import {
   Dialog,
@@ -58,7 +59,7 @@ export function Project() {
     },
   });
 
-  const crumbs = [{ label: "Projects", to: "/" }, { label: project.data?.name ?? "…" }];
+  const crumbs = [{ label: "Projects", to: "/" }, { label: project.data?.name ?? <Spinner className="size-3.5" /> }];
   if (project.error)
     return (
       <>
@@ -101,7 +102,7 @@ export function Project() {
             {services.error ? (
               <ErrorText error={services.error} />
             ) : !services.data ? (
-              <Empty>Loading…</Empty>
+              <Loading />
             ) : list.length === 0 ? (
               <EmptyState
                 icon={Layers}
@@ -248,8 +249,8 @@ function SharedVariables({ project }: { project: ProjectT }) {
           description="An entry used by a service can't be removed."
         />
         <div className="flex items-center justify-end gap-3">
-          <Button type="submit" disabled={save.isPending}>
-            {save.isPending ? "Saving…" : "Save"}
+          <Button type="submit" loading={save.isPending}>
+            Save
           </Button>
         </div>
       </form>
@@ -509,8 +510,8 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
                 <ChevronLeft data-icon="inline-start" />
                 Back
               </Button>
-              <Button type="submit" disabled={create.isPending}>
-                {create.isPending ? "Creating…" : "Create & deploy"}
+              <Button type="submit" loading={create.isPending}>
+                Create & deploy
               </Button>
             </DialogFooter>
           </form>

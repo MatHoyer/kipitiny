@@ -3,9 +3,10 @@ import { Activity, ChevronRight, FolderKanban, Globe, Layers, Plus, TriangleAler
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { PostgresIcon } from "@/components/brand-icons";
-import { Empty, EmptyState, ErrorText, IconTile, StatCard, Tag } from "@/components/common";
+import { EmptyState, ErrorText, IconTile, StatCard, Tag, Loading } from "@/components/common";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
 import {
   Dialog,
@@ -43,7 +44,7 @@ export function Projects() {
       <PageHeader crumbs={[{ label: "Projects" }]} actions={<NewProjectDialog />} />
       <PageBody>
         {projects.isPending ? (
-          <Empty>Loading…</Empty>
+          <Loading />
         ) : projects.error ? (
           <ErrorText error={projects.error} />
         ) : projects.data.length === 0 ? (
@@ -95,7 +96,7 @@ function ProjectCard({ project: p, services, server }: { project: ProjectT; serv
               {hasDb && <PostgresIcon aria-label="Has a database" className="size-3.5 shrink-0 text-[#4169E1]" />}
             </p>
             <p className="text-xs text-muted-foreground">
-              {services ? `${services.length} service${services.length === 1 ? "" : "s"}` : "…"}
+              {services ? `${services.length} service${services.length === 1 ? "" : "s"}` : <Spinner className="inline size-3" />}
               {server && ` · ${server}`}
             </p>
           </div>

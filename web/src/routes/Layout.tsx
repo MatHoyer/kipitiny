@@ -234,7 +234,7 @@ function UpdateNotice() {
       {updating ? (
         <div className="flex items-center gap-2">
           <LoaderCircle className="size-3.5 shrink-0 animate-spin" />
-          <span>Updating to {update.latest}… The page reloads when it's done.</span>
+          <span>Updating to {update.latest}. The page reloads when it's done.</span>
         </div>
       ) : (
         <>

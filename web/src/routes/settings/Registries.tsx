@@ -262,8 +262,8 @@ function RegistryForm({
             Back
           </Button>
         )}
-        <Button type="submit" disabled={save.isPending}>
-          {save.isPending ? "Checking…" : registry ? "Save" : "Connect"}
+        <Button type="submit" loading={save.isPending}>
+          {registry ? "Save" : "Connect"}
         </Button>
       </DialogFooter>
     </form>

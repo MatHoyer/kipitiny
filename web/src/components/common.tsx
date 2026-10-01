@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { friendlyError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
@@ -97,6 +98,15 @@ export function ErrorText({ error }: { error: Error | null | undefined }) {
       {friendlyError(error)}
     </p>
   ) : null;
+}
+
+/** What a page or block shows while its data loads. */
+export function Loading({ className }: { className?: string }) {
+  return (
+    <div className={cn("flex justify-center py-12 text-muted-foreground", className)}>
+      <Spinner className="size-6" />
+    </div>
+  );
 }
 
 export function Empty({ children }: { children: ReactNode }) {

@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ChevronLeft, Cloud, DatabaseBackup, HardDrive, History, KeyRound, LoaderCircle, Pencil, Plus, Search, Trash2, TriangleAlert } from "lucide-react";
+import { CheckCircle2, ChevronLeft, Cloud, DatabaseBackup, HardDrive, History, KeyRound, Pencil, Plus, Search, Trash2, TriangleAlert } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { GoogleDriveIcon, ProtonDriveIcon, ProtonIcon } from "@/components/brand-icons";
 import { CheckboxField, ChoiceTile, CopyField, EmptyState, ErrorText, Mono, Section, StatCard, Tag, withCode } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
 import {
   Dialog,
@@ -144,7 +145,7 @@ function BackupStats({ backups, targets }: { backups?: Backup[]; targets?: numbe
       <StatCard icon={History} label="Last backup" value={last ? timeAgo(last.createdAt) : "never"} hint={last && (last.serviceName || "manager")} />
       <StatCard icon={HardDrive} label="Stored" value={formatBytes(done.reduce((n, b) => n + b.sizeBytes, 0))} hint={`${done.length} backups`} />
       <StatCard icon={TriangleAlert} label="Failed" value={failed} tone={failed ? "bad" : undefined} />
-      <StatCard icon={Cloud} label="Targets" value={targets ?? "…"} />
+      <StatCard icon={Cloud} label="Targets" value={targets ?? <Spinner className="size-5 text-muted-foreground" />} />
     </div>
   );
 }
@@ -473,8 +474,8 @@ function TargetForm({
             Back
           </Button>
         )}
-        <Button type="submit" disabled={save.isPending || (kind.signIn && !target && !form.login)}>
-          {save.isPending ? "Testing…" : target ? "Save" : "Add target"}
+        <Button type="submit" loading={save.isPending} disabled={kind.signIn && !target && !form.login}>
+          {target ? "Save" : "Add target"}
         </Button>
       </DialogFooter>
     </form>
@@ -517,8 +518,8 @@ function ProtonSignIn({
       ) : status === "pending" && start.data ? (
         <>
           <p className="flex items-center gap-2 text-sm font-medium">
-            <LoaderCircle className="size-4 animate-spin" />
-            Waiting for you to sign in…
+            <Spinner />
+            Waiting for you to sign in
           </p>
           <p className="text-xs text-muted-foreground">Open this link on any device; it works for 15 minutes.</p>
           <div className="flex flex-wrap gap-2">

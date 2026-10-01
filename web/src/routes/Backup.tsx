@@ -4,10 +4,11 @@ import type { ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { PostgresIcon } from "@/components/brand-icons";
-import { CopyButton, DangerZone, Empty, ErrorText, Mono, Section, StatCard, StateBadge, Tag } from "@/components/common";
+import { CopyButton, DangerZone, ErrorText, Mono, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { formatBytes, formatDuration, timeAgo } from "@/lib/format";
 import { api, type Backup as BackupT } from "../api";
 import { backupTitle } from "./BackupList";
@@ -61,12 +62,12 @@ export function Backup() {
     },
   });
 
-  const crumbs = [{ label: "Backups", to: "/backups" }, { label: b ? backupTitle(b) : "…" }];
+  const crumbs = [{ label: "Backups", to: "/backups" }, { label: b ? backupTitle(b) : <Spinner className="size-3.5" /> }];
   if (!b)
     return (
       <>
         <PageHeader crumbs={crumbs} />
-        <PageBody>{backup.error ? <ErrorText error={backup.error} /> : <Empty>Loading…</Empty>}</PageBody>
+        <PageBody>{backup.error ? <ErrorText error={backup.error} /> : <Loading />}</PageBody>
       </>
     );
 
@@ -131,7 +132,7 @@ export function Backup() {
 
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <StatCard icon={HardDrive} label="Size" value={done ? formatBytes(b.sizeBytes) : "—"} />
-          <StatCard icon={Clock} label="Took" value={b.finishedAt ? formatDuration(b.durationMs) : "…"} />
+          <StatCard icon={Clock} label="Took" value={b.finishedAt ? formatDuration(b.durationMs) : <Spinner className="size-5 text-muted-foreground" />} />
           <StatCard icon={DatabaseBackup} label={isDb ? "PostgreSQL" : "Kind"} value={isDb ? b.pgVersion || "—" : "SQLite"} />
           <StatCard
             icon={ShieldCheck}
@@ -235,16 +236,19 @@ function RestoreTest({ backup: b, onRun, busy }: { backup: BackupT; onRun: () =>
       title="Restore test"
       description="Loads the backup into a throwaway PostgreSQL with no network, then measures what came back."
       actions={
-        <Button variant="outline" size="sm" disabled={busy || running} onClick={onRun}>
+        <Button variant="outline" size="sm" loading={running} disabled={busy} onClick={onRun}>
           <ShieldCheck data-icon="inline-start" />
-          {running ? "Testing…" : b.verifyStatus ? "Test again" : "Run test"}
+          {running ? "Testing" : b.verifyStatus ? "Test again" : "Run test"}
         </Button>
       }
     >
       {!b.verifyStatus ? (
         <p className="text-sm text-muted-foreground">Not tested yet. A backup nobody restored is a hope.</p>
       ) : running ? (
-        <p className="text-sm text-muted-foreground">Restoring into a scratch container…</p>
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner />
+          Restoring into a scratch container
+        </p>
       ) : b.verifyStatus === "failed" ? (
         <p className="text-sm text-destructive">{b.verifyError}</p>
       ) : (
