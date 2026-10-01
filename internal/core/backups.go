@@ -16,6 +16,7 @@ import (
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/ids"
+	"github.com/MatHoyer/kipitiny/internal/notify"
 	"github.com/MatHoyer/kipitiny/internal/storage"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -162,6 +163,7 @@ func (c *Core) runBackup(svc store.Service, containerID string, st storage.Stora
 		log.Error("cannot record backup result", "err", err)
 		return false
 	}
+	c.notifyBackup(b, target, "/services/"+svc.ID)
 	return err == nil && b.Status == store.OpSucceeded
 }
 
@@ -351,6 +353,59 @@ func (c *Core) runRestore(svc store.Service, containerID string, st storage.Stor
 	if err := c.store.FinishRestore(context.WithoutCancel(ctx), r.ID, status, msg); err != nil {
 		log.Error("cannot record restore result", "err", err)
 	}
+
+	e := notify.Event{
+		Type:    EventRestoreSucceeded,
+		Level:   notify.Success,
+		Title:   fmt.Sprintf("%s/%s restored", b.ProjectName, svc.Name),
+		Message: fmt.Sprintf("The database now holds the backup of %s.", b.CreatedAt.UTC().Format("2006-01-02 15:04 UTC")),
+		Fields: []notify.Field{
+			{Name: "Project", Value: b.ProjectName},
+			{Name: "Database", Value: svc.Name},
+			{Name: "Target", Value: target.Name},
+		},
+	}
+	if status == store.OpFailed {
+		e.Type, e.Level, e.Title, e.Message = EventRestoreFailed, notify.Error, fmt.Sprintf("%s/%s restore failed", b.ProjectName, svc.Name), msg+"\nThe live database was left unchanged."
+	}
+	c.notify(e, "/services/"+svc.ID, "")
+}
+
+// notifyBackup reports a finished database or manager backup.
+func (c *Core) notifyBackup(b store.Backup, target store.BackupTarget, path string) {
+	subject := b.ProjectName + "/" + b.ServiceName
+	if b.Kind == store.BackupKindManager {
+		subject, path = "Manager state", "/backups"
+	}
+	e := notify.Event{
+		Type:  EventBackupSucceeded,
+		Level: notify.Success,
+		Title: subject + " backed up",
+		Fields: []notify.Field{
+			{Name: "Target", Value: target.Name},
+			{Name: "Size", Value: humanSize(b.SizeBytes)},
+			{Name: "Duration", Value: (time.Duration(b.DurationMS) * time.Millisecond).Round(time.Second).String()},
+		},
+	}
+	if b.Status != store.OpSucceeded {
+		e.Type, e.Level, e.Title, e.Message = EventBackupFailed, notify.Error, subject+" backup failed", b.Error
+		e.Fields = e.Fields[:1]
+	}
+	c.notify(e, path, "")
+}
+
+// humanSize formats a byte count with binary units.
+func humanSize(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for m := n / unit; m >= unit; m /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
 // restore loads the dump into a scratch database and swaps it in by rename,

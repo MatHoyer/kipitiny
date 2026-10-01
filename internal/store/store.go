@@ -98,6 +98,12 @@ type Store interface {
 	SetDomainProxied(ctx context.Context, id string, proxied bool) (Domain, error)
 	DeleteDomain(ctx context.Context, id string) error
 
+	ListNotificationChannels(ctx context.Context) ([]NotificationChannel, error)
+	GetNotificationChannel(ctx context.Context, id string) (NotificationChannel, error)
+	CreateNotificationChannel(ctx context.Context, ch NotificationChannel) (NotificationChannel, error)
+	UpdateNotificationChannel(ctx context.Context, ch NotificationChannel) (NotificationChannel, error)
+	DeleteNotificationChannel(ctx context.Context, id string) error
+
 	AddAudit(ctx context.Context, e AuditEntry) error
 	ListAudit(ctx context.Context, limit int) ([]AuditEntry, error)
 	// PruneAudit deletes entries older than before.
@@ -402,6 +408,21 @@ type Domain struct {
 	Name string `bun:"name" json:"name"`
 	// Proxied puts managed DNS records behind Cloudflare's proxy.
 	Proxied   bool      `bun:"proxied" json:"proxied"`
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+}
+
+// NotificationChannel is one destination for notifications. Config is
+// specific to the kind (see internal/notify) and may hold secrets.
+type NotificationChannel struct {
+	bun.BaseModel `bun:"table:notification_channels,alias:channel" json:"-"`
+
+	ID     string            `bun:"id,pk" json:"id"`
+	Name   string            `bun:"name" json:"name"`
+	Kind   string            `bun:"kind" json:"kind"`
+	Config map[string]string `bun:"config" json:"config"`
+	// Events lists the event types sent to this channel.
+	Events    []string  `bun:"events" json:"events"`
+	Enabled   bool      `bun:"enabled" json:"enabled"`
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 }
 

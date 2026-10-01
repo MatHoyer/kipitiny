@@ -642,6 +642,42 @@ func (s *Store) DeleteDomain(ctx context.Context, id string) error {
 	return deleteByID(ctx, s.db, "domains", id)
 }
 
+func (s *Store) ListNotificationChannels(ctx context.Context) ([]store.NotificationChannel, error) {
+	chs := []store.NotificationChannel{}
+	err := s.db.NewSelect().Model(&chs).Order("name").Scan(ctx)
+	return chs, mapErr(err)
+}
+
+func (s *Store) GetNotificationChannel(ctx context.Context, id string) (store.NotificationChannel, error) {
+	var ch store.NotificationChannel
+	err := s.db.NewSelect().Model(&ch).Where("id = ?", id).Scan(ctx)
+	return ch, mapErr(err)
+}
+
+func (s *Store) CreateNotificationChannel(ctx context.Context, ch store.NotificationChannel) (store.NotificationChannel, error) {
+	ch.ID, ch.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&ch).Exec(ctx); err != nil {
+		return store.NotificationChannel{}, mapErr(err)
+	}
+	return ch, nil
+}
+
+func (s *Store) UpdateNotificationChannel(ctx context.Context, ch store.NotificationChannel) (store.NotificationChannel, error) {
+	res, err := s.db.NewUpdate().Model(&ch).Column("name", "config", "events", "enabled").WherePK().Exec(ctx)
+	if err != nil {
+		return store.NotificationChannel{}, mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.NotificationChannel{}, store.ErrNotFound
+	}
+	err = s.db.NewSelect().Model(&ch).WherePK().Scan(ctx)
+	return ch, mapErr(err)
+}
+
+func (s *Store) DeleteNotificationChannel(ctx context.Context, id string) error {
+	return deleteByID(ctx, s.db, "notification_channels", id)
+}
+
 func (s *Store) AddAudit(ctx context.Context, e store.AuditEntry) error {
 	e.ID, e.CreatedAt = ids.New(), now()
 	_, err := s.db.NewInsert().Model(&e).Exec(ctx)

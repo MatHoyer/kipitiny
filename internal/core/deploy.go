@@ -18,6 +18,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/notify"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -140,6 +141,22 @@ func (c *Core) runDeploy(project store.Project, svc store.Service, dep store.Dep
 	if err := c.store.FinishDeployment(context.WithoutCancel(ctx), dep.ID, status, msg); err != nil && !errors.Is(err, store.ErrNotFound) {
 		log.Error("cannot record deployment result", "err", err)
 	}
+
+	e := notify.Event{
+		Type:  EventDeploySucceeded,
+		Level: notify.Success,
+		Title: fmt.Sprintf("%s/%s deployed", project.Name, svc.Name),
+		Fields: []notify.Field{
+			{Name: "Project", Value: project.Name},
+			{Name: "Service", Value: svc.Name},
+			{Name: "Image", Value: svc.Image},
+			{Name: "Duration", Value: time.Since(start).Round(time.Second).String()},
+		},
+	}
+	if err != nil {
+		e.Type, e.Level, e.Title, e.Message = EventDeployFailed, notify.Error, fmt.Sprintf("%s/%s deployment failed", project.Name, svc.Name), msg
+	}
+	c.notify(e, "/services/"+svc.ID, "")
 }
 
 func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Service, dep store.Deployment,

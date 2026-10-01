@@ -12,6 +12,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/notify"
 	"github.com/MatHoyer/kipitiny/internal/storage"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -77,6 +78,23 @@ func (c *Core) runVerify(b store.Backup) {
 	if err := c.store.SetBackupVerification(context.WithoutCancel(ctx), b.ID, v); err != nil && !errors.Is(err, store.ErrNotFound) {
 		log.Error("cannot record restore test", "err", err)
 	}
+
+	subject := b.ProjectName + "/" + b.ServiceName
+	e := notify.Event{
+		Type:    EventVerifySucceeded,
+		Level:   notify.Success,
+		Title:   "Restore test passed for " + subject,
+		Message: fmt.Sprintf("The backup of %s restores cleanly.", b.CreatedAt.UTC().Format("2006-01-02 15:04 UTC")),
+		Fields: []notify.Field{
+			{Name: "Tables", Value: fmt.Sprint(details.Tables)},
+			{Name: "Rows", Value: fmt.Sprint(details.Rows)},
+		},
+	}
+	if err != nil {
+		e.Type, e.Level, e.Title, e.Message, e.Fields = EventVerifyFailed, notify.Error, "Restore test failed for "+subject,
+			fmt.Sprintf("The backup of %s could not be restored: %s", b.CreatedAt.UTC().Format("2006-01-02 15:04 UTC"), v.VerifyError), nil
+	}
+	c.notify(e, "/services/"+b.ServiceID, "")
 }
 
 func (c *Core) verify(ctx context.Context, b store.Backup) (store.VerificationDetails, error) {

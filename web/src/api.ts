@@ -275,6 +275,32 @@ export type Cleanup = {
   };
 };
 
+/** A delivery method (Discord…); its fields describe the config form. */
+export type NotificationKind = {
+  name: string;
+  label: string;
+  fields: { key: string; label: string; placeholder?: string; required: boolean; secret: boolean }[];
+};
+
+export type NotificationChannel = {
+  id: string;
+  name: string;
+  kind: string;
+  /** Secret values come back masked. */
+  config: Record<string, string>;
+  events: string[];
+  enabled: boolean;
+  createdAt: string;
+};
+
+export type ChannelInput = Pick<NotificationChannel, "name" | "kind" | "config" | "events" | "enabled">;
+
+export type Notifications = {
+  channels: NotificationChannel[];
+  kinds: NotificationKind[];
+  events: { type: string; label: string; default: boolean }[];
+};
+
 /** State of a service domain's managed Cloudflare record. */
 export type DNSStatus = { state: "synced" | "conflict" | "error"; message?: string };
 
@@ -402,6 +428,12 @@ export const api = {
   cleanup: () => request<Cleanup>("/cleanup"),
   setCleanup: (s: CleanupSettings) => request<Cleanup>("/cleanup", json("PUT", s)),
   runCleanup: () => request<Cleanup>("/cleanup/run", { method: "POST" }),
+  notifications: () => request<Notifications>("/notifications"),
+  createChannel: (c: ChannelInput) => request<NotificationChannel>("/notifications/channels", json("POST", c)),
+  updateChannel: (id: string, c: ChannelInput) =>
+    request<NotificationChannel>(`/notifications/channels/${id}`, json("PUT", c)),
+  deleteChannel: (id: string) => request<void>(`/notifications/channels/${id}`, { method: "DELETE" }),
+  testChannel: (id: string) => request<void>(`/notifications/channels/${id}/test`, { method: "POST" }),
   tokens: () => request<ApiToken[]>("/tokens"),
   createToken: (name: string, scope: Scope) =>
     request<ApiToken & { token: string }>("/tokens", json("POST", { name, scope })),

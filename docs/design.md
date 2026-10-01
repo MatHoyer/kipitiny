@@ -204,6 +204,13 @@ Later: `pgstore` + `migrations/postgres/`, CI against both, `kipitiny migrate-db
 
 Later: optional VictoriaLogs or Loki, opt-in.
 
+### Notifications
+
+- `internal/notify` is transport-agnostic: an `Event` (type, level, title, message, fields, link) and a `Sender` per channel kind. Each kind declares its config fields (secret or not), so the UI renders new kinds without changes.
+- Kinds: Discord webhook now; email (SMTP), in-app and generic webhooks later.
+- Channels live in `notification_channels` and subscribe to event types (deploy/backup/restore/restore-test outcomes, restarted services, cleanup errors, new versions). Secrets are masked on read.
+- Core emits events where operations finish; delivery runs in the background with a timeout, and keyed events (a crash loop) are throttled.
+
 ## 13. UI
 
 - React SPA (Vite), React Router, TanStack Query, Tailwind. No Next.js / Node at runtime.

@@ -14,6 +14,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/notify"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -75,6 +76,20 @@ type CleanupRun struct {
 	// Deployments is how many old deployment records (and logs) went away.
 	Deployments int    `json:"deployments"`
 	Error       string `json:"error,omitempty"`
+}
+
+// problems lists the run's errors, prefixed by their server.
+func (r CleanupRun) problems() []string {
+	var out []string
+	if r.Error != "" {
+		out = append(out, r.Error)
+	}
+	for _, s := range r.Servers {
+		for _, e := range s.Errors {
+			out = append(out, s.Server+": "+e)
+		}
+	}
+	return out
 }
 
 // CleanupResult counts what was removed on one server.
@@ -239,6 +254,14 @@ func (c *Core) runCleanup(s CleanupSettings, trigger string) {
 	}
 	finished := time.Now().UTC()
 	run.FinishedAt = &finished
+	if problems := run.problems(); len(problems) > 0 {
+		c.notify(notify.Event{
+			Type:    EventCleanupFailed,
+			Level:   notify.Warning,
+			Title:   "Docker cleanup had errors",
+			Message: strings.Join(problems, "\n"),
+		}, "/settings", "")
+	}
 	c.log.Info("cleanup finished", "trigger", trigger, "servers", len(run.Servers), "deployments", run.Deployments)
 	if b, err := json.Marshal(run); err == nil {
 		if err := c.store.SetSetting(context.WithoutCancel(ctx), cleanupRunSetting, string(b)); err != nil {

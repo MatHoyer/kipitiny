@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"regexp"
 	"sync"
 	"sync/atomic"
@@ -54,7 +55,9 @@ type Core struct {
 	update        updateState
 	dns           dnsState
 	dnsKick       chan struct{}
-	cleaning      atomic.Bool // a cleanup is running
+	cleaning      atomic.Bool  // a cleanup is running
+	notified      sync.Map     // notification key -> time.Time last sent
+	notifyHTTP    *http.Client // nil: notify's default; tests redirect it
 }
 
 // New builds the core around the local Docker client; remote servers are
