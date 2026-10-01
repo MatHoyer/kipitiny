@@ -15,6 +15,7 @@ import { Project } from "./routes/Project";
 import { Projects } from "./routes/Projects";
 import { Service } from "./routes/Service";
 import { SettingsShell } from "./routes/settings";
+import { ServerPage } from "./routes/settings/Servers";
 
 // A 401 anywhere means the session is gone: re-check auth to show the login.
 const onError = (err: Error) => {
@@ -53,6 +54,7 @@ const router = createBrowserRouter([
       { path: "backups", element: <Backups /> },
       { path: "settings", element: <Navigate to="/settings/servers" replace /> },
       { path: "settings/:page", element: <SettingsShell /> },
+      { path: "settings/servers/:id", element: <ServerPage /> },
     ],
   },
 ]);
