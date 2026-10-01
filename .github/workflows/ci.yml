@@ -1,10 +1,8 @@
-# Runs on every pull request and on pushes to main.
+# Runs on every pull request; merges to main are already checked there.
 name: ci
 
 on:
   pull_request:
-  push:
-    branches: [main]
 
 permissions:
   contents: read
