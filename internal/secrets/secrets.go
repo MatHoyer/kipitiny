@@ -93,3 +93,21 @@ func SchemeOf(ref string) string {
 	}
 	return s
 }
+
+// Browser is a Provider that can list what it can reference, for pickers.
+// Listings carry names and references, never values.
+type Browser interface {
+	Vaults(ctx context.Context) ([]string, error)
+	Items(ctx context.Context, vault string) ([]Item, error)
+}
+
+type Item struct {
+	Title  string  `json:"title"`
+	Fields []Field `json:"fields"`
+}
+
+type Field struct {
+	Name string `json:"name"`
+	// Ref is the full reference, ready to use in env.
+	Ref string `json:"ref"`
+}

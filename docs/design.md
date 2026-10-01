@@ -55,6 +55,7 @@ The manager runs as a container and controls the **host** Docker daemon via the 
 - `internal/secrets`: a `Provider` per password manager, each owning a reference scheme (`pass://` for Proton Pass; `op://` for 1Password would be another provider). Core and the UI only see the interface.
 - Providers wrap the vendor's official CLI (Proton has no public API): bundled in the image, run as short-lived processes, no resident RAM. The manager starts itself (`kipitiny secrets-env`) under the CLI's `run` command to read resolved values back.
 - Env values reference secrets as `{{ pass://Vault/Item/field }}`, in a service or a project entry. They're fetched on each deploy and replica recreation, injected into the containers and never stored by the manager; a database's env can't use them (backups read its credentials as stored).
+- Providers that implement `secrets.Browser` feed the env editor's picker (vaults → items → fields): names and references only, admin-only routes.
 - Logged in with a scoped token kept in settings; the CLI session lives in `$DATA_DIR/secrets/<provider>` and is recreated from the token when lost or expired.
 
 ## 5. Core concepts

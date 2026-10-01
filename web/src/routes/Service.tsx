@@ -363,6 +363,7 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
           vars={Object.keys(project.data?.env ?? {}).sort()}
           secretVars={project.data?.secrets}
           databases={databases}
+          passwordManagers={!isDb}
           description={isDb ? "POSTGRES_* credentials are fixed at creation." : undefined}
         />
         <div className="flex items-center justify-end gap-3">

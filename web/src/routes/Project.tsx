@@ -190,6 +190,7 @@ function SharedVariables({ project }: { project: ProjectT }) {
           showLabel={false}
           rows={rows}
           onChange={setRows}
+          passwordManagers
           description="An entry used by a service can't be removed."
         />
         <div className="flex items-center justify-end gap-3">

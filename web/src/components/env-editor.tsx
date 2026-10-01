@@ -1,6 +1,7 @@
 import { Braces, Code, Database, KeyRound, Link2, List, Plus, Trash2, Vault, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { PostgresIcon } from "@/components/brand-icons";
+import { SecretRefDialog } from "@/components/secret-ref-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -48,6 +49,7 @@ export function EnvEditor({
   vars,
   secretVars = [],
   databases,
+  passwordManagers = false,
   className,
 }: {
   label?: string;
@@ -61,6 +63,8 @@ export function EnvEditor({
   secretVars?: string[];
   /** The project's database names; enables "Connect database". */
   databases?: string[];
+  /** Offers secrets from connected password managers. */
+  passwordManagers?: boolean;
   className?: string;
 }) {
   const [mode, setMode] = useState<Mode>("list");
@@ -247,6 +251,7 @@ export function EnvEditor({
                 names={unused(projectSecrets)}
                 onPick={(v) => add({ key: v, value: envRef(v), secret: true })}
               />
+              {passwordManagers && <SecretRefDialog onPick={(key, value) => add({ key, value, secret: true })} />}
               {databases && databases.length > 0 && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
