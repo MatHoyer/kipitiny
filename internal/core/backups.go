@@ -588,6 +588,10 @@ func (c *Core) ListBackups(ctx context.Context, f store.BackupFilter) ([]store.B
 	return c.store.ListBackups(ctx, f)
 }
 
+func (c *Core) GetBackup(ctx context.Context, id string) (store.Backup, error) {
+	return c.store.GetBackup(ctx, id)
+}
+
 func (c *Core) ListRestores(ctx context.Context, serviceID string) ([]store.Restore, error) {
 	return c.store.ListRestores(ctx, serviceID, 20)
 }

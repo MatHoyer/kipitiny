@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ChevronLeft, Cloud, HardDrive, History, KeyRound, LoaderCircle, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { CheckCircle2, ChevronLeft, Cloud, DatabaseBackup, HardDrive, History, KeyRound, LoaderCircle, Pencil, Plus, Search, Trash2, TriangleAlert } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { GoogleDriveIcon, ProtonDriveIcon, ProtonIcon } from "@/components/brand-icons";
-import { CheckboxField, ChoiceTile, CopyField, ErrorText, Mono, Section, StatCard, Tag, withCode } from "@/components/common";
+import { CheckboxField, ChoiceTile, CopyField, EmptyState, ErrorText, Mono, Section, StatCard, Tag, withCode } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,10 @@ import {
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingTextarea } from "@/components/ui/floating-textarea";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useTab } from "@/hooks/use-tab";
 import { formatBytes, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, type Backup, type BackupTarget, type TargetInput, type TargetKind, type TargetKindName } from "../api";
@@ -31,18 +35,101 @@ export function Backups() {
     refetchInterval: (q) => (q.state.data?.some((b) => b.status === "running") ? 1_000 : 15_000),
   });
 
+  const [tab, setTab] = useTab(["backups", "targets", "manager"], "backups");
+  const all = backups.data ?? [];
+
   return (
     <>
       <PageHeader crumbs={[{ label: "Backups" }]} />
       <PageBody>
         <BackupStats backups={backups.data} targets={targets.data?.length} />
-        <Targets targets={targets.data ?? []} />
-        <ManagerBackup targets={targets.data ?? []} />
-        <Section title="All backups">
-          <ErrorText error={backups.error} />
-          <BackupList backups={backups.data ?? []} targets={targets.data ?? []} showService />
-        </Section>
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList variant="line">
+            <TabsTrigger value="backups">Backups</TabsTrigger>
+            <TabsTrigger value="targets">Targets</TabsTrigger>
+            <TabsTrigger value="manager">Manager state</TabsTrigger>
+          </TabsList>
+          <TabsContent value="backups" className="space-y-6">
+            <ErrorText error={backups.error} />
+            <FilteredBackups backups={all.filter((b) => b.kind === "postgres")} targets={targets.data ?? []} />
+          </TabsContent>
+          <TabsContent value="targets">
+            <Targets targets={targets.data ?? []} />
+          </TabsContent>
+          <TabsContent value="manager" className="space-y-6">
+            <ManagerBackup targets={targets.data ?? []} />
+            <BackupList
+              backups={all.filter((b) => b.kind === "manager")}
+              targets={targets.data ?? []}
+              empty={<EmptyState icon={DatabaseBackup} title="No snapshots yet" description="The daily snapshot appears here." />}
+            />
+          </TabsContent>
+        </Tabs>
       </PageBody>
+    </>
+  );
+}
+
+type StatusFilter = "all" | "succeeded" | "failed" | "running";
+
+/** Database backups with search and filters. */
+function FilteredBackups({ backups, targets }: { backups: Backup[]; targets: BackupTarget[] }) {
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [target, setTarget] = useState("all");
+  const needle = q.trim().toLowerCase();
+  const rows = backups.filter(
+    (b) =>
+      (status === "all" || b.status === status) &&
+      (target === "all" || b.targetId === target) &&
+      (!needle || `${b.projectName} ${b.serviceName}`.toLowerCase().includes(needle)),
+  );
+  const filtering = needle || status !== "all" || target !== "all";
+
+  return (
+    <>
+      {backups.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-48 flex-1">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search databases and projects" aria-label="Search" className="pl-9" />
+          </div>
+          <Select value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
+            <SelectTrigger aria-label="Status" className="min-w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any status</SelectItem>
+              <SelectItem value="succeeded">Succeeded</SelectItem>
+              <SelectItem value="failed">Failed</SelectItem>
+              <SelectItem value="running">Running</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={target} onValueChange={setTarget}>
+            <SelectTrigger aria-label="Target" className="min-w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All targets</SelectItem>
+              {targets.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      <BackupList
+        backups={rows}
+        targets={targets}
+        showService
+        empty={
+          filtering ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">No backup matches these filters.</p>
+          ) : undefined
+        }
+      />
     </>
   );
 }
@@ -72,7 +159,7 @@ function ManagerBackup({ targets }: { targets: BackupTarget[] }) {
   });
   return (
     <Section
-      title="Manager state"
+      plain
       description={
         <>
           Projects, services, schedules and backup records live in one SQLite file. It is snapshotted daily to local disk
@@ -122,7 +209,7 @@ function Targets({ targets }: { targets: BackupTarget[] }) {
 
   return (
     <Section
-      title="Targets"
+      plain
       description="Where backups are stored."
       actions={
         <Button size="sm" onClick={() => setEditing({ step: "pick" })}>

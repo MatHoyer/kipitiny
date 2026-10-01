@@ -48,6 +48,15 @@ func (a *API) createBackup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, b)
 }
 
+func (a *API) getBackup(w http.ResponseWriter, r *http.Request) {
+	b, err := a.core.GetBackup(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, b)
+}
+
 func (a *API) deleteBackup(w http.ResponseWriter, r *http.Request) {
 	if err := a.core.DeleteBackup(r.Context(), r.PathValue("id")); err != nil {
 		a.fail(w, err)

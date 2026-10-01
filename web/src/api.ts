@@ -452,6 +452,7 @@ export const api = {
   serviceBackups: (serviceId: string) => request<Backup[]>(`/services/${serviceId}/backups`),
   backup: (serviceId: string, targetId: string) =>
     request<Backup>(`/services/${serviceId}/backups`, json("POST", { targetId })),
+  getBackup: (id: string) => request<Backup>(`/backups/${id}`),
   verifyBackup: (id: string) => request<Backup>(`/backups/${id}/verify`, { method: "POST" }),
   deleteBackup: (id: string) => request<void>(`/backups/${id}`, { method: "DELETE" }),
   downloadUrl: (id: string) => `/api/backups/${id}/download`,
