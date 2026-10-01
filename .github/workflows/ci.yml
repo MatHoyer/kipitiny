@@ -1,0 +1,63 @@
+# Runs on every pull request and on pushes to main.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    services:
+      # S3-compatible server for internal/storage's TestS3.
+      s3:
+        image: rustfs/rustfs
+        ports: ["19000:9000"]
+        env:
+          RUSTFS_ACCESS_KEY: test
+          RUSTFS_SECRET_KEY: testsecret
+    env:
+      KIPITINY_TEST_S3_ENDPOINT: localhost:19000
+      KIPITINY_TEST_S3_ACCESS_KEY: test
+      KIPITINY_TEST_S3_SECRET_KEY: testsecret
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: make ui-stub
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then echo "Run gofmt on:"; echo "$unformatted"; exit 1; fi
+      - run: go vet ./...
+      - name: Wait for S3
+        run: for i in $(seq 30); do curl -s -o /dev/null localhost:19000 && exit 0; sleep 1; done; exit 1
+      - run: go test -race ./...
+      - run: go build ./cmd/kipitiny
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build # tsc -b && vite build
