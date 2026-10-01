@@ -99,7 +99,8 @@ export function SecretRefDialog({ onPick }: { onPick: (key: string, ref: string)
             />
           )}
           <FloatingSelect
-            label={vaults.isLoading ? "Vault (loading…)" : "Vault"}
+            label="Vault"
+            loading={vaults.isLoading}
             value={vault}
             onValueChange={(v) => {
               setVault(v);
@@ -110,7 +111,8 @@ export function SecretRefDialog({ onPick }: { onPick: (key: string, ref: string)
             disabled={!vaults.data?.length}
           />
           <FloatingSelect
-            label={items.isLoading ? "Item (loading…)" : "Item"}
+            label="Item"
+            loading={items.isLoading}
             value={item}
             onValueChange={(v) => {
               setItem(v);

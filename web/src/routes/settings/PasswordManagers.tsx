@@ -173,8 +173,8 @@ function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
                 <ChevronLeft data-icon="inline-start" />
                 Back
               </Button>
-              <Button type="submit" disabled={connect.isPending}>
-                {connect.isPending ? "Connecting…" : "Connect"}
+              <Button type="submit" loading={connect.isPending}>
+                Connect
               </Button>
             </DialogFooter>
           </form>

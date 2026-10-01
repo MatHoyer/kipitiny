@@ -7,7 +7,6 @@ import {
   CheckboxField,
   CopyField,
   DangerZone,
-  Empty,
   ErrorText,
   IconTile,
   Mono,
@@ -15,10 +14,12 @@ import {
   StatCard,
   StateBadge,
   Tag,
+  Loading,
 } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
 import {
   Dialog,
@@ -94,14 +95,14 @@ export function ServerPage() {
     },
   });
   const s = servers.data?.find((x) => x.id === id);
-  const crumbs = [{ label: "Settings" }, { label: "Servers", to: "/settings/servers" }, { label: s?.name ?? "…" }];
+  const crumbs = [{ label: "Settings" }, { label: "Servers", to: "/settings/servers" }, { label: s?.name ?? <Spinner className="size-3.5" /> }];
 
   if (servers.data && !s) return <Navigate to="/settings/servers" replace />;
   if (!s)
     return (
       <>
         <PageHeader crumbs={crumbs} />
-        <PageBody>{servers.error ? <ErrorText error={servers.error} /> : <Empty>Loading…</Empty>}</PageBody>
+        <PageBody>{servers.error ? <ErrorText error={servers.error} /> : <Loading />}</PageBody>
       </>
     );
 
@@ -236,8 +237,8 @@ function NetworkSection({ server }: { server: Server }) {
 function SaveBar({ dirty, pending, label = "Save" }: { dirty: boolean; pending: boolean; label?: string }) {
   return (
     <div className="flex justify-end">
-      <Button type="submit" disabled={!dirty || pending}>
-        {pending ? "Saving…" : label}
+      <Button type="submit" loading={pending} disabled={!dirty}>
+        {label}
       </Button>
     </div>
   );
@@ -279,7 +280,7 @@ function SshSetup() {
         On the server, add the manager's key to <Mono>~/.ssh/authorized_keys</Mono> of the SSH user (who needs access to
         the Docker socket).
       </p>
-      <CopyField value={key.data?.publicKey ?? "…"} />
+      {key.data ? <CopyField value={key.data.publicKey} /> : <Loading className="py-2" />}
       <p className="text-xs text-muted-foreground">
         sshd must allow <Mono>AllowTcpForwarding yes</Mono> (or <Mono>local</Mono>) and{" "}
         <Mono>AllowStreamLocalForwarding yes</Mono>: the Docker API is reached through the socket, never over TCP. The
@@ -371,8 +372,8 @@ function NewServerDialog() {
           <SshSetup />
           <ServerFields f={f} autoFocus />
           <DialogFooter>
-            <Button type="submit" disabled={f.save.isPending}>
-              {f.save.isPending ? "Connecting…" : "Add server"}
+            <Button type="submit" loading={f.save.isPending}>
+              Add server
             </Button>
           </DialogFooter>
         </form>

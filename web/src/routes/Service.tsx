@@ -4,12 +4,13 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { PostgresIcon } from "@/components/brand-icons";
-import { DangerZone, Empty, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag } from "@/components/common";
+import { DangerZone, Empty, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -76,14 +77,14 @@ export function Service() {
   const svc = service.data;
   const crumbs = [
     { label: "Projects", to: "/" },
-    { label: project.data?.name ?? "…", to: svc && `/projects/${svc.projectId}` },
-    { label: svc?.name ?? "…" },
+    { label: project.data?.name ?? <Spinner className="size-3.5" />, to: svc && `/projects/${svc.projectId}` },
+    { label: svc?.name ?? <Spinner className="size-3.5" /> },
   ];
   if (!svc)
     return (
       <>
         <PageHeader crumbs={crumbs} />
-        <PageBody>{service.error ? <ErrorText error={service.error} /> : <Empty>Loading…</Empty>}</PageBody>
+        <PageBody>{service.error ? <ErrorText error={service.error} /> : <Loading />}</PageBody>
       </>
     );
 
@@ -113,9 +114,9 @@ export function Service() {
                 </Button>
               </>
             )}
-            <Button size="sm" disabled={busy} onClick={() => deploy.mutate()}>
+            <Button size="sm" loading={deploying} disabled={busy} onClick={() => deploy.mutate()}>
               <Rocket data-icon="inline-start" />
-              {deploying ? "Deploying…" : "Deploy"}
+              {deploying ? "Deploying" : "Deploy"}
             </Button>
           </>
         }
@@ -354,8 +355,8 @@ function Settings({ svc }: { svc: ServiceT }) {
           </>
         )}
         <div className="flex items-center justify-end gap-3 sm:col-span-2">
-          <Button type="submit" disabled={save.isPending}>
-            {save.isPending ? "Saving…" : "Save"}
+          <Button type="submit" loading={save.isPending}>
+            Save
           </Button>
         </div>
       </form>
@@ -414,8 +415,8 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
         />
         {!isDb && (
           <div className="flex items-center justify-end gap-3">
-            <Button type="submit" disabled={save.isPending}>
-              {save.isPending ? "Saving…" : "Save"}
+            <Button type="submit" loading={save.isPending}>
+              Save
             </Button>
           </div>
         )}
@@ -714,7 +715,15 @@ function LiveLogs({ serviceId }: { serviceId: string }) {
         }}
         className={cn(terminal, "h-[calc(100svh-24rem)] min-h-80")}
       >
-        {lines.length === 0 && <span className="text-neutral-500">{ended ? "Stream closed." : "Waiting for logs…"}</span>}
+        {lines.length === 0 &&
+          (ended ? (
+            <span className="text-neutral-500">Stream closed.</span>
+          ) : (
+            <span className="flex items-center gap-2 text-neutral-500">
+              <Spinner className="size-3.5" />
+              Waiting for logs
+            </span>
+          ))}
         {lines.map((l, i) => (
           <div key={i}>
             <span className="text-neutral-500">{logTime(l.time)} </span>
