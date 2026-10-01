@@ -285,7 +285,7 @@ func (c *Core) ApplyUpdate(ctx context.Context) (UpdateInfo, error) {
 func (c *Core) launchUpdater(ctx context.Context, self, ref string) error {
 	dk := c.dockerFor(store.LocalServerID)
 	c.log.Info("updating the manager", "image", ref)
-	if err := dk.PullImage(ctx, ref, io.Discard); err != nil {
+	if err := dk.PullImage(ctx, ref, c.registryAuth(ctx, ref), io.Discard); err != nil {
 		return fmt.Errorf("pull %s: %w", ref, err)
 	}
 	// A compose file on :latest (or no tag) would otherwise bring back the

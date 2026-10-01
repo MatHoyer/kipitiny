@@ -6,6 +6,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +18,7 @@ import (
 
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/registry"
 	"github.com/moby/moby/client"
 )
 
@@ -133,10 +136,10 @@ func (c *Client) RemoveContainer(ctx context.Context, id string, timeout time.Du
 	return nil
 }
 
-// PullImage pulls ref, writing one line per status change (not per progress
-// tick) to w.
-func (c *Client) PullImage(ctx context.Context, ref string, w io.Writer) error {
-	resp, err := c.ImagePull(ctx, ref, client.ImagePullOptions{})
+// PullImage pulls ref with auth (an encoded registry credential, or "" for
+// none), writing one line per status change (not per progress tick) to w.
+func (c *Client) PullImage(ctx context.Context, ref, auth string, w io.Writer) error {
+	resp, err := c.ImagePull(ctx, ref, client.ImagePullOptions{RegistryAuth: auth})
 	if err != nil {
 		return err
 	}
@@ -159,14 +162,27 @@ func (c *Client) PullImage(ctx context.Context, ref string, w io.Writer) error {
 	return nil
 }
 
-// EnsureImage pulls ref only if it is not present locally.
-func (c *Client) EnsureImage(ctx context.Context, ref string) error {
+// EnsureImage pulls ref (with auth, see PullImage) only if it is not
+// present locally.
+func (c *Client) EnsureImage(ctx context.Context, ref, auth string) error {
 	if _, err := c.ImageInspect(ctx, ref); err == nil {
 		return nil
 	} else if !cerrdefs.IsNotFound(err) {
 		return err
 	}
-	return c.PullImage(ctx, ref, io.Discard)
+	return c.PullImage(ctx, ref, auth, io.Discard)
+}
+
+// RegistryAuth encodes a registry credential for PullImage.
+func RegistryAuth(host, username, password string) string {
+	b, _ := json.Marshal(registry.AuthConfig{Username: username, Password: password, ServerAddress: host})
+	return base64.URLEncoding.EncodeToString(b)
+}
+
+// Login checks a registry credential: the daemon signs in to the registry.
+func (c *Client) Login(ctx context.Context, server, username, password string) error {
+	_, err := c.RegistryLogin(ctx, client.RegistryLoginOptions{ServerAddress: server, Username: username, Password: password})
+	return err
 }
 
 // File is written into a container before it starts.

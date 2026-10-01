@@ -106,6 +106,12 @@ type Store interface {
 	UpdateNotificationChannel(ctx context.Context, ch NotificationChannel) (NotificationChannel, error)
 	DeleteNotificationChannel(ctx context.Context, id string) error
 
+	ListRegistries(ctx context.Context) ([]Registry, error)
+	GetRegistry(ctx context.Context, id string) (Registry, error)
+	CreateRegistry(ctx context.Context, r Registry) (Registry, error)
+	UpdateRegistry(ctx context.Context, r Registry) (Registry, error)
+	DeleteRegistry(ctx context.Context, id string) error
+
 	AddAudit(ctx context.Context, e AuditEntry) error
 	ListAudit(ctx context.Context, limit int) ([]AuditEntry, error)
 	// PruneAudit deletes entries older than before.
@@ -438,6 +444,19 @@ type NotificationChannel struct {
 	// Events lists the event types sent to this channel.
 	Events    []string  `bun:"events" json:"events"`
 	Enabled   bool      `bun:"enabled" json:"enabled"`
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+}
+
+// Registry holds the credentials pulls from one image registry host use.
+type Registry struct {
+	bun.BaseModel `bun:"table:registries,alias:registry" json:"-"`
+
+	ID string `bun:"id,pk" json:"id"`
+	// Host as image references name it: docker.io for Docker Hub.
+	Host     string `bun:"host" json:"host"`
+	Username string `bun:"username" json:"username"`
+	// Password is a password or access token; it reads back masked.
+	Password  string    `bun:"password" json:"password"`
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 }
 

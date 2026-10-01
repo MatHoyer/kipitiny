@@ -308,7 +308,7 @@ func (c *Core) recreateReplica(ctx context.Context, project store.Project, svc s
 		if _, err := dk.ImageInspect(ctx, svc.Image); err != nil {
 			return fmt.Errorf("build %s is gone; redeploy: %w", svc.Image, err)
 		}
-	} else if err := dk.EnsureImage(ctx, svc.Image); err != nil {
+	} else if err := dk.EnsureImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image)); err != nil {
 		return err
 	}
 	probe, err := c.probeFor(ctx, svc)

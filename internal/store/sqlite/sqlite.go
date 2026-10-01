@@ -690,6 +690,42 @@ func (s *Store) DeleteNotificationChannel(ctx context.Context, id string) error 
 	return deleteByID(ctx, s.db, "notification_channels", id)
 }
 
+func (s *Store) ListRegistries(ctx context.Context) ([]store.Registry, error) {
+	rs := []store.Registry{}
+	err := s.db.NewSelect().Model(&rs).Order("host").Scan(ctx)
+	return rs, mapErr(err)
+}
+
+func (s *Store) GetRegistry(ctx context.Context, id string) (store.Registry, error) {
+	var r store.Registry
+	err := s.db.NewSelect().Model(&r).Where("id = ?", id).Scan(ctx)
+	return r, mapErr(err)
+}
+
+func (s *Store) CreateRegistry(ctx context.Context, r store.Registry) (store.Registry, error) {
+	r.ID, r.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&r).Exec(ctx); err != nil {
+		return store.Registry{}, mapErr(err)
+	}
+	return r, nil
+}
+
+func (s *Store) UpdateRegistry(ctx context.Context, r store.Registry) (store.Registry, error) {
+	res, err := s.db.NewUpdate().Model(&r).Column("host", "username", "password").WherePK().Exec(ctx)
+	if err != nil {
+		return store.Registry{}, mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.Registry{}, store.ErrNotFound
+	}
+	err = s.db.NewSelect().Model(&r).WherePK().Scan(ctx)
+	return r, mapErr(err)
+}
+
+func (s *Store) DeleteRegistry(ctx context.Context, id string) error {
+	return deleteByID(ctx, s.db, "registries", id)
+}
+
 func (s *Store) AddAudit(ctx context.Context, e store.AuditEntry) error {
 	e.ID, e.CreatedAt = ids.New(), now()
 	_, err := s.db.NewInsert().Model(&e).Exec(ctx)

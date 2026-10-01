@@ -1,4 +1,4 @@
-import { Bell, Brush, Globe, Info, KeyRound, KeySquare, ScrollText, Server, type LucideIcon } from "lucide-react";
+import { Bell, Brush, Globe, Info, KeyRound, KeySquare, Package, ScrollText, Server, type LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 import { Navigate, useParams } from "react-router";
 import { Version } from "./About";
@@ -8,6 +8,7 @@ import { DomainsPage } from "./Domains";
 import { Notifications } from "./Notifications";
 import { SettingsLabel } from "./page";
 import { PasswordManagers } from "./PasswordManagers";
+import { Registries } from "./Registries";
 import { Servers } from "./Servers";
 import { TokensPage } from "./Tokens";
 
@@ -30,6 +31,12 @@ export const settingsPages: SettingsPage[] = [
     label: "Domains & DNS",
     icon: Globe,
     page: DomainsPage,
+  },
+  {
+    slug: "registries",
+    label: "Registries",
+    icon: Package,
+    page: Registries,
   },
   {
     slug: "password-managers",
