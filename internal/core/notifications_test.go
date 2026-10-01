@@ -102,7 +102,7 @@ func TestNotifyDispatch(t *testing.T) {
 
 	want := map[string]bool{
 		"/api/webhooks/a/x deploy https://kipi.example.com/services/S1": true,
-		"/api/webhooks/a/x crash 1 ":                                     true,
+		"/api/webhooks/a/x crash 1 ":                                    true,
 	}
 	if len(titles) != len(want) {
 		t.Fatalf("sent %q, want %d messages", titles, len(want))
