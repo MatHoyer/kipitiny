@@ -52,18 +52,18 @@ func TestValidateService(t *testing.T) {
 const sha = "0000000000000000000000000000000000000000000000000000000000000000"
 
 func TestAppContainerSpec(t *testing.T) {
-	p := store.Project{ID: "P1", Name: "shop"}
+	p := store.Project{ID: "P1", Name: "shop", Env: map[string]string{"SHARED": "s"}}
 	svc := store.Service{
 		ID: "01ABC", ProjectID: "P1", Name: "web", Image: "nginx", Replicas: 2,
-		Env: map[string]string{"B": "2", "A": "1"},
+		Env: map[string]string{"B": "2", "A": "1", "C": "{{ project.SHARED }}"},
 	}
 
 	spec := containerSpec(p, svc, nil, "D1", 2, certResolver)
 	if spec.Name != "shop-web-2-d1" {
 		t.Errorf("name = %q", spec.Name)
 	}
-	if !slices.Equal(spec.Config.Env, []string{"A=1", "B=2"}) {
-		t.Errorf("env = %v, want sorted", spec.Config.Env)
+	if !slices.Equal(spec.Config.Env, []string{"A=1", "B=2", "C=s"}) {
+		t.Errorf("env = %v, want sorted and resolved", spec.Config.Env)
 	}
 	l := spec.Config.Labels
 	if l[docker.LabelProject] != "P1" || l[docker.LabelService] != "01ABC" || l[docker.LabelReplica] != "2" || l[docker.LabelDeploy] != "D1" {

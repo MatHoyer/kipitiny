@@ -2,6 +2,8 @@ export type Project = {
   id: string;
   name: string;
   serverId: string;
+  /** Shared variables; services reference them as {{ project.NAME }}. Values come back masked. */
+  env: Record<string, string>;
   createdAt: string;
   updatedAt: string;
 };
@@ -333,6 +335,7 @@ export const api = {
   projects: () => request<Project[]>("/projects"),
   project: (id: string) => request<Project>(`/projects/${id}`),
   createProject: (name: string, serverId = "") => request<Project>("/projects", json("POST", { name, serverId })),
+  setProjectEnv: (id: string, env: Record<string, string>) => request<Project>(`/projects/${id}/env`, json("PUT", env)),
   deleteProject: (id: string, confirm: string) =>
     request<void>(`/projects/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),
 

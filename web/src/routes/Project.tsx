@@ -3,9 +3,10 @@ import { Database, DatabaseBackup, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { Empty, ErrorText, StateBadge } from "@/components/common";
+import { Empty, ErrorText, Mono, Section, StateBadge } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
+import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,10 +21,9 @@ import {
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
-import { FloatingTextarea } from "@/components/ui/floating-textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { parseEnv, serviceState } from "@/lib/format";
-import { api, type ServiceInput } from "../api";
+import { envMap, envRows, serviceState, type EnvRow } from "@/lib/format";
+import { api, type Project as ProjectT, type ServiceInput } from "../api";
 
 export function Project() {
   const { id = "" } = useParams();
@@ -135,8 +135,52 @@ export function Project() {
             ))}
           </div>
         )}
+        {project.data && <SharedVariables key={project.data.id} project={project.data} />}
       </PageBody>
     </>
+  );
+}
+
+function SharedVariables({ project }: { project: ProjectT }) {
+  const qc = useQueryClient();
+  const [rows, setRows] = useState<EnvRow[]>(() => envRows(project.env));
+  const save = useMutation({
+    mutationFn: () => api.setProjectEnv(project.id, envMap(rows)),
+    onSuccess: (updated) => {
+      qc.setQueryData(["project", project.id], updated);
+      setRows(envRows(updated.env));
+      toast.success("Shared variables saved", { description: "Deploy the services that use them to apply." });
+    },
+  });
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    save.mutate();
+  };
+
+  return (
+    <Section
+      title="Shared variables"
+      description={
+        <>
+          Available to every service of the project as <Mono>{"{{ project.NAME }}"}</Mono>.
+        </>
+      }
+    >
+      <form onSubmit={onSubmit} className="space-y-4">
+        <EnvEditor
+          label="Variables"
+          rows={rows}
+          onChange={setRows}
+          description="Hidden values (********) are kept as-is. A variable used by a service can't be removed."
+        />
+        <div className="flex items-center justify-end gap-3">
+          <ErrorText error={save.error} />
+          <Button type="submit" disabled={save.isPending}>
+            {save.isPending ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </form>
+    </Section>
   );
 }
 
@@ -146,7 +190,6 @@ const emptyForm = {
   port: "",
   domain: "",
   replicas: "1",
-  env: "",
   version: "17",
   memory: "512",
   databaseId: "",
@@ -162,8 +205,10 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
   const navigate = useNavigate();
   const services = useQuery({ queryKey: ["services", projectId], queryFn: () => api.services(projectId) });
   const databases = services.data?.filter((s) => s.kind === "postgres") ?? [];
+  const project = useQuery({ queryKey: ["project", projectId], queryFn: () => api.project(projectId) });
 
   const [open, setOpen] = useState(false);
+  const [env, setEnv] = useState<EnvRow[]>([]);
   const [kind, setKind] = useState<"app" | "postgres">("app");
   const [source, setSource] = useState<"image" | "git">("image");
   const [form, setForm] = useState(emptyForm);
@@ -197,7 +242,7 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
               port: Number(form.port) || 0,
               domain: form.domain.trim(),
               replicas: Number(form.replicas) || 1,
-              env: parseEnv(form.env),
+              env: envMap(env),
               databaseId: databaseId === "none" ? "" : databaseId,
             };
       const svc = await api.createService(projectId, input);
@@ -216,6 +261,7 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
     setOpen(next);
     if (!next) {
       setForm(emptyForm);
+      setEnv([]);
       setKind("app");
       setSource("image");
       create.reset();
@@ -325,14 +371,12 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
                   options={[{ value: "none", label: "None" }, ...databases.map((d) => ({ value: d.id, label: d.name }))]}
                   description="Injects DATABASE_URL."
                 />
-                <FloatingTextarea
-                  label="Environment"
-                  rows={4}
-                  value={form.env}
-                  onChange={set("env")}
-                  placeholder="NODE_ENV=production"
-                  className="sm:col-span-2 [&_textarea]:font-mono [&_textarea]:text-sm"
-                  description="One KEY=value per line. Values are hidden once saved."
+                <EnvEditor
+                  rows={env}
+                  onChange={setEnv}
+                  vars={Object.keys(project.data?.env ?? {}).sort()}
+                  className="sm:col-span-2"
+                  description="Values are hidden once saved, except project references."
                 />
               </>
             )}

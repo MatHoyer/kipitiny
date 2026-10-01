@@ -70,6 +70,10 @@ func (c *Core) startDeploy(ctx context.Context, serviceID, image string) (store.
 		unlock()
 		return store.Deployment{}, err
 	}
+	if err := checkRefs(svc.Env, project.Env); err != nil {
+		unlock()
+		return store.Deployment{}, err
+	}
 	if image == "" && svc.Source != store.SourceGit {
 		image = svc.Image
 	}
@@ -350,7 +354,7 @@ func containerSpec(project store.Project, svc store.Service, db *store.Service, 
 		endpoints[docker.ProxyNetwork] = &network.EndpointSettings{}
 	}
 
-	envMap := maps.Clone(svc.Env)
+	envMap := resolveEnv(svc.Env, project.Env)
 	if db != nil {
 		if _, set := envMap["DATABASE_URL"]; !set { // an explicit value wins
 			envMap["DATABASE_URL"] = DatabaseURL(*db)

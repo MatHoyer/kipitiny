@@ -8,7 +8,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -39,6 +41,8 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "Deploy a service's current settings (zero-downtime for apps; git services are rebuilt). Returns the deployment; poll get_app_status for the outcome."}, t.deploy)
 	mcp.AddTool(server, &mcp.Tool{Name: "deploy_from_git",
 		Description: "Create (or update) an app built from a Git repository's Dockerfile in a project, then deploy it. The project is created if missing."}, t.deployFromGit)
+	mcp.AddTool(server, &mcp.Tool{Name: "set_project_env",
+		Description: "Set or remove a project's shared variables. Services use one as {{ project.NAME }} in an env value; they pick up changes on their next deploy."}, t.setProjectEnv)
 	mcp.AddTool(server, &mcp.Tool{Name: "rollback",
 		Description: "Redeploy the image of an earlier successful deployment (the previous one by default)."}, t.rollback)
 	mcp.AddTool(server, &mcp.Tool{Name: "backup_database",
@@ -236,7 +240,7 @@ type deployFromGitIn struct {
 	Dockerfile string            `json:"dockerfile,omitempty" jsonschema:"Dockerfile path, default Dockerfile"`
 	Domain     string            `json:"domain,omitempty" jsonschema:"public hostname; omit for a private service"`
 	Port       int               `json:"port,omitempty" jsonschema:"container port the app listens on (required with a domain)"`
-	Env        map[string]string `json:"env,omitempty" jsonschema:"environment variables to set"`
+	Env        map[string]string `json:"env,omitempty" jsonschema:"environment variables to set; a value may reference a project variable as {{ project.NAME }}"`
 }
 
 func (t *tools) deployFromGit(ctx context.Context, _ *mcp.CallToolRequest, in deployFromGitIn) (*mcp.CallToolResult, store.Deployment, error) {
@@ -289,7 +293,37 @@ func (t *tools) deployFromGit(ctx context.Context, _ *mcp.CallToolRequest, in de
 	return nil, dep, err
 }
 
-func (t *tools) findOrCreateProject(ctx context.Context, name string) (store.Project, error) {
+type setProjectEnvIn struct {
+	Project string            `json:"project" jsonschema:"project name"`
+	Set     map[string]string `json:"set,omitempty" jsonschema:"variables to add or overwrite"`
+	Unset   []string          `json:"unset,omitempty" jsonschema:"variables to remove"`
+}
+
+type setProjectEnvOut struct {
+	// Variables lists the project's variable names after the change.
+	Variables []string `json:"variables"`
+}
+
+func (t *tools) setProjectEnv(ctx context.Context, _ *mcp.CallToolRequest, in setProjectEnvIn) (*mcp.CallToolResult, setProjectEnvOut, error) {
+	out, err := mutate(ctx, t.c, store.ScopeAdmin, "set_project_env", in.Project, func() (setProjectEnvOut, error) {
+		project, err := t.findProject(ctx, in.Project)
+		if err != nil {
+			return setProjectEnvOut{}, err
+		}
+		env := project.Env // masked: unchanged values are kept
+		maps.Copy(env, in.Set)
+		for _, k := range in.Unset {
+			delete(env, k)
+		}
+		if project, err = t.c.SetProjectEnv(ctx, project.ID, env); err != nil {
+			return setProjectEnvOut{}, err
+		}
+		return setProjectEnvOut{Variables: slices.Sorted(maps.Keys(project.Env))}, nil
+	})
+	return nil, out, err
+}
+
+func (t *tools) findProject(ctx context.Context, name string) (store.Project, error) {
 	projects, err := t.c.ListProjects(ctx)
 	if err != nil {
 		return store.Project{}, err
@@ -299,7 +333,15 @@ func (t *tools) findOrCreateProject(ctx context.Context, name string) (store.Pro
 			return p, nil
 		}
 	}
-	return t.c.CreateProject(ctx, name, "")
+	return store.Project{}, fmt.Errorf("%w: project %s", store.ErrNotFound, name)
+}
+
+func (t *tools) findOrCreateProject(ctx context.Context, name string) (store.Project, error) {
+	p, err := t.findProject(ctx, name)
+	if errors.Is(err, store.ErrNotFound) {
+		return t.c.CreateProject(ctx, name, "")
+	}
+	return p, err
 }
 
 type rollbackIn struct {
