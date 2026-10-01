@@ -21,8 +21,7 @@ import (
 // remote is the name of the one remote in the generated rclone config.
 const remote = "kipitiny"
 
-// Rclone stores objects on a remote rclone reaches, e.g. Google Drive or
-// Proton Drive. Each command gets a config file written from the target's
+// Rclone stores objects on a remote rclone reaches, e.g. Google Drive. Each command gets a config file written from the target's
 // options; options rclone changes (refreshed OAuth tokens, a Proton session)
 // are read back and handed to save, so the database stays the only copy.
 type Rclone struct {
@@ -37,15 +36,16 @@ type Rclone struct {
 	config map[string]string
 }
 
-// targetLocks serialises commands per target: concurrent runs could each
-// refresh a rotating token and lose the other's.
+// targetLocks serialises CLI commands per target (rclone, proton-drive):
+// concurrent runs could each refresh a rotating token and lose the other's.
 var targetLocks sync.Map // id -> *sync.Mutex
 
-func (r *Rclone) lock() func() {
-	if r.id == "" {
+// lockTarget takes a target's lock; a target not saved yet needs none.
+func lockTarget(id string) func() {
+	if id == "" {
 		return func() {}
 	}
-	m, _ := targetLocks.LoadOrStore(r.id, &sync.Mutex{})
+	m, _ := targetLocks.LoadOrStore(id, &sync.Mutex{})
 	mu := m.(*sync.Mutex)
 	mu.Lock()
 	return mu.Unlock
@@ -76,7 +76,7 @@ type session struct {
 }
 
 func (r *Rclone) open() (*session, error) {
-	unlock := r.lock()
+	unlock := lockTarget(r.id)
 	s := &session{r: r, unlock: unlock, before: r.Config()}
 	var err error
 	if err = os.MkdirAll(r.work, 0o700); err == nil {
@@ -252,20 +252,6 @@ func (r *Rclone) Check(ctx context.Context) error {
 		return fmt.Errorf("write test file: %w", err)
 	}
 	return r.Delete(ctx, ".kipitiny-check")
-}
-
-// Obscure encodes a password the way rclone expects it in a config file
-// (Proton Drive's password). The value goes through stdin, never argv.
-func Obscure(ctx context.Context, bin, plain string) (string, error) {
-	cmd := exec.CommandContext(ctx, bin, "obscure", "-")
-	cmd.Env = []string{}
-	cmd.Stdin = strings.NewReader(plain)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
-		return "", rcloneError("obscure", err, stderr.String())
-	}
-	return strings.TrimSpace(stdout.String()), nil
 }
 
 // RcloneAvailable reports whether bin can be run.

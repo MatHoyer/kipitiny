@@ -1,5 +1,6 @@
 // Package storage writes backup objects to local disk, S3-compatible
-// buckets or drives rclone reaches, streaming in constant memory.
+// buckets, Google Drive (rclone) or Proton Drive (its official CLI),
+// streaming in constant memory where the backend allows.
 package storage
 
 import (
@@ -32,8 +33,10 @@ type Storage interface {
 type Env struct {
 	// DataDir holds local backups and rclone's per-command files.
 	DataDir string
-	// Rclone is the rclone binary (path or name on PATH).
-	Rclone string
+	// Rclone and ProtonDrive are the CLIs drive targets use (paths or names
+	// on PATH).
+	Rclone      string
+	ProtonDrive string
 	// SaveConfig keeps the options rclone changed on a saved drive target.
 	SaveConfig func(ctx context.Context, targetID string, config map[string]string) error
 }
@@ -41,7 +44,6 @@ type Env struct {
 // rcloneBackends maps drive targets to rclone backend types.
 var rcloneBackends = map[store.BackupTargetKind]string{
 	store.BackupTargetGoogleDrive: "drive",
-	store.BackupTargetProtonDrive: "protondrive",
 }
 
 // Open returns the storage for a target.
@@ -61,6 +63,18 @@ func Open(t store.BackupTarget, env Env) (Storage, error) {
 		}, nil
 	}
 	switch t.Kind {
+	case store.BackupTargetProtonDrive:
+		if !ProtonAvailable(env.ProtonDrive) {
+			return nil, errors.New("proton-drive isn't installed on the manager")
+		}
+		return &ProtonDrive{
+			bin:    env.ProtonDrive,
+			work:   filepath.Join(env.DataDir, "protondrive"),
+			id:     t.ID,
+			prefix: t.Prefix,
+			save:   env.SaveConfig,
+			config: maps.Clone(t.Config),
+		}, nil
 	case store.BackupTargetLocal:
 		return &Local{Root: filepath.Join(env.DataDir, "backups")}, nil
 	case store.BackupTargetS3:

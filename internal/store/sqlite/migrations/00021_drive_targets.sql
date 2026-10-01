@@ -1,5 +1,5 @@
--- Google Drive and Proton Drive targets go through rclone; config holds the
--- remote's options (credentials, refreshed tokens) as JSON.
+-- Google Drive (rclone) and Proton Drive (proton-drive CLI) targets; config
+-- holds their credentials as JSON: rclone options, or the CLI's session files.
 -- SQLite can't change a CHECK constraint, so the table is rebuilt (with
 -- foreign keys off: schedules and backups reference it).
 

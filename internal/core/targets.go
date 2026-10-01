@@ -29,6 +29,9 @@ type TargetInput struct {
 	// Config is a drive target's fields (TargetKind.Fields); a secret equal
 	// to SecretMask keeps the stored value.
 	Config map[string]string `json:"config"`
+	// Login is a finished Proton sign-in (StartProtonLogin); required to
+	// create a Proton Drive target, optional on update.
+	Login string `json:"login"`
 }
 
 // TargetKind describes a kind of backup target the UI can create.
@@ -41,6 +44,8 @@ type TargetKind struct {
 	// Help says how to get the credentials; `code` spans are commands.
 	Help   string        `json:"help,omitempty"`
 	Fields []TargetField `json:"fields"`
+	// SignIn: credentials come from a browser sign-in, not fields.
+	SignIn bool `json:"signIn,omitempty"`
 }
 
 type TargetField struct {
@@ -51,8 +56,6 @@ type TargetField struct {
 	Required    bool   `json:"required"`
 	Secret      bool   `json:"secret"`
 	Multiline   bool   `json:"multiline,omitempty"`
-	// obscured values are stored the way rclone expects (rclone obscure).
-	obscured bool
 }
 
 var driveKinds = []TargetKind{
@@ -72,13 +75,9 @@ var driveKinds = []TargetKind{
 		Kind:        store.BackupTargetProtonDrive,
 		Label:       "Proton Drive",
 		Description: "A folder in your Proton Drive, end-to-end encrypted.",
-		Help:        "Signs in with your Proton account, through rclone's Proton Drive backend.",
-		Fields: []TargetField{
-			{Key: "username", Label: "Email", Placeholder: "you@proton.me", Required: true},
-			{Key: "password", Label: "Password", Required: true, Secret: true, obscured: true},
-			{Key: "2fa", Label: "2FA code", Description: "With two-factor sign-in on: the current code, used once to sign in."},
-			{Key: "mailbox_password", Label: "Mailbox password", Description: "Only for accounts with two-password mode.", Secret: true, obscured: true},
-		},
+		Help:        "Sign in with your Proton account in the browser, on any device: kipitiny never sees your password.",
+		Fields:      []TargetField{},
+		SignIn:      true,
 	},
 }
 
@@ -91,7 +90,8 @@ func driveKind(k store.BackupTargetKind) (TargetKind, bool) {
 	return TargetKind{}, false
 }
 
-// BackupTargetKinds lists what can be added: S3 always, drives with rclone.
+// BackupTargetKinds lists what can be added: S3 always, drives when their
+// CLI is installed.
 func (c *Core) BackupTargetKinds() []TargetKind {
 	kinds := []TargetKind{{
 		Kind:        store.BackupTargetS3,
@@ -100,20 +100,25 @@ func (c *Core) BackupTargetKinds() []TargetKind {
 		Available:   true,
 		Fields:      []TargetField{},
 	}}
-	ok := storage.RcloneAvailable(c.cfg.Rclone)
 	for _, d := range driveKinds {
-		d.Available = ok
+		if d.Kind == store.BackupTargetProtonDrive {
+			d.Available = storage.ProtonAvailable(c.cfg.ProtonDriveCLI)
+		} else {
+			d.Available = storage.RcloneAvailable(c.cfg.Rclone)
+		}
 		kinds = append(kinds, d)
 	}
 	return kinds
 }
 
-// openStorage opens a target; options rclone refreshes are saved back.
+// openStorage opens a target; credentials a drive's CLI refreshes are saved
+// back.
 func (c *Core) openStorage(t store.BackupTarget) (storage.Storage, error) {
 	return storage.Open(t, storage.Env{
-		DataDir:    c.cfg.DataDir,
-		Rclone:     c.cfg.Rclone,
-		SaveConfig: c.store.SetBackupTargetConfig,
+		DataDir:     c.cfg.DataDir,
+		Rclone:      c.cfg.Rclone,
+		ProtonDrive: c.cfg.ProtonDriveCLI,
+		SaveConfig:  c.store.SetBackupTargetConfig,
 	})
 }
 
@@ -198,8 +203,10 @@ func (c *Core) applyTargetInput(ctx context.Context, t *store.BackupTarget, in T
 	t.Prefix = strings.Trim(strings.TrimSpace(in.Prefix), "/")
 	switch t.Kind {
 	case store.BackupTargetS3:
-	case store.BackupTargetGoogleDrive, store.BackupTargetProtonDrive:
-		return c.applyDriveConfig(ctx, t, in.Config)
+	case store.BackupTargetGoogleDrive:
+		return c.applyDriveConfig(t, in.Config)
+	case store.BackupTargetProtonDrive:
+		return c.applyProtonLogin(t, in.Login)
 	default:
 		return fmt.Errorf("%w: unknown target kind %q", ErrInvalid, t.Kind)
 	}
@@ -222,9 +229,9 @@ func (c *Core) applyTargetInput(ctx context.Context, t *store.BackupTarget, in T
 }
 
 // applyDriveConfig merges a drive target's fields into its rclone options.
-// Changing a credential drops what rclone saved from the old one (a Proton
-// session), so it signs in again.
-func (c *Core) applyDriveConfig(ctx context.Context, t *store.BackupTarget, in map[string]string) error {
+// Changing a credential drops what rclone saved from the old one, so it
+// signs in again.
+func (c *Core) applyDriveConfig(t *store.BackupTarget, in map[string]string) error {
 	kind, _ := driveKind(t.Kind)
 	if !storage.RcloneAvailable(c.cfg.Rclone) {
 		return fmt.Errorf("%w: rclone isn't installed on the manager", ErrInvalid)
@@ -238,13 +245,6 @@ func (c *Core) applyDriveConfig(ctx context.Context, t *store.BackupTarget, in m
 		v := strings.TrimSpace(in[f.Key])
 		if f.Secret && v == SecretMask {
 			continue
-		}
-		if f.obscured && v != "" {
-			o, err := storage.Obscure(ctx, c.cfg.Rclone, v)
-			if err != nil {
-				return err
-			}
-			v = o
 		}
 		if cfg[f.Key] != v {
 			changed = true
@@ -285,7 +285,7 @@ var fixedDriveOptions = map[store.BackupTargetKind]map[string]string{
 
 // checkTarget validates fields, then writes and deletes a test object so a
 // misconfigured target fails now rather than at 3am. A drive target keeps
-// what rclone saved while signing in, minus the one-time 2FA code.
+// what its CLI refreshed meanwhile.
 func (c *Core) checkTarget(ctx context.Context, t *store.BackupTarget) error {
 	if t.Name == "" {
 		return fmt.Errorf("%w: a name is required", ErrInvalid)
@@ -301,20 +301,26 @@ func (c *Core) checkTarget(ctx context.Context, t *store.BackupTarget) error {
 		return fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	timeout := 15 * time.Second
-	if t.Rclone() {
+	if t.Drive() {
 		timeout = time.Minute // signing in to a drive takes a while
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if err := st.Check(ctx); err != nil {
-		if t.Rclone() {
+		if t.Drive() {
 			return fmt.Errorf("%w: cannot use the drive: %v", ErrInvalid, err)
 		}
 		return fmt.Errorf("%w: cannot use bucket: %v", ErrInvalid, err)
 	}
-	if r, ok := st.(*storage.Rclone); ok {
-		t.Config = r.Config()
-		delete(t.Config, "2fa")
+	switch st := st.(type) {
+	case *storage.Rclone:
+		t.Config = st.Config()
+	case *storage.ProtonDrive:
+		t.Config = st.Config()
+		// Shown on the target, so you know which account it writes to.
+		if email, err := st.Account(ctx); err == nil && email != "" {
+			t.Config["account"] = email
+		}
 	}
 	return nil
 }
@@ -332,9 +338,12 @@ func maskedTarget(t store.BackupTarget) store.BackupTarget {
 			if f.Secret && v != "" {
 				v = SecretMask
 			}
-			if v != "" && f.Key != "2fa" {
+			if v != "" {
 				t.Settings[f.Key] = v
 			}
+		}
+		if a := t.Config["account"]; a != "" {
+			t.Settings["account"] = a
 		}
 	}
 	t.Config = nil

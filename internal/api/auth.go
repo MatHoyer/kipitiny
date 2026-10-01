@@ -47,6 +47,8 @@ var secretReads = map[string]bool{
 	"GET /api/backup-targets/{id}/key":  true,
 	"GET /api/backups/{id}/download":    true,
 	"GET /api/audit":                    true,
+	// A pending Proton sign-in's link.
+	"GET /api/proton-logins/{id}": true,
 	// Names only, but they map what the password manager token can read.
 	"GET /api/secret-providers/{id}/vaults": true,
 	"GET /api/secret-providers/{id}/items":  true,

@@ -63,6 +63,8 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("POST /api/backups/{id}/restore", a.restoreBackup)
 	mux.HandleFunc("POST /api/backups/{id}/verify", a.verifyBackup)
 	mux.HandleFunc("GET /api/backup-target-kinds", a.targetKinds)
+	mux.HandleFunc("POST /api/proton-logins", a.startProtonLogin)
+	mux.HandleFunc("GET /api/proton-logins/{id}", a.protonLogin)
 	mux.HandleFunc("GET /api/backup-targets", a.listTargets)
 	mux.HandleFunc("POST /api/backup-targets", a.createTarget)
 	mux.HandleFunc("PUT /api/backup-targets/{id}", a.updateTarget)

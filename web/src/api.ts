@@ -119,7 +119,12 @@ export type TargetInput = Omit<BackupTarget, "id" | "kind" | "createdAt" | "ageR
   kind?: TargetKindName;
   encrypt?: boolean;
   config?: Record<string, string>;
+  /** A finished Proton sign-in, for a Proton Drive target. */
+  login?: string;
 };
+
+/** A Proton sign-in: open url on any device, then wait for done. */
+export type ProtonLogin = { id: string; url: string; status: "pending" | "done" | "failed"; error?: string };
 
 /** A kind of target that can be added; drives need rclone on the manager. */
 export type TargetKind = {
@@ -129,6 +134,8 @@ export type TargetKind = {
   available: boolean;
   /** How to get the credentials; `code` spans are commands. */
   help?: string;
+  /** Credentials come from a browser sign-in (ProtonLogin), not fields. */
+  signIn?: boolean;
   fields: {
     key: string;
     label: string;
@@ -432,6 +439,8 @@ export const api = {
   deploymentLog: (id: string) => request<string>(`/deployments/${id}/log`),
 
   backupTargetKinds: () => request<TargetKind[]>("/backup-target-kinds"),
+  startProtonLogin: () => request<ProtonLogin>("/proton-logins", { method: "POST" }),
+  protonLogin: (id: string) => request<ProtonLogin>(`/proton-logins/${id}`),
   backupTargets: () => request<BackupTarget[]>("/backup-targets"),
   createBackupTarget: (t: TargetInput) => request<BackupTarget>("/backup-targets", json("POST", t)),
   updateBackupTarget: (id: string, t: TargetInput) => request<BackupTarget>(`/backup-targets/${id}`, json("PUT", t)),
