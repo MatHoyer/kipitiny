@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
-import { CheckboxField, ErrorText, Mono, Section } from "@/components/common";
+import { CheckboxField, Mono, Section } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
@@ -35,8 +35,8 @@ export function Cleanup() {
     qc.setQueryData(["cleanup"], v);
     setForm(v.settings);
   };
-  const save = useMutation({ mutationFn: (s: CleanupSettings) => api.setCleanup(s), onSuccess: onSaved });
-  const run = useMutation({ mutationFn: api.runCleanup, onSuccess: (v) => qc.setQueryData(["cleanup"], v) });
+  const save = useMutation({ meta: { error: "Couldn't save the cleanup settings" }, mutationFn: (s: CleanupSettings) => api.setCleanup(s), onSuccess: onSaved });
+  const run = useMutation({ meta: { error: "Couldn't run the cleanup" }, mutationFn: api.runCleanup, onSuccess: (v) => qc.setQueryData(["cleanup"], v) });
 
   if (!form) return null;
   const set = <K extends keyof CleanupSettings>(k: K, v: CleanupSettings[K]) => setForm({ ...form, [k]: v });
@@ -142,7 +142,6 @@ export function Cleanup() {
             onCheckedChange={(v) => set("networks", v)}
           />
         </div>
-        <ErrorText error={save.error ?? run.error} />
         {dirty && (
           <div className="flex gap-2">
             <Button type="submit" size="sm" disabled={save.isPending}>

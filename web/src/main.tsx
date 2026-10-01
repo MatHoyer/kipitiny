@@ -3,10 +3,12 @@ import { ThemeProvider } from "next-themes";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router";
+import { toast } from "sonner";
 import { ApiError } from "./api";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import "./index.css";
+import { friendlyError } from "./lib/errors";
 import { Backups } from "./routes/Backups";
 import { Layout } from "./routes/Layout";
 import { Project } from "./routes/Project";
@@ -18,9 +20,23 @@ import { Settings } from "./routes/Settings";
 const onError = (err: Error) => {
   if (err instanceof ApiError && err.status === 401) queryClient.invalidateQueries({ queryKey: ["auth"] });
 };
+declare module "@tanstack/react-query" {
+  interface Register {
+    // error: the toast title when the mutation fails, e.g. "Couldn't save the schedule".
+    // Set it to false when the caller reports the error itself.
+    mutationMeta: { error?: string | false };
+  }
+}
+
 const queryClient: QueryClient = new QueryClient({
   queryCache: new QueryCache({ onError }),
-  mutationCache: new MutationCache({ onError }),
+  mutationCache: new MutationCache({
+    onError: (err, _vars, _ctx, mutation) => {
+      onError(err);
+      const title = mutation.meta?.error;
+      if (title !== false) toast.error(title ?? "Something went wrong", { description: friendlyError(err), duration: 8000 });
+    },
+  }),
   defaultOptions: {
     queries: { retry: (n, err) => !(err instanceof ApiError && err.status < 500) && n < 2 },
   },

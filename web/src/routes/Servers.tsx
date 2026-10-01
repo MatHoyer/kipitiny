@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Globe, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { CheckboxField, CopyField, ErrorText, Mono, Section, StateBadge } from "@/components/common";
+import { CheckboxField, CopyField, Mono, Section, StateBadge } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,7 @@ export function Servers() {
   const [editing, setEditing] = useState<Server | "new" | null>(null);
   const [ipFor, setIpFor] = useState<Server | null>(null);
   const remove = useMutation({
+    meta: { error: "Couldn't remove the server" },
     mutationFn: api.deleteServer,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["servers"] }),
   });
@@ -82,7 +83,6 @@ export function Servers() {
           </li>
         ))}
       </ul>
-      <ErrorText error={remove.error} />
       <Dialog open={ipFor !== null} onOpenChange={(o) => !o && setIpFor(null)}>
         <DialogContent className="sm:max-w-md">
           {ipFor && <NetworkForm key={ipFor.id} server={ipFor} onDone={() => setIpFor(null)} />}
@@ -116,6 +116,7 @@ function ServerForm({ server, onDone }: { server: Server | null; onDone: () => v
   const [resetHostKey, setResetHostKey] = useState(false);
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
   const save = useMutation({
+    meta: { error: "Couldn't save the server" },
     mutationFn: () => {
       const input: ServerInput = { ...form, port: Number(form.port) || 22, resetHostKey };
       return server ? api.updateServer(server.id, input) : api.createServer(input);
@@ -168,7 +169,6 @@ function ServerForm({ server, onDone }: { server: Server | null; onDone: () => v
           />
         )}
       </div>
-      <ErrorText error={save.error} />
       <DialogFooter>
         <Button type="submit" disabled={save.isPending}>
           {save.isPending ? "Connecting…" : server ? "Save" : "Add server"}
@@ -184,6 +184,7 @@ function NetworkForm({ server, onDone }: { server: Server; onDone: () => void })
   const [ip, setIp] = useState(server.publicIp);
   const [token, setToken] = useState(server.tunnel === "server" ? SECRET_MASK : "");
   const save = useMutation({
+    meta: { error: "Couldn't save the network settings" },
     mutationFn: () => api.setServerNetwork(server.id, { publicIp: ip.trim(), tunnelToken: token.trim() }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["servers"] });
@@ -237,7 +238,6 @@ function NetworkForm({ server, onDone }: { server: Server; onDone: () => void })
           }
         />
       </div>
-      <ErrorText error={save.error} />
       <DialogFooter>
         <Button type="submit" disabled={save.isPending}>
           Save

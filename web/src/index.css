@@ -133,3 +133,22 @@
     cursor: pointer;
     }
 }
+
+/* Toasts: errors get a tinted card with a red accent, descriptions read as secondary text. */
+[data-sonner-toaster] [data-sonner-toast] [data-description] {
+  color: var(--muted-foreground);
+  line-height: 1.4;
+}
+[data-sonner-toaster] [data-sonner-toast] [data-title] {
+  font-weight: 600;
+}
+[data-sonner-toaster] [data-sonner-toast][data-type="error"] {
+  --normal-bg: color-mix(in oklch, var(--destructive) 8%, var(--popover));
+  --normal-border: color-mix(in oklch, var(--destructive) 35%, var(--border));
+  box-shadow:
+    inset 3px 0 0 var(--destructive),
+    0 4px 12px rgb(0 0 0 / 8%);
+}
+[data-sonner-toaster] [data-sonner-toast][data-type="error"] [data-icon] {
+  color: var(--destructive);
+}

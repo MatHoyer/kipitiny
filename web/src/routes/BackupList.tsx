@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArchiveRestore, Download, ShieldCheck, Trash2 } from "lucide-react";
-import { Empty, ErrorText, StateBadge, Tag } from "@/components/common";
+import { Empty, StateBadge, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { formatBytes, formatDuration, timeAgo } from "@/lib/format";
@@ -25,9 +25,10 @@ export function BackupList({
     qc.invalidateQueries({ queryKey: ["backups"] });
     qc.invalidateQueries({ queryKey: ["restores"] });
   };
-  const remove = useMutation({ mutationFn: api.deleteBackup, onSuccess: invalidate });
-  const verify = useMutation({ mutationFn: api.verifyBackup, onSuccess: invalidate });
+  const remove = useMutation({ meta: { error: "Couldn't delete the backup" }, mutationFn: api.deleteBackup, onSuccess: invalidate });
+  const verify = useMutation({ meta: { error: "Couldn't start the restore test" }, mutationFn: api.verifyBackup, onSuccess: invalidate });
   const restore = useMutation({
+    meta: { error: "Couldn't restore the backup" },
     mutationFn: ({ id, confirm }: { id: string; confirm: string }) => api.restore(id, confirm),
     onSuccess: invalidate,
   });
@@ -138,7 +139,6 @@ export function BackupList({
           </tbody>
         </table>
       </div>
-      <ErrorText error={remove.error ?? restore.error ?? verify.error} />
     </div>
   );
 }

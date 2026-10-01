@@ -45,6 +45,7 @@ function ManagerBackup({ targets }: { targets: BackupTarget[] }) {
   const qc = useQueryClient();
   const [targetId, setTargetId] = useState("local");
   const backup = useMutation({
+    meta: { error: "Couldn't back up the manager" },
     mutationFn: () => api.backupManager(targetId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["backups"] }),
   });
@@ -58,9 +59,7 @@ function ManagerBackup({ targets }: { targets: BackupTarget[] }) {
         </>
       }
       actions={<BackupNow targets={targets} targetId={targetId} onTarget={setTargetId} disabled={backup.isPending} onBackup={() => backup.mutate()} />}
-    >
-      {backup.error && <ErrorText error={backup.error} />}
-    </Section>
+    />
   );
 }
 
@@ -68,6 +67,7 @@ function Targets({ targets }: { targets: BackupTarget[] }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<BackupTarget | "new" | null>(null);
   const remove = useMutation({
+    meta: { error: "Couldn't delete the backup target" },
     mutationFn: api.deleteBackupTarget,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["backup-targets"] }),
   });
@@ -118,7 +118,6 @@ function Targets({ targets }: { targets: BackupTarget[] }) {
           </li>
         ))}
       </ul>
-      <ErrorText error={remove.error} />
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
           {editing && (
@@ -136,7 +135,7 @@ function Targets({ targets }: { targets: BackupTarget[] }) {
 
 function KeyButton({ targetId, name }: { targetId: string; name: string }) {
   const [key, setKey] = useState<string | null>(null);
-  const reveal = useMutation({ mutationFn: () => api.backupTargetKey(targetId), onSuccess: (k) => setKey(k.identity) });
+  const reveal = useMutation({ meta: { error: "Couldn't show the key" }, mutationFn: () => api.backupTargetKey(targetId), onSuccess: (k) => setKey(k.identity) });
   return (
     <>
       <Button variant="ghost" size="icon-sm" title="Show key" aria-label="Show key" disabled={reveal.isPending} onClick={() => reveal.mutate()}>
@@ -151,7 +150,6 @@ function KeyButton({ targetId, name }: { targetId: string; name: string }) {
           {key && <CopyField value={key} />}
         </DialogContent>
       </Dialog>
-      <ErrorText error={reveal.error} />
     </>
   );
 }
@@ -176,6 +174,7 @@ function TargetForm({ target, onDone }: { target: BackupTarget | null; onDone: (
   });
   const set = (k: keyof TargetInput) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
   const save = useMutation({
+    meta: { error: "Couldn't save the backup target" },
     mutationFn: () => (target ? api.updateBackupTarget(target.id, form) : api.createBackupTarget(form)),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["backup-targets"] });
@@ -240,7 +239,6 @@ function TargetForm({ target, onDone }: { target: BackupTarget | null; onDone: (
           />
         )}
       </div>
-      <ErrorText error={save.error} />
       <DialogFooter>
         <Button type="submit" disabled={save.isPending}>
           {save.isPending ? "Testing…" : target ? "Save" : "Add target"}

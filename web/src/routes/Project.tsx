@@ -42,6 +42,7 @@ export function Project() {
   });
 
   const backupAll = useMutation({
+    meta: { error: "Couldn't back up the databases" },
     mutationFn: () => api.backupProject(id),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["backups"] });
@@ -51,6 +52,7 @@ export function Project() {
   });
   const hasDatabases = services.data?.some((s) => s.kind === "postgres");
   const remove = useMutation({
+    meta: { error: "Couldn't delete the project" },
     mutationFn: (confirm: string) => api.deleteProject(id, confirm),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects"] });
@@ -99,7 +101,6 @@ export function Project() {
         }
       />
       <PageBody>
-        <ErrorText error={remove.error ?? backupAll.error} />
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList variant="line">
             <TabsTrigger value="services">Services</TabsTrigger>
@@ -161,6 +162,7 @@ function SharedVariables({ project }: { project: ProjectT }) {
   const qc = useQueryClient();
   const [rows, setRows] = useState<EnvRow[]>(() => envRows(project.env, project.secrets));
   const save = useMutation({
+    meta: { error: "Couldn't save the shared variables" },
     mutationFn: () => api.setProjectEnv(project.id, envMap(rows), envSecrets(rows)),
     onSuccess: (updated) => {
       qc.setQueryData(["project", project.id], updated);
@@ -190,7 +192,6 @@ function SharedVariables({ project }: { project: ProjectT }) {
           description="An entry used by a service can't be removed."
         />
         <div className="flex items-center justify-end gap-3">
-          <ErrorText error={save.error} />
           <Button type="submit" disabled={save.isPending}>
             {save.isPending ? "Saving…" : "Save"}
           </Button>
@@ -260,6 +261,7 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
   const create = useMutation({
+    meta: { error: "Couldn't create the service" },
     mutationFn: async () => {
       const input: ServiceInput =
         kind === "postgres"
@@ -439,7 +441,6 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
               </>
             )}
           </div>
-          <ErrorText error={create.error} />
           <DialogFooter>
             <Button type="submit" disabled={create.isPending}>
               {create.isPending ? "Creating…" : "Create & deploy"}
