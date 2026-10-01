@@ -9,6 +9,7 @@ export default defineConfig({
     alias: { "@": path.resolve(import.meta.dirname, "./src") },
   },
   server: {
-    proxy: { "/api": "http://localhost:8080" },
+    // Keep the browser's Host: the API refuses mutations whose Origin differs.
+    proxy: { "/api": { target: "http://localhost:8080", changeOrigin: false } },
   },
 });
