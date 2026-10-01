@@ -35,7 +35,7 @@ func (c *Core) startManagerBackup(ctx context.Context, targetID string, done cha
 	if err != nil {
 		return store.Backup{}, err
 	}
-	st, err := storage.Open(target, c.cfg.DataDir)
+	st, err := c.openStorage(target)
 	if err != nil {
 		return store.Backup{}, err
 	}

@@ -97,6 +97,10 @@ func (a *API) listRestores(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rs)
 }
 
+func (a *API) targetKinds(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.core.BackupTargetKinds())
+}
+
 func (a *API) listTargets(w http.ResponseWriter, r *http.Request) {
 	ts, err := a.core.ListBackupTargets(r.Context())
 	if err != nil {

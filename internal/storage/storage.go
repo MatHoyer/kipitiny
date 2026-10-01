@@ -1,5 +1,5 @@
-// Package storage writes backup objects to local disk or S3-compatible
-// buckets, streaming in constant memory.
+// Package storage writes backup objects to local disk, S3-compatible
+// buckets or drives rclone reaches, streaming in constant memory.
 package storage
 
 import (
@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -27,11 +28,41 @@ type Storage interface {
 	Check(ctx context.Context) error
 }
 
-// Open returns the storage for a target. Local targets live under dataDir.
-func Open(t store.BackupTarget, dataDir string) (Storage, error) {
+// Env is what drivers need besides the target.
+type Env struct {
+	// DataDir holds local backups and rclone's per-command files.
+	DataDir string
+	// Rclone is the rclone binary (path or name on PATH).
+	Rclone string
+	// SaveConfig keeps the options rclone changed on a saved drive target.
+	SaveConfig func(ctx context.Context, targetID string, config map[string]string) error
+}
+
+// rcloneBackends maps drive targets to rclone backend types.
+var rcloneBackends = map[store.BackupTargetKind]string{
+	store.BackupTargetGoogleDrive: "drive",
+	store.BackupTargetProtonDrive: "protondrive",
+}
+
+// Open returns the storage for a target.
+func Open(t store.BackupTarget, env Env) (Storage, error) {
+	if backend, ok := rcloneBackends[t.Kind]; ok {
+		if !RcloneAvailable(env.Rclone) {
+			return nil, errors.New("rclone isn't installed on the manager")
+		}
+		return &Rclone{
+			bin:     env.Rclone,
+			work:    filepath.Join(env.DataDir, "rclone"),
+			id:      t.ID,
+			backend: backend,
+			prefix:  t.Prefix,
+			save:    env.SaveConfig,
+			config:  maps.Clone(t.Config),
+		}, nil
+	}
 	switch t.Kind {
 	case store.BackupTargetLocal:
-		return &Local{Root: filepath.Join(dataDir, "backups")}, nil
+		return &Local{Root: filepath.Join(env.DataDir, "backups")}, nil
 	case store.BackupTargetS3:
 		cl, err := minio.New(t.Endpoint, &minio.Options{
 			Creds:  credentials.NewStaticV4(t.AccessKey, t.SecretKey, ""),

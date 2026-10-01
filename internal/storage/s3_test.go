@@ -31,7 +31,7 @@ func TestS3(t *testing.T) {
 		AccessKey: os.Getenv("KIPITINY_TEST_S3_ACCESS_KEY"),
 		SecretKey: os.Getenv("KIPITINY_TEST_S3_SECRET_KEY"),
 	}
-	st, err := Open(target, t.TempDir())
+	st, err := Open(target, Env{DataDir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

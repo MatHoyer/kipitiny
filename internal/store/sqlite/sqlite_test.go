@@ -531,3 +531,62 @@ func TestNotificationChannels(t *testing.T) {
 		t.Errorf("after delete: %+v", chs)
 	}
 }
+
+// Rebuilding backup_targets for drive kinds keeps targets, the backups and
+// schedules pointing at them, and foreign keys.
+func TestRcloneTargetsMigration(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "k.db")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	sub, _ := fs.Sub(migrations, "migrations")
+	p, err := goose.NewProvider(goose.DialectSQLite3, db, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 20); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`INSERT INTO backup_targets (id, name, kind, bucket, created_at, age_recipient) VALUES ('t1', 'offsite', 's3', 'b', '2026-01-01 00:00:00+00:00', 'age1x')`,
+		`INSERT INTO backups (id, service_id, project_id, service_name, project_name, target_id, object_key, status, created_at) VALUES ('b1', 's', 'p', 'db', 'shop', 't1', 'k', 'succeeded', '2026-01-01 00:00:00+00:00')`,
+	} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	tg, err := s.GetBackupTarget(ctx, "t1")
+	if err != nil || tg.Bucket != "b" || tg.AgeRecipient != "age1x" {
+		t.Fatalf("target = %+v, %v", tg, err)
+	}
+	if b, err := s.GetBackup(ctx, "b1"); err != nil || b.TargetID != "t1" {
+		t.Fatalf("backup = %+v, %v", b, err)
+	}
+	if err := s.DeleteBackupTarget(ctx, "t1"); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("delete referenced target: %v", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO backups (id, service_id, project_id, service_name, project_name, target_id, object_key, status, created_at) VALUES ('b2', 's', 'p', 'db', 'shop', 'nope', 'k', 'running', '2026-01-01 00:00:00+00:00')`); err == nil {
+		t.Fatal("foreign keys are off after the migration")
+	}
+
+	d, err := s.CreateBackupTarget(ctx, store.BackupTarget{Name: "drive", Kind: store.BackupTargetProtonDrive, Config: map[string]string{"username": "me"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetBackupTargetConfig(ctx, d.ID, map[string]string{"username": "me", "client_uid": "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetBackupTarget(ctx, d.ID); got.Config["client_uid"] != "x" {
+		t.Fatalf("config = %v", got.Config)
+	}
+}
