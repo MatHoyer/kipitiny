@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, Pencil, Plus, Send, Trash2 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { Bell, ChevronLeft, Pencil, Plus, Send, Trash2 } from "lucide-react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
-import { CheckboxField, EmptyState, Section, Tag } from "@/components/common";
+import { DiscordIcon } from "@/components/brand-icons";
+import { CheckboxField, ChoiceTile, EmptyState, ErrorText, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -14,9 +16,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingSelect } from "@/components/ui/floating-select";
+import { cn } from "@/lib/utils";
 import { api, type ChannelInput, type NotificationChannel, type Notifications as NotificationsState } from "@/api";
 import { SettingsPage } from "./page";
+
+/** Brand marks by channel kind; others get a bell. */
+const kindIcons: Record<string, ReactNode> = {
+  discord: <DiscordIcon className="text-[#5865F2]" />,
+};
+const kindIcon = (kind: string) => kindIcons[kind] ?? <Bell />;
+
+/** What the dialog shows: the kind picker, a new channel of a kind, or a channel being edited. */
+type Editing = { step: "pick" } | { step: "new"; kind: string } | { step: "edit"; channel: NotificationChannel };
 
 export function Notifications() {
   const qc = useQueryClient();
@@ -24,7 +35,7 @@ export function Notifications() {
     queryKey: ["notifications"],
     queryFn: api.notifications,
   });
-  const [editing, setEditing] = useState<NotificationChannel | "new" | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(null);
   const refresh = () => qc.invalidateQueries({ queryKey: ["notifications"] });
   const remove = useMutation({
     meta: { error: "Couldn't remove the channel" },
@@ -38,106 +49,132 @@ export function Notifications() {
   });
   const data = notifications.data;
   const kindLabel = (name: string) => data?.kinds.find((k) => k.name === name)?.label ?? name;
+  const eventLabel = (type: string) => data?.events.find((t) => t.type === type)?.label ?? type;
+  const add = (
+    <Button size="sm" onClick={() => setEditing({ step: "pick" })}>
+      <Plus data-icon="inline-start" />
+      Add channel
+    </Button>
+  );
 
   return (
-    <SettingsPage
-      actions={
-        !!data?.channels.length && (
-          <Button size="sm" onClick={() => setEditing("new")}>
-            <Plus data-icon="inline-start" />
-            Add channel
-          </Button>
-        )
-      }
-    >
-      <Section plain>
-        {data?.channels.length === 0 ? (
-          <EmptyState
-            icon={Bell}
-            title="No notification channels"
-            description="Get told about failed deployments and backups, restarted services and new versions."
-            action={
-              <Button size="sm" onClick={() => setEditing("new")}>
-                <Plus data-icon="inline-start" />
-                Add channel
-              </Button>
-            }
-          />
-        ) : (
-          <ul className="divide-y border-y">
-            {data?.channels.map((ch) => (
-              <li key={ch.id} className="flex items-center justify-between gap-4 py-2.5">
-                <div className="min-w-0">
-                  <p className="flex items-center gap-2 text-sm font-medium">
-                    {ch.name}
-                    <Tag>{kindLabel(ch.kind)}</Tag>
-                    {!ch.enabled && <Tag>paused</Tag>}
-                  </p>
+    <SettingsPage actions={!!data?.channels.length && add}>
+      <ErrorText error={notifications.error} />
+      {data?.channels.length === 0 ? (
+        <EmptyState
+          icon={Bell}
+          title="No notification channels"
+          description="Get told about failed deployments and backups, restarted services and new versions."
+          action={add}
+        />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {data?.channels.map((ch) => (
+            <Card key={ch.id} className={cn("gap-3 px-4", !ch.enabled && "opacity-70")}>
+              <div className="flex items-start gap-3">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted [&>svg]:size-5">
+                  {kindIcon(ch.kind)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{ch.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {ch.events.length === 0
-                      ? "no events"
-                      : ch.events.map((e) => data.events.find((t) => t.type === e)?.label ?? e).join(", ")}
+                    {kindLabel(ch.kind)}
+                    {!ch.enabled && " · paused"}
                   </p>
                 </div>
-                <div className="flex shrink-0 gap-0.5">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    title="Send a test"
-                    aria-label="Send a test"
-                    disabled={test.isPending}
-                    onClick={() => test.mutate(ch.id)}
-                  >
-                    <Send />
-                  </Button>
-                  <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={() => setEditing(ch)}>
-                    <Pencil />
-                  </Button>
-                  <ConfirmDialog
-                    trigger={
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        title="Remove"
-                        aria-label="Remove"
-                        className="text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 />
-                      </Button>
-                    }
-                    title={`Remove channel ${ch.name}?`}
-                    confirmLabel="Remove"
-                    onConfirm={() => remove.mutate(ch.id)}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {ch.events.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">No events</span>
+                ) : (
+                  ch.events.map((e) => <Tag key={e}>{eventLabel(e)}</Tag>)
+                )}
+              </div>
+              <div className="mt-auto flex justify-end gap-0.5">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  title="Send a test"
+                  aria-label="Send a test"
+                  disabled={test.isPending}
+                  onClick={() => test.mutate(ch.id)}
+                >
+                  <Send />
+                </Button>
+                <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={() => setEditing({ step: "edit", channel: ch })}>
+                  <Pencil />
+                </Button>
+                <ConfirmDialog
+                  trigger={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      title="Remove"
+                      aria-label="Remove"
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 />
+                    </Button>
+                  }
+                  title={`Remove channel ${ch.name}?`}
+                  confirmLabel="Remove"
+                  onConfirm={() => remove.mutate(ch.id)}
+                />
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+      <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
+          {editing && data && editing.step === "pick" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Add a channel</DialogTitle>
+                <DialogDescription>Where should kipitiny send notifications?</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {data.kinds.map((k) => (
+                  <ChoiceTile
+                    key={k.name}
+                    icon={kindIcon(k.name)}
+                    title={k.label}
+                    onClick={() => setEditing({ step: "new", kind: k.name })}
                   />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
-          <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
-            {editing && data && (
-              <ChannelForm
-                key={editing === "new" ? "new" : editing.id}
-                channel={editing === "new" ? null : editing}
-                meta={data}
-                onDone={() => setEditing(null)}
-              />
-            )}
-          </DialogContent>
-        </Dialog>
-      </Section>
+                ))}
+              </div>
+            </>
+          )}
+          {editing && data && editing.step !== "pick" && (
+            <ChannelForm
+              key={editing.step === "new" ? editing.kind : editing.channel.id}
+              channel={editing.step === "edit" ? editing.channel : null}
+              kind={editing.step === "new" ? editing.kind : editing.channel.kind}
+              icon={kindIcon(editing.step === "new" ? editing.kind : editing.channel.kind)}
+              meta={data}
+              onBack={editing.step === "new" ? () => setEditing({ step: "pick" }) : undefined}
+              onDone={() => setEditing(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </SettingsPage>
   );
 }
 
 function ChannelForm({
   channel,
+  kind: kindName,
+  icon,
   meta,
+  onBack,
   onDone,
 }: {
   channel: NotificationChannel | null;
+  kind: string;
+  icon: ReactNode;
   meta: NotificationsState;
+  onBack?: () => void;
   onDone: () => void;
 }) {
   const qc = useQueryClient();
@@ -152,7 +189,7 @@ function ChannelForm({
         }
       : {
           name: "",
-          kind: meta.kinds[0]?.name ?? "",
+          kind: kindName,
           config: {},
           events: meta.events.filter((e) => e.default).map((e) => e.type),
           enabled: true,
@@ -180,7 +217,10 @@ function ChannelForm({
   return (
     <form onSubmit={onSubmit} className="contents">
       <DialogHeader>
-        <DialogTitle>{channel ? `Edit ${channel.name}` : "New channel"}</DialogTitle>
+        <DialogTitle className="flex items-center gap-2 [&>svg]:size-5">
+          {icon}
+          {channel ? `Edit ${channel.name}` : `New ${kind?.label ?? kindName} channel`}
+        </DialogTitle>
         <DialogDescription>
           {form.kind === "discord"
             ? "In Discord: channel settings › Integrations › Webhooks › New Webhook, then copy its URL."
@@ -196,14 +236,6 @@ function ChannelForm({
           onChange={(e) => setForm({ ...form, name: e.target.value })}
           placeholder="ops-alerts"
         />
-        {!channel && meta.kinds.length > 1 && (
-          <FloatingSelect
-            label="Type"
-            value={form.kind}
-            onValueChange={(v) => setForm({ ...form, kind: v, config: {} })}
-            options={meta.kinds.map((k) => ({ value: k.name, label: k.label }))}
-          />
-        )}
         {kind?.fields.map((f) => (
           <FloatingInput
             key={f.key}
@@ -242,6 +274,12 @@ function ChannelForm({
         />
       </div>
       <DialogFooter>
+        {onBack && (
+          <Button type="button" variant="ghost" disabled={save.isPending} onClick={onBack}>
+            <ChevronLeft data-icon="inline-start" />
+            Back
+          </Button>
+        )}
         <Button type="submit" disabled={save.isPending}>
           {channel ? "Save" : "Add channel"}
         </Button>
