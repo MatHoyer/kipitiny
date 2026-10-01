@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarClock, HardDrive, History, Play, Server, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import { CheckboxField, Mono, Section } from "@/components/common";
+import { CheckboxField, ErrorText, Loading, Mono, Section, StatCard } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
@@ -39,30 +40,33 @@ export function Cleanup() {
   const save = useMutation({ meta: { error: "Couldn't save the cleanup settings" }, mutationFn: (s: CleanupSettings) => api.setCleanup(s), onSuccess: onSaved });
   const run = useMutation({ meta: { error: "Couldn't run the cleanup" }, mutationFn: api.runCleanup, onSuccess: (v) => qc.setQueryData(["cleanup"], v) });
 
-  if (!form) return null;
+  const dirty = !!form && JSON.stringify(form) !== JSON.stringify(cleanup.data?.settings);
+  const running = cleanup.data?.running || run.isPending;
+  const actions = (
+    <Button variant="outline" size="sm" loading={running} disabled={!form || dirty} title={dirty ? "Save first" : undefined} onClick={() => run.mutate()}>
+      <Play data-icon="inline-start" />
+      {cleanup.data?.running ? "Cleaning" : "Run now"}
+    </Button>
+  );
+  if (!form)
+    return (
+      <SettingsPage actions={actions}>
+        {cleanup.error ? <ErrorText error={cleanup.error} /> : <Loading />}
+      </SettingsPage>
+    );
+
   const set = <K extends keyof CleanupSettings>(k: K, v: CleanupSettings[K]) => setForm({ ...form, [k]: v });
-  const dirty = JSON.stringify(form) !== JSON.stringify(cleanup.data?.settings);
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     save.mutate(form);
   };
+  const last = cleanup.data?.lastRun;
 
   return (
-    <SettingsPage
-      actions={
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={cleanup.data?.running || run.isPending || dirty}
-          title={dirty ? "Save first" : undefined}
-          onClick={() => run.mutate()}
-        >
-          {cleanup.data?.running ? "Cleaning…" : "Run now"}
-        </Button>
-      }
-    >
-      <Section plain>
-        <form onSubmit={onSubmit} className="space-y-4">
+    <SettingsPage actions={actions}>
+      <CleanupStats state={cleanup.data!} />
+      <form onSubmit={onSubmit} className="space-y-6">
+        <Section title="Schedule" description="When the cleanup runs on its own, on every server.">
           <CheckboxField
             label="Run on a schedule"
             description={cleanup.data?.nextRun && `Next run ${new Date(cleanup.data.nextRun).toLocaleString()}.`}
@@ -91,6 +95,13 @@ export function Cleanup() {
               onChange={(e) => set("minAgeHours", Number(e.target.value) || 0)}
               description="Leaves recent leftovers alone, e.g. an image a deploy just built."
             />
+          </div>
+        </Section>
+        <Section
+          title="What to remove"
+          description="Database volumes, the images of your services and of their recent deployments (for rollback), and everything kipitiny runs are always kept."
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
             <FloatingSelect
               label="Images"
               value={form.images}
@@ -142,50 +153,79 @@ export function Cleanup() {
               onCheckedChange={(v) => set("networks", v)}
             />
           </div>
-          {dirty && (
-            <div className="flex gap-2">
-              <Button type="submit" size="sm" disabled={save.isPending}>
-                Save
-              </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setForm(cleanup.data!.settings)}>
-                Cancel
-              </Button>
-            </div>
-          )}
-        </form>
-        {cleanup.data?.lastRun && <LastRun run={cleanup.data.lastRun} />}
-        <p className="text-xs text-muted-foreground">
-          Database volumes, the images of your services and of their recent deployments (for rollback), and everything
-          kipitiny runs are always kept.
-        </p>
-      </Section>
+        </Section>
+        {dirty && (
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" disabled={save.isPending} onClick={() => setForm(cleanup.data!.settings)}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={save.isPending}>
+              Save
+            </Button>
+          </div>
+        )}
+      </form>
+      {last && <LastRun run={last} />}
     </SettingsPage>
   );
 }
 
-function LastRun({ run }: { run: NonNullable<CleanupState["lastRun"]> }) {
-  const freed = run.servers.reduce((n, s) => n + s.reclaimed, 0);
+function CleanupStats({ state }: { state: CleanupState }) {
+  const run = state.lastRun;
+  const freed = run?.servers.reduce((n, s) => n + s.reclaimed, 0) ?? 0;
+  const removed = run?.servers.reduce((n, s) => n + s.images + s.volumes + s.containers + s.networks + s.buildCache, 0) ?? 0;
+  const failed = !!run?.error || !!run?.servers.some((s) => s.errors?.length);
   return (
-    <div className="space-y-1 border-t pt-4 text-sm">
-      <p>
-        Last run {timeAgo(run.startedAt)} ({run.trigger})
-        {run.finishedAt ? <> · ≈ {formatBytes(freed)} freed</> : " · running"}
-        {run.deployments > 0 && <> · {run.deployments} old deployments removed</>}
-      </p>
-      {run.error && <p className="text-destructive">{run.error}</p>}
-      <ul className="text-xs text-muted-foreground">
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <StatCard
+        icon={CalendarClock}
+        label="Schedule"
+        value={state.settings.enabled ? "On" : "Off"}
+        hint={state.settings.enabled && state.nextRun ? `Next ${new Date(state.nextRun).toLocaleString()}` : "Runs only on demand"}
+      />
+      <StatCard
+        icon={History}
+        label="Last run"
+        value={run ? timeAgo(run.startedAt) : "never"}
+        hint={run && (run.finishedAt ? run.trigger : "running")}
+        tone={failed ? "bad" : undefined}
+      />
+      <StatCard icon={HardDrive} label="Freed" value={run?.finishedAt ? `≈ ${formatBytes(freed)}` : "—"} hint="Last run" />
+      <StatCard
+        icon={Trash2}
+        label="Removed"
+        value={run?.finishedAt ? removed : "—"}
+        hint={run && run.deployments > 0 ? `and ${run.deployments} old deployments` : "Docker objects"}
+      />
+    </div>
+  );
+}
+
+function LastRun({ run }: { run: NonNullable<CleanupState["lastRun"]> }) {
+  return (
+    <Section
+      title="Last run"
+      description={`${run.trigger === "manual" ? "Run by hand" : "Scheduled"}, ${timeAgo(run.startedAt)}${run.finishedAt ? "" : ", still running"}.`}
+    >
+      {run.error && <p className="text-sm text-destructive">{run.error}</p>}
+      <ul className="divide-y">
         {run.servers.map((s) => (
-          <li key={s.server}>
-            <span className="font-medium text-foreground">{s.server}</span>: {describe(s)}
-            {s.errors?.map((e) => (
-              <span key={e} className="block text-destructive">
-                {e}
-              </span>
-            ))}
+          <li key={s.server} className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0">
+            <Server className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1 text-sm">
+              <p className="font-medium">{s.server}</p>
+              <p className="text-xs text-muted-foreground">{describe(s)}</p>
+              {s.errors?.map((e) => (
+                <p key={e} className="text-xs text-destructive">
+                  {e}
+                </p>
+              ))}
+            </div>
+            {s.reclaimed > 0 && <span className="text-xs text-muted-foreground tabular-nums">≈ {formatBytes(s.reclaimed)}</span>}
           </li>
         ))}
       </ul>
-    </div>
+    </Section>
   );
 }
 
@@ -198,5 +238,5 @@ function describe(s: CleanupResult): string {
     [s.buildCache, "cache entry", "cache entries"],
   ];
   const parts = counts.filter(([n]) => n > 0).map(([n, one, many]) => `${n} ${n === 1 ? one : many}`);
-  return parts.length ? `${parts.join(", ")} (≈ ${formatBytes(s.reclaimed)})` : "nothing to remove";
+  return parts.length ? parts.join(", ") : "nothing to remove";
 }
