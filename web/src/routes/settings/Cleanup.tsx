@@ -6,6 +6,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { formatBytes, timeAgo } from "@/lib/format";
 import { api, type Cleanup as CleanupState, type CleanupResult, type CleanupSettings } from "@/api";
+import { SettingsPage } from "./page";
 
 const imageModes = [
   { value: "off", label: "Keep all" },
@@ -47,9 +48,7 @@ export function Cleanup() {
   };
 
   return (
-    <Section
-      title="Cleanup"
-      description="Frees disk space on every server by removing what Docker leaves behind. Database volumes, the images of your services and of their recent deployments (for rollback), and everything kipitiny runs are always kept."
+    <SettingsPage
       actions={
         <Button
           variant="outline"
@@ -62,99 +61,105 @@ export function Cleanup() {
         </Button>
       }
     >
-      <form onSubmit={onSubmit} className="space-y-4">
-        <CheckboxField
-          label="Run on a schedule"
-          description={cleanup.data?.nextRun && `Next run ${new Date(cleanup.data.nextRun).toLocaleString()}.`}
-          checked={form.enabled}
-          onCheckedChange={(v) => set("enabled", v)}
-        />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FloatingInput
-            label="Cron expression"
-            required
-            value={form.cron}
-            onChange={(e) => set("cron", e.target.value)}
-            inputClassName="font-mono"
-            description={
-              <>
-                5 fields, UTC. Prefix with <Mono>CRON_TZ=Europe/Paris</Mono> for another zone.
-              </>
-            }
-          />
-          <FloatingInput
-            label="Only older than (hours)"
-            type="number"
-            min={1}
-            required
-            value={String(form.minAgeHours)}
-            onChange={(e) => set("minAgeHours", Number(e.target.value) || 0)}
-            description="Leaves recent leftovers alone, e.g. an image a deploy just built."
-          />
-          <FloatingSelect
-            label="Images"
-            value={form.images}
-            onValueChange={(v) => set("images", v as CleanupSettings["images"])}
-            options={imageModes}
-            description="Unused images are pulled again if needed."
-          />
-          <FloatingSelect
-            label="Volumes"
-            value={form.volumes}
-            onValueChange={(v) => set("volumes", v as CleanupSettings["volumes"])}
-            options={volumeModes}
-            description={
-              form.volumes === "unused" ? (
-                <span className="text-destructive">
-                  Deletes the data of any stopped stack on the host that isn't managed by kipitiny.
-                </span>
-              ) : (
-                "Volumes no container mounts."
-              )
-            }
-          />
-          <FloatingInput
-            label="Deployments kept per service"
-            type="number"
-            min={0}
-            value={String(form.keepDeployments)}
-            onChange={(e) => set("keepDeployments", Number(e.target.value) || 0)}
-            description="Older history and build logs are deleted. 0 keeps all, otherwise at least 10."
-          />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-3">
+      <Section>
+        <form onSubmit={onSubmit} className="space-y-4">
           <CheckboxField
-            label="Build cache"
-            description="Layers cached by Git builds."
-            checked={form.buildCache}
-            onCheckedChange={(v) => set("buildCache", v)}
+            label="Run on a schedule"
+            description={cleanup.data?.nextRun && `Next run ${new Date(cleanup.data.nextRun).toLocaleString()}.`}
+            checked={form.enabled}
+            onCheckedChange={(v) => set("enabled", v)}
           />
-          <CheckboxField
-            label="Stopped containers"
-            description="Only ones kipitiny didn't create."
-            checked={form.containers}
-            onCheckedChange={(v) => set("containers", v)}
-          />
-          <CheckboxField
-            label="Unused networks"
-            description="Only ones kipitiny didn't create."
-            checked={form.networks}
-            onCheckedChange={(v) => set("networks", v)}
-          />
-        </div>
-        {dirty && (
-          <div className="flex gap-2">
-            <Button type="submit" size="sm" disabled={save.isPending}>
-              Save
-            </Button>
-            <Button type="button" size="sm" variant="ghost" onClick={() => setForm(cleanup.data!.settings)}>
-              Cancel
-            </Button>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FloatingInput
+              label="Cron expression"
+              required
+              value={form.cron}
+              onChange={(e) => set("cron", e.target.value)}
+              inputClassName="font-mono"
+              description={
+                <>
+                  5 fields, UTC. Prefix with <Mono>CRON_TZ=Europe/Paris</Mono> for another zone.
+                </>
+              }
+            />
+            <FloatingInput
+              label="Only older than (hours)"
+              type="number"
+              min={1}
+              required
+              value={String(form.minAgeHours)}
+              onChange={(e) => set("minAgeHours", Number(e.target.value) || 0)}
+              description="Leaves recent leftovers alone, e.g. an image a deploy just built."
+            />
+            <FloatingSelect
+              label="Images"
+              value={form.images}
+              onValueChange={(v) => set("images", v as CleanupSettings["images"])}
+              options={imageModes}
+              description="Unused images are pulled again if needed."
+            />
+            <FloatingSelect
+              label="Volumes"
+              value={form.volumes}
+              onValueChange={(v) => set("volumes", v as CleanupSettings["volumes"])}
+              options={volumeModes}
+              description={
+                form.volumes === "unused" ? (
+                  <span className="text-destructive">
+                    Deletes the data of any stopped stack on the host that isn't managed by kipitiny.
+                  </span>
+                ) : (
+                  "Volumes no container mounts."
+                )
+              }
+            />
+            <FloatingInput
+              label="Deployments kept per service"
+              type="number"
+              min={0}
+              value={String(form.keepDeployments)}
+              onChange={(e) => set("keepDeployments", Number(e.target.value) || 0)}
+              description="Older history and build logs are deleted. 0 keeps all, otherwise at least 10."
+            />
           </div>
-        )}
-      </form>
-      {cleanup.data?.lastRun && <LastRun run={cleanup.data.lastRun} />}
-    </Section>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <CheckboxField
+              label="Build cache"
+              description="Layers cached by Git builds."
+              checked={form.buildCache}
+              onCheckedChange={(v) => set("buildCache", v)}
+            />
+            <CheckboxField
+              label="Stopped containers"
+              description="Only ones kipitiny didn't create."
+              checked={form.containers}
+              onCheckedChange={(v) => set("containers", v)}
+            />
+            <CheckboxField
+              label="Unused networks"
+              description="Only ones kipitiny didn't create."
+              checked={form.networks}
+              onCheckedChange={(v) => set("networks", v)}
+            />
+          </div>
+          {dirty && (
+            <div className="flex gap-2">
+              <Button type="submit" size="sm" disabled={save.isPending}>
+                Save
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setForm(cleanup.data!.settings)}>
+                Cancel
+              </Button>
+            </div>
+          )}
+        </form>
+        {cleanup.data?.lastRun && <LastRun run={cleanup.data.lastRun} />}
+        <p className="text-xs text-muted-foreground">
+          Database volumes, the images of your services and of their recent deployments (for rollback), and everything
+          kipitiny runs are always kept.
+        </p>
+      </Section>
+    </SettingsPage>
   );
 }
 

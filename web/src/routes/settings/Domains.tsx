@@ -7,13 +7,14 @@ import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { timeAgo } from "@/lib/format";
 import { api } from "@/api";
+import { SettingsPage } from "./page";
 
 export function DomainsPage() {
   return (
-    <>
+    <SettingsPage>
       <CloudflareSection />
       <Domains />
-    </>
+    </SettingsPage>
   );
 }
 
@@ -42,15 +43,7 @@ function Domains() {
   };
 
   return (
-    <Section
-      title="Domains"
-      description={
-        <>
-          Domains you own, offered when giving a service a public address (<Mono>shop.example.com</Mono>). Point their DNS
-          at this server, or add them to your Cloudflare tunnel.
-        </>
-      }
-    >
+    <Section>
       <form onSubmit={onSubmit} className="flex items-start gap-2">
         <FloatingInput
           label="Domain"
@@ -138,12 +131,14 @@ function CloudflareSection() {
     <Section
       title="Cloudflare"
       description={
-        <>
-          With an API token, kipitiny creates the DNS record of every service domain in your Cloudflare zones (an A record
-          to the server, or a CNAME to your tunnel along with its route) and removes it when the domain goes away. Records
-          it didn't create are never changed. Token permissions: <Mono>Zone › Zone › Read</Mono>,{" "}
-          <Mono>Zone › DNS › Edit</Mono>, and <Mono>Account › Cloudflare Tunnel › Edit</Mono> with a tunnel.
-        </>
+        !status?.connected && (
+          <>
+            With an API token, kipitiny creates the DNS record of every service domain in your Cloudflare zones (an A record
+            to the server, or a CNAME to your tunnel along with its route) and removes it when the domain goes away. Records
+            it didn't create are never changed. Token permissions: <Mono>Zone › Zone › Read</Mono>,{" "}
+            <Mono>Zone › DNS › Edit</Mono>, and <Mono>Account › Cloudflare Tunnel › Edit</Mono> with a tunnel.
+          </>
+        )
       }
       actions={
         status?.connected && (

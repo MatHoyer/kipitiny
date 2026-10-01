@@ -1,12 +1,12 @@
 import { Bell, Brush, Globe, Info, KeyRound, KeySquare, ScrollText, Server, type LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 import { Navigate, useParams } from "react-router";
-import { PageBody, PageHeader } from "@/components/page-header";
 import { Version } from "./About";
 import { Audit } from "./Audit";
 import { Cleanup } from "./Cleanup";
 import { DomainsPage } from "./Domains";
 import { Notifications } from "./Notifications";
+import { SettingsLabel } from "./page";
 import { PasswordManagers } from "./PasswordManagers";
 import { Servers } from "./Servers";
 import { TokensPage } from "./Tokens";
@@ -69,7 +69,7 @@ export const settingsPages: SettingsPage[] = [
   },
 ];
 
-/** One settings page; the sidebar lists the others. */
+/** One settings page; the sidebar lists the others. Each page renders its own header. */
 export function SettingsShell() {
   const { page = "" } = useParams();
   const current = settingsPages.find((p) => p.slug === page);
@@ -77,11 +77,8 @@ export function SettingsShell() {
   const Page = current.page;
 
   return (
-    <>
-      <PageHeader crumbs={[{ label: "Settings" }, { label: current.label }]} />
-      <PageBody>
-        <Page key={current.slug} />
-      </PageBody>
-    </>
+    <SettingsLabel.Provider value={current.label}>
+      <Page key={current.slug} />
+    </SettingsLabel.Provider>
   );
 }

@@ -16,6 +16,7 @@ import {
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { api, type ChannelInput, type NotificationChannel, type Notifications as NotificationsState } from "@/api";
+import { SettingsPage } from "./page";
 
 export function Notifications() {
   const qc = useQueryClient();
@@ -39,82 +40,82 @@ export function Notifications() {
   const kindLabel = (name: string) => data?.kinds.find((k) => k.name === name)?.label ?? name;
 
   return (
-    <Section
-      title="Notifications"
-      description="Where kipitiny reports failed deployments and backups, restarted services and new versions."
+    <SettingsPage
       actions={
-        <Button variant="outline" size="sm" onClick={() => setEditing("new")}>
+        <Button size="sm" onClick={() => setEditing("new")}>
           <Plus data-icon="inline-start" />
           Add channel
         </Button>
       }
     >
-      {data?.channels.length === 0 ? (
-        <Empty>No channels yet.</Empty>
-      ) : (
-        <ul className="-my-2 divide-y">
-          {data?.channels.map((ch) => (
-            <li key={ch.id} className="flex items-center justify-between gap-4 py-2.5">
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 text-sm font-medium">
-                  {ch.name}
-                  <Tag>{kindLabel(ch.kind)}</Tag>
-                  {!ch.enabled && <Tag>paused</Tag>}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {ch.events.length === 0
-                    ? "no events"
-                    : ch.events.map((e) => data.events.find((t) => t.type === e)?.label ?? e).join(", ")}
-                </p>
-              </div>
-              <div className="flex shrink-0 gap-0.5">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  title="Send a test"
-                  aria-label="Send a test"
-                  disabled={test.isPending}
-                  onClick={() => test.mutate(ch.id)}
-                >
-                  <Send />
-                </Button>
-                <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={() => setEditing(ch)}>
-                  <Pencil />
-                </Button>
-                <ConfirmDialog
-                  trigger={
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      title="Remove"
-                      aria-label="Remove"
-                      className="text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 />
-                    </Button>
-                  }
-                  title={`Remove channel ${ch.name}?`}
-                  confirmLabel="Remove"
-                  onConfirm={() => remove.mutate(ch.id)}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-      <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
-          {editing && data && (
-            <ChannelForm
-              key={editing === "new" ? "new" : editing.id}
-              channel={editing === "new" ? null : editing}
-              meta={data}
-              onDone={() => setEditing(null)}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-    </Section>
+      <Section>
+        {data?.channels.length === 0 ? (
+          <Empty>No channels yet.</Empty>
+        ) : (
+          <ul className="-my-2 divide-y">
+            {data?.channels.map((ch) => (
+              <li key={ch.id} className="flex items-center justify-between gap-4 py-2.5">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-medium">
+                    {ch.name}
+                    <Tag>{kindLabel(ch.kind)}</Tag>
+                    {!ch.enabled && <Tag>paused</Tag>}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {ch.events.length === 0
+                      ? "no events"
+                      : ch.events.map((e) => data.events.find((t) => t.type === e)?.label ?? e).join(", ")}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    title="Send a test"
+                    aria-label="Send a test"
+                    disabled={test.isPending}
+                    onClick={() => test.mutate(ch.id)}
+                  >
+                    <Send />
+                  </Button>
+                  <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={() => setEditing(ch)}>
+                    <Pencil />
+                  </Button>
+                  <ConfirmDialog
+                    trigger={
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        title="Remove"
+                        aria-label="Remove"
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 />
+                      </Button>
+                    }
+                    title={`Remove channel ${ch.name}?`}
+                    confirmLabel="Remove"
+                    onConfirm={() => remove.mutate(ch.id)}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
+          <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
+            {editing && data && (
+              <ChannelForm
+                key={editing === "new" ? "new" : editing.id}
+                channel={editing === "new" ? null : editing}
+                meta={data}
+                onDone={() => setEditing(null)}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+      </Section>
+    </SettingsPage>
   );
 }
 
