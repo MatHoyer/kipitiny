@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Box,
+  ChevronRight,
   ChevronsUpDown,
   DatabaseBackup,
   FolderKanban,
+  LayoutGrid,
   LoaderCircle,
   LogOut,
   Monitor,
@@ -13,6 +15,7 @@ import {
   SunMoon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { Collapsible } from "radix-ui";
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import { toast } from "sonner";
@@ -38,6 +41,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarProvider,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -46,6 +52,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { api } from "../api";
 import { Login, Setup } from "./Auth";
+import { settingsPages } from "./settings";
 
 export function Layout() {
   const auth = useQuery({ queryKey: ["auth"], queryFn: api.authState, staleTime: Infinity });
@@ -60,7 +67,6 @@ export function Layout() {
 const nav = [
   { to: "/", label: "Projects", icon: FolderKanban },
   { to: "/backups", label: "Backups", icon: DatabaseBackup },
-  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 function App({ username }: { username: string }) {
@@ -110,7 +116,55 @@ function MainNav() {
           </SidebarMenuButton>
         </SidebarMenuItem>
       ))}
+      <SettingsNav />
     </SidebarMenu>
+  );
+}
+
+/** Settings folds open in the sidebar, one entry per settings page. */
+function SettingsNav() {
+  const { pathname } = useLocation();
+  const { setOpenMobile } = useSidebar();
+  const inSettings = pathname.startsWith("/settings");
+  const [open, setOpen] = useState(inSettings);
+  useEffect(() => {
+    if (inSettings) setOpen(true);
+  }, [inSettings]);
+
+  return (
+    <Collapsible.Root asChild open={open} onOpenChange={setOpen}>
+      <SidebarMenuItem className="group/collapsible">
+        <Collapsible.Trigger asChild>
+          <SidebarMenuButton>
+            <Settings />
+            Settings
+            <ChevronRight className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
+          </SidebarMenuButton>
+        </Collapsible.Trigger>
+        <Collapsible.Content>
+          <SidebarMenuSub>
+            <SidebarMenuSubItem>
+              <SidebarMenuSubButton asChild isActive={pathname === "/settings"}>
+                <NavLink to="/settings" end onClick={() => setOpenMobile(false)}>
+                  <LayoutGrid />
+                  <span>Overview</span>
+                </NavLink>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+            {settingsPages.map(({ slug, label, icon: Icon }) => (
+              <SidebarMenuSubItem key={slug}>
+                <SidebarMenuSubButton asChild isActive={pathname === `/settings/${slug}`}>
+                  <NavLink to={`/settings/${slug}`} onClick={() => setOpenMobile(false)}>
+                    <Icon />
+                    <span>{label}</span>
+                  </NavLink>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            ))}
+          </SidebarMenuSub>
+        </Collapsible.Content>
+      </SidebarMenuItem>
+    </Collapsible.Root>
   );
 }
 
