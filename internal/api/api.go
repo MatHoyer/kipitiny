@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/MatHoyer/kipitiny/internal/core"
@@ -182,11 +183,11 @@ func (a *API) deleteProject(w http.ResponseWriter, r *http.Request) {
 func (a *API) fail(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, core.ErrUnauthorized):
-		writeError(w, http.StatusUnauthorized, err.Error())
+		writeError(w, http.StatusUnauthorized, reason(err, core.ErrUnauthorized))
 	case errors.Is(err, core.ErrForbidden):
-		writeError(w, http.StatusForbidden, err.Error())
+		writeError(w, http.StatusForbidden, reason(err, core.ErrForbidden))
 	case errors.Is(err, core.ErrInvalid):
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(w, http.StatusBadRequest, reason(err, core.ErrInvalid))
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not found")
 	case errors.Is(err, store.ErrConflict):
@@ -197,6 +198,16 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 		a.log.Error("request failed", "err", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 	}
+}
+
+// reason drops the sentinel's own text ("invalid input: ") so the UI shows
+// only the explanation; a bare sentinel stays as is.
+func reason(err, sentinel error) string {
+	msg, prefix := err.Error(), sentinel.Error()+": "
+	if i := strings.Index(msg, prefix); i >= 0 {
+		return msg[i+len(prefix):]
+	}
+	return msg
 }
 
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {

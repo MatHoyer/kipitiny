@@ -66,6 +66,7 @@ function NewProjectDialog() {
   const [name, setName] = useState("");
   const [serverId, setServerId] = useState("local");
   const create = useMutation({
+    meta: { error: "Couldn't create the project" },
     mutationFn: () => api.createProject(name.trim(), serverId),
     onSuccess: (p) => {
       qc.invalidateQueries({ queryKey: ["projects"] });
@@ -109,7 +110,6 @@ function NewProjectDialog() {
                 options={servers.data!.map((s) => ({ value: s.id, label: s.name }))}
               />
             )}
-            <ErrorText error={create.error} />
           </div>
           <DialogFooter>
             <Button type="submit" disabled={create.isPending}>

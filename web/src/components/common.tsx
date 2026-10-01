@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { friendlyError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
 /** A titled card; every block of a page is one. */
@@ -73,7 +74,7 @@ export function Tag({ children, className }: { children: ReactNode; className?: 
 export function ErrorText({ error }: { error: Error | null | undefined }) {
   return error ? (
     <p role="alert" className="text-sm text-destructive">
-      {error.message}
+      {friendlyError(error)}
     </p>
   ) : null;
 }

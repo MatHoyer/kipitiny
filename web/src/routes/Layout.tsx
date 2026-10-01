@@ -148,6 +148,7 @@ function UpdateNotice() {
   const [waiting, setWaiting] = useState(false);
   const from = useRef("");
   const apply = useMutation({
+    meta: { error: "Couldn't start the update" },
     mutationFn: api.applyUpdate,
     onSuccess: (u) => {
       from.current = u.current;
@@ -251,7 +252,7 @@ function NavUser({ username }: { username: string }) {
   const qc = useQueryClient();
   const { isMobile } = useSidebar();
   const { theme, setTheme } = useTheme();
-  const logout = useMutation({ mutationFn: api.logout, onSettled: () => qc.resetQueries() });
+  const logout = useMutation({ meta: { error: "Couldn't sign out" }, mutationFn: api.logout, onSettled: () => qc.resetQueries() });
   const avatar = (
     <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground uppercase">
       {username.slice(0, 1)}

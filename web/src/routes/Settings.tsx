@@ -51,14 +51,16 @@ function Domains() {
   const [name, setName] = useState("");
   const refresh = () => qc.invalidateQueries({ queryKey: ["domains"] });
   const create = useMutation({
+    meta: { error: "Couldn't add the domain" },
     mutationFn: () => api.createDomain(name),
     onSuccess: () => {
       setName("");
       refresh();
     },
   });
-  const remove = useMutation({ mutationFn: api.deleteDomain, onSuccess: refresh });
+  const remove = useMutation({ meta: { error: "Couldn't remove the domain" }, mutationFn: api.deleteDomain, onSuccess: refresh });
   const proxy = useMutation({
+    meta: { error: "Couldn't change the Cloudflare proxy" },
     mutationFn: ({ id, proxied }: { id: string; proxied: boolean }) => api.setDomainProxied(id, proxied),
     onSuccess: refresh,
   });
@@ -91,7 +93,6 @@ function Domains() {
           Add
         </Button>
       </form>
-      <ErrorText error={create.error} />
       {domains.data?.length === 0 ? (
         <Empty>No domains yet.</Empty>
       ) : (
@@ -133,7 +134,6 @@ function Domains() {
           ))}
         </ul>
       )}
-      <ErrorText error={remove.error ?? proxy.error} />
     </Section>
   );
 }
@@ -143,6 +143,7 @@ function Version() {
   const qc = useQueryClient();
   const status = useQuery({ queryKey: ["status"], queryFn: api.status, refetchInterval: 15_000 });
   const check = useMutation({
+    meta: { error: "Couldn't check for updates" },
     mutationFn: api.checkUpdate,
     onSuccess: (update) => qc.setQueryData<Status>(["status"], (s) => s && { ...s, update }),
   });
@@ -176,7 +177,6 @@ function Version() {
           {update.error && <p className="text-sm text-destructive">{update.error}</p>}
         </div>
       )}
-      <ErrorText error={check.error} />
     </Section>
   );
 }
@@ -191,13 +191,14 @@ function CloudflareSection() {
     qc.invalidateQueries({ queryKey: ["domains"] });
   };
   const connect = useMutation({
+    meta: { error: "Couldn't connect Cloudflare" },
     mutationFn: () => api.connectCloudflare(token.trim()),
     onSuccess: () => {
       setToken("");
       refresh();
     },
   });
-  const disconnect = useMutation({ mutationFn: api.disconnectCloudflare, onSuccess: refresh });
+  const disconnect = useMutation({ meta: { error: "Couldn't disconnect Cloudflare" }, mutationFn: api.disconnectCloudflare, onSuccess: refresh });
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     connect.mutate();
@@ -262,7 +263,6 @@ function CloudflareSection() {
           </Button>
         </form>
       )}
-      <ErrorText error={connect.error ?? disconnect.error} />
     </Section>
   );
 }
@@ -271,6 +271,7 @@ function Tokens() {
   const qc = useQueryClient();
   const tokens = useQuery({ queryKey: ["tokens"], queryFn: api.tokens });
   const remove = useMutation({
+    meta: { error: "Couldn't revoke the token" },
     mutationFn: api.deleteToken,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tokens"] }),
   });
@@ -316,7 +317,6 @@ function Tokens() {
           ))}
         </ul>
       )}
-      <ErrorText error={remove.error} />
     </Section>
   );
 }
@@ -328,6 +328,7 @@ function TokenDialog() {
   const [scope, setScope] = useState<Scope>("read");
   const [created, setCreated] = useState<string | null>(null);
   const create = useMutation({
+    meta: { error: "Couldn't create the token" },
     mutationFn: () => api.createToken(name.trim(), scope),
     onSuccess: (t) => {
       setCreated(t.token);
@@ -386,7 +387,6 @@ function TokenDialog() {
                 onValueChange={(v) => setScope(v as Scope)}
                 options={scopes.map(([value, label]) => ({ value, label }))}
               />
-              <ErrorText error={create.error} />
             </div>
             <DialogFooter>
               <Button type="submit" disabled={create.isPending}>

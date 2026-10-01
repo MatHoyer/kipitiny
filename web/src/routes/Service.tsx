@@ -52,6 +52,7 @@ export function Service() {
     qc.invalidateQueries({ queryKey: ["deployments", id] });
   };
   const deploy = useMutation({
+    meta: { error: "Couldn't start the deployment" },
     mutationFn: () => api.deploy(id),
     onSuccess: (d) => {
       setSelected(d.id);
@@ -59,10 +60,12 @@ export function Service() {
     },
   });
   const action = useMutation({
+    meta: { error: "Couldn't change the service state" },
     mutationFn: (a: "start" | "stop" | "restart") => api.serviceAction(id, a),
     onSuccess: (svc) => qc.setQueryData(["service", id], svc),
   });
   const remove = useMutation({
+    meta: { error: "Couldn't delete the service" },
     mutationFn: (confirm: string) => api.deleteService(id, confirm),
     onSuccess: () => navigate(`/projects/${service.data?.projectId}`),
   });
@@ -146,7 +149,6 @@ export function Service() {
             DNS {svc.dns.state}: {svc.dns.message}
           </p>
         )}
-        <ErrorText error={deploy.error ?? action.error ?? remove.error} />
 
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList variant="line">
@@ -215,6 +217,7 @@ function Settings({ svc }: { svc: ServiceT }) {
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
   const save = useMutation({
+    meta: { error: "Couldn't save the settings" },
     mutationFn: () =>
       api.updateService(
         svc.id,
@@ -305,7 +308,6 @@ function Settings({ svc }: { svc: ServiceT }) {
           </>
         )}
         <div className="flex items-center justify-end gap-3 sm:col-span-2">
-          <ErrorText error={save.error} />
           <Button type="submit" disabled={save.isPending}>
             {save.isPending ? "Saving…" : "Save"}
           </Button>
@@ -323,6 +325,7 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
   const databases = siblings.data?.filter((s) => s.kind === "postgres" && s.id !== svc.id).map((s) => s.name);
   const [rows, setRows] = useState<EnvRow[]>(() => envRows(svc.env, svc.secrets));
   const save = useMutation({
+    meta: { error: "Couldn't save the environment" },
     mutationFn: () => api.updateService(svc.id, { env: envMap(rows), secrets: envSecrets(rows) }),
     onSuccess: (updated) => {
       qc.setQueryData(["service", svc.id], updated);
@@ -356,7 +359,6 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
           description={isDb ? "POSTGRES_* credentials are fixed at creation." : undefined}
         />
         <div className="flex items-center justify-end gap-3">
-          <ErrorText error={save.error} />
           <Button type="submit" disabled={save.isPending}>
             {save.isPending ? "Saving…" : "Save"}
           </Button>
@@ -381,6 +383,7 @@ function BackupsCard({ serviceId, name }: { serviceId: string; name: string }) {
   });
   const [targetId, setTargetId] = useState("local");
   const backup = useMutation({
+    meta: { error: "Couldn't start the backup" },
     mutationFn: () => api.backup(serviceId, targetId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["backups"] }),
   });
@@ -398,7 +401,6 @@ function BackupsCard({ serviceId, name }: { serviceId: string; name: string }) {
           {lastRestore.error && <span className="truncate text-destructive">{lastRestore.error}</span>}
         </div>
       )}
-      <ErrorText error={backup.error} />
       <Schedules serviceId={serviceId} targets={targets.data ?? []} />
       <div className="space-y-2">
         <h3 className="text-sm font-medium">History</h3>
@@ -445,7 +447,7 @@ export function BackupNow({
 
 function WebhookCard({ serviceId, branch }: { serviceId: string; branch: string }) {
   const [hook, setHook] = useState<{ url: string; secret: string } | null>(null);
-  const reveal = useMutation({ mutationFn: () => api.webhook(serviceId), onSuccess: setHook });
+  const reveal = useMutation({ meta: { error: "Couldn't show the webhook" }, mutationFn: () => api.webhook(serviceId), onSuccess: setHook });
   return (
     <Section
       title="Deploy on push"
@@ -469,14 +471,13 @@ function WebhookCard({ serviceId, branch }: { serviceId: string; branch: string 
           ]}
         />
       )}
-      <ErrorText error={reveal.error} />
     </Section>
   );
 }
 
 function ConnectionCard({ serviceId, host }: { serviceId: string; host: string }) {
   const [conn, setConn] = useState<Connection | null>(null);
-  const reveal = useMutation({ mutationFn: () => api.connection(serviceId), onSuccess: setConn });
+  const reveal = useMutation({ meta: { error: "Couldn't show the connection details" }, mutationFn: () => api.connection(serviceId), onSuccess: setConn });
   return (
     <Section
       title="Connection"
@@ -503,7 +504,6 @@ function ConnectionCard({ serviceId, host }: { serviceId: string; host: string }
           ]}
         />
       )}
-      <ErrorText error={reveal.error} />
     </Section>
   );
 }
@@ -523,6 +523,7 @@ function Deployments({
 }) {
   const qc = useQueryClient();
   const rollback = useMutation({
+    meta: { error: "Couldn't roll back" },
     mutationFn: (deploymentId: string) => api.rollback(svc.id, deploymentId),
     onSuccess: (d) => {
       onSelect(d.id);
@@ -574,7 +575,6 @@ function Deployments({
               </li>
             ))}
           </ul>
-          <ErrorText error={rollback.error} />
           {current && <DeploymentLog deployment={current} />}
         </>
       )}

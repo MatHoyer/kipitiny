@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pause, Play, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { CheckboxField, Empty, ErrorText, Mono } from "@/components/common";
+import { CheckboxField, Empty, Mono } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,11 +43,12 @@ export function Schedules({ serviceId, targets }: { serviceId: string; targets: 
   const schedules = useQuery({ queryKey: ["schedules", serviceId], queryFn: () => api.schedules(serviceId) });
   const invalidate = () => qc.invalidateQueries({ queryKey: ["schedules", serviceId] });
   const toggle = useMutation({
+    meta: { error: "Couldn't update the schedule" },
     mutationFn: ({ id, targetId, cron, keepLast, keepDaily, keepWeekly, keepMonthly, enabled, verify }: Schedule) =>
       api.updateSchedule(id, { targetId, cron, keepLast, keepDaily, keepWeekly, keepMonthly, verify, enabled: !enabled }),
     onSuccess: invalidate,
   });
-  const remove = useMutation({ mutationFn: api.deleteSchedule, onSuccess: invalidate });
+  const remove = useMutation({ meta: { error: "Couldn't delete the schedule" }, mutationFn: api.deleteSchedule, onSuccess: invalidate });
   const targetName = (id: string) => targets.find((t) => t.id === id)?.name ?? id;
 
   return (
@@ -93,7 +94,6 @@ export function Schedules({ serviceId, targets }: { serviceId: string; targets: 
           </li>
         ))}
       </ul>
-      <ErrorText error={toggle.error ?? remove.error} />
     </div>
   );
 }
@@ -110,6 +110,7 @@ function ScheduleDialog({ serviceId, targets }: { serviceId: string; targets: Ba
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
   const create = useMutation({
+    meta: { error: "Couldn't create the schedule" },
     mutationFn: () =>
       api.createSchedule(serviceId, {
         targetId: form.targetId,
@@ -200,7 +201,6 @@ function ScheduleDialog({ serviceId, targets }: { serviceId: string; targets: Ba
             checked={verify}
             onCheckedChange={setVerify}
           />
-          <ErrorText error={create.error} />
           <DialogFooter>
             <Button type="submit" disabled={create.isPending}>
               Add schedule

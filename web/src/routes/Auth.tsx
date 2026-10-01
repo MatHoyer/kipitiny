@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Box, Loader2 } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
-import { ErrorText } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { FloatingInput } from "@/components/ui/floating-input";
+import { toast } from "sonner";
+import { friendlyError } from "@/lib/errors";
 import { api } from "../api";
 
 function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
@@ -43,8 +44,13 @@ export function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const login = useMutation({
+    meta: { error: false },
     mutationFn: () => api.login(username.trim(), password),
     onSuccess: () => qc.resetQueries(),
+    onError: (err) =>
+      toast.error("Couldn't sign in", {
+        description: err.message === "unauthorized" ? "Wrong username or password." : friendlyError(err),
+      }),
   });
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -73,11 +79,6 @@ export function Login() {
             onChange={(e) => setPassword(e.target.value)}
             aria-invalid={wrong || undefined}
           />
-          {login.error && (
-            <p role="alert" className="text-sm text-destructive">
-              {wrong ? "Wrong username or password." : login.error.message}
-            </p>
-          )}
         </CardContent>
         <Submit pending={login.isPending}>Sign in</Submit>
       </form>
@@ -90,6 +91,7 @@ export function Setup() {
   const [form, setForm] = useState({ token: "", username: "admin", password: "", confirm: "" });
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
   const setup = useMutation({
+    meta: { error: "Couldn't create the account" },
     mutationFn: () => {
       if (form.password !== form.confirm) throw new Error("Passwords don't match.");
       return api.setup(form.token.trim(), form.username.trim(), form.password);
@@ -130,7 +132,6 @@ export function Setup() {
             value={form.confirm}
             onChange={set("confirm")}
           />
-          <ErrorText error={setup.error} />
         </CardContent>
         <Submit pending={setup.isPending}>Create account</Submit>
       </form>
