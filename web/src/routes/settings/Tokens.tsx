@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
+import { KeySquare, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { CopyField, Empty, Section, Tag } from "@/components/common";
+import { CopyField, EmptyState, Section, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,8 +26,9 @@ const scopes: [Scope, string][] = [
 ];
 
 export function TokensPage() {
+  const tokens = useQuery({ queryKey: ["tokens"], queryFn: api.tokens });
   return (
-    <SettingsPage actions={<TokenDialog />}>
+    <SettingsPage actions={!!tokens.data?.length && <TokenDialog />}>
       <Mcp />
       <Tokens />
     </SettingsPage>
@@ -58,7 +59,12 @@ function Tokens() {
   return (
     <Section plain>
       {tokens.data?.length === 0 ? (
-        <Empty>No tokens yet.</Empty>
+        <EmptyState
+          icon={KeySquare}
+          title="No API tokens yet"
+          description="A token lets a script or an AI agent use the API and the MCP endpoint. Every change it makes is in the audit log."
+          action={<TokenDialog />}
+        />
       ) : (
         <ul className="divide-y border-y">
           {tokens.data?.map((t) => (

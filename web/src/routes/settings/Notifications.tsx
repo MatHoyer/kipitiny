@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Send, Trash2 } from "lucide-react";
+import { Bell, Pencil, Plus, Send, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { CheckboxField, Empty, Section, Tag } from "@/components/common";
+import { CheckboxField, EmptyState, Section, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,15 +42,27 @@ export function Notifications() {
   return (
     <SettingsPage
       actions={
-        <Button size="sm" onClick={() => setEditing("new")}>
-          <Plus data-icon="inline-start" />
-          Add channel
-        </Button>
+        !!data?.channels.length && (
+          <Button size="sm" onClick={() => setEditing("new")}>
+            <Plus data-icon="inline-start" />
+            Add channel
+          </Button>
+        )
       }
     >
       <Section plain>
         {data?.channels.length === 0 ? (
-          <Empty>No channels yet.</Empty>
+          <EmptyState
+            icon={Bell}
+            title="No notification channels"
+            description="Get told about failed deployments and backups, restarted services and new versions."
+            action={
+              <Button size="sm" onClick={() => setEditing("new")}>
+                <Plus data-icon="inline-start" />
+                Add channel
+              </Button>
+            }
+          />
         ) : (
           <ul className="divide-y border-y">
             {data?.channels.map((ch) => (
