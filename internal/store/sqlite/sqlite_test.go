@@ -52,10 +52,11 @@ func TestProjectsAndServices(t *testing.T) {
 		t.Fatalf("list: %v %v", ps, err)
 	}
 
-	if got, err = s.SetProjectEnv(ctx, p.ID, map[string]string{"REGION": "eu"}); err != nil || got.Env["REGION"] != "eu" {
-		t.Fatalf("set env: %+v %v", got.Env, err)
+	if got, err = s.SetProjectEnv(ctx, p.ID, map[string]string{"REGION": "eu", "KEY": "k"}, []string{"KEY"}); err != nil ||
+		got.Env["REGION"] != "eu" || !slices.Equal(got.Secrets, []string{"KEY"}) {
+		t.Fatalf("set env: %+v %v %v", got.Env, got.Secrets, err)
 	}
-	if _, err := s.SetProjectEnv(ctx, "missing", nil); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.SetProjectEnv(ctx, "missing", nil, nil); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("set env of unknown project: got %v, want ErrNotFound", err)
 	}
 

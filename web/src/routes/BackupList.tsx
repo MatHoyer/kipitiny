@@ -105,7 +105,7 @@ export function BackupList({
                               </Button>
                             }
                             title={`Restore into ${restoreInto}?`}
-                            description="Current data will be replaced; linked apps are stopped meanwhile."
+                            description="Current data will be replaced; apps using this database are stopped meanwhile."
                             confirmLabel="Restore"
                             typeToConfirm={restoreInto}
                             onConfirm={(name) => restore.mutate({ id: b.id, confirm: name })}

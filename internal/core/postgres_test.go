@@ -38,12 +38,11 @@ func TestValidatePostgres(t *testing.T) {
 		t.Fatalf("valid service rejected: %v", err)
 	}
 	for name, mutate := range map[string]func(*store.Service){
-		"replicas":      func(s *store.Service) { s.Replicas = 2 },
-		"public":        func(s *store.Service) { s.Domain, s.Port = "db.example.com", 5432 },
-		"low memory":    func(s *store.Service) { s.MemoryMB = 64 },
-		"unpinned":      func(s *store.Service) { s.Image = "postgres:latest" },
-		"no password":   func(s *store.Service) { delete(s.Env, pgPassword) },
-		"links another": func(s *store.Service) { s.DatabaseID = "X" },
+		"replicas":    func(s *store.Service) { s.Replicas = 2 },
+		"public":      func(s *store.Service) { s.Domain, s.Port = "db.example.com", 5432 },
+		"low memory":  func(s *store.Service) { s.MemoryMB = 64 },
+		"unpinned":    func(s *store.Service) { s.Image = "postgres:latest" },
+		"no password": func(s *store.Service) { delete(s.Env, pgPassword) },
 	} {
 		s := pgService()
 		mutate(&s)
@@ -108,20 +107,15 @@ func TestPostgresContainerSpec(t *testing.T) {
 	}
 }
 
-func TestDatabaseURLInjection(t *testing.T) {
+func TestDatabaseRefsInSpec(t *testing.T) {
 	p := store.Project{ID: "P1", Name: "shop"}
 	db := pgService()
-	app := store.Service{ID: "01APP", Name: "web", Image: "app", Replicas: 1, DatabaseID: db.ID, Env: map[string]string{}}
+	app := store.Service{ID: "01APP", Name: "web", Image: "app", Replicas: 1,
+		Env: map[string]string{"DATABASE_URL": "{{ db." + db.Name + ".URL }}"}}
 
-	spec := containerSpec(p, app, &db, "D1", 1, certResolver)
+	spec := containerSpec(p, app, map[string]store.Service{db.Name: db}, "D1", 1, certResolver)
 	if !slices.Contains(spec.Config.Env, "DATABASE_URL="+DatabaseURL(db)) {
-		t.Errorf("DATABASE_URL not injected: %v", spec.Config.Env)
-	}
-
-	app.Env["DATABASE_URL"] = "postgres://custom"
-	spec = containerSpec(p, app, &db, "D1", 1, certResolver)
-	if !slices.Contains(spec.Config.Env, "DATABASE_URL=postgres://custom") {
-		t.Errorf("explicit DATABASE_URL overridden: %v", spec.Config.Env)
+		t.Errorf("DATABASE_URL not resolved: %v", spec.Config.Env)
 	}
 }
 

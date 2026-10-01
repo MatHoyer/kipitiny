@@ -105,10 +105,10 @@ func TestAppContainerSpec(t *testing.T) {
 }
 
 func TestMasked(t *testing.T) {
-	s := store.Service{Env: map[string]string{"SECRET": "hunter2"}}
+	s := store.Service{Env: map[string]string{"SECRET": "hunter2", "VAR": "v"}, Secrets: []string{"SECRET"}}
 	m := masked(s)
-	if m.Env["SECRET"] != SecretMask {
-		t.Errorf("value not masked: %v", m.Env)
+	if m.Env["SECRET"] != SecretMask || m.Env["VAR"] != "v" {
+		t.Errorf("env = %v, want the secret masked and the variable readable", m.Env)
 	}
 	if s.Env["SECRET"] != "hunter2" {
 		t.Error("masking mutated the original map")

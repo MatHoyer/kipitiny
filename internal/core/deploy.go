@@ -70,7 +70,12 @@ func (c *Core) startDeploy(ctx context.Context, serviceID, image string) (store.
 		unlock()
 		return store.Deployment{}, err
 	}
-	if err := checkRefs(svc.Env, project.Env); err != nil {
+	dbs, err := c.projectDatabases(ctx, svc.ProjectID)
+	if err != nil {
+		unlock()
+		return store.Deployment{}, err
+	}
+	if err := checkRefs(svc.Env, envSources{project: project.Env, dbs: dbs}); err != nil {
 		unlock()
 		return store.Deployment{}, err
 	}
@@ -141,14 +146,14 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 	out io.Writer, logf func(string, ...any)) error {
 
 	dk := c.dockerFor(svc.ServerID)
-	var db *store.Service
-	if svc.DatabaseID != "" {
-		d, err := c.store.GetService(ctx, svc.DatabaseID)
-		if err != nil {
-			return fmt.Errorf("linked database: %w", err)
+	dbs, err := c.projectDatabases(ctx, svc.ProjectID)
+	if err != nil {
+		return err
+	}
+	for _, name := range slices.Sorted(maps.Keys(dbs)) {
+		if usesDatabase(svc.Env, name) {
+			logf("Using credentials of database %s", name)
 		}
-		db = &d
-		logf("Injecting DATABASE_URL for database %s", d.Name)
 	}
 
 	switch {
@@ -174,7 +179,7 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 	if svc.Kind == store.ServiceKindPostgres {
 		return c.recreate(ctx, project, svc, dep, logf)
 	}
-	if err := c.rollout(ctx, project, svc, db, dep, out, logf); err != nil {
+	if err := c.rollout(ctx, project, svc, dbs, dep, out, logf); err != nil {
 		return err
 	}
 	if svc.Source == store.SourceGit {
@@ -225,7 +230,7 @@ func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Se
 // rollout is a blue-green deploy: every new replica starts next to the old
 // ones and must become ready before any old one stops. If one fails, all new
 // containers are removed and the old version keeps serving.
-func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Service, db *store.Service,
+func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Service, dbs map[string]store.Service,
 	dep store.Deployment, out io.Writer, logf func(string, ...any)) error {
 
 	dk := c.dockerFor(svc.ServerID)
@@ -247,7 +252,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 	}
 
 	if svc.PreDeploy != "" {
-		if err := c.preDeploy(ctx, project, svc, db, dep, out, logf); err != nil {
+		if err := c.preDeploy(ctx, project, svc, dbs, dep, out, logf); err != nil {
 			return err
 		}
 	}
@@ -264,7 +269,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 		}
 	}
 	for i := 1; i <= svc.Replicas; i++ {
-		spec := replicaSpec(project, svc, db, dep.ID, i, probe, c.certResolver(ctx, svc.ServerID, svc.Domain))
+		spec := replicaSpec(project, svc, dbs, dep.ID, i, probe, c.certResolver(ctx, svc.ServerID, svc.Domain))
 		logf("Starting %s", spec.Name)
 		id, err := dk.Run(ctx, spec)
 		if err != nil {
@@ -335,9 +340,9 @@ func readinessMode(svc store.Service) string {
 	return "running for 5s"
 }
 
-// containerSpec builds the container for one replica. db is the linked
-// database of an app, if any.
-func containerSpec(project store.Project, svc store.Service, db *store.Service, deployID string, replica int, resolver string) client.ContainerCreateOptions {
+// containerSpec builds the container for one replica. dbs are the project's
+// databases, for env references.
+func containerSpec(project store.Project, svc store.Service, dbs map[string]store.Service, deployID string, replica int, resolver string) client.ContainerCreateOptions {
 	labels := map[string]string{
 		docker.LabelManaged: "true",
 		docker.LabelProject: project.ID,
@@ -354,12 +359,7 @@ func containerSpec(project store.Project, svc store.Service, db *store.Service, 
 		endpoints[docker.ProxyNetwork] = &network.EndpointSettings{}
 	}
 
-	envMap := resolveEnv(svc.Env, project.Env)
-	if db != nil {
-		if _, set := envMap["DATABASE_URL"]; !set { // an explicit value wins
-			envMap["DATABASE_URL"] = DatabaseURL(*db)
-		}
-	}
+	envMap := resolveEnv(svc.Env, envSources{project: project.Env, dbs: dbs})
 	env := make([]string, 0, len(envMap))
 	for _, k := range slices.Sorted(maps.Keys(envMap)) {
 		env = append(env, k+"="+envMap[k])

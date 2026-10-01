@@ -1,4 +1,4 @@
-import { Braces, Code, Link2, List, Lock, Plus, Trash2, X } from "lucide-react";
+import { Braces, Code, Database, KeyRound, Link2, List, Plus, Trash2, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -6,12 +6,24 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { envRef, formatEnvRows, parseEnvRows, refsIn, soleRef, type EnvRow } from "@/lib/format";
+import {
+  dbFields,
+  dbRef,
+  envRef,
+  formatEnvRows,
+  parseEnvRows,
+  refName,
+  refsIn,
+  soleRef,
+  type EnvReference,
+  type EnvRow,
+} from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SECRET_MASK } from "../api";
 
@@ -20,23 +32,34 @@ const keyRe = /^[A-Za-z_][A-Za-z0-9_]*$/;
 type Mode = "list" | "raw";
 
 /**
- * Edits environment variables as a list of fields or as KEY=value text. With
- * vars (the project's shared variable names), values can reference them as
- * {{ project.NAME }}, picked from a menu instead of typed.
+ * Edits environment variables and secrets as a list of fields or as
+ * KEY=value text. Secrets are write-only: their saved values read back
+ * masked. With vars (the project's shared entry names) and databases (its
+ * postgres services), values can reference them as {{ project.NAME }} and
+ * {{ db.SERVICE.FIELD }}, picked from menus instead of typed.
  */
 export function EnvEditor({
   label = "Environment",
+  showLabel = true,
   description,
   rows,
   onChange,
   vars,
+  secretVars = [],
+  databases,
   className,
 }: {
   label?: string;
+  /** False when the surrounding card already names it. */
+  showLabel?: boolean;
   description?: ReactNode;
   rows: EnvRow[];
   onChange: (rows: EnvRow[]) => void;
   vars?: string[];
+  /** The vars that are secrets: offered to secrets, the others to variables. */
+  secretVars?: string[];
+  /** The project's database names; enables "Connect database". */
+  databases?: string[];
   className?: string;
 }) {
   const [mode, setMode] = useState<Mode>("list");
@@ -49,18 +72,109 @@ export function EnvEditor({
     setMode(m);
   };
   const update = (i: number, row: Partial<EnvRow>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...row } : r)));
-  const add = (row: EnvRow) => {
+  const add = (...added: EnvRow[]) => {
     setFocus(rows.length);
-    onChange([...rows, row]);
+    onChange([...rows, ...added]);
   };
+  const refs = !!vars || !!databases;
+  const known = (r: EnvReference) =>
+    r.kind === "project"
+      ? !!vars?.includes(r.name)
+      : !!databases?.includes(r.db) && (dbFields as readonly string[]).includes(r.field);
+  // A name for a database's entry: the usual one, or prefixed by the database
+  // when taken (several databases, one service).
+  const dbEntryName = (db: string, key: string) =>
+    rows.some((r) => r.key === key) ? `${db.toUpperCase().replaceAll("-", "_")}_${key}` : key;
+  const connect = (db: string, fields: [string, string][]) =>
+    add(...fields.map(([key, field]) => ({ key: dbEntryName(db, key), value: dbRef(db, field), secret: true })));
   const counts = new Map<string, number>();
   for (const r of rows) counts.set(r.key, (counts.get(r.key) ?? 0) + 1);
-  const unused = vars?.filter((v) => !rows.some((r) => r.key === v)) ?? [];
+  // Project entries, split like the rows: a service variable uses a project
+  // variable, a service secret a project secret.
+  const projectVars = vars?.filter((v) => !secretVars.includes(v)) ?? [];
+  const projectSecrets = vars?.filter((v) => secretVars.includes(v)) ?? [];
+  const unused = (names: string[]) => names.filter((v) => !rows.some((r) => r.key === v));
+
+  const renderRow = (row: EnvRow, i: number) => {
+    const badKey = !!row.key && (!keyRe.test(row.key) || (counts.get(row.key) ?? 0) > 1);
+    const unknown = refs
+      ? refsIn(row.value)
+          .filter((r) => !known(r))
+          .map(refName)
+      : [];
+    // A service secret may use a project secret or a database credential; a
+    // variable a project variable.
+    const sections = row.secret
+      ? [
+          { label: "Project secrets", items: projectSecrets.map((v) => ({ label: v, key: v, value: envRef(v) })) },
+          ...(databases ?? []).map((db) => ({
+            label: `Database ${db}`,
+            items: dbFields.map((f) => ({
+              label: f,
+              key: f === "URL" ? "DATABASE_URL" : `PG${f}`,
+              value: dbRef(db, f),
+            })),
+          })),
+        ]
+      : [{ label: "Project variables", items: projectVars.map((v) => ({ label: v, key: v, value: envRef(v) })) }];
+    return (
+      <div key={i} className="space-y-1">
+        <div className="flex items-start gap-2">
+          <Input
+            aria-label="Name"
+            placeholder="NAME"
+            value={row.key}
+            autoFocus={i === focus}
+            aria-invalid={badKey || undefined}
+            onChange={(e) => update(i, { key: e.target.value })}
+            spellCheck={false}
+            className="w-2/5 shrink-0 font-mono text-sm"
+          />
+          <ValueField
+            value={row.value}
+            secret={row.secret}
+            onChange={(value) => update(i, { value })}
+            invalid={unknown.length > 0}
+            refs={refs}
+          />
+          {sections.some((s) => s.items.length > 0) && (
+            <RefMenu
+              sections={sections}
+              onPick={(item) => update(i, { key: row.key || item.key, value: item.value })}
+              trigger={
+                <Button type="button" variant="ghost" size="icon" aria-label="Use a reference">
+                  <Braces />
+                </Button>
+              }
+            />
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={`Remove ${row.key || (row.secret ? "secret" : "variable")}`}
+            onClick={() => onChange(rows.filter((_, j) => j !== i))}
+          >
+            <Trash2 />
+          </Button>
+        </div>
+        {(badKey || unknown.length > 0) && (
+          <p className="px-1 text-xs text-destructive">
+            {badKey
+              ? (counts.get(row.key) ?? 0) > 1
+                ? "Duplicate name."
+                : "Letters, digits and _; not starting with a digit."
+              : `Unknown reference ${unknown.join(", ")}.`}
+          </p>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className={cn("space-y-2", className)}>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium">{label}</span>
+        <span className="text-sm font-medium">{showLabel && label}</span>
         <ToggleGroup
           type="single"
           variant="outline"
@@ -90,88 +204,79 @@ export function EnvEditor({
             setText(e.target.value);
             onChange(parseEnvRows(e.target.value));
           }}
-          placeholder={vars ? `NODE_ENV=production\nAPI_URL=${envRef("API_URL")}` : "NODE_ENV=production"}
+          placeholder={`NODE_ENV=production${vars ? `\nAPI_URL=${envRef("API_URL")}` : ""}\n# secrets\nAPI_TOKEN=…`}
           spellCheck={false}
           className="font-mono text-sm"
         />
       ) : (
-        <div className="space-y-2">
-          {rows.length === 0 && <p className="text-sm text-muted-foreground">No variables.</p>}
-          {rows.map((row, i) => {
-            const badKey = !!row.key && (!keyRe.test(row.key) || (counts.get(row.key) ?? 0) > 1);
-            const unknown = vars ? refsIn(row.value).filter((r) => !vars.includes(r)) : [];
-            return (
-              <div key={i} className="space-y-1">
-                <div className="flex items-start gap-2">
-                  <Input
-                    aria-label="Name"
-                    placeholder="NAME"
-                    value={row.key}
-                    autoFocus={i === focus}
-                    aria-invalid={badKey || undefined}
-                    onChange={(e) => update(i, { key: e.target.value })}
-                    spellCheck={false}
-                    className="w-2/5 shrink-0 font-mono text-sm"
-                  />
-                  <ValueField
-                    value={row.value}
-                    onChange={(value) => update(i, { value })}
-                    invalid={unknown.length > 0}
-                    refs={!!vars}
-                  />
-                  {vars && vars.length > 0 && (
-                    <VarMenu
-                      vars={vars}
-                      label="Reference a project variable"
-                      onPick={(v) => update(i, { key: row.key || v, value: envRef(v) })}
-                      trigger={
-                        <Button type="button" variant="ghost" size="icon" aria-label="Reference a project variable">
-                          <Braces />
-                        </Button>
-                      }
-                    />
-                  )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Remove ${row.key || "variable"}`}
-                    onClick={() => onChange(rows.filter((_, j) => j !== i))}
-                  >
-                    <Trash2 />
-                  </Button>
-                </div>
-                {(badKey || unknown.length > 0) && (
-                  <p className="px-1 text-xs text-destructive">
-                    {badKey
-                      ? (counts.get(row.key) ?? 0) > 1
-                        ? "Duplicate name."
-                        : "Letters, digits and _; not starting with a digit."
-                      : `Unknown project variable ${unknown.join(", ")}.`}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => add({ key: "", value: "" })}>
-              <Plus data-icon="inline-start" />
-              Add variable
-            </Button>
-            {vars && unused.length > 0 && (
-              <VarMenu
-                vars={unused}
-                label="Same name, value from the project"
-                onPick={(v) => add({ key: v, value: envRef(v) })}
-                trigger={
-                  <Button type="button" variant="outline" size="sm">
-                    <Link2 data-icon="inline-start" />
-                    Add from project
-                  </Button>
-                }
+        <div className="space-y-4">
+          <Group title="Variables" hint="Readable values." count={rows.filter((r) => !r.secret).length}>
+            {rows.map((r, i) => !r.secret && renderRow(r, i))}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => add({ key: "", value: "", secret: false })}
+              >
+                <Plus data-icon="inline-start" />
+                Add variable
+              </Button>
+              <FromProject
+                names={unused(projectVars)}
+                onPick={(v) => add({ key: v, value: envRef(v), secret: false })}
               />
-            )}
-          </div>
+            </div>
+          </Group>
+          <Group title="Secrets" hint="Write-only once saved." count={rows.filter((r) => r.secret).length}>
+            {rows.map((r, i) => r.secret && renderRow(r, i))}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => add({ key: "", value: "", secret: true })}
+              >
+                <KeyRound data-icon="inline-start" />
+                Add secret
+              </Button>
+              <FromProject
+                names={unused(projectSecrets)}
+                onPick={(v) => add({ key: v, value: envRef(v), secret: true })}
+              />
+              {databases && databases.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="outline" size="sm">
+                      <Database data-icon="inline-start" />
+                      Connect database
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="max-h-80 min-w-56">
+                    {databases.map((db, n) => (
+                      <div key={db}>
+                        {n > 0 && <DropdownMenuSeparator />}
+                        <DropdownMenuLabel className="text-xs">{db}</DropdownMenuLabel>
+                        <DropdownMenuItem onSelect={() => connect(db, [["DATABASE_URL", "URL"]])}>
+                          <span className="font-mono text-xs">DATABASE_URL</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            connect(
+                              db,
+                              dbFields.filter((f) => f !== "URL").map((f) => [`PG${f}`, f]),
+                            )
+                          }
+                        >
+                          <span className="font-mono text-xs">PGHOST, PGPORT, PGUSER…</span>
+                        </DropdownMenuItem>
+                      </div>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+          </Group>
         </div>
       )}
       {description && <p className="px-1 text-xs text-muted-foreground">{description}</p>}
@@ -179,14 +284,19 @@ export function EnvEditor({
   );
 }
 
-/** A value input; a lone project reference shows as a removable chip. */
+/**
+ * A value input; a lone reference shows as a removable chip. A secret is
+ * typed blind, and its saved value only shows as the mask.
+ */
 function ValueField({
   value,
+  secret,
   onChange,
   invalid,
   refs,
 }: {
   value: string;
+  secret: boolean;
   onChange: (v: string) => void;
   invalid: boolean;
   refs: boolean;
@@ -207,8 +317,8 @@ function ValueField({
           )}
           title={value.trim()}
         >
-          <Link2 className="size-3 shrink-0" />
-          <span className="truncate">{ref}</span>
+          {ref.kind === "db" ? <Database className="size-3 shrink-0" /> : <Link2 className="size-3 shrink-0" />}
+          <span className="truncate">{ref.kind === "db" ? `${ref.db}.${ref.field}` : ref.name}</span>
           <button
             type="button"
             aria-label="Remove reference"
@@ -220,52 +330,87 @@ function ValueField({
         </span>
       </div>
     );
-  const hidden = value === SECRET_MASK;
+  const saved = secret && value === SECRET_MASK;
   return (
     <div className="relative min-w-0 flex-1">
       <Input
         aria-label="Value"
-        placeholder="value"
+        type={secret ? "password" : "text"}
+        autoComplete={secret ? "new-password" : "off"}
+        placeholder={secret ? "secret value" : "value"}
         value={value}
         aria-invalid={invalid || undefined}
         onChange={(e) => onChange(e.target.value)}
-        // A hidden value is replaced as a whole.
-        onFocus={(e) => hidden && e.target.select()}
+        // A saved secret is replaced as a whole.
+        onFocus={(e) => saved && e.target.select()}
         spellCheck={false}
-        className={cn("font-mono text-sm", hidden && "pr-7 text-muted-foreground")}
+        title={saved ? "Saved secret: type to replace it" : undefined}
+        className={cn("font-mono text-sm", saved && "text-muted-foreground")}
       />
-      {hidden && (
-        <Lock
-          aria-label="Saved value, hidden"
-          className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-        />
-      )}
     </div>
   );
 }
 
-function VarMenu({
-  vars,
-  label,
+function Group({ title, hint, count, children }: { title: string; hint: string; count: number; children: ReactNode }) {
+  return (
+    <section className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <h4 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          {title}
+          {count > 0 && <span className="ml-1.5 font-normal">{count}</span>}
+        </h4>
+        <span className="truncate text-xs text-muted-foreground">{hint}</span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** Adds an entry with the same name, its value taken from the project. */
+function FromProject({ names, onPick }: { names: string[]; onPick: (name: string) => void }) {
+  if (names.length === 0) return null;
+  return (
+    <RefMenu
+      sections={[
+        { label: "Same name, value from the project", items: names.map((v) => ({ label: v, key: v, value: v })) },
+      ]}
+      onPick={(item) => onPick(item.key)}
+      trigger={
+        <Button type="button" variant="outline" size="sm">
+          <Link2 data-icon="inline-start" />
+          Add from project
+        </Button>
+      }
+    />
+  );
+}
+
+type RefItem = { label: string; key: string; value: string };
+
+function RefMenu({
+  sections,
   onPick,
   trigger,
 }: {
-  vars: string[];
-  label: string;
-  onPick: (name: string) => void;
+  sections: { label: string; items: RefItem[] }[];
+  onPick: (item: RefItem) => void;
   trigger: ReactNode;
 }) {
+  const shown = sections.filter((s) => s.items.length > 0);
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        {trigger}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="max-h-72 min-w-48">
-        <DropdownMenuLabel className="text-xs">{label}</DropdownMenuLabel>
-        {vars.map((v) => (
-          <DropdownMenuItem key={v} onSelect={() => onPick(v)} className="font-mono text-xs">
-            {v}
-          </DropdownMenuItem>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-h-80 min-w-48">
+        {shown.map((s, n) => (
+          <div key={s.label}>
+            {n > 0 && <DropdownMenuSeparator />}
+            <DropdownMenuLabel className="text-xs">{s.label}</DropdownMenuLabel>
+            {s.items.map((item) => (
+              <DropdownMenuItem key={item.label} onSelect={() => onPick(item)} className="font-mono text-xs">
+                {item.label}
+              </DropdownMenuItem>
+            ))}
+          </div>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

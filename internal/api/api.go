@@ -153,13 +153,17 @@ func (a *API) getProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, p)
 }
 
-// setProjectEnv replaces the shared variables; masked values are kept.
+// setProjectEnv replaces the shared variables and secrets; masked secrets
+// are kept.
 func (a *API) setProjectEnv(w http.ResponseWriter, r *http.Request) {
-	var env map[string]string
-	if !decode(w, r, &env) {
+	var body struct {
+		Env     map[string]string `json:"env"`
+		Secrets []string          `json:"secrets"`
+	}
+	if !decode(w, r, &body) {
 		return
 	}
-	p, err := a.core.SetProjectEnv(r.Context(), r.PathValue("id"), env)
+	p, err := a.core.SetProjectEnv(r.Context(), r.PathValue("id"), body.Env, body.Secrets)
 	if err != nil {
 		a.fail(w, err)
 		return

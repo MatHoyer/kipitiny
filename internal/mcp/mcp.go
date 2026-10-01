@@ -42,7 +42,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "deploy_from_git",
 		Description: "Create (or update) an app built from a Git repository's Dockerfile in a project, then deploy it. The project is created if missing."}, t.deployFromGit)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_project_env",
-		Description: "Set or remove a project's shared variables. Services use one as {{ project.NAME }} in an env value; they pick up changes on their next deploy."}, t.setProjectEnv)
+		Description: "Set or remove a project's shared variables (readable) and secrets (write-only). Services use either as {{ project.NAME }} in an env value; they pick up changes on their next deploy."}, t.setProjectEnv)
 	mcp.AddTool(server, &mcp.Tool{Name: "rollback",
 		Description: "Redeploy the image of an earlier successful deployment (the previous one by default)."}, t.rollback)
 	mcp.AddTool(server, &mcp.Tool{Name: "backup_database",
@@ -50,7 +50,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "list_backups", Annotations: readOnly,
 		Description: "Backups of a PostgreSQL service with status, size, target and restore-test result."}, t.listBackups)
 	mcp.AddTool(server, &mcp.Tool{Name: "restore_database", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
-		Description: "Replace a database's data with a backup. Destructive: confirm must repeat the database's service name. Linked apps are stopped meanwhile."}, t.restoreDatabase)
+		Description: "Replace a database's data with a backup. Destructive: confirm must repeat the database's service name. Apps referencing it are stopped meanwhile."}, t.restoreDatabase)
 
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{
 		Stateless:    true,
@@ -274,14 +274,9 @@ func (t *tools) deployFromGit(ctx context.Context, _ *mcp.CallToolRequest, in de
 				patch.Dockerfile = &in.Dockerfile
 			}
 			if in.Env != nil {
-				// Keep existing variables; masked values mean "unchanged".
-				env := map[string]string{}
-				for k := range svc.Env {
-					env[k] = core.SecretMask
-				}
-				for k, v := range in.Env {
-					env[k] = v
-				}
+				// Keep existing entries; new ones become secrets.
+				env := maps.Clone(svc.Env)
+				maps.Copy(env, in.Env)
 				patch.Env = env
 			}
 			if _, err := t.c.UpdateService(ctx, svc.ID, patch); err != nil {
@@ -295,13 +290,15 @@ func (t *tools) deployFromGit(ctx context.Context, _ *mcp.CallToolRequest, in de
 
 type setProjectEnvIn struct {
 	Project string            `json:"project" jsonschema:"project name"`
-	Set     map[string]string `json:"set,omitempty" jsonschema:"variables to add or overwrite"`
-	Unset   []string          `json:"unset,omitempty" jsonschema:"variables to remove"`
+	Set     map[string]string `json:"set,omitempty" jsonschema:"plain variables to add or overwrite (readable)"`
+	Secrets map[string]string `json:"secrets,omitempty" jsonschema:"secrets to add or overwrite (write-only)"`
+	Unset   []string          `json:"unset,omitempty" jsonschema:"variables or secrets to remove"`
 }
 
 type setProjectEnvOut struct {
-	// Variables lists the project's variable names after the change.
+	// Variables and Secrets list the project's names after the change.
 	Variables []string `json:"variables"`
+	Secrets   []string `json:"secrets"`
 }
 
 func (t *tools) setProjectEnv(ctx context.Context, _ *mcp.CallToolRequest, in setProjectEnvIn) (*mcp.CallToolResult, setProjectEnvOut, error) {
@@ -310,15 +307,25 @@ func (t *tools) setProjectEnv(ctx context.Context, _ *mcp.CallToolRequest, in se
 		if err != nil {
 			return setProjectEnvOut{}, err
 		}
-		env := project.Env // masked: unchanged values are kept
+		env := project.Env // secrets masked: unchanged ones are kept
+		secrets := slices.DeleteFunc(project.Secrets, func(k string) bool { _, set := in.Set[k]; return set })
 		maps.Copy(env, in.Set)
+		maps.Copy(env, in.Secrets)
+		secrets = append(secrets, slices.Collect(maps.Keys(in.Secrets))...)
 		for _, k := range in.Unset {
 			delete(env, k)
 		}
-		if project, err = t.c.SetProjectEnv(ctx, project.ID, env); err != nil {
+		if project, err = t.c.SetProjectEnv(ctx, project.ID, env, secrets); err != nil {
 			return setProjectEnvOut{}, err
 		}
-		return setProjectEnvOut{Variables: slices.Sorted(maps.Keys(project.Env))}, nil
+		out := setProjectEnvOut{Variables: []string{}, Secrets: project.Secrets}
+		for k := range project.Env {
+			if !slices.Contains(project.Secrets, k) {
+				out.Variables = append(out.Variables, k)
+			}
+		}
+		slices.Sort(out.Variables)
+		return out, nil
 	})
 	return nil, out, err
 }
