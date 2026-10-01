@@ -109,3 +109,11 @@ export function formatDuration(ms: number): string {
   const s = ms / 1000;
   return s < 60 ? `${s.toFixed(1)} s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
 }
+
+/** A service's state as lists show it: stopped on purpose, or from its live containers. */
+export function liveState(svc: { stopped: boolean; containers: { state: string; health?: string; retired?: boolean }[] }): string {
+  return svc.stopped ? "stopped" : serviceState(svc.containers.filter((c) => !c.retired));
+}
+
+/** States that need attention. */
+export const troubled = (state: string) => ["unhealthy", "degraded", "failed", "dead", "exited"].includes(state);
