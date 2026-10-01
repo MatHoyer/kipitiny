@@ -1,15 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Play, RefreshCw, RotateCcw, Rocket, Square, Trash2 } from "lucide-react";
+import { Activity, ExternalLink, Globe, Layers, Play, RefreshCw, RotateCcw, Rocket, Square, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { PostgresIcon } from "@/components/brand-icons";
-import { Empty, ErrorText, Mono, SecretList, Section, StateBadge, Tag } from "@/components/common";
+import { DangerZone, Empty, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -39,6 +40,7 @@ export function Service() {
   });
   const deploying = deployments.data?.some((d) => d.status === "running") ?? false;
   const [selected, setSelected] = useState<string | null>(null);
+  const [tab, setTab] = useTab(["overview", "deployments", "logs", "environment", "backups", "settings"], "overview");
 
   // Refresh containers as soon as a deploy finishes.
   const wasDeploying = useRef(false);
@@ -56,6 +58,7 @@ export function Service() {
     mutationFn: () => api.deploy(id),
     onSuccess: (d) => {
       setSelected(d.id);
+      setTab("deployments");
       refresh();
     },
   });
@@ -70,7 +73,6 @@ export function Service() {
     onSuccess: () => navigate(`/projects/${service.data?.projectId}`),
   });
 
-  const [tab, setTab] = useTab(["overview", "environment"], "overview");
   const svc = service.data;
   const crumbs = [
     { label: "Projects", to: "/" },
@@ -90,6 +92,8 @@ export function Service() {
   const allStopped = active.length > 0 && active.every((c) => c.state !== "running");
   const busy = deploying || deploy.isPending || action.isPending || remove.isPending;
   const isDb = svc.kind === "postgres";
+  const running = active.filter((c) => c.state === "running").length;
+  const last = deployments.data?.[0];
 
   return (
     <>
@@ -113,47 +117,68 @@ export function Service() {
               <Rocket data-icon="inline-start" />
               {deploying ? "Deploying…" : "Deploy"}
             </Button>
-            <ConfirmDialog
-              trigger={
-                <Button variant="destructive" size="icon-sm" aria-label="Delete service" disabled={busy}>
-                  <Trash2 />
-                </Button>
-              }
-              title={isDb ? `Delete database ${svc.name}?` : `Delete service ${svc.name}?`}
-              description={isDb ? "Its data volume will be destroyed." : "Its containers are removed."}
-              typeToConfirm={isDb ? svc.name : undefined}
-              onConfirm={(name) => remove.mutate(name)}
-            />
           </>
         }
       />
       <PageBody>
-        <div className="flex flex-wrap items-center gap-3">
-          {isDb && <PostgresIcon aria-label="PostgreSQL" className="size-5 text-[#4169E1]" />}
-          <StateBadge state={state} />
-          {svc.domain && (
-            <a
-              href={`https://${svc.domain}`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-            >
-              {svc.domain}
-              <ExternalLink className="size-3.5" />
-            </a>
-          )}
-          {svc.dns?.state === "synced" && <span className="text-xs text-muted-foreground">DNS managed by kipitiny</span>}
-        </div>
         {svc.dns && svc.dns.state !== "synced" && (
           <p role="alert" className="text-sm text-destructive">
             DNS {svc.dns.state}: {svc.dns.message}
           </p>
         )}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Card size="sm" className="gap-1.5 px-3">
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {isDb ? <PostgresIcon className="size-3.5 text-[#4169E1]" /> : <Activity className="size-3.5" />}
+              State
+            </p>
+            <StateBadge state={state} className="self-start text-sm text-foreground" />
+          </Card>
+          <StatCard
+            icon={Layers}
+            label="Replicas"
+            value={`${running}/${isDb ? 1 : svc.replicas}`}
+            hint="running"
+            tone={active.length > 0 && running < (isDb ? 1 : svc.replicas) ? "warn" : undefined}
+          />
+          <StatCard
+            icon={Rocket}
+            label="Last deploy"
+            value={last ? timeAgo(last.createdAt) : "never"}
+            hint={last && <StateBadge state={last.status} className="border-0 p-0" />}
+          />
+          <Card size="sm" className="gap-1 px-3">
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Globe className="size-3.5" />
+              {isDb ? "Host" : "Domain"}
+            </p>
+            {isDb ? (
+              <p className="truncate font-mono text-sm">{svc.name}</p>
+            ) : svc.domain ? (
+              <a
+                href={`https://${svc.domain}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex min-w-0 items-center gap-1 text-sm font-medium underline-offset-4 hover:underline"
+              >
+                <span className="truncate">{svc.domain}</span>
+                <ExternalLink className="size-3.5 shrink-0" />
+              </a>
+            ) : (
+              <p className="text-sm text-muted-foreground">private</p>
+            )}
+            {svc.dns?.state === "synced" && <p className="text-xs text-muted-foreground">DNS managed by kipitiny</p>}
+          </Card>
+        </div>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList variant="line">
+          <TabsList variant="line" className="max-w-full overflow-x-auto">
             <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="deployments">Deployments</TabsTrigger>
+            <TabsTrigger value="logs">Logs</TabsTrigger>
             <TabsTrigger value="environment">Environment</TabsTrigger>
+            {isDb && <TabsTrigger value="backups">Backups</TabsTrigger>}
+            <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
           <TabsContent value="overview" className="space-y-4">
             <Section title="Containers">
@@ -173,23 +198,44 @@ export function Service() {
                 </ul>
               )}
             </Section>
-
             {isDb && <ConnectionCard serviceId={svc.id} host={svc.name} />}
-            {svc.source === "git" && <WebhookCard serviceId={svc.id} branch={svc.gitBranch} />}
-            {isDb && <BackupsCard serviceId={svc.id} name={svc.name} />}
-
-            {svc.containers.length > 0 && (
+          </TabsContent>
+          <TabsContent value="deployments">
+            <Deployments svc={svc} deployments={deployments.data ?? []} selected={selected} onSelect={setSelected} busy={busy} />
+          </TabsContent>
+          <TabsContent value="logs">
+            {svc.containers.length === 0 ? (
+              <Empty>Not deployed yet.</Empty>
+            ) : (
               // Remount (and reconnect) whenever the set of containers changes.
               <LiveLogs key={active.map((c) => c.id).join()} serviceId={id} />
             )}
-
-            <div className="grid items-start gap-4 lg:grid-cols-2">
-              <Settings svc={svc} />
-              <Deployments svc={svc} deployments={deployments.data ?? []} selected={selected} onSelect={setSelected} busy={busy} />
-            </div>
           </TabsContent>
           <TabsContent value="environment">
             <EnvironmentCard key={svc.id} svc={svc} />
+          </TabsContent>
+          {isDb && (
+            <TabsContent value="backups">
+              <BackupsCard serviceId={svc.id} name={svc.name} />
+            </TabsContent>
+          )}
+          <TabsContent value="settings" className="space-y-4">
+            <Settings svc={svc} />
+            {svc.source === "git" && <WebhookCard serviceId={svc.id} branch={svc.gitBranch} />}
+            <DangerZone description={isDb ? "Deleting the database destroys its data volume." : "Deleting the service removes its containers."}>
+              <ConfirmDialog
+                trigger={
+                  <Button variant="destructive" size="sm" disabled={busy}>
+                    <Trash2 data-icon="inline-start" />
+                    {isDb ? "Delete database" : "Delete service"}
+                  </Button>
+                }
+                title={isDb ? `Delete database ${svc.name}?` : `Delete service ${svc.name}?`}
+                description={isDb ? "Its data volume will be destroyed." : "Its containers are removed."}
+                typeToConfirm={isDb ? svc.name : undefined}
+                onConfirm={(name) => remove.mutate(name)}
+              />
+            </DangerZone>
           </TabsContent>
         </Tabs>
       </PageBody>
@@ -666,7 +712,7 @@ function LiveLogs({ serviceId }: { serviceId: string }) {
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
         }}
-        className={cn(terminal, "h-80")}
+        className={cn(terminal, "h-[calc(100svh-24rem)] min-h-80")}
       >
         {lines.length === 0 && <span className="text-neutral-500">{ended ? "Stream closed." : "Waiting for logs…"}</span>}
         {lines.map((l, i) => (
