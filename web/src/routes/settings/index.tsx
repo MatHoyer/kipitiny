@@ -1,11 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Bell, Brush, Globe, Info, KeyRound, KeySquare, ScrollText, Server, type LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
-import { Navigate, NavLink, useParams } from "react-router";
+import { Navigate, useParams } from "react-router";
 import { LinkCard } from "@/components/common";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { timeAgo } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import { api } from "@/api";
 import { Version } from "./About";
 import { Audit } from "./Audit";
@@ -154,7 +153,7 @@ export function SettingsHub() {
   );
 }
 
-/** One settings page, with the others a click away. */
+/** One settings page; the sidebar lists the others. */
 export function SettingsShell() {
   const { page = "" } = useParams();
   const current = settingsPages.find((p) => p.slug === page);
@@ -164,31 +163,8 @@ export function SettingsShell() {
   return (
     <>
       <PageHeader crumbs={[{ label: "Settings", to: "/settings" }, { label: current.label }]} />
-      <PageBody className="max-w-6xl md:grid md:grid-cols-[12rem_1fr] md:items-start md:gap-6 md:space-y-0">
-        <nav
-          aria-label="Settings"
-          className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1 md:sticky md:top-16 md:mx-0 md:flex-col md:overflow-visible md:px-0"
-        >
-          {settingsPages.map(({ slug, label, icon: Icon }) => (
-            <NavLink
-              key={slug}
-              to={`/settings/${slug}`}
-              className={({ isActive }) =>
-                cn(
-                  "flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                  "max-md:border",
-                  isActive && "bg-muted font-medium text-foreground",
-                )
-              }
-            >
-              <Icon className="size-4" />
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="min-w-0 space-y-4">
-          <Page key={current.slug} />
-        </div>
+      <PageBody>
+        <Page key={current.slug} />
       </PageBody>
     </>
   );
