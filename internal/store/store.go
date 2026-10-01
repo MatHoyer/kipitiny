@@ -21,6 +21,7 @@ type Store interface {
 	GetProject(ctx context.Context, id string) (Project, error)
 	ListProjects(ctx context.Context) ([]Project, error)
 	DeleteProject(ctx context.Context, id string) error
+	SetProjectEnv(ctx context.Context, id string, env map[string]string) (Project, error)
 
 	CreateService(ctx context.Context, s Service) (Service, error)
 	GetService(ctx context.Context, id string) (Service, error)
@@ -142,9 +143,12 @@ type Project struct {
 	ID   string `bun:"id,pk" json:"id"`
 	Name string `bun:"name" json:"name"`
 	// ServerID is where the project's containers run; fixed at creation.
-	ServerID  string    `bun:"server_id" json:"serverId"`
-	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
-	UpdatedAt time.Time `bun:"updated_at" json:"updatedAt"`
+	ServerID string `bun:"server_id" json:"serverId"`
+	// Env holds variables shared by the services, which reference them as
+	// {{ project.NAME }}.
+	Env       map[string]string `bun:"env" json:"env"`
+	CreatedAt time.Time         `bun:"created_at" json:"createdAt"`
+	UpdatedAt time.Time         `bun:"updated_at" json:"updatedAt"`
 }
 
 type ServiceSource string

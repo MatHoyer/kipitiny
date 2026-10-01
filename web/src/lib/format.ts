@@ -1,21 +1,45 @@
-/** Parses KEY=VALUE lines; blank lines and # comments are ignored. */
-export function parseEnv(text: string): Record<string, string> {
-  const env: Record<string, string> = {};
+export type EnvRow = { key: string; value: string };
+
+/** Parses KEY=VALUE lines into rows; blank lines and # comments are ignored. */
+export function parseEnvRows(text: string): EnvRow[] {
+  const rows: EnvRow[] = [];
   for (const raw of text.split("\n")) {
     const line = raw.trim();
     if (!line || line.startsWith("#")) continue;
     const i = line.indexOf("=");
-    if (i === -1) env[line] = "";
-    else env[line.slice(0, i).trim()] = line.slice(i + 1);
+    rows.push(i === -1 ? { key: line, value: "" } : { key: line.slice(0, i).trim(), value: line.slice(i + 1) });
   }
-  return env;
+  return rows;
 }
 
-export function formatEnv(env: Record<string, string>): string {
-  return Object.entries(env)
-    .map(([k, v]) => `${k}=${v}`)
+export function formatEnvRows(rows: EnvRow[]): string {
+  return rows
+    .filter((r) => r.key || r.value)
+    .map((r) => `${r.key}=${r.value}`)
     .join("\n");
 }
+
+export const envRows = (env: Record<string, string>): EnvRow[] =>
+  Object.entries(env)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => ({ key, value }));
+
+/** Rows to the API map; rows without a name are dropped, the last duplicate wins. */
+export const envMap = (rows: EnvRow[]): Record<string, string> =>
+  Object.fromEntries(rows.filter((r) => r.key.trim()).map((r) => [r.key.trim(), r.value]));
+
+/** A service env value referencing a project variable: {{ project.NAME }}. */
+export const envRefRe = /\{\{\s*project\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+
+export const envRef = (name: string) => `{{ project.${name} }}`;
+
+/** The variable a value references when it is exactly one reference. */
+export function soleRef(value: string): string | null {
+  const m = /^\s*\{\{\s*project\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}\s*$/.exec(value);
+  return m ? m[1] : null;
+}
+
+export const refsIn = (value: string): string[] => [...value.matchAll(envRefRe)].map((m) => m[1]);
 
 export function timeAgo(iso: string): string {
   const s = Math.round((Date.now() - new Date(iso).getTime()) / 1000);

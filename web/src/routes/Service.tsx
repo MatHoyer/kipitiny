@@ -6,13 +6,13 @@ import { toast } from "sonner";
 import { Empty, ErrorText, Mono, SecretList, Section, StateBadge, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
+import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
-import { FloatingTextarea } from "@/components/ui/floating-textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatEnv, parseEnv, serviceState, timeAgo } from "@/lib/format";
+import { envMap, envRows, serviceState, timeAgo, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, type Connection, type Deployment, type LogLine, type Service as ServiceT } from "../api";
 import { BackupList } from "./BackupList";
@@ -189,6 +189,8 @@ function Settings({ svc }: { svc: ServiceT }) {
     enabled: !isDb,
   });
   const databases = siblings.data?.filter((s) => s.kind === "postgres") ?? [];
+  const project = useQuery({ queryKey: ["project", svc.projectId], queryFn: () => api.project(svc.projectId) });
+  const [env, setEnv] = useState<EnvRow[]>(() => envRows(svc.env));
   const [form, setForm] = useState(() => ({
     image: svc.image,
     domain: svc.domain,
@@ -203,7 +205,6 @@ function Settings({ svc }: { svc: ServiceT }) {
     gitToken: svc.gitToken,
     dockerfile: svc.dockerfile,
     buildContext: svc.buildContext,
-    env: formatEnv(svc.env),
   }));
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
@@ -212,7 +213,7 @@ function Settings({ svc }: { svc: ServiceT }) {
       api.updateService(
         svc.id,
         isDb
-          ? { image: form.image.trim(), memoryMb: Number(form.memory) || 0, env: parseEnv(form.env) }
+          ? { image: form.image.trim(), memoryMb: Number(form.memory) || 0, env: envMap(env) }
           : {
               ...(svc.source === "git"
                 ? {
@@ -230,7 +231,7 @@ function Settings({ svc }: { svc: ServiceT }) {
               databaseId: form.databaseId,
               healthPath: form.healthPath.trim(),
               preDeploy: form.preDeploy.trim(),
-              env: parseEnv(form.env),
+              env: envMap(env),
             },
       ),
     onSuccess: (updated) => {
@@ -306,16 +307,17 @@ function Settings({ svc }: { svc: ServiceT }) {
             />
           </>
         )}
-        <FloatingTextarea
-          label="Environment"
-          rows={5}
-          value={form.env}
-          onChange={set("env")}
-          className="sm:col-span-2 [&_textarea]:font-mono [&_textarea]:text-sm"
+        <EnvEditor
+          rows={env}
+          onChange={setEnv}
+          vars={Object.keys(project.data?.env ?? {}).sort()}
+          className="sm:col-span-2"
           description={
-            isDb
-              ? "POSTGRES_* credentials are fixed at creation."
-              : "Hidden values (********) are kept as-is. Remove a line to delete a variable."
+            <>
+              {isDb && "POSTGRES_* credentials are fixed at creation. "}
+              Hidden values (********) are kept as-is. Use a project variable with{" "}
+              <Mono>{"{{ project.NAME }}"}</Mono>.
+            </>
           }
         />
         <div className="flex items-center justify-end gap-3 sm:col-span-2">

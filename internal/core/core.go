@@ -234,7 +234,11 @@ func (c *Core) Status(ctx context.Context) Status {
 }
 
 func (c *Core) ListProjects(ctx context.Context) ([]store.Project, error) {
-	return c.store.ListProjects(ctx)
+	ps, err := c.store.ListProjects(ctx)
+	for i := range ps {
+		ps[i] = maskedProject(ps[i])
+	}
+	return ps, err
 }
 
 // CreateProject creates a project on a server (this one when serverID is empty).
@@ -261,7 +265,8 @@ func (c *Core) CreateProject(ctx context.Context, name, serverID string) (store.
 }
 
 func (c *Core) GetProject(ctx context.Context, id string) (store.Project, error) {
-	return c.store.GetProject(ctx, id)
+	p, err := c.store.GetProject(ctx, id)
+	return maskedProject(p), err
 }
 
 // DeleteProject removes every container and database volume of the project,

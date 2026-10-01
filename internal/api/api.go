@@ -34,6 +34,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("POST /api/projects", a.createProject)
 	mux.HandleFunc("GET /api/projects/{id}", a.getProject)
 	mux.HandleFunc("DELETE /api/projects/{id}", a.deleteProject)
+	mux.HandleFunc("PUT /api/projects/{id}/env", a.setProjectEnv)
 	mux.HandleFunc("GET /api/projects/{id}/services", a.listServices)
 	mux.HandleFunc("POST /api/projects/{id}/services", a.createService)
 	mux.HandleFunc("GET /api/services/{id}", a.getService)
@@ -145,6 +146,20 @@ func (a *API) createProject(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) getProject(w http.ResponseWriter, r *http.Request) {
 	p, err := a.core.GetProject(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
+}
+
+// setProjectEnv replaces the shared variables; masked values are kept.
+func (a *API) setProjectEnv(w http.ResponseWriter, r *http.Request) {
+	var env map[string]string
+	if !decode(w, r, &env) {
+		return
+	}
+	p, err := a.core.SetProjectEnv(r.Context(), r.PathValue("id"), env)
 	if err != nil {
 		a.fail(w, err)
 		return

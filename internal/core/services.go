@@ -189,14 +189,7 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 		svc.Domain = strings.ToLower(strings.TrimSpace(*p.Domain))
 	}
 	if p.Env != nil {
-		env := make(map[string]string, len(p.Env))
-		for k, v := range p.Env {
-			if old, ok := svc.Env[k]; ok && v == SecretMask {
-				v = old
-			}
-			env[k] = v
-		}
-		svc.Env = env
+		svc.Env = mergeMasked(p.Env, svc.Env)
 	}
 	if p.MemoryMB != nil {
 		svc.MemoryMB = *p.MemoryMB
@@ -254,6 +247,13 @@ func (c *Core) validate(ctx context.Context, s store.Service) error {
 	}
 	if s.Domain != "" && s.Domain == c.cfg.Domain {
 		return fmt.Errorf("%w: domain %q is the manager's own", ErrInvalid, s.Domain)
+	}
+	project, err := c.store.GetProject(ctx, s.ProjectID)
+	if err != nil {
+		return err
+	}
+	if err := checkRefs(s.Env, project.Env); err != nil {
+		return err
 	}
 	if s.DatabaseID == "" {
 		return nil
@@ -444,14 +444,7 @@ func masked(s store.Service) store.Service {
 	if s.GitToken != "" {
 		s.GitToken = SecretMask
 	}
-	env := maps.Clone(s.Env)
-	for k := range env {
-		env[k] = SecretMask
-	}
-	if env == nil {
-		env = map[string]string{}
-	}
-	s.Env = env
+	s.Env = maskEnv(s.Env)
 	return s
 }
 

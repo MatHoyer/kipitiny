@@ -120,6 +120,9 @@ func (s *Store) CreateProject(ctx context.Context, p store.Project) (store.Proje
 	if p.ServerID == "" {
 		p.ServerID = store.LocalServerID
 	}
+	if p.Env == nil {
+		p.Env = map[string]string{}
+	}
 	if _, err := s.db.NewInsert().Model(&p).Exec(ctx); err != nil {
 		return store.Project{}, mapErr(err)
 	}
@@ -136,6 +139,21 @@ func (s *Store) ListProjects(ctx context.Context) ([]store.Project, error) {
 	ps := []store.Project{}
 	err := s.db.NewSelect().Model(&ps).Order("name").Scan(ctx)
 	return ps, mapErr(err)
+}
+
+func (s *Store) SetProjectEnv(ctx context.Context, id string, env map[string]string) (store.Project, error) {
+	if env == nil {
+		env = map[string]string{}
+	}
+	p := store.Project{ID: id, Env: env, UpdatedAt: now()}
+	res, err := s.db.NewUpdate().Model(&p).Column("env", "updated_at").WherePK().Exec(ctx)
+	if err != nil {
+		return store.Project{}, mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.Project{}, store.ErrNotFound
+	}
+	return s.GetProject(ctx, id)
 }
 
 func (s *Store) DeleteProject(ctx context.Context, id string) error {
