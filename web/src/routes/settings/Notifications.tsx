@@ -48,11 +48,11 @@ export function Notifications() {
         </Button>
       }
     >
-      <Section>
+      <Section plain>
         {data?.channels.length === 0 ? (
           <Empty>No channels yet.</Empty>
         ) : (
-          <ul className="-my-2 divide-y">
+          <ul className="divide-y border-y">
             {data?.channels.map((ch) => (
               <li key={ch.id} className="flex items-center justify-between gap-4 py-2.5">
                 <div className="min-w-0">

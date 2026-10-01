@@ -43,7 +43,7 @@ function Domains() {
   };
 
   return (
-    <Section>
+    <Section plain>
       <form onSubmit={onSubmit} className="flex items-start gap-2">
         <FloatingInput
           label="Domain"

@@ -14,13 +14,31 @@ export function Section({
   actions,
   children,
   className,
+  plain,
 }: {
   title?: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
   children?: ReactNode;
   className?: string;
+  /** No card: the block is the page's (or tab's) only content, already named by it. */
+  plain?: boolean;
 }) {
+  if (plain)
+    return (
+      <section className={cn("space-y-4", className)}>
+        {(title || description || actions) && (
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div className="space-y-1">
+              {title && <h2 className="font-medium">{title}</h2>}
+              {description && <p className="text-sm text-muted-foreground">{description}</p>}
+            </div>
+            {actions && <div className="flex items-center gap-2">{actions}</div>}
+          </div>
+        )}
+        {children}
+      </section>
+    );
   return (
     <Card className={className}>
       {(title || description || actions) && (

@@ -24,7 +24,7 @@ export function Version() {
         </Button>
       }
     >
-      <Section>
+      <Section plain>
         {update && (
           <div className="space-y-1 text-sm">
             <p>

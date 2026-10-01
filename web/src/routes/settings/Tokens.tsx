@@ -56,11 +56,11 @@ function Tokens() {
   });
 
   return (
-    <Section>
+    <Section plain>
       {tokens.data?.length === 0 ? (
         <Empty>No tokens yet.</Empty>
       ) : (
-        <ul className="-my-2 divide-y">
+        <ul className="divide-y border-y">
           {tokens.data?.map((t) => (
             <li key={t.id} className="flex items-center justify-between gap-4 py-2.5">
               <div>
