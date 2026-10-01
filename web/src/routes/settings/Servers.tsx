@@ -38,7 +38,7 @@ export function Servers() {
         </Button>
       }
     >
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         {servers.data?.map((s) => (
           <Card key={s.id} size="sm" className="px-3">
             <div className="flex items-start gap-3">

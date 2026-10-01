@@ -50,7 +50,7 @@ function BackupStats({ backups, targets }: { backups?: Backup[]; targets?: numbe
   const failed = backups.filter((b) => b.status === "failed").length;
   const last = done[0];
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
       <StatCard icon={History} label="Last backup" value={last ? timeAgo(last.createdAt) : "never"} hint={last && (last.serviceName || "manager")} />
       <StatCard icon={HardDrive} label="Stored" value={formatBytes(done.reduce((n, b) => n + b.sizeBytes, 0))} hint={`${done.length} backups`} />
       <StatCard icon={TriangleAlert} label="Failed" value={failed} tone={failed ? "bad" : undefined} />
@@ -101,7 +101,7 @@ function Targets({ targets }: { targets: BackupTarget[] }) {
         </Button>
       }
     >
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         {targets.map((t) => (
           <Card key={t.id} size="sm" className="px-3">
             <div className="flex items-start gap-3">
