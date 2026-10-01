@@ -144,7 +144,7 @@ function SettingsNav() {
           <SidebarMenuSub>
             {settingsPages.map(({ slug, label, icon: Icon }) => (
               <SidebarMenuSubItem key={slug}>
-                <SidebarMenuSubButton asChild isActive={pathname === `/settings/${slug}`}>
+                <SidebarMenuSubButton asChild isActive={pathname.startsWith(`/settings/${slug}`)}>
                   <NavLink to={`/settings/${slug}`} onClick={() => setOpenMobile(false)}>
                     <Icon />
                     <span>{label}</span>
