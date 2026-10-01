@@ -35,7 +35,9 @@ func TestTokenScopes(t *testing.T) {
 	expect(t, "read token can't reveal secrets", anon.do("GET", "/api/services/X/connection", "", bearer(read)...), 403)
 	expect(t, "deploy token may deploy (service missing)", anon.do("POST", "/api/services/X/deploy", "", bearer(deploy)...), 404)
 	expect(t, "deploy token can't change settings", anon.do("PATCH", "/api/services/X", `{}`, bearer(deploy)...), 403)
-	expect(t, "admin token creates", anon.do("POST", "/api/projects", `{"name":"shop"}`, bearer(full)...), 201)
+	// Creating a project would create a real Docker network: an admin-only
+	// route on a missing service shows the scope check passes without one.
+	expect(t, "admin token may change settings (service missing)", anon.do("PATCH", "/api/services/X", `{}`, bearer(full)...), 404)
 	expect(t, "tokens can't mint tokens", anon.do("POST", "/api/tokens", `{"name":"x","scope":"admin"}`, bearer(full)...), 403)
 	expect(t, "tokens can't list tokens", anon.do("GET", "/api/tokens", "", bearer(full)...), 403)
 
@@ -49,7 +51,7 @@ func TestTokenScopes(t *testing.T) {
 	json.NewDecoder(res.Body).Decode(&entries)
 	found := false
 	for _, e := range entries {
-		if e.Actor == "token:t-admin" && e.Action == "POST /api/projects" {
+		if e.Actor == "token:t-admin" && e.Action == "PATCH /api/services/{id}" {
 			found = true
 		}
 		if e.Action == "POST /api/services/{id}/deploy" && e.Target != "X" {
