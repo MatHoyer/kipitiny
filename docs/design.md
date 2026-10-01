@@ -200,7 +200,7 @@ Later: `pgstore` + `migrations/postgres/`, CI against both, `kipitiny migrate-db
 ### Deploy/build logs
 
 - One file per deployment: `/data/deploys/<project>/<service>/<deploy-id>.log`; only path + metadata in SQLite.
-- Compress after completion; retention (e.g. last 50 per service).
+- Compress after completion; retention: optional "keep last N per service" in the cleanup job (Settings › Cleanup), which also prunes unused images, volumes, build cache, foreign stopped containers and networks.
 
 Later: optional VictoriaLogs or Loki, opt-in.
 
