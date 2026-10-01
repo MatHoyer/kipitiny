@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
-import { api, type ChannelInput, type NotificationChannel, type Notifications as NotificationsState } from "../api";
+import { api, type ChannelInput, type NotificationChannel, type Notifications as NotificationsState } from "@/api";
 
 export function Notifications() {
   const qc = useQueryClient();

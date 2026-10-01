@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { formatBytes, timeAgo } from "@/lib/format";
-import { api, type Cleanup as CleanupState, type CleanupResult, type CleanupSettings } from "../api";
+import { api, type Cleanup as CleanupState, type CleanupResult, type CleanupSettings } from "@/api";
 
 const imageModes = [
   { value: "off", label: "Keep all" },

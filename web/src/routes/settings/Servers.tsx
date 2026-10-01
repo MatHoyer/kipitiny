@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Globe, Pencil, Plus, Trash2 } from "lucide-react";
+import { Globe, HardDrive, Pencil, Plus, Server as ServerIcon, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { CheckboxField, CopyField, Mono, Section, StateBadge } from "@/components/common";
+import { CheckboxField, CopyField, IconTile, Mono, Section, StateBadge, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
-import { api, SECRET_MASK, type Server, type ServerInput } from "../api";
+import { api, SECRET_MASK, type Server, type ServerInput } from "@/api";
 
 export function Servers() {
   const qc = useQueryClient();
@@ -37,52 +38,58 @@ export function Servers() {
         </Button>
       }
     >
-      <ul className="-my-2 divide-y">
+      <div className="grid gap-3 lg:grid-cols-2">
         {servers.data?.map((s) => (
-          <li key={s.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2.5">
-            <div className="min-w-0">
-              <p className="flex items-center gap-2 text-sm font-medium">
-                {s.name}
-                <StateBadge state={s.docker ? "running" : "failed"} />
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {s.kind === "local" ? "the manager's own Docker" : `ssh://${s.sshUser}@${s.host}:${s.port}`}
-                {s.docker ? ` · Docker ${s.docker.version} (${s.docker.arch})` : ` · ${s.dockerError}`}
-                {` · ${s.projects} project${s.projects === 1 ? "" : "s"}`}
-                {s.tunnel
-                  ? " · Cloudflare tunnel"
-                  : s.publicIp
-                    ? ` · IP ${s.publicIp}`
-                    : s.detectedIp
-                      ? ` · IP ${s.detectedIp} (detected)`
-                      : ""}
-              </p>
-            </div>
-            <div className="flex gap-0.5">
-              <Button variant="ghost" size="icon-sm" title="Network" aria-label="Network" onClick={() => setIpFor(s)}>
-                <Globe />
-              </Button>
-              {s.kind === "ssh" && (
-                <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={() => setEditing(s)}>
-                  <Pencil />
+          <Card key={s.id} size="sm" className="px-3">
+            <div className="flex items-start gap-3">
+              <IconTile icon={s.kind === "local" ? HardDrive : ServerIcon} />
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-2 font-medium">
+                  <span className="truncate">{s.name}</span>
+                  <StateBadge state={s.docker ? "running" : "failed"} />
+                </p>
+                <p className="truncate font-mono text-xs text-muted-foreground">
+                  {s.kind === "local" ? "the manager's own Docker" : `ssh://${s.sshUser}@${s.host}:${s.port}`}
+                </p>
+              </div>
+              <div className="-mt-1 -mr-1 flex">
+                <Button variant="ghost" size="icon-sm" title="Network" aria-label="Network" onClick={() => setIpFor(s)}>
+                  <Globe />
                 </Button>
-              )}
-              {s.kind === "ssh" && (
-                <ConfirmDialog
-                  trigger={
-                    <Button variant="ghost" size="icon-sm" title="Remove" aria-label="Remove" className="text-muted-foreground hover:text-destructive">
-                      <Trash2 />
-                    </Button>
-                  }
-                  title={`Remove server ${s.name}?`}
-                  confirmLabel="Remove"
-                  onConfirm={() => remove.mutate(s.id)}
-                />
+                {s.kind === "ssh" && (
+                  <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={() => setEditing(s)}>
+                    <Pencil />
+                  </Button>
+                )}
+                {s.kind === "ssh" && (
+                  <ConfirmDialog
+                    trigger={
+                      <Button variant="ghost" size="icon-sm" title="Remove" aria-label="Remove" className="text-muted-foreground hover:text-destructive">
+                        <Trash2 />
+                      </Button>
+                    }
+                    title={`Remove server ${s.name}?`}
+                    confirmLabel="Remove"
+                    onConfirm={() => remove.mutate(s.id)}
+                  />
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <Tag>{s.docker ? `Docker ${s.docker.version} · ${s.docker.arch}` : "Docker unreachable"}</Tag>
+              <Tag>{`${s.projects} project${s.projects === 1 ? "" : "s"}`}</Tag>
+              {s.tunnel ? (
+                <Tag>Cloudflare tunnel</Tag>
+              ) : s.publicIp ? (
+                <Tag>IP {s.publicIp}</Tag>
+              ) : (
+                s.detectedIp && <Tag>IP {s.detectedIp} (detected)</Tag>
               )}
             </div>
-          </li>
+            {s.dockerError && <p className="text-xs text-destructive">{s.dockerError}</p>}
+          </Card>
         ))}
-      </ul>
+      </div>
       <Dialog open={ipFor !== null} onOpenChange={(o) => !o && setIpFor(null)}>
         <DialogContent className="sm:max-w-md">
           {ipFor && <NetworkForm key={ipFor.id} server={ipFor} onDone={() => setIpFor(null)} />}
