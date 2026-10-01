@@ -18,7 +18,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { api, type Scope } from "../api";
+import { api, type Scope, type Status } from "../api";
 import { Cleanup } from "./Cleanup";
 import { Servers } from "./Servers";
 
@@ -33,6 +33,7 @@ export function Settings() {
     <>
       <PageHeader crumbs={[{ label: "Settings" }]} />
       <PageBody>
+        <Version />
         <Domains />
         <CloudflareSection />
         <Servers />
@@ -133,6 +134,49 @@ function Domains() {
         </ul>
       )}
       <ErrorText error={remove.error ?? proxy.error} />
+    </Section>
+  );
+}
+
+/** The running version, with an on-demand check for a newer one. */
+function Version() {
+  const qc = useQueryClient();
+  const status = useQuery({ queryKey: ["status"], queryFn: api.status, refetchInterval: 15_000 });
+  const check = useMutation({
+    mutationFn: api.checkUpdate,
+    onSuccess: (update) => qc.setQueryData<Status>(["status"], (s) => s && { ...s, update }),
+  });
+  const update = status.data?.update;
+
+  return (
+    <Section
+      title="Version"
+      description="kipitiny looks for a newer release every six hours; the update is offered in the sidebar."
+      actions={
+        <Button variant="outline" size="sm" disabled={check.isPending} onClick={() => check.mutate()}>
+          {check.isPending ? "Checking…" : "Check for updates"}
+        </Button>
+      }
+    >
+      {update && (
+        <div className="space-y-1 text-sm">
+          <p>
+            Running <span className="font-mono">{update.current}</span>
+            {update.available ? (
+              <>
+                {" "}
+                · <span className="font-mono">{update.latest}</span> is available
+              </>
+            ) : (
+              update.latest && " · up to date"
+            )}
+          </p>
+          {update.available && !update.canApply && <p className="text-muted-foreground">{update.reason}</p>}
+          {update.checkedAt && <p className="text-xs text-muted-foreground">Last check {timeAgo(update.checkedAt)}</p>}
+          {update.error && <p className="text-sm text-destructive">{update.error}</p>}
+        </div>
+      )}
+      <ErrorText error={check.error} />
     </Section>
   );
 }

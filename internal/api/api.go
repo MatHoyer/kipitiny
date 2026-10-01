@@ -29,6 +29,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("POST /api/auth/logout", a.logout)
 	mux.HandleFunc("GET /api/status", a.status)
 	mux.HandleFunc("POST /api/update", a.applyUpdate)
+	mux.HandleFunc("POST /api/update/check", a.checkUpdate)
 	mux.HandleFunc("GET /api/projects", a.listProjects)
 	mux.HandleFunc("POST /api/projects", a.createProject)
 	mux.HandleFunc("GET /api/projects/{id}", a.getProject)
@@ -111,6 +112,10 @@ func (a *API) applyUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusAccepted, info)
+}
+
+func (a *API) checkUpdate(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.core.CheckUpdate(r.Context()))
 }
 
 func (a *API) listProjects(w http.ResponseWriter, r *http.Request) {

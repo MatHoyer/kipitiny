@@ -55,6 +55,10 @@ type updateState struct {
 	checkErr  string
 	applyErr  string
 	updating  bool
+	// pinned is the x.y.z tag a compose file runs the manager on, which the
+	// next `docker compose up` would bring back after an update.
+	pinned    string
+	inspected bool
 }
 
 var versionRe = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)$`)
@@ -122,9 +126,16 @@ func (c *Core) StartUpdateChecker() error {
 	})
 }
 
+// CheckUpdate looks for a newer published version now, on demand.
+func (c *Core) CheckUpdate(ctx context.Context) UpdateInfo {
+	c.checkUpdate(ctx)
+	return c.Update()
+}
+
 func (c *Core) checkUpdate(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
+	c.inspectPin(ctx)
 	tags, err := registry.Tags(ctx, http.DefaultClient, c.cfg.Update.Image)
 
 	u := &c.update
@@ -141,6 +152,46 @@ func (c *Core) checkUpdate(ctx context.Context) {
 	if newer(u.latest, c.cfg.Version) {
 		c.log.Info("a new version is available", "current", c.cfg.Version, "latest", u.latest)
 	}
+}
+
+// inspectPin records once whether compose pins the manager's version: the
+// container's image can't change while this process runs.
+func (c *Core) inspectPin(ctx context.Context) {
+	u := &c.update
+	u.mu.Lock()
+	done := u.inspected
+	u.mu.Unlock()
+	self := docker.SelfContainerID()
+	if done || self == "" {
+		return
+	}
+	res, err := c.dockerFor(store.LocalServerID).ContainerInspect(ctx, self, client.ContainerInspectOptions{})
+	if err != nil {
+		c.log.Warn("cannot inspect the manager's container", "err", err)
+		return
+	}
+	pinned := composePin(res.Container.Config.Image, res.Container.Config.Labels)
+	u.mu.Lock()
+	u.pinned, u.inspected = pinned, true
+	u.mu.Unlock()
+}
+
+// composePin is the x.y.z tag of ref when a compose file created the
+// container from it, empty otherwise. A floating tag isn't a pin: the updater
+// retags it (see launchUpdater).
+func composePin(ref string, labels map[string]string) string {
+	if labels["com.docker.compose.project"] == "" {
+		return ""
+	}
+	ref, _, _ = strings.Cut(ref, "@")
+	i := strings.LastIndex(ref, ":")
+	if i < 0 || strings.Contains(ref[i:], "/") {
+		return ""
+	}
+	if tag := ref[i+1:]; versionRe.MatchString(tag) {
+		return tag
+	}
+	return ""
 }
 
 // Update reports the known update state; it never calls the registry.
@@ -162,9 +213,13 @@ func (c *Core) Update() UpdateInfo {
 		t := u.checkedAt
 		info.CheckedAt = &t
 	}
-	if docker.SelfContainerID() == "" {
+	switch {
+	case docker.SelfContainerID() == "":
 		info.Reason = "the manager isn't running in a container: update it the way it was installed"
-	} else {
+	case u.pinned != "":
+		info.Reason = "the compose file pins version " + u.pinned + " (KIPITINY_VERSION), which its next up would " +
+			"bring back: set it to the new version, or remove it to follow latest, then run docker compose up -d"
+	default:
 		info.CanApply = true
 	}
 	return info
@@ -186,6 +241,10 @@ func (c *Core) ApplyUpdate(ctx context.Context) (UpdateInfo, error) {
 		return UpdateInfo{}, fmt.Errorf("%w: an update is already running", ErrBusy)
 	}
 	latest := u.latest
+	if u.pinned != "" {
+		u.mu.Unlock()
+		return UpdateInfo{}, fmt.Errorf("%w: the compose file pins version %s", ErrInvalid, u.pinned)
+	}
 	if !newer(latest, c.cfg.Version) {
 		u.mu.Unlock()
 		return UpdateInfo{}, fmt.Errorf("%w: already up to date", ErrInvalid)

@@ -44,8 +44,10 @@ The UI update pulls the new image and starts a short-lived `kipitiny-updater`
 container that swaps the manager's container, keeping its configuration,
 volumes and networks. If the new version isn't healthy within 3 minutes, the
 previous one is restored; the updater's output ends up in the manager's log.
-It needs the manager to run in Docker, and a compose file on `latest` (with a
-pinned `KIPITINY_VERSION`, the next `up` goes back to that version).
+It needs the manager to run in Docker. With a compose file pinning
+`KIPITINY_VERSION`, the button is off (the next `up` would go back to that
+version): change the variable and run `docker compose up -d` instead.
+Settings › Version checks for a new release on demand.
 
 ### Releasing
 

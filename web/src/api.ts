@@ -328,6 +328,7 @@ export const api = {
 
   status: () => request<Status>("/status"),
   applyUpdate: () => request<UpdateInfo>("/update", { method: "POST" }),
+  checkUpdate: () => request<UpdateInfo>("/update/check", { method: "POST" }),
 
   projects: () => request<Project[]>("/projects"),
   project: (id: string) => request<Project>(`/projects/${id}`),
