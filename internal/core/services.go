@@ -155,12 +155,8 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		if svc.MemoryMB == 0 {
 			svc.MemoryMB = defaultPostgresMemoryMB
 		}
-		// Generated credentials win over anything sent in.
-		maps.Copy(svc.Env, newPostgresEnv())
-		if !slices.Contains(svc.Secrets, pgPassword) {
-			svc.Secrets = append(svc.Secrets, pgPassword)
-			slices.Sort(svc.Secrets)
-		}
+		// The env is generated and fixed: anything sent in is ignored.
+		svc.Env, svc.Secrets = newPostgresEnv(), []string{pgPassword}
 	default:
 		return ServiceView{}, fmt.Errorf("%w: unknown service kind %q", ErrInvalid, svc.Kind)
 	}

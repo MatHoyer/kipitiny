@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -73,6 +74,13 @@ func TestCheckPostgresUpdate(t *testing.T) {
 	creds.Env = map[string]string{pgUser: "app", pgPassword: "changed", pgDatabase: "app"}
 	if err := checkPostgresUpdate(old, creds); !errors.Is(err, ErrInvalid) {
 		t.Errorf("password change allowed: %v", err)
+	}
+
+	extra := old
+	extra.Env = map[string]string{"TZ": "Europe/Paris"}
+	maps.Copy(extra.Env, old.Env)
+	if err := checkPostgresUpdate(old, extra); !errors.Is(err, ErrInvalid) {
+		t.Errorf("env change allowed: %v", err)
 	}
 }
 

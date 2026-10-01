@@ -3,7 +3,9 @@ package core
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -34,8 +36,7 @@ const (
 	postgresReadyTimeout = 2 * time.Minute
 )
 
-// pgManagedKeys are generated once; changing them after initdb would not
-// change the actual credentials, so they are read-only.
+// pgManagedKeys are generated once and only read by initdb.
 var pgManagedKeys = []string{pgUser, pgPassword, pgDatabase}
 
 func newPostgresEnv() map[string]string {
@@ -108,10 +109,9 @@ func checkPostgresUpdate(old, updated store.Service) error {
 	if postgresMajor(old.Image) != postgresMajor(updated.Image) {
 		return fmt.Errorf("%w: changing the postgres major version needs a dump and restore; create a new database service instead", ErrInvalid)
 	}
-	for _, k := range pgManagedKeys {
-		if old.Env[k] != updated.Env[k] {
-			return fmt.Errorf("%w: %s cannot be changed after creation", ErrInvalid, k)
-		}
+	// The image only reads its env at initdb, so edits would silently do nothing.
+	if !maps.Equal(old.Env, updated.Env) || !slices.Equal(old.Secrets, updated.Secrets) {
+		return fmt.Errorf("%w: a database's environment is fixed at creation", ErrInvalid)
 	}
 	return nil
 }

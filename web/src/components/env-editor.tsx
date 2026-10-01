@@ -38,7 +38,8 @@ type Mode = "list" | "raw";
  * KEY=value text. Secrets are write-only: their saved values read back
  * masked. With vars (the project's shared entry names) and databases (its
  * postgres services), values can reference them as {{ project.NAME }} and
- * {{ db.SERVICE.FIELD }}, picked from menus instead of typed.
+ * {{ db.SERVICE.FIELD }}, picked from menus instead of typed. readOnly shows
+ * the entries without any way to change them.
  */
 export function EnvEditor({
   label = "Environment",
@@ -50,6 +51,7 @@ export function EnvEditor({
   secretVars = [],
   databases,
   passwordManagers = false,
+  readOnly = false,
   className,
 }: {
   label?: string;
@@ -65,6 +67,7 @@ export function EnvEditor({
   databases?: string[];
   /** Offers secrets from connected password managers. */
   passwordManagers?: boolean;
+  readOnly?: boolean;
   className?: string;
 }) {
   const [mode, setMode] = useState<Mode>("list");
@@ -134,6 +137,7 @@ export function EnvEditor({
             autoFocus={i === focus}
             aria-invalid={badKey || undefined}
             onChange={(e) => update(i, { key: e.target.value })}
+            disabled={readOnly}
             spellCheck={false}
             className="w-2/5 shrink-0 font-mono text-sm"
           />
@@ -143,8 +147,9 @@ export function EnvEditor({
             onChange={(value) => update(i, { value })}
             invalid={unknown.length > 0}
             refs={refs}
+            readOnly={readOnly}
           />
-          {sections.some((s) => s.items.length > 0) && (
+          {!readOnly && sections.some((s) => s.items.length > 0) && (
             <RefMenu
               sections={sections}
               onPick={(item) => update(i, { key: row.key || item.key, value: item.value })}
@@ -155,15 +160,17 @@ export function EnvEditor({
               }
             />
           )}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={`Remove ${row.key || (row.secret ? "secret" : "variable")}`}
-            onClick={() => onChange(rows.filter((_, j) => j !== i))}
-          >
-            <Trash2 />
-          </Button>
+          {!readOnly && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={`Remove ${row.key || (row.secret ? "secret" : "variable")}`}
+              onClick={() => onChange(rows.filter((_, j) => j !== i))}
+            >
+              <Trash2 />
+            </Button>
+          )}
         </div>
         {(badKey || unknown.length > 0) && (
           <p className="px-1 text-xs text-destructive">
@@ -212,6 +219,7 @@ export function EnvEditor({
             onChange(parseEnvRows(e.target.value));
           }}
           placeholder={`NODE_ENV=production${vars ? `\nAPI_URL=${envRef("API_URL")}` : ""}\n# secrets\nAPI_TOKEN=…`}
+          disabled={readOnly}
           spellCheck={false}
           className="font-mono text-sm"
         />
@@ -219,7 +227,7 @@ export function EnvEditor({
         <div className="space-y-4">
           <Group title="Variables" hint="Readable values." count={rows.filter((r) => !r.secret).length}>
             {rows.map((r, i) => !r.secret && renderRow(r, i))}
-            <div className="flex flex-wrap gap-2">
+            <div className={cn("flex flex-wrap gap-2", readOnly && "hidden")}>
               <Button
                 type="button"
                 variant="outline"
@@ -237,7 +245,7 @@ export function EnvEditor({
           </Group>
           <Group title="Secrets" hint="Write-only once saved." count={rows.filter((r) => r.secret).length}>
             {rows.map((r, i) => r.secret && renderRow(r, i))}
-            <div className="flex flex-wrap gap-2">
+            <div className={cn("flex flex-wrap gap-2", readOnly && "hidden")}>
               <Button
                 type="button"
                 variant="outline"
@@ -302,12 +310,14 @@ function ValueField({
   onChange,
   invalid,
   refs,
+  readOnly,
 }: {
   value: string;
   secret: boolean;
   onChange: (v: string) => void;
   invalid: boolean;
   refs: boolean;
+  readOnly: boolean;
 }) {
   const ref = refs ? soleRef(value) : null;
   if (ref)
@@ -335,14 +345,16 @@ function ValueField({
           <span className="truncate">
             {ref.kind === "db" ? `${ref.db}.${ref.field}` : ref.kind === "secret" ? ref.ref : ref.name}
           </span>
-          <button
-            type="button"
-            aria-label="Remove reference"
-            onClick={() => onChange("")}
-            className="rounded-sm p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
-          >
-            <X className="size-3" />
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              aria-label="Remove reference"
+              onClick={() => onChange("")}
+              className="rounded-sm p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
+            >
+              <X className="size-3" />
+            </button>
+          )}
         </span>
       </div>
     );
@@ -357,10 +369,11 @@ function ValueField({
         value={value}
         aria-invalid={invalid || undefined}
         onChange={(e) => onChange(e.target.value)}
+        disabled={readOnly}
         // A saved secret is replaced as a whole.
         onFocus={(e) => saved && e.target.select()}
         spellCheck={false}
-        title={saved ? "Saved secret: type to replace it" : undefined}
+        title={saved && !readOnly ? "Saved secret: type to replace it" : undefined}
         className={cn("font-mono text-sm", saved && "text-muted-foreground")}
       />
     </div>

@@ -319,11 +319,11 @@ function Settings({ svc }: { svc: ServiceT }) {
 
 function EnvironmentCard({ svc }: { svc: ServiceT }) {
   const qc = useQueryClient();
+  // A database's env is only read by initdb: shown, never edited.
   const isDb = svc.kind === "postgres";
-  const project = useQuery({ queryKey: ["project", svc.projectId], queryFn: () => api.project(svc.projectId) });
+  const project = useQuery({ queryKey: ["project", svc.projectId], queryFn: () => api.project(svc.projectId), enabled: !isDb });
   const siblings = useQuery({ queryKey: ["services", svc.projectId], queryFn: () => api.services(svc.projectId), enabled: !isDb });
-  // A database can't reference another one.
-  const databases = isDb ? undefined : siblings.data?.filter((s) => s.kind === "postgres").map((s) => s.name);
+  const databases = siblings.data?.filter((s) => s.kind === "postgres").map((s) => s.name);
   const [rows, setRows] = useState<EnvRow[]>(() => envRows(svc.env, svc.secrets));
   const save = useMutation({
     meta: { error: "Couldn't save the environment" },
@@ -343,16 +343,16 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
     <Section
       title="Environment"
       description={
-        <>
-          Use the project&apos;s shared entries with <Mono>{"{{ project.NAME }}"}</Mono>
-          {!isDb && (
-            <>
-              , its databases with <Mono>{"{{ db.NAME.URL }}"}</Mono> and password manager secrets with{" "}
-              <Mono>{"{{ pass://Vault/Item/field }}"}</Mono> (Settings › Password managers)
-            </>
-          )}
-          . Changes apply on the next deploy.
-        </>
+        isDb ? (
+          "Generated at creation and only read when the database is initialized, so it can't be changed."
+        ) : (
+          <>
+            Use the project&apos;s shared entries with <Mono>{"{{ project.NAME }}"}</Mono>, its databases with{" "}
+            <Mono>{"{{ db.NAME.URL }}"}</Mono> and password manager secrets with{" "}
+            <Mono>{"{{ pass://Vault/Item/field }}"}</Mono> (Settings › Password managers). Changes apply on the next
+            deploy.
+          </>
+        )
       }
     >
       <form onSubmit={onSubmit} className="space-y-4">
@@ -363,14 +363,16 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
           vars={Object.keys(project.data?.env ?? {}).sort()}
           secretVars={project.data?.secrets}
           databases={databases}
-          passwordManagers={!isDb}
-          description={isDb ? "POSTGRES_* credentials are fixed at creation." : undefined}
+          passwordManagers
+          readOnly={isDb}
         />
-        <div className="flex items-center justify-end gap-3">
-          <Button type="submit" disabled={save.isPending}>
-            {save.isPending ? "Saving…" : "Save"}
-          </Button>
-        </div>
+        {!isDb && (
+          <div className="flex items-center justify-end gap-3">
+            <Button type="submit" disabled={save.isPending}>
+              {save.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        )}
       </form>
     </Section>
   );
