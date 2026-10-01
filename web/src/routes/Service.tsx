@@ -172,7 +172,7 @@ export function Service() {
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList variant="line" className="max-w-full overflow-x-auto">
+          <TabsList variant="line" className="max-w-full justify-start overflow-x-auto overflow-y-hidden pb-1.5 [scrollbar-width:none]">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="deployments">Deployments</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
