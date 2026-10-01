@@ -347,8 +347,8 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
           Use the project&apos;s shared entries with <Mono>{"{{ project.NAME }}"}</Mono>
           {!isDb && (
             <>
-              {" "}
-              and its databases with <Mono>{"{{ db.NAME.URL }}"}</Mono>
+              , its databases with <Mono>{"{{ db.NAME.URL }}"}</Mono> and password manager secrets with{" "}
+              <Mono>{"{{ pass://Vault/Item/field }}"}</Mono> (Settings › Password managers)
             </>
           )}
           . Changes apply on the next deploy.

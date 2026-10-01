@@ -92,3 +92,48 @@ func (c *Core) DisconnectSecretProvider(ctx context.Context, id string) error {
 	}
 	return c.store.SetSetting(ctx, secretTokenSetting(id), "")
 }
+
+// resolveSecrets returns the value of each reference from its provider. A
+// failure is retried once after logging in again with the stored token, in
+// case the session expired or the data dir was restored without it.
+func (c *Core) resolveSecrets(ctx context.Context, refs []string) (map[string]string, error) {
+	byScheme := map[string][]string{}
+	for _, r := range refs {
+		s := secrets.SchemeOf(r)
+		byScheme[s] = append(byScheme[s], r)
+	}
+	out := make(map[string]string, len(refs))
+	for scheme, rs := range byScheme {
+		p := c.providerFor(scheme)
+		if p == nil {
+			return nil, fmt.Errorf("no password manager handles %s://", scheme)
+		}
+		name, id := p.Info().Name, p.Info().ID
+		token, _ := c.store.GetSetting(ctx, secretTokenSetting(id))
+		if token == "" {
+			return nil, fmt.Errorf("%s isn't connected (Settings › Password managers)", name)
+		}
+		vals, err := p.Resolve(ctx, rs)
+		if err != nil {
+			if lerr := p.Connect(ctx, token); lerr != nil {
+				return nil, fmt.Errorf("%s: %v (logging in again: %v)", name, err, lerr)
+			}
+			if vals, err = p.Resolve(ctx, rs); err != nil {
+				return nil, fmt.Errorf("%s: %w", name, err)
+			}
+		}
+		for k, v := range vals {
+			out[k] = v
+		}
+	}
+	return out, nil
+}
+
+func (c *Core) providerFor(scheme string) secrets.Provider {
+	for _, p := range c.secrets {
+		if p.Info().Scheme == scheme {
+			return p
+		}
+	}
+	return nil
+}

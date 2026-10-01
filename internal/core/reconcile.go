@@ -299,7 +299,7 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 }
 
 func (c *Core) recreateReplica(ctx context.Context, project store.Project, svc store.Service, deployID string, replica int) error {
-	dbs, err := c.projectDatabases(ctx, svc.ProjectID)
+	src, err := c.envSources(ctx, project, svc)
 	if err != nil {
 		return err
 	}
@@ -315,6 +315,6 @@ func (c *Core) recreateReplica(ctx context.Context, project store.Project, svc s
 	if err != nil {
 		return err
 	}
-	_, err = dk.Run(ctx, replicaSpec(project, svc, dbs, deployID, replica, probe, c.certResolver(ctx, svc.ServerID, svc.Domain)))
+	_, err = dk.Run(ctx, replicaSpec(project, svc, src, deployID, replica, probe, c.certResolver(ctx, svc.ServerID, svc.Domain)))
 	return err
 }

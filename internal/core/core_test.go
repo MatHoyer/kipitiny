@@ -58,7 +58,7 @@ func TestAppContainerSpec(t *testing.T) {
 		Env: map[string]string{"B": "2", "A": "1", "C": "{{ project.SHARED }}"},
 	}
 
-	spec := containerSpec(p, svc, nil, "D1", 2, certResolver)
+	spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 2, certResolver)
 	if spec.Name != "shop-web-2-d1" {
 		t.Errorf("name = %q", spec.Name)
 	}
@@ -78,7 +78,7 @@ func TestAppContainerSpec(t *testing.T) {
 	}
 
 	svc.Domain, svc.Port = "shop.example.com", 8080
-	spec = containerSpec(p, svc, nil, "D1", 1, certResolver)
+	spec = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, certResolver)
 	l = spec.Config.Labels
 	if l["traefik.enable"] != "true" || l["traefik.docker.network"] != docker.ProxyNetwork {
 		t.Errorf("traefik labels missing: %v", l)
@@ -95,7 +95,7 @@ func TestAppContainerSpec(t *testing.T) {
 	if l["traefik.http.routers.kipitiny-01abc.middlewares"] != "kipitiny-01abc-retry@docker" {
 		t.Error("retry middleware missing")
 	}
-	l = containerSpec(p, svc, nil, "D1", 1, "").Config.Labels
+	l = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, "").Config.Labels
 	if _, acme := l["traefik.http.routers.kipitiny-01abc.tls.certresolver"]; acme || l["traefik.http.routers.kipitiny-01abc.tls"] != "true" {
 		t.Error("no resolver must mean Traefik's default certificate")
 	}

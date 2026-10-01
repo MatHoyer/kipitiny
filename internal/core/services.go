@@ -267,6 +267,9 @@ func (c *Core) validate(ctx context.Context, s store.Service) error {
 	if err != nil {
 		return err
 	}
+	if err := c.checkSecretSchemes(s.Env); err != nil {
+		return err
+	}
 	return checkRefs(s.Env, envSources{project: project.Env, dbs: dbs})
 }
 

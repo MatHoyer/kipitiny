@@ -190,8 +190,8 @@ func (c *Core) probeFor(ctx context.Context, svc store.Service) (*mount.Mount, e
 }
 
 // replicaSpec is containerSpec plus the injected health probe, if any.
-func replicaSpec(project store.Project, svc store.Service, dbs map[string]store.Service, deployID string, replica int, probe *mount.Mount, resolver string) client.ContainerCreateOptions {
-	spec := containerSpec(project, svc, dbs, deployID, replica, resolver)
+func replicaSpec(project store.Project, svc store.Service, src envSources, deployID string, replica int, probe *mount.Mount, resolver string) client.ContainerCreateOptions {
+	spec := containerSpec(project, svc, src, deployID, replica, resolver)
 	if probe != nil {
 		withProbe(&spec, svc, *probe)
 	}

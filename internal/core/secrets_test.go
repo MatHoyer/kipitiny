@@ -66,3 +66,37 @@ func TestSecretProviderConnect(t *testing.T) {
 		t.Error("still connected after disconnect")
 	}
 }
+
+func TestResolveSecrets(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	fake := &fakeProvider{}
+	c.secrets = []secrets.Provider{fake}
+	refs := []string{"fake://a", "fake://b"}
+
+	if _, err := c.resolveSecrets(ctx, refs); err == nil {
+		t.Errorf("not connected: %v", err)
+	}
+	if _, err := c.resolveSecrets(ctx, []string{"op://x/y/z"}); err == nil {
+		t.Errorf("unknown scheme: %v", err)
+	}
+	if _, err := c.ConnectSecretProvider(ctx, "fake", "good"); err != nil {
+		t.Fatal(err)
+	}
+
+	fake.session = "" // expired: logs in again with the stored token
+	got, err := c.resolveSecrets(ctx, refs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["fake://a"] != "value-of-a" || got["fake://b"] != "value-of-b" || fake.logins != 2 {
+		t.Errorf("got %v after %d logins", got, fake.logins)
+	}
+
+	if err := c.checkSecretSchemes(map[string]string{"A": "{{ fake://x }}"}); err != nil {
+		t.Error(err)
+	}
+	if err := c.checkSecretSchemes(map[string]string{"A": "{{ op://x/y/z }}"}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("unknown scheme accepted: %v", err)
+	}
+}

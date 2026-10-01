@@ -7,13 +7,15 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/MatHoyer/kipitiny/internal/secrets"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
 // envRefRe matches a reference in a service env value, spaces optional:
 // {{ project.NAME }} for a project variable or secret, {{ db.SERVICE.FIELD }}
-// for a credential of a postgres service of the project (see dbFields).
-var envRefRe = regexp.MustCompile(`\{\{\s*(?:project\.([A-Za-z_][A-Za-z0-9_]*)|db\.([a-z0-9-]+)\.([A-Z]+))\s*\}\}`)
+// for a credential of a postgres service of the project (see dbFields),
+// {{ scheme://… }} for a secret in a password manager (internal/secrets).
+var envRefRe = regexp.MustCompile(`\{\{\s*(?:project\.([A-Za-z_][A-Za-z0-9_]*)|db\.([a-z0-9-]+)\.([A-Z]+)|([a-z][a-z0-9+.-]*://[^{}]+?))\s*\}\}`)
 
 // soleRefRe matches a value that is exactly one reference.
 var soleRefRe = regexp.MustCompile(`^\s*` + envRefRe.String() + `\s*$`)
@@ -26,6 +28,9 @@ type envSources struct {
 	project map[string]string
 	// dbs are the project's postgres services by name.
 	dbs map[string]store.Service
+	// secrets are password manager values by reference, fetched for a
+	// deploy (resolveSecrets); nil when only checking references.
+	secrets map[string]string
 }
 
 // projectDatabases returns the project's postgres services by name.
@@ -51,7 +56,12 @@ func databasesOf(svcs []store.Service) map[string]store.Service {
 func (src envSources) lookup(m []string) (string, bool) {
 	if m[1] != "" {
 		v, ok := src.project[m[1]]
-		return v, ok
+		// A project entry may itself hold password manager references.
+		return src.expandSecrets(v), ok
+	}
+	if m[4] != "" {
+		v, ok := src.secrets[m[4]]
+		return v, ok || src.secrets == nil
 	}
 	db, ok := src.dbs[m[2]]
 	if !ok {
@@ -74,10 +84,79 @@ func (src envSources) lookup(m []string) (string, bool) {
 	return "", false
 }
 
+// expandSecrets substitutes the password manager references in v, leaving
+// the others as they are.
+func (src envSources) expandSecrets(v string) string {
+	if src.secrets == nil {
+		return v
+	}
+	return envRefRe.ReplaceAllStringFunc(v, func(ref string) string {
+		m := envRefRe.FindStringSubmatch(ref)
+		if m[4] == "" {
+			return ref
+		}
+		return src.secrets[m[4]]
+	})
+}
+
+// secretRefs lists the password manager references env resolves through,
+// directly or in the project entries it references, sorted.
+func secretRefs(env map[string]string, project map[string]string) []string {
+	var out []string
+	add := func(v string) {
+		for _, m := range envRefRe.FindAllStringSubmatch(v, -1) {
+			if m[4] != "" {
+				out = append(out, m[4])
+			}
+		}
+	}
+	for _, v := range env {
+		add(v)
+		for _, m := range envRefRe.FindAllStringSubmatch(v, -1) {
+			if m[1] != "" {
+				add(project[m[1]])
+			}
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+// checkSecretSchemes refuses references no password manager handles.
+func (c *Core) checkSecretSchemes(env map[string]string) error {
+	for k, v := range env {
+		for _, m := range envRefRe.FindAllStringSubmatch(v, -1) {
+			if m[4] != "" && c.providerFor(secrets.SchemeOf(m[4])) == nil {
+				return fmt.Errorf("%w: %s: no password manager handles %s", ErrInvalid, k, m[4])
+			}
+		}
+	}
+	return nil
+}
+
+// envSources gathers what svc's env resolves against, fetching password
+// manager values.
+func (c *Core) envSources(ctx context.Context, project store.Project, svc store.Service) (envSources, error) {
+	dbs, err := c.projectDatabases(ctx, svc.ProjectID)
+	if err != nil {
+		return envSources{}, err
+	}
+	src := envSources{project: project.Env, dbs: dbs, secrets: map[string]string{}}
+	if refs := secretRefs(svc.Env, project.Env); len(refs) > 0 {
+		if src.secrets, err = c.resolveSecrets(ctx, refs); err != nil {
+			return envSources{}, err
+		}
+	}
+	return src, nil
+}
+
 // refName is how a reference is named in messages: project.NAME, db.SERVICE.FIELD.
 func refName(m []string) string {
 	if m[1] != "" {
 		return "project." + m[1]
+	}
+	if m[4] != "" {
+		return m[4]
 	}
 	return "db." + m[2] + "." + m[3]
 }
@@ -196,6 +275,9 @@ func (c *Core) SetProjectEnv(ctx context.Context, id string, env map[string]stri
 		if !envKeyRe.MatchString(k) {
 			return store.Project{}, fmt.Errorf("%w: invalid env var name %q", ErrInvalid, k)
 		}
+	}
+	if err := c.checkSecretSchemes(env); err != nil {
+		return store.Project{}, err
 	}
 	svcs, err := c.store.ListServices(ctx, id)
 	if err != nil {

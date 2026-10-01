@@ -94,6 +94,10 @@ func validatePostgres(s store.Service) error {
 			if m[2] != "" {
 				return fmt.Errorf("%w: %s: a database can't reference another database (%s)", ErrInvalid, k, refName(m))
 			}
+			if m[4] != "" {
+				// Backups and DATABASE_URL read the credentials as stored.
+				return fmt.Errorf("%w: %s: a database can't use password manager references (%s)", ErrInvalid, k, refName(m))
+			}
 		}
 	}
 	return nil

@@ -38,12 +38,13 @@ func TestValidatePostgres(t *testing.T) {
 		t.Fatalf("valid service rejected: %v", err)
 	}
 	for name, mutate := range map[string]func(*store.Service){
-		"replicas":     func(s *store.Service) { s.Replicas = 2 },
-		"public":       func(s *store.Service) { s.Domain, s.Port = "db.example.com", 5432 },
-		"low memory":   func(s *store.Service) { s.MemoryMB = 64 },
-		"unpinned":     func(s *store.Service) { s.Image = "postgres:latest" },
-		"no password":  func(s *store.Service) { delete(s.Env, pgPassword) },
-		"db reference": func(s *store.Service) { s.Env["OTHER"] = "{{ project.A }}/{{ db.other.URL }}" },
+		"replicas":         func(s *store.Service) { s.Replicas = 2 },
+		"public":           func(s *store.Service) { s.Domain, s.Port = "db.example.com", 5432 },
+		"low memory":       func(s *store.Service) { s.MemoryMB = 64 },
+		"unpinned":         func(s *store.Service) { s.Image = "postgres:latest" },
+		"no password":      func(s *store.Service) { delete(s.Env, pgPassword) },
+		"db reference":     func(s *store.Service) { s.Env["OTHER"] = "{{ project.A }}/{{ db.other.URL }}" },
+		"secret reference": func(s *store.Service) { s.Env["OTHER"] = "{{ pass://V/I/password }}" },
 	} {
 		s := pgService()
 		mutate(&s)
@@ -86,7 +87,7 @@ func TestDatabaseURLEscapes(t *testing.T) {
 
 func TestPostgresContainerSpec(t *testing.T) {
 	p := store.Project{ID: "P1", Name: "shop"}
-	spec := containerSpec(p, pgService(), nil, "D1", 1, certResolver)
+	spec := containerSpec(p, pgService(), envSources{project: p.Env}, "D1", 1, certResolver)
 
 	if spec.HostConfig.Memory != 512<<20 {
 		t.Errorf("memory = %d", spec.HostConfig.Memory)
@@ -114,7 +115,7 @@ func TestDatabaseRefsInSpec(t *testing.T) {
 	app := store.Service{ID: "01APP", Name: "web", Image: "app", Replicas: 1,
 		Env: map[string]string{"DATABASE_URL": "{{ db." + db.Name + ".URL }}"}}
 
-	spec := containerSpec(p, app, map[string]store.Service{db.Name: db}, "D1", 1, certResolver)
+	spec := containerSpec(p, app, envSources{project: p.Env, dbs: map[string]store.Service{db.Name: db}}, "D1", 1, certResolver)
 	if !slices.Contains(spec.Config.Env, "DATABASE_URL="+DatabaseURL(db)) {
 		t.Errorf("DATABASE_URL not resolved: %v", spec.Config.Env)
 	}
