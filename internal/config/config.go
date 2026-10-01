@@ -26,6 +26,9 @@ type Config struct {
 	// BuilderImage runs `docker build` for git services (BuildKit via the CLI).
 	BuilderImage string
 
+	// ProtonPassCLI is the pass-cli binary (path or name on PATH).
+	ProtonPassCLI string
+
 	// Version is the running build (set by main, not the environment).
 	Version string
 	Update  Update
@@ -74,12 +77,13 @@ type Traefik struct {
 
 func Load() Config {
 	return Config{
-		Addr:         env("KIPITINY_ADDR", ":3000"),
-		Domain:       strings.ToLower(strings.TrimSpace(env("KIPITINY_DOMAIN", ""))),
-		DataDir:      env("KIPITINY_DATA_DIR", "/data"),
-		LogLevel:     env("KIPITINY_LOG_LEVEL", "info"),
-		SetupToken:   env("KIPITINY_SETUP_TOKEN", ""),
-		BuilderImage: env("KIPITINY_BUILDER_IMAGE", "docker:cli"),
+		Addr:          env("KIPITINY_ADDR", ":3000"),
+		Domain:        strings.ToLower(strings.TrimSpace(env("KIPITINY_DOMAIN", ""))),
+		DataDir:       env("KIPITINY_DATA_DIR", "/data"),
+		LogLevel:      env("KIPITINY_LOG_LEVEL", "info"),
+		SetupToken:    env("KIPITINY_SETUP_TOKEN", ""),
+		BuilderImage:  env("KIPITINY_BUILDER_IMAGE", "docker:cli"),
+		ProtonPassCLI: env("KIPITINY_PROTONPASS_CLI", "pass-cli"),
 		Traefik: Traefik{
 			Enabled:      env("KIPITINY_TRAEFIK", "true") != "false",
 			Image:        env("KIPITINY_TRAEFIK_IMAGE", "traefik:v3.7"),
