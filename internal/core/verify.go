@@ -108,7 +108,7 @@ func (c *Core) verify(ctx context.Context, b store.Backup) (store.VerificationDe
 	}
 	image, serverID := c.verifyImage(ctx, b)
 	dk := c.dockerFor(serverID)
-	if err := dk.EnsureImage(ctx, image); err != nil {
+	if err := dk.EnsureImage(ctx, image, c.registryAuth(ctx, image)); err != nil {
 		return d, fmt.Errorf("pull %s: %w", image, err)
 	}
 

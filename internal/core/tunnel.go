@@ -78,7 +78,7 @@ func (c *Core) ensureTunnel(ctx context.Context, sv store.Server) error {
 		return nil
 	}
 
-	if err := dk.EnsureImage(ctx, opts.Config.Image); err != nil {
+	if err := dk.EnsureImage(ctx, opts.Config.Image, c.registryAuth(ctx, opts.Config.Image)); err != nil {
 		return fmt.Errorf("pull %s: %w", opts.Config.Image, err)
 	}
 	if _, err := dk.Run(ctx, opts); err != nil {

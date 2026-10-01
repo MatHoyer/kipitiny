@@ -176,6 +176,14 @@ Targets are checked (a test object is written and deleted) before they are saved
 tests (through its local backend) when `KIPITINY_TEST_RCLONE` points at rclone.
 Proton Drive is tested against a stand-in CLI.
 
+## Private registries
+
+*Settings → Registries* stores credentials per registry host (Docker Hub, ghcr.io,
+registry.gitlab.com, or any other). The manager's Docker checks them on save, as
+`docker login` would; nothing is written to the hosts' Docker config. Every pull,
+on any server, sends the credential of the image's registry, and Git builds get
+them all so a Dockerfile can start `FROM` a private image. Use read-only tokens.
+
 ## Multiple servers
 
 *Settings → Servers* adds remote Docker hosts over SSH. The manager reaches the

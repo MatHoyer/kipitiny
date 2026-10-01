@@ -81,7 +81,7 @@ func (c *Core) buildImage(ctx context.Context, project store.Project, svc store.
 		return "", "", err
 	}
 	dk := c.dockerFor(server.ID)
-	if err := dk.EnsureImage(ctx, c.cfg.BuilderImage); err != nil {
+	if err := dk.EnsureImage(ctx, c.cfg.BuilderImage, c.registryAuth(ctx, c.cfg.BuilderImage)); err != nil {
 		return "", "", fmt.Errorf("pull builder %s: %w", c.cfg.BuilderImage, err)
 	}
 
@@ -90,18 +90,28 @@ func (c *Core) buildImage(ctx context.Context, project store.Project, svc store.
 	defer pr.Close()
 
 	logf("Building %s", tag)
+	cmd := []string{
+		"docker", "build", "--progress=plain",
+		"-f", svc.Dockerfile, "-t", tag,
+		"--label", docker.LabelManaged + "=true",
+		"--label", docker.LabelService + "=" + svc.ID,
+		"--label", "org.opencontainers.image.revision=" + commit,
+		"-", // context: the tar stream on stdin
+	}
+	var env []string
+	if cfg := c.dockerConfig(ctx); cfg != "" {
+		// Base images from private registries: the CLI reads its config file.
+		env = []string{"KIPITINY_DOCKER_CONFIG=" + cfg}
+		cmd = append([]string{"sh", "-c",
+			`mkdir -p "$HOME/.docker" && printf %s "$KIPITINY_DOCKER_CONFIG" > "$HOME/.docker/config.json" && exec "$@"`,
+			"sh"}, cmd...)
+	}
 	code, err := dk.RunAttached(ctx, client.ContainerCreateOptions{
 		Name: "kipitiny-build-" + strings.ToLower(dep.ID),
 		Config: &container.Config{
-			Image: c.cfg.BuilderImage,
-			Cmd: []string{
-				"docker", "build", "--progress=plain",
-				"-f", svc.Dockerfile, "-t", tag,
-				"--label", docker.LabelManaged + "=true",
-				"--label", docker.LabelService + "=" + svc.ID,
-				"--label", "org.opencontainers.image.revision=" + commit,
-				"-", // context: the tar stream on stdin
-			},
+			Image:  c.cfg.BuilderImage,
+			Cmd:    cmd,
+			Env:    env,
 			Labels: map[string]string{docker.LabelManaged: "true", docker.LabelComponent: "builder"},
 		},
 		HostConfig: &container.HostConfig{

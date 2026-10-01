@@ -233,6 +233,11 @@ export type Scope = "read" | "deploy" | "admin";
 
 export type ApiToken = { id: string; name: string; scope: Scope; createdAt: string; lastUsedAt?: string };
 
+/** Credentials pulls from one registry host use; password reads back masked. */
+export type Registry = { id: string; host: string; username: string; password: string; createdAt: string };
+
+export type RegistryInput = Pick<Registry, "host" | "username" | "password">;
+
 export type AuditEntry = {
   id: string;
   actor: string;
@@ -471,6 +476,10 @@ export const api = {
   createServer: (s: ServerInput) => request<Server>("/servers", json("POST", s)),
   updateServer: (id: string, s: ServerInput) => request<Server>(`/servers/${id}`, json("PUT", s)),
   deleteServer: (id: string) => request<void>(`/servers/${id}`, { method: "DELETE" }),
+  registries: () => request<Registry[]>("/registries"),
+  createRegistry: (r: RegistryInput) => request<Registry>("/registries", json("POST", r)),
+  updateRegistry: (id: string, r: RegistryInput) => request<Registry>(`/registries/${id}`, json("PUT", r)),
+  deleteRegistry: (id: string) => request<void>(`/registries/${id}`, { method: "DELETE" }),
   sshKey: () => request<{ publicKey: string }>("/ssh-key"),
   domains: () => request<Domain[]>("/domains"),
   createDomain: (name: string) => request<Domain>("/domains", json("POST", { name })),

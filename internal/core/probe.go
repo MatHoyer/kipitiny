@@ -103,7 +103,8 @@ func installProbe(ctx context.Context, dk *docker.Client, volume, bin string) er
 	}); err != nil {
 		return err
 	}
-	if err := dk.EnsureImage(ctx, probeHelperImage); err != nil {
+	// A fixed public image: no registry credential.
+	if err := dk.EnsureImage(ctx, probeHelperImage, ""); err != nil {
 		return err
 	}
 	helper, err := dk.ContainerCreate(ctx, client.ContainerCreateOptions{

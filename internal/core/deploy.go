@@ -193,8 +193,8 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 		}
 	default:
 		logf("Pulling %s", svc.Image)
-		if err := dk.PullImage(ctx, svc.Image, out); err != nil {
-			return fmt.Errorf("pull %s: %w", svc.Image, err)
+		if err := dk.PullImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image), out); err != nil {
+			return fmt.Errorf("pull %s: %w%s", svc.Image, err, pullHint(err))
 		}
 	}
 	if svc.Kind == store.ServiceKindPostgres {

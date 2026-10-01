@@ -76,7 +76,7 @@ func (c *Core) ensureTraefik(ctx context.Context, sv store.Server) error {
 		}
 	}
 
-	if err := dk.EnsureImage(ctx, cfg.Image); err != nil {
+	if err := dk.EnsureImage(ctx, cfg.Image, c.registryAuth(ctx, cfg.Image)); err != nil {
 		return fmt.Errorf("pull %s: %w", cfg.Image, err)
 	}
 	if _, err := dk.Run(ctx, opts, files...); err != nil {
