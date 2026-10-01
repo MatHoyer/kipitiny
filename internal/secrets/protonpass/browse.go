@@ -49,7 +49,7 @@ type listedItem struct {
 			} `json:"Login"`
 			Custom *struct {
 				Sections []struct {
-					Name   string      `json:"section_name"`
+					Name   string       `json:"section_name"`
 					Fields []namedField `json:"section_fields"`
 				} `json:"sections"`
 			} `json:"Custom"`
