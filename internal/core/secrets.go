@@ -137,3 +137,44 @@ func (c *Core) providerFor(scheme string) secrets.Provider {
 	}
 	return nil
 }
+
+func (c *Core) secretBrowser(ctx context.Context, id string) (secrets.Browser, error) {
+	p, err := c.secretProvider(id)
+	if err != nil {
+		return nil, err
+	}
+	b, ok := p.(secrets.Browser)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s can't list its items", ErrInvalid, p.Info().Name)
+	}
+	if !c.secretProviderView(ctx, p).Connected {
+		return nil, fmt.Errorf("%w: %s isn't connected", ErrInvalid, p.Info().Name)
+	}
+	return b, nil
+}
+
+// SecretVaults lists the vaults the provider's token can read.
+func (c *Core) SecretVaults(ctx context.Context, id string) ([]string, error) {
+	b, err := c.secretBrowser(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	vs, err := b.Vaults(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	return vs, nil
+}
+
+// SecretItems lists a vault's items with the fields env can reference.
+func (c *Core) SecretItems(ctx context.Context, id, vault string) ([]secrets.Item, error) {
+	b, err := c.secretBrowser(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	items, err := b.Items(ctx, vault)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	return items, nil
+}

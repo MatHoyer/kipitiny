@@ -250,6 +250,9 @@ export type SecretProvider = {
   connected: boolean;
 };
 
+/** An item of a password manager vault, with the fields env can reference. */
+export type SecretItem = { title: string; fields: { name: string; ref: string }[] };
+
 export type CleanupSettings = {
   enabled: boolean;
   cron: string;
@@ -441,6 +444,9 @@ export const api = {
   secretProviders: () => request<SecretProvider[]>("/secret-providers"),
   connectSecretProvider: (id: string, token: string) =>
     request<SecretProvider>(`/secret-providers/${id}`, json("PUT", { token })),
+  secretVaults: (id: string) => request<string[]>(`/secret-providers/${id}/vaults`),
+  secretItems: (id: string, vault: string) =>
+    request<SecretItem[]>(`/secret-providers/${id}/items?vault=${encodeURIComponent(vault)}`),
   disconnectSecretProvider: (id: string) => request<void>(`/secret-providers/${id}`, { method: "DELETE" }),
   setServerNetwork: (id: string, n: ServerNetwork) => request<Server>(`/servers/${id}/network`, json("PUT", n)),
   cleanup: () => request<Cleanup>("/cleanup"),

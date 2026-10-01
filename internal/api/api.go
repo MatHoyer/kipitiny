@@ -86,6 +86,8 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("GET /api/secret-providers", a.secretProviders)
 	mux.HandleFunc("PUT /api/secret-providers/{id}", a.connectSecretProvider)
 	mux.HandleFunc("DELETE /api/secret-providers/{id}", a.disconnectSecretProvider)
+	mux.HandleFunc("GET /api/secret-providers/{id}/vaults", a.secretVaults)
+	mux.HandleFunc("GET /api/secret-providers/{id}/items", a.secretItems)
 	mux.HandleFunc("GET /api/cleanup", a.getCleanup)
 	mux.HandleFunc("PUT /api/cleanup", a.setCleanup)
 	mux.HandleFunc("POST /api/cleanup/run", a.runCleanup)

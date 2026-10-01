@@ -28,3 +28,21 @@ func (a *API) disconnectSecretProvider(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (a *API) secretVaults(w http.ResponseWriter, r *http.Request) {
+	vs, err := a.core.SecretVaults(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, vs)
+}
+
+func (a *API) secretItems(w http.ResponseWriter, r *http.Request) {
+	items, err := a.core.SecretItems(r.Context(), r.PathValue("id"), r.URL.Query().Get("vault"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}

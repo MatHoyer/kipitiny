@@ -47,6 +47,9 @@ var secretReads = map[string]bool{
 	"GET /api/backup-targets/{id}/key":  true,
 	"GET /api/backups/{id}/download":    true,
 	"GET /api/audit":                    true,
+	// Names only, but they map what the password manager token can read.
+	"GET /api/secret-providers/{id}/vaults": true,
+	"GET /api/secret-providers/{id}/items":  true,
 }
 
 // requiredScope maps a route to the scope an API token needs.
