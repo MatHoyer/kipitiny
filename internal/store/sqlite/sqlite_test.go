@@ -94,12 +94,15 @@ func TestProjectsAndServices(t *testing.T) {
 		t.Fatalf("service round-trip mismatch: %+v", got2)
 	}
 
-	d, err := s.CreateDeployment(ctx, store.Deployment{ServiceID: svc.ID, Status: store.DeploymentRunning, Image: "nginx", Config: got2})
+	d, err := s.CreateDeployment(ctx, store.Deployment{ServiceID: svc.ID, Status: store.DeploymentRunning, Image: "nginx", Config: got2,
+		GitCommit: "abc1234", TriggeredBy: "token:ci"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := s.GetDeployment(ctx, d.ID); got.Config.Env["B"] != "2" || got.Config.Replicas != 3 {
 		t.Fatalf("deployment config snapshot: %+v", got.Config)
+	} else if got.GitCommit != "abc1234" || got.TriggeredBy != "token:ci" {
+		t.Fatalf("deployment commit/trigger: %q %q", got.GitCommit, got.TriggeredBy)
 	}
 	if err := s.SetServiceStopped(ctx, svc.ID, true); err != nil {
 		t.Fatal(err)

@@ -152,13 +152,17 @@ func (c *Core) startDeploy(ctx context.Context, serviceID string, req deployRequ
 		image = svc.Image
 	}
 	svc.Image = image // empty for a git service: built during the deploy
-	dep, err := c.store.CreateDeployment(ctx, store.Deployment{
+	d := store.Deployment{
 		ServiceID: svc.ID,
 		Status:    store.DeploymentRunning,
 		Image:     image,
 		GitCommit: req.commit,
 		Config:    svc,
-	})
+	}
+	if a, ok := ActorFrom(ctx); ok {
+		d.TriggeredBy = a.String()
+	}
+	dep, err := c.store.CreateDeployment(ctx, d)
 	if err != nil {
 		unlock()
 		return store.Deployment{}, err
