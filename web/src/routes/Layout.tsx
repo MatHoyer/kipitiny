@@ -49,7 +49,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tip, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { api } from "../api";
 import { Login, Setup } from "./Auth";
@@ -282,13 +282,15 @@ function DockerStatus() {
   const status = useQuery({ queryKey: ["status"], queryFn: api.status, refetchInterval: 15_000 });
   const docker = status.data?.docker;
   return (
-    <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground" title={status.data?.dockerError}>
-      <span className={cn("size-2 shrink-0 rounded-full", docker ? "bg-emerald-500" : "bg-red-500")} />
-      <span className="truncate">
-        {status.data && `kipitiny ${status.data.version} · `}
-        {docker ? `Docker ${docker.version}` : "Docker unreachable"}
-      </span>
-    </div>
+    <Tip content={status.data?.dockerError}>
+      <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
+        <span className={cn("size-2 shrink-0 rounded-full", docker ? "bg-emerald-500" : "bg-red-500")} />
+        <span className="truncate">
+          {status.data && `kipitiny ${status.data.version} · `}
+          {docker ? `Docker ${docker.version}` : "Docker unreachable"}
+        </span>
+      </div>
+    </Tip>
   );
 }
 

@@ -53,4 +53,23 @@ function TooltipContent({
   )
 }
 
-export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger }
+/** Wraps one element in a tooltip, in place of a native title. No content, no tooltip. */
+function Tip({
+  content,
+  children,
+  side,
+}: {
+  content?: React.ReactNode
+  children: React.ReactElement
+  side?: React.ComponentProps<typeof TooltipPrimitive.Content>["side"]
+}) {
+  if (!content) return children
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side={side}>{content}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+export { Tip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger }
