@@ -18,6 +18,7 @@ import (
 
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/api/types/registry"
 	"github.com/moby/moby/client"
 )
@@ -318,4 +319,15 @@ func (c *Client) RemoveImagesByLabel(ctx context.Context, label, value string) e
 		}
 	}
 	return nil
+}
+
+// ListNetworks returns the networks the manager created.
+func (c *Client) ListNetworks(ctx context.Context) ([]network.Summary, error) {
+	f := make(client.Filters)
+	f.Add("label", LabelManaged+"=true")
+	res, err := c.NetworkList(ctx, client.NetworkListOptions{Filters: f})
+	if err != nil {
+		return nil, err
+	}
+	return res.Items, nil
 }

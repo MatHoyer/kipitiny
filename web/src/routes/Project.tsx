@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
+import { MapLegend, ServerCard } from "@/components/topology";
 import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -34,7 +35,7 @@ export function Project() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const project = useQuery({ queryKey: ["project", id], queryFn: () => api.project(id) });
-  const [tab, setTab] = useTab(["services", "environment", "settings"], "services");
+  const [tab, setTab] = useTab(["services", "map", "environment", "settings"], "services");
   const services = useQuery({
     queryKey: ["services", id],
     queryFn: () => api.services(id),
@@ -96,6 +97,7 @@ export function Project() {
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList variant="line">
             <TabsTrigger value="services">Services</TabsTrigger>
+            <TabsTrigger value="map">Map</TabsTrigger>
             <TabsTrigger value="environment">Environment</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
@@ -117,6 +119,9 @@ export function Project() {
                 <ServiceGroup title="Databases" services={dbs} />
               </>
             )}
+          </TabsContent>
+          <TabsContent value="map" className="space-y-6">
+            {tab === "map" && <ProjectMap projectId={id} />}
           </TabsContent>
           <TabsContent value="environment" className="space-y-6">
             {project.data && <SharedVariables key={project.data.id} project={project.data} />}
@@ -154,6 +159,24 @@ export function Project() {
           </TabsContent>
         </Tabs>
       </PageBody>
+    </>
+  );
+}
+
+function ProjectMap({ projectId }: { projectId: string }) {
+  const topology = useQuery({
+    queryKey: ["topology", projectId],
+    queryFn: () => api.topology(projectId),
+    refetchInterval: 5_000,
+  });
+  if (topology.error) return <ErrorText error={topology.error} />;
+  if (!topology.data) return <Loading />;
+  return (
+    <>
+      <MapLegend />
+      {topology.data.servers.map((s) => (
+        <ServerCard key={s.id} server={s} showName={false} />
+      ))}
     </>
   );
 }

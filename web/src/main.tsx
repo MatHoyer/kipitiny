@@ -12,6 +12,7 @@ import { friendlyError } from "./lib/errors";
 import { Backup } from "./routes/Backup";
 import { Backups } from "./routes/Backups";
 import { Layout } from "./routes/Layout";
+import { MapPage } from "./routes/MapPage";
 import { Project } from "./routes/Project";
 import { Projects } from "./routes/Projects";
 import { Service } from "./routes/Service";
@@ -52,6 +53,7 @@ const router = createBrowserRouter([
       { index: true, element: <Projects /> },
       { path: "projects/:id", element: <Project /> },
       { path: "services/:id", element: <Service /> },
+      { path: "map", element: <MapPage /> },
       { path: "backups", element: <Backups /> },
       { path: "backups/:id", element: <Backup /> },
       { path: "settings", element: <Navigate to="/settings/servers" replace /> },

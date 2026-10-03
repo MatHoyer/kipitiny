@@ -36,6 +36,8 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("GET /api/projects/{id}", a.getProject)
 	mux.HandleFunc("DELETE /api/projects/{id}", a.deleteProject)
 	mux.HandleFunc("PUT /api/projects/{id}/env", a.setProjectEnv)
+	mux.HandleFunc("GET /api/projects/{id}/topology", a.topology)
+	mux.HandleFunc("GET /api/topology", a.topology)
 	mux.HandleFunc("GET /api/projects/{id}/services", a.listServices)
 	mux.HandleFunc("POST /api/projects/{id}/services", a.createService)
 	mux.HandleFunc("GET /api/services/{id}", a.getService)
