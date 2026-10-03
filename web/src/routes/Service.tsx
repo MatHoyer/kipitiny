@@ -15,7 +15,7 @@ import {
   Square,
   Trash2,
 } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { PostgresIcon } from "@/components/brand-icons";
@@ -24,6 +24,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
+import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
@@ -32,7 +33,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
-import { byDay, envMap, envRows, envSecrets, formatDuration, serviceState, timeAgo, type EnvRow } from "@/lib/format";
+import { byDay, envMap, envRows, envSecrets, formatDuration, sameEnv, serviceState, timeAgo, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, type Connection, type Deployment, type LogLine, type Service as ServiceT } from "../api";
 import { BackupList } from "./BackupList";
@@ -264,23 +265,28 @@ export function Service() {
   );
 }
 
+/** The settings form's fields, as saved. */
+const settingsForm = (s: ServiceT) => ({
+  image: s.image,
+  domain: s.domain,
+  port: s.port ? String(s.port) : "",
+  replicas: String(s.replicas),
+  memory: s.memoryMb ? String(s.memoryMb) : "",
+  healthPath: s.healthPath,
+  preDeploy: s.preDeploy,
+  gitUrl: s.gitUrl,
+  gitBranch: s.gitBranch,
+  gitToken: s.gitToken,
+  dockerfile: s.dockerfile,
+  buildContext: s.buildContext,
+});
+
 function Settings({ svc }: { svc: ServiceT }) {
   const qc = useQueryClient();
   const isDb = svc.kind === "postgres";
-  const [form, setForm] = useState(() => ({
-    image: svc.image,
-    domain: svc.domain,
-    port: svc.port ? String(svc.port) : "",
-    replicas: String(svc.replicas),
-    memory: svc.memoryMb ? String(svc.memoryMb) : "",
-    healthPath: svc.healthPath,
-    preDeploy: svc.preDeploy,
-    gitUrl: svc.gitUrl,
-    gitBranch: svc.gitBranch,
-    gitToken: svc.gitToken,
-    dockerfile: svc.dockerfile,
-    buildContext: svc.buildContext,
-  }));
+  const [form, setForm] = useState(() => settingsForm(svc));
+  const dirty = JSON.stringify(form) !== JSON.stringify(settingsForm(svc));
+  const formId = useId();
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
   const save = useMutation({
@@ -310,6 +316,7 @@ function Settings({ svc }: { svc: ServiceT }) {
       ),
     onSuccess: (updated) => {
       qc.setQueryData(["service", svc.id], updated);
+      setForm(settingsForm(updated));
       toast.success("Settings saved", {
         description: isDb ? "Deploy to apply." : "Replica count applies now; deploy to apply other changes.",
       });
@@ -323,7 +330,7 @@ function Settings({ svc }: { svc: ServiceT }) {
 
   return (
     <Section plain>
-      <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
+      <form id={formId} onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
         {svc.source === "git" ? (
           <GitFields form={form} set={set} tokenHint="******** keeps the saved token." />
         ) : (
@@ -374,12 +381,8 @@ function Settings({ svc }: { svc: ServiceT }) {
             />
           </>
         )}
-        <div className="flex items-center justify-end gap-3 sm:col-span-2">
-          <Button type="submit" loading={save.isPending}>
-            Save
-          </Button>
-        </div>
       </form>
+      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setForm(settingsForm(svc))} />
     </Section>
   );
 }
@@ -392,6 +395,8 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
   const siblings = useQuery({ queryKey: ["services", svc.projectId], queryFn: () => api.services(svc.projectId), enabled: !isDb });
   const databases = siblings.data?.filter((s) => s.kind === "postgres").map((s) => s.name);
   const [rows, setRows] = useState<EnvRow[]>(() => envRows(svc.env, svc.secrets));
+  const dirty = !sameEnv(rows, svc.env, svc.secrets);
+  const formId = useId();
   const save = useMutation({
     meta: { error: "Couldn't save the environment" },
     mutationFn: () => api.updateService(svc.id, { env: envMap(rows), secrets: envSecrets(rows) }),
@@ -422,7 +427,7 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
         )
       }
     >
-      <form onSubmit={onSubmit} className="space-y-4">
+      <form id={formId} onSubmit={onSubmit} className="space-y-4">
         <EnvEditor
           showLabel={false}
           rows={rows}
@@ -433,14 +438,8 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
           passwordManagers
           readOnly={isDb}
         />
-        {!isDb && (
-          <div className="flex items-center justify-end gap-3">
-            <Button type="submit" loading={save.isPending}>
-              Save
-            </Button>
-          </div>
-        )}
       </form>
+      {!isDb && <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setRows(envRows(svc.env, svc.secrets))} />}
     </Section>
   );
 }

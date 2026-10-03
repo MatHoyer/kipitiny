@@ -159,3 +159,9 @@ export function byDay<T extends { createdAt: string }>(items: T[]): [string, T[]
   }
   return [...groups];
 }
+
+/** Whether rows hold the saved env, ignoring order and nameless rows. */
+export function sameEnv(rows: EnvRow[], env: Record<string, string>, secrets: string[] = []) {
+  const norm = (rs: EnvRow[]) => JSON.stringify(envRows(envMap(rs), envSecrets(rs)));
+  return norm(rows) === norm(envRows(env, secrets));
+}

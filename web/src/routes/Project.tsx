@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Box, ChevronLeft, Database, DatabaseBackup, GitBranch, Globe, Layers, Lock, Plus, Trash2, TriangleAlert } from "lucide-react";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { PostgresIcon } from "@/components/brand-icons";
@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
+import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
@@ -25,7 +26,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
-import { dbFields, dbRef, envMap, envRows, envSecrets, liveState, troubled, type EnvRow } from "@/lib/format";
+import { dbFields, dbRef, envMap, envRows, envSecrets, liveState, sameEnv, troubled, type EnvRow } from "@/lib/format";
 import { api, type Project as ProjectT, type Service as ServiceT, type ServiceInput } from "../api";
 
 export function Project() {
@@ -216,6 +217,8 @@ function ServiceCard({ svc: s }: { svc: ServiceT }) {
 function SharedVariables({ project }: { project: ProjectT }) {
   const qc = useQueryClient();
   const [rows, setRows] = useState<EnvRow[]>(() => envRows(project.env, project.secrets));
+  const dirty = !sameEnv(rows, project.env, project.secrets);
+  const formId = useId();
   const save = useMutation({
     meta: { error: "Couldn't save the shared variables" },
     mutationFn: () => api.setProjectEnv(project.id, envMap(rows), envSecrets(rows)),
@@ -240,7 +243,7 @@ function SharedVariables({ project }: { project: ProjectT }) {
         </>
       }
     >
-      <form onSubmit={onSubmit} className="space-y-4">
+      <form id={formId} onSubmit={onSubmit} className="space-y-4">
         <EnvEditor
           showLabel={false}
           rows={rows}
@@ -248,12 +251,8 @@ function SharedVariables({ project }: { project: ProjectT }) {
           passwordManagers
           description="An entry used by a service can't be removed."
         />
-        <div className="flex items-center justify-end gap-3">
-          <Button type="submit" loading={save.isPending}>
-            Save
-          </Button>
-        </div>
       </form>
+      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setRows(envRows(project.env, project.secrets))} />
     </Section>
   );
 }
