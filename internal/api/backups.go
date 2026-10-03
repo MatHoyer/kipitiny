@@ -124,6 +124,15 @@ func (a *API) protonLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, l)
 }
 
+func (a *API) encryptStorage(w http.ResponseWriter, r *http.Request) {
+	t, err := a.core.EncryptBackupTarget(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
 func (a *API) storageKinds(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a.core.BackupTargetKinds())
 }
@@ -208,6 +217,28 @@ func (a *API) createSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sc, err := a.core.CreateBackupSchedule(r.Context(), r.PathValue("id"), in)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, sc)
+}
+
+func (a *API) listManagerSchedules(w http.ResponseWriter, r *http.Request) {
+	scs, err := a.core.ListManagerSchedules(r.Context())
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, scs)
+}
+
+func (a *API) createManagerSchedule(w http.ResponseWriter, r *http.Request) {
+	var in core.ScheduleInput
+	if !decode(w, r, &in) {
+		return
+	}
+	sc, err := a.core.CreateManagerSchedule(r.Context(), in)
 	if err != nil {
 		a.fail(w, err)
 		return

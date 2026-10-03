@@ -66,6 +66,9 @@ type Store interface {
 	GetBackupTarget(ctx context.Context, id string) (BackupTarget, error)
 	CreateBackupTarget(ctx context.Context, t BackupTarget) (BackupTarget, error)
 	UpdateBackupTarget(ctx context.Context, t BackupTarget) (BackupTarget, error)
+	// SetBackupTargetKey gives an unencrypted target an age key; ErrConflict
+	// if it already has one (replacing it would orphan its backups).
+	SetBackupTargetKey(ctx context.Context, id, identity, recipient string) error
 	// SetBackupTargetConfig keeps the options rclone changed (refreshed tokens).
 	SetBackupTargetConfig(ctx context.Context, id string, config map[string]string) error
 	// DeleteBackupTarget returns ErrConflict while backups reference it.
@@ -366,9 +369,12 @@ type Restore struct {
 type BackupSchedule struct {
 	bun.BaseModel `bun:"table:backup_schedules,alias:schedule" json:"-"`
 
-	ID        string `bun:"id,pk" json:"id"`
-	ServiceID string `bun:"service_id" json:"serviceId"`
-	TargetID  string `bun:"target_id" json:"targetId"`
+	ID string `bun:"id,pk" json:"id"`
+	// Kind is what it backs up: a PostgreSQL service, or the manager's own
+	// state (no ServiceID).
+	Kind      BackupKind `bun:"kind" json:"kind"`
+	ServiceID string     `bun:"service_id,nullzero" json:"serviceId,omitempty"`
+	TargetID  string     `bun:"target_id" json:"targetId"`
 	// Cron is a standard 5-field expression or a descriptor like @daily.
 	Cron string `bun:"cron" json:"cron"`
 	// KeepLast keeps the N most recent backups.

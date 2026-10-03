@@ -24,7 +24,8 @@ type TargetInput struct {
 	// SecretKey equal to SecretMask keeps the stored value on update.
 	SecretKey string `json:"secretKey"`
 	UseSSL    bool   `json:"useSsl"`
-	// Encrypt generates an age key for the target; only honoured on creation.
+	// Encrypt generates an age key for a new target; existing ones use
+	// EncryptBackupTarget.
 	Encrypt bool `json:"encrypt"`
 	// Config is a drive target's fields (TargetKind.Fields); a secret equal
 	// to SecretMask keeps the stored value.
@@ -178,6 +179,23 @@ func (c *Core) DeleteBackupTarget(ctx context.Context, id string) error {
 		return fmt.Errorf("%w: %v; delete them first", ErrInvalid, err)
 	}
 	return err
+}
+
+// EncryptBackupTarget gives a target (the local one too) an age key: backups
+// made from now on are encrypted, earlier ones stay readable as they are.
+// It can't be turned off: the key must outlive the backups it encrypted.
+func (c *Core) EncryptBackupTarget(ctx context.Context, id string) (store.BackupTarget, error) {
+	identity, recipient, err := newAgeKey()
+	if err != nil {
+		return store.BackupTarget{}, err
+	}
+	if err := c.store.SetBackupTargetKey(ctx, id, identity, recipient); errors.Is(err, store.ErrConflict) {
+		return store.BackupTarget{}, fmt.Errorf("%w: this storage is already encrypted", ErrInvalid)
+	} else if err != nil {
+		return store.BackupTarget{}, err
+	}
+	t, err := c.store.GetBackupTarget(ctx, id)
+	return maskedTarget(t), err
 }
 
 type TargetKey struct {

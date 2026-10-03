@@ -30,7 +30,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FloatingInput } from "@/components/ui/floating-input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
 import { byDay, envMap, envRows, envSecrets, formatDuration, sameEnv, serviceState, timeAgo, type EnvRow } from "@/lib/format";
@@ -38,6 +37,7 @@ import { cn } from "@/lib/utils";
 import { api, type Connection, type Deployment, type LogLine, type Service as ServiceT } from "../api";
 import { BackupList } from "./BackupList";
 import { Schedules } from "./Schedules";
+import { BackupNowDialog } from "@/components/backup-now-dialog";
 
 export function Service() {
   const { id = "" } = useParams();
@@ -237,7 +237,7 @@ export function Service() {
           </TabsContent>
           {isDb && (
             <TabsContent value="backups">
-              <BackupsCard serviceId={svc.id} />
+              <BackupsCard serviceId={svc.id} name={project.data ? `${project.data.name}/${svc.name}` : svc.name} />
             </TabsContent>
           )}
           <TabsContent value="settings" className="space-y-6">
@@ -426,7 +426,7 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
   );
 }
 
-function BackupsCard({ serviceId }: { serviceId: string }) {
+function BackupsCard({ serviceId, name }: { serviceId: string; name: string }) {
   const qc = useQueryClient();
   const targets = useQuery({ queryKey: ["storage"], queryFn: api.backupTargets });
   const backups = useQuery({
@@ -439,19 +439,17 @@ function BackupsCard({ serviceId }: { serviceId: string }) {
     queryFn: () => api.restores(serviceId),
     refetchInterval: (q) => (q.state.data?.some((r) => r.status === "running") ? 1_000 : 15_000),
   });
-  const [targetId, setTargetId] = useState("local");
-  const backup = useMutation({
-    meta: { error: "Couldn't start the backup" },
-    mutationFn: () => api.backup(serviceId, targetId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["backups"] }),
-  });
+  const backup = async (targetId: string) => {
+    await api.backup(serviceId, targetId);
+    qc.invalidateQueries({ queryKey: ["backups"] });
+  };
   const lastRestore = restores.data?.[0];
   const busy = backups.data?.some((b) => b.status === "running") || lastRestore?.status === "running";
 
   return (
     <Section
       plain
-      actions={<BackupNow targets={targets.data ?? []} targetId={targetId} onTarget={setTargetId} disabled={busy || backup.isPending} onBackup={() => backup.mutate()} />}
+      actions={<BackupNowDialog what={name} targets={targets.data ?? []} disabled={busy} onBackup={backup} />}
     >
       {lastRestore && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -465,41 +463,6 @@ function BackupsCard({ serviceId }: { serviceId: string }) {
         <BackupList backups={backups.data ?? []} targets={targets.data ?? []} />
       </div>
     </Section>
-  );
-}
-
-/** Target picker and "Back up now", for a card's actions. */
-export function BackupNow({
-  targets,
-  targetId,
-  onTarget,
-  disabled,
-  onBackup,
-}: {
-  targets: { id: string; name: string }[];
-  targetId: string;
-  onTarget: (id: string) => void;
-  disabled?: boolean;
-  onBackup: () => void;
-}) {
-  return (
-    <>
-      <Select value={targetId} onValueChange={onTarget}>
-        <SelectTrigger size="sm" aria-label="Target" className="min-w-24">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent position="popper" align="end">
-          {targets.map((t) => (
-            <SelectItem key={t.id} value={t.id}>
-              {t.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button size="sm" disabled={disabled} onClick={onBackup}>
-        Back up now
-      </Button>
-    </>
   );
 }
 

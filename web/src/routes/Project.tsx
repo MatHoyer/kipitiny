@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Box, ChevronLeft, Database, DatabaseBackup, Globe, Layers, Lock, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { Activity, Box, ChevronLeft, Database, Globe, Layers, Lock, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -29,6 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
 import { dbFields, dbRef, envMap, envRows, envSecrets, liveState, sameEnv, troubled, type EnvRow } from "@/lib/format";
 import { api, type Project as ProjectT, type Service as ServiceT, type ServiceInput } from "../api";
+import { BackupNowDialog } from "@/components/backup-now-dialog";
 
 export function Project() {
   const { id = "" } = useParams();
@@ -42,15 +43,12 @@ export function Project() {
     refetchInterval: 5_000,
   });
 
-  const backupAll = useMutation({
-    meta: { error: "Couldn't back up the databases" },
-    mutationFn: () => api.backupProject(id),
-    onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ["backups"] });
-      if (res.error) toast.warning("Some databases were not backed up", { description: res.error });
-      else toast.success("Backups started");
-    },
-  });
+  const targets = useQuery({ queryKey: ["storage"], queryFn: api.backupTargets });
+  const backupAll = async (targetId: string) => {
+    const res = await api.backupProject(id, targetId);
+    qc.invalidateQueries({ queryKey: ["backups"] });
+    if (res.error) toast.warning("Some databases were not backed up", { description: res.error });
+  };
   const hasDatabases = services.data?.some((s) => s.kind === "postgres");
   const remove = useMutation({
     meta: { error: "Couldn't delete the project" },
@@ -131,12 +129,14 @@ export function Project() {
             {hasDatabases && (
               <Section
                 title="Back up databases"
-                description="Back up every database of the project now, to each one's default target."
+                description="Back up every database of the project now, to one storage."
                 actions={
-                  <Button variant="outline" size="sm" disabled={backupAll.isPending} onClick={() => backupAll.mutate()}>
-                    <DatabaseBackup data-icon="inline-start" />
-                    Back up now
-                  </Button>
+                  <BackupNowDialog
+                    variant="outline"
+                    what={`every database of ${project.data?.name ?? "the project"}`}
+                    targets={targets.data ?? []}
+                    onBackup={backupAll}
+                  />
                 }
               />
             )}

@@ -226,7 +226,8 @@ export type ScheduleInput = {
 
 export type Schedule = ScheduleInput & {
   id: string;
-  serviceId: string;
+  kind: "postgres" | "manager";
+  serviceId?: string;
   createdAt: string;
   nextRun?: string;
 };
@@ -494,6 +495,7 @@ export const api = {
   backupTargetKey: (id: string) => request<{ identity: string; recipient: string }>(`/storage/${id}/key`),
   backupManager: (targetId: string) => request<Backup>("/manager/backups", json("POST", { targetId })),
   deleteBackupTarget: (id: string) => request<void>(`/storage/${id}`, { method: "DELETE" }),
+  encryptBackupTarget: (id: string) => request<BackupTarget>(`/storage/${id}/encrypt`, { method: "POST" }),
   testBackupTarget: (id: string) => request<void>(`/storage/${id}/test`, { method: "POST" }),
 
   backups: (projectId?: string) => request<Backup[]>(`/backups${projectId ? `?projectId=${projectId}` : ""}`),
@@ -509,6 +511,8 @@ export const api = {
   schedules: (serviceId: string) => request<Schedule[]>(`/services/${serviceId}/schedules`),
   createSchedule: (serviceId: string, s: ScheduleInput) =>
     request<Schedule>(`/services/${serviceId}/schedules`, json("POST", s)),
+  managerSchedules: () => request<Schedule[]>("/manager/schedules"),
+  createManagerSchedule: (s: ScheduleInput) => request<Schedule>("/manager/schedules", json("POST", s)),
   updateSchedule: (id: string, s: ScheduleInput) => request<Schedule>(`/schedules/${id}`, json("PUT", s)),
   deleteSchedule: (id: string) => request<void>(`/schedules/${id}`, { method: "DELETE" }),
   backupProject: (projectId: string, targetId = "") =>
