@@ -562,4 +562,6 @@ export const api = {
   audit: () => request<AuditEntry[]>("/audit?limit=200"),
 
   logsUrl: (serviceId: string, tail = 200) => `/api/services/${serviceId}/logs?tail=${tail}`,
+  terminalUrl: (serviceId: string, container: string, shell: string) =>
+    `/api/services/${serviceId}/terminal?${new URLSearchParams({ container, shell })}`,
 };

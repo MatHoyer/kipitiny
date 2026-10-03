@@ -46,6 +46,8 @@ var secretReads = map[string]bool{
 	"GET /api/storage/{id}/key":         true,
 	"GET /api/backups/{id}/download":    true,
 	"GET /api/audit":                    true,
+	// A shell in a container.
+	"GET /api/services/{id}/terminal": true,
 	// A pending Proton sign-in's link.
 	"GET /api/proton-logins/{id}": true,
 	// Names only, but they map what the password manager token can read.
