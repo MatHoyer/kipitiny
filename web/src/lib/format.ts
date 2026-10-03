@@ -38,8 +38,9 @@ export const envRows = (env: Record<string, string>, secrets: string[] = []): En
 export const envMap = (rows: EnvRow[]): Record<string, string> =>
   Object.fromEntries(rows.filter((r) => r.key.trim()).map((r) => [r.key.trim(), r.value]));
 
+/** Secret names; a password manager reference is never one (it holds no secret). */
 export const envSecrets = (rows: EnvRow[]): string[] =>
-  rows.filter((r) => r.secret && r.key.trim()).map((r) => r.key.trim());
+  rows.filter((r) => r.secret && r.key.trim() && !managerRef(r.value)).map((r) => r.key.trim());
 
 /**
  * A reference in a service env value: {{ project.NAME }} for a project
@@ -72,7 +73,30 @@ export function soleRef(value: string): EnvReference | null {
   return m ? toRef(m) : null;
 }
 
+/** A value that is exactly one password manager reference: its scheme and path (vault, item, field). */
+export function managerRef(value: string): { scheme: string; path: string[] } | null {
+  const r = soleRef(value);
+  if (r?.kind !== "secret") return null;
+  const i = r.ref.indexOf("://");
+  return { scheme: r.ref.slice(0, i), path: r.ref.slice(i + 3).split("/").filter(Boolean) };
+}
+
 export const refsIn = (value: string): EnvReference[] => [...value.matchAll(new RegExp(refSrc, "g"))].map(toRef);
+
+/** A value cut into its literal text and its references, in order. */
+export type ValuePart = { text: string } | { ref: EnvReference; raw: string };
+
+export function splitRefs(value: string): ValuePart[] {
+  const parts: ValuePart[] = [];
+  let at = 0;
+  for (const m of value.matchAll(new RegExp(refSrc, "g"))) {
+    if (m.index > at) parts.push({ text: value.slice(at, m.index) });
+    parts.push({ ref: toRef(m), raw: m[0] });
+    at = m.index + m[0].length;
+  }
+  if (at < value.length) parts.push({ text: value.slice(at) });
+  return parts;
+}
 
 export function timeAgo(iso: string): string {
   const s = Math.round((Date.now() - new Date(iso).getTime()) / 1000);

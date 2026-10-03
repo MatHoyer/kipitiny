@@ -97,6 +97,16 @@ func TestMergeEnv(t *testing.T) {
 		t.Errorf("unmasking a secret: got %v, want ErrInvalid", err)
 	}
 
+	// A password manager reference holds no secret: it's stored as a variable.
+	_, secrets, err = mergeEnv(map[string]string{"KEY": "{{ pass://Vault/Item/password }}", "MIX": "x{{ pass://V/I/f }}"},
+		[]string{"KEY", "MIX"}, old, oldSecrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"MIX"}; !slices.Equal(secrets, want) {
+		t.Errorf("secrets with a reference = %v, want %v", secrets, want)
+	}
+
 	// Without flags, stored ones are kept and new entries are secrets.
 	_, secrets, err = mergeEnv(map[string]string{"VAR": "v", "KEY": SecretMask, "NEW": "n"}, nil, old, oldSecrets)
 	if err != nil {

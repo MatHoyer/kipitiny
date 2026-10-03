@@ -1,45 +1,36 @@
-import { Braces, Code, Database, KeyRound, Link2, List, Plus, Trash2, Vault, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Code, List, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { PostgresIcon } from "@/components/brand-icons";
-import { SecretRefDialog } from "@/components/secret-ref-dialog";
+import { EnvEntryDialog, envKeyRe, type EnvContext } from "@/components/env-entry-dialog";
+import { ManagerRefValue, TemplateValue } from "@/components/template-value";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   dbFields,
-  dbRef,
   envRef,
   formatEnvRows,
+  managerRef,
   parseEnvRows,
   refName,
   refsIn,
-  soleRef,
   type EnvReference,
   type EnvRow,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { SECRET_MASK } from "../api";
-
-const keyRe = /^[A-Za-z_][A-Za-z0-9_]*$/;
+import { api, SECRET_MASK } from "../api";
 
 type Mode = "list" | "raw";
 
 /**
  * Edits environment variables and secrets as a list of fields or as
- * KEY=value text. Secrets are write-only: their saved values read back
- * masked. With vars (the project's shared entry names) and databases (its
- * postgres services), values can reference them as {{ project.NAME }} and
- * {{ db.SERVICE.FIELD }}, picked from menus instead of typed. readOnly shows
- * the entries without any way to change them.
+ * KEY=value text. Entries are added and edited in a dialog (EnvEntryDialog).
+ * Secrets are write-only: their saved values read back masked. An entry that
+ * is exactly one password manager reference ({{ pass://Vault/Item/field }})
+ * holds no secret: it's listed on its own, showing where it points. With vars (the
+ * project's shared entry names) and databases (its postgres services), values
+ * can reference them as {{ project.NAME }} and {{ db.SERVICE.FIELD }}, alone or
+ * within text. readOnly shows the entries without any way to change them.
  */
 export function EnvEditor({
   label = "Environment",
@@ -72,18 +63,25 @@ export function EnvEditor({
 }) {
   const [mode, setMode] = useState<Mode>("list");
   const [text, setText] = useState("");
-  const [focus, setFocus] = useState(-1);
+  // The dialog adds (index null) or edits the entry at index. It keeps its
+  // last state while closing; n remounts it fresh on each open.
+  const [dialog, setDialog] = useState<{ open: boolean; index: number | null; n: number }>({
+    open: false,
+    index: null,
+    n: 0,
+  });
+  const openDialog = (index: number | null) => setDialog((d) => ({ open: true, index, n: d.n + 1 }));
 
+  const change = (next: EnvRow[]) => {
+    onChange(next);
+    if (mode === "raw") setText(formatEnvRows(next));
+  };
   const switchMode = (m: Mode) => {
     if (!m || m === mode) return;
     if (m === "raw") setText(formatEnvRows(rows));
     setMode(m);
   };
-  const update = (i: number, row: Partial<EnvRow>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...row } : r)));
-  const add = (...added: EnvRow[]) => {
-    setFocus(rows.length);
-    onChange([...rows, ...added]);
-  };
+  const ctx: EnvContext = { vars, secretVars, databases, passwordManagers };
   const refs = !!vars || !!databases;
   // Password manager references are checked by the manager on save.
   const known = (r: EnvReference) =>
@@ -91,104 +89,111 @@ export function EnvEditor({
     (r.kind === "project"
       ? !!vars?.includes(r.name)
       : !!databases?.includes(r.db) && (dbFields as readonly string[]).includes(r.field));
-  // A name for a database's entry: the usual one, or prefixed by the database
-  // when taken (several databases, one service).
-  const dbEntryName = (db: string, key: string) =>
-    rows.some((r) => r.key === key) ? `${db.toUpperCase().replaceAll("-", "_")}_${key}` : key;
-  const connect = (db: string, fields: [string, string][]) =>
-    add(...fields.map(([key, field]) => ({ key: dbEntryName(db, key), value: dbRef(db, field), secret: true })));
+  const fromManager = rows.map((r) => managerRef(r.value));
+  const providers = useQuery({
+    queryKey: ["secret-providers"],
+    queryFn: api.secretProviders,
+    enabled: fromManager.some(Boolean),
+  });
+  // Unknown until the providers load; then a scheme no connected one resolves.
+  const unresolved = (scheme: string) => !!providers.data && !providers.data.some((p) => p.connected && p.scheme === scheme);
   const counts = new Map<string, number>();
   for (const r of rows) counts.set(r.key, (counts.get(r.key) ?? 0) + 1);
-  // Project entries, split like the rows: a service variable uses a project
-  // variable, a service secret a project secret.
-  const projectVars = vars?.filter((v) => !secretVars.includes(v)) ?? [];
-  const projectSecrets = vars?.filter((v) => secretVars.includes(v)) ?? [];
-  const unused = (names: string[]) => names.filter((v) => !rows.some((r) => r.key === v));
+  const editing = dialog.index != null ? (rows[dialog.index] ?? null) : null;
 
   const renderRow = (row: EnvRow, i: number) => {
-    const badKey = !!row.key && (!keyRe.test(row.key) || (counts.get(row.key) ?? 0) > 1);
+    const badKey = !row.key || !envKeyRe.test(row.key) || (counts.get(row.key) ?? 0) > 1;
     const unknown = refs
       ? refsIn(row.value)
           .filter((r) => !known(r))
           .map(refName)
       : [];
-    // A service secret may use a project secret or a database credential; a
-    // variable a project variable.
-    const sections = row.secret
-      ? [
-          { label: "Project secrets", items: projectSecrets.map((v) => ({ label: v, key: v, value: envRef(v) })) },
-          ...(databases ?? []).map((db) => ({
-            label: `Database ${db}`,
-            items: dbFields.map((f) => ({
-              label: f,
-              key: f === "URL" ? "DATABASE_URL" : `PG${f}`,
-              value: dbRef(db, f),
-            })),
-          })),
-        ]
-      : [{ label: "Project variables", items: projectVars.map((v) => ({ label: v, key: v, value: envRef(v) })) }];
+    const saved = row.secret && row.value === SECRET_MASK;
+    const mref = fromManager[i];
+    const offline = !!mref && unresolved(mref.scheme);
     return (
-      <div key={i} className="space-y-1">
-        <div className="flex items-start gap-2">
-          <Input
-            aria-label="Name"
-            placeholder="NAME"
-            value={row.key}
-            autoFocus={i === focus}
-            aria-invalid={badKey || undefined}
-            onChange={(e) => update(i, { key: e.target.value })}
-            disabled={readOnly}
-            spellCheck={false}
-            className="w-2/5 shrink-0 font-mono text-sm"
-          />
-          <ValueField
-            value={row.value}
-            secret={row.secret}
-            onChange={(value) => update(i, { value })}
-            invalid={unknown.length > 0}
-            refs={refs}
-            readOnly={readOnly}
-          />
-          {!readOnly && sections.some((s) => s.items.length > 0) && (
-            <RefMenu
-              sections={sections}
-              onPick={(item) => update(i, { key: row.key || item.key, value: item.value })}
-              trigger={
-                <Button type="button" variant="ghost" size="icon" aria-label="Use a reference">
-                  <Braces />
-                </Button>
-              }
-            />
+      <li key={i} className="group/row">
+        <div
+          className={cn(
+            "flex min-h-11 items-center gap-3 rounded-lg border px-3 py-1.5 transition-colors",
+            !readOnly && "cursor-pointer hover:bg-muted/50",
+            (badKey || unknown.length > 0 || offline) && "border-destructive/60",
           )}
+          onClick={() => !readOnly && openDialog(i)}
+        >
+          <span className={cn("w-2/5 shrink-0 truncate font-mono text-sm", badKey && "text-destructive")}>
+            {row.key || "unnamed"}
+          </span>
+          <span className="flex min-w-0 flex-1 items-center">
+            {mref ? (
+              <ManagerRefValue scheme={mref.scheme} path={mref.path} invalid={offline} />
+            ) : saved ? (
+              <span className="font-mono text-xs tracking-widest text-muted-foreground" title="Saved secret">
+                ••••••••
+              </span>
+            ) : (
+              <TemplateValue value={row.value} maskText={row.secret} invalid={refs ? (r) => !known(r) : undefined} />
+            )}
+          </span>
           {!readOnly && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={`Remove ${row.key || (row.secret ? "secret" : "variable")}`}
-              onClick={() => onChange(rows.filter((_, j) => j !== i))}
-            >
-              <Trash2 />
-            </Button>
+            <span className="flex shrink-0 gap-0.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                title="Edit"
+                aria-label={`Edit ${row.key || "entry"}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openDialog(i);
+                }}
+              >
+                <Pencil />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                title="Remove"
+                aria-label={`Remove ${row.key || "entry"}`}
+                className="text-muted-foreground hover:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  change(rows.filter((_, j) => j !== i));
+                }}
+              >
+                <Trash2 />
+              </Button>
+            </span>
           )}
         </div>
-        {(badKey || unknown.length > 0) && (
-          <p className="px-1 text-xs text-destructive">
-            {badKey
-              ? (counts.get(row.key) ?? 0) > 1
+        {(badKey || unknown.length > 0 || offline) && (
+          <p className="px-1 pt-1 text-xs text-destructive">
+            {offline && !badKey
+              ? `No connected password manager resolves ${mref.scheme}:// (Settings › Password managers).`
+              : !row.key
+              ? "Missing name."
+              : (counts.get(row.key) ?? 0) > 1
                 ? "Duplicate name."
-                : "Letters, digits and _; not starting with a digit."
-              : `Unknown reference ${unknown.join(", ")}.`}
+                : badKey
+                  ? "Letters, digits and _; not starting with a digit."
+                  : `Unknown reference ${unknown.join(", ")}.`}
           </p>
         )}
-      </div>
+      </li>
     );
   };
 
+  const kind = (r: EnvRow, i: number) => (fromManager[i] ? "manager" : r.secret ? "secret" : "variable");
+  const count = (k: string) => rows.filter((r, i) => kind(r, i) === k).length;
+  const varCount = count("variable");
+  const managerCount = count("manager");
+  const secretCount = count("secret");
+
   return (
     <div className={cn("space-y-2", className)}>
+      {showLabel && <span className="block text-sm font-medium">{label}</span>}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium">{showLabel && label}</span>
         <ToggleGroup
           type="single"
           variant="outline"
@@ -207,6 +212,12 @@ export function EnvEditor({
             Text
           </ToggleGroupItem>
         </ToggleGroup>
+        {!readOnly && (
+          <Button type="button" size="sm" onClick={() => openDialog(null)}>
+            <Plus data-icon="inline-start" />
+            Add
+          </Button>
+        )}
       </div>
 
       {mode === "raw" ? (
@@ -223,159 +234,47 @@ export function EnvEditor({
           spellCheck={false}
           className="font-mono text-sm"
         />
+      ) : rows.length === 0 ? (
+        <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+          {readOnly ? "No variables or secrets." : "No variables or secrets yet."}
+        </p>
       ) : (
         <div className="space-y-4">
-          <Group title="Variables" hint="Readable values." count={rows.filter((r) => !r.secret).length}>
-            {rows.map((r, i) => !r.secret && renderRow(r, i))}
-            <div className={cn("flex flex-wrap gap-2", readOnly && "hidden")}>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => add({ key: "", value: "", secret: false })}
-              >
-                <Plus data-icon="inline-start" />
-                Add variable
-              </Button>
-              <FromProject
-                names={unused(projectVars)}
-                onPick={(v) => add({ key: v, value: envRef(v), secret: false })}
-              />
-            </div>
-          </Group>
-          <Group title="Secrets" hint="Write-only once saved." count={rows.filter((r) => r.secret).length}>
-            {rows.map((r, i) => r.secret && renderRow(r, i))}
-            <div className={cn("flex flex-wrap gap-2", readOnly && "hidden")}>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => add({ key: "", value: "", secret: true })}
-              >
-                <KeyRound data-icon="inline-start" />
-                Add secret
-              </Button>
-              <FromProject
-                names={unused(projectSecrets)}
-                onPick={(v) => add({ key: v, value: envRef(v), secret: true })}
-              />
-              {passwordManagers && <SecretRefDialog onPick={(key, value) => add({ key, value, secret: true })} />}
-              {databases && databases.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="outline" size="sm">
-                      <Database data-icon="inline-start" />
-                      Connect database
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="max-h-80 min-w-56">
-                    {databases.map((db, n) => (
-                      <div key={db}>
-                        {n > 0 && <DropdownMenuSeparator />}
-                        <DropdownMenuLabel className="text-xs">{db}</DropdownMenuLabel>
-                        <DropdownMenuItem onSelect={() => connect(db, [["DATABASE_URL", "URL"]])}>
-                          <span className="font-mono text-xs">DATABASE_URL</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() =>
-                            connect(
-                              db,
-                              dbFields.filter((f) => f !== "URL").map((f) => [`PG${f}`, f]),
-                            )
-                          }
-                        >
-                          <span className="font-mono text-xs">PGHOST, PGPORT, PGUSER…</span>
-                        </DropdownMenuItem>
-                      </div>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
-          </Group>
+          {varCount > 0 && (
+            <Group title="Variables" hint="Readable values." count={varCount}>
+              {rows.map((r, i) => kind(r, i) === "variable" && renderRow(r, i))}
+            </Group>
+          )}
+          {managerCount > 0 && (
+            <Group title="From password manager" hint="Fetched at each deploy, never stored." count={managerCount}>
+              {rows.map((r, i) => kind(r, i) === "manager" && renderRow(r, i))}
+            </Group>
+          )}
+          {secretCount > 0 && (
+            <Group title="Secrets" hint="Write-only once saved." count={secretCount}>
+              {rows.map((r, i) => kind(r, i) === "secret" && renderRow(r, i))}
+            </Group>
+          )}
         </div>
       )}
       {description && <p className="px-1 text-xs text-muted-foreground">{description}</p>}
-    </div>
-  );
-}
-
-/**
- * A value input; a lone reference shows as a removable chip. A secret is
- * typed blind, and its saved value only shows as the mask.
- */
-function ValueField({
-  value,
-  secret,
-  onChange,
-  invalid,
-  refs,
-  readOnly,
-}: {
-  value: string;
-  secret: boolean;
-  onChange: (v: string) => void;
-  invalid: boolean;
-  refs: boolean;
-  readOnly: boolean;
-}) {
-  const ref = refs ? soleRef(value) : null;
-  if (ref)
-    return (
-      <div
-        className={cn(
-          "flex h-8 min-w-0 flex-1 items-center rounded-lg border border-input px-1.5 dark:bg-input/30",
-          invalid && "border-destructive",
-        )}
-      >
-        <span
-          className={cn(
-            "inline-flex min-w-0 items-center gap-1 rounded-md bg-muted py-0.5 pr-0.5 pl-1.5 font-mono text-xs",
-            invalid && "bg-destructive/10 text-destructive",
-          )}
-          title={value.trim()}
-        >
-          {ref.kind === "db" ? (
-            <PostgresIcon className="size-3 shrink-0 text-[#4169E1]" />
-          ) : ref.kind === "secret" ? (
-            <Vault className="size-3 shrink-0" />
-          ) : (
-            <Link2 className="size-3 shrink-0" />
-          )}
-          <span className="truncate">
-            {ref.kind === "db" ? `${ref.db}.${ref.field}` : ref.kind === "secret" ? ref.ref : ref.name}
-          </span>
-          {!readOnly && (
-            <button
-              type="button"
-              aria-label="Remove reference"
-              onClick={() => onChange("")}
-              className="rounded-sm p-0.5 text-muted-foreground hover:bg-background hover:text-foreground"
-            >
-              <X className="size-3" />
-            </button>
-          )}
-        </span>
-      </div>
-    );
-  const saved = secret && value === SECRET_MASK;
-  return (
-    <div className="relative min-w-0 flex-1">
-      <Input
-        aria-label="Value"
-        type={secret ? "password" : "text"}
-        autoComplete={secret ? "new-password" : "off"}
-        placeholder={secret ? "secret value" : "value"}
-        value={value}
-        aria-invalid={invalid || undefined}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={readOnly}
-        // A saved secret is replaced as a whole.
-        onFocus={(e) => saved && e.target.select()}
-        spellCheck={false}
-        title={saved && !readOnly ? "Saved secret: type to replace it" : undefined}
-        className={cn("font-mono text-sm", saved && "text-muted-foreground")}
-      />
+      {!readOnly && (
+        <EnvEntryDialog
+          key={dialog.n}
+          open={dialog.open}
+          onOpenChange={(open) => setDialog((d) => ({ ...d, open }))}
+          entry={editing}
+          taken={rows.filter((_, j) => j !== dialog.index).map((r) => r.key)}
+          ctx={ctx}
+          onDone={(added) =>
+            change(
+              dialog.index != null
+                ? rows.map((r, j) => (j === dialog.index ? added[0] : r))
+                : [...rows, ...added],
+            )
+          }
+        />
+      )}
     </div>
   );
 }
@@ -386,62 +285,11 @@ function Group({ title, hint, count, children }: { title: string; hint: string; 
       <div className="flex items-baseline gap-2">
         <h4 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           {title}
-          {count > 0 && <span className="ml-1.5 font-normal">{count}</span>}
+          <span className="ml-1.5 font-normal">{count}</span>
         </h4>
         <span className="truncate text-xs text-muted-foreground">{hint}</span>
       </div>
-      {children}
+      <ul className="space-y-1.5">{children}</ul>
     </section>
-  );
-}
-
-/** Adds an entry with the same name, its value taken from the project. */
-function FromProject({ names, onPick }: { names: string[]; onPick: (name: string) => void }) {
-  if (names.length === 0) return null;
-  return (
-    <RefMenu
-      sections={[
-        { label: "Same name, value from the project", items: names.map((v) => ({ label: v, key: v, value: v })) },
-      ]}
-      onPick={(item) => onPick(item.key)}
-      trigger={
-        <Button type="button" variant="outline" size="sm">
-          <Link2 data-icon="inline-start" />
-          Add from project
-        </Button>
-      }
-    />
-  );
-}
-
-type RefItem = { label: string; key: string; value: string };
-
-function RefMenu({
-  sections,
-  onPick,
-  trigger,
-}: {
-  sections: { label: string; items: RefItem[] }[];
-  onPick: (item: RefItem) => void;
-  trigger: ReactNode;
-}) {
-  const shown = sections.filter((s) => s.items.length > 0);
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="max-h-80 min-w-48">
-        {shown.map((s, n) => (
-          <div key={s.label}>
-            {n > 0 && <DropdownMenuSeparator />}
-            <DropdownMenuLabel className="text-xs">{s.label}</DropdownMenuLabel>
-            {s.items.map((item) => (
-              <DropdownMenuItem key={item.label} onSelect={() => onPick(item)} className="font-mono text-xs">
-                {item.label}
-              </DropdownMenuItem>
-            ))}
-          </div>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
