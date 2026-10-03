@@ -38,7 +38,7 @@ func TestImageRegistry(t *testing.T) {
 func TestRegistryAuth(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	if got := c.registryAuth(ctx, "ghcr.io/org/app"); got != "" || c.dockerConfig(ctx) != "" {
+	if got := c.registryAuth(ctx, "ghcr.io/org/app"); got != "" {
 		t.Fatal("credentials without any registry")
 	}
 	for _, r := range []store.Registry{
@@ -61,15 +61,5 @@ func TestRegistryAuth(t *testing.T) {
 	}
 	if c.registryAuth(ctx, "quay.io/org/app") != "" {
 		t.Fatal("credential sent to another registry")
-	}
-
-	var cfg struct {
-		Auths map[string]struct{ Auth string } `json:"auths"`
-	}
-	if err := json.Unmarshal([]byte(c.dockerConfig(ctx)), &cfg); err != nil {
-		t.Fatal(err)
-	}
-	if userpass, _ := base64.StdEncoding.DecodeString(cfg.Auths["ghcr.io"].Auth); string(userpass) != "me:ghp_x" {
-		t.Fatalf("config = %+v", cfg)
 	}
 }

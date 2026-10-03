@@ -2,8 +2,6 @@ package core
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -107,24 +105,6 @@ func pullHint(err error) string {
 		}
 	}
 	return ""
-}
-
-// dockerConfig is a Docker CLI config.json with every saved registry
-// credential, or "" without any.
-func (c *Core) dockerConfig(ctx context.Context) string {
-	rs, err := c.store.ListRegistries(ctx)
-	if err != nil || len(rs) == 0 {
-		return ""
-	}
-	type entry struct {
-		Auth string `json:"auth"`
-	}
-	auths := map[string]entry{}
-	for _, r := range rs {
-		auths[loginAddress(r.Host)] = entry{base64.StdEncoding.EncodeToString([]byte(r.Username + ":" + r.Password))}
-	}
-	b, _ := json.Marshal(map[string]any{"auths": auths})
-	return string(b)
 }
 
 // imageRegistry is the registry host of an image reference: docker.io for

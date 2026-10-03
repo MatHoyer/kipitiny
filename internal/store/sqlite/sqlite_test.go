@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/pressly/goose/v3"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/sqlitedialect"
 
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -591,5 +593,59 @@ func TestDriveTargetsMigration(t *testing.T) {
 	}
 	if got, _ := s.GetBackupTarget(ctx, d.ID); got.Config["client_uid"] != "x" {
 		t.Fatalf("config = %v", got.Config)
+	}
+}
+
+func TestImageOnlyMigration(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "k.db")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	sub, _ := fs.Sub(migrations, "migrations")
+	p, err := goose.NewProvider(goose.DialectSQLite3, db, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 23); err != nil {
+		t.Fatal(err)
+	}
+	old := &Store{db: bun.NewDB(db, sqlitedialect.New())}
+	pr, err := old.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := old.CreateService(ctx, store.Service{ProjectID: pr.ID, ServerID: pr.ServerID, Name: "api", Kind: store.ServiceKindApp, Replicas: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := old.CreateDeployment(ctx, store.Deployment{ServiceID: built.ID, Status: store.DeploymentSucceeded, Image: "kipitiny/api:abc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := old.SetCurrentDeployment(ctx, built.ID, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	never, err := old.CreateService(ctx, store.Service{ProjectID: pr.ID, ServerID: pr.ServerID, Name: "worker", Kind: store.ServiceKindApp, Replicas: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE services SET source = 'git', image = '', git_url = 'https://x/y.git'`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if got, err := s.GetService(ctx, built.ID); err != nil || got.Image != "kipitiny/api:abc" {
+		t.Fatalf("deployed git service = %q, %v", got.Image, err)
+	}
+	if got, err := s.GetService(ctx, never.ID); err != nil || got.Image != "" {
+		t.Fatalf("never deployed git service = %q, %v", got.Image, err)
 	}
 }

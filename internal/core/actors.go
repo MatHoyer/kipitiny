@@ -16,7 +16,7 @@ var ErrForbidden = errors.New("forbidden")
 // Actor is who performs a request: a signed-in user (full access) or an API
 // token (limited to its scope).
 type Actor struct {
-	Kind  string      `json:"kind"` // "user", "token" or "webhook"
+	Kind  string      `json:"kind"` // "user" or "token"
 	Name  string      `json:"name"`
 	Scope store.Scope `json:"scope"`
 }

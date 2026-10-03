@@ -23,9 +23,6 @@ type Config struct {
 	// that is required to create the admin account.
 	SetupToken string
 
-	// BuilderImage runs `docker build` for git services (BuildKit via the CLI).
-	BuilderImage string
-
 	// ProtonPassCLI is the pass-cli binary (path or name on PATH).
 	ProtonPassCLI string
 
@@ -87,7 +84,6 @@ func Load() Config {
 		DataDir:        env("KIPITINY_DATA_DIR", "/data"),
 		LogLevel:       env("KIPITINY_LOG_LEVEL", "info"),
 		SetupToken:     env("KIPITINY_SETUP_TOKEN", ""),
-		BuilderImage:   env("KIPITINY_BUILDER_IMAGE", "docker:cli"),
 		ProtonPassCLI:  env("KIPITINY_PROTONPASS_CLI", "pass-cli"),
 		Rclone:         env("KIPITINY_RCLONE", "rclone"),
 		ProtonDriveCLI: env("KIPITINY_PROTONDRIVE_CLI", "proton-drive"),

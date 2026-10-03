@@ -69,23 +69,10 @@ updates.
   ones that services reference as `{{ project.NAME }}`. References resolve at deploy.
 - Deleting a database or a project destroys data and must be confirmed by typing its name.
 
-## Builds from Git
-
-An app can come from a Git repository instead of an image: every deploy clones
-the branch (pure Go, HTTPS, optional access token for private repos) and builds
-its Dockerfile with BuildKit through a short-lived `docker:cli` container that
-receives the source as a tar stream, so neither the host nor the manager needs
-`git` or the Docker CLI. Images are tagged per deployment (the last 5 are kept
-for rollback) and removed with the service.
-
-**Deploy on push**: point a webhook at `/api/hooks/<service-id>` with the
-service's secret: GitHub (`X-Hub-Signature-256`), GitLab (`X-Gitlab-Token`) or
-`Authorization: Bearer <secret>`. Pushes to other branches are ignored.
-
 ## Deploy from CI
 
-Building on the server is handy for small apps; the sturdier flow is to build,
-test and push the image once in CI, then have kipitiny deploy that exact image.
+Services run Docker images; kipitiny doesn't build them. Build, test and push
+the image once in CI, then have kipitiny deploy that exact image.
 Create a **deploy** token (Settings), keep it as a CI secret, and end the
 pipeline with `kipitiny deploy` (in the manager image):
 
@@ -109,8 +96,8 @@ service keeps it. The same is `POST /api/services/<id>/deploy` with
 
 Pulled images are pinned to their digest (`name:tag@sha256:…`): replicas the
 reconciler recreates and rollbacks run the image that was deployed, even if the
-tag moved since. Each deployment records who triggered it (user, token or
-webhook) and, when given, the commit.
+tag moved since. Each deployment records who triggered it (user or token)
+and, when given, the commit.
 
 ## Deploys
 
@@ -211,8 +198,7 @@ Proton Drive is tested against a stand-in CLI.
 *Settings → Registries* stores credentials per registry host (Docker Hub, ghcr.io,
 registry.gitlab.com, or any other). The manager's Docker checks them on save, as
 `docker login` would; nothing is written to the hosts' Docker config. Every pull,
-on any server, sends the credential of the image's registry, and Git builds get
-them all so a Dockerfile can start `FROM` a private image. Use read-only tokens.
+on any server, sends the credential of the image's registry. Use read-only tokens.
 
 ## Multiple servers
 
@@ -239,9 +225,9 @@ gated on staying up instead).
 - **Images**: dangling layers only, or every image no container uses.
 - **Volumes**: unused anonymous volumes, or unused named ones too (careful:
   that includes stopped stacks on the host that kipitiny doesn't manage).
-- **Build cache** of Git builds, **stopped containers** and **unused networks**
+- **Build cache**, **stopped containers** and **unused networks**
   that kipitiny didn't create.
-- **Deployment history**: keep the last N deployments (and their build logs)
+- **Deployment history**: keep the last N deployments (and their logs)
   per service.
 
 Nothing younger than the minimum age (24 h by default) is touched. Whatever the
@@ -253,7 +239,7 @@ volumes left by older manager versions are removed once unused.
 ## API tokens, MCP and audit
 
 Create tokens in *Settings*. Scopes: **read** (status, logs, backup lists),
-**deploy** (plus deploy, including another tag of an image service, rollback, start/stop, back up; see [Deploy from CI](#deploy-from-ci)) and **admin**
+**deploy** (plus deploy, including another tag of an app, rollback, start/stop, back up; see [Deploy from CI](#deploy-from-ci)) and **admin**
 (everything, including settings, revealed secrets and restores). Tokens work as
 `Authorization: Bearer kpt_…` on `/api` and on the built-in **MCP** endpoint
 (Streamable HTTP):
@@ -264,7 +250,7 @@ claude mcp add --transport http kipitiny https://kipitiny.example.com/mcp \
 ```
 
 Tools are task-oriented rather than a copy of the REST API: `list_services`,
-`get_app_status`, `get_logs`, `deploy`, `deploy_from_git`, `rollback`,
+`get_app_status`, `get_logs`, `deploy`, `deploy_image`, `rollback`,
 `backup_database`, `list_backups`, `restore_database` (admin, requires the
 database name as confirmation). Secrets are masked in every response. Every
 mutation, from the UI, a token or an agent (including refused attempts), lands
@@ -304,7 +290,6 @@ KIPITINY_VERSION=dev docker compose up -d   # run that build
 | `KIPITINY_MANAGER_BACKUP_CRON` | `@daily` | Snapshot of the manager's state (`off` to disable) |
 | `KIPITINY_MANAGER_BACKUP_TARGET` | `local` | Target ID for those snapshots |
 | `KIPITINY_MANAGER_BACKUP_KEEP` | `14` | Snapshots kept per target |
-| `KIPITINY_BUILDER_IMAGE` | `docker:cli` | Image running `docker build` for Git services |
 | `KIPITINY_DOCKER_SOCKET` | `/var/run/docker.sock` | Host socket path mounted into Traefik |
 | `DOCKER_HOST`        | socket  | Standard Docker client env vars apply |
 

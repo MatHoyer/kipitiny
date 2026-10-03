@@ -336,6 +336,10 @@ func (c *Core) cleanServer(ctx context.Context, sv store.Server, svcs []store.Se
 	return r
 }
 
+// keepRollbackImages is how many successful deployments per service keep
+// their image for rollback.
+const keepRollbackImages = 5
+
 // removeUnusedImages removes images no container uses, except the images of
 // the server's services and of their recent successful deployments, which
 // deploys and rollbacks need.
@@ -361,7 +365,7 @@ func (c *Core) removeUnusedImages(ctx context.Context, dk *docker.Client, server
 		kept := 0
 		for _, d := range deps {
 			if d.ID == svc.CurrentDeploymentID || d.Status == store.DeploymentRunning ||
-				(d.Status == store.DeploymentSucceeded && kept < keepBuilds) {
+				(d.Status == store.DeploymentSucceeded && kept < keepRollbackImages) {
 				protect(d.Image)
 				if d.Status == store.DeploymentSucceeded {
 					kept++

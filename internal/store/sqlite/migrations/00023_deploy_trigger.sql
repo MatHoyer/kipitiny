@@ -1,5 +1,5 @@
 -- +goose Up
--- Who started a deployment: user:<name>, token:<name> or webhook:<source>.
+-- Who started a deployment: user:<name> or token:<name>.
 ALTER TABLE deployments ADD COLUMN triggered_by TEXT NOT NULL DEFAULT '';
 
 -- +goose Down

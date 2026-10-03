@@ -61,7 +61,7 @@ The manager runs as a container and controls the **host** Docker daemon via the 
 ## 5. Core concepts
 
 - **Project:** a group of services (apps + databases) sharing a private network.
-- **Service:** an app (image or Git build) or a Postgres database.
+- **Service:** an app (a Docker image) or a Postgres database.
 - **Replica:** one running container of a service.
 - **Deployment:** one release of a service, with an ID, status, and log file.
 
@@ -140,7 +140,7 @@ Replicas on one host = several identical containers with **identical Traefik rou
 
 ## 9. Deployments (zero downtime, no Swarm)
 
-1. Build or pull the new image.
+1. Pull the new image (built and pushed by CI; kipitiny does not build).
 2. Run the pre-deploy command once, if configured.
 3. For each replica: start the new container with same Traefik labels, new name/deploy label.
 4. Wait for health (`State.Health.Status == "healthy"`, or an HTTP check).
@@ -148,9 +148,7 @@ Replicas on one host = several identical containers with **identical Traefik rou
 6. Stop and remove the old replica.
 7. On failed health check: remove the new container, stop rollout, keep old replicas (automatic rollback).
 
-Builds: Dockerfile-only via the Docker build API first. Nixpacks/Buildpacks later.
-
-Preferred flow: build once in CI, then deploy by tag (`kipitiny deploy`, a deploy-scoped token that may change the tag, never the repository). Every pull is pinned to its digest in the deployment record, so reconciler recreations and rollbacks never pick up a moved tag.
+No builds on the server (Git builds existed and were removed to keep services simple; may return later). Flow: build once in CI, then deploy by tag (`kipitiny deploy`, a deploy-scoped token that may change the tag, never the repository). Every pull is pinned to its digest in the deployment record, so reconciler recreations and rollbacks never pick up a moved tag.
 
 ## 10. PostgreSQL management and backups (core feature)
 
@@ -238,7 +236,7 @@ Clients ────┤                            ├──→ core (service la
 
 - All logic in `internal/core`. REST handlers and MCP tools are thin adapters. Permissions enforced in one place.
 - MCP built in (`/mcp` module), Streamable HTTP at `/mcp`, reusing auth, tokens, permissions, audit logs. Standalone stdio proxy later.
-- Task-oriented tools, not 1:1 REST mapping: `deploy_from_git`, `get_app_status`, `get_logs`, `rollback`, `backup_database`, `restore_database`.
+- Task-oriented tools, not 1:1 REST mapping: `deploy_image`, `get_app_status`, `get_logs`, `rollback`, `backup_database`, `restore_database`.
 - Mask secrets in every tool response; scoped tokens (read-only vs deploy); confirmation for destructive tools.
 
 ## 15. Multi-server (later)
@@ -259,7 +257,7 @@ Clients ────┤                            ├──→ core (service la
 6. Automated restore tests.
 7. Blue-green deploys with health checks and rollback; pre-deploy command.
 8. Replicas + reconciliation loop.
-9. Builds from Git (Dockerfile first).
+9. ~~Builds from Git~~ (removed: images built in CI, deployed by tag).
 10. React UI polish; built-in MCP endpoint.
 11. Multi-server over SSH.
 12. Optional: Postgres backend for manager state, PITR, centralized logs.

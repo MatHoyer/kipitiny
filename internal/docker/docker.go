@@ -304,23 +304,6 @@ func (c *Client) RemoveContainerAndVolumes(ctx context.Context, id string) error
 	return nil
 }
 
-// RemoveImagesByLabel removes every image carrying label=value (e.g. the
-// builds of a deleted service). Images still in use are left alone.
-func (c *Client) RemoveImagesByLabel(ctx context.Context, label, value string) error {
-	f := make(client.Filters)
-	f.Add("label", label+"="+value)
-	res, err := c.ImageList(ctx, client.ImageListOptions{Filters: f})
-	if err != nil {
-		return err
-	}
-	for _, img := range res.Items {
-		if _, err := c.ImageRemove(ctx, img.ID, client.ImageRemoveOptions{Force: true, PruneChildren: true}); err != nil && !cerrdefs.IsNotFound(err) {
-			return fmt.Errorf("remove image %s: %w", img.ID, err)
-		}
-	}
-	return nil
-}
-
 // ListNetworks returns the networks the manager created.
 func (c *Client) ListNetworks(ctx context.Context) ([]network.Summary, error) {
 	f := make(client.Filters)

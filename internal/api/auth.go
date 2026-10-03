@@ -43,7 +43,6 @@ var deployRoutes = map[string]bool{
 // secretReads reveal credentials or backup contents: admin only.
 var secretReads = map[string]bool{
 	"GET /api/services/{id}/connection": true,
-	"GET /api/services/{id}/webhook":    true,
 	"GET /api/backup-targets/{id}/key":  true,
 	"GET /api/backups/{id}/download":    true,
 	"GET /api/audit":                    true,
@@ -76,8 +75,7 @@ func (a *API) protect(mux *http.ServeMux) http.Handler {
 			return
 		}
 		_, pattern := mux.Handler(r)
-		// Push webhooks authenticate with their own secret.
-		if publicRoutes[pattern] || pattern == "POST /api/hooks/{id}" {
+		if publicRoutes[pattern] {
 			mux.ServeHTTP(w, r)
 			return
 		}
