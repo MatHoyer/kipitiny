@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ErrorText } from "@/components/common";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { timeAgo } from "@/lib/format";
+import { formatDateTime, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, type AuditEntry } from "@/api";
 import { SettingsPage } from "./page";
@@ -103,7 +103,7 @@ export function Audit() {
 
 function AuditRow({ entry: e }: { entry: AuditEntry }) {
   const when = (
-    <span title={new Date(e.createdAt).toLocaleString()} className="whitespace-nowrap">
+    <span title={formatDateTime(e.createdAt)} className="whitespace-nowrap">
       {timeAgo(e.createdAt)}
     </span>
   );

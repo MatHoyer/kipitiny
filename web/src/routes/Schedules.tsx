@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
+import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, type BackupTarget, type Schedule, type ScheduleInput } from "../api";
 
@@ -67,7 +68,7 @@ export function Schedules({ serviceId, targets }: { serviceId: string; targets: 
               <p className="text-xs text-muted-foreground">
                 {describeRetention(s)}
                 {s.verify && " · restore-tested"}
-                {s.enabled && s.nextRun && ` · next ${new Date(s.nextRun).toLocaleString()}`}
+                {s.enabled && s.nextRun && ` · next ${formatDateTime(s.nextRun)}`}
               </p>
             </div>
             <div className="flex gap-0.5">
