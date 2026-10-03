@@ -31,6 +31,8 @@ type Store interface {
 	// SetDeploymentBuild records the image built for a deployment.
 	SetDeploymentBuild(ctx context.Context, id, image, commit string, config Service) error
 	SetServiceStopped(ctx context.Context, serviceID string, stopped bool) error
+	// SetServiceImage records the image a service now deploys.
+	SetServiceImage(ctx context.Context, serviceID, image string) error
 	// ListAllServices returns every service of every project.
 	ListAllServices(ctx context.Context) ([]Service, error)
 	DeleteService(ctx context.Context, id string) error

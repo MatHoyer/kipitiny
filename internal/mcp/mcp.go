@@ -38,7 +38,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "get_logs", Annotations: readOnly,
 		Description: "Recent log lines of a service's running containers, optionally filtered by a case-insensitive substring."}, t.getLogs)
 	mcp.AddTool(server, &mcp.Tool{Name: "deploy",
-		Description: "Deploy a service's current settings (zero-downtime for apps; git services are rebuilt). Returns the deployment; poll get_app_status for the outcome."}, t.deploy)
+		Description: "Deploy a service's current settings (zero-downtime for apps; git services are rebuilt), or another tag of an image service's image. Returns the deployment; poll get_app_status for the outcome."}, t.deploy)
 	mcp.AddTool(server, &mcp.Tool{Name: "deploy_from_git",
 		Description: "Create (or update) an app built from a Git repository's Dockerfile in a project, then deploy it. The project is created if missing."}, t.deployFromGit)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_project_env",
@@ -221,13 +221,18 @@ func (t *tools) getLogs(ctx context.Context, _ *mcp.CallToolRequest, in getLogsI
 	return nil, out, nil
 }
 
-func (t *tools) deploy(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, store.Deployment, error) {
+type deployIn struct {
+	Service string `json:"service" jsonschema:"the service as project/service, or its ID"`
+	Tag     string `json:"tag,omitempty" jsonschema:"image services only: deploy this tag of the service's image, which then keeps it"`
+}
+
+func (t *tools) deploy(ctx context.Context, _ *mcp.CallToolRequest, in deployIn) (*mcp.CallToolResult, store.Deployment, error) {
 	dep, err := mutate(ctx, t.c, store.ScopeDeploy, "deploy", in.Service, func() (store.Deployment, error) {
 		svc, err := t.c.ResolveService(ctx, in.Service)
 		if err != nil {
 			return store.Deployment{}, err
 		}
-		return t.c.Deploy(ctx, svc.ID)
+		return t.c.Deploy(ctx, svc.ID, core.DeployOptions{Tag: in.Tag})
 	})
 	return nil, dep, err
 }
@@ -283,7 +288,7 @@ func (t *tools) deployFromGit(ctx context.Context, _ *mcp.CallToolRequest, in de
 				return store.Deployment{}, err
 			}
 		}
-		return t.c.Deploy(ctx, svc.ID)
+		return t.c.Deploy(ctx, svc.ID, core.DeployOptions{})
 	})
 	return nil, dep, err
 }
