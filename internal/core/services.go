@@ -133,6 +133,14 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		}
 		// The env is generated and fixed: anything sent in is ignored.
 		svc.Env, svc.Secrets = newPostgresEnv(), []string{pgPassword}
+	case store.ServiceKindRedis:
+		if svc.Image == "" {
+			svc.Image = DefaultRedisImage
+		}
+		if svc.MemoryMB == 0 {
+			svc.MemoryMB = defaultRedisMemoryMB
+		}
+		svc.Env, svc.Secrets = newRedisEnv(), []string{redisPassword}
 	default:
 		return ServiceView{}, fmt.Errorf("%w: unknown service kind %q", ErrInvalid, svc.Kind)
 	}
@@ -189,8 +197,8 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	if p.PreDeploy != nil {
 		svc.PreDeploy = strings.TrimSpace(*p.PreDeploy)
 	}
-	if svc.Kind == store.ServiceKindPostgres {
-		if err := checkPostgresUpdate(old, svc); err != nil {
+	if svc.Kind.IsDatabase() {
+		if err := checkDatabaseUpdate(old, svc); err != nil {
 			return ServiceView{}, err
 		}
 	}
@@ -246,11 +254,8 @@ func validateService(s store.Service) error {
 	if s.CPUs != 0 && (s.CPUs < minCPUs || s.CPUs > maxCPUs) {
 		return fmt.Errorf("%w: CPU limit must be between %g and %g cores", ErrInvalid, minCPUs, maxCPUs)
 	}
-	if s.Kind == store.ServiceKindPostgres {
-		if s.HealthPath != "" || s.PreDeploy != "" {
-			return fmt.Errorf("%w: databases have a built-in healthcheck and no pre-deploy command", ErrInvalid)
-		}
-		return validatePostgres(s)
+	if s.Kind.IsDatabase() {
+		return validateDatabase(s)
 	}
 	if s.HealthPath != "" {
 		if !strings.HasPrefix(s.HealthPath, "/") || strings.ContainsAny(s.HealthPath, " \t\n") {
@@ -418,7 +423,7 @@ func (c *Core) DeleteService(ctx context.Context, id, confirm string) error {
 	if err != nil {
 		return err
 	}
-	if svc.Kind == store.ServiceKindPostgres {
+	if svc.Kind.IsDatabase() {
 		if confirm != svc.Name {
 			return fmt.Errorf("%w: deleting a database destroys its data; confirm with the service name", ErrInvalid)
 		}
@@ -455,8 +460,8 @@ func (c *Core) removeServiceContainers(ctx context.Context, svc store.Service) e
 			return err
 		}
 	}
-	if svc.Kind == store.ServiceKindPostgres {
-		return dk.RemoveVolume(ctx, PostgresVolume(svc.ID))
+	if vol := DataVolume(svc); vol != "" {
+		return dk.RemoveVolume(ctx, vol)
 	}
 	return nil
 }

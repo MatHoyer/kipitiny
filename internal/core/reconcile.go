@@ -237,7 +237,7 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 		want.Image = dep.Image
 	}
 	want.Replicas = svc.Replicas
-	if want.Kind == store.ServiceKindPostgres {
+	if want.Kind.IsDatabase() {
 		want.Replicas = 1
 	}
 

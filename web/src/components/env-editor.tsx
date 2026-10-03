@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
-  dbFields,
+  dbRefValid,
   envRef,
   formatEnvRows,
   managerRef,
@@ -18,7 +18,7 @@ import {
   type EnvRow,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { api, SECRET_MASK } from "../api";
+import { api, SECRET_MASK, type DatabaseRef } from "../api";
 
 type Mode = "list" | "raw";
 
@@ -28,7 +28,7 @@ type Mode = "list" | "raw";
  * Secrets are write-only: their saved values read back masked. An entry that
  * is exactly one password manager reference ({{ pass://Vault/Item/field }})
  * holds no secret: it's listed on its own, showing where it points. With vars (the
- * project's shared entry names) and databases (its postgres services), values
+ * project's shared entry names) and databases (its database services), values
  * can reference them as {{ project.NAME }} and {{ db.SERVICE.FIELD }}, alone or
  * within text. readOnly shows the entries without any way to change them.
  */
@@ -55,7 +55,7 @@ export function EnvEditor({
   /** The vars that are secrets: offered to secrets, the others to variables. */
   secretVars?: string[];
   /** The project's database names; enables "Connect database". */
-  databases?: string[];
+  databases?: DatabaseRef[];
   /** Offers secrets from connected password managers. */
   passwordManagers?: boolean;
   readOnly?: boolean;
@@ -88,7 +88,7 @@ export function EnvEditor({
     r.kind === "secret" ||
     (r.kind === "project"
       ? !!vars?.includes(r.name)
-      : !!databases?.includes(r.db) && (dbFields as readonly string[]).includes(r.field));
+      : dbRefValid(databases, r.db, r.field));
   const fromManager = rows.map((r) => managerRef(r.value));
   const providers = useQuery({
     queryKey: ["secret-providers"],

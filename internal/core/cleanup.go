@@ -409,8 +409,8 @@ func (c *Core) removeUnusedImages(ctx context.Context, dk *docker.Client, server
 func (c *Core) removeUnusedVolumes(ctx context.Context, dk *docker.Client, svcs []store.Service, named bool, minAge time.Duration) (int, uint64, error) {
 	protected := map[string]bool{}
 	for _, svc := range svcs {
-		if svc.Kind == store.ServiceKindPostgres {
-			protected[PostgresVolume(svc.ID)] = true
+		if vol := DataVolume(svc); vol != "" {
+			protected[vol] = true
 		}
 	}
 	f := make(client.Filters).Add("dangling", "true")

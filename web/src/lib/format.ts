@@ -1,3 +1,5 @@
+import type { DatabaseKind, DatabaseRef } from "@/api";
+
 /** An env entry; a secret's saved value is write-only (it reads back masked). */
 export type EnvRow = { key: string; value: string; secret: boolean };
 
@@ -54,8 +56,15 @@ export type EnvReference =
   | { kind: "db"; db: string; field: string }
   | { kind: "secret"; ref: string };
 
-/** Credentials a database reference can name. */
-export const dbFields = ["URL", "HOST", "PORT", "USER", "PASSWORD", "DATABASE"] as const;
+/** Credentials a database reference can name, per kind. */
+export const dbFields: Record<DatabaseKind, readonly string[]> = {
+  postgres: ["URL", "HOST", "PORT", "USER", "PASSWORD", "DATABASE"],
+  redis: ["URL", "HOST", "PORT", "USER", "PASSWORD"],
+};
+
+/** Whether {{ db.NAME.FIELD }} resolves against the project's databases. */
+export const dbRefValid = (databases: DatabaseRef[] | undefined, db: string, field: string) =>
+  !!databases?.some((d) => d.name === db && dbFields[d.kind].includes(field));
 
 export const envRef = (name: string) => `{{ project.${name} }}`;
 export const dbRef = (db: string, field: string) => `{{ db.${db}.${field} }}`;

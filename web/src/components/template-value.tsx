@@ -1,5 +1,5 @@
-import { ChevronRight, Link2 } from "lucide-react";
-import { PostgresIcon, schemeIcon } from "@/components/brand-icons";
+import { ChevronRight, Database, Link2 } from "lucide-react";
+import { schemeIcon } from "@/components/brand-icons";
 import { splitRefs, type EnvReference } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +45,7 @@ function RefChip({ r, invalid }: { r: EnvReference; invalid?: boolean }) {
       )}
     >
       {r.kind === "db" ? (
-        <PostgresIcon className="size-3 shrink-0 text-[#4169E1]" />
+        <Database className="size-3 shrink-0" />
       ) : r.kind === "secret" ? (
         <span className="flex shrink-0 [&>svg]:size-3">{schemeIcon(r.ref.split("://")[0])}</span>
       ) : (

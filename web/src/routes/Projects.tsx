@@ -2,7 +2,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { Activity, ChevronRight, FolderKanban, Globe, Layers, Plus, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
-import { PostgresIcon } from "@/components/brand-icons";
+import { DatabaseIcon } from "@/components/brand-icons";
 import { EmptyState, ErrorText, IconTile, StatCard, Tag, Loading } from "@/components/common";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { liveState, timeAgo, troubled } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { api, type Project as ProjectT, type Service } from "../api";
+import { api, isDatabase, type Project as ProjectT, type Service } from "../api";
 
 export function Projects() {
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
@@ -58,7 +58,7 @@ export function Projects() {
           <>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <StatCard icon={FolderKanban} label="Projects" value={projects.data.length} />
-              <StatCard icon={Layers} label="Services" value={all.length} hint={`${all.filter((s) => s.kind === "postgres").length} databases`} />
+              <StatCard icon={Layers} label="Services" value={all.length} hint={`${all.filter((s) => isDatabase(s.kind)).length} databases`} />
               <StatCard icon={Activity} label="Running" value={states.filter((s) => s === "running").length} tone="good" />
               <StatCard
                 icon={TriangleAlert}
@@ -81,7 +81,7 @@ export function Projects() {
 
 function ProjectCard({ project: p, services, server }: { project: ProjectT; services?: Service[]; server?: string }) {
   const domains = services?.filter((s) => s.domain).map((s) => s.domain) ?? [];
-  const hasDb = services?.some((s) => s.kind === "postgres");
+  const dbKinds = [...new Set(services?.map((s) => s.kind).filter(isDatabase))];
   const states = services?.map(liveState) ?? [];
   const bad = states.filter(troubled).length;
 
@@ -93,7 +93,9 @@ function ProjectCard({ project: p, services, server }: { project: ProjectT; serv
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-2 font-medium">
               <span className="truncate">{p.name}</span>
-              {hasDb && <PostgresIcon aria-label="Has a database" className="size-3.5 shrink-0 text-[#4169E1]" />}
+              {dbKinds.map((k) => (
+                <DatabaseIcon key={k} kind={k} aria-label={`Has a ${k} database`} className="size-3.5 shrink-0" />
+              ))}
             </p>
             <p className="text-xs text-muted-foreground">
               {services ? `${services.length} service${services.length === 1 ? "" : "s"}` : <Spinner className="inline size-3" />}

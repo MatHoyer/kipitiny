@@ -64,7 +64,7 @@ func (a *API) deleteService(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) connection(w http.ResponseWriter, r *http.Request) {
-	conn, err := a.core.PostgresConnection(r.Context(), r.PathValue("id"))
+	conn, err := a.core.DatabaseConnection(r.Context(), r.PathValue("id"))
 	if err != nil {
 		a.fail(w, err)
 		return

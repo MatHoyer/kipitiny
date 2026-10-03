@@ -695,3 +695,64 @@ func TestSetBackupTargetKey(t *testing.T) {
 		t.Fatalf("unknown target: %v", err)
 	}
 }
+
+func TestRedisMigration(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "k.db")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	sub, _ := fs.Sub(migrations, "migrations")
+	p, err := goose.NewProvider(goose.DialectSQLite3, db, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 26); err != nil {
+		t.Fatal(err)
+	}
+	old := &Store{db: bun.NewDB(db, sqlitedialect.New())}
+	pr, err := old.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pg, err := old.CreateService(ctx, store.Service{ProjectID: pr.ID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17", Replicas: 1,
+		MemoryMB: 512, CPUs: 0.5, Domain: "", Env: map[string]string{"A": "1"}, Secrets: []string{"A"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := old.CreateDeployment(ctx, store.Deployment{ServiceID: pg.ID, Status: store.DeploymentSucceeded, Image: "postgres:17"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	got, err := s.GetService(ctx, pg.ID)
+	if err != nil || got.CPUs != 0.5 || got.MemoryMB != 512 || got.Env["A"] != "1" || !slices.Equal(got.Secrets, []string{"A"}) {
+		t.Fatalf("service after rebuild = %+v, %v", got, err)
+	}
+	if _, err := s.GetDeployment(ctx, d.ID); err != nil {
+		t.Fatalf("deployment lost: %v", err)
+	}
+	if _, err := s.CreateService(ctx, store.Service{ProjectID: pr.ID, Name: "cache", Kind: store.ServiceKindRedis, Image: "redis:8-alpine", Replicas: 1}); err != nil {
+		t.Fatalf("create redis: %v", err)
+	}
+	if _, err := s.CreateService(ctx, store.Service{ProjectID: pr.ID, Name: "db", Kind: store.ServiceKindRedis, Image: "redis:8-alpine", Replicas: 1}); err == nil {
+		t.Fatal("unique (project_id, name) lost")
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO deployments (id, service_id, status, image, created_at) VALUES ('d2', 'nope', 'running', 'x', '2026-01-01 00:00:00+00:00')`); err == nil {
+		t.Fatal("foreign keys are off after the migration")
+	}
+	if err := s.DeleteService(ctx, pg.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetDeployment(ctx, d.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("deployment not cascaded: %v", err)
+	}
+}
