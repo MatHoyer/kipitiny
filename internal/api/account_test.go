@@ -125,4 +125,27 @@ func TestAccountNeedsSession(t *testing.T) {
 	srv := newServer(t)
 	c := newClient(t, srv)
 	expect(t, "account without auth", c.do("GET", "/api/account", ""), 401)
+	expect(t, "passkeys refused at an IP address", c.do("POST", "/api/auth/passkey/begin", "{}"), 400)
+
+	req, _ := http.NewRequest("POST", srv.URL+"/api/auth/passkey/begin", strings.NewReader("{}"))
+	req.Host = "localhost"
+	var opts struct {
+		Ceremony string
+		Options  struct {
+			PublicKey struct {
+				RPID             string `json:"rpId"`
+				UserVerification string
+			}
+		}
+	}
+	res, err := c.hc.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	_ = json.NewDecoder(res.Body).Decode(&opts)
+	expect(t, "passkey login begins without auth", res.StatusCode, 200)
+	if opts.Ceremony == "" || opts.Options.PublicKey.RPID != "localhost" || opts.Options.PublicKey.UserVerification != "required" {
+		t.Fatalf("options = %+v", opts)
+	}
 }

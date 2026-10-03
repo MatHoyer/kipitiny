@@ -430,6 +430,43 @@ func (s *Store) UseRecoveryCode(ctx context.Context, userID, codeHash string) er
 	return nil
 }
 
+func (s *Store) CreatePasskey(ctx context.Context, p store.Passkey) (store.Passkey, error) {
+	p.ID, p.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&p).Exec(ctx); err != nil {
+		return store.Passkey{}, mapErr(err)
+	}
+	return p, nil
+}
+
+func (s *Store) ListPasskeys(ctx context.Context, userID string) ([]store.Passkey, error) {
+	ps := []store.Passkey{}
+	err := s.db.NewSelect().Model(&ps).Where("user_id = ?", userID).Order("created_at").Scan(ctx)
+	return ps, mapErr(err)
+}
+
+func (s *Store) GetPasskeyByCredentialID(ctx context.Context, credentialID string) (store.Passkey, error) {
+	var p store.Passkey
+	err := s.db.NewSelect().Model(&p).Where("credential_id = ?", credentialID).Scan(ctx)
+	return p, mapErr(err)
+}
+
+func (s *Store) PasskeyUsed(ctx context.Context, id, credential string) error {
+	_, err := s.db.NewUpdate().Model((*store.Passkey)(nil)).
+		Set("credential = ?", credential).Set("last_used_at = ?", now()).Where("id = ?", id).Exec(ctx)
+	return mapErr(err)
+}
+
+func (s *Store) DeletePasskey(ctx context.Context, userID, id string) error {
+	res, err := s.db.NewDelete().Model((*store.Passkey)(nil)).Where("id = ?", id).Where("user_id = ?", userID).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) CreateSession(ctx context.Context, sess store.Session) error {
 	sess.CreatedAt = now()
 	sess.ExpiresAt = sess.ExpiresAt.UTC().Truncate(time.Microsecond)

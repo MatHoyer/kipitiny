@@ -1,16 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ShieldCheck, ShieldOff, TriangleAlert } from "lucide-react";
+import { Download, Fingerprint, KeyRound, Plus, ShieldCheck, ShieldOff, Trash2, TriangleAlert } from "lucide-react";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { encode } from "uqr";
-import { CopyButton, CopyField, ErrorText, Section, Tag } from "@/components/common";
+import { CopyButton, CopyField, EmptyState, ErrorText, Section, Tag } from "@/components/common";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
+import { friendlyError } from "@/lib/errors";
+import { timeAgo } from "@/lib/format";
+import { isCancelled, passkeysSupported } from "@/lib/webauthn";
 import { api, type Account } from "@/api";
 
-/** The signed-in user's own sign-in settings: password and two-factor authentication. */
+/** The signed-in user's own sign-in settings: password, two-factor authentication, passkeys. */
 export function AccountPage() {
   const account = useQuery({ queryKey: ["account"], queryFn: api.account });
   return (
@@ -21,6 +25,7 @@ export function AccountPage() {
         {account.data && (
           <>
             <TwoFactor account={account.data} />
+            <Passkeys account={account.data} />
             <ChangePassword username={account.data.username} />
           </>
         )}
@@ -288,6 +293,108 @@ function DisableTotp({ onDone }: { onDone: () => void }) {
       pending={disable.isPending}
       onSubmit={(p) => disable.mutate(p)}
     />
+  );
+}
+
+function Passkeys({ account }: { account: Account }) {
+  const qc = useQueryClient();
+  const [adding, setAdding] = useState(false);
+  const supported = passkeysSupported();
+  const remove = useMutation({
+    meta: { error: "Couldn't remove the passkey" },
+    mutationFn: api.deletePasskey,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["account"] }),
+  });
+  const add = (
+    <Button size="sm" onClick={() => setAdding(true)} disabled={!supported}>
+      <Plus data-icon="inline-start" />
+      Add passkey
+    </Button>
+  );
+  return (
+    <Section
+      title="Passkeys"
+      description="Sign in with your fingerprint, face or device PIN instead of a password. A passkey stands in for two-factor authentication too."
+      actions={account.passkeys.length > 0 && add}
+    >
+      {!supported && (
+        <p className="text-sm text-amber-600 dark:text-amber-400">
+          Passkeys need the manager to be opened over HTTPS at a domain name (or at localhost), in a browser that supports them.
+        </p>
+      )}
+      {account.passkeys.length === 0 ? (
+        <EmptyState
+          icon={Fingerprint}
+          title="No passkeys yet"
+          description={`A passkey only works at ${window.location.hostname}, where it was added.`}
+          action={add}
+        />
+      ) : (
+        <ul className="divide-y rounded-lg border">
+          {account.passkeys.map((p) => (
+            <li key={p.id} className="flex items-center gap-3 px-4 py-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted [&>svg]:size-4">
+                <KeyRound />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{p.name}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  Added {timeAgo(p.createdAt)} · {p.lastUsedAt ? `last used ${timeAgo(p.lastUsedAt)}` : "never used"}
+                </p>
+              </div>
+              <ConfirmDialog
+                trigger={
+                  <Button variant="ghost" size="icon-sm" title="Remove" aria-label="Remove" className="text-muted-foreground hover:text-destructive">
+                    <Trash2 />
+                  </Button>
+                }
+                title={`Remove passkey ${p.name}?`}
+                description="It won't sign you in anymore. Also delete it from the device or password manager holding it."
+                confirmLabel="Remove"
+                onConfirm={() => remove.mutate(p.id)}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+      <Dialog open={adding} onOpenChange={setAdding}>
+        <DialogContent className="sm:max-w-md">{adding && <AddPasskey onDone={() => setAdding(false)} />}</DialogContent>
+      </Dialog>
+    </Section>
+  );
+}
+
+function AddPasskey({ onDone }: { onDone: () => void }) {
+  const qc = useQueryClient();
+  const [name, setName] = useState("");
+  const add = useMutation({
+    meta: { error: false },
+    mutationFn: (password: string) => api.addPasskey(password, name.trim()),
+    onSuccess: (p) => {
+      qc.invalidateQueries({ queryKey: ["account"] });
+      toast.success(`Passkey ${p.name} added`);
+      onDone();
+    },
+    onError: (err) => !isCancelled(err) && toast.error("Couldn't add the passkey", { description: friendlyError(err), duration: 8000 }),
+  });
+  return (
+    <ConfirmPassword
+      title="Add a passkey"
+      description="Confirm your password, then follow your browser's prompt."
+      submitLabel="Continue"
+      pending={add.isPending}
+      onSubmit={(p) => add.mutate(p)}
+    >
+      <FloatingInput
+        label="Name"
+        required
+        autoFocus
+        maxLength={60}
+        placeholder="MacBook Touch ID"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
+    </ConfirmPassword>
   );
 }
 

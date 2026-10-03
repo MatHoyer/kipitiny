@@ -1,11 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Box, Loader2 } from "lucide-react";
+import { Box, Fingerprint, Loader2 } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { FloatingInput } from "@/components/ui/floating-input";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/errors";
+import { isCancelled, passkeysSupported } from "@/lib/webauthn";
 import { api } from "../api";
 
 function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
@@ -84,7 +86,40 @@ export function Login() {
         </CardContent>
         <Submit pending={login.isPending}>Sign in</Submit>
       </form>
+      <PasskeySignIn />
     </Shell>
+  );
+}
+
+/** Passwordless sign-in; a passkey stands in for the second factor too. */
+function PasskeySignIn() {
+  const qc = useQueryClient();
+  const signIn = useMutation({
+    meta: { error: false },
+    mutationFn: api.loginPasskey,
+    onSuccess: () => qc.resetQueries(),
+    onError: (err) => !isCancelled(err) && toast.error("Couldn't sign in with a passkey", { description: friendlyError(err) }),
+  });
+  if (!passkeysSupported()) return null;
+  return (
+    <CardFooter className="flex-col gap-3">
+      <div className="flex w-full items-center gap-3 text-xs text-muted-foreground">
+        <Separator className="flex-1" />
+        or
+        <Separator className="flex-1" />
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        className="h-11 w-full rounded-xl"
+        loading={signIn.isPending}
+        onClick={() => signIn.mutate()}
+      >
+        <Fingerprint data-icon="inline-start" />
+        Sign in with a passkey
+      </Button>
+    </CardFooter>
   );
 }
 
@@ -159,6 +194,7 @@ function SecondFactor({ ticket, onRestart }: { ticket: string; onRestart: () => 
           Back
         </Button>
       </CardFooter>
+      <PasskeySignIn />
     </Shell>
   );
 }
