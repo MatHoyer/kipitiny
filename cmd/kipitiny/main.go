@@ -34,6 +34,8 @@ func main() {
 		switch os.Args[1] {
 		case "reset-password":
 			run = resetPassword
+		case "disable-2fa":
+			run = disable2FA
 		case "probe":
 			// Healthcheck injected into app containers: keep it dependency-free.
 			if len(os.Args) != 3 || probe.Check(os.Args[2]) != nil {
@@ -60,7 +62,7 @@ func main() {
 			}
 			os.Exit(0)
 		default:
-			fmt.Fprintf(os.Stderr, "usage: %s [reset-password <username> | deploy --service <project/service> [--tag <tag>] | healthcheck]\n", os.Args[0])
+			fmt.Fprintf(os.Stderr, "usage: %s [reset-password <username> | disable-2fa <username> | deploy --service <project/service> [--tag <tag>] | healthcheck]\n", os.Args[0])
 			os.Exit(2)
 		}
 	}
@@ -215,5 +217,26 @@ func resetPassword() error {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "Password updated; existing sessions were signed out.")
+	return nil
+}
+
+// disable2FA turns two-factor authentication off for a user who lost both
+// the authenticator and the recovery codes. Passkeys are kept.
+func disable2FA() error {
+	if len(os.Args) != 3 {
+		return errors.New("usage: disable-2fa <username>")
+	}
+	cfg := config.Load()
+	ctx := context.Background()
+	st, err := sqlite.Open(ctx, cfg.DBPath())
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	if err := core.New(cfg, st, nil, slog.Default()).ResetTOTP(ctx, os.Args[2]); err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stderr, "Two-factor authentication is off; the password alone signs in again.")
 	return nil
 }

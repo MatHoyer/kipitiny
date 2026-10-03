@@ -130,21 +130,35 @@ func validatePassword(p string) error {
 	return nil
 }
 
-func (c *Core) Login(ctx context.Context, username, password string) (store.User, string, error) {
+// LoginResult is a new session, or a ticket for the second step when the
+// user has two-factor authentication on.
+type LoginResult struct {
+	User    store.User
+	Session string
+	// MFATicket redeems a TOTP or recovery code (LoginMFA) for a session.
+	MFATicket string
+}
+
+func (c *Core) Login(ctx context.Context, username, password string) (LoginResult, error) {
 	u, err := c.store.GetUserByUsername(ctx, username)
 	if errors.Is(err, store.ErrNotFound) {
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
-		return store.User{}, "", ErrUnauthorized
+		return LoginResult{}, ErrUnauthorized
 	}
 	if err != nil {
-		return store.User{}, "", err
+		return LoginResult{}, err
 	}
 	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) != nil {
-		return store.User{}, "", ErrUnauthorized
+		return LoginResult{}, ErrUnauthorized
+	}
+	if u.TOTPSecret != "" {
+		ticket := randomToken(32)
+		c.mfaTickets.put(ticket, mfaTicket{userID: u.ID}, time.Now().Add(mfaTicketTTL))
+		return LoginResult{MFATicket: ticket}, nil
 	}
 	_ = c.store.DeleteExpiredSessions(ctx)
 	token, err := c.newSession(ctx, u.ID)
-	return u, token, err
+	return LoginResult{User: u, Session: token}, err
 }
 
 func (c *Core) Authenticate(ctx context.Context, sessionToken string) (store.User, error) {

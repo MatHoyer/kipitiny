@@ -17,16 +17,18 @@ const sessionCookie = "kipitiny_session"
 
 // publicRoutes are reachable without a session.
 var publicRoutes = map[string]bool{
-	"GET /api/health":      true,
-	"GET /api/auth/state":  true,
-	"POST /api/auth/setup": true,
-	"POST /api/auth/login": true,
+	"GET /api/health":          true,
+	"GET /api/auth/state":      true,
+	"POST /api/auth/setup":     true,
+	"POST /api/auth/login":     true,
+	"POST /api/auth/login/mfa": true,
 }
 
 // sessionOnly routes can't be used with an API token (a token must not mint
 // tokens or act as a signed-in user).
 func sessionOnly(pattern string) bool {
-	return strings.Contains(pattern, "/api/auth/") || strings.Contains(pattern, "/api/tokens") ||
+	return strings.Contains(pattern, "/api/auth/") || strings.Contains(pattern, "/api/account") ||
+		strings.Contains(pattern, "/api/tokens") ||
 		pattern == "POST /api/update"
 }
 
@@ -137,7 +139,7 @@ func (a *API) authenticate(r *http.Request) (core.Actor, bool, error) {
 	if err != nil {
 		return core.Actor{}, false, err
 	}
-	return core.Actor{Kind: "user", Name: u.Username, Scope: store.ScopeAdmin}, false, nil
+	return core.Actor{Kind: "user", Name: u.Username, Scope: store.ScopeAdmin, UserID: u.ID}, false, nil
 }
 
 type statusRecorder struct {
@@ -232,7 +234,37 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &c) {
 		return
 	}
-	u, token, err := a.core.Login(r.Context(), c.Username, c.Password)
+	res, err := a.core.Login(r.Context(), c.Username, c.Password)
+	if err != nil {
+		a.limiter.fail(ip)
+		a.fail(w, err)
+		return
+	}
+	if res.MFATicket != "" {
+		// The limiter isn't reset until the second factor passes too, so
+		// codes can't be guessed by signing in again and again.
+		writeJSON(w, http.StatusOK, map[string]any{"mfaRequired": true, "ticket": res.MFATicket})
+		return
+	}
+	a.limiter.reset(ip)
+	setSessionCookie(w, r, res.Session, int(core.SessionTTL.Seconds()))
+	writeJSON(w, http.StatusOK, res.User)
+}
+
+func (a *API) loginMFA(w http.ResponseWriter, r *http.Request) {
+	ip := clientIP(r, a.core.BehindTunnel(r.Context()))
+	if !a.limiter.allow(ip) {
+		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
+		return
+	}
+	var body struct {
+		Ticket string `json:"ticket"`
+		Code   string `json:"code"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	u, token, err := a.core.LoginMFA(r.Context(), body.Ticket, body.Code)
 	if err != nil {
 		a.limiter.fail(ip)
 		a.fail(w, err)

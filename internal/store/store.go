@@ -56,6 +56,17 @@ type Store interface {
 	// SetPassword updates the hash and revokes all of the user's sessions.
 	SetPassword(ctx context.Context, userID, passwordHash string) error
 
+	// SetTOTP turns TOTP on with secret (empty: off) and replaces the
+	// recovery codes with codeHashes.
+	SetTOTP(ctx context.Context, userID, secret string, codeHashes []string) error
+	// UseTOTPStep records step as used; ErrConflict if it (or a later one)
+	// already was.
+	UseTOTPStep(ctx context.Context, userID string, step int64) error
+	SetRecoveryCodes(ctx context.Context, userID string, codeHashes []string) error
+	CountRecoveryCodes(ctx context.Context, userID string) (int, error)
+	// UseRecoveryCode deletes the code; ErrNotFound if the user has no such code.
+	UseRecoveryCode(ctx context.Context, userID, codeHash string) error
+
 	CreateSession(ctx context.Context, s Session) error
 	// GetSession returns ErrNotFound for unknown or expired sessions.
 	GetSession(ctx context.Context, tokenHash string) (Session, error)
@@ -146,6 +157,9 @@ type User struct {
 	Username     string    `bun:"username" json:"username"`
 	PasswordHash string    `bun:"password_hash" json:"-"`
 	CreatedAt    time.Time `bun:"created_at" json:"createdAt"`
+	// TOTPSecret is the base32 authenticator secret; empty while 2FA is off.
+	TOTPSecret   string `bun:"totp_secret" json:"-"`
+	TOTPLastStep int64  `bun:"totp_last_step" json:"-"`
 }
 
 type Session struct {

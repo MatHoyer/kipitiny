@@ -309,6 +309,13 @@ export type LogLine = { container: string; time: string; text: string };
 
 export type User = { id: string; username: string; createdAt: string };
 
+/** A password sign-in that still needs a TOTP or recovery code. */
+export type MfaChallenge = { mfaRequired: true; ticket: string };
+
+export type Account = { username: string; totpEnabled: boolean; recoveryCodes: number };
+
+export type TotpSetup = { secret: string; uri: string };
+
 export type AuthState = { setupRequired: boolean; user?: User };
 
 /** A base domain offered when giving a service a public domain. */
@@ -467,8 +474,18 @@ export const api = {
   authState: () => request<AuthState>("/auth/state"),
   setup: (setupToken: string, username: string, password: string) =>
     request<User>("/auth/setup", json("POST", { setupToken, username, password })),
-  login: (username: string, password: string) => request<User>("/auth/login", json("POST", { username, password })),
+  login: (username: string, password: string) =>
+    request<User | MfaChallenge>("/auth/login", json("POST", { username, password })),
+  loginMfa: (ticket: string, code: string) => request<User>("/auth/login/mfa", json("POST", { ticket, code })),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
+
+  account: () => request<Account>("/account"),
+  changePassword: (current: string, password: string) => request<void>("/account/password", json("PUT", { current, password })),
+  beginTotp: (password: string) => request<TotpSetup>("/account/totp", json("POST", { password })),
+  enableTotp: (code: string) => request<{ recoveryCodes: string[] }>("/account/totp/enable", json("POST", { code })),
+  disableTotp: (password: string) => request<void>("/account/totp/disable", json("POST", { password })),
+  regenerateRecoveryCodes: (password: string) =>
+    request<{ recoveryCodes: string[] }>("/account/recovery-codes", json("POST", { password })),
 
   status: () => request<Status>("/status"),
   applyUpdate: () => request<UpdateInfo>("/update", { method: "POST" }),

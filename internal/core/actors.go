@@ -19,6 +19,8 @@ type Actor struct {
 	Kind  string      `json:"kind"` // "user" or "token"
 	Name  string      `json:"name"`
 	Scope store.Scope `json:"scope"`
+	// UserID is the signed-in user's; empty for a token.
+	UserID string `json:"-"`
 }
 
 func (a Actor) String() string { return a.Kind + ":" + a.Name }
