@@ -269,3 +269,11 @@ func (a *API) verifyBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusAccepted, b)
 }
+
+func (a *API) testTarget(w http.ResponseWriter, r *http.Request) {
+	if err := a.core.TestBackupTarget(r.Context(), r.PathValue("id")); err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

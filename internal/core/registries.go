@@ -55,6 +55,20 @@ func (c *Core) DeleteRegistry(ctx context.Context, id string) error {
 	return c.store.DeleteRegistry(ctx, id)
 }
 
+// TestRegistry signs in again with the saved credential.
+func (c *Core) TestRegistry(ctx context.Context, id string) error {
+	r, err := c.store.GetRegistry(ctx, id)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	if err := c.pool.Local().Login(ctx, loginAddress(r.Host), r.Username, r.Password); err != nil {
+		return fmt.Errorf("%w: %s refused the credentials: %v", ErrInvalid, r.Host, err)
+	}
+	return nil
+}
+
 func (c *Core) applyRegistry(ctx context.Context, r *store.Registry, in RegistryInput) error {
 	r.Host = normalizeRegistryHost(in.Host)
 	r.Username = strings.TrimSpace(in.Username)

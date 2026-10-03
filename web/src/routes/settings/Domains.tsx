@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Globe, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { CloudflareIcon } from "@/components/brand-icons";
-import { CheckboxField, EmptyState, ErrorText, Mono, Tag } from "@/components/common";
+import { CheckboxField, EmptyState, ErrorText, Mono, Tag, TestButton } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -196,17 +196,20 @@ function CloudflareCard() {
           </p>
         </div>
         {status.connected ? (
-          <ConfirmDialog
-            trigger={
-              <Button variant="outline" size="sm" loading={disconnect.isPending}>
-                Disconnect
-              </Button>
-            }
-            title="Disconnect Cloudflare?"
-            description="kipitiny stops managing DNS. Records it created stay in Cloudflare."
-            confirmLabel="Disconnect"
-            onConfirm={() => disconnect.mutate()}
-          />
+          <div className="flex items-center gap-1">
+            <TestButton name="Cloudflare" test={api.testCloudflare} />
+            <ConfirmDialog
+              trigger={
+                <Button variant="outline" size="sm" loading={disconnect.isPending}>
+                  Disconnect
+                </Button>
+              }
+              title="Disconnect Cloudflare?"
+              description="kipitiny stops managing DNS. Records it created stay in Cloudflare."
+              confirmLabel="Disconnect"
+              onConfirm={() => disconnect.mutate()}
+            />
+          </div>
         ) : (
           <ConnectCloudflareDialog />
         )}

@@ -92,3 +92,11 @@ func (a *API) deleteDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (a *API) testCloudflare(w http.ResponseWriter, r *http.Request) {
+	if err := a.core.TestCloudflare(r.Context()); err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

@@ -325,6 +325,28 @@ func (c *Core) checkTarget(ctx context.Context, t *store.BackupTarget) error {
 	return nil
 }
 
+// TestBackupTarget writes and deletes a test object on a saved target.
+func (c *Core) TestBackupTarget(ctx context.Context, id string) error {
+	t, err := c.store.GetBackupTarget(ctx, id)
+	if err != nil {
+		return err
+	}
+	st, err := c.openStorage(t)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	timeout := 15 * time.Second
+	if t.Drive() {
+		timeout = time.Minute
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	if err := st.Check(ctx); err != nil {
+		return fmt.Errorf("%w: cannot write to %s: %v", ErrInvalid, t.Name, err)
+	}
+	return nil
+}
+
 // maskedTarget hides credentials; a drive target shows its fields as
 // Settings, secrets masked and rclone's own options left out.
 func maskedTarget(t store.BackupTarget) store.BackupTarget {

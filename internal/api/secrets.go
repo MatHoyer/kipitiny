@@ -46,3 +46,11 @@ func (a *API) secretItems(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, items)
 }
+
+func (a *API) testSecretProvider(w http.ResponseWriter, r *http.Request) {
+	if err := a.core.TestSecretProvider(r.Context(), r.PathValue("id")); err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
