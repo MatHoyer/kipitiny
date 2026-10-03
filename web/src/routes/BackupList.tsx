@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { PostgresIcon } from "@/components/brand-icons";
 import { EmptyState, StateBadge, Tag } from "@/components/common";
-import { formatBytes, formatDuration, timeAgo } from "@/lib/format";
+import { byDay, formatBytes, formatDuration, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Backup, BackupTarget } from "../api";
 
@@ -76,24 +76,6 @@ export function BackupList({
 export function backupTitle(b: Backup, withProject = true) {
   if (b.kind === "manager") return "Manager state";
   return withProject ? `${b.projectName} / ${b.serviceName}` : b.serviceName;
-}
-
-/** Groups backups (newest first) under "Today", "Yesterday" or their date. */
-function byDay(backups: Backup[]): [string, Backup[]][] {
-  const groups = new Map<string, Backup[]>();
-  const today = new Date().toDateString();
-  const yesterday = new Date(Date.now() - 86_400_000).toDateString();
-  for (const b of backups) {
-    const d = new Date(b.createdAt);
-    const key =
-      d.toDateString() === today
-        ? "Today"
-        : d.toDateString() === yesterday
-          ? "Yesterday"
-          : d.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-    groups.set(key, [...(groups.get(key) ?? []), b]);
-  }
-  return [...groups];
 }
 
 /** The restore test's outcome, compact. */
