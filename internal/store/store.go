@@ -247,6 +247,9 @@ type Deployment struct {
 	Image     string           `bun:"image" json:"image"`
 	Error     string           `bun:"error" json:"error,omitempty"`
 	GitCommit string           `bun:"git_commit" json:"gitCommit,omitempty"`
+	// TriggeredBy is who started it: user:<name>, token:<name> or
+	// webhook:<source>; empty for older deployments.
+	TriggeredBy string `bun:"triggered_by" json:"triggeredBy,omitempty"`
 	// Config is the service as deployed (image included).
 	Config     Service    `bun:"config,type:text" json:"-"`
 	CreatedAt  time.Time  `bun:"created_at" json:"createdAt"`

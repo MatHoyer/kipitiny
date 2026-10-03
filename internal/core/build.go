@@ -280,7 +280,14 @@ func (c *Core) HandleWebhook(ctx context.Context, serviceID string, header func(
 	if payload.Ref != "" && payload.Ref != "refs/heads/"+svc.GitBranch {
 		return store.Deployment{}, ErrIgnored
 	}
-	return c.Deploy(ctx, svc.ID, DeployOptions{})
+	source := "push"
+	switch {
+	case header("X-GitHub-Event") != "":
+		source = "github"
+	case header("X-Gitlab-Event") != "":
+		source = "gitlab"
+	}
+	return c.Deploy(WithActor(ctx, Actor{Kind: "webhook", Name: source}), svc.ID, DeployOptions{})
 }
 
 func webhookAuthorized(secret string, header func(string) string, body []byte) bool {
