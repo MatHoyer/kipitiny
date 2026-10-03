@@ -112,6 +112,9 @@ func (c *Core) bootstrapServer(ctx context.Context, sv store.Server) error {
 	if err := c.cleanupRestoreTests(ctx, dk); err != nil {
 		return err
 	}
+	if err := c.cleanupTerminals(ctx, dk); err != nil {
+		return err
+	}
 	if sv.Kind == store.ServerLocal {
 		c.cleanupUpdater(ctx, dk)
 	}

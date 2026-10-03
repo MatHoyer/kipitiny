@@ -83,6 +83,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("POST /api/servers", a.createServer)
 	mux.HandleFunc("PUT /api/servers/{id}", a.updateServer)
 	mux.HandleFunc("DELETE /api/servers/{id}", a.deleteServer)
+	mux.HandleFunc("GET /api/servers/{id}/terminal", a.serverTerminal)
 	mux.HandleFunc("GET /api/ssh-key", a.sshKey)
 	mux.HandleFunc("GET /api/domains", a.listDomains)
 	mux.HandleFunc("POST /api/domains", a.createDomain)

@@ -564,4 +564,5 @@ export const api = {
   logsUrl: (serviceId: string, tail = 200) => `/api/services/${serviceId}/logs?tail=${tail}`,
   terminalUrl: (serviceId: string, container: string, shell: string) =>
     `/api/services/${serviceId}/terminal?${new URLSearchParams({ container, shell })}`,
+  serverTerminalUrl: (serverId: string) => `/api/servers/${serverId}/terminal`,
 };

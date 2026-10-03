@@ -1,6 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ChevronRight, Cloud, FolderKanban, Globe, HardDrive, Plus, Server as ServerIcon, Trash2 } from "lucide-react";
-import { useId, useState, type FormEvent, type ReactNode } from "react";
+import {
+  Activity,
+  ChevronRight,
+  Cloud,
+  FolderKanban,
+  Globe,
+  HardDrive,
+  Plus,
+  Server as ServerIcon,
+  SquareTerminal,
+  Trash2,
+} from "lucide-react";
+import { lazy, Suspense, useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import {
@@ -149,6 +160,8 @@ export function ServerPage() {
             </ul>
           )}
         </Section>
+
+        <HostTerminal key={`term-${s.id}`} server={s} />
 
         {s.kind === "ssh" && (
           <DangerZone description={s.projects > 0 ? "Move or delete its projects first." : "kipitiny stops managing it and removes the Traefik and tunnel containers it put there."}>
@@ -386,5 +399,54 @@ function NewServerDialog() {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// xterm.js is big: load it with the first terminal.
+const TerminalView = lazy(() => import("@/components/terminal").then((m) => ({ default: m.TerminalView })));
+
+/** A root shell on the host, through a privileged helper container. */
+function HostTerminal({ server }: { server: Server }) {
+  // Each connect mounts a new session; an ended one stays on screen.
+  const [session, setSession] = useState(0);
+  const [live, setLive] = useState(false);
+
+  return (
+    <Section
+      title="Terminal"
+      description="Root shell on the host. Sessions are recorded in the audit log."
+      actions={
+        live ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSession(0);
+              setLive(false);
+            }}
+          >
+            Disconnect
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            disabled={!server.docker}
+            onClick={() => {
+              setSession((n) => n + 1);
+              setLive(true);
+            }}
+          >
+            <SquareTerminal data-icon="inline-start" />
+            {session ? "Reconnect" : "Connect"}
+          </Button>
+        )
+      }
+    >
+      {session > 0 && (
+        <Suspense fallback={<Loading />}>
+          <TerminalView key={session} path={api.serverTerminalUrl(server.id)} onClose={() => setLive(false)} className="h-[28rem]" />
+        </Suspense>
+      )}
+    </Section>
   );
 }

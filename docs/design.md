@@ -226,6 +226,7 @@ Later: optional VictoriaLogs or Loki, opt-in.
 - Dev: Go on `:8080`, Vite dev server proxies `/api`.
 - Release: multi-stage Dockerfile → distroless image (`cc` variant, for the bundled `pass-cli`; kipitiny itself is static).
 - Web terminal: `docker exec` with a TTY, bridged to xterm.js (lazy-loaded chunk) over a websocket (`golang.org/x/net/websocket`). Browser sends JSON `input`/`resize` messages; the server sends raw output as binary frames, then one `exit`/`error` message. Admin only, Origin must match the host, every session opened/closed lands in the audit log.
+- Server terminal: same bridge, into a throwaway privileged `alpine` container (`--pid=host`, labelled `kipitiny.component=terminal`) running `nsenter -t 1 -m -u -i -n -p` then `su -l root`: a root shell on the host, local or remote, with nothing but Docker access (already root-equivalent). Closing the session removes the container; leftovers are cleaned at startup.
 
 ## 14. API and MCP
 
