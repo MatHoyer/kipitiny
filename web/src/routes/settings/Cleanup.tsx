@@ -6,7 +6,7 @@ import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
-import { formatBytes, timeAgo } from "@/lib/format";
+import { formatBytes, formatDateTime, timeAgo } from "@/lib/format";
 import { api, type Cleanup as CleanupState, type CleanupResult, type CleanupSettings } from "@/api";
 import { SettingsPage } from "./page";
 
@@ -71,7 +71,7 @@ export function Cleanup() {
         <Section title="Schedule" description="When the cleanup runs on its own, on every server.">
           <CheckboxField
             label="Run on a schedule"
-            description={cleanup.data?.nextRun && `Next run ${new Date(cleanup.data.nextRun).toLocaleString()}.`}
+            description={cleanup.data?.nextRun && `Next run ${formatDateTime(cleanup.data.nextRun)}.`}
             checked={form.enabled}
             onCheckedChange={(v) => set("enabled", v)}
           />
@@ -174,7 +174,7 @@ function CleanupStats({ state }: { state: CleanupState }) {
         icon={CalendarClock}
         label="Schedule"
         value={state.settings.enabled ? "On" : "Off"}
-        hint={state.settings.enabled && state.nextRun ? `Next ${new Date(state.nextRun).toLocaleString()}` : "Runs only on demand"}
+        hint={state.settings.enabled && state.nextRun ? `Next ${formatDateTime(state.nextRun)}` : "Runs only on demand"}
       />
       <StatCard
         icon={History}

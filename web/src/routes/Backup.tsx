@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { formatBytes, formatDuration, timeAgo } from "@/lib/format";
+import { formatBytes, formatDateTime, formatDuration, timeAgo } from "@/lib/format";
 import { api, type Backup as BackupT } from "../api";
 import { backupTitle } from "./BackupList";
 
@@ -119,7 +119,7 @@ export function Backup() {
               <StateBadge state={b.status} />
               {b.encrypted && <Tag>encrypted (age)</Tag>}
             </h2>
-            <p className="text-sm text-muted-foreground" title={new Date(b.createdAt).toLocaleString()}>
+            <p className="text-sm text-muted-foreground" title={formatDateTime(b.createdAt)}>
               {new Date(b.createdAt).toLocaleString([], { dateStyle: "full", timeStyle: "short" })} · {timeAgo(b.createdAt)}
             </p>
           </div>
@@ -171,8 +171,8 @@ export function Backup() {
               </Link>
             </Detail>
             <Detail label="Encryption">{b.encrypted ? "age (X25519), with the target's key" : "none"}</Detail>
-            <Detail label="Started">{new Date(b.createdAt).toLocaleString()}</Detail>
-            <Detail label="Finished">{b.finishedAt ? new Date(b.finishedAt).toLocaleString() : "—"}</Detail>
+            <Detail label="Started">{formatDateTime(b.createdAt)}</Detail>
+            <Detail label="Finished">{b.finishedAt ? formatDateTime(b.finishedAt) : "—"}</Detail>
             <Detail label="Object" className="sm:col-span-2">
               <CopyValue value={b.objectKey} />
             </Detail>
@@ -193,7 +193,7 @@ export function Backup() {
                 {ownRestores.map((r) => (
                   <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-sm">
                     <StateBadge state={r.status} />
-                    <span title={new Date(r.createdAt).toLocaleString()}>{timeAgo(r.createdAt)}</span>
+                    <span title={formatDateTime(r.createdAt)}>{timeAgo(r.createdAt)}</span>
                     {r.finishedAt && (
                       <span className="text-muted-foreground">
                         took {formatDuration(new Date(r.finishedAt).getTime() - new Date(r.createdAt).getTime())}
@@ -258,7 +258,7 @@ function RestoreTest({ backup: b, onRun, busy }: { backup: BackupT; onRun: () =>
           <Detail label="Database size">{formatBytes(d.dbBytes)}</Detail>
           <Detail label="Restored in">{formatDuration(d.durationMs)}</Detail>
           {b.verifiedAt && (
-            <p className="col-span-full text-xs text-muted-foreground">Tested {new Date(b.verifiedAt).toLocaleString()}</p>
+            <p className="col-span-full text-xs text-muted-foreground">Tested {formatDateTime(b.verifiedAt)}</p>
           )}
         </dl>
       )}
