@@ -1,10 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ExternalLink, Globe, Layers, Play, RefreshCw, RotateCcw, Rocket, Square, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  Activity,
+  ChevronRight,
+  CircleCheck,
+  CircleX,
+  ExternalLink,
+  GitCommitHorizontal,
+  Globe,
+  Layers,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  Rocket,
+  Square,
+  Trash2,
+} from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { PostgresIcon } from "@/components/brand-icons";
-import { DangerZone, Empty, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
+import { DangerZone, Empty, EmptyState, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
@@ -12,11 +27,12 @@ import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
-import { envMap, envRows, envSecrets, serviceState, timeAgo, type EnvRow } from "@/lib/format";
+import { byDay, envMap, envRows, envSecrets, formatDuration, serviceState, timeAgo, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, type Connection, type Deployment, type LogLine, type Service as ServiceT } from "../api";
 import { BackupList } from "./BackupList";
@@ -202,7 +218,11 @@ export function Service() {
             {isDb && <ConnectionCard serviceId={svc.id} host={svc.name} />}
           </TabsContent>
           <TabsContent value="deployments">
-            <Deployments svc={svc} deployments={deployments.data ?? []} selected={selected} onSelect={setSelected} busy={busy} />
+            {deployments.isPending ? (
+              <Loading />
+            ) : (
+              <Deployments svc={svc} deployments={deployments.data ?? []} focus={selected} onFocus={setSelected} busy={busy} />
+            )}
           </TabsContent>
           <TabsContent value="logs">
             {svc.containers.length === 0 ? (
@@ -568,74 +588,141 @@ function ConnectionCard({ serviceId, host }: { serviceId: string; host: string }
 function Deployments({
   svc,
   deployments,
-  selected,
-  onSelect,
+  focus,
+  onFocus,
   busy,
 }: {
   svc: ServiceT;
   deployments: Deployment[];
-  selected: string | null;
-  onSelect: (id: string | null) => void;
+  /** Opened when it changes, e.g. a deploy just started. */
+  focus: string | null;
+  onFocus: (id: string) => void;
   busy: boolean;
 }) {
   const qc = useQueryClient();
+  const [open, setOpen] = useState<Set<string>>(() => {
+    const live = deployments[0]?.status === "running" ? deployments[0].id : null;
+    return new Set([focus, live].filter((x) => x !== null));
+  });
+  useEffect(() => {
+    if (focus) setOpen((s) => new Set(s).add(focus));
+  }, [focus]);
+  const toggle = (id: string, on: boolean) =>
+    setOpen((s) => {
+      const next = new Set(s);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
   const rollback = useMutation({
     meta: { error: "Couldn't roll back" },
     mutationFn: (deploymentId: string) => api.rollback(svc.id, deploymentId),
     onSuccess: (d) => {
-      onSelect(d.id);
+      onFocus(d.id);
       qc.invalidateQueries({ queryKey: ["deployments", svc.id] });
     },
   });
-  const current = deployments.find((d) => d.id === selected);
+
+  if (deployments.length === 0)
+    return <EmptyState icon={Rocket} title="No deployments yet" description="Deploy the service to see its builds and logs here." />;
+
   return (
-    <Section plain description={deployments.length > 0 ? "Select one to see its log." : undefined}>
-      {deployments.length === 0 ? (
-        <Empty>No deployments yet.</Empty>
-      ) : (
-        <>
-          <ul className="-mx-2 max-h-72 space-y-0.5 overflow-y-auto">
-            {deployments.map((d) => (
-              <li
+    <div className="space-y-6">
+      {byDay(deployments).map(([day, rows]) => (
+        <section key={day} className="space-y-2">
+          <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{day}</h3>
+          <ul className="divide-y overflow-hidden rounded-xl border">
+            {rows.map((d) => (
+              <DeploymentRow
                 key={d.id}
-                className={cn(
-                  "flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-muted",
-                  d.id === selected && "bg-muted",
-                )}
-              >
-                <button
-                  type="button"
-                  onClick={() => onSelect(d.id === selected ? null : d.id)}
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left outline-none"
-                >
-                  <StateBadge state={d.status} />
-                  <span className="flex-1 truncate font-mono text-xs text-muted-foreground">
-                    {d.gitCommit ? `commit ${d.gitCommit.slice(0, 7)}` : d.image}
-                  </span>
-                  {d.id === svc.currentDeploymentId && <Tag className="bg-emerald-500/10 text-emerald-600">current</Tag>}
-                  <span className="text-xs whitespace-nowrap text-muted-foreground">{timeAgo(d.createdAt)}</span>
-                </button>
-                {svc.kind === "app" && d.status === "succeeded" && d.id !== svc.currentDeploymentId && !busy && (
-                  <ConfirmDialog
-                    trigger={
-                      <Button variant="ghost" size="icon-xs" aria-label="Roll back" title="Roll back">
-                        <RefreshCw />
-                      </Button>
-                    }
-                    title="Roll back?"
-                    description={`Redeploys ${d.image}. Current settings are kept; the next regular deploy uses the image in Settings again.`}
-                    confirmLabel="Roll back"
-                    destructive={false}
-                    onConfirm={() => rollback.mutate(d.id)}
-                  />
-                )}
-              </li>
+                deployment={d}
+                current={d.id === svc.currentDeploymentId}
+                open={open.has(d.id)}
+                onOpenChange={(on) => toggle(d.id, on)}
+                onRollback={
+                  svc.kind === "app" && d.status === "succeeded" && d.id !== svc.currentDeploymentId && !busy
+                    ? () => rollback.mutate(d.id)
+                    : undefined
+                }
+              />
             ))}
           </ul>
-          {current && <DeploymentLog deployment={current} />}
-        </>
-      )}
-    </Section>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+const statusIcon = {
+  succeeded: <CircleCheck className="size-4.5 text-emerald-600 dark:text-emerald-400" />,
+  failed: <CircleX className="size-4.5 text-destructive" />,
+  running: <Spinner className="size-4.5 text-sky-500" />,
+} satisfies Record<Deployment["status"], ReactNode>;
+
+function DeploymentRow({
+  deployment: d,
+  current,
+  open,
+  onOpenChange,
+  onRollback,
+}: {
+  deployment: Deployment;
+  current: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onRollback?: () => void;
+}) {
+  const end = d.finishedAt ? new Date(d.finishedAt).getTime() : Date.now();
+  const took = formatDuration(Math.max(0, end - new Date(d.createdAt).getTime()));
+  return (
+    <Collapsible asChild open={open} onOpenChange={onOpenChange}>
+      <li className={cn(open && "bg-muted/30")}>
+        <div className="flex items-center gap-2 pr-3">
+          <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-3 py-3 pl-3 text-left outline-none focus-visible:bg-muted/50">
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">{statusIcon[d.status]}</span>
+            <div className="min-w-0 flex-1">
+              <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                {d.gitCommit ? (
+                  <span className="inline-flex items-center gap-1.5 font-mono">
+                    <GitCommitHorizontal className="size-4 text-muted-foreground" />
+                    {d.gitCommit.slice(0, 7)}
+                  </span>
+                ) : (
+                  <span className="truncate font-mono">{d.image}</span>
+                )}
+                {current && <Tag className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">current</Tag>}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {new Date(d.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ·{" "}
+                {d.status === "running" ? `running for ${took}` : took}
+                {d.error && <span className="text-destructive"> · {d.error}</span>}
+              </p>
+            </div>
+            <span className="text-xs whitespace-nowrap text-muted-foreground max-sm:hidden">{timeAgo(d.createdAt)}</span>
+          </CollapsibleTrigger>
+          {onRollback && (
+            <ConfirmDialog
+              trigger={
+                <Button variant="outline" size="sm">
+                  <RefreshCw data-icon="inline-start" />
+                  Roll back
+                </Button>
+              }
+              title="Roll back?"
+              description={`Redeploys ${d.image}. Current settings are kept; the next regular deploy uses the image in Settings again.`}
+              confirmLabel="Roll back"
+              destructive={false}
+              onConfirm={onRollback}
+            />
+          )}
+        </div>
+        <CollapsibleContent>
+          <DeploymentLog deployment={d} />
+        </CollapsibleContent>
+      </li>
+    </Collapsible>
   );
 }
 
@@ -647,10 +734,34 @@ function DeploymentLog({ deployment }: { deployment: Deployment }) {
     queryFn: () => api.deploymentLog(deployment.id),
     refetchInterval: deployment.status === "running" ? 1_000 : false,
   });
+  const box = useRef<HTMLPreElement>(null);
+  const stick = useRef(true);
+  useEffect(() => {
+    if (stick.current && box.current) box.current.scrollTop = box.current.scrollHeight;
+  }, [log.data]);
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 px-3 pb-3">
+      {deployment.image && deployment.gitCommit && (
+        <p className="truncate font-mono text-xs text-muted-foreground">{deployment.image}</p>
+      )}
       {deployment.error && <p className="text-sm text-destructive">{deployment.error}</p>}
-      <pre className={cn(terminal, "max-h-80")}>{log.data || "No output."}</pre>
+      <pre
+        ref={box}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
+        }}
+        className={cn(terminal, "max-h-96")}
+      >
+        {log.isPending ? (
+          <span className="flex items-center gap-2 text-neutral-500">
+            <Spinner className="size-3.5" />
+            Loading log
+          </span>
+        ) : (
+          log.data || <span className="text-neutral-500">No output.</span>
+        )}
+      </pre>
     </div>
   );
 }

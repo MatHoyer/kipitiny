@@ -141,3 +141,21 @@ export function liveState(svc: { stopped: boolean; containers: { state: string; 
 
 /** States that need attention. */
 export const troubled = (state: string) => ["unhealthy", "degraded", "failed", "dead", "exited"].includes(state);
+
+/** Groups items (newest first) under "Today", "Yesterday" or their date. */
+export function byDay<T extends { createdAt: string }>(items: T[]): [string, T[]][] {
+  const groups = new Map<string, T[]>();
+  const today = new Date().toDateString();
+  const yesterday = new Date(Date.now() - 86_400_000).toDateString();
+  for (const it of items) {
+    const d = new Date(it.createdAt);
+    const key =
+      d.toDateString() === today
+        ? "Today"
+        : d.toDateString() === yesterday
+          ? "Yesterday"
+          : d.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    groups.set(key, [...(groups.get(key) ?? []), it]);
+  }
+  return [...groups];
+}
