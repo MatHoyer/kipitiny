@@ -124,11 +124,11 @@ func (a *API) protonLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, l)
 }
 
-func (a *API) targetKinds(w http.ResponseWriter, r *http.Request) {
+func (a *API) storageKinds(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a.core.BackupTargetKinds())
 }
 
-func (a *API) listTargets(w http.ResponseWriter, r *http.Request) {
+func (a *API) listStorage(w http.ResponseWriter, r *http.Request) {
 	ts, err := a.core.ListBackupTargets(r.Context())
 	if err != nil {
 		a.fail(w, err)
@@ -137,7 +137,7 @@ func (a *API) listTargets(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ts)
 }
 
-func (a *API) createTarget(w http.ResponseWriter, r *http.Request) {
+func (a *API) createStorage(w http.ResponseWriter, r *http.Request) {
 	var in core.TargetInput
 	if !decode(w, r, &in) {
 		return
@@ -150,7 +150,7 @@ func (a *API) createTarget(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, t)
 }
 
-func (a *API) updateTarget(w http.ResponseWriter, r *http.Request) {
+func (a *API) updateStorage(w http.ResponseWriter, r *http.Request) {
 	var in core.TargetInput
 	if !decode(w, r, &in) {
 		return
@@ -163,7 +163,7 @@ func (a *API) updateTarget(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, t)
 }
 
-func (a *API) deleteTarget(w http.ResponseWriter, r *http.Request) {
+func (a *API) deleteStorage(w http.ResponseWriter, r *http.Request) {
 	if err := a.core.DeleteBackupTarget(r.Context(), r.PathValue("id")); err != nil {
 		a.fail(w, err)
 		return
@@ -236,7 +236,7 @@ func (a *API) deleteSchedule(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (a *API) targetKey(w http.ResponseWriter, r *http.Request) {
+func (a *API) storageKey(w http.ResponseWriter, r *http.Request) {
 	key, err := a.core.BackupTargetKey(r.Context(), r.PathValue("id"))
 	if err != nil {
 		a.fail(w, err)
@@ -270,7 +270,7 @@ func (a *API) verifyBackup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, b)
 }
 
-func (a *API) testTarget(w http.ResponseWriter, r *http.Request) {
+func (a *API) testStorage(w http.ResponseWriter, r *http.Request) {
 	if err := a.core.TestBackupTarget(r.Context(), r.PathValue("id")); err != nil {
 		a.fail(w, err)
 		return

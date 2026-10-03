@@ -23,7 +23,7 @@ export function Backup() {
     queryFn: () => api.getBackup(id),
     refetchInterval: (q) => (q.state.data?.status === "running" || q.state.data?.verifyStatus === "running" ? 1_000 : 15_000),
   });
-  const targets = useQuery({ queryKey: ["backup-targets"], queryFn: api.backupTargets });
+  const targets = useQuery({ queryKey: ["storage"], queryFn: api.backupTargets });
   const b = backup.data;
   const isDb = b?.kind === "postgres";
   // The database may be gone: backups outlive it.
@@ -166,7 +166,7 @@ export function Backup() {
               </Detail>
             )}
             <Detail label="Target">
-              <Link className="hover:underline" to="/backups?tab=targets">
+              <Link className="hover:underline" to="/settings/storage">
                 {target?.name ?? "deleted target"}
               </Link>
             </Detail>

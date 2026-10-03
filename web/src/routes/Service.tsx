@@ -428,7 +428,7 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
 
 function BackupsCard({ serviceId }: { serviceId: string }) {
   const qc = useQueryClient();
-  const targets = useQuery({ queryKey: ["backup-targets"], queryFn: api.backupTargets });
+  const targets = useQuery({ queryKey: ["storage"], queryFn: api.backupTargets });
   const backups = useQuery({
     queryKey: ["backups", serviceId],
     queryFn: () => api.serviceBackups(serviceId),
