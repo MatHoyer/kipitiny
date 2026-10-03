@@ -1,5 +1,7 @@
-import { CheckIcon, CopyIcon, type LucideIcon } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { CheckIcon, CopyIcon, PlugZap, type LucideIcon } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -133,6 +135,20 @@ export function CopyButton({ value, label = "Copy" }: { value: string; label?: s
       }}
     >
       {copied ? <CheckIcon /> : <CopyIcon />}
+    </Button>
+  );
+}
+
+/** Checks that a saved connection (registry, target, provider) still works. */
+export function TestButton({ name, test }: { name: string; test: () => Promise<unknown> }) {
+  const check = useMutation({
+    meta: { error: `${name}: the test failed` },
+    mutationFn: test,
+    onSuccess: () => toast.success(`${name} works`),
+  });
+  return (
+    <Button variant="ghost" size="icon-sm" title="Test connection" aria-label="Test connection" loading={check.isPending} onClick={() => check.mutate()}>
+      <PlugZap />
     </Button>
   );
 }

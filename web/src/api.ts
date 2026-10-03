@@ -494,6 +494,7 @@ export const api = {
   backupTargetKey: (id: string) => request<{ identity: string; recipient: string }>(`/backup-targets/${id}/key`),
   backupManager: (targetId: string) => request<Backup>("/manager/backups", json("POST", { targetId })),
   deleteBackupTarget: (id: string) => request<void>(`/backup-targets/${id}`, { method: "DELETE" }),
+  testBackupTarget: (id: string) => request<void>(`/backup-targets/${id}/test`, { method: "POST" }),
 
   backups: (projectId?: string) => request<Backup[]>(`/backups${projectId ? `?projectId=${projectId}` : ""}`),
   serviceBackups: (serviceId: string) => request<Backup[]>(`/services/${serviceId}/backups`),
@@ -522,6 +523,7 @@ export const api = {
   createRegistry: (r: RegistryInput) => request<Registry>("/registries", json("POST", r)),
   updateRegistry: (id: string, r: RegistryInput) => request<Registry>(`/registries/${id}`, json("PUT", r)),
   deleteRegistry: (id: string) => request<void>(`/registries/${id}`, { method: "DELETE" }),
+  testRegistry: (id: string) => request<void>(`/registries/${id}/test`, { method: "POST" }),
   sshKey: () => request<{ publicKey: string }>("/ssh-key"),
   domains: () => request<Domain[]>("/domains"),
   createDomain: (name: string) => request<Domain>("/domains", json("POST", { name })),
@@ -530,6 +532,7 @@ export const api = {
   cloudflare: () => request<Cloudflare>("/cloudflare"),
   connectCloudflare: (token: string) => request<Cloudflare>("/cloudflare", json("PUT", { token })),
   disconnectCloudflare: () => request<void>("/cloudflare", { method: "DELETE" }),
+  testCloudflare: () => request<void>("/cloudflare/test", { method: "POST" }),
   secretProviders: () => request<SecretProvider[]>("/secret-providers"),
   connectSecretProvider: (id: string, token: string) =>
     request<SecretProvider>(`/secret-providers/${id}`, json("PUT", { token })),
@@ -537,6 +540,7 @@ export const api = {
   secretItems: (id: string, vault: string) =>
     request<SecretItem[]>(`/secret-providers/${id}/items?vault=${encodeURIComponent(vault)}`),
   disconnectSecretProvider: (id: string) => request<void>(`/secret-providers/${id}`, { method: "DELETE" }),
+  testSecretProvider: (id: string) => request<void>(`/secret-providers/${id}/test`, { method: "POST" }),
   setServerNetwork: (id: string, n: ServerNetwork) => request<Server>(`/servers/${id}/network`, json("PUT", n)),
   cleanup: () => request<Cleanup>("/cleanup"),
   setCleanup: (s: CleanupSettings) => request<Cleanup>("/cleanup", json("PUT", s)),

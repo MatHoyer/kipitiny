@@ -175,6 +175,24 @@ func (c *Core) ConnectCloudflare(ctx context.Context, token string) (CloudflareV
 	return c.CloudflareStatus(ctx), nil
 }
 
+// TestCloudflare checks the saved token can still list zones.
+func (c *Core) TestCloudflare(ctx context.Context) error {
+	token := c.cfToken(ctx)
+	if token == "" {
+		return fmt.Errorf("%w: Cloudflare isn't connected", ErrInvalid)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	zones, err := cloudflare.New(token).Zones(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	if len(zones) == 0 {
+		return fmt.Errorf("%w: the token can't see any zone anymore (it needs Zone › Zone › Read)", ErrInvalid)
+	}
+	return nil
+}
+
 // DisconnectCloudflare forgets the token. Existing records stay in Cloudflare.
 func (c *Core) DisconnectCloudflare(ctx context.Context) error {
 	if err := c.store.SetSetting(ctx, cfTokenSetting, ""); err != nil {

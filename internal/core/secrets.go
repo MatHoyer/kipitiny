@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/secrets"
@@ -78,6 +79,37 @@ func (c *Core) ConnectSecretProvider(ctx context.Context, id, token string) (Sec
 		return SecretProviderView{}, err
 	}
 	return c.secretProviderView(ctx, p), nil
+}
+
+// TestSecretProvider checks the session still works, logging in again with
+// the saved token if it doesn't, as a deploy would.
+func (c *Core) TestSecretProvider(ctx context.Context, id string) error {
+	p, err := c.secretProvider(id)
+	if err != nil {
+		return err
+	}
+	name := p.Info().Name
+	token, _ := c.store.GetSetting(ctx, secretTokenSetting(id))
+	if token == "" {
+		return fmt.Errorf("%w: %s isn't connected", ErrInvalid, name)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	b, ok := p.(secrets.Browser)
+	if ok {
+		if _, err := b.Vaults(ctx); err == nil {
+			return nil
+		}
+	}
+	if err := p.Connect(ctx, token); err != nil {
+		return fmt.Errorf("%w: %s refused the saved token: %v", ErrInvalid, name, err)
+	}
+	if ok {
+		if _, err := b.Vaults(ctx); err != nil {
+			return fmt.Errorf("%w: %s: %v", ErrInvalid, name, err)
+		}
+	}
+	return nil
 }
 
 // DisconnectSecretProvider logs out and forgets the token. Services that

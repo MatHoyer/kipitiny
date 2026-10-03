@@ -48,3 +48,11 @@ func (a *API) deleteRegistry(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (a *API) testRegistry(w http.ResponseWriter, r *http.Request) {
+	if err := a.core.TestRegistry(r.Context(), r.PathValue("id")); err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

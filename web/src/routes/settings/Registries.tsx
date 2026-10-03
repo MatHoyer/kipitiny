@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { DockerIcon, GitHubIcon, GitLabIcon } from "@/components/brand-icons";
-import { ChoiceTile, EmptyState, ErrorText, Mono } from "@/components/common";
+import { ChoiceTile, EmptyState, ErrorText, Mono, TestButton } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -129,6 +129,7 @@ export function Registries() {
                   Used for <Mono>{r.host === "docker.io" ? "org/image" : `${r.host}/…`}</Mono>
                 </p>
                 <div className="mt-auto flex justify-end gap-0.5">
+                  <TestButton name={r.host} test={() => api.testRegistry(r.id)} />
                   <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={() => setEditing({ step: "edit", registry: r })}>
                     <Pencil />
                   </Button>

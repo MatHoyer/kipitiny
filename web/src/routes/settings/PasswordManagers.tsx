@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, KeyRound, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { passwordManagerIcon as iconFor } from "@/components/brand-icons";
-import { ChoiceTile, EmptyState, ErrorText, Mono, Tag, withCode } from "@/components/common";
+import { ChoiceTile, EmptyState, ErrorText, Mono, Tag, TestButton, withCode } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -66,7 +66,8 @@ function ProviderCard({ provider: p }: { provider: SecretProvider }) {
       <p className="text-xs text-muted-foreground">
         Use in env as <Mono>{`{{ ${p.example} }}`}</Mono>
       </p>
-      <div className="mt-auto flex justify-end">
+      <div className="mt-auto flex items-center justify-end gap-1">
+        <TestButton name={p.name} test={() => api.testSecretProvider(p.id)} />
         <ConfirmDialog
           trigger={
             <Button variant="outline" size="sm" disabled={disconnect.isPending}>

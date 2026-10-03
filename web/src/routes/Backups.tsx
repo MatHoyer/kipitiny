@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, ChevronLeft, Cloud, DatabaseBackup, HardDrive, History, KeyRound, Pencil, Plus, Search, Trash2, TriangleAlert } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { GoogleDriveIcon, ProtonDriveIcon, ProtonIcon } from "@/components/brand-icons";
-import { CheckboxField, ChoiceTile, CopyField, EmptyState, ErrorText, Mono, Section, StatCard, Tag, withCode } from "@/components/common";
+import { CheckboxField, ChoiceTile, CopyField, EmptyState, ErrorText, Mono, Section, StatCard, Tag, TestButton, withCode } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -237,6 +237,7 @@ function Targets({ targets }: { targets: BackupTarget[] }) {
             </p>
             {t.kind !== "local" && (
               <div className="mt-auto flex justify-end gap-0.5">
+                <TestButton name={t.name} test={() => api.testBackupTarget(t.id)} />
                 {t.ageRecipient && <KeyButton targetId={t.id} name={t.name} />}
                 <Button
                   variant="ghost"
