@@ -12,6 +12,7 @@ import {
   Settings,
   Sun,
   SunMoon,
+  Waypoints,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Collapsible } from "radix-ui";
@@ -66,6 +67,7 @@ export function Layout() {
 
 const nav = [
   { to: "/", label: "Projects", icon: FolderKanban },
+  { to: "/map", label: "Map", icon: Waypoints },
   { to: "/backups", label: "Backups", icon: DatabaseBackup },
 ];
 

@@ -52,6 +52,58 @@ export type Service = {
   dns?: DNSStatus;
 };
 
+/** A container with the networks it is attached to. */
+export type TopoNode = Container & {
+  endpoints: { network: string; ip?: string; aliases?: string[] }[];
+};
+
+export type TopoService = {
+  id: string;
+  name: string;
+  kind: "app" | "postgres";
+  image: string;
+  domain?: string;
+  port?: number;
+  replicas: number;
+  stopped?: boolean;
+  /** Volume holding a database's data. */
+  volume?: string;
+  /** IDs of the project databases its env references. */
+  uses: string[];
+  containers: TopoNode[];
+};
+
+export type TopoNetwork = {
+  name: string;
+  subnet?: string;
+  gateway?: string;
+  /** Empty for the proxy network. */
+  projectId?: string;
+  /** Expected but not found on the server. */
+  missing?: boolean;
+};
+
+export type TopoProject = { id: string; name: string; network: string; services: TopoService[] };
+
+export type ServerTopology = {
+  id: string;
+  name: string;
+  kind: "local" | "ssh";
+  /** Set when the server's Docker could not be read. */
+  error?: string;
+  /** False when routing is left to the user's own proxy. */
+  traefik: boolean;
+  tunnel: boolean;
+  entrypoints: { name: string; port: number; hostPort?: string; redirectTo?: string }[];
+  proxy?: TopoNode;
+  cloudflared?: TopoNode;
+  manager?: { domain?: string; upstream: string; container?: TopoNode };
+  networks: TopoNetwork[];
+  projects: TopoProject[];
+};
+
+export type Topology = { servers: ServerTopology[] };
+
 export type ServiceInput = {
   name: string;
   kind?: "app" | "postgres";
@@ -419,6 +471,7 @@ export const api = {
 
   projects: () => request<Project[]>("/projects"),
   project: (id: string) => request<Project>(`/projects/${id}`),
+  topology: (projectId?: string) => request<Topology>(projectId ? `/projects/${projectId}/topology` : "/topology"),
   createProject: (name: string, serverId = "") => request<Project>("/projects", json("POST", { name, serverId })),
   setProjectEnv: (id: string, env: Record<string, string>, secrets: string[]) =>
     request<Project>(`/projects/${id}/env`, json("PUT", { env, secrets })),

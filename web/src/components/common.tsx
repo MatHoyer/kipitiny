@@ -54,7 +54,7 @@ export function Section({
   );
 }
 
-const stateColors: Record<string, string> = {
+export const stateColors: Record<string, string> = {
   running: "bg-emerald-500",
   healthy: "bg-emerald-500",
   starting: "animate-pulse bg-amber-500",
