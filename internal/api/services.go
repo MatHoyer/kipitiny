@@ -102,7 +102,14 @@ func (a *API) hook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) deployService(w http.ResponseWriter, r *http.Request) {
-	dep, err := a.core.Deploy(r.Context(), r.PathValue("id"))
+	var opts core.DeployOptions // optional: an empty body deploys the current settings
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&opts); err != nil && !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	dep, err := a.core.Deploy(r.Context(), r.PathValue("id"), opts)
 	if err != nil {
 		a.fail(w, err)
 		return

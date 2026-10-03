@@ -280,7 +280,7 @@ func (c *Core) HandleWebhook(ctx context.Context, serviceID string, header func(
 	if payload.Ref != "" && payload.Ref != "refs/heads/"+svc.GitBranch {
 		return store.Deployment{}, ErrIgnored
 	}
-	return c.Deploy(ctx, svc.ID)
+	return c.Deploy(ctx, svc.ID, DeployOptions{})
 }
 
 func webhookAuthorized(secret string, header func(string) string, body []byte) bool {

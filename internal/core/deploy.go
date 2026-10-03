@@ -8,14 +8,17 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/distribution/reference"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
+	"github.com/opencontainers/go-digest"
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/notify"
@@ -28,10 +31,74 @@ const (
 	retireGap = 500 * time.Millisecond
 )
 
+// DeployOptions picks what a deploy ships. Tag and Digest replace those of
+// the service's image (its repository stays), so CI can ship the image it
+// built without being able to run any other.
+type DeployOptions struct {
+	Tag    string `json:"tag,omitempty"`
+	Digest string `json:"digest,omitempty"`
+	// Commit is the source revision, recorded on the deployment.
+	Commit string `json:"commit,omitempty"`
+}
+
 // Deploy starts a deployment of the service's current configuration in the
 // background and returns immediately. Progress goes to the deployment's log.
-func (c *Core) Deploy(ctx context.Context, serviceID string) (store.Deployment, error) {
-	return c.startDeploy(ctx, serviceID, "")
+// With a tag or digest, the service keeps that image once deployed.
+func (c *Core) Deploy(ctx context.Context, serviceID string, opts DeployOptions) (store.Deployment, error) {
+	req := deployRequest{commit: strings.ToLower(strings.TrimSpace(opts.Commit))}
+	if req.commit != "" && !commitRe.MatchString(req.commit) {
+		return store.Deployment{}, fmt.Errorf("%w: commit must be a hex SHA", ErrInvalid)
+	}
+	if opts.Tag != "" || opts.Digest != "" {
+		svc, err := c.store.GetService(ctx, serviceID)
+		if err != nil {
+			return store.Deployment{}, err
+		}
+		// A database's version changes only through its settings: a new major
+		// can't start on the old data directory.
+		if svc.Source != store.SourceImage || svc.Kind != store.ServiceKindApp {
+			return store.Deployment{}, fmt.Errorf("%w: only image apps deploy a tag or digest", ErrInvalid)
+		}
+		if req.image, err = retagImage(svc.Image, opts.Tag, opts.Digest); err != nil {
+			return store.Deployment{}, err
+		}
+		req.keep = true
+	}
+	return c.startDeploy(ctx, serviceID, req)
+}
+
+var commitRe = regexp.MustCompile(`^[0-9a-f]{7,64}$`)
+
+// retagImage swaps the tag and/or digest of image, keeping its repository.
+func retagImage(image, tag, dgst string) (string, error) {
+	named, err := reference.ParseNormalizedNamed(image)
+	if err != nil {
+		return "", fmt.Errorf("%w: service image %q: %v", ErrInvalid, image, err)
+	}
+	ref := reference.TrimNamed(named)
+	if tag != "" {
+		if ref, err = reference.WithTag(ref, tag); err != nil {
+			return "", fmt.Errorf("%w: tag %q: %v", ErrInvalid, tag, err)
+		}
+	}
+	if dgst != "" {
+		d, err := digest.Parse(dgst)
+		if err != nil {
+			return "", fmt.Errorf("%w: digest %q: %v", ErrInvalid, dgst, err)
+		}
+		if ref, err = reference.WithDigest(ref, d); err != nil {
+			return "", fmt.Errorf("%w: digest %q: %v", ErrInvalid, dgst, err)
+		}
+	}
+	return reference.FamiliarString(ref), nil
+}
+
+// deployRequest is what startDeploy ships: image overrides the service's
+// (empty: its own), and keep makes it the service's image once deployed.
+type deployRequest struct {
+	image  string
+	commit string
+	keep   bool
 }
 
 // Rollback redeploys the image of an earlier successful deployment (the one
@@ -50,13 +117,13 @@ func (c *Core) Rollback(ctx context.Context, serviceID, deploymentID string) (st
 			continue
 		}
 		if (deploymentID == "" && d.ID != svc.CurrentDeploymentID) || d.ID == deploymentID {
-			return c.startDeploy(ctx, serviceID, d.Image)
+			return c.startDeploy(ctx, serviceID, deployRequest{image: d.Image, commit: d.GitCommit})
 		}
 	}
 	return store.Deployment{}, fmt.Errorf("%w: no earlier successful deployment to roll back to", ErrInvalid)
 }
 
-func (c *Core) startDeploy(ctx context.Context, serviceID, image string) (store.Deployment, error) {
+func (c *Core) startDeploy(ctx context.Context, serviceID string, req deployRequest) (store.Deployment, error) {
 	unlock, err := c.lockService(serviceID)
 	if err != nil {
 		return store.Deployment{}, err
@@ -80,6 +147,7 @@ func (c *Core) startDeploy(ctx context.Context, serviceID, image string) (store.
 		unlock()
 		return store.Deployment{}, err
 	}
+	image := req.image
 	if image == "" && svc.Source != store.SourceGit {
 		image = svc.Image
 	}
@@ -88,6 +156,7 @@ func (c *Core) startDeploy(ctx context.Context, serviceID, image string) (store.
 		ServiceID: svc.ID,
 		Status:    store.DeploymentRunning,
 		Image:     image,
+		GitCommit: req.commit,
 		Config:    svc,
 	})
 	if err != nil {
@@ -97,7 +166,7 @@ func (c *Core) startDeploy(ctx context.Context, serviceID, image string) (store.
 
 	if err := c.goBackground(func() {
 		defer unlock()
-		c.runDeploy(project, svc, dep)
+		c.runDeploy(project, svc, dep, req)
 	}); err != nil {
 		unlock()
 		_ = c.store.FinishDeployment(ctx, dep.ID, store.DeploymentFailed, err.Error())
@@ -106,7 +175,7 @@ func (c *Core) startDeploy(ctx context.Context, serviceID, image string) (store.
 	return dep, nil
 }
 
-func (c *Core) runDeploy(project store.Project, svc store.Service, dep store.Deployment) {
+func (c *Core) runDeploy(project store.Project, svc store.Service, dep store.Deployment, req deployRequest) {
 	ctx, cancel := context.WithTimeout(c.bg, deployTimeout)
 	defer cancel()
 	log := c.log.With("deploy", dep.ID, "project", project.Name, "service", svc.Name)
@@ -140,6 +209,11 @@ func (c *Core) runDeploy(project store.Project, svc store.Service, dep store.Dep
 	// The deploy context may be cancelled; recording the outcome must not be.
 	if err := c.store.FinishDeployment(context.WithoutCancel(ctx), dep.ID, status, msg); err != nil && !errors.Is(err, store.ErrNotFound) {
 		log.Error("cannot record deployment result", "err", err)
+	}
+	if err == nil && req.keep {
+		if err := c.store.SetServiceImage(context.WithoutCancel(ctx), svc.ID, req.image); err != nil && !errors.Is(err, store.ErrNotFound) {
+			log.Error("cannot record the deployed image", "err", err)
+		}
 	}
 
 	e := notify.Event{

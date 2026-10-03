@@ -251,6 +251,18 @@ func (s *Store) SetServiceStopped(ctx context.Context, serviceID string, stopped
 	return nil
 }
 
+func (s *Store) SetServiceImage(ctx context.Context, serviceID, image string) error {
+	res, err := s.db.NewUpdate().Model((*store.Service)(nil)).
+		Set("image = ?", image).Set("updated_at = ?", now()).Where("id = ?", serviceID).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) ListAllServices(ctx context.Context) ([]store.Service, error) {
 	svcs := []store.Service{}
 	err := s.db.NewSelect().Model(&svcs).Order("project_id", "name").Scan(ctx)
