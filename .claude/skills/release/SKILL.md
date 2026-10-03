@@ -1,11 +1,12 @@
 ---
 name: release
-description: Cut a kipitiny release — empty `chore(release): X.Y.Z` commit on main, tag it X.Y.Z, push. Use when the user says "release", "cut a release", "tag a version", or invokes /release [version|major|minor|patch].
+description: Cut a kipitiny release — bump `VERSION` in a `chore(release): X.Y.Z` commit on main, tag it X.Y.Z, push. Use when the user says "release", "cut a release", "tag a version", or invokes /release [version|major|minor|patch].
 ---
 
 # Release
 
-A release is an empty chore commit on `main` plus a lightweight tag on it. Pushing
+A release is a chore commit on `main` that bumps the root `VERSION` file, plus a
+lightweight tag on it. The workflow fails if the tag and `VERSION` disagree. Pushing
 the tag triggers `.github/workflows/release.yml` (multi-arch image to
 `ghcr.io/mathoyer/kipitiny:<tag>` + `:latest`, GitHub release with generated notes).
 
@@ -18,6 +19,7 @@ matches `[0-9]+.[0-9]+.[0-9]+`).
    - on `main`, working tree clean (`git status --porcelain` empty)
    - `git fetch --tags origin` then local `main` == `origin/main`
    - there are commits since the last tag (`git describe --tags --abbrev=0`)
+   - `VERSION` content equals the last tag
 
 2. **Pick the version.** Arg may be an explicit `X.Y.Z` or `major|minor|patch`.
    Without one, infer from conventional commits since the last tag
@@ -32,7 +34,9 @@ matches `[0-9]+.[0-9]+.[0-9]+`).
 
 4. **Commit and tag:**
    ```sh
-   git commit --allow-empty -m "chore(release): X.Y.Z"
+   printf 'X.Y.Z\n' > VERSION
+   git add VERSION
+   git commit -m "chore(release): X.Y.Z"
    git tag X.Y.Z
    ```
    No AI attribution trailer on the commit.
