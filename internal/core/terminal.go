@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/ids"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -111,4 +113,66 @@ func pickContainer(cts []container.Summary, ref string) (container.Summary, bool
 func replicaOf(ct container.Summary) int {
 	n, _ := strconv.Atoi(ct.Labels[docker.LabelReplica])
 	return n
+}
+
+const (
+	terminalComponent = "terminal"
+	// hostShellImage only needs nsenter: the shell itself is the host's.
+	hostShellImage = "alpine:3.22"
+)
+
+// hostShell enters the namespaces of the host's PID 1 and starts a root login
+// shell there. su resets the helper's supplementary groups; without it, bash
+// or sh runs in root's home.
+var hostShell = []string{"nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--", "/bin/sh", "-c",
+	"command -v su >/dev/null 2>&1 && exec su -l root; cd; exec $(command -v bash || command -v sh) -l"}
+
+// OpenServerTerminal starts a root shell on a server's host, through a
+// privileged helper container sharing its PID namespace (Docker access is
+// root on the host anyway). Admin only.
+func (c *Core) OpenServerTerminal(ctx context.Context, serverID string, cols, rows uint) (*Terminal, error) {
+	if err := Require(ctx, store.ScopeAdmin); err != nil {
+		return nil, err
+	}
+	sv, err := c.store.GetServer(ctx, serverID)
+	if err != nil {
+		return nil, err
+	}
+	target := "server " + sv.Name
+	dk := c.dockerFor(sv.ID)
+	if err := dk.EnsureImage(ctx, hostShellImage, ""); err != nil {
+		return c.openTerminal(ctx, target, nil, fmt.Errorf("pull %s: %w", hostShellImage, err))
+	}
+	tty, err := dk.RunTTY(ctx, client.ContainerCreateOptions{
+		Name: "kipitiny-terminal-" + strings.ToLower(ids.New()),
+		Config: &container.Config{
+			Image: hostShellImage,
+			Cmd:   hostShell,
+			Env:   terminalEnv,
+			Labels: map[string]string{
+				docker.LabelManaged:   "true",
+				docker.LabelComponent: terminalComponent,
+			},
+		},
+		HostConfig: &container.HostConfig{
+			Privileged: true,
+			PidMode:    "host",
+			LogConfig:  docker.DefaultLogConfig(),
+		},
+	}, cols, rows)
+	return c.openTerminal(ctx, target, tty, err)
+}
+
+// cleanupTerminals removes host shell helpers left by a crash.
+func (c *Core) cleanupTerminals(ctx context.Context, dk *docker.Client) error {
+	cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: terminalComponent})
+	if err != nil {
+		return err
+	}
+	for _, ct := range cts {
+		if err := dk.RemoveContainer(ctx, ct.ID, 0); err != nil {
+			return err
+		}
+	}
+	return nil
 }
