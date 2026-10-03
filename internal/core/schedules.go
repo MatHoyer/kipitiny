@@ -58,10 +58,10 @@ func (c *Core) StartScheduler(ctx context.Context) error {
 	c.sched.cron = cron.New(cron.WithParser(cronParser), cron.WithLocation(time.UTC))
 	c.sched.entries = map[string]cron.EntryID{}
 	c.sched.mu.Unlock()
-	if err := c.reloadSchedules(ctx); err != nil {
+	if err := c.seedManagerSchedule(ctx); err != nil {
 		return err
 	}
-	if err := c.scheduleManagerBackup(); err != nil {
+	if err := c.reloadSchedules(ctx); err != nil {
 		return err
 	}
 	if err := c.scheduleCleanup(ctx); err != nil {
@@ -126,7 +126,11 @@ func (c *Core) runScheduledBackup(scheduleID string) {
 			return // deleted or disabled meanwhile
 		}
 		done := make(chan struct{})
-		_, err = c.startBackup(ctx, sc.ServiceID, sc.TargetID, sc.ID, done)
+		if sc.Kind == store.BackupKindManager {
+			_, err = c.startManagerBackup(ctx, sc.TargetID, sc.ID, done)
+		} else {
+			_, err = c.startBackup(ctx, sc.ServiceID, sc.TargetID, sc.ID, done)
+		}
 		if err == nil {
 			select {
 			case <-done:
@@ -225,7 +229,30 @@ func (c *Core) CreateBackupSchedule(ctx context.Context, serviceID string, in Sc
 	if _, _, err := c.postgresService(ctx, serviceID); err != nil {
 		return ScheduleView{}, err
 	}
-	sc := store.BackupSchedule{ServiceID: serviceID}
+	return c.createSchedule(ctx, store.BackupSchedule{Kind: store.BackupKindPostgres, ServiceID: serviceID}, in)
+}
+
+// ListManagerSchedules lists the schedules backing up the manager itself.
+func (c *Core) ListManagerSchedules(ctx context.Context) ([]ScheduleView, error) {
+	scs, err := c.store.ListBackupSchedules(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	views := []ScheduleView{}
+	for _, sc := range scs {
+		if sc.Kind == store.BackupKindManager {
+			views = append(views, c.scheduleView(sc))
+		}
+	}
+	return views, nil
+}
+
+// CreateManagerSchedule schedules backups of the manager's own state.
+func (c *Core) CreateManagerSchedule(ctx context.Context, in ScheduleInput) (ScheduleView, error) {
+	return c.createSchedule(ctx, store.BackupSchedule{Kind: store.BackupKindManager}, in)
+}
+
+func (c *Core) createSchedule(ctx context.Context, sc store.BackupSchedule, in ScheduleInput) (ScheduleView, error) {
 	if err := c.applyScheduleInput(ctx, &sc, in); err != nil {
 		return ScheduleView{}, err
 	}
@@ -280,6 +307,9 @@ func (c *Core) applyScheduleInput(ctx context.Context, sc *store.BackupSchedule,
 		return fmt.Errorf("%w: unknown backup target", ErrInvalid)
 	} else if err != nil {
 		return err
+	}
+	if sc.Kind == store.BackupKindManager {
+		in.Verify = false // restore tests start a PostgreSQL container
 	}
 	sc.TargetID, sc.Cron, sc.Enabled, sc.Verify = in.TargetID, in.Cron, in.Enabled, in.Verify
 	sc.KeepLast, sc.KeepDaily, sc.KeepWeekly, sc.KeepMonthly = in.KeepLast, in.KeepDaily, in.KeepWeekly, in.KeepMonthly

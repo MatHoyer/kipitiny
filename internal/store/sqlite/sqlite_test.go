@@ -304,6 +304,25 @@ func TestBackupSchedules(t *testing.T) {
 	}
 }
 
+func TestManagerSchedules(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	sc, err := s.CreateBackupSchedule(ctx, store.BackupSchedule{
+		Kind: store.BackupKindManager, TargetID: store.LocalTargetID, Cron: "@daily", KeepLast: 14, Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetBackupSchedule(ctx, sc.ID)
+	if err != nil || got.Kind != store.BackupKindManager || got.ServiceID != "" {
+		t.Fatalf("manager schedule round-trip: %+v %v", got, err)
+	}
+	// A manager schedule has no service, a database schedule needs one.
+	if _, err := s.CreateBackupSchedule(ctx, store.BackupSchedule{TargetID: store.LocalTargetID, Cron: "@daily"}); err == nil {
+		t.Fatal("database schedule without a service accepted")
+	}
+}
+
 func TestSnapshot(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
@@ -647,5 +666,27 @@ func TestImageOnlyMigration(t *testing.T) {
 	}
 	if got, err := s.GetService(ctx, never.ID); err != nil || got.Image != "" {
 		t.Fatalf("never deployed git service = %q, %v", got.Image, err)
+	}
+}
+
+func TestSetBackupTargetKey(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	if err := s.SetBackupTargetKey(ctx, store.LocalTargetID, "AGE-SECRET-KEY-1", "age1one"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetBackupTarget(ctx, store.LocalTargetID)
+	if err != nil || got.AgeRecipient != "age1one" || got.AgeIdentity != "AGE-SECRET-KEY-1" {
+		t.Fatalf("key not saved: %+v %v", got, err)
+	}
+	// A key is never replaced: backups encrypted with it would be lost.
+	if err := s.SetBackupTargetKey(ctx, store.LocalTargetID, "AGE-SECRET-KEY-2", "age1two"); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("second key: %v", err)
+	}
+	if got, _ := s.GetBackupTarget(ctx, store.LocalTargetID); got.AgeRecipient != "age1one" {
+		t.Fatalf("key replaced: %+v", got)
+	}
+	if err := s.SetBackupTargetKey(ctx, "missing", "k", "r"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("unknown target: %v", err)
 	}
 }

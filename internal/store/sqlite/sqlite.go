@@ -416,6 +416,22 @@ func (s *Store) UpdateBackupTarget(ctx context.Context, t store.BackupTarget) (s
 	return t, nil
 }
 
+func (s *Store) SetBackupTargetKey(ctx context.Context, id, identity, recipient string) error {
+	res, err := s.db.NewUpdate().Table("backup_targets").
+		Set("age_identity = ?", identity).Set("age_recipient = ?", recipient).
+		Where("id = ?", id).Where("age_recipient = ''").Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		return nil
+	}
+	if _, err := s.GetBackupTarget(ctx, id); err != nil {
+		return err
+	}
+	return fmt.Errorf("%w: already encrypted", store.ErrConflict)
+}
+
 func (s *Store) SetBackupTargetConfig(ctx context.Context, id string, config map[string]string) error {
 	t := store.BackupTarget{ID: id, Config: config}
 	res, err := s.db.NewUpdate().Model(&t).Column("config").WherePK().Exec(ctx)
@@ -531,6 +547,9 @@ func (s *Store) GetBackupSchedule(ctx context.Context, id string) (store.BackupS
 
 func (s *Store) CreateBackupSchedule(ctx context.Context, sc store.BackupSchedule) (store.BackupSchedule, error) {
 	sc.ID, sc.CreatedAt = ids.New(), now()
+	if sc.Kind == "" {
+		sc.Kind = store.BackupKindPostgres
+	}
 	if _, err := s.db.NewInsert().Model(&sc).Exec(ctx); err != nil {
 		return store.BackupSchedule{}, mapErr(err)
 	}

@@ -56,7 +56,8 @@ type Tunnel struct {
 	Image string
 }
 
-// ManagerBackup schedules backups of the manager's own SQLite state.
+// ManagerBackup is the manager backup schedule created on first start; it is
+// edited in the UI afterwards.
 type ManagerBackup struct {
 	// Cron is empty when disabled (KIPITINY_MANAGER_BACKUP_CRON=off).
 	Cron     string

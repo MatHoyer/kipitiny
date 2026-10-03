@@ -164,9 +164,11 @@ age -d -i key.txt shop-20260930T030000Z-xxxx.dump.age | pg_restore -d "$DATABASE
 ### Manager state
 
 The manager's own SQLite file (projects, services, schedules, credentials, keys)
-is snapshotted with `VACUUM INTO` daily to local disk and the last 14 are kept
-(`KIPITINY_MANAGER_BACKUP_CRON` / `_TARGET` / `_KEEP`, `off` to disable). These
-snapshots contain every secret the manager holds: prefer an encrypted target.
+is snapshotted with `VACUUM INTO` on schedules you manage in Backups › Manager
+state, to any storage, with the same retention rules as databases. On first
+start a daily schedule to local disk keeping the last 14 is created
+(`KIPITINY_MANAGER_BACKUP_CRON` / `_TARGET` / `_KEEP`, `off` to skip it). These
+snapshots contain every secret the manager holds: prefer an encrypted storage.
 To restore one, stop the manager and replace `/data/kipitiny.db` with the file
 (delete `kipitiny.db-wal` and `kipitiny.db-shm` first).
 
@@ -287,9 +289,9 @@ KIPITINY_VERSION=dev docker compose up -d   # run that build
 | `KIPITINY_ACME_EMAIL` | — | Let's Encrypt account email (optional) |
 | `KIPITINY_CLOUDFLARE_TUNNEL_TOKEN` | — | Receive traffic through a Cloudflare Tunnel instead of ports 80/443 |
 | `KIPITINY_CLOUDFLARED_IMAGE` | `cloudflare/cloudflared:2026.9.3` | |
-| `KIPITINY_MANAGER_BACKUP_CRON` | `@daily` | Snapshot of the manager's state (`off` to disable) |
-| `KIPITINY_MANAGER_BACKUP_TARGET` | `local` | Target ID for those snapshots |
-| `KIPITINY_MANAGER_BACKUP_KEEP` | `14` | Snapshots kept per target |
+| `KIPITINY_MANAGER_BACKUP_CRON` | `@daily` | First-start schedule for snapshots of the manager's state (`off` for none) |
+| `KIPITINY_MANAGER_BACKUP_TARGET` | `local` | Storage ID for that schedule |
+| `KIPITINY_MANAGER_BACKUP_KEEP` | `14` | Snapshots that schedule keeps |
 | `KIPITINY_DOCKER_SOCKET` | `/var/run/docker.sock` | Host socket path mounted into Traefik |
 | `DOCKER_HOST`        | socket  | Standard Docker client env vars apply |
 

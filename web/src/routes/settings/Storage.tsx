@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ChevronLeft, Cloud, HardDrive, KeyRound, Pencil, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { GoogleDriveIcon, ProtonDriveIcon, ProtonIcon } from "@/components/brand-icons";
+import { CheckCircle2, ChevronLeft, KeyRound, Lock, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { toast } from "sonner";
+import { ProtonIcon } from "@/components/brand-icons";
 import { CheckboxField, ChoiceTile, CopyField, ErrorText, Mono, Tag, TestButton, withCode } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -18,30 +19,9 @@ import {
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingTextarea } from "@/components/ui/floating-textarea";
 import { cn } from "@/lib/utils";
-import { api, type BackupTarget, type TargetInput, type TargetKind, type TargetKindName } from "@/api";
+import { api, type BackupTarget, type TargetInput, type TargetKind } from "@/api";
+import { storageIcons, storageLocation } from "@/components/storage";
 import { SettingsPage } from "./page";
-
-/** Brand marks by storage kind. */
-const storageIcons: Record<TargetKindName, ReactNode> = {
-  local: <HardDrive />,
-  s3: <Cloud />,
-  gdrive: <GoogleDriveIcon className="text-[#4285F4]" />,
-  protondrive: <ProtonDriveIcon className="text-[#EB508D]" />,
-};
-
-function storageLocation(t: BackupTarget) {
-  const folder = t.prefix ? `/${t.prefix}` : "/";
-  switch (t.kind) {
-    case "local":
-      return "/data/backups on the manager's volume";
-    case "s3":
-      return `${t.useSsl ? "https" : "http"}://${t.endpoint}/${t.bucket}/${t.prefix}`;
-    case "gdrive":
-      return `Google Drive ${folder}`;
-    case "protondrive":
-      return `Proton Drive ${folder}${t.settings?.account ? ` · ${t.settings.account}` : ""}`;
-  }
-}
 
 /** What the dialog shows: the kind picker, a new target of a kind, or a target being edited. */
 type Editing = { step: "pick" } | { step: "new"; kind: TargetKind } | { step: "edit"; target: BackupTarget; kind?: TargetKind };
@@ -58,6 +38,15 @@ export function Storage() {
     mutationFn: api.deleteBackupTarget,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["storage"] }),
   });
+  const encrypt = useMutation({
+    meta: { error: "Couldn't encrypt the storage" },
+    mutationFn: api.encryptBackupTarget,
+    onSuccess: (t) => {
+      qc.invalidateQueries({ queryKey: ["storage"] });
+      toast.success(`${t.name} is encrypted`, { description: "Copy its key (key icon) somewhere safe, away from this server." });
+    },
+  });
+
   return (
     <SettingsPage
       actions={
@@ -84,31 +73,48 @@ export function Storage() {
             <p className="truncate font-mono text-xs text-muted-foreground" title={storageLocation(t)}>
               {storageLocation(t)}
             </p>
-            {t.kind !== "local" && (
-              <div className="mt-auto flex justify-end gap-0.5">
-                <TestButton name={t.name} test={() => api.testBackupTarget(t.id)} />
-                {t.ageRecipient && <KeyButton targetId={t.id} name={t.name} />}
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  title="Edit"
-                  aria-label="Edit"
-                  onClick={() => setEditing({ step: "edit", target: t, kind: kindOf(t.kind) })}
-                >
-                  <Pencil />
-                </Button>
+            <div className="mt-auto flex justify-end gap-0.5">
+              <TestButton name={t.name} test={() => api.testBackupTarget(t.id)} />
+              {t.ageRecipient ? (
+                <KeyButton targetId={t.id} name={t.name} />
+              ) : (
                 <ConfirmDialog
                   trigger={
-                    <Button variant="ghost" size="icon-sm" title="Delete" aria-label="Delete" className="text-muted-foreground hover:text-destructive">
-                      <Trash2 />
+                    <Button variant="ghost" size="icon-sm" title="Encrypt" loading={encrypt.isPending && encrypt.variables === t.id}>
+                      <Lock />
                     </Button>
                   }
-                  title={`Delete target ${t.name}?`}
-                  description="Backups already stored there are not deleted."
-                  onConfirm={() => remove.mutate(t.id)}
+                  title={`Encrypt backups on ${t.name}?`}
+                  description="An age key is generated for this storage. Backups made from now on are encrypted with it; existing ones stay as they are. It can't be turned off, and without the key (copy it after) encrypted backups are unreadable if this server is lost."
+                  confirmLabel="Encrypt"
+                  destructive={false}
+                  onConfirm={() => encrypt.mutate(t.id)}
                 />
-              </div>
-            )}
+              )}
+              {t.kind !== "local" && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    title="Edit"
+                    aria-label="Edit"
+                    onClick={() => setEditing({ step: "edit", target: t, kind: kindOf(t.kind) })}
+                  >
+                    <Pencil />
+                  </Button>
+                  <ConfirmDialog
+                    trigger={
+                      <Button variant="ghost" size="icon-sm" title="Delete" aria-label="Delete" className="text-muted-foreground hover:text-destructive">
+                        <Trash2 />
+                      </Button>
+                    }
+                    title={`Delete target ${t.name}?`}
+                    description="Backups already stored there are not deleted."
+                    onConfirm={() => remove.mutate(t.id)}
+                  />
+                </>
+              )}
+            </div>
           </Card>
         ))}
       </div>
@@ -310,7 +316,7 @@ function TargetForm({
                 Encrypt backups with <Mono>age</Mono>
               </>
             }
-            description="A key is generated for this target and cannot be changed later. Copy it (Show key) somewhere safe: without it, these backups are unreadable if this server is lost."
+            description="A key is generated for this storage and cannot be changed or removed. Copy it (Show key) somewhere safe: without it, these backups are unreadable if this server is lost."
             checked={form.encrypt ?? false}
             onCheckedChange={(v) => setForm({ ...form, encrypt: v })}
             className="sm:col-span-2"

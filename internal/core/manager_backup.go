@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/robfig/cron/v3"
-
 	"github.com/MatHoyer/kipitiny/internal/storage"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -21,10 +19,12 @@ const managerLockID = "manager"
 // BackupManager snapshots the manager's own state (VACUUM INTO) and uploads
 // it to a target in the background.
 func (c *Core) BackupManager(ctx context.Context, targetID string) (store.Backup, error) {
-	return c.startManagerBackup(ctx, targetID, nil)
+	return c.startManagerBackup(ctx, targetID, "", nil)
 }
 
-func (c *Core) startManagerBackup(ctx context.Context, targetID string, done chan<- struct{}) (store.Backup, error) {
+// startManagerBackup starts a manager backup; done, if set, is closed when it
+// finishes. Backups made by a schedule trigger its retention on success.
+func (c *Core) startManagerBackup(ctx context.Context, targetID, scheduleID string, done chan<- struct{}) (store.Backup, error) {
 	if targetID == "" {
 		targetID = store.LocalTargetID
 	}
@@ -47,6 +47,7 @@ func (c *Core) startManagerBackup(ctx context.Context, targetID string, done cha
 		Kind:        store.BackupKindManager,
 		ServiceName: "manager",
 		TargetID:    target.ID,
+		ScheduleID:  scheduleID,
 		ObjectKey:   objectKey("_manager/", time.Now().UTC(), ".db", target),
 		Status:      store.OpRunning,
 	})
@@ -59,7 +60,9 @@ func (c *Core) startManagerBackup(ctx context.Context, targetID string, done cha
 		if done != nil {
 			defer close(done)
 		}
-		c.runManagerBackup(st, target, b)
+		if c.runManagerBackup(st, target, b) && scheduleID != "" {
+			c.afterScheduledBackup(scheduleID, b.ID)
+		}
 	}); err != nil {
 		unlock()
 		b.Status, b.Error = store.OpFailed, err.Error()
@@ -69,7 +72,7 @@ func (c *Core) startManagerBackup(ctx context.Context, targetID string, done cha
 	return b, nil
 }
 
-func (c *Core) runManagerBackup(st storage.Storage, target store.BackupTarget, b store.Backup) {
+func (c *Core) runManagerBackup(st storage.Storage, target store.BackupTarget, b store.Backup) bool {
 	ctx, cancel := context.WithTimeout(c.bg, time.Hour)
 	defer cancel()
 	start := time.Now()
@@ -86,9 +89,7 @@ func (c *Core) runManagerBackup(st storage.Storage, target store.BackupTarget, b
 		c.log.Error("cannot record manager backup", "err", err)
 	}
 	c.notifyBackup(b, target, "")
-	if b.Status == store.OpSucceeded {
-		c.pruneManagerBackups(ctx, target.ID)
-	}
+	return b.Status == store.OpSucceeded
 }
 
 func (c *Core) snapshotTo(ctx context.Context, st storage.Storage, target store.BackupTarget, b *store.Backup) error {
@@ -112,45 +113,29 @@ func (c *Core) snapshotTo(ctx context.Context, st storage.Storage, target store.
 	})
 }
 
-// pruneManagerBackups keeps the configured number of manager backups per target.
-func (c *Core) pruneManagerBackups(ctx context.Context, targetID string) {
-	keep := c.cfg.ManagerBackup.Keep
-	if keep <= 0 {
-		return
-	}
-	bs, err := c.store.ListBackups(ctx, store.BackupFilter{Kind: store.BackupKindManager, Status: store.OpSucceeded})
-	if err != nil {
-		return
-	}
-	n := 0
-	for _, b := range bs {
-		if b.TargetID != targetID {
-			continue
-		}
-		if n++; n > keep {
-			if err := c.DeleteBackup(ctx, b.ID); err != nil {
-				c.log.Warn("cannot prune manager backup", "backup", b.ID, "err", err)
-			}
-		}
-	}
-}
+// managerScheduleSeeded marks that the KIPITINY_MANAGER_BACKUP_* defaults
+// became a schedule; from then on it is edited in the UI.
+const managerScheduleSeeded = "manager_schedule_seeded"
 
-// scheduleManagerBackup registers the manager's own backup, if configured.
-func (c *Core) scheduleManagerBackup() error {
-	cfg := c.cfg.ManagerBackup
-	if cfg.Cron == "" {
+// seedManagerSchedule turns the KIPITINY_MANAGER_BACKUP_* settings into a
+// manager backup schedule, once.
+func (c *Core) seedManagerSchedule(ctx context.Context) error {
+	if done, _ := c.store.GetSetting(ctx, managerScheduleSeeded); done != "" {
 		return nil
 	}
-	job := cron.NewChain(cron.SkipIfStillRunning(cron.DiscardLogger)).Then(cron.FuncJob(func() {
-		done := make(chan struct{})
-		if _, err := c.startManagerBackup(c.bg, cfg.TargetID, done); err != nil {
-			c.log.Warn("scheduled manager backup did not start", "err", err)
-			return
+	if cfg := c.cfg.ManagerBackup; cfg.Cron != "" {
+		in := ScheduleInput{TargetID: cfg.TargetID, Cron: cfg.Cron, KeepLast: cfg.Keep, Enabled: true}
+		if _, err := c.store.GetBackupTarget(ctx, in.TargetID); err != nil {
+			c.log.Warn("KIPITINY_MANAGER_BACKUP_TARGET not found, using local disk", "target", in.TargetID)
+			in.TargetID = store.LocalTargetID
 		}
-		<-done
-	}))
-	if _, err := c.sched.cron.AddJob(cfg.Cron, job); err != nil {
-		return fmt.Errorf("KIPITINY_MANAGER_BACKUP_CRON: %w", err)
+		sc := store.BackupSchedule{Kind: store.BackupKindManager}
+		if err := c.applyScheduleInput(ctx, &sc, in); err != nil {
+			return fmt.Errorf("KIPITINY_MANAGER_BACKUP_CRON: %w", err)
+		}
+		if _, err := c.store.CreateBackupSchedule(ctx, sc); err != nil {
+			return err
+		}
 	}
-	return nil
+	return c.store.SetSetting(ctx, managerScheduleSeeded, "1")
 }

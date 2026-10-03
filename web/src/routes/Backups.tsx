@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Cloud, DatabaseBackup, HardDrive, History, Search, TriangleAlert } from "lucide-react";
 import { useState } from "react";
-import { EmptyState, ErrorText, Mono, Section, StatCard } from "@/components/common";
+import { EmptyState, ErrorText, Section, StatCard } from "@/components/common";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,9 @@ import { useTab } from "@/hooks/use-tab";
 import { formatBytes, timeAgo } from "@/lib/format";
 import { api, type Backup, type BackupTarget } from "../api";
 import { BackupList } from "./BackupList";
-import { BackupNow } from "./Service";
+import { BackupNowDialog } from "@/components/backup-now-dialog";
+import { Schedules } from "./Schedules";
+
 
 export function Backups() {
   const targets = useQuery({ queryKey: ["storage"], queryFn: api.backupTargets });
@@ -133,22 +135,17 @@ function BackupStats({ backups, targets }: { backups?: Backup[]; targets?: numbe
 
 function ManagerBackup({ targets }: { targets: BackupTarget[] }) {
   const qc = useQueryClient();
-  const [targetId, setTargetId] = useState("local");
-  const backup = useMutation({
-    meta: { error: "Couldn't back up the manager" },
-    mutationFn: () => api.backupManager(targetId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["backups"] }),
-  });
+  const backup = async (targetId: string) => {
+    await api.backupManager(targetId);
+    qc.invalidateQueries({ queryKey: ["backups"] });
+  };
   return (
     <Section
       plain
-      description={
-        <>
-          Projects, services, schedules and backup records live in one SQLite file. It is snapshotted daily to local disk
-          by default (<Mono>KIPITINY_MANAGER_BACKUP_*</Mono>); send a copy off-site too.
-        </>
-      }
-      actions={<BackupNow targets={targets} targetId={targetId} onTarget={setTargetId} disabled={backup.isPending} onBackup={() => backup.mutate()} />}
-    />
+      description="Projects, services, schedules, credentials and keys live in one SQLite file. Snapshot it on a schedule, and keep a copy off-site."
+      actions={<BackupNowDialog what="the manager" targets={targets} sensitive onBackup={backup} />}
+    >
+      <Schedules targets={targets} />
+    </Section>
   );
 }
