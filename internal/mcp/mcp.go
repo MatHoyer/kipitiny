@@ -32,15 +32,15 @@ func Handler(c *core.Core, version string) http.Handler {
 	yes := true
 
 	mcp.AddTool(server, &mcp.Tool{Name: "list_services", Annotations: readOnly,
-		Description: "List every project with its services, their kind, image or repository, domain and current status."}, t.listServices)
+		Description: "List every project with its services, their kind, image, domain and current status."}, t.listServices)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_app_status", Annotations: readOnly,
 		Description: "Status of one service: containers and health, settings (secrets masked), the last deployments with errors."}, t.getAppStatus)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_logs", Annotations: readOnly,
 		Description: "Recent log lines of a service's running containers, optionally filtered by a case-insensitive substring."}, t.getLogs)
 	mcp.AddTool(server, &mcp.Tool{Name: "deploy",
-		Description: "Deploy a service's current settings (zero-downtime for apps; git services are rebuilt), or another tag of an image service's image. Returns the deployment; poll get_app_status for the outcome."}, t.deploy)
-	mcp.AddTool(server, &mcp.Tool{Name: "deploy_from_git",
-		Description: "Create (or update) an app built from a Git repository's Dockerfile in a project, then deploy it. The project is created if missing."}, t.deployFromGit)
+		Description: "Deploy a service's current settings (zero-downtime for apps), or another tag of an app's image. Returns the deployment; poll get_app_status for the outcome."}, t.deploy)
+	mcp.AddTool(server, &mcp.Tool{Name: "deploy_image",
+		Description: "Create (or update) an app running a Docker image in a project, then deploy it. The project is created if missing."}, t.deployImage)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_project_env",
 		Description: "Set or remove a project's shared variables (readable) and secrets (write-only). Services use either as {{ project.NAME }} in an env value; they pick up changes on their next deploy."}, t.setProjectEnv)
 	mcp.AddTool(server, &mcp.Tool{Name: "rollback",
@@ -97,7 +97,7 @@ type ServiceSummary struct {
 	Project string `json:"project"`
 	Service string `json:"service"`
 	Kind    string `json:"kind"`
-	Source  string `json:"source"`
+	Image   string `json:"image"`
 	Domain  string `json:"domain,omitempty"`
 	Status  string `json:"status"`
 }
@@ -121,12 +121,8 @@ func (t *tools) listServices(ctx context.Context, _ *mcp.CallToolRequest, _ stru
 			return nil, listServicesOut{}, err
 		}
 		for _, s := range svcs {
-			src := s.Image
-			if s.Source == store.SourceGit {
-				src = s.GitURL + "@" + s.GitBranch
-			}
 			out.Services = append(out.Services, ServiceSummary{
-				Project: p.Name, Service: s.Name, Kind: string(s.Kind), Source: src,
+				Project: p.Name, Service: s.Name, Kind: string(s.Kind), Image: s.Image,
 				Domain: s.Domain, Status: status(s),
 			})
 		}
@@ -237,19 +233,17 @@ func (t *tools) deploy(ctx context.Context, _ *mcp.CallToolRequest, in deployIn)
 	return nil, dep, err
 }
 
-type deployFromGitIn struct {
-	Project    string            `json:"project" jsonschema:"project name (created if missing)"`
-	Name       string            `json:"name" jsonschema:"service name (lowercase, digits, dashes)"`
-	Repository string            `json:"repository" jsonschema:"HTTPS URL of the Git repository"`
-	Branch     string            `json:"branch,omitempty" jsonschema:"branch to build, default main"`
-	Dockerfile string            `json:"dockerfile,omitempty" jsonschema:"Dockerfile path, default Dockerfile"`
-	Domain     string            `json:"domain,omitempty" jsonschema:"public hostname; omit for a private service"`
-	Port       int               `json:"port,omitempty" jsonschema:"container port the app listens on (required with a domain)"`
-	Env        map[string]string `json:"env,omitempty" jsonschema:"environment variables to set; a value may reference a project variable as {{ project.NAME }}"`
+type deployImageIn struct {
+	Project string            `json:"project" jsonschema:"project name (created if missing)"`
+	Name    string            `json:"name" jsonschema:"service name (lowercase, digits, dashes)"`
+	Image   string            `json:"image" jsonschema:"Docker image, e.g. ghcr.io/org/app:v1"`
+	Domain  string            `json:"domain,omitempty" jsonschema:"public hostname; omit for a private service"`
+	Port    int               `json:"port,omitempty" jsonschema:"container port the app listens on (required with a domain)"`
+	Env     map[string]string `json:"env,omitempty" jsonschema:"environment variables to set; a value may reference a project variable as {{ project.NAME }}"`
 }
 
-func (t *tools) deployFromGit(ctx context.Context, _ *mcp.CallToolRequest, in deployFromGitIn) (*mcp.CallToolResult, store.Deployment, error) {
-	dep, err := mutate(ctx, t.c, store.ScopeDeploy, "deploy_from_git", in.Project+"/"+in.Name, func() (store.Deployment, error) {
+func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in deployImageIn) (*mcp.CallToolResult, store.Deployment, error) {
+	dep, err := mutate(ctx, t.c, store.ScopeDeploy, "deploy_image", in.Project+"/"+in.Name, func() (store.Deployment, error) {
 		project, err := t.findOrCreateProject(ctx, in.Project)
 		if err != nil {
 			return store.Deployment{}, err
@@ -258,8 +252,7 @@ func (t *tools) deployFromGit(ctx context.Context, _ *mcp.CallToolRequest, in de
 		switch {
 		case errors.Is(err, store.ErrNotFound):
 			view, err := t.c.CreateService(ctx, project.ID, core.ServiceInput{
-				Name: in.Name, Source: store.SourceGit, GitURL: in.Repository, GitBranch: in.Branch,
-				Dockerfile: in.Dockerfile, Domain: in.Domain, Port: in.Port, Env: in.Env,
+				Name: in.Name, Image: in.Image, Domain: in.Domain, Port: in.Port, Env: in.Env,
 			})
 			if err != nil {
 				return store.Deployment{}, err
@@ -268,16 +261,10 @@ func (t *tools) deployFromGit(ctx context.Context, _ *mcp.CallToolRequest, in de
 		case err != nil:
 			return store.Deployment{}, err
 		default:
-			if svc.Source != store.SourceGit {
-				return store.Deployment{}, fmt.Errorf("%s/%s exists and is not built from Git", project.Name, in.Name)
+			if svc.Kind != store.ServiceKindApp {
+				return store.Deployment{}, fmt.Errorf("%s/%s exists and is not an app", project.Name, in.Name)
 			}
-			patch := core.ServicePatch{GitURL: &in.Repository, Domain: &in.Domain, Port: &in.Port}
-			if in.Branch != "" {
-				patch.GitBranch = &in.Branch
-			}
-			if in.Dockerfile != "" {
-				patch.Dockerfile = &in.Dockerfile
-			}
+			patch := core.ServicePatch{Image: &in.Image, Domain: &in.Domain, Port: &in.Port}
 			if in.Env != nil {
 				// Keep existing entries; new ones become secrets.
 				env := maps.Clone(svc.Env)

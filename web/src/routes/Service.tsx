@@ -37,7 +37,6 @@ import { byDay, envMap, envRows, envSecrets, formatDuration, sameEnv, serviceSta
 import { cn } from "@/lib/utils";
 import { api, type Connection, type Deployment, type LogLine, type Service as ServiceT } from "../api";
 import { BackupList } from "./BackupList";
-import { GitFields } from "./Project";
 import { Schedules } from "./Schedules";
 
 export function Service() {
@@ -243,8 +242,7 @@ export function Service() {
           )}
           <TabsContent value="settings" className="space-y-6">
             <Settings svc={svc} />
-            {svc.source === "git" && <WebhookCard serviceId={svc.id} branch={svc.gitBranch} />}
-            {svc.source === "image" && svc.kind === "app" && <DeployFromCICard svc={svc} />}
+            {svc.kind === "app" && <DeployFromCICard svc={svc} />}
             <DangerZone description={isDb ? "Deleting the database destroys its data volume." : "Deleting the service removes its containers."}>
               <ConfirmDialog
                 trigger={
@@ -275,11 +273,6 @@ const settingsForm = (s: ServiceT) => ({
   memory: s.memoryMb ? String(s.memoryMb) : "",
   healthPath: s.healthPath,
   preDeploy: s.preDeploy,
-  gitUrl: s.gitUrl,
-  gitBranch: s.gitBranch,
-  gitToken: s.gitToken,
-  dockerfile: s.dockerfile,
-  buildContext: s.buildContext,
 });
 
 function Settings({ svc }: { svc: ServiceT }) {
@@ -298,15 +291,7 @@ function Settings({ svc }: { svc: ServiceT }) {
         isDb
           ? { image: form.image.trim(), memoryMb: Number(form.memory) || 0, }
           : {
-              ...(svc.source === "git"
-                ? {
-                    gitUrl: form.gitUrl.trim(),
-                    gitBranch: form.gitBranch.trim(),
-                    gitToken: form.gitToken,
-                    dockerfile: form.dockerfile.trim(),
-                    buildContext: form.buildContext.trim(),
-                  }
-                : { image: form.image.trim() }),
+              image: form.image.trim(),
               domain: form.domain.trim(),
               port: Number(form.port) || 0,
               replicas: Number(form.replicas) || 1,
@@ -332,18 +317,14 @@ function Settings({ svc }: { svc: ServiceT }) {
   return (
     <Section plain>
       <form id={formId} onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
-        {svc.source === "git" ? (
-          <GitFields form={form} set={set} tokenHint="******** keeps the saved token." />
-        ) : (
-          <FloatingInput
-            label="Image"
-            required
-            value={form.image}
-            onChange={set("image")}
-            className="sm:col-span-2"
-            description={isDb ? "Minor upgrades only; major versions need a dump and restore." : undefined}
-          />
-        )}
+        <FloatingInput
+          label="Image"
+          required
+          value={form.image}
+          onChange={set("image")}
+          className="sm:col-span-2"
+          description={isDb ? "Minor upgrades only; major versions need a dump and restore." : undefined}
+        />
         {!isDb && (
           <>
             <DomainField value={form.domain} onChange={(domain) => setForm({ ...form, domain })} className="sm:col-span-2" />
@@ -522,36 +503,6 @@ export function BackupNow({
   );
 }
 
-function WebhookCard({ serviceId, branch }: { serviceId: string; branch: string }) {
-  const [hook, setHook] = useState<{ url: string; secret: string } | null>(null);
-  const reveal = useMutation({ meta: { error: "Couldn't show the webhook" }, mutationFn: () => api.webhook(serviceId), onSuccess: setHook });
-  return (
-    <Section
-      title="Deploy on push"
-      description={
-        <>
-          Add a push webhook (GitHub: content type <Mono>application/json</Mono>; GitLab: secret token) and every push to{" "}
-          <Mono>{branch}</Mono> builds and deploys.
-        </>
-      }
-      actions={
-        <Button variant="outline" size="sm" onClick={() => (hook ? setHook(null) : reveal.mutate())} disabled={reveal.isPending}>
-          {hook ? "Hide" : "Show webhook"}
-        </Button>
-      }
-    >
-      {hook && (
-        <SecretList
-          rows={[
-            ["Payload URL", window.location.origin + hook.url],
-            ["Secret", hook.secret],
-          ]}
-        />
-      )}
-    </Section>
-  );
-}
-
 function DeployFromCICard({ svc }: { svc: ServiceT }) {
   const repo = imageRepo(svc.image);
   const step = [
@@ -599,7 +550,6 @@ function triggeredBy(t?: string) {
   if (!t) return "";
   const [kind, name] = [t.slice(0, t.indexOf(":")), t.slice(t.indexOf(":") + 1)];
   if (kind === "token") return `token ${name}`;
-  if (kind === "webhook") return name === "push" ? "push" : `${name} push`;
   return name;
 }
 

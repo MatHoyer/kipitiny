@@ -304,11 +304,7 @@ func (c *Core) recreateReplica(ctx context.Context, project store.Project, svc s
 		return err
 	}
 	dk := c.dockerFor(svc.ServerID)
-	if isBuiltImage(svc.Image) {
-		if _, err := dk.ImageInspect(ctx, svc.Image); err != nil {
-			return fmt.Errorf("build %s is gone; redeploy: %w", svc.Image, err)
-		}
-	} else if err := dk.EnsureImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image)); err != nil {
+	if err := dk.EnsureImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image)); err != nil {
 		return err
 	}
 	probe, err := c.probeFor(ctx, svc)

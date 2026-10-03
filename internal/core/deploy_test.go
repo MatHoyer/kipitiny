@@ -47,18 +47,11 @@ func TestDeployRejects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	git, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, ServerID: p.ServerID, Name: "api", Kind: store.ServiceKindApp,
-		Source: store.SourceGit, GitURL: "https://github.com/org/api.git", GitBranch: "main", Replicas: 1})
+	img, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, ServerID: p.ServerID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx:1.25", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	img, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, ServerID: p.ServerID, Name: "web", Kind: store.ServiceKindApp,
-		Source: store.SourceImage, Image: "nginx:1.25", Replicas: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
-	db, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, ServerID: p.ServerID, Name: "db", Kind: store.ServiceKindPostgres,
-		Source: store.SourceImage, Image: "postgres:17", Replicas: 1})
+	db, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, ServerID: p.ServerID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,11 +59,10 @@ func TestDeployRejects(t *testing.T) {
 		id   string
 		opts DeployOptions
 	}{
-		"tag on a git service": {git.ID, DeployOptions{Tag: "v2"}},
-		"tag on a database":    {db.ID, DeployOptions{Tag: "18"}},
-		"invalid tag":          {img.ID, DeployOptions{Tag: "a b"}},
-		"invalid digest":       {img.ID, DeployOptions{Digest: "sha256:nope"}},
-		"invalid commit":       {img.ID, DeployOptions{Tag: "v2", Commit: "main"}},
+		"tag on a database": {db.ID, DeployOptions{Tag: "18"}},
+		"invalid tag":       {img.ID, DeployOptions{Tag: "a b"}},
+		"invalid digest":    {img.ID, DeployOptions{Digest: "sha256:nope"}},
+		"invalid commit":    {img.ID, DeployOptions{Tag: "v2", Commit: "main"}},
 	} {
 		if _, err := c.Deploy(ctx, tc.id, tc.opts); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: want ErrInvalid, got %v", name, err)

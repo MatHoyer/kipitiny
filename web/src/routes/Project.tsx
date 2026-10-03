@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Box, ChevronLeft, Database, DatabaseBackup, GitBranch, Globe, Layers, Lock, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { Activity, Box, ChevronLeft, Database, DatabaseBackup, Globe, Layers, Lock, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -110,7 +110,7 @@ export function Project() {
               <EmptyState
                 icon={Layers}
                 title="No services yet"
-                description="Add an app from an image or a Git repository, or a PostgreSQL database."
+                description="Add an app from a Docker image, or a PostgreSQL database."
                 action={<NewServiceDialog projectId={id} />}
               />
             ) : (
@@ -207,12 +207,12 @@ function ServiceCard({ svc: s }: { svc: ServiceT }) {
               <PostgresIcon aria-label="PostgreSQL" className="size-5 text-[#4169E1]" />
             </span>
           ) : (
-            <IconTile icon={s.source === "git" ? GitBranch : Box} />
+            <IconTile icon={Box} />
           )}
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium">{s.name}</p>
             <p className="truncate font-mono text-xs text-muted-foreground">
-              {s.source === "git" ? `${s.gitUrl.replace(/^https?:\/\//, "")}@${s.gitBranch}` : s.image}
+              {s.image}
             </p>
           </div>
           <StateBadge state={liveState(s)} />
@@ -316,21 +316,15 @@ const emptyForm = {
   replicas: "1",
   version: "17",
   memory: "512",
-  gitUrl: "",
-  gitBranch: "main",
-  gitToken: "",
-  dockerfile: "Dockerfile",
-  buildContext: "",
 };
 
-type Choice = "image" | "git" | "postgres";
+type Choice = "image" | "postgres";
 
 const choiceGroups: { label: string; choices: { id: Choice; icon: ReactNode; title: string; description: string }[] }[] = [
   {
     label: "Apps",
     choices: [
       { id: "image", icon: <Box />, title: "Docker image", description: "Run a published image." },
-      { id: "git", icon: <GitBranch />, title: "Git repository", description: "Build its Dockerfile on every deploy." },
     ],
   },
   {
@@ -348,7 +342,6 @@ const choiceGroups: { label: string; choices: { id: Choice; icon: ReactNode; tit
 
 const choiceTitles: Record<Choice, string> = {
   image: "New app from a Docker image",
-  git: "New app from a Git repository",
   postgres: "New PostgreSQL database",
 };
 
@@ -364,7 +357,6 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
   // First step: what to create; the form follows.
   const [choice, setChoice] = useState<Choice | null>(null);
   const kind = choice === "postgres" ? "postgres" : "app";
-  const source = choice === "git" ? "git" : "image";
   const [form, setForm] = useState(emptyForm);
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
@@ -382,16 +374,7 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
           : {
               kind,
               name: form.name.trim(),
-              ...(source === "git"
-                ? {
-                    source,
-                    gitUrl: form.gitUrl.trim(),
-                    gitBranch: form.gitBranch.trim(),
-                    gitToken: form.gitToken.trim(),
-                    dockerfile: form.dockerfile.trim(),
-                    buildContext: form.buildContext.trim(),
-                  }
-                : { image: form.image.trim() }),
+              image: form.image.trim(),
               port: Number(form.port) || 0,
               domain: form.domain.trim(),
               replicas: Number(form.replicas) || 1,
@@ -473,7 +456,6 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
               {kind === "postgres" ? (
                 <>
                   <FloatingSelect
-                    // Its own instance: Radix keeps the Source select's item text otherwise.
                     key="version"
                     label="Version"
                     value={form.version}
@@ -492,18 +474,14 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
                 </>
               ) : (
                 <>
-                  {source === "image" ? (
-                    <FloatingInput
-                      label="Image"
-                      required
-                      value={form.image}
-                      onChange={set("image")}
-                      placeholder="ghcr.io/org/app:latest"
-                      className="sm:col-span-2"
-                    />
-                  ) : (
-                    <GitFields form={form} set={set} />
-                  )}
+                  <FloatingInput
+                    label="Image"
+                    required
+                    value={form.image}
+                    onChange={set("image")}
+                    placeholder="ghcr.io/org/app:latest"
+                    className="sm:col-span-2"
+                  />
                   <DomainField value={form.domain} onChange={(domain) => setForm({ ...form, domain })} className="sm:col-span-2" />
                   <FloatingInput
                     label="Container port"
@@ -540,49 +518,5 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
         )}
       </DialogContent>
     </Dialog>
-  );
-}
-
-type GitForm = { gitUrl: string; gitBranch: string; gitToken: string; dockerfile: string; buildContext: string };
-
-export function GitFields({
-  form,
-  set,
-  tokenHint,
-}: {
-  form: GitForm;
-  set: (k: keyof GitForm) => (e: { target: { value: string } }) => void;
-  tokenHint?: string;
-}) {
-  return (
-    <>
-      <FloatingInput
-        label="Repository"
-        required
-        value={form.gitUrl}
-        onChange={set("gitUrl")}
-        placeholder="https://github.com/org/app"
-        description="HTTPS URL; built with its Dockerfile on every deploy."
-        className="sm:col-span-2"
-      />
-      <FloatingInput label="Branch" required value={form.gitBranch} onChange={set("gitBranch")} />
-      <FloatingInput
-        label="Access token"
-        type="password"
-        autoComplete="off"
-        value={form.gitToken}
-        onChange={set("gitToken")}
-        description={tokenHint ?? "Only for private repositories."}
-      />
-      <FloatingInput label="Dockerfile" value={form.dockerfile} onChange={set("dockerfile")} inputClassName="font-mono" />
-      <FloatingInput
-        label="Build context"
-        value={form.buildContext}
-        onChange={set("buildContext")}
-        placeholder="."
-        inputClassName="font-mono"
-        description="Folder inside the repository; empty for the root."
-      />
-    </>
   );
 }

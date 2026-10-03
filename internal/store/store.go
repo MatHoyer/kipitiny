@@ -28,9 +28,9 @@ type Store interface {
 	ListServices(ctx context.Context, projectID string) ([]Service, error)
 	UpdateService(ctx context.Context, s Service) (Service, error)
 	SetCurrentDeployment(ctx context.Context, serviceID, deploymentID string) error
-	// SetDeploymentBuild records the image a deployment runs: built, or
-	// pinned to the digest it was pulled at.
-	SetDeploymentBuild(ctx context.Context, id, image, commit string, config Service) error
+	// SetDeploymentImage records the image a deployment runs, pinned to the
+	// digest it was pulled at.
+	SetDeploymentImage(ctx context.Context, id, image string, config Service) error
 	SetServiceStopped(ctx context.Context, serviceID string, stopped bool) error
 	// SetServiceImage records the image a service now deploys.
 	SetServiceImage(ctx context.Context, serviceID, image string) error
@@ -170,13 +170,6 @@ type Project struct {
 	UpdatedAt time.Time `bun:"updated_at" json:"updatedAt"`
 }
 
-type ServiceSource string
-
-const (
-	SourceImage ServiceSource = "image"
-	SourceGit   ServiceSource = "git"
-)
-
 type ServiceKind string
 
 const (
@@ -216,18 +209,8 @@ type Service struct {
 	// Stopped is the desired run state after the user stopped the service.
 	Stopped bool `bun:"stopped" json:"stopped"`
 
-	// Source is image (pull Image) or git (build GitURL's Dockerfile).
-	Source    ServiceSource `bun:"source" json:"source"`
-	GitURL    string        `bun:"git_url" json:"gitUrl"`
-	GitBranch string        `bun:"git_branch" json:"gitBranch"`
-	// GitToken authenticates HTTPS clones of private repositories.
-	GitToken     string `bun:"git_token" json:"gitToken"`
-	Dockerfile   string `bun:"dockerfile" json:"dockerfile"`
-	BuildContext string `bun:"build_context" json:"buildContext"`
-	// WebhookSecret authenticates push webhooks that trigger a deploy.
-	WebhookSecret string    `bun:"webhook_secret" json:"-"`
-	CreatedAt     time.Time `bun:"created_at" json:"createdAt"`
-	UpdatedAt     time.Time `bun:"updated_at" json:"updatedAt"`
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+	UpdatedAt time.Time `bun:"updated_at" json:"updatedAt"`
 }
 
 type DeploymentStatus string
@@ -247,8 +230,8 @@ type Deployment struct {
 	Image     string           `bun:"image" json:"image"`
 	Error     string           `bun:"error" json:"error,omitempty"`
 	GitCommit string           `bun:"git_commit" json:"gitCommit,omitempty"`
-	// TriggeredBy is who started it: user:<name>, token:<name> or
-	// webhook:<source>; empty for older deployments.
+	// TriggeredBy is who started it: user:<name> or token:<name>; empty
+	// for older deployments.
 	TriggeredBy string `bun:"triggered_by" json:"triggeredBy,omitempty"`
 	// Config is the service as deployed (image included).
 	Config     Service    `bun:"config,type:text" json:"-"`

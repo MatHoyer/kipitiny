@@ -56,8 +56,8 @@ func (c *Core) Deploy(ctx context.Context, serviceID string, opts DeployOptions)
 		}
 		// A database's version changes only through its settings: a new major
 		// can't start on the old data directory.
-		if svc.Source != store.SourceImage || svc.Kind != store.ServiceKindApp {
-			return store.Deployment{}, fmt.Errorf("%w: only image apps deploy a tag or digest", ErrInvalid)
+		if svc.Kind != store.ServiceKindApp {
+			return store.Deployment{}, fmt.Errorf("%w: only apps deploy a tag or digest", ErrInvalid)
 		}
 		if req.image, err = retagImage(svc.Image, opts.Tag, opts.Digest); err != nil {
 			return store.Deployment{}, err
@@ -147,11 +147,10 @@ func (c *Core) startDeploy(ctx context.Context, serviceID string, req deployRequ
 		unlock()
 		return store.Deployment{}, err
 	}
-	image := req.image
-	if image == "" && svc.Source != store.SourceGit {
-		image = svc.Image
+	if req.image != "" {
+		svc.Image = req.image
 	}
-	svc.Image = image // empty for a git service: built during the deploy
+	image := svc.Image
 	d := store.Deployment{
 		ServiceID: svc.ID,
 		Status:    store.DeploymentRunning,
@@ -255,46 +254,23 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 		}
 	}
 
-	switch {
-	case svc.Image == "": // git service: build it
-		tag, commit, err := c.buildImage(ctx, project, svc, dep, out, logf)
-		if err != nil {
+	logf("Pulling %s", svc.Image)
+	if err := dk.PullImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image), out); err != nil {
+		return fmt.Errorf("pull %s: %w%s", svc.Image, err, pullHint(err))
+	}
+	if res, err := dk.ImageInspect(ctx, svc.Image); err != nil {
+		return err
+	} else if pinned := pinDigest(svc.Image, res.RepoDigests); pinned != svc.Image {
+		logf("Pinned to %s", pinned)
+		svc.Image = pinned
+		if err := c.store.SetDeploymentImage(ctx, dep.ID, pinned, svc); err != nil {
 			return err
-		}
-		svc.Image = tag
-		if err := c.store.SetDeploymentBuild(ctx, dep.ID, tag, commit, svc); err != nil {
-			return err
-		}
-	case isBuiltImage(svc.Image): // rollback to an earlier build: local only
-		if _, err := dk.ImageInspect(ctx, svc.Image); err != nil {
-			return fmt.Errorf("build %s is no longer available: %w", svc.Image, err)
-		}
-	default:
-		logf("Pulling %s", svc.Image)
-		if err := dk.PullImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image), out); err != nil {
-			return fmt.Errorf("pull %s: %w%s", svc.Image, err, pullHint(err))
-		}
-		if res, err := dk.ImageInspect(ctx, svc.Image); err != nil {
-			return err
-		} else if pinned := pinDigest(svc.Image, res.RepoDigests); pinned != svc.Image {
-			logf("Pinned to %s", pinned)
-			svc.Image = pinned
-			if err := c.store.SetDeploymentBuild(ctx, dep.ID, pinned, dep.GitCommit, svc); err != nil {
-				return err
-			}
 		}
 	}
 	if svc.Kind == store.ServiceKindPostgres {
 		return c.recreate(ctx, project, svc, src, dep, logf)
 	}
-	if err := c.rollout(ctx, project, svc, src, dep, out, logf); err != nil {
-		return err
-	}
-	if svc.Source == store.SourceGit {
-		svc.CurrentDeploymentID = dep.ID
-		c.pruneBuilds(ctx, svc)
-	}
-	return nil
+	return c.rollout(ctx, project, svc, src, dep, out, logf)
 }
 
 // pinDigest pins image to the digest it was pulled at (name:tag@sha256:…), so
@@ -320,12 +296,6 @@ func pinDigest(image string, repoDigests []string) string {
 		}
 	}
 	return image
-}
-
-// isBuiltImage reports whether an image was built by the manager (and so
-// exists only locally).
-func isBuiltImage(image string) bool {
-	return strings.HasPrefix(image, "kipitiny/")
 }
 
 // recreate replaces a database's container in place: its volume can't be
