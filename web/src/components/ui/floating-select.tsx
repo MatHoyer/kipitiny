@@ -71,9 +71,9 @@ function FloatingSelect({
             {label}
           </label>
         </div>
-        <SelectContent position="popper" className="rounded-xl">
+        <SelectContent className="rounded-xl">
           {options.map((o) => (
-            <SelectItem key={o.value} value={o.value} className="py-2">
+            <SelectItem key={o.value} value={o.value} className="rounded-md py-2">
               {o.label}
             </SelectItem>
           ))}
