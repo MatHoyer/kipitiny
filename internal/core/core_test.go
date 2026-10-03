@@ -33,6 +33,9 @@ func TestValidateService(t *testing.T) {
 		{"too many replicas", func(s *store.Service) { s.Replicas = maxReplicas + 1 }, true},
 		{"bad env key", func(s *store.Service) { s.Env = map[string]string{"A-B": "1"} }, true},
 		{"good env key", func(s *store.Service) { s.Env = map[string]string{"_A1": "1"} }, false},
+		{"cpu limit", func(s *store.Service) { s.CPUs = 0.5 }, false},
+		{"tiny cpu limit", func(s *store.Service) { s.CPUs = 0.001 }, true},
+		{"negative cpu limit", func(s *store.Service) { s.CPUs = -1 }, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

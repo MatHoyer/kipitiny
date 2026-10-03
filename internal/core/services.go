@@ -21,7 +21,12 @@ import (
 // update keeps the stored value.
 const SecretMask = "********"
 
-const maxReplicas = 10
+const (
+	maxReplicas = 10
+	// Docker's NanoCPUs granularity is 0.01 CPU in practice.
+	minCPUs = 0.01
+	maxCPUs = 256.0
+)
 
 var (
 	domainRe = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$|^localhost$|^([a-z0-9-]+\.)+localhost$`)
@@ -39,6 +44,7 @@ type ServiceInput struct {
 	// Secrets names the write-only Env entries; nil makes them all secrets.
 	Secrets    []string `json:"secrets"`
 	MemoryMB   int      `json:"memoryMb"`
+	CPUs       float64  `json:"cpus"`
 	HealthPath string   `json:"healthPath"`
 	PreDeploy  string   `json:"preDeploy"`
 }
@@ -54,6 +60,7 @@ type ServicePatch struct {
 	Env        map[string]string `json:"env"`
 	Secrets    []string          `json:"secrets"`
 	MemoryMB   *int              `json:"memoryMb"`
+	CPUs       *float64          `json:"cpus"`
 	HealthPath *string           `json:"healthPath"`
 	PreDeploy  *string           `json:"preDeploy"`
 }
@@ -100,6 +107,7 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		Domain:     strings.ToLower(strings.TrimSpace(in.Domain)),
 		Env:        in.Env,
 		MemoryMB:   in.MemoryMB,
+		CPUs:       in.CPUs,
 		HealthPath: strings.TrimSpace(in.HealthPath),
 		PreDeploy:  strings.TrimSpace(in.PreDeploy),
 	}
@@ -172,6 +180,9 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	if p.MemoryMB != nil {
 		svc.MemoryMB = *p.MemoryMB
 	}
+	if p.CPUs != nil {
+		svc.CPUs = *p.CPUs
+	}
 	if p.HealthPath != nil {
 		svc.HealthPath = strings.TrimSpace(*p.HealthPath)
 	}
@@ -231,6 +242,9 @@ func validateService(s store.Service) error {
 	}
 	if s.MemoryMB < 0 {
 		return fmt.Errorf("%w: memory must be positive", ErrInvalid)
+	}
+	if s.CPUs != 0 && (s.CPUs < minCPUs || s.CPUs > maxCPUs) {
+		return fmt.Errorf("%w: CPU limit must be between %g and %g cores", ErrInvalid, minCPUs, maxCPUs)
 	}
 	if s.Kind == store.ServiceKindPostgres {
 		if s.HealthPath != "" || s.PreDeploy != "" {

@@ -277,6 +277,7 @@ const settingsForm = (s: ServiceT) => ({
   port: s.port ? String(s.port) : "",
   replicas: String(s.replicas),
   memory: s.memoryMb ? String(s.memoryMb) : "",
+  cpus: s.cpus ? String(s.cpus) : "",
   healthPath: s.healthPath,
   preDeploy: s.preDeploy,
 });
@@ -295,13 +296,14 @@ function Settings({ svc }: { svc: ServiceT }) {
       api.updateService(
         svc.id,
         isDb
-          ? { image: form.image.trim(), memoryMb: Number(form.memory) || 0, }
+          ? { image: form.image.trim(), memoryMb: Number(form.memory) || 0, cpus: Number(form.cpus) || 0 }
           : {
               image: form.image.trim(),
               domain: form.domain.trim(),
               port: Number(form.port) || 0,
               replicas: Number(form.replicas) || 1,
               memoryMb: Number(form.memory) || 0,
+              cpus: Number(form.cpus) || 0,
               healthPath: form.healthPath.trim(),
               preDeploy: form.preDeploy.trim(),
             },
@@ -346,7 +348,16 @@ function Settings({ svc }: { svc: ServiceT }) {
           value={form.memory}
           onChange={set("memory")}
           description={isDb ? undefined : "Empty for no limit."}
-          className="sm:col-span-2"
+        />
+        <FloatingInput
+          label="CPUs"
+          type="number"
+          min={0}
+          step={0.25}
+          value={form.cpus}
+          onChange={set("cpus")}
+          placeholder="0.5"
+          description="Cores, e.g. 0.5. Empty for no limit."
         />
         {!isDb && (
           <>

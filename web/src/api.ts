@@ -35,6 +35,8 @@ export type Service = {
   /** Names of the env entries that are secrets: their values come back masked. */
   secrets: string[];
   memoryMb: number;
+  /** CPU limit in cores; 0 means unlimited. */
+  cpus: number;
   healthPath: string;
   preDeploy: string;
   currentDeploymentId: string;
@@ -108,6 +110,7 @@ export type ServiceInput = {
   env?: Record<string, string>;
   secrets?: string[];
   memoryMb?: number;
+  cpus?: number;
   healthPath?: string;
   preDeploy?: string;
 };

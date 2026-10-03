@@ -202,6 +202,9 @@ type Service struct {
 	Secrets []string `bun:"secrets" json:"secrets"`
 	// MemoryMB is the container memory limit; 0 means unlimited.
 	MemoryMB int `bun:"memory_mb" json:"memoryMb"`
+	// CPUs is the container CPU limit in cores (0.5 = half a core); 0 means
+	// unlimited.
+	CPUs float64 `bun:"cpus" json:"cpus"`
 	// HealthPath is an HTTP path that must answer 2xx/3xx before a new
 	// replica takes over; empty uses the image healthcheck or a stability wait.
 	HealthPath string `bun:"health_path" json:"healthPath"`

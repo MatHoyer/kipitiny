@@ -95,10 +95,15 @@ func TestDatabaseURLEscapes(t *testing.T) {
 
 func TestPostgresContainerSpec(t *testing.T) {
 	p := store.Project{ID: "P1", Name: "shop"}
-	spec := containerSpec(p, pgService(), envSources{project: p.Env}, "D1", 1, certResolver)
+	svc := pgService()
+	svc.CPUs = 1.5
+	spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, certResolver)
 
 	if spec.HostConfig.Memory != 512<<20 {
 		t.Errorf("memory = %d", spec.HostConfig.Memory)
+	}
+	if spec.HostConfig.NanoCPUs != 1_500_000_000 {
+		t.Errorf("nano cpus = %d", spec.HostConfig.NanoCPUs)
 	}
 	if !slices.Contains(spec.Config.Env, "PGDATA="+pgDataDir) {
 		t.Errorf("PGDATA missing: %v", spec.Config.Env)
