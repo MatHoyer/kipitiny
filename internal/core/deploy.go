@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -479,6 +480,9 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 	}
 	if svc.MemoryMB > 0 {
 		host.Memory = int64(svc.MemoryMB) << 20
+	}
+	if svc.CPUs > 0 {
+		host.NanoCPUs = int64(math.Round(svc.CPUs * 1e9))
 	}
 	if svc.Kind == store.ServiceKindPostgres {
 		applyPostgresSpec(cfg, host, svc)

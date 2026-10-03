@@ -16,6 +16,7 @@ import (
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 
+	"github.com/MatHoyer/kipitiny/internal/ids"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -636,10 +637,17 @@ func TestImageOnlyMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	built, err := old.CreateService(ctx, store.Service{ProjectID: pr.ID, ServerID: pr.ServerID, Name: "api", Kind: store.ServiceKindApp, Replicas: 1})
-	if err != nil {
-		t.Fatal(err)
+	// Raw inserts: the current model has columns this schema lacks.
+	newService := func(name string) store.Service {
+		svc := store.Service{ID: ids.New(), ProjectID: pr.ID, Name: name}
+		if _, err := db.ExecContext(ctx, `INSERT INTO services (id, project_id, server_id, name, kind, image, created_at, updated_at)
+			VALUES (?, ?, ?, ?, 'app', '', '2026-01-01 00:00:00+00:00', '2026-01-01 00:00:00+00:00')`,
+			svc.ID, pr.ID, pr.ServerID, name); err != nil {
+			t.Fatal(err)
+		}
+		return svc
 	}
+	built := newService("api")
 	d, err := old.CreateDeployment(ctx, store.Deployment{ServiceID: built.ID, Status: store.DeploymentSucceeded, Image: "kipitiny/api:abc"})
 	if err != nil {
 		t.Fatal(err)
@@ -647,10 +655,7 @@ func TestImageOnlyMigration(t *testing.T) {
 	if err := old.SetCurrentDeployment(ctx, built.ID, d.ID); err != nil {
 		t.Fatal(err)
 	}
-	never, err := old.CreateService(ctx, store.Service{ProjectID: pr.ID, ServerID: pr.ServerID, Name: "worker", Kind: store.ServiceKindApp, Replicas: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
+	never := newService("worker")
 	if _, err := db.ExecContext(ctx, `UPDATE services SET source = 'git', image = '', git_url = 'https://x/y.git'`); err != nil {
 		t.Fatal(err)
 	}

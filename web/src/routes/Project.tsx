@@ -219,7 +219,10 @@ function ServiceCard({ svc: s }: { svc: ServiceT }) {
         </div>
         <div className="mt-auto flex flex-wrap items-center gap-1.5">
           {isDb ? (
-            <Tag>{s.memoryMb} MB</Tag>
+            <>
+              <Tag>{s.memoryMb} MB</Tag>
+              {s.cpus > 0 && <Tag>{s.cpus} CPU</Tag>}
+            </>
           ) : (
             <>
               <Tag className="flex items-center gap-1 font-mono font-normal">
