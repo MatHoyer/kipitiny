@@ -30,6 +30,7 @@ test: ui-stub
 	go test ./...
 
 lint: ui-stub
+	@unformatted=$$(gofmt -l .); if [ -n "$$unformatted" ]; then echo "Run gofmt on:"; echo "$$unformatted"; exit 1; fi
 	go vet ./...
 	cd web && pnpm typecheck
 
