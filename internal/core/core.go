@@ -63,6 +63,7 @@ type Core struct {
 	protonLogins  sync.Map // sign-in ID -> *protonLogin
 	mfaTickets    pending[mfaTicket]
 	totpSetups    pending[string] // user ID -> secret awaiting its first code
+	ceremonies    pending[ceremony]
 }
 
 // New builds the core around the local Docker client; remote servers are

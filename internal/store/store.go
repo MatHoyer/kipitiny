@@ -67,6 +67,13 @@ type Store interface {
 	// UseRecoveryCode deletes the code; ErrNotFound if the user has no such code.
 	UseRecoveryCode(ctx context.Context, userID, codeHash string) error
 
+	CreatePasskey(ctx context.Context, p Passkey) (Passkey, error)
+	ListPasskeys(ctx context.Context, userID string) ([]Passkey, error)
+	GetPasskeyByCredentialID(ctx context.Context, credentialID string) (Passkey, error)
+	// PasskeyUsed stores the updated credential (sign count) and the use.
+	PasskeyUsed(ctx context.Context, id, credential string) error
+	DeletePasskey(ctx context.Context, userID, id string) error
+
 	CreateSession(ctx context.Context, s Session) error
 	// GetSession returns ErrNotFound for unknown or expired sessions.
 	GetSession(ctx context.Context, tokenHash string) (Session, error)
@@ -160,6 +167,20 @@ type User struct {
 	// TOTPSecret is the base32 authenticator secret; empty while 2FA is off.
 	TOTPSecret   string `bun:"totp_secret" json:"-"`
 	TOTPLastStep int64  `bun:"totp_last_step" json:"-"`
+}
+
+type Passkey struct {
+	bun.BaseModel `bun:"table:passkeys,alias:passkey" json:"-"`
+
+	ID     string `bun:"id,pk" json:"id"`
+	UserID string `bun:"user_id" json:"-"`
+	Name   string `bun:"name" json:"name"`
+	// CredentialID is the base64url WebAuthn credential ID.
+	CredentialID string `bun:"credential_id" json:"-"`
+	// Credential is the JSON-encoded webauthn.Credential.
+	Credential string     `bun:"credential" json:"-"`
+	CreatedAt  time.Time  `bun:"created_at" json:"createdAt"`
+	LastUsedAt *time.Time `bun:"last_used_at" json:"lastUsedAt,omitempty"`
 }
 
 type Session struct {

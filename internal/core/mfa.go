@@ -104,7 +104,8 @@ type Account struct {
 	Username    string `json:"username"`
 	TOTPEnabled bool   `json:"totpEnabled"`
 	// RecoveryCodes is how many unused recovery codes are left.
-	RecoveryCodes int `json:"recoveryCodes"`
+	RecoveryCodes int             `json:"recoveryCodes"`
+	Passkeys      []store.Passkey `json:"passkeys"`
 }
 
 // currentUser is the signed-in user making the request; API tokens have none.
@@ -138,7 +139,11 @@ func (c *Core) Account(ctx context.Context) (Account, error) {
 	if err != nil {
 		return Account{}, err
 	}
-	return Account{Username: u.Username, TOTPEnabled: u.TOTPSecret != "", RecoveryCodes: n}, nil
+	ps, err := c.store.ListPasskeys(ctx, u.ID)
+	if err != nil {
+		return Account{}, err
+	}
+	return Account{Username: u.Username, TOTPEnabled: u.TOTPSecret != "", RecoveryCodes: n, Passkeys: ps}, nil
 }
 
 // ChangePassword signs the user out everywhere and returns a new session

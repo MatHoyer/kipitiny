@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -17,11 +18,13 @@ const sessionCookie = "kipitiny_session"
 
 // publicRoutes are reachable without a session.
 var publicRoutes = map[string]bool{
-	"GET /api/health":          true,
-	"GET /api/auth/state":      true,
-	"POST /api/auth/setup":     true,
-	"POST /api/auth/login":     true,
-	"POST /api/auth/login/mfa": true,
+	"GET /api/health":               true,
+	"GET /api/auth/state":           true,
+	"POST /api/auth/setup":          true,
+	"POST /api/auth/login":          true,
+	"POST /api/auth/login/mfa":      true,
+	"POST /api/auth/passkey/begin":  true,
+	"POST /api/auth/passkey/finish": true,
 }
 
 // sessionOnly routes can't be used with an API token (a token must not mint
@@ -273,6 +276,57 @@ func (a *API) loginMFA(w http.ResponseWriter, r *http.Request) {
 	a.limiter.reset(ip)
 	setSessionCookie(w, r, token, int(core.SessionTTL.Seconds()))
 	writeJSON(w, http.StatusOK, u)
+}
+
+func (a *API) beginPasskeyLogin(w http.ResponseWriter, r *http.Request) {
+	opts, err := a.core.BeginPasskeyLogin(relyingParty(r))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, opts)
+}
+
+func (a *API) finishPasskeyLogin(w http.ResponseWriter, r *http.Request) {
+	ip := clientIP(r, a.core.BehindTunnel(r.Context()))
+	if !a.limiter.allow(ip) {
+		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
+		return
+	}
+	var body struct {
+		Ceremony   string          `json:"ceremony"`
+		Credential json.RawMessage `json:"credential"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	u, token, err := a.core.FinishPasskeyLogin(r.Context(), body.Ceremony, body.Credential)
+	if err != nil {
+		a.limiter.fail(ip)
+		a.fail(w, err)
+		return
+	}
+	a.limiter.reset(ip)
+	setSessionCookie(w, r, token, int(core.SessionTTL.Seconds()))
+	writeJSON(w, http.StatusOK, u)
+}
+
+// relyingParty is the origin the browser is on, which passkeys are bound to.
+// sameOrigin already checked that Origin matches the host.
+func relyingParty(r *http.Request) core.RelyingParty {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		scheme := "http"
+		if isHTTPS(r) {
+			scheme = "https"
+		}
+		origin = scheme + "://" + r.Host
+	}
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return core.RelyingParty{ID: host, Origin: origin}
 }
 
 func (a *API) logout(w http.ResponseWriter, r *http.Request) {

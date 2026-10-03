@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -127,4 +128,45 @@ func (a *API) regenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, recoveryCodes{codes})
+}
+
+func (a *API) beginPasskeyRegistration(w http.ResponseWriter, r *http.Request) {
+	if !a.confirmAllowed(w, r) {
+		return
+	}
+	var body passwordBody
+	if !decode(w, r, &body) {
+		return
+	}
+	opts, err := a.core.BeginPasskeyRegistration(r.Context(), relyingParty(r), body.Password)
+	if err != nil {
+		a.failConfirm(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, opts)
+}
+
+func (a *API) finishPasskeyRegistration(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Ceremony   string          `json:"ceremony"`
+		Name       string          `json:"name"`
+		Credential json.RawMessage `json:"credential"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	p, err := a.core.FinishPasskeyRegistration(r.Context(), body.Ceremony, body.Name, body.Credential)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, p)
+}
+
+func (a *API) deletePasskey(w http.ResponseWriter, r *http.Request) {
+	if err := a.core.DeletePasskey(r.Context(), r.PathValue("id")); err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

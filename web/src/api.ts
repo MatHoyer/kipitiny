@@ -1,3 +1,5 @@
+import { createPasskey, getPasskey, type CreationOptionsJSON, type RequestOptionsJSON } from "./lib/webauthn";
+
 export type DatabaseKind = "postgres" | "redis";
 export type ServiceKind = "app" | DatabaseKind;
 
@@ -312,9 +314,13 @@ export type User = { id: string; username: string; createdAt: string };
 /** A password sign-in that still needs a TOTP or recovery code. */
 export type MfaChallenge = { mfaRequired: true; ticket: string };
 
-export type Account = { username: string; totpEnabled: boolean; recoveryCodes: number };
+export type Passkey = { id: string; name: string; createdAt: string; lastUsedAt?: string };
+
+export type Account = { username: string; totpEnabled: boolean; recoveryCodes: number; passkeys: Passkey[] };
 
 export type TotpSetup = { secret: string; uri: string };
+
+type Ceremony<T> = { ceremony: string; options: T };
 
 export type AuthState = { setupRequired: boolean; user?: User };
 
@@ -477,6 +483,11 @@ export const api = {
   login: (username: string, password: string) =>
     request<User | MfaChallenge>("/auth/login", json("POST", { username, password })),
   loginMfa: (ticket: string, code: string) => request<User>("/auth/login/mfa", json("POST", { ticket, code })),
+  loginPasskey: async () => {
+    const { ceremony, options } = await request<Ceremony<RequestOptionsJSON>>("/auth/passkey/begin", json("POST", {}));
+    const credential = await getPasskey(options);
+    return request<User>("/auth/passkey/finish", json("POST", { ceremony, credential }));
+  },
   logout: () => request<void>("/auth/logout", { method: "POST" }),
 
   account: () => request<Account>("/account"),
@@ -486,6 +497,13 @@ export const api = {
   disableTotp: (password: string) => request<void>("/account/totp/disable", json("POST", { password })),
   regenerateRecoveryCodes: (password: string) =>
     request<{ recoveryCodes: string[] }>("/account/recovery-codes", json("POST", { password })),
+  /** Asks for the password, then the browser's passkey prompt. */
+  addPasskey: async (password: string, name: string) => {
+    const { ceremony, options } = await request<Ceremony<CreationOptionsJSON>>("/account/passkeys/begin", json("POST", { password }));
+    const credential = await createPasskey(options);
+    return request<Passkey>("/account/passkeys", json("POST", { ceremony, name, credential }));
+  },
+  deletePasskey: (id: string) => request<void>(`/account/passkeys/${id}`, { method: "DELETE" }),
 
   status: () => request<Status>("/status"),
   applyUpdate: () => request<UpdateInfo>("/update", { method: "POST" }),
