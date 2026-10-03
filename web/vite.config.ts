@@ -10,6 +10,6 @@ export default defineConfig({
   },
   server: {
     // Keep the browser's Host: the API refuses mutations whose Origin differs.
-    proxy: { "/api": { target: "http://localhost:8080", changeOrigin: false } },
+    proxy: { "/api": { target: "http://localhost:8080", changeOrigin: false, ws: true } },
   },
 });

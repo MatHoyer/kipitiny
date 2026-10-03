@@ -225,6 +225,7 @@ Later: optional VictoriaLogs or Loki, opt-in.
 - Embedded in the binary (`web/embed.go`), SPA fallback to `index.html`.
 - Dev: Go on `:8080`, Vite dev server proxies `/api`.
 - Release: multi-stage Dockerfile → distroless image (`cc` variant, for the bundled `pass-cli`; kipitiny itself is static).
+- Web terminal: `docker exec` with a TTY, bridged to xterm.js (lazy-loaded chunk) over a websocket (`golang.org/x/net/websocket`). Browser sends JSON `input`/`resize` messages; the server sends raw output as binary frames, then one `exit`/`error` message. Admin only, Origin must match the host, every session opened/closed lands in the audit log.
 
 ## 14. API and MCP
 

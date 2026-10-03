@@ -13,9 +13,10 @@ import {
   RotateCcw,
   Rocket,
   Square,
+  SquareTerminal,
   Trash2,
 } from "lucide-react";
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { PostgresIcon } from "@/components/brand-icons";
@@ -38,6 +39,7 @@ import { api, type Connection, type Deployment, type LogLine, type Service as Se
 import { BackupList } from "./BackupList";
 import { Schedules } from "./Schedules";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function Service() {
   const { id = "" } = useParams();
@@ -57,7 +59,7 @@ export function Service() {
   });
   const deploying = deployments.data?.some((d) => d.status === "running") ?? false;
   const [selected, setSelected] = useState<string | null>(null);
-  const [tab, setTab] = useTab(["overview", "deployments", "logs", "environment", "backups", "settings"], "overview");
+  const [tab, setTab] = useTab(["overview", "deployments", "logs", "terminal", "environment", "backups", "settings"], "overview");
 
   // Refresh containers as soon as a deploy finishes.
   const wasDeploying = useRef(false);
@@ -193,6 +195,7 @@ export function Service() {
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="deployments">Deployments</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
+            <TabsTrigger value="terminal">Terminal</TabsTrigger>
             <TabsTrigger value="environment">Environment</TabsTrigger>
             {isDb && <TabsTrigger value="backups">Backups</TabsTrigger>}
             <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -231,6 +234,9 @@ export function Service() {
               // Remount (and reconnect) whenever the set of containers changes.
               <LiveLogs key={active.map((c) => c.id).join()} serviceId={id} />
             )}
+          </TabsContent>
+          <TabsContent value="terminal">
+            <ServiceTerminal svc={svc} />
           </TabsContent>
           <TabsContent value="environment">
             <EnvironmentCard key={svc.id} svc={svc} />
@@ -810,6 +816,103 @@ function LiveLogs({ serviceId }: { serviceId: string }) {
           </div>
         ))}
       </pre>
+    </Section>
+  );
+}
+
+// xterm.js is big: load it with the first terminal.
+const TerminalView = lazy(() => import("@/components/terminal").then((m) => ({ default: m.TerminalView })));
+
+const shells = [
+  { value: "auto", label: "bash, or sh" },
+  { value: "sh", label: "sh" },
+  { value: "bash", label: "bash" },
+];
+
+/** A shell in one of the service's running containers. */
+function ServiceTerminal({ svc }: { svc: ServiceT }) {
+  const running = svc.containers.filter((c) => !c.retired && c.state === "running");
+  const [picked, setPicked] = useState("");
+  const [shell, setShell] = useState("auto");
+  // Each connect mounts a new session; an ended one stays on screen.
+  const [session, setSession] = useState<{ n: number; path: string } | null>(null);
+  const [live, setLive] = useState(false);
+  const container = running.some((c) => c.name === picked) ? picked : (running[0]?.name ?? "");
+
+  if (running.length === 0 && !session) return <Empty>No running container.</Empty>;
+
+  return (
+    <Section
+      plain
+      actions={
+        <>
+          {running.length > 1 && (
+            <Select value={container} onValueChange={setPicked} disabled={live}>
+              <SelectTrigger size="sm" aria-label="Replica">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {running.map((c) => (
+                  <SelectItem key={c.id} value={c.name}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Select value={shell} onValueChange={setShell} disabled={live}>
+            <SelectTrigger size="sm" aria-label="Shell">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {shells.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {live ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSession(null);
+                setLive(false);
+              }}
+            >
+              Disconnect
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              disabled={!container}
+              onClick={() => {
+                setSession((s) => ({ n: (s?.n ?? 0) + 1, path: api.terminalUrl(svc.id, container, shell) }));
+                setLive(true);
+              }}
+            >
+              <SquareTerminal data-icon="inline-start" />
+              {session ? "Reconnect" : "Connect"}
+            </Button>
+          )}
+        </>
+      }
+    >
+      {!session ? (
+        <p className="text-sm text-muted-foreground">
+          Opens a shell in {running.length > 1 ? "the chosen replica" : container}. Sessions are recorded in the audit log.
+        </p>
+      ) : (
+        <Suspense fallback={<Loading />}>
+          <TerminalView
+            key={session.n}
+            path={session.path}
+            onClose={() => setLive(false)}
+            className="h-[calc(100svh-24rem)] min-h-80"
+          />
+        </Suspense>
+      )}
     </Section>
   );
 }
