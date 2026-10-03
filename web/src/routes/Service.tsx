@@ -19,7 +19,7 @@ import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } fr
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { PostgresIcon } from "@/components/brand-icons";
-import { DangerZone, Empty, EmptyState, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
+import { CopyButton, DangerZone, Empty, EmptyState, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
@@ -244,6 +244,7 @@ export function Service() {
           <TabsContent value="settings" className="space-y-6">
             <Settings svc={svc} />
             {svc.source === "git" && <WebhookCard serviceId={svc.id} branch={svc.gitBranch} />}
+            {svc.source === "image" && svc.kind === "app" && <DeployFromCICard svc={svc} />}
             <DangerZone description={isDb ? "Deleting the database destroys its data volume." : "Deleting the service removes its containers."}>
               <ConfirmDialog
                 trigger={
@@ -551,6 +552,57 @@ function WebhookCard({ serviceId, branch }: { serviceId: string; branch: string 
   );
 }
 
+function DeployFromCICard({ svc }: { svc: ServiceT }) {
+  const repo = imageRepo(svc.image);
+  const step = [
+    "- name: Deploy",
+    "  run: >",
+    "    docker run --rm -e KIPITINY_TOKEN=${{ secrets.KIPITINY_TOKEN }}",
+    "    ghcr.io/mathoyer/kipitiny deploy",
+    `    --url ${window.location.origin} --service ${svc.id}`,
+    "    --tag sha-${{ github.sha }} --commit ${{ github.sha }}",
+  ].join("\n");
+  return (
+    <Section
+      title="Deploy from CI"
+      description={
+        <>
+          Build and push <Mono>{repo}</Mono> in CI, then deploy the tag it pushed with a <Mono>deploy</Mono> token (Settings › API
+          tokens). The service keeps that tag; the step fails if the deployment does.
+        </>
+      }
+    >
+      <div className="relative">
+        <pre className={cn(terminal, "pr-10")}>{step}</pre>
+        <div className="absolute top-1.5 right-1.5 text-neutral-200">
+          <CopyButton value={step} label="Copy step" />
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+/** The image without its tag or digest. */
+function imageRepo(image: string) {
+  const name = image.split("@")[0];
+  const colon = name.lastIndexOf(":");
+  return colon > name.lastIndexOf("/") ? name.slice(0, colon) : name;
+}
+
+/** The image without its pinned digest: name:tag stays readable. */
+function shortImage(image: string) {
+  return image.split("@")[0];
+}
+
+/** Who started a deployment, for display. */
+function triggeredBy(t?: string) {
+  if (!t) return "";
+  const [kind, name] = [t.slice(0, t.indexOf(":")), t.slice(t.indexOf(":") + 1)];
+  if (kind === "token") return `token ${name}`;
+  if (kind === "webhook") return name === "push" ? "push" : `${name} push`;
+  return name;
+}
+
 function ConnectionCard({ serviceId, host }: { serviceId: string; host: string }) {
   const [conn, setConn] = useState<Connection | null>(null);
   const reveal = useMutation({ meta: { error: "Couldn't show the connection details" }, mutationFn: () => api.connection(serviceId), onSuccess: setConn });
@@ -689,13 +741,16 @@ function DeploymentRow({
                     {d.gitCommit.slice(0, 7)}
                   </span>
                 ) : (
-                  <span className="truncate font-mono">{d.image}</span>
+                  <span className="truncate font-mono" title={d.image}>
+                    {shortImage(d.image)}
+                  </span>
                 )}
                 {current && <Tag className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">current</Tag>}
               </p>
               <p className="truncate text-xs text-muted-foreground">
                 {new Date(d.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ·{" "}
                 {d.status === "running" ? `running for ${took}` : took}
+                {d.triggeredBy && <> · by {triggeredBy(d.triggeredBy)}</>}
                 {d.error && <span className="text-destructive"> · {d.error}</span>}
               </p>
             </div>
