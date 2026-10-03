@@ -46,9 +46,11 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "rollback",
 		Description: "Redeploy the image of an earlier successful deployment (the previous one by default)."}, t.rollback)
 	mcp.AddTool(server, &mcp.Tool{Name: "backup_database",
-		Description: "Start a pg_dump backup of a PostgreSQL service to a backup target (local disk by default)."}, t.backupDatabase)
+		Description: "Start a pg_dump backup of a PostgreSQL service to a storage (local disk by default; see list_storage)."}, t.backupDatabase)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_backups", Annotations: readOnly,
-		Description: "Backups of a PostgreSQL service with status, size, target and restore-test result."}, t.listBackups)
+		Description: "Backups of a PostgreSQL service with status, size, storage (targetId) and restore-test result."}, t.listBackups)
+	mcp.AddTool(server, &mcp.Tool{Name: "list_storage", Annotations: readOnly,
+		Description: "Where kipitiny can store files (local disk, S3, drives), with their IDs and whether files are encrypted."}, t.listStorage)
 	mcp.AddTool(server, &mcp.Tool{Name: "restore_database", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Replace a database's data with a backup. Destructive: confirm must repeat the database's service name. Apps referencing it are stopped meanwhile."}, t.restoreDatabase)
 
@@ -361,7 +363,7 @@ func (t *tools) rollback(ctx context.Context, _ *mcp.CallToolRequest, in rollbac
 
 type backupIn struct {
 	Database string `json:"database" jsonschema:"the PostgreSQL service as project/service, or its ID"`
-	Target   string `json:"target,omitempty" jsonschema:"backup target ID; default local disk"`
+	Storage  string `json:"storage,omitempty" jsonschema:"storage ID (see list_storage); default local disk"`
 }
 
 func (t *tools) backupDatabase(ctx context.Context, _ *mcp.CallToolRequest, in backupIn) (*mcp.CallToolResult, store.Backup, error) {
@@ -370,9 +372,36 @@ func (t *tools) backupDatabase(ctx context.Context, _ *mcp.CallToolRequest, in b
 		if err != nil {
 			return store.Backup{}, err
 		}
-		return t.c.BackupDatabase(ctx, svc.ID, in.Target)
+		return t.c.BackupDatabase(ctx, svc.ID, in.Storage)
 	})
 	return nil, b, err
+}
+
+// StorageSummary is a storage as agents see it: no endpoints or credentials.
+type StorageSummary struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	Encrypted bool   `json:"encrypted"`
+}
+
+type listStorageOut struct {
+	Storage []StorageSummary `json:"storage"`
+}
+
+func (t *tools) listStorage(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listStorageOut, error) {
+	if err := core.Require(ctx, store.ScopeRead); err != nil {
+		return nil, listStorageOut{}, err
+	}
+	ts, err := t.c.ListBackupTargets(ctx)
+	if err != nil {
+		return nil, listStorageOut{}, err
+	}
+	out := listStorageOut{Storage: make([]StorageSummary, len(ts))}
+	for i, s := range ts {
+		out.Storage[i] = StorageSummary{ID: s.ID, Name: s.Name, Kind: string(s.Kind), Encrypted: s.Encrypted()}
+	}
+	return nil, out, nil
 }
 
 type listBackupsIn struct {

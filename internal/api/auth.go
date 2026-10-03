@@ -43,7 +43,7 @@ var deployRoutes = map[string]bool{
 // secretReads reveal credentials or backup contents: admin only.
 var secretReads = map[string]bool{
 	"GET /api/services/{id}/connection": true,
-	"GET /api/backup-targets/{id}/key":  true,
+	"GET /api/storage/{id}/key":         true,
 	"GET /api/backups/{id}/download":    true,
 	"GET /api/audit":                    true,
 	// A pending Proton sign-in's link.
