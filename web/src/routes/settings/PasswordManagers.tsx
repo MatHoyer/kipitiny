@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, KeyRound, Plus } from "lucide-react";
-import { useState, type FormEvent, type ReactNode } from "react";
-import { ProtonIcon } from "@/components/brand-icons";
+import { useState, type FormEvent } from "react";
+import { passwordManagerIcon as iconFor } from "@/components/brand-icons";
 import { ChoiceTile, EmptyState, ErrorText, Mono, Tag, withCode } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -18,12 +18,6 @@ import {
 import { FloatingInput } from "@/components/ui/floating-input";
 import { api, type SecretProvider } from "@/api";
 import { SettingsPage } from "./page";
-
-/** Brand marks by provider id; others get a key. */
-const icons: Record<string, ReactNode> = {
-  protonpass: <ProtonIcon className="text-[#6D4AFF]" />,
-};
-const iconFor = (id: string) => icons[id] ?? <KeyRound />;
 
 /** Password managers that service env can reference (e.g. pass://Vault/Item/field). */
 export function PasswordManagers() {

@@ -1,4 +1,5 @@
-import type { SVGProps } from "react";
+import { KeyRound } from "lucide-react";
+import type { ReactNode, SVGProps } from "react";
 
 // Logos from Simple Icons (CC0-1.0), https://simpleicons.org.
 
@@ -74,3 +75,13 @@ export function CloudflareIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+/** Brand marks of password managers by provider id; others get a key. */
+const passwordManagerIcons: Record<string, ReactNode> = {
+  protonpass: <ProtonIcon className="text-[#6D4AFF]" />,
+};
+export const passwordManagerIcon = (id: string) => passwordManagerIcons[id] ?? <KeyRound />;
+
+/** Provider ids by reference scheme, for icons where only a reference is known. */
+const schemeProviders: Record<string, string> = { pass: "protonpass" };
+export const schemeIcon = (scheme: string) => passwordManagerIcon(schemeProviders[scheme] ?? "");

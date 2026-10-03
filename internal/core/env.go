@@ -220,10 +220,18 @@ func maskEnv(env map[string]string, secrets []string) map[string]string {
 	return out
 }
 
+// managerRef reports whether v is exactly one password manager reference. It
+// only says where the secret lives, so it's stored as a readable variable.
+func managerRef(v string) bool {
+	m := soleRefRe.FindStringSubmatch(v)
+	return m != nil && m[4] != ""
+}
+
 // mergeEnv applies an edited env over the stored one. A secret sent back as
 // SecretMask keeps its stored value; it can't become a variable without a new
-// value, which would reveal it. secrets nil (a client unaware of them) keeps
-// the stored flags and makes new entries secrets.
+// value, which would reveal it. Password manager references are never secrets.
+// secrets nil (a client unaware of them) keeps the stored flags and makes new
+// entries secrets.
 func mergeEnv(in map[string]string, secrets []string, old map[string]string, oldSecrets []string) (map[string]string, []string, error) {
 	if secrets == nil {
 		for k := range in {
@@ -243,7 +251,7 @@ func mergeEnv(in map[string]string, secrets []string, old map[string]string, old
 			v = prev
 		}
 		env[k] = v
-		if secret {
+		if secret && !managerRef(v) {
 			out = append(out, k)
 		}
 	}
