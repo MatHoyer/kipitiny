@@ -55,31 +55,31 @@ func TestValidatePostgres(t *testing.T) {
 	}
 }
 
-func TestCheckPostgresUpdate(t *testing.T) {
+func TestCheckDatabaseUpdate(t *testing.T) {
 	old := pgService()
 
 	minor := old
 	minor.Image = "postgres:17.2-alpine"
-	if err := checkPostgresUpdate(old, minor); err != nil {
+	if err := checkDatabaseUpdate(old, minor); err != nil {
 		t.Errorf("minor upgrade refused: %v", err)
 	}
 
 	major := old
 	major.Image = "postgres:18-alpine"
-	if err := checkPostgresUpdate(old, major); !errors.Is(err, ErrInvalid) {
+	if err := checkDatabaseUpdate(old, major); !errors.Is(err, ErrInvalid) {
 		t.Errorf("major upgrade allowed: %v", err)
 	}
 
 	creds := old
 	creds.Env = map[string]string{pgUser: "app", pgPassword: "changed", pgDatabase: "app"}
-	if err := checkPostgresUpdate(old, creds); !errors.Is(err, ErrInvalid) {
+	if err := checkDatabaseUpdate(old, creds); !errors.Is(err, ErrInvalid) {
 		t.Errorf("password change allowed: %v", err)
 	}
 
 	extra := old
 	extra.Env = map[string]string{"TZ": "Europe/Paris"}
 	maps.Copy(extra.Env, old.Env)
-	if err := checkPostgresUpdate(old, extra); !errors.Is(err, ErrInvalid) {
+	if err := checkDatabaseUpdate(old, extra); !errors.Is(err, ErrInvalid) {
 		t.Errorf("env change allowed: %v", err)
 	}
 }

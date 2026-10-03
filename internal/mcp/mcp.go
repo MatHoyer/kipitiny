@@ -23,7 +23,7 @@ import (
 // core.Actor in the request context.
 func Handler(c *core.Core, version string) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "kipitiny", Version: version}, &mcp.ServerOptions{
-		Instructions: "Manage apps and PostgreSQL databases on this kipitiny server. " +
+		Instructions: "Manage apps and PostgreSQL/Redis databases on this kipitiny server. " +
 			"Refer to services as project/service. Read tools need a read token, " +
 			"deploy/rollback/backup need deploy, restore needs admin and an explicit confirmation.",
 	})

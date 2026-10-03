@@ -212,9 +212,7 @@ func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []s
 				ID: s.ID, Name: s.Name, Kind: s.Kind, Image: s.Image, Domain: s.Domain, Port: s.Port,
 				Replicas: s.Replicas, Stopped: s.Stopped, Uses: usedDatabases(s, p, dbs), Containers: []TopoNode{},
 			}
-			if s.Kind == store.ServiceKindPostgres {
-				ts.Volume = PostgresVolume(s.ID)
-			}
+			ts.Volume = DataVolume(s)
 			views := make([]ContainerView, 0, len(byService[s.ID]))
 			nodes := map[string]container.Summary{}
 			for _, ct := range byService[s.ID] {

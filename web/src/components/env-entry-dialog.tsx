@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { Braces, ChevronLeft, Eye, EyeOff, FolderSearch, KeyRound, Variable, Vault } from "lucide-react";
+import { Braces, ChevronLeft, Database, Eye, EyeOff, FolderSearch, KeyRound, Variable, Vault } from "lucide-react";
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
-import { PostgresIcon, passwordManagerIcon } from "@/components/brand-icons";
+import { DatabaseIcon, databaseLabels, passwordManagerIcon } from "@/components/brand-icons";
 import { ChoiceTile, ErrorText, Mono } from "@/components/common";
 import { TemplateValue } from "@/components/template-value";
 import { Button } from "@/components/ui/button";
@@ -25,9 +25,9 @@ import {
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { dbFields, dbRef, envRef, managerRef, refName, refsIn, type EnvReference, type EnvRow } from "@/lib/format";
+import { dbFields, dbRef, dbRefValid, envRef, managerRef, refName, refsIn, type EnvReference, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { api, SECRET_MASK } from "../api";
+import { api, SECRET_MASK, type DatabaseKind, type DatabaseRef } from "../api";
 
 export const envKeyRe = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -46,7 +46,7 @@ export type EnvContext = {
   /** The vars that are secrets. */
   secretVars: string[];
   /** The project's database names. */
-  databases?: string[];
+  databases?: DatabaseRef[];
   /** Offers secrets from connected password managers. */
   passwordManagers: boolean;
 };
@@ -123,7 +123,7 @@ export function EnvEntryDialog({
               )}
               {!!ctx.databases?.length && (
                 <ChoiceTile
-                  icon={<PostgresIcon className="text-[#4169E1]" />}
+                  icon={<Database />}
                   title="Connect database"
                   description="Credentials of a project database."
                   onClick={() => setStep({ step: "database" })}
@@ -202,7 +202,7 @@ function EntryForm({
     r.kind === "secret" ||
     (r.kind === "project"
       ? !!ctx.vars?.includes(r.name)
-      : !!ctx.databases?.includes(r.db) && (dbFields as readonly string[]).includes(r.field));
+      : dbRefValid(ctx.databases, r.db, r.field));
   const checked = !!ctx.vars || !!ctx.databases;
   const unknown = !fromProvider && checked ? refsIn(value).filter((r) => !known(r)).map(refName) : [];
   // Turning a saved secret into a variable would reveal it: it needs a new value.
@@ -221,8 +221,8 @@ function EntryForm({
       ? [
           { label: "Project secrets", items: projectSecrets.map((v) => ({ label: v, value: envRef(v) })) },
           ...(ctx.databases ?? []).map((db) => ({
-            label: `Database ${db}`,
-            items: dbFields.map((f) => ({ label: f, value: dbRef(db, f) })),
+            label: `Database ${db.name}`,
+            items: dbFields[db.kind].map((f) => ({ label: f, value: dbRef(db.name, f) })),
           })),
         ]
       : []),
@@ -590,14 +590,25 @@ function ProviderPath({
   );
 }
 
-/** The two ways to connect a database. */
-const dbShapes = {
-  url: { label: "DATABASE_URL", fields: [["DATABASE_URL", "URL"]] },
-  split: {
-    label: "PGHOST, PGPORT, PGUSER…",
-    fields: dbFields.filter((f) => f !== "URL").map((f) => [`PG${f}`, f]),
+type DbShape = { label: string; fields: string[][] };
+
+/** The two ways to connect a database, as the kind's clients expect them. */
+const dbShapes: Record<DatabaseKind, { url: DbShape; split: DbShape }> = {
+  postgres: {
+    url: { label: "DATABASE_URL", fields: [["DATABASE_URL", "URL"]] },
+    split: {
+      label: "PGHOST, PGPORT, PGUSER…",
+      fields: dbFields.postgres.filter((f) => f !== "URL").map((f) => [`PG${f}`, f]),
+    },
   },
-} satisfies Record<string, { label: string; fields: string[][] }>;
+  redis: {
+    url: { label: "REDIS_URL", fields: [["REDIS_URL", "URL"]] },
+    split: {
+      label: "REDIS_HOST, REDIS_PORT…",
+      fields: ["HOST", "PORT", "PASSWORD"].map((f) => [`REDIS_${f}`, f]),
+    },
+  },
+};
 
 /** Adds a database's credentials as secrets referencing it. */
 function DatabaseForm({
@@ -606,19 +617,21 @@ function DatabaseForm({
   onBack,
   onDone,
 }: {
-  databases: string[];
+  databases: DatabaseRef[];
   taken: string[];
   onBack: () => void;
   onDone: (rows: EnvRow[]) => void;
 }) {
-  const [db, setDb] = useState(databases[0]);
-  const [shape, setShape] = useState<keyof typeof dbShapes>("url");
+  const [name, setName] = useState(databases[0].name);
+  const db = databases.find((d) => d.name === name) ?? databases[0];
+  const shapes = dbShapes[db.kind];
+  const [shape, setShape] = useState<"url" | "split">("url");
   // The usual name, or prefixed by the database when taken (several
   // databases, one service).
-  const entryName = (key: string) => (taken.includes(key) ? `${db.toUpperCase().replaceAll("-", "_")}_${key}` : key);
-  const rows = dbShapes[shape].fields.map(([key, field]) => ({
+  const entryName = (key: string) => (taken.includes(key) ? `${db.name.toUpperCase().replaceAll("-", "_")}_${key}` : key);
+  const rows = shapes[shape].fields.map(([key, field]) => ({
     key: entryName(key),
-    value: dbRef(db, field),
+    value: dbRef(db.name, field),
     secret: true,
   }));
   const onSubmit = (e: FormEvent) => {
@@ -631,7 +644,7 @@ function DatabaseForm({
     <form onSubmit={onSubmit} className="contents">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2 [&>svg]:size-5">
-          <PostgresIcon className="text-[#4169E1]" />
+          <DatabaseIcon kind={db.kind} />
           Connect a database
         </DialogTitle>
         <DialogDescription>Added as secrets that follow the database&apos;s credentials.</DialogDescription>
@@ -640,9 +653,9 @@ function DatabaseForm({
         {databases.length > 1 && (
           <FloatingSelect
             label="Database"
-            value={db}
-            onValueChange={setDb}
-            options={databases.map((d) => ({ value: d, label: d }))}
+            value={db.name}
+            onValueChange={setName}
+            options={databases.map((d) => ({ value: d.name, label: `${d.name} (${databaseLabels[d.kind]})` }))}
           />
         )}
         <ToggleGroup
@@ -650,11 +663,11 @@ function DatabaseForm({
           variant="outline"
           spacing={0}
           value={shape}
-          onValueChange={(v) => v && setShape(v as keyof typeof dbShapes)}
+          onValueChange={(v) => v && setShape(v as "url" | "split")}
           aria-label="Variables"
           className="w-full"
         >
-          {Object.entries(dbShapes).map(([k, s]) => (
+          {Object.entries(shapes).map(([k, s]) => (
             <ToggleGroupItem key={k} value={k} className="flex-1 font-mono text-xs aria-checked:bg-muted">
               {s.label}
             </ToggleGroupItem>

@@ -19,7 +19,7 @@ import {
 import { lazy, Suspense, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { PostgresIcon } from "@/components/brand-icons";
+import { DatabaseIcon } from "@/components/brand-icons";
 import { CopyButton, DangerZone, Empty, EmptyState, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
@@ -35,7 +35,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
 import { byDay, envMap, envRows, envSecrets, formatDuration, sameEnv, serviceState, timeAgo, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { api, type Connection, type Deployment, type LogLine, type Service as ServiceT } from "../api";
+import { api, databasePorts, isDatabase, type Connection, type DatabaseKind, type Deployment, type LogLine, type Service as ServiceT } from "../api";
 import { BackupList } from "./BackupList";
 import { Schedules } from "./Schedules";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
@@ -110,7 +110,7 @@ export function Service() {
   const state = deploying ? "deploying" : svc.stopped ? "stopped" : serviceState(active);
   const allStopped = active.length > 0 && active.every((c) => c.state !== "running");
   const busy = deploying || deploy.isPending || action.isPending || remove.isPending;
-  const isDb = svc.kind === "postgres";
+  const isDb = isDatabase(svc.kind);
   const running = active.filter((c) => c.state === "running").length;
   const last = deployments.data?.[0];
 
@@ -148,7 +148,7 @@ export function Service() {
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Card size="sm" className="gap-1.5 px-3">
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {isDb ? <PostgresIcon className="size-3.5 text-[#4169E1]" /> : <Activity className="size-3.5" />}
+              {isDatabase(svc.kind) ? <DatabaseIcon kind={svc.kind} className="size-3.5" /> : <Activity className="size-3.5" />}
               State
             </p>
             <StateBadge state={state} className="self-start text-sm text-foreground" />
@@ -197,7 +197,7 @@ export function Service() {
             <TabsTrigger value="logs">Logs</TabsTrigger>
             <TabsTrigger value="terminal">Terminal</TabsTrigger>
             <TabsTrigger value="environment">Environment</TabsTrigger>
-            {isDb && <TabsTrigger value="backups">Backups</TabsTrigger>}
+            {svc.kind === "postgres" && <TabsTrigger value="backups">Backups</TabsTrigger>}
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
           <TabsContent value="overview" className="space-y-6">
@@ -218,7 +218,7 @@ export function Service() {
                 </ul>
               )}
             </Section>
-            {isDb && <ConnectionCard serviceId={svc.id} host={svc.name} />}
+            {isDatabase(svc.kind) && <ConnectionCard serviceId={svc.id} host={svc.name} kind={svc.kind} />}
           </TabsContent>
           <TabsContent value="deployments">
             {deployments.isPending ? (
@@ -241,7 +241,7 @@ export function Service() {
           <TabsContent value="environment">
             <EnvironmentCard key={svc.id} svc={svc} />
           </TabsContent>
-          {isDb && (
+          {svc.kind === "postgres" && (
             <TabsContent value="backups">
               <BackupsCard serviceId={svc.id} name={project.data ? `${project.data.name}/${svc.name}` : svc.name} />
             </TabsContent>
@@ -284,7 +284,7 @@ const settingsForm = (s: ServiceT) => ({
 
 function Settings({ svc }: { svc: ServiceT }) {
   const qc = useQueryClient();
-  const isDb = svc.kind === "postgres";
+  const isDb = isDatabase(svc.kind);
   const [form, setForm] = useState(() => settingsForm(svc));
   const dirty = JSON.stringify(form) !== JSON.stringify(settingsForm(svc));
   const formId = useId();
@@ -331,7 +331,7 @@ function Settings({ svc }: { svc: ServiceT }) {
           value={form.image}
           onChange={set("image")}
           className="sm:col-span-2"
-          description={isDb ? "Minor upgrades only; major versions need a dump and restore." : undefined}
+          description={svc.kind === "postgres" ? "Minor upgrades only; major versions need a dump and restore." : undefined}
         />
         {!isDb && (
           <>
@@ -388,11 +388,11 @@ function Settings({ svc }: { svc: ServiceT }) {
 
 function EnvironmentCard({ svc }: { svc: ServiceT }) {
   const qc = useQueryClient();
-  // A database's env is only read by initdb: shown, never edited.
-  const isDb = svc.kind === "postgres";
+  // A database's env is generated at creation: shown, never edited.
+  const isDb = isDatabase(svc.kind);
   const project = useQuery({ queryKey: ["project", svc.projectId], queryFn: () => api.project(svc.projectId), enabled: !isDb });
   const siblings = useQuery({ queryKey: ["services", svc.projectId], queryFn: () => api.services(svc.projectId), enabled: !isDb });
-  const databases = siblings.data?.filter((s) => s.kind === "postgres").map((s) => s.name);
+  const databases = siblings.data?.flatMap((s) => (isDatabase(s.kind) ? [{ name: s.name, kind: s.kind }] : []));
   const [rows, setRows] = useState<EnvRow[]>(() => envRows(svc.env, svc.secrets));
   const dirty = !sameEnv(rows, svc.env, svc.secrets);
   const formId = useId();
@@ -415,7 +415,7 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
       plain
       description={
         isDb ? (
-          "Generated at creation and only read when the database is initialized, so it can't be changed."
+          "Generated at creation and shared with the apps that connect, so it can't be changed."
         ) : (
           <>
             Use the project&apos;s shared entries with <Mono>{"{{ project.NAME }}"}</Mono>, its databases with{" "}
@@ -533,7 +533,7 @@ function triggeredBy(t?: string) {
   return name;
 }
 
-function ConnectionCard({ serviceId, host }: { serviceId: string; host: string }) {
+function ConnectionCard({ serviceId, host, kind }: { serviceId: string; host: string; kind: DatabaseKind }) {
   const [conn, setConn] = useState<Connection | null>(null);
   const reveal = useMutation({ meta: { error: "Couldn't show the connection details" }, mutationFn: () => api.connection(serviceId), onSuccess: setConn });
   return (
@@ -541,8 +541,9 @@ function ConnectionCard({ serviceId, host }: { serviceId: string; host: string }
       title="Connection"
       description={
         <>
-          Reachable only inside the project at <Mono>{host}:5432</Mono>. Apps use it from their Environment
-          (Secrets → Connect database), e.g. <Mono>{`DATABASE_URL={{ db.${host}.URL }}`}</Mono>.
+          Reachable only inside the project at <Mono>{`${host}:${databasePorts[kind]}`}</Mono>. Apps use it from their
+          Environment (Secrets → Connect database), e.g.{" "}
+          <Mono>{`${kind === "redis" ? "REDIS_URL" : "DATABASE_URL"}={{ db.${host}.URL }}`}</Mono>.
         </>
       }
       actions={
@@ -555,7 +556,7 @@ function ConnectionCard({ serviceId, host }: { serviceId: string; host: string }
         <SecretList
           rows={[
             ["Host", `${conn.host}:${conn.port}`],
-            ["Database", conn.database],
+            ...(conn.database ? [["Database", conn.database] as [string, string]] : []),
             ["User", conn.user],
             ["Password", conn.password],
             ["URL", conn.url],

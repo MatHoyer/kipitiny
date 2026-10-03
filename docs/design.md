@@ -61,7 +61,7 @@ The manager runs as a container and controls the **host** Docker daemon via the 
 ## 5. Core concepts
 
 - **Project:** a group of services (apps + databases) sharing a private network.
-- **Service:** an app (a Docker image) or a Postgres database.
+- **Service:** an app (a Docker image) or a database (Postgres or Redis).
 - **Replica:** one running container of a service.
 - **Deployment:** one release of a service, with an ID, status, and log file.
 
@@ -93,7 +93,7 @@ Internet → Traefik ──→ app1-web        app2-web          │
 - Databases are **only** on the private network, never publicly reachable.
 - Public containers are on both networks.
 - Always set `traefik.docker.network=kipitiny-proxy` on containers attached to multiple networks, otherwise Traefik may pick the wrong network (502/504).
-- Apps get credentials through env references resolved at deploy: `DATABASE_URL={{ db.<service>.URL }}` gives `postgres://user:pass@<service>:5432/app`.
+- Apps get credentials through env references resolved at deploy: `DATABASE_URL={{ db.<service>.URL }}` gives `postgres://user:pass@<service>:5432/app`, or `redis://:pass@<service>:6379` for Redis.
 - Stricter isolation later: connect Traefik to each project network instead of one shared proxy network.
 
 ## 7. Reverse proxy (Traefik)
@@ -157,6 +157,12 @@ No builds on the server (Git builds existed and were removed to keep services si
 - One Postgres container per database service, on the private project network only.
 - Generated password, named volume for data.
 - Docker memory limit and sane defaults (`shared_buffers`, `max_connections`).
+
+### Redis
+
+- Same model as Postgres: one container, one replica, private network only, named volume, password generated at creation and fixed.
+- AOF persistence (`appendonly yes`); `maxmemory` at 75% of the container limit so Redis refuses writes instead of being OOM-killed.
+- No backups yet (Redis is mostly a cache/queue here); `BGSAVE` + streaming `dump.rdb` would follow the Postgres flow.
 
 ### Backup method
 

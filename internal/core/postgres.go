@@ -1,11 +1,8 @@
 package core
 
 import (
-	"context"
 	"fmt"
-	"maps"
 	"net/url"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -73,12 +70,6 @@ func postgresMajor(image string) int {
 }
 
 func validatePostgres(s store.Service) error {
-	if s.Replicas != 1 {
-		return fmt.Errorf("%w: postgres services always run a single replica", ErrInvalid)
-	}
-	if s.Domain != "" || s.Port != 0 {
-		return fmt.Errorf("%w: databases are never public", ErrInvalid)
-	}
 	if s.MemoryMB < minPostgresMemoryMB {
 		return fmt.Errorf("%w: postgres needs at least %d MB of memory", ErrInvalid, minPostgresMemoryMB)
 	}
@@ -90,17 +81,6 @@ func validatePostgres(s store.Service) error {
 			return fmt.Errorf("%w: %s is required", ErrInvalid, k)
 		}
 	}
-	for k, v := range s.Env {
-		for _, m := range envRefRe.FindAllStringSubmatch(v, -1) {
-			if m[2] != "" {
-				return fmt.Errorf("%w: %s: a database can't reference another database (%s)", ErrInvalid, k, refName(m))
-			}
-			if m[4] != "" {
-				// Backups and DATABASE_URL read the credentials as stored.
-				return fmt.Errorf("%w: %s: a database can't use password manager references (%s)", ErrInvalid, k, refName(m))
-			}
-		}
-	}
 	return nil
 }
 
@@ -109,15 +89,10 @@ func checkPostgresUpdate(old, updated store.Service) error {
 	if postgresMajor(old.Image) != postgresMajor(updated.Image) {
 		return fmt.Errorf("%w: changing the postgres major version needs a dump and restore; create a new database service instead", ErrInvalid)
 	}
-	// The image only reads its env at initdb, so edits would silently do nothing.
-	if !maps.Equal(old.Env, updated.Env) || !slices.Equal(old.Secrets, updated.Secrets) {
-		return fmt.Errorf("%w: a database's environment is fixed at creation", ErrInvalid)
-	}
 	return nil
 }
 
-// DatabaseURL is the connection string apps of the project use.
-func DatabaseURL(db store.Service) string {
+func postgresURL(db store.Service) string {
 	u := url.URL{
 		Scheme: "postgres",
 		User:   url.UserPassword(db.Env[pgUser], db.Env[pgPassword]),
@@ -127,33 +102,23 @@ func DatabaseURL(db store.Service) string {
 	return u.String()
 }
 
-type Connection struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Database string `json:"database"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-	URL      string `json:"url"`
-}
-
-// PostgresConnection reveals a database's credentials (explicit action; they
-// are masked everywhere else).
-func (c *Core) PostgresConnection(ctx context.Context, id string) (Connection, error) {
-	svc, err := c.store.GetService(ctx, id)
-	if err != nil {
-		return Connection{}, err
+// postgresField resolves {{ db.NAME.FIELD }} for a postgres service.
+func postgresField(db store.Service, field string) (string, bool) {
+	switch field {
+	case "URL":
+		return postgresURL(db), true
+	case "HOST":
+		return db.Name, true
+	case "PORT":
+		return "5432", true
+	case "USER":
+		return db.Env[pgUser], true
+	case "PASSWORD":
+		return db.Env[pgPassword], true
+	case "DATABASE":
+		return db.Env[pgDatabase], true
 	}
-	if svc.Kind != store.ServiceKindPostgres {
-		return Connection{}, fmt.Errorf("%w: not a postgres service", ErrInvalid)
-	}
-	return Connection{
-		Host:     svc.Name,
-		Port:     5432,
-		Database: svc.Env[pgDatabase],
-		User:     svc.Env[pgUser],
-		Password: svc.Env[pgPassword],
-		URL:      DatabaseURL(svc),
-	}, nil
+	return "", false
 }
 
 // postgresTuning sizes memory settings from the container limit.
@@ -178,7 +143,7 @@ func applyPostgresSpec(cfg *container.Config, host *container.HostConfig, svc st
 		Source: PostgresVolume(svc.ID),
 		Target: pgVolumeMount,
 	})
-	cfg.Labels[docker.LabelComponent] = "postgres"
+	cfg.Labels[docker.LabelComponent] = string(store.ServiceKindPostgres)
 }
 
 // postgresHealthcheck probes over TCP: during first-start initdb the image
@@ -193,11 +158,4 @@ func postgresHealthcheck(user, db string) *container.HealthConfig {
 		StartInterval: time.Second,
 		Retries:       3,
 	}
-}
-
-func stopTimeoutFor(svc store.Service) time.Duration {
-	if svc.Kind == store.ServiceKindPostgres {
-		return postgresStopTimeout
-	}
-	return stopTimeout
 }

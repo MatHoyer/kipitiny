@@ -268,7 +268,7 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 			return err
 		}
 	}
-	if svc.Kind == store.ServiceKindPostgres {
+	if svc.Kind.IsDatabase() {
 		return c.recreate(ctx, project, svc, src, dep, logf)
 	}
 	return c.rollout(ctx, project, svc, src, dep, out, logf)
@@ -321,9 +321,9 @@ func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Se
 	if err != nil {
 		return err
 	}
-	logf("Waiting for postgres to accept connections")
-	if err := dk.WaitHealthy(ctx, id, postgresReadyTimeout); err != nil {
-		return fmt.Errorf("postgres did not become ready: %w", err)
+	logf("Waiting for %s to accept connections", svc.Kind)
+	if err := dk.WaitHealthy(ctx, id, databaseReadyTimeout); err != nil {
+		return fmt.Errorf("%s did not become ready: %w", svc.Kind, err)
 	}
 	if err := c.store.SetServiceStopped(ctx, svc.ID, false); err != nil {
 		return err
@@ -484,11 +484,11 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 	if svc.CPUs > 0 {
 		host.NanoCPUs = int64(math.Round(svc.CPUs * 1e9))
 	}
-	if svc.Kind == store.ServiceKindPostgres {
-		applyPostgresSpec(cfg, host, svc)
+	if svc.Kind.IsDatabase() {
+		applyDatabaseSpec(cfg, host, svc)
 	}
 	name := fmt.Sprintf("%s-%s-%d", project.Name, svc.Name, replica)
-	if svc.Kind != store.ServiceKindPostgres {
+	if !svc.Kind.IsDatabase() {
 		// Old and new replicas run side by side during a rollout.
 		name += "-" + deploySuffix(deployID)
 	}

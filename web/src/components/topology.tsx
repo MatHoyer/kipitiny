@@ -1,13 +1,13 @@
 import { Box, Globe, HardDrive, Lock, Network, Server, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { CloudflareIcon, PostgresIcon } from "@/components/brand-icons";
+import { CloudflareIcon, DatabaseIcon } from "@/components/brand-icons";
 import { stateColors, Tag } from "@/components/common";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { liveState, troubled } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { ServerTopology, TopoNetwork, TopoNode, TopoProject, TopoService } from "../api";
+import { databasePorts, isDatabase, type ServerTopology, type TopoNetwork, type TopoNode, type TopoProject, type TopoService } from "../api";
 
 const PROXY_NETWORK = "kipitiny-proxy";
 
@@ -29,7 +29,7 @@ const edgeStyles: Record<EdgeKind, string> = {
 export function serviceWarning(svc: TopoService): string {
   const live = svc.containers.filter((c) => !c.retired);
   const onProxy = live.some((c) => c.endpoints.some((e) => e.network === PROXY_NETWORK));
-  if (svc.kind === "postgres" && onProxy) return "Attached to the proxy network";
+  if (isDatabase(svc.kind) && onProxy) return "Attached to the proxy network";
   if (svc.domain && live.length > 0 && !onProxy) return "Not on the proxy network: Traefik can't reach it";
   return "";
 }
@@ -307,7 +307,7 @@ function ServicePills({ services, isPublic, labelled }: { services: TopoService[
             >
               <span className={cn("size-1.5 shrink-0 rounded-full", stateColors[state] ?? "bg-muted-foreground/50")} />
               {isPublic && <Globe className="size-3 shrink-0 text-sky-500" />}
-              {svc.kind === "postgres" && <PostgresIcon className="size-3 shrink-0 text-[#4169E1]" />}
+              {isDatabase(svc.kind) && <DatabaseIcon kind={svc.kind} className="size-3 shrink-0" />}
               <span className="truncate">{svc.name}</span>
             </li>
           );
@@ -335,8 +335,8 @@ function ProjectBox({
   services: TopoService[];
 }) {
   const exposed = services.filter((s) => s.domain);
-  const apps = services.filter((s) => !s.domain && s.kind !== "postgres");
-  const dbs = services.filter((s) => s.kind === "postgres");
+  const apps = services.filter((s) => !s.domain && !isDatabase(s.kind));
+  const dbs = services.filter((s) => isDatabase(s.kind));
   return (
     <section className="w-full min-w-0 space-y-4 rounded-xl border-2 border-dashed p-4">
       {/* Opaque so Traefik's line into the proxy box passes behind the text. */}
@@ -378,12 +378,13 @@ function ServiceRow({ services }: { services: TopoService[] }) {
 }
 
 function ServiceNode({ svc }: { svc: TopoService }) {
-  const isDb = svc.kind === "postgres";
+  const kind = svc.kind;
+  const isDb = isDatabase(kind);
   const warning = serviceWarning(svc);
   return (
     <Node anchor={`svc-${svc.id}`} className={cn("w-56", svc.domain && "ring-sky-500/40", warning && "ring-destructive/50")}>
       <NodeHead
-        icon={isDb ? <PostgresIcon className="size-4 text-[#4169E1]" /> : <Box className="size-4 text-primary" />}
+        icon={isDatabase(kind) ? <DatabaseIcon kind={kind} className="size-4" /> : <Box className="size-4 text-primary" />}
         title={
           <Link to={`/services/${svc.id}`} title={svc.name} className="hover:underline">
             {svc.name}
@@ -409,7 +410,7 @@ function ServiceNode({ svc }: { svc: TopoService }) {
             </span>
           </Tag>
         )}
-        {(svc.port || isDb) && <Tag className="font-mono font-normal">:{isDb ? 5432 : svc.port}</Tag>}
+        {(svc.port || isDb) && <Tag className="font-mono font-normal">:{isDatabase(kind) ? databasePorts[kind] : svc.port}</Tag>}
       </div>
       {svc.stopped ? (
         <p className="text-xs text-muted-foreground">Stopped</p>

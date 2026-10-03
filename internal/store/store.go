@@ -178,7 +178,14 @@ type ServiceKind string
 const (
 	ServiceKindApp      ServiceKind = "app"
 	ServiceKindPostgres ServiceKind = "postgres"
+	ServiceKindRedis    ServiceKind = "redis"
 )
+
+// IsDatabase reports whether the kind is a stateful single-replica service
+// on a data volume, never public.
+func (k ServiceKind) IsDatabase() bool {
+	return k == ServiceKindPostgres || k == ServiceKindRedis
+}
 
 type Service struct {
 	bun.BaseModel `bun:"table:services,alias:service" json:"-"`
@@ -190,7 +197,7 @@ type Service struct {
 	Name     string      `bun:"name" json:"name"`
 	Kind     ServiceKind `bun:"kind" json:"kind"`
 	Image    string      `bun:"image" json:"image"`
-	// Replicas is always 1 for postgres services.
+	// Replicas is always 1 for databases.
 	Replicas int `bun:"replicas" json:"replicas"`
 	// Port is the container port Traefik routes to; 0 when not public.
 	Port int `bun:"port" json:"port"`

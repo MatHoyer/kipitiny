@@ -3,7 +3,8 @@ import { Activity, Box, ChevronLeft, Database, Globe, Layers, Lock, Plus, Trash2
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { PostgresIcon } from "@/components/brand-icons";
+import { DatabaseIcon, databaseLabels, PostgresIcon, RedisIcon } from "@/components/brand-icons";
+import { cn } from "@/lib/utils";
 import { ChoiceTile, CopyButton, DangerZone, EmptyState, ErrorText, IconTile, Mono, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
@@ -28,7 +29,15 @@ import { FloatingSelect } from "@/components/ui/floating-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
 import { dbFields, dbRef, envMap, envRows, envSecrets, liveState, sameEnv, troubled, type EnvRow } from "@/lib/format";
-import { api, type Project as ProjectT, type Service as ServiceT, type ServiceInput } from "../api";
+import {
+  api,
+  isDatabase,
+  type DatabaseKind,
+  type DatabaseRef,
+  type Project as ProjectT,
+  type Service as ServiceT,
+  type ServiceInput,
+} from "../api";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
 
 export function Project() {
@@ -71,8 +80,8 @@ export function Project() {
     );
 
   const list = services.data ?? [];
-  const apps = list.filter((s) => s.kind !== "postgres");
-  const dbs = list.filter((s) => s.kind === "postgres");
+  const apps = list.filter((s) => !isDatabase(s.kind));
+  const dbs = list.flatMap((s) => (isDatabase(s.kind) ? [{ ...s, kind: s.kind }] : []));
   const states = list.map(liveState);
 
   return (
@@ -123,7 +132,7 @@ export function Project() {
           </TabsContent>
           <TabsContent value="environment" className="space-y-6">
             {project.data && <SharedVariables key={project.data.id} project={project.data} />}
-            <DatabaseReferences names={dbs.map((s) => s.name)} />
+            <DatabaseReferences dbs={dbs} />
           </TabsContent>
           <TabsContent value="settings" className="space-y-6">
             {hasDatabases && (
@@ -196,15 +205,20 @@ function ServiceGroup({ title, services }: { title: string; services: ServiceT[]
 }
 
 function ServiceCard({ svc: s }: { svc: ServiceT }) {
-  const isDb = s.kind === "postgres";
+  const isDb = isDatabase(s.kind);
   const live = s.containers.filter((c) => !c.retired);
   return (
     <Link to={`/services/${s.id}`} className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
       <Card className="h-full gap-3 px-4 transition-all group-hover:-translate-y-px group-hover:shadow-md group-hover:ring-foreground/20">
         <div className="flex items-start gap-3">
-          {isDb ? (
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[#4169E1]/10">
-              <PostgresIcon aria-label="PostgreSQL" className="size-5 text-[#4169E1]" />
+          {isDatabase(s.kind) ? (
+            <span
+              className={cn(
+                "flex size-10 shrink-0 items-center justify-center rounded-lg",
+                s.kind === "redis" ? "bg-[#FF4438]/10" : "bg-[#4169E1]/10",
+              )}
+            >
+              <DatabaseIcon kind={s.kind} aria-label={databaseLabels[s.kind]} className="size-5" />
             </span>
           ) : (
             <IconTile icon={Box} />
@@ -284,24 +298,24 @@ function SharedVariables({ project }: { project: ProjectT }) {
 }
 
 /** The credentials each database offers to the services' env. */
-function DatabaseReferences({ names }: { names: string[] }) {
-  if (names.length === 0) return null;
+function DatabaseReferences({ dbs }: { dbs: DatabaseRef[] }) {
+  if (dbs.length === 0) return null;
   return (
     <Section
       title="Databases"
       description="Credentials a service can use in its environment, e.g. under Secrets → Connect database."
     >
-      {names.map((db) => (
-        <div key={db} className="space-y-1.5">
+      {dbs.map((db) => (
+        <div key={db.name} className="space-y-1.5">
           <p className="flex items-center gap-2 text-sm font-medium">
-            <PostgresIcon className="size-4 text-[#4169E1]" />
-            {db}
+            <DatabaseIcon kind={db.kind} className="size-4" />
+            {db.name}
           </p>
           <ul className="flex flex-wrap gap-1.5">
-            {dbFields.map((f) => (
+            {dbFields[db.kind].map((f) => (
               <li key={f} className="inline-flex items-center gap-0.5 rounded-md bg-muted py-0.5 pr-0.5 pl-2 font-mono text-xs">
-                {dbRef(db, f)}
-                <CopyButton value={dbRef(db, f)} label={`Copy ${f} reference`} />
+                {dbRef(db.name, f)}
+                <CopyButton value={dbRef(db.name, f)} label={`Copy ${f} reference`} />
               </li>
             ))}
           </ul>
@@ -318,10 +332,14 @@ const emptyForm = {
   domain: "",
   replicas: "1",
   version: "17",
-  memory: "512",
+  redisVersion: "8",
+  // Empty: the kind's default (defaultMemory).
+  memory: "",
 };
 
-type Choice = "image" | "postgres";
+const defaultMemory: Record<DatabaseKind, number> = { postgres: 512, redis: 256 };
+
+type Choice = "image" | DatabaseKind;
 
 const choiceGroups: { label: string; choices: { id: Choice; icon: ReactNode; title: string; description: string }[] }[] = [
   {
@@ -339,6 +357,12 @@ const choiceGroups: { label: string; choices: { id: Choice; icon: ReactNode; tit
         title: "PostgreSQL",
         description: "Relational database, backed up on a schedule.",
       },
+      {
+        id: "redis",
+        icon: <RedisIcon className="text-[#FF4438]" />,
+        title: "Redis",
+        description: "In-memory store for caches, queues and sessions.",
+      },
     ],
   },
 ];
@@ -346,20 +370,21 @@ const choiceGroups: { label: string; choices: { id: Choice; icon: ReactNode; tit
 const choiceTitles: Record<Choice, string> = {
   image: "New app from a Docker image",
   postgres: "New PostgreSQL database",
+  redis: "New Redis database",
 };
 
 function NewServiceDialog({ projectId }: { projectId: string }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const services = useQuery({ queryKey: ["services", projectId], queryFn: () => api.services(projectId) });
-  const databases = services.data?.filter((s) => s.kind === "postgres") ?? [];
+  const databases: DatabaseRef[] = services.data?.flatMap((s) => (isDatabase(s.kind) ? [{ name: s.name, kind: s.kind }] : [])) ?? [];
   const project = useQuery({ queryKey: ["project", projectId], queryFn: () => api.project(projectId) });
 
   const [open, setOpen] = useState(false);
   const [env, setEnv] = useState<EnvRow[]>([]);
   // First step: what to create; the form follows.
   const [choice, setChoice] = useState<Choice | null>(null);
-  const kind = choice === "postgres" ? "postgres" : "app";
+  const kind = !choice || choice === "image" ? "app" : choice;
   const [form, setForm] = useState(emptyForm);
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
@@ -367,12 +392,12 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
     meta: { error: "Couldn't create the service" },
     mutationFn: async () => {
       const input: ServiceInput =
-        kind === "postgres"
+        kind !== "app"
           ? {
               kind,
               name: form.name.trim(),
-              image: `postgres:${form.version}-alpine`,
-              memoryMb: Number(form.memory) || 512,
+              image: kind === "redis" ? `redis:${form.redisVersion}-alpine` : `postgres:${form.version}-alpine`,
+              memoryMb: Number(form.memory) || defaultMemory[kind],
             }
           : {
               kind,
@@ -405,8 +430,17 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
   const onOpenChange = (next: boolean) => {
     if (create.isPending) return;
     if (!next) return close();
-    // With a single database, apps most likely want it.
-    if (databases.length === 1) setEnv([{ key: "DATABASE_URL", value: dbRef(databases[0].name, "URL"), secret: true }]);
+    // With a single database of a kind, apps most likely want it.
+    const only = (k: DatabaseKind) => {
+      const of = databases.filter((d) => d.kind === k);
+      return of.length === 1 ? of[0].name : null;
+    };
+    const pg = only("postgres");
+    const redis = only("redis");
+    setEnv([
+      ...(pg ? [{ key: "DATABASE_URL", value: dbRef(pg, "URL"), secret: true }] : []),
+      ...(redis ? [{ key: "REDIS_URL", value: dbRef(redis, "URL"), secret: true }] : []),
+    ]);
     setOpen(true);
   };
   const onSubmit = (e: FormEvent) => {
@@ -453,10 +487,30 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
                 autoFocus
                 value={form.name}
                 onChange={set("name")}
-                placeholder={kind === "postgres" ? "db" : "web"}
-                description={kind === "postgres" ? "Also the hostname apps use to connect." : undefined}
+                placeholder={kind === "postgres" ? "db" : kind === "redis" ? "cache" : "web"}
+                description={kind !== "app" ? "Also the hostname apps use to connect." : undefined}
               />
-              {kind === "postgres" ? (
+              {kind === "redis" ? (
+                <>
+                  <FloatingSelect
+                    key="redisVersion"
+                    label="Version"
+                    value={form.redisVersion}
+                    onValueChange={(v) => setForm({ ...form, redisVersion: v })}
+                    options={["8", "7"].map((v) => ({ value: v, label: `Redis ${v}` }))}
+                  />
+                  <FloatingInput
+                    label="Memory (MB)"
+                    type="number"
+                    min={32}
+                    step={64}
+                    value={form.memory}
+                    onChange={set("memory")}
+                    placeholder={String(defaultMemory.redis)}
+                    description="Container limit; Redis keeps its data within 75% of it."
+                  />
+                </>
+              ) : kind === "postgres" ? (
                 <>
                   <FloatingSelect
                     key="version"
@@ -472,6 +526,7 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
                     step={128}
                     value={form.memory}
                     onChange={set("memory")}
+                    placeholder={String(defaultMemory.postgres)}
                     description="Container limit; shared_buffers is sized from it."
                   />
                 </>
@@ -502,7 +557,7 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
                     onChange={setEnv}
                     vars={Object.keys(project.data?.env ?? {}).sort()}
                     secretVars={project.data?.secrets}
-                    databases={databases.map((d) => d.name)}
+                    databases={databases}
                     className="sm:col-span-2"
                   />
                 </>

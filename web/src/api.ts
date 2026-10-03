@@ -1,3 +1,13 @@
+export type DatabaseKind = "postgres" | "redis";
+export type ServiceKind = "app" | DatabaseKind;
+
+export const isDatabase = (kind: ServiceKind): kind is DatabaseKind => kind !== "app";
+
+export const databasePorts: Record<DatabaseKind, number> = { postgres: 5432, redis: 6379 };
+
+/** A project database, as env references see it. */
+export type DatabaseRef = { name: string; kind: DatabaseKind };
+
 export type Project = {
   id: string;
   name: string;
@@ -26,7 +36,7 @@ export type Service = {
   id: string;
   projectId: string;
   name: string;
-  kind: "app" | "postgres";
+  kind: ServiceKind;
   image: string;
   replicas: number;
   port: number;
@@ -56,7 +66,7 @@ export type TopoNode = Container & {
 export type TopoService = {
   id: string;
   name: string;
-  kind: "app" | "postgres";
+  kind: ServiceKind;
   image: string;
   domain?: string;
   port?: number;
@@ -102,7 +112,7 @@ export type Topology = { servers: ServerTopology[] };
 
 export type ServiceInput = {
   name: string;
-  kind?: "app" | "postgres";
+  kind?: ServiceKind;
   image?: string;
   replicas?: number;
   port?: number;
@@ -118,7 +128,8 @@ export type ServiceInput = {
 export type Connection = {
   host: string;
   port: number;
-  database: string;
+  /** Absent for redis. */
+  database?: string;
   user: string;
   password: string;
   url: string;

@@ -13,7 +13,7 @@ import (
 
 // envRefRe matches a reference in a service env value, spaces optional:
 // {{ project.NAME }} for a project variable or secret, {{ db.SERVICE.FIELD }}
-// for a credential of a postgres service of the project (see dbFields),
+// for a credential of a database service of the project (see dbFields),
 // {{ scheme://… }} for a secret in a password manager (internal/secrets).
 var envRefRe = regexp.MustCompile(`\{\{\s*(?:project\.([A-Za-z_][A-Za-z0-9_]*)|db\.([a-z0-9-]+)\.([A-Z]+)|([a-z][a-z0-9+.-]*://[^{}]+?))\s*\}\}`)
 
@@ -26,14 +26,14 @@ var dbFields = []string{"URL", "HOST", "PORT", "USER", "PASSWORD", "DATABASE"}
 // envSources holds what references resolve against.
 type envSources struct {
 	project map[string]string
-	// dbs are the project's postgres services by name.
+	// dbs are the project's database services by name.
 	dbs map[string]store.Service
 	// secrets are password manager values by reference, fetched for a
 	// deploy (resolveSecrets); nil when only checking references.
 	secrets map[string]string
 }
 
-// projectDatabases returns the project's postgres services by name.
+// projectDatabases returns the project's database services by name.
 func (c *Core) projectDatabases(ctx context.Context, projectID string) (map[string]store.Service, error) {
 	svcs, err := c.store.ListServices(ctx, projectID)
 	if err != nil {
@@ -45,7 +45,7 @@ func (c *Core) projectDatabases(ctx context.Context, projectID string) (map[stri
 func databasesOf(svcs []store.Service) map[string]store.Service {
 	dbs := map[string]store.Service{}
 	for _, s := range svcs {
-		if s.Kind == store.ServiceKindPostgres {
+		if s.Kind.IsDatabase() {
 			dbs[s.Name] = s
 		}
 	}
@@ -67,21 +67,7 @@ func (src envSources) lookup(m []string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	switch m[3] {
-	case "URL":
-		return DatabaseURL(db), true
-	case "HOST":
-		return db.Name, true
-	case "PORT":
-		return "5432", true
-	case "USER":
-		return db.Env[pgUser], true
-	case "PASSWORD":
-		return db.Env[pgPassword], true
-	case "DATABASE":
-		return db.Env[pgDatabase], true
-	}
-	return "", false
+	return databaseField(db, m[3])
 }
 
 // expandSecrets substitutes the password manager references in v, leaving
