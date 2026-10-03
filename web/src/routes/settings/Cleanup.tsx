@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, HardDrive, History, Play, Server, Trash2 } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { CheckboxField, ErrorText, Loading, Mono, Section, StatCard } from "@/components/common";
+import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
@@ -40,6 +41,7 @@ export function Cleanup() {
   const save = useMutation({ meta: { error: "Couldn't save the cleanup settings" }, mutationFn: (s: CleanupSettings) => api.setCleanup(s), onSuccess: onSaved });
   const run = useMutation({ meta: { error: "Couldn't run the cleanup" }, mutationFn: api.runCleanup, onSuccess: (v) => qc.setQueryData(["cleanup"], v) });
 
+  const formId = useId();
   const dirty = !!form && JSON.stringify(form) !== JSON.stringify(cleanup.data?.settings);
   const running = cleanup.data?.running || run.isPending;
   const actions = (
@@ -65,7 +67,7 @@ export function Cleanup() {
   return (
     <SettingsPage actions={actions}>
       <CleanupStats state={cleanup.data!} />
-      <form onSubmit={onSubmit} className="space-y-6">
+      <form id={formId} onSubmit={onSubmit} className="space-y-6">
         <Section title="Schedule" description="When the cleanup runs on its own, on every server.">
           <CheckboxField
             label="Run on a schedule"
@@ -154,17 +156,8 @@ export function Cleanup() {
             />
           </div>
         </Section>
-        {dirty && (
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" disabled={save.isPending} onClick={() => setForm(cleanup.data!.settings)}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={save.isPending}>
-              Save
-            </Button>
-          </div>
-        )}
       </form>
+      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setForm(cleanup.data!.settings)} />
       {last && <LastRun run={last} />}
     </SettingsPage>
   );

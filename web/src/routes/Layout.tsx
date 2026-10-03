@@ -18,6 +18,7 @@ import { Collapsible } from "radix-ui";
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import { toast } from "sonner";
+import { SaveBarHost } from "@/components/save-bar";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -94,7 +95,9 @@ function App({ username }: { username: string }) {
       </Sidebar>
       {/* The inset variant adds an m-2 margin from md up, so the height gives it back. */}
       <SidebarInset className="h-svh overflow-y-auto md:h-[calc(100svh-1rem)]">
-        <Outlet />
+        <SaveBarHost>
+          <Outlet />
+        </SaveBarHost>
       </SidebarInset>
     </SidebarProvider>
   );

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, ChevronRight, Cloud, FolderKanban, Globe, HardDrive, Plus, Server as ServerIcon, Trash2 } from "lucide-react";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import {
@@ -18,6 +18,7 @@ import {
 } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
+import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
@@ -180,9 +181,12 @@ function NetworkSection({ server }: { server: Server }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["servers"] });
       qc.invalidateQueries({ queryKey: ["cloudflare"] });
+      setIp(ip.trim());
+      setToken(token.trim() ? SECRET_MASK : "");
       toast.success("Network settings saved");
     },
   });
+  const formId = useId();
   const dirty = ip !== server.publicIp || token !== (server.tunnel === "server" ? SECRET_MASK : "");
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -191,7 +195,7 @@ function NetworkSection({ server }: { server: Server }) {
 
   return (
     <Section title="Network" description="How its apps are reached from the internet.">
-      <form onSubmit={onSubmit} className="space-y-4">
+      <form id={formId} onSubmit={onSubmit} className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <FloatingInput
             label="Cloudflare tunnel token"
@@ -228,19 +232,17 @@ function NetworkSection({ server }: { server: Server }) {
             }
           />
         </div>
-        <SaveBar dirty={dirty} pending={save.isPending} />
       </form>
+      <SaveBar
+        form={formId}
+        dirty={dirty}
+        saving={save.isPending}
+        onReset={() => {
+          setIp(server.publicIp);
+          setToken(server.tunnel === "server" ? SECRET_MASK : "");
+        }}
+      />
     </Section>
-  );
-}
-
-function SaveBar({ dirty, pending, label = "Save" }: { dirty: boolean; pending: boolean; label?: string }) {
-  return (
-    <div className="flex justify-end">
-      <Button type="submit" loading={pending} disabled={!dirty}>
-        {label}
-      </Button>
-    </div>
   );
 }
 
@@ -268,7 +270,11 @@ function useServerForm(server: Server | null, onSaved: (s: Server) => void) {
     },
   });
   const dirty = resetHostKey || JSON.stringify(form) !== JSON.stringify(initial);
-  return { form, setForm, resetHostKey, setResetHostKey, save, dirty };
+  const reset = () => {
+    setForm(initial);
+    setResetHostKey(false);
+  };
+  return { form, setForm, resetHostKey, setResetHostKey, save, dirty, reset };
 }
 
 /** What the server needs before the manager can reach it. */
@@ -329,17 +335,18 @@ function ServerFields({
 
 function ConnectionSection({ server }: { server: Server }) {
   const f = useServerForm(server, () => toast.success("Server saved"));
+  const formId = useId();
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     f.save.mutate();
   };
   return (
     <Section title="SSH connection">
-      <form onSubmit={onSubmit} className="space-y-4">
+      <form id={formId} onSubmit={onSubmit} className="space-y-4">
         <ServerFields f={f} hostKey={!!server.hostKey} />
         <SshSetup />
-        <SaveBar dirty={f.dirty} pending={f.save.isPending} />
       </form>
+      <SaveBar form={formId} dirty={f.dirty} saving={f.save.isPending} onReset={f.reset} />
     </Section>
   );
 }
