@@ -141,6 +141,8 @@ export type Deployment = {
   status: "running" | "succeeded" | "failed";
   image: string;
   gitCommit?: string;
+  /** user:<name>, token:<name> or webhook:<source>. */
+  triggeredBy?: string;
   error?: string;
   createdAt: string;
   finishedAt?: string;

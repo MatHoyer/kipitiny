@@ -82,6 +82,36 @@ for rollback) and removed with the service.
 service's secret: GitHub (`X-Hub-Signature-256`), GitLab (`X-Gitlab-Token`) or
 `Authorization: Bearer <secret>`. Pushes to other branches are ignored.
 
+## Deploy from CI
+
+Building on the server is handy for small apps; the sturdier flow is to build,
+test and push the image once in CI, then have kipitiny deploy that exact image.
+Create a **deploy** token (Settings), keep it as a CI secret, and end the
+pipeline with `kipitiny deploy` (in the manager image):
+
+```yaml
+# .github/workflows/deploy.yml (after docker/build-push-action pushed
+# ghcr.io/org/shop:sha-${{ github.sha }})
+- name: Deploy
+  run: >
+    docker run --rm -e KIPITINY_TOKEN=${{ secrets.KIPITINY_TOKEN }}
+    ghcr.io/mathoyer/kipitiny deploy
+    --url https://kipitiny.example.com --service shop/web
+    --tag sha-${{ github.sha }} --commit ${{ github.sha }}
+```
+
+It starts the deployment, prints its log and exits non-zero if it fails
+(`--timeout`, default 20m; `--no-wait` to return at once). `--tag` (or
+`--digest sha256:…`) replaces only the tag of the service's image, never its
+repository, so a deploy token can't run another image; once deployed, the
+service keeps it. The same is `POST /api/services/<id>/deploy` with
+`{"tag": "…", "commit": "…"}`, or the MCP `deploy` tool's `tag`.
+
+Pulled images are pinned to their digest (`name:tag@sha256:…`): replicas the
+reconciler recreates and rollbacks run the image that was deployed, even if the
+tag moved since. Each deployment records who triggered it (user, token or
+webhook) and, when given, the commit.
+
 ## Deploys
 
 Apps deploy blue-green: every new replica starts next to the old ones, and old
@@ -223,7 +253,7 @@ volumes left by older manager versions are removed once unused.
 ## API tokens, MCP and audit
 
 Create tokens in *Settings*. Scopes: **read** (status, logs, backup lists),
-**deploy** (plus deploy, rollback, start/stop, back up) and **admin**
+**deploy** (plus deploy, including another tag of an image service, rollback, start/stop, back up; see [Deploy from CI](#deploy-from-ci)) and **admin**
 (everything, including settings, revealed secrets and restores). Tokens work as
 `Authorization: Bearer kpt_…` on `/api` and on the built-in **MCP** endpoint
 (Streamable HTTP):

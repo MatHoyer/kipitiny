@@ -150,6 +150,8 @@ Replicas on one host = several identical containers with **identical Traefik rou
 
 Builds: Dockerfile-only via the Docker build API first. Nixpacks/Buildpacks later.
 
+Preferred flow: build once in CI, then deploy by tag (`kipitiny deploy`, a deploy-scoped token that may change the tag, never the repository). Every pull is pinned to its digest in the deployment record, so reconciler recreations and rollbacks never pick up a moved tag.
+
 ## 10. PostgreSQL management and backups (core feature)
 
 ### Provisioning
