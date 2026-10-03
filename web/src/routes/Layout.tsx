@@ -131,8 +131,8 @@ function SettingsNav() {
             .filter((p) => p.group === group)
             .map(({ slug, label, icon: Icon }) => (
               <SidebarMenuItem key={slug}>
-                <SidebarMenuButton asChild isActive={pathname.startsWith(`/settings/${slug}`)}>
-                  <NavLink to={`/settings/${slug}`} onClick={() => setOpenMobile(false)}>
+                <SidebarMenuButton asChild isActive={pathname.startsWith(`/${slug}`)}>
+                  <NavLink to={`/${slug}`} onClick={() => setOpenMobile(false)}>
                     <Icon />
                     {label}
                   </NavLink>

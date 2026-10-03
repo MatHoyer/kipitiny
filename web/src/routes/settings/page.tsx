@@ -9,7 +9,7 @@ export function SettingsPage({ actions, children }: { actions?: ReactNode; child
   const label = useContext(SettingsLabel);
   return (
     <>
-      <PageHeader crumbs={[{ label: "Settings" }, { label }]} actions={actions} />
+      <PageHeader crumbs={[{ label }]} actions={actions} />
       <PageBody>{children}</PageBody>
     </>
   );

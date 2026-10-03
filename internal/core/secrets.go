@@ -143,7 +143,7 @@ func (c *Core) resolveSecrets(ctx context.Context, refs []string) (map[string]st
 		name, id := p.Info().Name, p.Info().ID
 		token, _ := c.store.GetSetting(ctx, secretTokenSetting(id))
 		if token == "" {
-			return nil, fmt.Errorf("%s isn't connected (Settings › Password managers)", name)
+			return nil, fmt.Errorf("%s isn't connected (Integrations › Password managers)", name)
 		}
 		vals, err := p.Resolve(ctx, rs)
 		if err != nil {

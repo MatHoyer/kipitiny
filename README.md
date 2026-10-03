@@ -47,7 +47,7 @@ previous one is restored; the updater's output ends up in the manager's log.
 It needs the manager to run in Docker. With a compose file pinning
 `KIPITINY_VERSION`, the button is off (the next `up` would go back to that
 version): change the variable and run `docker compose up -d` instead.
-Settings › Version checks for a new release on demand.
+System › About checks for a new release on demand.
 
 ### Releasing
 
@@ -221,7 +221,7 @@ gated on staying up instead).
 
 ## Cleanup
 
-*Settings › Cleanup* frees disk space on every server, on a cron schedule
+*System › Cleanup* frees disk space on every server, on a cron schedule
 (off by default) or with **Run now**. Each part is optional:
 
 - **Images**: dangling layers only, or every image no container uses.
@@ -322,7 +322,7 @@ To keep ports 80/443 closed, let traffic come in through a
    under TLS enable **No TLS Verify** and **Match SNI to Host**. Check that DNS
    has a proxied `* CNAME <tunnel-id>.cfargotunnel.com` record, and add it if
    the dashboard didn't.
-3. Paste the token in *Settings › Servers › Network* (globe button), or start
+3. Paste the token in *Infrastructure › Servers › Network* (globe button), or start
    the manager with `KIPITINY_CLOUDFLARE_TUNNEL_TOKEN=<token>` for its own
    server (with `KIPITINY_DOMAIN`), and publish no port in the compose file.
 
@@ -342,14 +342,14 @@ error until then).
 
 ### Cloudflare DNS
 
-List your domains in *Settings › Domains*, then connect Cloudflare in
-*Settings › Cloudflare* with an API token (*My Profile › API Tokens*) allowed
+List your domains in *Infrastructure › Domains & DNS* and connect Cloudflare
+there with an API token (*My Profile › API Tokens*) allowed
 **Zone › Zone › Read** and **Zone › DNS › Edit**, plus **Account › Cloudflare
 Tunnel › Edit** with a tunnel. For every service domain in one of the token's
 zones, the manager then keeps the DNS record in sync:
 
 - an **A** record to the server's public IP (detected, or set under
-  *Settings › Servers*), proxied if the domain is marked **Proxied**;
+  *Infrastructure › Servers*), proxied if the domain is marked **Proxied**;
 - behind the tunnel, a proxied **CNAME** to it, and the tunnel's route to
   Traefik.
 

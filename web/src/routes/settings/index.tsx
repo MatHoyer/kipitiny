@@ -1,6 +1,5 @@
 import { Bell, Brush, HardDrive, Globe, Info, KeyRound, KeySquare, Package, ScrollText, Server, type LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
-import { Navigate, useParams } from "react-router";
 import { Version } from "./About";
 import { Audit } from "./Audit";
 import { Cleanup } from "./Cleanup";
@@ -99,10 +98,8 @@ export const settingsPages: SettingsPage[] = [
 ];
 
 /** One settings page; the sidebar lists the others. Each page renders its own header. */
-export function SettingsShell() {
-  const { page = "" } = useParams();
-  const current = settingsPages.find((p) => p.slug === page);
-  if (!current) return <Navigate to={`/settings/${settingsPages[0].slug}`} replace />;
+export function SettingsShell({ slug }: { slug: string }) {
+  const current = settingsPages.find((p) => p.slug === slug)!;
   const Page = current.page;
 
   return (

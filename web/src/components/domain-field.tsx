@@ -81,8 +81,8 @@ export function DomainField({
             {noList && (
               <>
                 List your domains in{" "}
-                <Link to="/settings" className="underline underline-offset-2">
-                  Settings
+                <Link to="/domains" className="underline underline-offset-2">
+                  Domains & DNS
                 </Link>{" "}
                 to pick them here.
               </>

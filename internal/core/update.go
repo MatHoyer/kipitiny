@@ -160,8 +160,8 @@ func (c *Core) checkUpdate(ctx context.Context) {
 				Type:    EventUpdateAvailable,
 				Level:   notify.Info,
 				Title:   "kipitiny " + u.latest + " is available",
-				Message: "Running " + c.cfg.Version + ". Update from the sidebar or Settings › Version.",
-			}, "/settings", "")
+				Message: "Running " + c.cfg.Version + ". Update from the sidebar or System › About.",
+			}, "/about", "")
 		}
 	}
 }

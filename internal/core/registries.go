@@ -115,7 +115,7 @@ func pullHint(err error) string {
 	msg := strings.ToLower(err.Error())
 	for _, s := range []string{"denied", "unauthorized", "docker login", "authentication required"} {
 		if strings.Contains(msg, s) {
-			return " (a private image? add its registry in Settings › Registries)"
+			return " (a private image? add its registry in Integrations › Registries)"
 		}
 	}
 	return ""

@@ -166,7 +166,7 @@ export function Backup() {
               </Detail>
             )}
             <Detail label="Target">
-              <Link className="hover:underline" to="/settings/storage">
+              <Link className="hover:underline" to="/storage">
                 {target?.name ?? "deleted target"}
               </Link>
             </Detail>

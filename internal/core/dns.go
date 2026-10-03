@@ -667,7 +667,7 @@ func (c *Core) publicIP(ctx context.Context, sv store.Server) (string, error) {
 	}
 	ip, err := detectPublicIP(ctx, sv)
 	if err != nil {
-		return "", fmt.Errorf("can't tell %s's public IP (%v): set it in Settings › Servers", sv.Name, err)
+		return "", fmt.Errorf("can't tell %s's public IP (%v): set it in Infrastructure › Servers", sv.Name, err)
 	}
 	s.mu.Lock()
 	if s.ips == nil {

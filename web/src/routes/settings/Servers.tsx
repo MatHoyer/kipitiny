@@ -57,7 +57,7 @@ export function Servers() {
 
 function ServerCard({ server: s }: { server: Server }) {
   return (
-    <Link to={`/settings/servers/${s.id}`} className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+    <Link to={`/servers/${s.id}`} className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
       <Card className="h-full gap-3 px-4 transition-all group-hover:-translate-y-px group-hover:shadow-md group-hover:ring-foreground/20">
         <div className="flex items-start gap-3">
           <IconTile icon={s.kind === "local" ? HardDrive : ServerIcon} />
@@ -92,13 +92,13 @@ export function ServerPage() {
     mutationFn: api.deleteServer,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["servers"] });
-      navigate("/settings/servers");
+      navigate("/servers");
     },
   });
   const s = servers.data?.find((x) => x.id === id);
-  const crumbs = [{ label: "Settings" }, { label: "Servers", to: "/settings/servers" }, { label: s?.name ?? <Spinner className="size-3.5" /> }];
+  const crumbs = [{ label: "Servers", to: "/servers" }, { label: s?.name ?? <Spinner className="size-3.5" /> }];
 
-  if (servers.data && !s) return <Navigate to="/settings/servers" replace />;
+  if (servers.data && !s) return <Navigate to="/servers" replace />;
   if (!s)
     return (
       <>
@@ -356,7 +356,7 @@ function NewServerDialog() {
   const [open, setOpen] = useState(false);
   const f = useServerForm(null, (s) => {
     setOpen(false);
-    navigate(`/settings/servers/${s.id}`);
+    navigate(`/servers/${s.id}`);
   });
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();

@@ -2,7 +2,7 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@ta
 import { ThemeProvider } from "next-themes";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
+import { createBrowserRouter, RouterProvider } from "react-router";
 import { toast } from "sonner";
 import { ApiError } from "./api";
 import { Toaster } from "./components/ui/sonner";
@@ -16,7 +16,7 @@ import { MapPage } from "./routes/MapPage";
 import { Project } from "./routes/Project";
 import { Projects } from "./routes/Projects";
 import { Service } from "./routes/Service";
-import { SettingsShell } from "./routes/settings";
+import { SettingsShell, settingsPages } from "./routes/settings";
 import { ServerPage } from "./routes/settings/Servers";
 
 // A 401 anywhere means the session is gone: re-check auth to show the login.
@@ -56,9 +56,8 @@ const router = createBrowserRouter([
       { path: "map", element: <MapPage /> },
       { path: "backups", element: <Backups /> },
       { path: "backups/:id", element: <Backup /> },
-      { path: "settings", element: <Navigate to="/settings/servers" replace /> },
-      { path: "settings/:page", element: <SettingsShell /> },
-      { path: "settings/servers/:id", element: <ServerPage /> },
+      ...settingsPages.map((p) => ({ path: p.slug, element: <SettingsShell slug={p.slug} /> })),
+      { path: "servers/:id", element: <ServerPage /> },
     ],
   },
 ]);

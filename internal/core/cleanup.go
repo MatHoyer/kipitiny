@@ -260,7 +260,7 @@ func (c *Core) runCleanup(s CleanupSettings, trigger string) {
 			Level:   notify.Warning,
 			Title:   "Docker cleanup had errors",
 			Message: strings.Join(problems, "\n"),
-		}, "/settings", "")
+		}, "/cleanup", "")
 	}
 	c.log.Info("cleanup finished", "trigger", trigger, "servers", len(run.Servers), "deployments", run.Deployments)
 	if b, err := json.Marshal(run); err == nil {

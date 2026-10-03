@@ -294,7 +294,7 @@ function EntryForm({
         {fromProvider && providers.isSuccess && sources.length === 0 && (
           <p className="rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
             No password manager is connected.{" "}
-            <Link to="/settings/password-managers" className="font-medium text-foreground underline-offset-4 hover:underline">
+            <Link to="/password-managers" className="font-medium text-foreground underline-offset-4 hover:underline">
               Connect one in Settings
             </Link>
             .

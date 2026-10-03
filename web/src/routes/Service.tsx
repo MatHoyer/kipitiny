@@ -403,7 +403,7 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
           <>
             Use the project&apos;s shared entries with <Mono>{"{{ project.NAME }}"}</Mono>, its databases with{" "}
             <Mono>{"{{ db.NAME.URL }}"}</Mono> and password manager secrets with{" "}
-            <Mono>{"{{ pass://Vault/Item/field }}"}</Mono> (Settings › Password managers). Changes apply on the next
+            <Mono>{"{{ pass://Vault/Item/field }}"}</Mono> (Integrations › Password managers). Changes apply on the next
             deploy.
           </>
         )
@@ -481,8 +481,8 @@ function DeployFromCICard({ svc }: { svc: ServiceT }) {
       title="Deploy from CI"
       description={
         <>
-          Build and push <Mono>{repo}</Mono> in CI, then deploy the tag it pushed with a <Mono>deploy</Mono> token (Settings › API
-          tokens). The service keeps that tag; the step fails if the deployment does.
+          Build and push <Mono>{repo}</Mono> in CI, then deploy the tag it pushed with a <Mono>deploy</Mono> token (Access ›
+          API tokens & MCP). The service keeps that tag; the step fails if the deployment does.
         </>
       }
     >

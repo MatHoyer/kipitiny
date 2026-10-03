@@ -170,7 +170,7 @@ export function EnvEditor({
         {(badKey || unknown.length > 0 || offline) && (
           <p className="px-1 pt-1 text-xs text-destructive">
             {offline && !badKey
-              ? `No connected password manager resolves ${mref.scheme}:// (Settings › Password managers).`
+              ? `No connected password manager resolves ${mref.scheme}:// (Integrations › Password managers).`
               : !row.key
               ? "Missing name."
               : (counts.get(row.key) ?? 0) > 1
