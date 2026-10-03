@@ -43,10 +43,11 @@ export function Login() {
   const qc = useQueryClient();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [ticket, setTicket] = useState("");
   const login = useMutation({
     meta: { error: false },
     mutationFn: () => api.login(username.trim(), password),
-    onSuccess: () => qc.resetQueries(),
+    onSuccess: (res) => ("mfaRequired" in res ? setTicket(res.ticket) : qc.resetQueries()),
     onError: (err) =>
       toast.error("Couldn't sign in", {
         description: err.message === "unauthorized" ? "Wrong username or password." : friendlyError(err),
@@ -57,6 +58,7 @@ export function Login() {
     login.mutate();
   };
   const wrong = login.error?.message === "unauthorized";
+  if (ticket) return <SecondFactor ticket={ticket} onRestart={() => setTicket("")} />;
   return (
     <Shell title="Sign in">
       <form onSubmit={onSubmit}>
@@ -82,6 +84,81 @@ export function Login() {
         </CardContent>
         <Submit pending={login.isPending}>Sign in</Submit>
       </form>
+    </Shell>
+  );
+}
+
+function SecondFactor({ ticket, onRestart }: { ticket: string; onRestart: () => void }) {
+  const qc = useQueryClient();
+  const [recovery, setRecovery] = useState(false);
+  const [code, setCode] = useState("");
+  const verify = useMutation({
+    meta: { error: false },
+    mutationFn: () => api.loginMfa(ticket, code),
+    onSuccess: () => qc.resetQueries(),
+    onError: (err) => {
+      setCode("");
+      if (/expired|too many/.test(err.message)) onRestart();
+      toast.error("Couldn't sign in", { description: err.message === "unauthorized" ? "Wrong code." : friendlyError(err) });
+    },
+  });
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    verify.mutate();
+  };
+  return (
+    <Shell
+      title="Two-factor authentication"
+      subtitle={recovery ? "Enter one of your recovery codes. Each works once." : "Enter the 6-digit code from your authenticator app."}
+    >
+      <form onSubmit={onSubmit}>
+        <CardContent className="space-y-4">
+          {recovery ? (
+            <FloatingInput
+              key="recovery"
+              label="Recovery code"
+              autoFocus
+              required
+              autoComplete="off"
+              placeholder="xxxxx-xxxxx"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              inputClassName="font-mono"
+            />
+          ) : (
+            <FloatingInput
+              key="totp"
+              label="Code"
+              autoFocus
+              required
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9 ]{6,7}"
+              maxLength={7}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              inputClassName="font-mono tracking-widest"
+            />
+          )}
+        </CardContent>
+        <Submit pending={verify.isPending}>Verify</Submit>
+      </form>
+      <CardFooter className="flex-wrap justify-between gap-2 text-sm">
+        <Button
+          variant="link"
+          size="sm"
+          className="h-auto px-0 text-muted-foreground"
+          onClick={() => {
+            setRecovery(!recovery);
+            setCode("");
+          }}
+        >
+          {recovery ? "Use the authenticator app" : "Use a recovery code"}
+        </Button>
+        <Button variant="link" size="sm" className="h-auto px-0 text-muted-foreground" onClick={onRestart}>
+          Back
+        </Button>
+      </CardFooter>
     </Shell>
   );
 }

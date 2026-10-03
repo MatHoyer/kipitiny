@@ -26,6 +26,13 @@ the admin account. Forgot the password?
 docker compose exec -it manager /kipitiny reset-password admin
 ```
 
+Two-factor authentication (authenticator app) is set up from
+**Account** in the user menu. Lost the authenticator and the recovery codes?
+
+```sh
+docker compose exec manager /kipitiny disable-2fa admin
+```
+
 ## Upgrading
 
 The sidebar shows **Update available** when a newer version is published

@@ -10,11 +10,12 @@ import {
   Moon,
   Sun,
   SunMoon,
+  UserRound,
   Waypoints,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router";
+import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { toast } from "sonner";
 import { SaveBarHost } from "@/components/save-bar";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -258,7 +259,7 @@ const themes = [
 
 function NavUser({ username }: { username: string }) {
   const qc = useQueryClient();
-  const { isMobile } = useSidebar();
+  const { isMobile, setOpenMobile } = useSidebar();
   const { theme, setTheme } = useTheme();
   const logout = useMutation({ meta: { error: "Couldn't sign out" }, mutationFn: api.logout, onSettled: () => qc.resetQueries() });
   const avatar = (
@@ -293,6 +294,13 @@ function NavUser({ username }: { username: string }) {
                 <span className="truncate font-medium">{username}</span>
               </div>
             </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild className="gap-2">
+              <Link to="/account" onClick={() => setOpenMobile(false)}>
+                <UserRound />
+                Account
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <div className="flex items-center gap-2 px-2 py-1 text-sm">
               <SunMoon className="size-4 text-muted-foreground" />

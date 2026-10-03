@@ -358,6 +358,78 @@ func (s *Store) SetPassword(ctx context.Context, userID, passwordHash string) er
 	})
 }
 
+func (s *Store) SetTOTP(ctx context.Context, userID, secret string, codeHashes []string) error {
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		res, err := tx.NewUpdate().Model((*store.User)(nil)).
+			Set("totp_secret = ?", secret).Set("totp_last_step = 0").Where("id = ?", userID).Exec(ctx)
+		if err != nil {
+			return mapErr(err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return store.ErrNotFound
+		}
+		return replaceRecoveryCodes(ctx, tx, userID, codeHashes)
+	})
+}
+
+func (s *Store) UseTOTPStep(ctx context.Context, userID string, step int64) error {
+	res, err := s.db.NewUpdate().Model((*store.User)(nil)).Set("totp_last_step = ?", step).
+		Where("id = ?", userID).Where("totp_last_step < ?", step).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrConflict
+	}
+	return nil
+}
+
+func (s *Store) SetRecoveryCodes(ctx context.Context, userID string, codeHashes []string) error {
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		return replaceRecoveryCodes(ctx, tx, userID, codeHashes)
+	})
+}
+
+type recoveryCode struct {
+	bun.BaseModel `bun:"table:recovery_codes"`
+
+	CodeHash  string    `bun:"code_hash,pk"`
+	UserID    string    `bun:"user_id"`
+	CreatedAt time.Time `bun:"created_at"`
+}
+
+func replaceRecoveryCodes(ctx context.Context, tx bun.Tx, userID string, codeHashes []string) error {
+	if _, err := tx.NewDelete().Model((*recoveryCode)(nil)).Where("user_id = ?", userID).Exec(ctx); err != nil {
+		return mapErr(err)
+	}
+	if len(codeHashes) == 0 {
+		return nil
+	}
+	rows := make([]recoveryCode, len(codeHashes))
+	for i, h := range codeHashes {
+		rows[i] = recoveryCode{CodeHash: h, UserID: userID, CreatedAt: now()}
+	}
+	_, err := tx.NewInsert().Model(&rows).Exec(ctx)
+	return mapErr(err)
+}
+
+func (s *Store) CountRecoveryCodes(ctx context.Context, userID string) (int, error) {
+	n, err := s.db.NewSelect().Model((*recoveryCode)(nil)).Where("user_id = ?", userID).Count(ctx)
+	return n, mapErr(err)
+}
+
+func (s *Store) UseRecoveryCode(ctx context.Context, userID, codeHash string) error {
+	res, err := s.db.NewDelete().Model((*recoveryCode)(nil)).
+		Where("user_id = ?", userID).Where("code_hash = ?", codeHash).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) CreateSession(ctx context.Context, sess store.Session) error {
 	sess.CreatedAt = now()
 	sess.ExpiresAt = sess.ExpiresAt.UTC().Truncate(time.Microsecond)

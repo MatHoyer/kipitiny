@@ -46,7 +46,7 @@ The manager runs as a container and controls the **host** Docker daemon via the 
 
 - Access to `docker.sock` = **root on the host**.
 - Consider a socket proxy (`tecnativa/docker-socket-proxy`) limiting API endpoints.
-- Strong authentication on the UI and API.
+- Strong authentication on the UI and API. Optional TOTP two-factor (own RFC 6238, codes single-use per time step, 10 hashed recovery codes). Pending second-factor tickets live in memory. Changing how the account signs in requires the password again; `kipitiny disable-2fa <user>` is the lockout escape hatch.
 - Never expose the Docker API over TCP without TLS.
 - Mask secrets (env vars, DB passwords, keys) in API read responses by default.
 

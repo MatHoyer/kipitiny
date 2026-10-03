@@ -61,6 +61,8 @@ type Core struct {
 	notifyHTTP    *http.Client // nil: notify's default; tests redirect it
 	secrets       []secrets.Provider
 	protonLogins  sync.Map // sign-in ID -> *protonLogin
+	mfaTickets    pending[mfaTicket]
+	totpSetups    pending[string] // user ID -> secret awaiting its first code
 }
 
 // New builds the core around the local Docker client; remote servers are
