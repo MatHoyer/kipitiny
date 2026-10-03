@@ -330,7 +330,7 @@ function NavUser({ username }: { username: string }) {
             sideOffset={4}
           >
             <DropdownMenuLabel className="p-0 font-normal">
-              <div className="flex items-center gap-2 px-1 py-1.5 text-sm">
+              <div className="flex items-center gap-2 px-2 py-1.5 text-sm">
                 {avatar}
                 <span className="truncate font-medium">{username}</span>
               </div>
@@ -363,7 +363,7 @@ function NavUser({ username }: { username: string }) {
               </ToggleGroup>
             </div>
             <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" className="gap-2 px-2 py-2" onClick={() => logout.mutate()}>
+            <DropdownMenuItem variant="destructive" className="gap-2" onClick={() => logout.mutate()}>
               <LogOut />
               Sign out
             </DropdownMenuItem>

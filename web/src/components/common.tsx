@@ -140,8 +140,8 @@ export function CopyButton({ value, label = "Copy" }: { value: string; label?: s
 /** A value in a bordered box with a copy button, e.g. a token or a URL. */
 export function CopyField({ value }: { value: string }) {
   return (
-    <div className="flex items-start gap-1 rounded-lg border bg-muted/40 py-1 pr-1 pl-2.5">
-      <code className="flex-1 py-0.5 font-mono text-xs break-all">{value}</code>
+    <div className="flex items-center gap-1 rounded-lg border bg-muted/40 py-1 pr-1 pl-2.5">
+      <code className="flex-1 font-mono text-xs break-all">{value}</code>
       <CopyButton value={value} />
     </div>
   );

@@ -42,6 +42,10 @@ export function TokensPage() {
   return (
     <SettingsPage actions={!!tokens.data?.length && add}>
       <ErrorText error={tokens.error} />
+      <Section title="MCP endpoint" description="Where AI agents connect, with a token of the scope they need.">
+        <CopyField value={`${window.location.origin}/mcp`} />
+        <CopyField value={mcpCommand("<token>")} />
+      </Section>
       {tokens.data?.length === 0 ? (
         <EmptyState
           icon={KeySquare}
@@ -86,10 +90,6 @@ export function TokensPage() {
           })}
         </div>
       )}
-      <Section title="MCP endpoint" description="Where AI agents connect, with a token of the scope they need.">
-        <CopyField value={`${window.location.origin}/mcp`} />
-        <CopyField value={mcpCommand("<token>")} />
-      </Section>
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent className="sm:max-w-lg">
           {/* Remounted on every open, so a previous token never shows again. */}
