@@ -28,7 +28,8 @@ type Store interface {
 	ListServices(ctx context.Context, projectID string) ([]Service, error)
 	UpdateService(ctx context.Context, s Service) (Service, error)
 	SetCurrentDeployment(ctx context.Context, serviceID, deploymentID string) error
-	// SetDeploymentBuild records the image built for a deployment.
+	// SetDeploymentBuild records the image a deployment runs: built, or
+	// pinned to the digest it was pulled at.
 	SetDeploymentBuild(ctx context.Context, id, image, commit string, config Service) error
 	SetServiceStopped(ctx context.Context, serviceID string, stopped bool) error
 	// SetServiceImage records the image a service now deploys.

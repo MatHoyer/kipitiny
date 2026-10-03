@@ -270,6 +270,15 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 		if err := dk.PullImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image), out); err != nil {
 			return fmt.Errorf("pull %s: %w%s", svc.Image, err, pullHint(err))
 		}
+		if res, err := dk.ImageInspect(ctx, svc.Image); err != nil {
+			return err
+		} else if pinned := pinDigest(svc.Image, res.RepoDigests); pinned != svc.Image {
+			logf("Pinned to %s", pinned)
+			svc.Image = pinned
+			if err := c.store.SetDeploymentBuild(ctx, dep.ID, pinned, dep.GitCommit, svc); err != nil {
+				return err
+			}
+		}
 	}
 	if svc.Kind == store.ServiceKindPostgres {
 		return c.recreate(ctx, project, svc, src, dep, logf)
@@ -282,6 +291,31 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 		c.pruneBuilds(ctx, svc)
 	}
 	return nil
+}
+
+// pinDigest pins image to the digest it was pulled at (name:tag@sha256:…), so
+// replicas recreated later and rollbacks run the same image even when the tag
+// moves. It is unchanged when already pinned or the registry gave no digest.
+func pinDigest(image string, repoDigests []string) string {
+	named, err := reference.ParseNormalizedNamed(image)
+	if err != nil {
+		return image
+	}
+	if _, ok := named.(reference.Digested); ok {
+		return image
+	}
+	for _, rd := range repoDigests {
+		ref, err := reference.ParseNormalizedNamed(rd)
+		if err != nil || ref.Name() != named.Name() {
+			continue
+		}
+		if d, ok := ref.(reference.Digested); ok {
+			if pinned, err := reference.WithDigest(reference.TagNameOnly(named), d.Digest()); err == nil {
+				return reference.FamiliarString(pinned)
+			}
+		}
+	}
+	return image
 }
 
 // isBuiltImage reports whether an image was built by the manager (and so

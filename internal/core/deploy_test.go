@@ -87,3 +87,24 @@ func TestDeployRejects(t *testing.T) {
 		t.Errorf("image = %q after SetServiceImage", got.Image)
 	}
 }
+
+func TestPinDigest(t *testing.T) {
+	const d1 = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+	const d2 = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+	for _, tc := range []struct {
+		image   string
+		digests []string
+		want    string
+	}{
+		{"nginx:1.27", []string{"nginx@" + d1}, "nginx:1.27@" + d1},
+		{"nginx", []string{"docker.io/library/nginx@" + d1}, "nginx:latest@" + d1},
+		{"ghcr.io/org/app:v2", []string{"ghcr.io/org/other@" + d2, "ghcr.io/org/app@" + d1}, "ghcr.io/org/app:v2@" + d1},
+		{"ghcr.io/org/app:v2@" + d2, []string{"ghcr.io/org/app@" + d1}, "ghcr.io/org/app:v2@" + d2},
+		{"ghcr.io/org/app:v2", nil, "ghcr.io/org/app:v2"},
+		{"ghcr.io/org/app:v2", []string{"ghcr.io/org/other@" + d1}, "ghcr.io/org/app:v2"},
+	} {
+		if got := pinDigest(tc.image, tc.digests); got != tc.want {
+			t.Errorf("pinDigest(%q, %v) = %q, want %q", tc.image, tc.digests, got, tc.want)
+		}
+	}
+}
