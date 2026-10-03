@@ -6,6 +6,7 @@ import { EmptyState, StateBadge, Tag } from "@/components/common";
 import { byDay, formatBytes, formatDuration, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Backup, BackupTarget } from "../api";
+import { Tip } from "@/components/ui/tooltip";
 
 /** Backups as rows grouped by day; each opens its page. */
 export function BackupList({
@@ -85,16 +86,17 @@ export function Verification({ backup: b, className }: { backup: Backup; classNa
   if (!b.verifyStatus) return <span className={cn("text-xs text-muted-foreground", className)}>not tested</span>;
   const ok = b.verifyStatus === "succeeded";
   return (
-    <span
-      title={ok ? `Restore test passed ${timeAgo(b.verifiedAt!)}` : b.verifyError}
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs",
-        ok ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-destructive/10 text-destructive",
-        className,
-      )}
-    >
-      {ok ? <ShieldCheck className="size-3.5" /> : <ShieldAlert className="size-3.5" />}
-      {ok ? "tested" : "test failed"}
-    </span>
+    <Tip content={ok ? `Restore test passed ${timeAgo(b.verifiedAt!)}` : b.verifyError}>
+      <span
+        className={cn(
+          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs",
+          ok ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-destructive/10 text-destructive",
+          className,
+        )}
+      >
+        {ok ? <ShieldCheck className="size-3.5" /> : <ShieldAlert className="size-3.5" />}
+        {ok ? "tested" : "test failed"}
+      </span>
+    </Tip>
   );
 }
