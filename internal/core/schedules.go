@@ -226,10 +226,15 @@ func (c *Core) scheduleView(sc store.BackupSchedule) ScheduleView {
 }
 
 func (c *Core) CreateBackupSchedule(ctx context.Context, serviceID string, in ScheduleInput) (ScheduleView, error) {
-	if _, _, err := c.postgresService(ctx, serviceID); err != nil {
+	svc, err := c.store.GetService(ctx, serviceID)
+	if err != nil {
 		return ScheduleView{}, err
 	}
-	return c.createSchedule(ctx, store.BackupSchedule{Kind: store.BackupKindPostgres, ServiceID: serviceID}, in)
+	kind, err := backupKind(svc)
+	if err != nil {
+		return ScheduleView{}, err
+	}
+	return c.createSchedule(ctx, store.BackupSchedule{Kind: kind, ServiceID: serviceID}, in)
 }
 
 // ListManagerSchedules lists the schedules backing up the manager itself.
@@ -309,7 +314,7 @@ func (c *Core) applyScheduleInput(ctx context.Context, sc *store.BackupSchedule,
 		return err
 	}
 	if sc.Kind == store.BackupKindManager {
-		in.Verify = false // restore tests start a PostgreSQL container
+		in.Verify = false // the manager's own state has no restore test
 	}
 	sc.TargetID, sc.Cron, sc.Enabled, sc.Verify = in.TargetID, in.Cron, in.Enabled, in.Verify
 	sc.KeepLast, sc.KeepDaily, sc.KeepWeekly, sc.KeepMonthly = in.KeepLast, in.KeepDaily, in.KeepWeekly, in.KeepMonthly

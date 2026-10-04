@@ -22,16 +22,17 @@ const (
 	verifyMemoryMB  = 512
 )
 
-// VerifyBackup restores a backup into a throwaway, network-less Postgres
-// container and checks the result, proving the backup can actually be
-// restored. The outcome is recorded on the backup.
+// VerifyBackup proves a backup can actually be restored: a database dump is
+// restored into a throwaway, network-less Postgres container and checked; a
+// volume archive is read through entirely. The outcome is recorded on the
+// backup.
 func (c *Core) VerifyBackup(ctx context.Context, backupID string) (store.Backup, error) {
 	b, err := c.store.GetBackup(ctx, backupID)
 	if err != nil {
 		return store.Backup{}, err
 	}
-	if b.Kind != store.BackupKindPostgres || b.Status != store.OpSucceeded {
-		return store.Backup{}, fmt.Errorf("%w: only successful database backups can be verified", ErrInvalid)
+	if b.Kind == store.BackupKindManager || b.Status != store.OpSucceeded {
+		return store.Backup{}, fmt.Errorf("%w: only successful service backups can be verified", ErrInvalid)
 	}
 	if b.VerifyStatus == store.OpRunning {
 		return store.Backup{}, ErrBusy
@@ -61,7 +62,13 @@ func (c *Core) runVerify(b store.Backup) {
 	log := c.log.With("backup", b.ID, "service", b.ServiceName)
 	start := time.Now()
 
-	details, err := c.verify(ctx, b)
+	var details store.VerificationDetails
+	var err error
+	if b.Kind == store.BackupKindVolume {
+		details, err = c.verifyVolumes(ctx, b)
+	} else {
+		details, err = c.verify(ctx, b)
+	}
 	details.DurationMS = time.Since(start).Milliseconds()
 	now := time.Now()
 	v := store.Verification{VerifyStatus: store.OpSucceeded, VerifyDetails: details, VerifiedAt: &now}
@@ -72,7 +79,7 @@ func (c *Core) runVerify(b store.Backup) {
 		}
 		log.Warn("restore test failed", "err", err)
 	} else {
-		log.Info("restore test passed", "tables", details.Tables, "rows", details.Rows)
+		log.Info("restore test passed", "tables", details.Tables, "rows", details.Rows, "files", details.Files)
 	}
 	if err := c.store.SetBackupVerification(context.WithoutCancel(ctx), b.ID, v); err != nil && !errors.Is(err, store.ErrNotFound) {
 		log.Error("cannot record restore test", "err", err)
@@ -88,6 +95,9 @@ func (c *Core) runVerify(b store.Backup) {
 			{Name: "Tables", Value: fmt.Sprint(details.Tables)},
 			{Name: "Rows", Value: fmt.Sprint(details.Rows)},
 		},
+	}
+	if b.Kind == store.BackupKindVolume {
+		e.Fields = []notify.Field{{Name: "Files", Value: fmt.Sprint(details.Files)}}
 	}
 	if err != nil {
 		e.Type, e.Level, e.Title, e.Message, e.Fields = EventVerifyFailed, notify.Error, "Restore test failed for "+subject,
@@ -208,14 +218,27 @@ func (c *Core) verifyImage(ctx context.Context, b store.Backup) (image, serverID
 	return fmt.Sprintf("postgres:%d-alpine", major), serverID
 }
 
-// cleanupRestoreTests removes throwaway containers left by a crash.
+// cleanupRestoreTests removes throwaway containers (restore tests, volume
+// helpers) and staging volumes left by a crash.
 func (c *Core) cleanupRestoreTests(ctx context.Context, dk *docker.Client) error {
-	cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: verifyComponent})
+	for _, component := range []string{verifyComponent, volumeHelperComponent} {
+		cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: component})
+		if err != nil {
+			return err
+		}
+		for _, ct := range cts {
+			if err := dk.RemoveContainerAndVolumes(ctx, ct.ID); err != nil {
+				return err
+			}
+		}
+	}
+	f := make(client.Filters).Add("label", docker.LabelComponent+"="+volumeStageComponent)
+	vols, err := dk.VolumeList(ctx, client.VolumeListOptions{Filters: f})
 	if err != nil {
 		return err
 	}
-	for _, ct := range cts {
-		if err := dk.RemoveContainerAndVolumes(ctx, ct.ID); err != nil {
+	for _, v := range vols.Items {
+		if err := dk.RemoveVolume(ctx, v.Name); err != nil {
 			return err
 		}
 	}

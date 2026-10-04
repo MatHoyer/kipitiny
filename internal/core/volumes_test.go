@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
@@ -40,10 +41,17 @@ func TestValidateVolumes(t *testing.T) {
 }
 
 func TestDatabaseRefusesVolumes(t *testing.T) {
-	svc := store.Service{Kind: store.ServiceKindRedis, Image: DefaultRedisImage, Replicas: 1, MemoryMB: 256,
-		Env: newRedisEnv(), Volumes: []store.Volume{{Name: "x", Path: "/x"}}}
-	if err := validateService(svc); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("got %v, want ErrInvalid", err)
+	svc := store.Service{Kind: store.ServiceKindRedis, Image: DefaultRedisImage, Replicas: 1, MemoryMB: 256, Env: newRedisEnv()}
+	if err := validateService(svc); err != nil {
+		t.Fatal(err)
+	}
+	withVolume, withPreBackup := svc, svc
+	withVolume.Volumes = []store.Volume{{Name: "x", Path: "/x"}}
+	withPreBackup.PreBackup = "redis-cli save"
+	for _, s := range []store.Service{withVolume, withPreBackup} {
+		if err := validateService(s); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("got %v, want ErrInvalid", err)
+		}
 	}
 }
 
@@ -64,5 +72,41 @@ func TestAppVolumeMounts(t *testing.T) {
 	}
 	if !hasData(svc) || hasData(store.Service{Kind: store.ServiceKindApp}) {
 		t.Error("hasData")
+	}
+}
+
+func TestBackupKind(t *testing.T) {
+	app := store.Service{ID: "01APP", ProjectID: "P1", Name: "web", Kind: store.ServiceKindApp,
+		Volumes: []store.Volume{{Name: "uploads", Path: "/app/uploads"}, {Name: "cache", Path: "/cache"}}}
+	redis := store.Service{ID: "01RED", Name: "cache", Kind: store.ServiceKindRedis}
+	pg := store.Service{ID: "01PG", Name: "db", Kind: store.ServiceKindPostgres}
+	tests := []struct {
+		svc   store.Service
+		kind  store.BackupKind
+		names []string
+	}{
+		{app, store.BackupKindVolume, []string{"uploads", "cache"}},
+		{redis, store.BackupKindVolume, []string{"data"}},
+		{pg, store.BackupKindPostgres, nil},
+		{store.Service{Name: "worker", Kind: store.ServiceKindApp}, "", []string{}},
+	}
+	for _, tt := range tests {
+		kind, err := backupKind(tt.svc)
+		if kind != tt.kind || (err != nil) != (tt.kind == "") {
+			t.Errorf("%s: kind = %q, %v", tt.svc.Name, kind, err)
+		}
+		if got := volumeNames(tt.svc); !slices.Equal(got, tt.names) {
+			t.Errorf("%s: names = %v, want %v", tt.svc.Name, got, tt.names)
+		}
+	}
+
+	m := helperMounts(app, []string{"cache"}, "/v", true)
+	if len(m) != 1 || m[0].Source != AppVolume("01APP", "cache") || m[0].Target != "/v/cache" || !m[0].ReadOnly ||
+		m[0].VolumeOptions.Labels[docker.LabelService] != "01APP" {
+		t.Errorf("app helper mounts = %+v", m)
+	}
+	m = helperMounts(redis, []string{"data"}, "/v", false)
+	if len(m) != 1 || m[0].Source != RedisVolume("01RED") || m[0].Target != "/v/data" || m[0].ReadOnly {
+		t.Errorf("redis helper mounts = %+v", m)
 	}
 }

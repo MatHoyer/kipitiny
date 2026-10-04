@@ -162,7 +162,7 @@ No builds on the server (Git builds existed and were removed to keep services si
 
 - Same model as Postgres: one container, one replica, private network only, named volume, password generated at creation and fixed.
 - AOF persistence (`appendonly yes`); `maxmemory` at 75% of the container limit so Redis refuses writes instead of being OOM-killed.
-- No backups yet (Redis is mostly a cache/queue here); `BGSAVE` + streaming `dump.rdb` would follow the Postgres flow.
+- Backed up as a volume (see below): a crash-consistent copy of the AOF, which Redis loads even if its tail is cut.
 
 ### Backup method
 
@@ -177,6 +177,15 @@ Run `pg_dump -Fc` **inside the database container** via `docker exec` so the dum
 - **Automated restore tests** (key differentiator): start a throwaway Postgres container, `pg_restore` the latest backup, run a sanity query, delete the container, record the result.
 - **Project-level backups:** "back up everything in this project".
 - **Restore flow:** `pg_restore` via exec with stdin attached; apps referencing the database are stopped during restore.
+
+### Volume backups
+
+Every other stateful service is backed up by archiving its volumes: Redis's data volume, an app's named volumes. Same targets, encryption, schedules, retention, metadata (kind `volume`, volume names) and restore tests as Postgres.
+
+- A short-lived `busybox` helper (no network, labelled `kipitiny.component=volume-helper`) mounts the volumes read-only under `/v/<name>`; `tar -czf - --numeric-owner` streams through `docker exec` into the same upload path as `pg_dump`. The service keeps running; an app's optional *pre-backup command* runs in one replica first (e.g. flush to disk).
+- Restore: extract into a fresh staging volume through a helper, verify the checksum and that every volume is present, and only then stop the service's containers, replace each volume's content (`rm` + `cp -a` from staging) and start them again. A failure before the swap leaves live data untouched.
+- Restore test: stream the archive through `tar -tzf -` in a throwaway helper, check the checksum and record the entry count.
+- Helpers and staging volumes left by a crash are removed at startup only (a server re-check must not kill a running restore).
 
 Later: point-in-time recovery via WAL archiving (`wal-g` or `pgBackRest`).
 

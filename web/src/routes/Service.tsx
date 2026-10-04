@@ -38,7 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
 import { byDay, envMap, envRows, envSecrets, formatBytes, formatCpu, formatDuration, sameEnv, serviceState, timeAgo, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { api, databasePorts, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type LogLine, type Service as ServiceT, type Volume } from "../api";
+import { api, canBackup, databasePorts, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type LogLine, type Service as ServiceT, type Volume } from "../api";
 import { BackupList } from "./BackupList";
 import { Schedules } from "./Schedules";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
@@ -201,7 +201,7 @@ export function Service() {
             <TabsTrigger value="logs">Logs</TabsTrigger>
             <TabsTrigger value="terminal">Terminal</TabsTrigger>
             <TabsTrigger value="environment">Environment</TabsTrigger>
-            {svc.kind === "postgres" && <TabsTrigger value="backups">Backups</TabsTrigger>}
+            {canBackup(svc) && <TabsTrigger value="backups">Backups</TabsTrigger>}
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
           <TabsContent value="overview" className="space-y-6">
@@ -241,7 +241,7 @@ export function Service() {
           <TabsContent value="environment">
             <EnvironmentCard key={svc.id} svc={svc} />
           </TabsContent>
-          {svc.kind === "postgres" && (
+          {canBackup(svc) && (
             <TabsContent value="backups">
               <BackupsCard serviceId={svc.id} name={project.data ? `${project.data.name}/${svc.name}` : svc.name} />
             </TabsContent>
@@ -441,17 +441,27 @@ const volumeNameRe = /^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/;
 function VolumesCard({ svc }: { svc: ServiceT }) {
   const qc = useQueryClient();
   const [rows, setRows] = useState<Volume[]>(svc.volumes);
-  const dirty = JSON.stringify(rows) !== JSON.stringify(svc.volumes);
+  const [preBackup, setPreBackup] = useState(svc.preBackup);
+  const dirty = JSON.stringify(rows) !== JSON.stringify(svc.volumes) || preBackup !== svc.preBackup;
   const formId = useId();
   const save = useMutation({
     meta: { error: "Couldn't save the volumes" },
-    mutationFn: () => api.updateService(svc.id, { volumes: rows.map((v) => ({ name: v.name.trim(), path: v.path.trim() })) }),
+    mutationFn: () =>
+      api.updateService(svc.id, {
+        volumes: rows.map((v) => ({ name: v.name.trim(), path: v.path.trim() })),
+        preBackup: rows.length > 0 ? preBackup.trim() : "",
+      }),
     onSuccess: (updated) => {
       qc.setQueryData(["service", svc.id], updated);
       setRows(updated.volumes);
+      setPreBackup(updated.preBackup);
       toast.success("Volumes saved", { description: "Deploy to apply." });
     },
   });
+  const reset = () => {
+    setRows(svc.volumes);
+    setPreBackup(svc.preBackup);
+  };
   const set = (i: number, field: keyof Volume) => (e: { target: { value: string } }) =>
     setRows(rows.map((v, j) => (j === i ? { ...v, [field]: e.target.value } : v)));
   const onSubmit = (e: FormEvent) => {
@@ -513,8 +523,18 @@ function VolumesCard({ svc }: { svc: ServiceT }) {
             </div>
           );
         })}
+        {rows.length > 0 && (
+          <FloatingInput
+            label="Pre-backup command"
+            value={preBackup}
+            onChange={(e) => setPreBackup(e.target.value)}
+            placeholder="./bin/flush"
+            inputClassName="font-mono"
+            description="Runs (sh -c) in a running replica before each backup of the volumes, e.g. to flush to disk. Optional."
+          />
+        )}
       </form>
-      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setRows(svc.volumes)} label="Save volumes" />
+      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={reset} label="Save volumes" />
     </Section>
   );
 }

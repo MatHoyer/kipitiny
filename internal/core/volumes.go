@@ -64,24 +64,29 @@ func normalizeVolumes(vols []store.Volume) []store.Volume {
 	return out
 }
 
-// appVolumeMounts mounts an app's volumes. Docker creates a missing volume
-// on first use, with these labels.
-func appVolumeMounts(projectID string, svc store.Service) []mount.Mount {
+// appVolumeMounts mounts an app's volumes in a replica.
+func appVolumeMounts(svc store.Service) []mount.Mount {
 	mounts := make([]mount.Mount, 0, len(svc.Volumes))
 	for _, v := range svc.Volumes {
-		mounts = append(mounts, mount.Mount{
-			Type:   mount.TypeVolume,
-			Source: AppVolume(svc.ID, v.Name),
-			Target: v.Path,
-			VolumeOptions: &mount.VolumeOptions{Labels: map[string]string{
-				docker.LabelManaged:   "true",
-				docker.LabelProject:   projectID,
-				docker.LabelService:   svc.ID,
-				docker.LabelComponent: volumeComponent,
-			}},
-		})
+		mounts = append(mounts, appVolumeMount(svc, v))
 	}
 	return mounts
+}
+
+// appVolumeMount mounts one app volume at v.Path. Docker creates a missing
+// volume on first use, with these labels.
+func appVolumeMount(svc store.Service, v store.Volume) mount.Mount {
+	return mount.Mount{
+		Type:   mount.TypeVolume,
+		Source: AppVolume(svc.ID, v.Name),
+		Target: v.Path,
+		VolumeOptions: &mount.VolumeOptions{Labels: map[string]string{
+			docker.LabelManaged:   "true",
+			docker.LabelProject:   svc.ProjectID,
+			docker.LabelService:   svc.ID,
+			docker.LabelComponent: volumeComponent,
+		}},
+	}
 }
 
 // hasData reports whether deleting the service destroys data.

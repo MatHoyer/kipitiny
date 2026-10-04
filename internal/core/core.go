@@ -103,6 +103,12 @@ func (c *Core) Bootstrap(ctx context.Context) error {
 	}
 	var errs []error
 	for _, sv := range servers {
+		// Nothing runs yet: what restore tests and volume helpers left
+		// behind is from a crash. (Later bootstraps must not touch them.)
+		if err := c.cleanupRestoreTests(ctx, c.dockerFor(sv.ID)); err != nil {
+			errs = append(errs, fmt.Errorf("server %s: %w", sv.Name, err))
+			continue
+		}
 		if err := c.bootstrapServer(ctx, sv); err != nil {
 			errs = append(errs, fmt.Errorf("server %s: %w", sv.Name, err))
 		}
@@ -111,13 +117,10 @@ func (c *Core) Bootstrap(ctx context.Context) error {
 }
 
 // bootstrapServer prepares a Docker host: proxy network, Traefik, and
-// cleanup of throwaway containers left by a crash.
+// cleanup of terminals left by a crash.
 func (c *Core) bootstrapServer(ctx context.Context, sv store.Server) error {
 	dk := c.dockerFor(sv.ID)
 	if err := dk.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil {
-		return err
-	}
-	if err := c.cleanupRestoreTests(ctx, dk); err != nil {
 		return err
 	}
 	if err := c.cleanupTerminals(ctx, dk); err != nil {

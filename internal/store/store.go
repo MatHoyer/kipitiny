@@ -270,8 +270,11 @@ type Service struct {
 	PreDeploy string `bun:"pre_deploy" json:"preDeploy"`
 	// Volumes are named volumes an app mounts, shared by its replicas and
 	// kept across deploys. Databases keep their data in their own volume.
-	Volumes             []Volume `bun:"volumes" json:"volumes"`
-	CurrentDeploymentID string   `bun:"current_deployment_id" json:"currentDeploymentId"`
+	Volumes []Volume `bun:"volumes" json:"volumes"`
+	// PreBackup runs (sh -c) in a running replica before each volume
+	// backup, e.g. to flush to disk. A failure aborts the backup.
+	PreBackup           string `bun:"pre_backup" json:"preBackup"`
+	CurrentDeploymentID string `bun:"current_deployment_id" json:"currentDeploymentId"`
 	// Stopped is the desired run state after the user stopped the service.
 	Stopped bool `bun:"stopped" json:"stopped"`
 
@@ -369,7 +372,8 @@ type Backup struct {
 	bun.BaseModel `bun:"table:backups,alias:backup" json:"-"`
 
 	ID string `bun:"id,pk" json:"id"`
-	// Kind is postgres (a database) or manager (the manager's own state).
+	// Kind is postgres (a pg_dump), volume (an archive of a service's
+	// volumes) or manager (the manager's own state).
 	Kind        BackupKind `bun:"kind" json:"kind"`
 	ServiceID   string     `bun:"service_id" json:"serviceId"`
 	ProjectID   string     `bun:"project_id" json:"projectId"`
@@ -383,10 +387,12 @@ type Backup struct {
 	SHA256      string     `bun:"sha256" json:"sha256"`
 	Encrypted   bool       `bun:"encrypted" json:"encrypted"`
 	PGVersion   string     `bun:"pg_version" json:"pgVersion"`
-	DurationMS  int64      `bun:"duration_ms" json:"durationMs"`
-	Error       string     `bun:"error" json:"error,omitempty"`
-	CreatedAt   time.Time  `bun:"created_at" json:"createdAt"`
-	FinishedAt  *time.Time `bun:"finished_at" json:"finishedAt,omitempty"`
+	// Volumes names the volumes in a volume backup's archive.
+	Volumes    []string   `bun:"volumes" json:"volumes,omitempty"`
+	DurationMS int64      `bun:"duration_ms" json:"durationMs"`
+	Error      string     `bun:"error" json:"error,omitempty"`
+	CreatedAt  time.Time  `bun:"created_at" json:"createdAt"`
+	FinishedAt *time.Time `bun:"finished_at" json:"finishedAt,omitempty"`
 	Verification
 }
 
@@ -399,9 +405,11 @@ type Verification struct {
 }
 
 type VerificationDetails struct {
-	Tables     int   `json:"tables"`
-	Rows       int64 `json:"rows"`
-	DBBytes    int64 `json:"dbBytes"`
+	Tables  int   `json:"tables"`
+	Rows    int64 `json:"rows"`
+	DBBytes int64 `json:"dbBytes"`
+	// Files counts the entries of a volume backup's archive.
+	Files      int64 `json:"files,omitempty"`
 	DurationMS int64 `json:"durationMs"`
 }
 
@@ -409,6 +417,7 @@ type BackupKind string
 
 const (
 	BackupKindPostgres BackupKind = "postgres"
+	BackupKindVolume   BackupKind = "volume"
 	BackupKindManager  BackupKind = "manager"
 )
 
@@ -439,8 +448,8 @@ type BackupSchedule struct {
 	bun.BaseModel `bun:"table:backup_schedules,alias:schedule" json:"-"`
 
 	ID string `bun:"id,pk" json:"id"`
-	// Kind is what it backs up: a PostgreSQL service, or the manager's own
-	// state (no ServiceID).
+	// Kind is what it backs up: a PostgreSQL service, a service's volumes,
+	// or the manager's own state (no ServiceID).
 	Kind      BackupKind `bun:"kind" json:"kind"`
 	ServiceID string     `bun:"service_id,nullzero" json:"serviceId,omitempty"`
 	TargetID  string     `bun:"target_id" json:"targetId"`

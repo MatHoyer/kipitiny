@@ -48,7 +48,8 @@ type ServiceInput struct {
 	HealthPath string   `json:"healthPath"`
 	PreDeploy  string   `json:"preDeploy"`
 	// Volumes are named volumes mounted in every replica (apps only).
-	Volumes []store.Volume `json:"volumes"`
+	Volumes   []store.Volume `json:"volumes"`
+	PreBackup string         `json:"preBackup"`
 }
 
 // ServicePatch updates only the fields that are set. Env replaces the whole
@@ -66,7 +67,8 @@ type ServicePatch struct {
 	HealthPath *string           `json:"healthPath"`
 	PreDeploy  *string           `json:"preDeploy"`
 	// Volumes replaces the app's volumes; nil keeps them.
-	Volumes []store.Volume `json:"volumes"`
+	Volumes   []store.Volume `json:"volumes"`
+	PreBackup *string        `json:"preBackup"`
 }
 
 type ContainerView struct {
@@ -115,6 +117,7 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		HealthPath: strings.TrimSpace(in.HealthPath),
 		PreDeploy:  strings.TrimSpace(in.PreDeploy),
 		Volumes:    normalizeVolumes(in.Volumes),
+		PreBackup:  strings.TrimSpace(in.PreBackup),
 	}
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
@@ -205,6 +208,9 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	if p.Volumes != nil {
 		svc.Volumes = normalizeVolumes(p.Volumes)
 	}
+	if p.PreBackup != nil {
+		svc.PreBackup = strings.TrimSpace(*p.PreBackup)
+	}
 	if svc.Kind.IsDatabase() {
 		if err := checkDatabaseUpdate(old, svc); err != nil {
 			return ServiceView{}, err
@@ -263,8 +269,8 @@ func validateService(s store.Service) error {
 		return fmt.Errorf("%w: CPU limit must be between %g and %g cores", ErrInvalid, minCPUs, maxCPUs)
 	}
 	if s.Kind.IsDatabase() {
-		if len(s.Volumes) > 0 {
-			return fmt.Errorf("%w: databases keep their data in their own volume", ErrInvalid)
+		if len(s.Volumes) > 0 || s.PreBackup != "" {
+			return fmt.Errorf("%w: databases keep their data in their own volume, backed up as is", ErrInvalid)
 		}
 		return validateDatabase(s)
 	}
