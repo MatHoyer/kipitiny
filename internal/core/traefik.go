@@ -151,6 +151,14 @@ func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreate
 		"--entrypoints.web.http.redirections.entrypoint.scheme=https",
 		"--entrypoints.websecure.address=:443",
 	}
+	// Keep X-Forwarded-For from Cloudflare, so IP allowlists and rate
+	// limits can see the client behind it (see route.behindProxy).
+	if tunnel {
+		// Only cloudflared, on the proxy network, can reach Traefik.
+		args = append(args, "--entrypoints.websecure.forwardedheaders.trustedips="+strings.Join(privateRanges, ","))
+	} else if o.CFToken != "" {
+		args = append(args, "--entrypoints.websecure.forwardedheaders.trustedips="+strings.Join(cloudflareRanges, ","))
+	}
 	if !tunnel {
 		args = append(args,
 			"--certificatesresolvers."+certResolver+".acme.tlschallenge=true",
@@ -242,29 +250,73 @@ func managerRoute(domain, url, resolver string) []byte {
 	return b
 }
 
-// traefikLabels routes HTTPS traffic for svc.Domain to svc.Port, with a
-// certificate from resolver ("" for Traefik's default one).
-func traefikLabels(svc store.Service, resolver string) map[string]string {
+// route is how a public service's requests reach Traefik.
+type route struct {
+	// resolver issues the certificate, "" for Traefik's default one.
+	resolver string
+	// behindProxy: requests come through Cloudflare (tunnel or proxied
+	// record), which puts the client IP last in X-Forwarded-For.
+	behindProxy bool
+}
+
+func (c *Core) routeFor(ctx context.Context, svc store.Service) route {
+	return route{
+		resolver:    c.certResolver(ctx, svc.ServerID, svc.Domain),
+		behindProxy: c.behindCloudflare(ctx, svc.ServerID, svc.Domain),
+	}
+}
+
+// traefikLabels routes HTTPS traffic for svc.Domain to svc.Port through the
+// service's middlewares.
+//
+// Traefik drops a router or middleware that containers define differently,
+// and old and new replicas run side by side during a rollout, so the router
+// and its middlewares are named after their configuration: a change adds a
+// new router next to the old one instead of conflicting with it.
+func traefikLabels(svc store.Service, rt route) map[string]string {
 	name := "kipitiny-" + strings.ToLower(svc.ID)
+	mws := middlewareLabels(svc.Middlewares, rt.behindProxy)
+	router := name + "-" + specHash(svc.Domain, rt.resolver, mws)[:8]
 	labels := map[string]string{
-		"traefik.enable":                                "true",
-		"traefik.docker.network":                        docker.ProxyNetwork,
-		"traefik.http.routers." + name + ".rule":        "Host(`" + svc.Domain + "`)",
-		"traefik.http.routers." + name + ".entrypoints": "websecure",
-		"traefik.http.routers." + name + ".service":     name,
+		"traefik.enable":                                  "true",
+		"traefik.docker.network":                          docker.ProxyNetwork,
+		"traefik.http.routers." + router + ".rule":        "Host(`" + svc.Domain + "`)",
+		"traefik.http.routers." + router + ".entrypoints": "websecure",
+		"traefik.http.routers." + router + ".service":     name,
 		// Connection failures (a replica stopping during a rollout, before
 		// Traefik sees the event) are retried on another replica.
-		"traefik.http.routers." + name + ".middlewares":                     name + "-retry@docker",
 		"traefik.http.middlewares." + name + "-retry.retry.attempts":        "3",
 		"traefik.http.middlewares." + name + "-retry.retry.initialinterval": "100ms",
 		"traefik.http.services." + name + ".loadbalancer.server.port":       fmt.Sprint(svc.Port),
 	}
-	if resolver == "" {
-		labels["traefik.http.routers."+name+".tls"] = "true"
+	chain := make([]string, 0, len(mws)+1)
+	for _, mw := range mws {
+		mwName := router + "-" + mw.Suffix
+		chain = append(chain, mwName+"@docker")
+		for k, v := range mw.Labels {
+			labels["traefik.http.middlewares."+mwName+"."+k] = v
+		}
+	}
+	labels["traefik.http.routers."+router+".middlewares"] = strings.Join(append(chain, name+"-retry@docker"), ",")
+	if rt.resolver == "" {
+		labels["traefik.http.routers."+router+".tls"] = "true"
 	} else {
-		labels["traefik.http.routers."+name+".tls.certresolver"] = resolver
+		labels["traefik.http.routers."+router+".tls.certresolver"] = rt.resolver
 	}
 	return labels
+}
+
+// privateRanges are the networks Docker assigns container addresses from.
+var privateRanges = []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fd00::/8"}
+
+// cloudflareRanges are Cloudflare's edge addresses
+// (https://www.cloudflare.com/ips/).
+var cloudflareRanges = []string{
+	"173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22", "141.101.64.0/18",
+	"108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20", "197.234.240.0/22", "198.41.128.0/17",
+	"162.158.0.0/15", "104.16.0.0/13", "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+	"2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32", "2405:8100::/32",
+	"2a06:98c0::/29", "2c0f:f248::/32",
 }
 
 func specHash(parts ...any) string {

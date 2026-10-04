@@ -73,7 +73,7 @@ func TestRedisRefs(t *testing.T) {
 func TestRedisContainerSpec(t *testing.T) {
 	p := store.Project{ID: "P1", Name: "shop"}
 	svc := redisService()
-	spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, certResolver)
+	spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, route{resolver: certResolver})
 
 	if spec.Name != "shop-cache-1" {
 		t.Errorf("name = %q, want no deploy suffix", spec.Name)

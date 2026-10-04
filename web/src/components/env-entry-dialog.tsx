@@ -169,31 +169,14 @@ function EntryForm({
   const [kind, setKind] = useState(initialKind);
   const secret = kind === "secret";
   const fromProvider = kind === "manager";
-  const providers = useQuery({
-    queryKey: ["secret-providers"],
-    queryFn: api.secretProviders,
-    enabled: ctx.passwordManagers || fromProvider,
-  });
-  const connected = providers.data?.filter((p) => p.connected) ?? [];
   // A saved secret reads back masked: left empty, it keeps its value.
   const saved = !!entry?.secret && entry.value === SECRET_MASK;
   const initialRef = entry ? managerRef(entry.value) : null;
-  const scheme = initialRef?.scheme ?? "";
+  const ms = useManagerSource(initialRef?.scheme ?? "", ctx.passwordManagers || fromProvider);
+  const source = ms.source;
   const [name, setName] = useState(entry?.key ?? "");
   const [value, setValue] = useState(saved || initialRef ? "" : (entry?.value ?? ""));
   const [path, setPath] = useState(initialRef?.path.join("/") ?? "");
-
-  // The schemes on offer: the connected providers, plus the edited entry's
-  // own when its provider isn't connected (anymore).
-  const sources = [
-    ...connected.map((p) => ({ value: p.scheme, label: p.name, icon: passwordManagerIcon(p.id) })),
-    ...(scheme && !connected.some((p) => p.scheme === scheme)
-      ? [{ value: scheme, label: `${scheme}://`, icon: <KeyRound /> }]
-      : []),
-  ];
-  const [picked, setSource] = useState(scheme);
-  const source = picked || sources[0]?.value || "";
-  const provider = connected.find((p) => p.scheme === source);
 
   const key = name.trim();
   const badName = !!key && !envKeyRe.test(key);
@@ -291,42 +274,13 @@ function EntryForm({
             ) : undefined
           }
         />
-        {fromProvider && providers.isSuccess && sources.length === 0 && (
-          <p className="rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
-            No password manager is connected.{" "}
-            <Link to="/password-managers" className="font-medium text-foreground underline-offset-4 hover:underline">
-              Connect one in Settings
-            </Link>
-            .
-          </p>
-        )}
-        {fromProvider && sources.length > 0 && (
-          <FloatingSelect
-            label="Password manager"
-            value={source}
-            onValueChange={setSource}
-            loading={providers.isLoading}
-            options={sources.map((s) => ({
-              value: s.value,
-              label: (
-                <span className="flex items-center gap-2 [&>svg]:size-4 [&>svg]:shrink-0">
-                  {s.icon}
-                  {s.label}
-                </span>
-              ),
-            }))}
-          />
-        )}
         {fromProvider ? (
-          source && (
-            <ProviderPath
-              scheme={source}
-              providerId={provider?.id}
-              path={path}
-              onChange={setPath}
-              onPickField={(item, field) => !name && setName(fieldEntryName(item, field))}
-            />
-          )
+          <ManagerSourceFields
+            ms={ms}
+            path={path}
+            onPathChange={setPath}
+            onPickField={(item, field) => !name && setName(fieldEntryName(item, field))}
+          />
         ) : (
           <TemplateInput
             value={value}
@@ -378,6 +332,90 @@ const kindDescriptions: Record<Kind, string> = {
   manager: "Stays in your vault: fetched on each deploy, never stored by kipitiny.",
 };
 const kindActions: Record<Kind, string> = { variable: "Add variable", secret: "Add secret", manager: "Add" };
+
+/** The password managers a reference can come from, and the one picked. */
+export type ManagerSource = ReturnType<typeof useManagerSource>;
+
+/**
+ * The connected password managers on offer, plus scheme's own when its
+ * manager isn't connected (anymore), with the one picked (the first by
+ * default). scheme is the edited reference's, or "".
+ */
+export function useManagerSource(scheme: string, enabled: boolean) {
+  const providers = useQuery({ queryKey: ["secret-providers"], queryFn: api.secretProviders, enabled });
+  const connected = providers.data?.filter((p) => p.connected) ?? [];
+  const sources = [
+    ...connected.map((p) => ({ value: p.scheme, label: p.name, icon: passwordManagerIcon(p.id) })),
+    ...(scheme && !connected.some((p) => p.scheme === scheme)
+      ? [{ value: scheme, label: `${scheme}://`, icon: <KeyRound /> }]
+      : []),
+  ];
+  const [picked, setSource] = useState(scheme);
+  const source = picked || sources[0]?.value || "";
+  return {
+    providers,
+    sources,
+    source,
+    setSource,
+    /** Unset when the source's manager isn't connected: no browsing. */
+    providerId: connected.find((p) => p.scheme === source)?.id,
+    /** Whether any password manager is connected. */
+    any: connected.length > 0,
+  };
+}
+
+/** Picks a password manager reference: the manager, then its path, typed or browsed. */
+export function ManagerSourceFields({
+  ms,
+  path,
+  onPathChange,
+  onPickField,
+}: {
+  ms: ManagerSource;
+  path: string;
+  onPathChange: (path: string) => void;
+  onPickField?: (item: string, field: string) => void;
+}) {
+  return (
+    <>
+      {ms.providers.isSuccess && ms.sources.length === 0 && (
+        <p className="rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
+          No password manager is connected.{" "}
+          <Link to="/password-managers" className="font-medium text-foreground underline-offset-4 hover:underline">
+            Connect one in Settings
+          </Link>
+          .
+        </p>
+      )}
+      {ms.sources.length > 0 && (
+        <FloatingSelect
+          label="Password manager"
+          value={ms.source}
+          onValueChange={ms.setSource}
+          loading={ms.providers.isLoading}
+          options={ms.sources.map((s) => ({
+            value: s.value,
+            label: (
+              <span className="flex items-center gap-2 [&>svg]:size-4 [&>svg]:shrink-0">
+                {s.icon}
+                {s.label}
+              </span>
+            ),
+          }))}
+        />
+      )}
+      {ms.source && (
+        <ProviderPath
+          scheme={ms.source}
+          providerId={ms.providerId}
+          path={path}
+          onChange={onPathChange}
+          onPickField={onPickField ?? (() => {})}
+        />
+      )}
+    </>
+  );
+}
 
 type RefSection = { label: string; items: { label: string; value: string }[] };
 

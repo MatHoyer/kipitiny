@@ -56,6 +56,8 @@ export type Service = {
   preDeploy: string;
   /** Named volumes mounted in every replica (apps only). */
   volumes: Volume[];
+  /** Traefik middlewares on the public domain (apps only). */
+  middlewares: Middlewares;
   /** Runs (sh -c) in a replica before each volume backup. */
   preBackup: string;
   currentDeploymentId: string;
@@ -68,6 +70,25 @@ export type Service = {
 };
 
 export type Volume = { name: string; path: string };
+
+export type RateLimit = { average: number; burst: number };
+
+export type Middlewares = {
+  /** Users with a stored password show only their name; ref is a password manager reference. */
+  basicAuth?: { name: string; ref?: string }[];
+  ipAllowList?: string[];
+  rateLimit?: RateLimit;
+  /** Response headers; an empty value removes the header. */
+  headers?: Record<string, string>;
+};
+
+export type MiddlewaresInput = {
+  /** password: a new password, a {{ scheme://… }} reference, or empty to keep the current one. */
+  basicAuth: { name: string; password: string }[];
+  ipAllowList: string[];
+  rateLimit: RateLimit | null;
+  headers: Record<string, string>;
+};
 
 /** A container with the networks it is attached to. */
 export type TopoNode = Container & {
@@ -135,6 +156,7 @@ export type ServiceInput = {
   healthPath?: string;
   preDeploy?: string;
   volumes?: Volume[];
+  middlewares?: MiddlewaresInput;
   preBackup?: string;
 };
 

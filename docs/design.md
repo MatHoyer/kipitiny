@@ -116,6 +116,8 @@ Labels: map[string]string{
 }
 ```
 
+Per-app middlewares (basic auth, IP allowlist, rate limit, response headers) are labels too. Traefik drops a router or middleware that containers define differently, and old and new replicas overlap during a rollout, so the router and its middlewares are named after a hash of their configuration (`kipitiny-<service>-<hash>`); a change adds a router next to the old one, both on the same load balancer. Basic auth references are hashed at deploy into the deployment snapshot, which reconciled replicas reuse. Behind Cloudflare (tunnel, or a record the manager keeps proxied) the client IP is the last `X-Forwarded-For` entry: Traefik trusts that header from the proxy network (tunnel) or Cloudflare's ranges (API token connected), and the middlewares read it with `ipStrategy.depth=1`.
+
 Databases get no Traefik labels (TCP/SNI routing is a possible later feature).
 
 ## 8. Replicas

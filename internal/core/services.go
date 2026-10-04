@@ -48,8 +48,10 @@ type ServiceInput struct {
 	HealthPath string   `json:"healthPath"`
 	PreDeploy  string   `json:"preDeploy"`
 	// Volumes are named volumes mounted in every replica (apps only).
-	Volumes   []store.Volume `json:"volumes"`
-	PreBackup string         `json:"preBackup"`
+	Volumes []store.Volume `json:"volumes"`
+	// Middlewares apply to a public app's requests (apps only).
+	Middlewares *MiddlewaresInput `json:"middlewares"`
+	PreBackup   string            `json:"preBackup"`
 }
 
 // ServicePatch updates only the fields that are set. Env replaces the whole
@@ -67,8 +69,10 @@ type ServicePatch struct {
 	HealthPath *string           `json:"healthPath"`
 	PreDeploy  *string           `json:"preDeploy"`
 	// Volumes replaces the app's volumes; nil keeps them.
-	Volumes   []store.Volume `json:"volumes"`
-	PreBackup *string        `json:"preBackup"`
+	Volumes []store.Volume `json:"volumes"`
+	// Middlewares replaces the app's middlewares; nil keeps them.
+	Middlewares *MiddlewaresInput `json:"middlewares"`
+	PreBackup   *string           `json:"preBackup"`
 }
 
 type ContainerView struct {
@@ -127,6 +131,13 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		return ServiceView{}, envErr
 	}
 	svc.Env, svc.Secrets = env, secrets
+	if in.Middlewares != nil {
+		mw, err := mergeMiddlewares(*in.Middlewares, store.Middlewares{})
+		if err != nil {
+			return ServiceView{}, err
+		}
+		svc.Middlewares = mw
+	}
 	if !nameRe.MatchString(svc.Name) {
 		return ServiceView{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
@@ -211,6 +222,11 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	if p.PreBackup != nil {
 		svc.PreBackup = strings.TrimSpace(*p.PreBackup)
 	}
+	if p.Middlewares != nil {
+		if svc.Middlewares, err = mergeMiddlewares(*p.Middlewares, old.Middlewares); err != nil {
+			return ServiceView{}, err
+		}
+	}
 	if svc.Kind.IsDatabase() {
 		if err := checkDatabaseUpdate(old, svc); err != nil {
 			return ServiceView{}, err
@@ -250,6 +266,9 @@ func (c *Core) validate(ctx context.Context, s store.Service) error {
 	if err := c.checkSecretSchemes(s.Env); err != nil {
 		return err
 	}
+	if err := c.checkBasicAuthSchemes(s.Middlewares); err != nil {
+		return err
+	}
 	return checkRefs(s.Env, envSources{project: project.Env, dbs: dbs})
 }
 
@@ -272,9 +291,15 @@ func validateService(s store.Service) error {
 		if len(s.Volumes) > 0 || s.PreBackup != "" {
 			return fmt.Errorf("%w: databases keep their data in their own volume, backed up as is", ErrInvalid)
 		}
+		if !s.Middlewares.IsZero() {
+			return fmt.Errorf("%w: databases are never public, so take no middlewares", ErrInvalid)
+		}
 		return validateDatabase(s)
 	}
 	if err := validateVolumes(s.Volumes); err != nil {
+		return err
+	}
+	if err := validateMiddlewares(s.Middlewares); err != nil {
 		return err
 	}
 	if s.HealthPath != "" {
@@ -429,6 +454,7 @@ func masked(s store.Service) store.Service {
 	if s.Volumes == nil {
 		s.Volumes = []store.Volume{}
 	}
+	s.Middlewares = maskMiddlewares(s.Middlewares)
 	return s
 }
 

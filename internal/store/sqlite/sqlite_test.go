@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -91,6 +92,12 @@ func TestProjectsAndServices(t *testing.T) {
 	svc.Env["B"] = "2"
 	svc.Replicas = 3
 	svc.Volumes = []store.Volume{{Name: "uploads", Path: "/app/uploads"}}
+	svc.Middlewares = store.Middlewares{
+		BasicAuth:   []store.BasicAuthUser{{Name: "ann", Hash: "$2a$10$x"}},
+		IPAllowList: []string{"10.0.0.0/8"},
+		RateLimit:   &store.RateLimit{Average: 10, Burst: 20},
+		Headers:     map[string]string{"X-Robots-Tag": "noindex"},
+	}
 	if _, err := s.UpdateService(ctx, svc); err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +106,7 @@ func TestProjectsAndServices(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got2.Replicas != 3 || got2.Env["A"] != "1" || got2.Env["B"] != "2" || got2.Domain != "shop.example.com" ||
-		!slices.Equal(got2.Volumes, svc.Volumes) {
+		!slices.Equal(got2.Volumes, svc.Volumes) || !reflect.DeepEqual(got2.Middlewares, svc.Middlewares) {
 		t.Fatalf("service round-trip mismatch: %+v", got2)
 	}
 

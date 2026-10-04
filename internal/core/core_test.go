@@ -61,7 +61,7 @@ func TestAppContainerSpec(t *testing.T) {
 		Env: map[string]string{"B": "2", "A": "1", "C": "{{ project.SHARED }}"},
 	}
 
-	spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 2, certResolver)
+	spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 2, route{resolver: certResolver})
 	if spec.Name != "shop-web-2-d1" {
 		t.Errorf("name = %q", spec.Name)
 	}
@@ -81,30 +81,47 @@ func TestAppContainerSpec(t *testing.T) {
 	}
 
 	svc.Domain, svc.Port = "shop.example.com", 8080
-	spec = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, certResolver)
+	spec = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, route{resolver: certResolver})
 	l = spec.Config.Labels
 	if l["traefik.enable"] != "true" || l["traefik.docker.network"] != docker.ProxyNetwork {
 		t.Errorf("traefik labels missing: %v", l)
 	}
-	if l["traefik.http.routers.kipitiny-01abc.rule"] != "Host(`shop.example.com`)" {
-		t.Errorf("router rule = %q", l["traefik.http.routers.kipitiny-01abc.rule"])
+	r := routerName(t, l)
+	if !strings.HasPrefix(r, "kipitiny-01abc-") || l["traefik.http.routers."+r+".rule"] != "Host(`shop.example.com`)" {
+		t.Errorf("router %s rule = %q", r, l["traefik.http.routers."+r+".rule"])
 	}
 	if l["traefik.http.services.kipitiny-01abc.loadbalancer.server.port"] != "8080" {
 		t.Error("service port label wrong")
 	}
-	if l["traefik.http.routers.kipitiny-01abc.tls.certresolver"] != "letsencrypt" {
+	if l["traefik.http.routers."+r+".tls.certresolver"] != "letsencrypt" {
 		t.Error("public domain must use the ACME resolver")
 	}
-	if l["traefik.http.routers.kipitiny-01abc.middlewares"] != "kipitiny-01abc-retry@docker" {
+	if l["traefik.http.routers."+r+".middlewares"] != "kipitiny-01abc-retry@docker" {
 		t.Error("retry middleware missing")
 	}
-	l = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, "").Config.Labels
-	if _, acme := l["traefik.http.routers.kipitiny-01abc.tls.certresolver"]; acme || l["traefik.http.routers.kipitiny-01abc.tls"] != "true" {
+	l = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, route{}).Config.Labels
+	r = routerName(t, l)
+	if _, acme := l["traefik.http.routers."+r+".tls.certresolver"]; acme || l["traefik.http.routers."+r+".tls"] != "true" {
 		t.Error("no resolver must mean Traefik's default certificate")
 	}
 	if _, ok := spec.NetworkingConfig.EndpointsConfig[docker.ProxyNetwork]; !ok {
 		t.Error("public service must join the proxy network")
 	}
+}
+
+// routerName is the one router labels define.
+func routerName(t *testing.T, labels map[string]string) string {
+	t.Helper()
+	var out []string
+	for k := range labels {
+		if r, ok := strings.CutPrefix(k, "traefik.http.routers."); ok && strings.HasSuffix(r, ".rule") {
+			out = append(out, strings.TrimSuffix(r, ".rule"))
+		}
+	}
+	if len(out) != 1 {
+		t.Fatalf("routers = %v, want one", out)
+	}
+	return out[0]
 }
 
 func TestMasked(t *testing.T) {
@@ -192,8 +209,9 @@ func TestTunnelMode(t *testing.T) {
 		t.Error("manager route must not reference the ACME resolver")
 	}
 
-	l := traefikLabels(store.Service{ID: "01ABC", Domain: "shop.example.com", Port: 80}, "")
-	if _, acme := l["traefik.http.routers.kipitiny-01abc.tls.certresolver"]; acme || l["traefik.http.routers.kipitiny-01abc.tls"] != "true" {
+	l := traefikLabels(store.Service{ID: "01ABC", Domain: "shop.example.com", Port: 80}, route{})
+	r := routerName(t, l)
+	if _, acme := l["traefik.http.routers."+r+".tls.certresolver"]; acme || l["traefik.http.routers."+r+".tls"] != "true" {
 		t.Errorf("tunnel labels = %v", l)
 	}
 

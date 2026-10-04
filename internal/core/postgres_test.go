@@ -97,7 +97,7 @@ func TestPostgresContainerSpec(t *testing.T) {
 	p := store.Project{ID: "P1", Name: "shop"}
 	svc := pgService()
 	svc.CPUs = 1.5
-	spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, certResolver)
+	spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, route{resolver: certResolver})
 
 	if spec.HostConfig.Memory != 512<<20 {
 		t.Errorf("memory = %d", spec.HostConfig.Memory)
@@ -128,7 +128,7 @@ func TestDatabaseRefsInSpec(t *testing.T) {
 	app := store.Service{ID: "01APP", Name: "web", Image: "app", Replicas: 1,
 		Env: map[string]string{"DATABASE_URL": "{{ db." + db.Name + ".URL }}"}}
 
-	spec := containerSpec(p, app, envSources{project: p.Env, dbs: map[string]store.Service{db.Name: db}}, "D1", 1, certResolver)
+	spec := containerSpec(p, app, envSources{project: p.Env, dbs: map[string]store.Service{db.Name: db}}, "D1", 1, route{resolver: certResolver})
 	if !slices.Contains(spec.Config.Env, "DATABASE_URL="+DatabaseURL(db)) {
 		t.Errorf("DATABASE_URL not resolved: %v", spec.Config.Env)
 	}
