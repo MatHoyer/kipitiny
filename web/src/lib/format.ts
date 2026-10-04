@@ -147,6 +147,14 @@ export function formatBytes(n: number): string {
   return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
 }
 
+/** CPU use in percent of one core, e.g. "12%" or "0.4%". */
+export function formatCpu(pct: number): string {
+  return pct < 10 ? `${pct.toFixed(1)}%` : `${Math.round(pct)}%`;
+}
+
+/** A transfer rate in bytes per second. */
+export const formatRate = (bytesPerSec: number) => `${formatBytes(Math.round(bytesPerSec))}/s`;
+
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms} ms`;
   const s = ms / 1000;

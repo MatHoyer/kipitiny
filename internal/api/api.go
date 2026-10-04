@@ -60,6 +60,8 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("POST /api/services/{id}/{action}", a.serviceAction)
 	mux.HandleFunc("GET /api/services/{id}/deployments", a.listDeployments)
 	mux.HandleFunc("GET /api/services/{id}/logs", a.streamLogs)
+	mux.HandleFunc("GET /api/services/{id}/stats", a.serviceStats)
+	mux.HandleFunc("GET /api/stats", a.usage)
 	mux.HandleFunc("GET /api/services/{id}/terminal", a.serviceTerminal)
 	mux.HandleFunc("GET /api/services/{id}/connection", a.connection)
 	mux.HandleFunc("GET /api/services/{id}/backups", a.listServiceBackups)

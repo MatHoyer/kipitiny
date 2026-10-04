@@ -225,6 +225,12 @@ Later: optional VictoriaLogs or Loki, opt-in.
 - Channels live in `notification_channels` and subscribe to event types (deploy/backup/restore/restore-test outcomes, restarted services, cleanup errors, new versions). Secrets are masked on read.
 - Core emits events where operations finish; delivery runs in the background with a timeout, and keyed events (a crash loop) are throttled.
 
+### Resource usage
+
+- Every 10 s the manager takes a one-shot `ContainerStats` of each running replica that serves traffic, on every server, and sums them per service: CPU (percent of one core, from the CPU time delta between two samples), memory (without reclaimable page cache, like `docker stats`), network bytes/s.
+- Kept in memory only: the last five minutes per service. Nothing in SQLite, no metrics container.
+- `GET /api/services/{id}/stats` (current + history, for the service page sparklines), `GET /api/stats` (current use of every service, which project and server lists add up).
+
 ## 13. UI
 
 - React SPA (Vite), React Router, TanStack Query, Tailwind. No Next.js / Node at runtime.

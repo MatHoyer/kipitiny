@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
-import { liveState, timeAgo, troubled } from "@/lib/format";
+import { memoryOf, useUsage } from "@/components/usage";
+import { formatBytes, liveState, timeAgo, troubled } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, isDatabase, type Project as ProjectT, type Service } from "../api";
 
@@ -84,6 +85,7 @@ function ProjectCard({ project: p, services, server }: { project: ProjectT; serv
   const dbKinds = [...new Set(services?.map((s) => s.kind).filter(isDatabase))];
   const states = services?.map(liveState) ?? [];
   const bad = states.filter(troubled).length;
+  const memory = memoryOf(useUsage().data, (u) => u.projectId === p.id);
 
   return (
     <Link to={`/projects/${p.id}`} className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
@@ -125,7 +127,9 @@ function ProjectCard({ project: p, services, server }: { project: ProjectT; serv
             {domains.length > 2 && <Tag>+{domains.length - 2}</Tag>}
           </div>
         )}
-        <p className="mt-auto text-xs text-muted-foreground">Updated {timeAgo(p.updatedAt)}</p>
+        <p className="mt-auto text-xs text-muted-foreground">
+          {memory ? `${formatBytes(memory)} memory · ` : ""}Updated {timeAgo(p.updatedAt)}
+        </p>
       </Card>
     </Link>
   );

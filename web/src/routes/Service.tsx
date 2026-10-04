@@ -26,6 +26,7 @@ import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { SaveBar } from "@/components/save-bar";
+import { ServiceUsageSection, UsageGrid, useServiceStats } from "@/components/usage";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
@@ -33,9 +34,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { FloatingInput } from "@/components/ui/floating-input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
-import { byDay, envMap, envRows, envSecrets, formatDuration, sameEnv, serviceState, timeAgo, type EnvRow } from "@/lib/format";
+import { byDay, envMap, envRows, envSecrets, formatBytes, formatCpu, formatDuration, sameEnv, serviceState, timeAgo, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { api, databasePorts, isDatabase, type Connection, type DatabaseKind, type Deployment, type LogLine, type Service as ServiceT } from "../api";
+import { api, databasePorts, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type LogLine, type Service as ServiceT } from "../api";
 import { BackupList } from "./BackupList";
 import { Schedules } from "./Schedules";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
@@ -201,19 +202,14 @@ export function Service() {
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
           <TabsContent value="overview" className="space-y-6">
+            {svc.containers.length > 0 && <ServiceUsageSection serviceId={svc.id} />}
             <Section title="Containers">
               {svc.containers.length === 0 ? (
                 <Empty>Not deployed yet.</Empty>
               ) : (
-                <ul className="-my-2 divide-y">
+                <ul className="-mx-3 -my-2 divide-y">
                   {svc.containers.map((c) => (
-                    <li key={c.id} className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 py-2", c.retired && "opacity-50")}>
-                      <span className="font-mono text-xs">{c.name}</span>
-                      <StateBadge state={c.health ?? c.state} />
-                      <span className="flex-1 text-right text-xs text-muted-foreground">
-                        {c.retired ? "previous deploy, kept for its logs" : c.status}
-                      </span>
-                    </li>
+                    <ContainerRow key={c.id} serviceId={svc.id} container={c} />
                   ))}
                 </ul>
               )}
@@ -267,6 +263,40 @@ export function Service() {
         </Tabs>
       </PageBody>
     </>
+  );
+}
+
+/** One container; opening it shows its own share of the service's usage. */
+function ContainerRow({ serviceId, container: c }: { serviceId: string; container: ContainerT }) {
+  const stats = useServiceStats(serviceId).data?.containers[c.id];
+  const cur = stats?.current;
+  return (
+    <Collapsible asChild>
+      <li className={cn("data-[state=open]:bg-muted/30", c.retired && "opacity-50")}>
+        <CollapsibleTrigger className="group flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left outline-none focus-visible:bg-muted/50">
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+          <span className="font-mono text-xs">{c.name}</span>
+          <StateBadge state={c.health ?? c.state} />
+          {cur && (
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {formatCpu(cur.cpu)} · {formatBytes(cur.memoryBytes)}
+            </span>
+          )}
+          <span className="flex-1 text-right text-xs text-muted-foreground">
+            {c.retired ? "previous deploy, kept for its logs" : c.status}
+          </span>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="px-3 pt-1 pb-3">
+            {cur ? (
+              <UsageGrid current={cur} history={stats.history} />
+            ) : (
+              <p className="text-sm text-muted-foreground">{c.state === "running" ? "No usage sampled yet." : "Not running."}</p>
+            )}
+          </div>
+        </CollapsibleContent>
+      </li>
+    </Collapsible>
   );
 }
 

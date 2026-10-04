@@ -34,7 +34,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "list_services", Annotations: readOnly,
 		Description: "List every project with its services, their kind, image, domain and current status."}, t.listServices)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_app_status", Annotations: readOnly,
-		Description: "Status of one service: containers and health, settings (secrets masked), the last deployments with errors."}, t.getAppStatus)
+		Description: "Status of one service: containers and health, settings (secrets masked), the last deployments with errors, current CPU/memory/network use."}, t.getAppStatus)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_logs", Annotations: readOnly,
 		Description: "Recent log lines of a service's running containers, optionally filtered by a case-insensitive substring."}, t.getLogs)
 	mcp.AddTool(server, &mcp.Tool{Name: "deploy",
@@ -162,6 +162,8 @@ type appStatusOut struct {
 	Service     core.ServiceView   `json:"service"`
 	Status      string             `json:"status"`
 	Deployments []store.Deployment `json:"recentDeployments"`
+	// Usage is the current CPU, memory and network use; nil when not running.
+	Usage *core.Usage `json:"usage,omitempty"`
 }
 
 func (t *tools) getAppStatus(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, appStatusOut, error) {
@@ -180,7 +182,11 @@ func (t *tools) getAppStatus(ctx context.Context, _ *mcp.CallToolRequest, in ser
 	if err != nil {
 		return nil, appStatusOut{}, err
 	}
-	return nil, appStatusOut{Service: view, Status: status(view), Deployments: deps[:min(len(deps), 5)]}, nil
+	stats, err := t.c.ServiceStats(ctx, svc.ID)
+	if err != nil {
+		return nil, appStatusOut{}, err
+	}
+	return nil, appStatusOut{Service: view, Status: status(view), Deployments: deps[:min(len(deps), 5)], Usage: stats.Current}, nil
 }
 
 type getLogsIn struct {
