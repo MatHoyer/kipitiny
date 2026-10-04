@@ -24,6 +24,8 @@ const (
 	EventServiceRestarted = "service.restarted"
 	EventCleanupFailed    = "cleanup.failed"
 	EventUpdateAvailable  = "update.available"
+	EventUptimeDown       = "uptime.down"
+	EventUptimeUp         = "uptime.up"
 )
 
 // EventType describes an event a channel can subscribe to.
@@ -38,6 +40,8 @@ var eventTypes = []EventType{
 	{EventDeployFailed, "Deployment failed", true},
 	{EventDeploySucceeded, "Deployment succeeded", false},
 	{EventServiceRestarted, "Stopped service restarted", true},
+	{EventUptimeDown, "Uptime check failing", true},
+	{EventUptimeUp, "Uptime check recovered", true},
 	{EventBackupFailed, "Backup failed", true},
 	{EventBackupSucceeded, "Backup succeeded", false},
 	{EventVerifyFailed, "Restore test failed", true},

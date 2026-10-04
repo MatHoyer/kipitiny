@@ -467,6 +467,39 @@ export type ServiceStats = {
 
 export type ServiceUsage = Usage & { projectId: string; serverId: string };
 
+export type UptimeCheck = {
+  serviceId: string;
+  path: string;
+  intervalSec: number;
+  timeoutSec: number;
+  /** 0 accepts any status below 400. */
+  expectedStatus: number;
+  enabled: boolean;
+  /** The state last notified, since changedAt. */
+  down: boolean;
+  changedAt?: string;
+  createdAt: string;
+};
+
+export type UptimeInput = Pick<UptimeCheck, "path" | "intervalSec" | "timeoutSec" | "expectedStatus" | "enabled">;
+
+export type UptimeResult = { at: string; ok: boolean; status?: number; latencyMs: number; error?: string };
+
+export type Uptime = {
+  /** Null when the service has no check. */
+  check: UptimeCheck | null;
+  url?: string;
+  /** Why the check isn't running. */
+  problem?: string;
+  /** The latest results since the manager started, oldest first. */
+  recent: UptimeResult[];
+  uptime24h: number | null;
+  uptime7d: number | null;
+  uptime30d: number | null;
+  /** Over the successful checks of the last 24 hours. */
+  avgLatencyMs: number | null;
+};
+
 export type Status = {
   version: string;
   update: UpdateInfo;
@@ -552,6 +585,9 @@ export const api = {
     request<void>(`/services/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),
   connection: (id: string) => request<Connection>(`/services/${id}/connection`),
   serviceStats: (id: string) => request<ServiceStats>(`/services/${id}/stats`),
+  uptime: (id: string) => request<Uptime>(`/services/${id}/uptime`),
+  setUptime: (id: string, input: UptimeInput) => request<Uptime>(`/services/${id}/uptime`, json("PUT", input)),
+  deleteUptime: (id: string) => request<void>(`/services/${id}/uptime`, { method: "DELETE" }),
   /** Current use of every running service, by service ID. */
   usage: () => request<Record<string, ServiceUsage>>("/stats"),
   serviceAction: (id: string, action: "start" | "stop" | "restart") =>

@@ -189,7 +189,7 @@ Single writer, low write volume, zero RAM overhead, state is one file.
 - WAL mode has `.db`, `.db-wal`, `.db-shm`. Never delete WAL files while running.
 - **Backing up SQLite:** `VACUUM INTO '/backups/kipitiny-<date>.db'`, then upload with the same S3 code. Optional: Litestream.
 - `STRICT` tables.
-- **Do not store** container logs or metrics in SQLite.
+- **Do not store** container logs or metrics in SQLite. Exception: uptime checks keep one row per service and hour (counts and summed response time), pruned after 30 days.
 
 ### Postgres compatibility
 
@@ -230,6 +230,12 @@ Later: optional VictoriaLogs or Loki, opt-in.
 - Every 10 s the manager takes a one-shot `ContainerStats` of each running replica that serves traffic, on every server, and sums them per service: CPU (percent of one core, from the CPU time delta between two samples), memory (without reclaimable page cache, like `docker stats`), network bytes/s.
 - Kept in memory only: the last five minutes per service. Nothing in SQLite, no metrics container.
 - `GET /api/services/{id}/stats` (current + history, for the service page sparklines), `GET /api/stats` (current use of every service, which project and server lists add up).
+
+### Uptime checks
+
+- One optional check per app with a public domain: `GET https://<domain><path>` every 30–3600 s (default 60), with a timeout and an expected status (default: any below 400; redirects are not followed). Runs in the manager through `internal/probe`, no extra container. Stopped or undeployed services are skipped.
+- Debounce: down after 3 failures in a row, up again after 2 successes. Transitions go out as `uptime.down` / `uptime.up` events through the notification channels; the notified state is stored on the check so a restart doesn't repeat or lose it.
+- The last 60 results live in memory (the service page's bars and response times); hourly counts in `uptime_hours` give the 24 h / 7 d / 30 d percentages.
 
 ## 13. UI
 
