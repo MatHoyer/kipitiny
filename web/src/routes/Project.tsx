@@ -12,6 +12,7 @@ import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { MapLegend, ServerCard } from "@/components/topology";
 import { SaveBar } from "@/components/save-bar";
+import { memoryOf, useUsage } from "@/components/usage";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
@@ -28,7 +29,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
-import { dbFields, dbRef, envMap, envRows, envSecrets, liveState, sameEnv, troubled, type EnvRow } from "@/lib/format";
+import { dbFields, dbRef, envMap, envRows, envSecrets, formatBytes, liveState, sameEnv, troubled, type EnvRow } from "@/lib/format";
 import {
   api,
   isDatabase,
@@ -59,6 +60,7 @@ export function Project() {
     if (res.error) toast.warning("Some databases were not backed up", { description: res.error });
   };
   const hasDatabases = services.data?.some((s) => s.kind === "postgres");
+  const memory = memoryOf(useUsage().data, (u) => u.projectId === id);
   const remove = useMutation({
     meta: { error: "Couldn't delete the project" },
     mutationFn: (confirm: string) => api.deleteProject(id, confirm),
@@ -91,7 +93,13 @@ export function Project() {
         {list.length > 0 && (
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatCard icon={Layers} label="Services" value={list.length} />
-            <StatCard icon={Activity} label="Running" value={states.filter((s) => s === "running").length} tone="good" />
+            <StatCard
+              icon={Activity}
+              label="Running"
+              value={states.filter((s) => s === "running").length}
+              hint={memory !== undefined && `${formatBytes(memory)} memory in use`}
+              tone="good"
+            />
             <StatCard icon={Database} label="Databases" value={dbs.length} />
             <StatCard
               icon={TriangleAlert}
@@ -207,6 +215,7 @@ function ServiceGroup({ title, services }: { title: string; services: ServiceT[]
 function ServiceCard({ svc: s }: { svc: ServiceT }) {
   const isDb = isDatabase(s.kind);
   const live = s.containers.filter((c) => !c.retired);
+  const used = useUsage().data?.[s.id]?.memoryBytes;
   return (
     <Link to={`/services/${s.id}`} className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
       <Card className="h-full gap-3 px-4 transition-all group-hover:-translate-y-px group-hover:shadow-md group-hover:ring-foreground/20">
@@ -234,7 +243,10 @@ function ServiceCard({ svc: s }: { svc: ServiceT }) {
         <div className="mt-auto flex flex-wrap items-center gap-1.5">
           {isDb ? (
             <>
-              <Tag>{s.memoryMb} MB</Tag>
+              <Tag>
+                {used !== undefined && `${formatBytes(used)} / `}
+                {s.memoryMb} MB
+              </Tag>
               {s.cpus > 0 && <Tag>{s.cpus} CPU</Tag>}
             </>
           ) : (
@@ -246,6 +258,7 @@ function ServiceCard({ svc: s }: { svc: ServiceT }) {
               <Tag>
                 {live.filter((c) => c.state === "running").length}/{s.replicas} replica{s.replicas > 1 ? "s" : ""}
               </Tag>
+              {used !== undefined && <Tag>{formatBytes(used)} memory</Tag>}
             </>
           )}
         </div>

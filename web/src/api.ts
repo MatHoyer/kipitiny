@@ -442,6 +442,31 @@ export type UpdateInfo = {
   error?: string;
 };
 
+/** A service's resource use at one moment, summed over its running replicas. */
+export type Usage = {
+  at: string;
+  replicas: number;
+  /** Percent of one core: 200 is two busy cores. */
+  cpu: number;
+  memoryBytes: number;
+  /** Limit of those replicas together; absent when unlimited. */
+  memoryLimitBytes?: number;
+  /** Bytes per second. */
+  netRx: number;
+  netTx: number;
+};
+
+export type ServiceStats = {
+  /** Null while the service runs no replica. */
+  current: Usage | null;
+  /** The last five minutes, one point every ten seconds. */
+  history: Usage[];
+  /** The same for each replica, by short container ID. */
+  containers: Record<string, { current: Usage | null; history: Usage[] }>;
+};
+
+export type ServiceUsage = Usage & { projectId: string; serverId: string };
+
 export type Status = {
   version: string;
   update: UpdateInfo;
@@ -526,6 +551,9 @@ export const api = {
   deleteService: (id: string, confirm = "") =>
     request<void>(`/services/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),
   connection: (id: string) => request<Connection>(`/services/${id}/connection`),
+  serviceStats: (id: string) => request<ServiceStats>(`/services/${id}/stats`),
+  /** Current use of every running service, by service ID. */
+  usage: () => request<Record<string, ServiceUsage>>("/stats"),
   serviceAction: (id: string, action: "start" | "stop" | "restart") =>
     request<Service>(`/services/${id}/${action}`, { method: "POST" }),
 

@@ -30,6 +30,7 @@ import {
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { SaveBar } from "@/components/save-bar";
+import { memoryOf, useUsage } from "@/components/usage";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
@@ -43,7 +44,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
-import { api, SECRET_MASK, type Server, type ServerInput } from "@/api";
+import { api, SECRET_MASK, type Server, type ServerInput, type ServiceUsage } from "@/api";
+import { formatBytes } from "@/lib/format";
 import { SettingsPage } from "./page";
 
 const address = (s: Server) => (s.kind === "local" ? "the manager's own Docker" : `ssh://${s.sshUser}@${s.host}:${s.port}`);
@@ -98,6 +100,7 @@ export function ServerPage() {
   const navigate = useNavigate();
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.servers, refetchInterval: 30_000 });
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
+  const usage = useUsage();
   const remove = useMutation({
     meta: { error: "Couldn't remove the server" },
     mutationFn: api.deleteServer,
@@ -119,6 +122,8 @@ export function ServerPage() {
     );
 
   const own = projects.data?.filter((p) => p.serverId === s.id) ?? [];
+  const memory = (keep: (u: ServiceUsage) => boolean) => memoryOf(usage.data, keep);
+  const total = memory((u) => u.serverId === s.id);
 
   return (
     <>
@@ -132,7 +137,12 @@ export function ServerPage() {
             hint={s.docker ? `${s.docker.os} · ${s.docker.arch}` : s.dockerError}
             tone={s.docker ? "good" : "bad"}
           />
-          <StatCard icon={FolderKanban} label="Projects" value={s.projects} />
+          <StatCard
+            icon={FolderKanban}
+            label="Projects"
+            value={s.projects}
+            hint={total !== undefined && `${formatBytes(total)} memory in use`}
+          />
           <StatCard icon={s.kind === "local" ? HardDrive : ServerIcon} label="Connection" value={s.kind === "local" ? "Local" : "SSH"} hint={address(s)} />
           <StatCard icon={s.tunnel ? Cloud : Globe} label="Reached through" value={s.tunnel ? "Tunnel" : "IP"} hint={exposure(s)} />
         </div>
@@ -153,7 +163,10 @@ export function ServerPage() {
                   <Link to={`/projects/${p.id}`} className="flex items-center gap-2 py-2.5 text-sm hover:underline">
                     <FolderKanban className="size-4 text-muted-foreground" />
                     {p.name}
-                    <ChevronRight className="ml-auto size-4 text-muted-foreground" />
+                    <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+                      {formatBytes(memory((u) => u.projectId === p.id) ?? 0)}
+                    </span>
+                    <ChevronRight className="size-4 text-muted-foreground" />
                   </Link>
                 </li>
               ))}

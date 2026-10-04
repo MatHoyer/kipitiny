@@ -73,6 +73,20 @@ func (a *API) connection(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, conn)
 }
 
+func (a *API) serviceStats(w http.ResponseWriter, r *http.Request) {
+	st, err := a.core.ServiceStats(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, st)
+}
+
+// usage returns the current resource use of every running service.
+func (a *API) usage(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.core.CurrentUsage())
+}
+
 func (a *API) deployService(w http.ResponseWriter, r *http.Request) {
 	var opts core.DeployOptions // optional: an empty body deploys the current settings
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
