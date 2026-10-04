@@ -117,6 +117,20 @@ func (c *Core) certResolver(ctx context.Context, serverID, domain string) string
 	}
 }
 
+// behindCloudflare reports whether requests for host on serverID come
+// through Cloudflare: always behind the tunnel, else when the manager keeps
+// host's record proxied.
+func (c *Core) behindCloudflare(ctx context.Context, serverID, host string) bool {
+	if c.viaTunnel(ctx, serverID) {
+		return true
+	}
+	if !c.onCloudflare(ctx, host) {
+		return false
+	}
+	domains, err := c.store.ListDomains(ctx)
+	return err == nil && proxiedFor(domains, host)
+}
+
 // cfToken is the Cloudflare API token, or "" when not connected.
 func (c *Core) cfToken(ctx context.Context) string {
 	s := c.cf(ctx)

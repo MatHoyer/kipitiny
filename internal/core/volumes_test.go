@@ -59,7 +59,7 @@ func TestAppVolumeMounts(t *testing.T) {
 	p := store.Project{ID: "P1", Name: "shop"}
 	svc := store.Service{ID: "01ABC", ProjectID: "P1", Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 2,
 		Volumes: []store.Volume{{Name: "uploads", Path: "/app/uploads"}}}
-	mounts := containerSpec(p, svc, envSources{}, "D1", 1, "").HostConfig.Mounts
+	mounts := containerSpec(p, svc, envSources{}, "D1", 1, route{}).HostConfig.Mounts
 	if len(mounts) != 1 {
 		t.Fatalf("mounts = %+v", mounts)
 	}

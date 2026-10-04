@@ -271,6 +271,8 @@ type Service struct {
 	// Volumes are named volumes an app mounts, shared by its replicas and
 	// kept across deploys. Databases keep their data in their own volume.
 	Volumes []Volume `bun:"volumes" json:"volumes"`
+	// Middlewares apply to a public app's requests through Traefik.
+	Middlewares Middlewares `bun:"middlewares,type:text" json:"middlewares"`
 	// PreBackup runs (sh -c) in a running replica before each volume
 	// backup, e.g. to flush to disk. A failure aborts the backup.
 	PreBackup           string `bun:"pre_backup" json:"preBackup"`
@@ -286,6 +288,42 @@ type Service struct {
 type Volume struct {
 	Name string `json:"name"`
 	Path string `json:"path"`
+}
+
+// Middlewares are the Traefik middlewares on an app's router; the zero
+// value adds none.
+type Middlewares struct {
+	// BasicAuth asks for one of these users' credentials.
+	BasicAuth []BasicAuthUser `json:"basicAuth,omitempty"`
+	// IPAllowList limits clients to these IPs or CIDR ranges.
+	IPAllowList []string `json:"ipAllowList,omitempty"`
+	// RateLimit caps requests per client IP; nil means unlimited.
+	RateLimit *RateLimit `json:"rateLimit,omitempty"`
+	// Headers are set on every response; an empty value removes the header.
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// BasicAuthUser is one basic auth login. Its password is either stored as
+// Hash or read from a password manager at deploy (Ref).
+type BasicAuthUser struct {
+	Name string `json:"name"`
+	// Hash is the bcrypt hash of the password. For a Ref user it is only
+	// set in deployment snapshots, hashed from the value fetched at deploy.
+	Hash string `json:"hash,omitempty"`
+	// Ref is a password manager reference, {{ scheme://… }}.
+	Ref string `json:"ref,omitempty"`
+}
+
+// RateLimit allows Average requests per second per client IP, with bursts
+// of up to Burst requests.
+type RateLimit struct {
+	Average int `json:"average"`
+	Burst   int `json:"burst"`
+}
+
+// IsZero reports whether no middleware is configured.
+func (m Middlewares) IsZero() bool {
+	return len(m.BasicAuth) == 0 && len(m.IPAllowList) == 0 && m.RateLimit == nil && len(m.Headers) == 0
 }
 
 type DeploymentStatus string

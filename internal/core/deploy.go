@@ -248,6 +248,16 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 	if err != nil {
 		return err
 	}
+	if n, err := c.hashBasicAuth(ctx, &svc); err != nil {
+		return err
+	} else if n > 0 {
+		logf("Fetched %d basic auth password(s) from password managers", n)
+		// Replicas recreated later reuse these hashes, so they define the
+		// same middleware as their siblings without fetching again.
+		if err := c.store.SetDeploymentImage(ctx, dep.ID, svc.Image, svc); err != nil {
+			return err
+		}
+	}
 	dbs := src.dbs
 	for _, name := range slices.Sorted(maps.Keys(dbs)) {
 		if usesDatabase(svc.Env, name) {
@@ -315,7 +325,7 @@ func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Se
 			return err
 		}
 	}
-	spec := containerSpec(project, svc, src, dep.ID, 1, c.certResolver(ctx, svc.ServerID, svc.Domain))
+	spec := containerSpec(project, svc, src, dep.ID, 1, c.routeFor(ctx, svc))
 	logf("Starting %s", spec.Name)
 	id, err := dk.Run(ctx, spec)
 	if err != nil {
@@ -373,7 +383,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 		}
 	}
 	for i := 1; i <= svc.Replicas; i++ {
-		spec := replicaSpec(project, svc, src, dep.ID, i, probe, c.certResolver(ctx, svc.ServerID, svc.Domain))
+		spec := replicaSpec(project, svc, src, dep.ID, i, probe, c.routeFor(ctx, svc))
 		logf("Starting %s", spec.Name)
 		id, err := dk.Run(ctx, spec)
 		if err != nil {
@@ -446,7 +456,7 @@ func readinessMode(svc store.Service) string {
 
 // containerSpec builds the container for one replica. src resolves env
 // references.
-func containerSpec(project store.Project, svc store.Service, src envSources, deployID string, replica int, resolver string) client.ContainerCreateOptions {
+func containerSpec(project store.Project, svc store.Service, src envSources, deployID string, replica int, rt route) client.ContainerCreateOptions {
 	labels := map[string]string{
 		docker.LabelManaged: "true",
 		docker.LabelProject: project.ID,
@@ -459,7 +469,7 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 		docker.ProjectNetwork(project.ID): {Aliases: []string{svc.Name}},
 	}
 	if svc.Domain != "" {
-		maps.Copy(labels, traefikLabels(svc, resolver))
+		maps.Copy(labels, traefikLabels(svc, rt))
 		endpoints[docker.ProxyNetwork] = &network.EndpointSettings{}
 	}
 
