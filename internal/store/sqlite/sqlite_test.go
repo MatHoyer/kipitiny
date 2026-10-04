@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -482,6 +483,44 @@ func TestSnapshotBeforeMigrating(t *testing.T) {
 	s.Close()
 	if _, err := os.Stat(snap); !os.IsNotExist(err) {
 		t.Error("snapshot taken without pending migrations")
+	}
+}
+
+func TestRefuseNewerSchema(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "k.db")
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+
+	// A newer binary applied a migration this one doesn't know.
+	sub, _ := fs.Sub(migrations, "migrations")
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := goose.NewProvider(goose.DialectSQLite3, db, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcs := p.ListSources()
+	latest := srcs[len(srcs)-1].Version
+	if _, err := db.ExecContext(ctx, "INSERT INTO goose_db_version (version_id, is_applied) VALUES (?, 1)", latest+1); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	want := fmt.Sprintf("database schema is at %d, this version knows up to %d", latest+1, latest)
+	if _, err := Open(ctx, path); err == nil || !strings.Contains(err.Error(), want) || strings.Contains(err.Error(), "restore") {
+		t.Fatalf("open newer schema: %v", err)
+	}
+
+	snap := fmt.Sprintf("%s.pre-migrate-%d", path, latest)
+	os.WriteFile(snap, nil, 0o600)
+	if _, err := Open(ctx, path); err == nil || !strings.HasSuffix(err.Error(), "or restore "+snap) {
+		t.Fatalf("open newer schema with snapshot: %v", err)
 	}
 }
 

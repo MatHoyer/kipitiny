@@ -69,6 +69,13 @@ func migrate(ctx context.Context, db *sql.DB, path string) error {
 	if err != nil {
 		return fmt.Errorf("goose: %w", err)
 	}
+	v, err := p.GetDBVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	if err := checkNotAhead(path, v, p.ListSources()); err != nil {
+		return err
+	}
 	pending, err := p.HasPending(ctx)
 	if err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -76,9 +83,7 @@ func migrate(ctx context.Context, db *sql.DB, path string) error {
 	if !pending {
 		return nil
 	}
-	if v, err := p.GetDBVersion(ctx); err != nil {
-		return fmt.Errorf("migrate: %w", err)
-	} else if v > 0 {
+	if v > 0 {
 		snap := fmt.Sprintf("%s.pre-migrate-%d", path, v)
 		_ = os.Remove(snap) // VACUUM INTO refuses to overwrite
 		if _, err := db.ExecContext(ctx, "VACUUM INTO ?", snap); err != nil {
@@ -90,6 +95,24 @@ func migrate(ctx context.Context, db *sql.DB, path string) error {
 		return fmt.Errorf("migrate: %w", err)
 	}
 	return nil
+}
+
+// checkNotAhead refuses a database migrated by a newer binary: this one
+// would find nothing pending and run on a schema it doesn't know.
+func checkNotAhead(path string, v int64, srcs []*goose.Source) error {
+	if len(srcs) == 0 {
+		return nil
+	}
+	latest := srcs[len(srcs)-1].Version
+	if v <= latest {
+		return nil
+	}
+	msg := fmt.Sprintf("database schema is at %d, this version knows up to %d: run a newer version", v, latest)
+	snap := fmt.Sprintf("%s.pre-migrate-%d", path, latest)
+	if _, err := os.Stat(snap); err == nil {
+		msg += ", or restore " + snap
+	}
+	return errors.New(msg)
 }
 
 // prunePreMigrate keeps the newest keepPreMigrate snapshots.
