@@ -133,7 +133,7 @@ Replicas on one host = several identical containers with **identical Traefik rou
 ### Requirements for user apps
 
 - **Stateless:** sessions in DB/Redis/signed cookies.
-- **Files:** S3 or a shared named volume.
+- **Files:** S3 or an app **volume**: a named volume (`kipitiny-vol-<service>-<name>`, labelled with project and service) mounted at a path in every replica and the pre-deploy container. Replicas share it, so concurrent writers must cope. Docker creates it on first use; it survives deploys and goes away with the service (delete confirms with the name). A volume removed from the settings keeps its data until then.
 - **Migrations:** run once via a **pre-deploy command** in a one-off container.
 - **Cron/background jobs:** separate service with 1 replica.
 - **Postgres services are always 1 replica.**

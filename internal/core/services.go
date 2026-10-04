@@ -47,6 +47,8 @@ type ServiceInput struct {
 	CPUs       float64  `json:"cpus"`
 	HealthPath string   `json:"healthPath"`
 	PreDeploy  string   `json:"preDeploy"`
+	// Volumes are named volumes mounted in every replica (apps only).
+	Volumes []store.Volume `json:"volumes"`
 }
 
 // ServicePatch updates only the fields that are set. Env replaces the whole
@@ -63,6 +65,8 @@ type ServicePatch struct {
 	CPUs       *float64          `json:"cpus"`
 	HealthPath *string           `json:"healthPath"`
 	PreDeploy  *string           `json:"preDeploy"`
+	// Volumes replaces the app's volumes; nil keeps them.
+	Volumes []store.Volume `json:"volumes"`
 }
 
 type ContainerView struct {
@@ -110,6 +114,7 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		CPUs:       in.CPUs,
 		HealthPath: strings.TrimSpace(in.HealthPath),
 		PreDeploy:  strings.TrimSpace(in.PreDeploy),
+		Volumes:    normalizeVolumes(in.Volumes),
 	}
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
@@ -197,6 +202,9 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	if p.PreDeploy != nil {
 		svc.PreDeploy = strings.TrimSpace(*p.PreDeploy)
 	}
+	if p.Volumes != nil {
+		svc.Volumes = normalizeVolumes(p.Volumes)
+	}
 	if svc.Kind.IsDatabase() {
 		if err := checkDatabaseUpdate(old, svc); err != nil {
 			return ServiceView{}, err
@@ -255,7 +263,13 @@ func validateService(s store.Service) error {
 		return fmt.Errorf("%w: CPU limit must be between %g and %g cores", ErrInvalid, minCPUs, maxCPUs)
 	}
 	if s.Kind.IsDatabase() {
+		if len(s.Volumes) > 0 {
+			return fmt.Errorf("%w: databases keep their data in their own volume", ErrInvalid)
+		}
 		return validateDatabase(s)
+	}
+	if err := validateVolumes(s.Volumes); err != nil {
+		return err
 	}
 	if s.HealthPath != "" {
 		if !strings.HasPrefix(s.HealthPath, "/") || strings.ContainsAny(s.HealthPath, " \t\n") {
@@ -406,12 +420,15 @@ func masked(s store.Service) store.Service {
 	if s.Secrets == nil {
 		s.Secrets = []string{}
 	}
+	if s.Volumes == nil {
+		s.Volumes = []store.Volume{}
+	}
 	return s
 }
 
 // DeleteService removes the service's containers, its record and deploy logs.
-// Deleting a database also destroys its data volume, so confirm must repeat
-// the service name.
+// Deleting a database or an app with volumes also destroys its data, so
+// confirm must repeat the service name.
 func (c *Core) DeleteService(ctx context.Context, id, confirm string) error {
 	unlock, err := c.lockService(id)
 	if err != nil {
@@ -423,10 +440,10 @@ func (c *Core) DeleteService(ctx context.Context, id, confirm string) error {
 	if err != nil {
 		return err
 	}
+	if hasData(svc) && confirm != svc.Name {
+		return fmt.Errorf("%w: deleting %s destroys its data; confirm with the service name", ErrInvalid, svc.Name)
+	}
 	if svc.Kind.IsDatabase() {
-		if confirm != svc.Name {
-			return fmt.Errorf("%w: deleting a database destroys its data; confirm with the service name", ErrInvalid)
-		}
 		siblings, err := c.store.ListServices(ctx, svc.ProjectID)
 		if err != nil {
 			return err
@@ -448,7 +465,7 @@ func (c *Core) DeleteService(ctx context.Context, id, confirm string) error {
 	return nil
 }
 
-// removeServiceContainers removes containers and, for databases, the volume.
+// removeServiceContainers removes containers and the service's volumes.
 func (c *Core) removeServiceContainers(ctx context.Context, svc store.Service) error {
 	cts, err := c.serviceContainers(ctx, svc)
 	if err != nil {
@@ -460,10 +477,7 @@ func (c *Core) removeServiceContainers(ctx context.Context, svc store.Service) e
 			return err
 		}
 	}
-	if vol := DataVolume(svc); vol != "" {
-		return dk.RemoveVolume(ctx, vol)
-	}
-	return nil
+	return removeServiceVolumes(ctx, dk, svc)
 }
 
 type Action string

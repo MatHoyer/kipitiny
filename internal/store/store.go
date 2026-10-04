@@ -267,13 +267,22 @@ type Service struct {
 	HealthPath string `bun:"health_path" json:"healthPath"`
 	// PreDeploy runs once (sh -c) in a one-off container before a rollout,
 	// e.g. migrations. A failure aborts the deploy.
-	PreDeploy           string `bun:"pre_deploy" json:"preDeploy"`
-	CurrentDeploymentID string `bun:"current_deployment_id" json:"currentDeploymentId"`
+	PreDeploy string `bun:"pre_deploy" json:"preDeploy"`
+	// Volumes are named volumes an app mounts, shared by its replicas and
+	// kept across deploys. Databases keep their data in their own volume.
+	Volumes             []Volume `bun:"volumes" json:"volumes"`
+	CurrentDeploymentID string   `bun:"current_deployment_id" json:"currentDeploymentId"`
 	// Stopped is the desired run state after the user stopped the service.
 	Stopped bool `bun:"stopped" json:"stopped"`
 
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 	UpdatedAt time.Time `bun:"updated_at" json:"updatedAt"`
+}
+
+// Volume is a named volume mounted at Path in every replica of an app.
+type Volume struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
 }
 
 type DeploymentStatus string
