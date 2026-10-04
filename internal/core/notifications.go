@@ -24,6 +24,8 @@ const (
 	EventServiceRestarted = "service.restarted"
 	EventCleanupFailed    = "cleanup.failed"
 	EventUpdateAvailable  = "update.available"
+	EventServiceUnhealthy = "service.unhealthy"
+	EventServiceHealthy   = "service.healthy"
 	EventUptimeDown       = "uptime.down"
 	EventUptimeUp         = "uptime.up"
 )
@@ -40,6 +42,8 @@ var eventTypes = []EventType{
 	{EventDeployFailed, "Deployment failed", true},
 	{EventDeploySucceeded, "Deployment succeeded", false},
 	{EventServiceRestarted, "Stopped service restarted", true},
+	{EventServiceUnhealthy, "Service unhealthy", true},
+	{EventServiceHealthy, "Service healthy again", true},
 	{EventUptimeDown, "Uptime check failing", true},
 	{EventUptimeUp, "Uptime check recovered", true},
 	{EventBackupFailed, "Backup failed", true},

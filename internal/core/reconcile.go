@@ -172,6 +172,7 @@ func (c *Core) reconcileServer(ctx context.Context, sv store.Server, svcs []stor
 	}
 
 	var errs []error
+	now := time.Now()
 	known := map[string]bool{}
 	projects := map[string]store.Project{}
 	for _, svc := range svcs {
@@ -188,10 +189,12 @@ func (c *Core) reconcileServer(ctx context.Context, sv store.Server, svcs []stor
 				continue
 			}
 		}
+		c.trackHealth(p, svc, byService[svc.ID], now)
 		if err := c.reconcileService(ctx, p, svc, byService[svc.ID]); err != nil {
 			errs = append(errs, fmt.Errorf("%s/%s: %w", p.Name, svc.Name, err))
 		}
 	}
+	c.forgetHealth(sv.ID, known)
 
 	// Containers of services that no longer exist (e.g. a delete interrupted
 	// by a crash).
