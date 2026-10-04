@@ -26,6 +26,7 @@ import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { SaveBar } from "@/components/save-bar";
+import { UptimeSection } from "@/components/uptime";
 import { ServiceUsageSection, UsageGrid, useServiceStats } from "@/components/usage";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -203,6 +204,7 @@ export function Service() {
           </TabsList>
           <TabsContent value="overview" className="space-y-6">
             {svc.containers.length > 0 && <ServiceUsageSection serviceId={svc.id} />}
+            {svc.kind === "app" && <UptimeSection svc={svc} />}
             <Section title="Containers">
               {svc.containers.length === 0 ? (
                 <Empty>Not deployed yet.</Empty>

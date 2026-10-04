@@ -66,6 +66,8 @@ type Core struct {
 	totpSetups    pending[string] // user ID -> secret awaiting its first code
 	ceremonies    pending[ceremony]
 	stats         statsState
+	uptime        uptimeState
+	uptimeHTTP    *http.Client // nil: probe's default; tests redirect it
 }
 
 // New builds the core around the local Docker client; remote servers are

@@ -87,6 +87,36 @@ func (a *API) usage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a.core.CurrentUsage())
 }
 
+func (a *API) uptime(w http.ResponseWriter, r *http.Request) {
+	v, err := a.core.Uptime(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+func (a *API) setUptime(w http.ResponseWriter, r *http.Request) {
+	var in core.UptimeInput
+	if !decode(w, r, &in) {
+		return
+	}
+	v, err := a.core.SetUptime(r.Context(), r.PathValue("id"), in)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+func (a *API) deleteUptime(w http.ResponseWriter, r *http.Request) {
+	if err := a.core.DeleteUptime(r.Context(), r.PathValue("id")); err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (a *API) deployService(w http.ResponseWriter, r *http.Request) {
 	var opts core.DeployOptions // optional: an empty body deploys the current settings
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))

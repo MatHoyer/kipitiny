@@ -69,6 +69,8 @@ export const stateColors: Record<string, string> = {
   created: "bg-amber-500",
   dead: "bg-red-500",
   failed: "bg-red-500",
+  up: "bg-emerald-500",
+  down: "bg-red-500",
 };
 
 export function StateBadge({ state, className }: { state: string; className?: string }) {

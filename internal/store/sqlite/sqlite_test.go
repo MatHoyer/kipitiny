@@ -795,3 +795,69 @@ func TestRedisMigration(t *testing.T) {
 		t.Fatalf("deployment not cascaded: %v", err)
 	}
 }
+
+func TestUptime(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	p, err := s.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := s.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetUptimeCheck(ctx, svc.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("before: %v", err)
+	}
+	c, err := s.SaveUptimeCheck(ctx, store.UptimeCheck{ServiceID: svc.ID, Path: "/", IntervalSec: 60, TimeoutSec: 10, Enabled: true})
+	if err != nil || c.Down || c.ChangedAt != nil {
+		t.Fatalf("create: %+v %v", c, err)
+	}
+	since := time.Now()
+	if err := s.SetUptimeState(ctx, svc.ID, true, since); err != nil {
+		t.Fatal(err)
+	}
+	// Saving the settings again keeps the state.
+	c, err = s.SaveUptimeCheck(ctx, store.UptimeCheck{ServiceID: svc.ID, Path: "/health", IntervalSec: 30, TimeoutSec: 5, ExpectedStatus: 204})
+	if err != nil || c.Path != "/health" || c.IntervalSec != 30 || c.ExpectedStatus != 204 || c.Enabled || !c.Down || c.ChangedAt == nil {
+		t.Fatalf("update: %+v %v", c, err)
+	}
+	if cs, err := s.ListUptimeChecks(ctx); err != nil || len(cs) != 1 {
+		t.Fatalf("list: %v %v", cs, err)
+	}
+
+	h0 := time.Date(2026, 10, 4, 9, 0, 0, 0, time.UTC)
+	for _, r := range []struct {
+		at time.Time
+		ok bool
+		ms int
+	}{{h0.Add(time.Minute), true, 100}, {h0.Add(2 * time.Minute), false, 0}, {h0.Add(3 * time.Minute), true, 50}, {h0.Add(time.Hour), true, 10}} {
+		if err := s.AddUptimeResult(ctx, svc.ID, r.at, r.ok, time.Duration(r.ms)*time.Millisecond); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hs, err := s.ListUptimeHours(ctx, svc.ID, h0.Add(30*time.Minute))
+	if err != nil || len(hs) != 2 {
+		t.Fatalf("hours: %+v %v", hs, err)
+	}
+	if h := hs[0]; !h.Hour.Equal(h0) || h.Checks != 3 || h.Failures != 1 || h.LatencyMS != 150 {
+		t.Errorf("first hour: %+v", h)
+	}
+	if err := s.PruneUptime(ctx, h0.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if hs, _ := s.ListUptimeHours(ctx, svc.ID, h0); len(hs) != 1 || hs[0].Checks != 1 {
+		t.Errorf("after prune: %+v", hs)
+	}
+
+	if err := s.DeleteUptimeCheck(ctx, svc.ID); err != nil {
+		t.Fatal(err)
+	}
+	if hs, _ := s.ListUptimeHours(ctx, svc.ID, h0); len(hs) != 0 {
+		t.Errorf("results kept after delete: %+v", hs)
+	}
+	if err := s.DeleteUptimeCheck(ctx, svc.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("delete again: %v", err)
+	}
+}
