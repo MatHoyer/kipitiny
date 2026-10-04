@@ -17,7 +17,7 @@ type passwordBody struct {
 
 // confirmAllowed refuses while the caller's IP is locked out.
 func (a *API) confirmAllowed(w http.ResponseWriter, r *http.Request) bool {
-	if !a.limiter.allow(clientIP(r, a.core.BehindTunnel(r.Context()))) {
+	if !a.limiter.allow(a.clientIP(r)) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return false
 	}
@@ -27,7 +27,7 @@ func (a *API) confirmAllowed(w http.ResponseWriter, r *http.Request) bool {
 // failConfirm counts a wrong password against the caller's IP.
 func (a *API) failConfirm(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, core.ErrWrongPassword) {
-		a.limiter.fail(clientIP(r, a.core.BehindTunnel(r.Context())))
+		a.limiter.fail(a.clientIP(r))
 	}
 	a.fail(w, err)
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/netip"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -114,6 +115,8 @@ func TestLoginRateLimit(t *testing.T) {
 }
 
 func TestClientIP(t *testing.T) {
+	traefik := netip.MustParseAddr("172.18.0.2")
+	trusted := func(ip netip.Addr) bool { return ip.IsLoopback() || ip == traefik }
 	tests := []struct {
 		name, remote, xff, cf, want string
 		tunnel                      bool
@@ -124,6 +127,9 @@ func TestClientIP(t *testing.T) {
 		{"last hop wins", "172.18.0.2:5000", "10.0.0.1, 198.51.100.1", "", "198.51.100.1", false},
 		{"garbage header", "172.18.0.2:5000", "nope", "", "172.18.0.2", false},
 		{"loopback without header", "127.0.0.1:5000", "", "", "127.0.0.1", false},
+		{"loopback proxy", "127.0.0.1:5000", "198.51.100.1", "", "198.51.100.1", false},
+		{"container on the proxy network can't spoof", "172.18.0.5:5000", "198.51.100.1", "", "172.18.0.5", false},
+		{"container can't spoof cloudflare", "172.18.0.5:5000", "", "198.51.100.1", "172.18.0.5", true},
 		{"tunnel uses cloudflare header", "172.18.0.2:5000", "172.18.0.9", "198.51.100.1", "198.51.100.1", true},
 		{"cloudflare header ignored without tunnel", "172.18.0.2:5000", "198.51.100.2", "198.51.100.1", "198.51.100.2", false},
 		{"public peer can't spoof cloudflare", "203.0.113.7:5000", "", "198.51.100.1", "203.0.113.7", true},
@@ -138,7 +144,7 @@ func TestClientIP(t *testing.T) {
 			if tt.cf != "" {
 				r.Header.Set("CF-Connecting-IP", tt.cf)
 			}
-			if got := clientIP(r, tt.tunnel); got != tt.want {
+			if got := clientIP(r, trusted, tt.tunnel); got != tt.want {
 				t.Errorf("clientIP = %q, want %q", got, tt.want)
 			}
 		})

@@ -293,6 +293,7 @@ KIPITINY_VERSION=dev docker compose up -d   # run that build
 | `KIPITINY_DATA_DIR`  | `/data` | SQLite DB, deploy logs, local backups. Local disk only. |
 | `KIPITINY_LOG_LEVEL` | `info`  | `debug`, `info`, `warn`, `error` |
 | `KIPITINY_SETUP_TOKEN` | random | Fix the first-run setup token instead of generating one |
+| `KIPITINY_TRUSTED_PROXIES` | — | Comma-separated CIDRs/IPs allowed to set `X-Forwarded-For` (your own proxy). Loopback and the managed Traefik are always trusted |
 | `KIPITINY_TRAEFIK`   | `true`  | Run and maintain the Traefik container (`false` to bring your own) |
 | `KIPITINY_TRAEFIK_IMAGE` | `traefik:v3.7` | |
 | `KIPITINY_HTTP_PORT` / `KIPITINY_HTTPS_PORT` | `80` / `443` | Host ports Traefik binds |

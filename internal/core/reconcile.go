@@ -150,6 +150,9 @@ func (c *Core) reconcileServer(ctx context.Context, sv store.Server, svcs []stor
 		if err := c.ensureTraefik(ctx, sv); err != nil {
 			c.log.Warn("reconcile: traefik", "server", sv.Name, "err", err)
 		}
+		if sv.Kind == store.ServerLocal {
+			c.refreshProxy(ctx)
+		}
 		if err := c.ensureTunnel(ctx, sv); err != nil {
 			c.log.Warn("reconcile: cloudflared", "server", sv.Name, "err", err)
 		}
