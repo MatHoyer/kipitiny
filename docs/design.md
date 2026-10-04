@@ -11,7 +11,7 @@ Lightweight self-hosted PaaS (apps + Postgres with clean backups), similar in sp
 
 ## 2. Non-goals (for now)
 
-- No Docker Swarm, no Kubernetes.
+- No Docker Swarm services, no Kubernetes (Swarm's overlay network may be used for multi-server, §15).
 - No multi-tenant hosted service.
 - No database replication / HA Postgres.
 - No manager high availability (single manager instance).
@@ -247,13 +247,21 @@ Clients ────┤                            ├──→ core (service la
 - Task-oriented tools, not 1:1 REST mapping: `deploy_image`, `get_app_status`, `get_logs`, `rollback`, `backup_database`, `restore_database`.
 - Mask secrets in every tool response; scoped tokens (read-only vs deploy); confirmation for destructive tools.
 
-## 15. Multi-server (later)
+## 15. Multi-server
 
-- **No Swarm** (node-local volumes, no DB scaling, complicates exec-based backups).
-- Remote Docker daemons over SSH/TLS (`client.WithHost("ssh://user@host")`).
-- Each database lives on one known server; backup logic unchanged.
-- Docker operations behind an interface taking a server parameter.
-- Cross-server replicas: Traefik HTTP provider polling the manager, or proxy per server + DNS.
+Shipped: remote Docker daemons over SSH (manager key, host key pinned on first use). A project lives on one server, fixed at creation; each server runs its own Traefik and optional tunnel, and DNS points a domain at its project's server. Each database lives on one known server; backup logic unchanged.
+
+**No Swarm services.** Swarm volumes are node-local, so databases would be pinned with constraints anyway; backups would still have to find the task's node and exec through its daemon; and the reconciler, rollouts, logs, terminal and probes would be rewritten for the service/task API. Single-server installs (most of them) would carry raft, ingress and VXLAN for nothing.
+
+### Replicas across servers (later, issue #79)
+
+Deferred until there is a concrete need. Planned approach:
+
+1. **Placements:** `service_placements (service_id, server_id, replicas)`; no rows = all replicas on the project's server. The reconciler iterates placements; containers carry `kipitiny.server`; the project network is created on every placed server. Databases stay on the project's server, 1 replica.
+2. **Routing:** one Traefik per server (unchanged, it sees its local replicas) + one A record per placed server in the DNS sync. Spread services require a Cloudflare zone (DNS-01: the TLS challenge breaks with several A records) and refuse servers behind a tunnel.
+3. **Rollouts** go server by server with the health gate; a failure rolls already-updated servers back to the previous digest.
+4. **Cross-server networking: Swarm overlay only.** `swarm init` on the manager's server when a second server is added, `swarm join` on the others, and one attachable encrypted overlay (`docker network create -d overlay --attachable --opt encrypted`) per spread project. Plain containers join it, so `{{ db.X.host }}` keeps resolving by name and nothing else changes. Needs 2377/tcp, 7946/tcp+udp, 4789/udp between servers; IPsec ESP must not be blocked. Fallback if that is impractical: a manager-run WireGuard mesh with databases published on the mesh IP only.
+5. **Failover** (optional): replicas of an unreachable server restarted on another placed server after a delay, by the reconciler.
 
 ## 16. Roadmap
 
