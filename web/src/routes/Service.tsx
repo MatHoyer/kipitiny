@@ -9,6 +9,7 @@ import {
   Globe,
   Layers,
   Play,
+  Plus,
   RefreshCw,
   RotateCcw,
   Rocket,
@@ -37,7 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
 import { byDay, envMap, envRows, envSecrets, formatBytes, formatCpu, formatDuration, sameEnv, serviceState, timeAgo, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { api, databasePorts, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type LogLine, type Service as ServiceT } from "../api";
+import { api, databasePorts, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type LogLine, type Service as ServiceT, type Volume } from "../api";
 import { BackupList } from "./BackupList";
 import { Schedules } from "./Schedules";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
@@ -113,6 +114,7 @@ export function Service() {
   const allStopped = active.length > 0 && active.every((c) => c.state !== "running");
   const busy = deploying || deploy.isPending || action.isPending || remove.isPending;
   const isDb = isDatabase(svc.kind);
+  const hasData = isDb || svc.volumes.length > 0;
   const running = active.filter((c) => c.state === "running").length;
   const last = deployments.data?.[0];
 
@@ -246,8 +248,17 @@ export function Service() {
           )}
           <TabsContent value="settings" className="space-y-6">
             <Settings svc={svc} />
+            {svc.kind === "app" && <VolumesCard key={svc.id} svc={svc} />}
             {svc.kind === "app" && <DeployFromCICard svc={svc} />}
-            <DangerZone description={isDb ? "Deleting the database destroys its data volume." : "Deleting the service removes its containers."}>
+            <DangerZone
+              description={
+                isDb
+                  ? "Deleting the database destroys its data volume."
+                  : hasData
+                    ? "Deleting the service removes its containers and destroys its volumes."
+                    : "Deleting the service removes its containers."
+              }
+            >
               <ConfirmDialog
                 trigger={
                   <Button variant="destructive" size="sm" disabled={busy}>
@@ -256,8 +267,14 @@ export function Service() {
                   </Button>
                 }
                 title={isDb ? `Delete database ${svc.name}?` : `Delete service ${svc.name}?`}
-                description={isDb ? "Its data volume will be destroyed." : "Its containers are removed."}
-                typeToConfirm={isDb ? svc.name : undefined}
+                description={
+                  isDb
+                    ? "Its data volume will be destroyed."
+                    : hasData
+                      ? "Its containers are removed and its volumes destroyed."
+                      : "Its containers are removed."
+                }
+                typeToConfirm={hasData ? svc.name : undefined}
                 onConfirm={(name) => remove.mutate(name)}
               />
             </DangerZone>
@@ -414,6 +431,90 @@ function Settings({ svc }: { svc: ServiceT }) {
         )}
       </form>
       <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setForm(settingsForm(svc))} />
+    </Section>
+  );
+}
+
+const volumeNameRe = /^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/;
+
+/** Named volumes of an app: kept across deploys, shared by its replicas. */
+function VolumesCard({ svc }: { svc: ServiceT }) {
+  const qc = useQueryClient();
+  const [rows, setRows] = useState<Volume[]>(svc.volumes);
+  const dirty = JSON.stringify(rows) !== JSON.stringify(svc.volumes);
+  const formId = useId();
+  const save = useMutation({
+    meta: { error: "Couldn't save the volumes" },
+    mutationFn: () => api.updateService(svc.id, { volumes: rows.map((v) => ({ name: v.name.trim(), path: v.path.trim() })) }),
+    onSuccess: (updated) => {
+      qc.setQueryData(["service", svc.id], updated);
+      setRows(updated.volumes);
+      toast.success("Volumes saved", { description: "Deploy to apply." });
+    },
+  });
+  const set = (i: number, field: keyof Volume) => (e: { target: { value: string } }) =>
+    setRows(rows.map((v, j) => (j === i ? { ...v, [field]: e.target.value } : v)));
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    save.mutate();
+  };
+
+  return (
+    <Section
+      title="Volumes"
+      description="Data that outlives deploys, e.g. uploads. Every replica mounts the same volume. A volume removed here keeps its data until the service is deleted."
+      actions={
+        <Button type="button" size="sm" variant="outline" onClick={() => setRows([...rows, { name: "", path: "" }])}>
+          <Plus data-icon="inline-start" />
+          Add volume
+        </Button>
+      }
+    >
+      {/* Always rendered: the save bar submits it, even to remove the last volume. */}
+      <form id={formId} onSubmit={onSubmit} className="space-y-3">
+        {rows.length === 0 && <Empty>No volumes: files written in the containers are lost on every deploy.</Empty>}
+        {rows.map((v, i) => {
+          const name = v.name.trim();
+          const badName = name !== "" && !volumeNameRe.test(name);
+          const isNew = name !== "" && !svc.volumes.some((o) => o.name === name);
+          return (
+            <div key={i} className="flex items-start gap-2">
+              <FloatingInput
+                label="Name"
+                required
+                value={v.name}
+                onChange={set(i, "name")}
+                placeholder="uploads"
+                className="w-40 shrink-0 sm:w-56"
+                inputClassName="font-mono"
+                aria-invalid={badName}
+                description={badName ? "Lowercase letters, digits and dashes." : isNew ? "New volume, created empty." : undefined}
+              />
+              <FloatingInput
+                label="Mount path"
+                required
+                value={v.path}
+                onChange={set(i, "path")}
+                placeholder="/app/uploads"
+                className="min-w-0 flex-1"
+                inputClassName="font-mono"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                title="Remove"
+                aria-label={`Remove ${v.name || "volume"}`}
+                className="mt-3.5 text-muted-foreground hover:text-destructive"
+                onClick={() => setRows(rows.filter((_, j) => j !== i))}
+              >
+                <Trash2 />
+              </Button>
+            </div>
+          );
+        })}
+      </form>
+      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setRows(svc.volumes)} label="Save volumes" />
     </Section>
   );
 }

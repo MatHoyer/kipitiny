@@ -51,6 +51,8 @@ export type Service = {
   cpus: number;
   healthPath: string;
   preDeploy: string;
+  /** Named volumes mounted in every replica (apps only). */
+  volumes: Volume[];
   currentDeploymentId: string;
   stopped: boolean;
   createdAt: string;
@@ -59,6 +61,8 @@ export type Service = {
   /** Set when the manager manages the domain's Cloudflare DNS record. */
   dns?: DNSStatus;
 };
+
+export type Volume = { name: string; path: string };
 
 /** A container with the networks it is attached to. */
 export type TopoNode = Container & {
@@ -125,6 +129,7 @@ export type ServiceInput = {
   cpus?: number;
   healthPath?: string;
   preDeploy?: string;
+  volumes?: Volume[];
 };
 
 export type Connection = {

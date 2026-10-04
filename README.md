@@ -125,6 +125,9 @@ gets ready, the new containers are removed and the old version keeps serving.
 - Old replicas are stopped one by one and kept (stopped) until the next deploy so
   their logs stay readable. **Roll back** redeploys an earlier image.
 - Databases are recreated in place (a volume can't be shared by two servers).
+- **Volumes** keep an app's files across deploys (e.g. uploads): each has a
+  name and a mount path, and every replica mounts the same volume. Deleting the
+  service destroys them, so it asks for the service name.
 
 A **reconciler** keeps Docker matching the store every 30 s, shortly after any
 change, and whenever a managed container dies or is removed: missing replicas
@@ -243,7 +246,7 @@ gated on staying up instead).
   per service.
 
 Nothing younger than the minimum age (24 h by default) is touched. Whatever the
-settings, kipitiny keeps database volumes, everything it labels
+settings, kipitiny keeps database and app volumes, everything it labels
 `kipitiny.managed`, each service's image and those of its last successful
 deployments (rollback), and the current and running deployments. Health probe
 volumes left by older manager versions are removed once unused.

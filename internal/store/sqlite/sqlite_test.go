@@ -85,8 +85,12 @@ func TestProjectsAndServices(t *testing.T) {
 		}
 	}
 
+	if svc.Volumes == nil || len(svc.Volumes) != 0 {
+		t.Fatalf("volumes default: %#v", svc.Volumes)
+	}
 	svc.Env["B"] = "2"
 	svc.Replicas = 3
+	svc.Volumes = []store.Volume{{Name: "uploads", Path: "/app/uploads"}}
 	if _, err := s.UpdateService(ctx, svc); err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +98,8 @@ func TestProjectsAndServices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got2.Replicas != 3 || got2.Env["A"] != "1" || got2.Env["B"] != "2" || got2.Domain != "shop.example.com" {
+	if got2.Replicas != 3 || got2.Env["A"] != "1" || got2.Env["B"] != "2" || got2.Domain != "shop.example.com" ||
+		!slices.Equal(got2.Volumes, svc.Volumes) {
 		t.Fatalf("service round-trip mismatch: %+v", got2)
 	}
 
@@ -756,9 +761,10 @@ func TestRedisMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pg, err := old.CreateService(ctx, store.Service{ProjectID: pr.ID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17", Replicas: 1,
-		MemoryMB: 512, CPUs: 0.5, Domain: "", Env: map[string]string{"A": "1"}, Secrets: []string{"A"}})
-	if err != nil {
+	// Raw SQL: the current model has columns added after this version.
+	pg := store.Service{ID: "pg1"}
+	if _, err := db.ExecContext(ctx, `INSERT INTO services (id, project_id, name, kind, image, replicas, created_at, updated_at, env, memory_mb, secrets, cpus)
+		VALUES ('pg1', ?, 'db', 'postgres', 'postgres:17', 1, '2026-01-01 00:00:00+00:00', '2026-01-01 00:00:00+00:00', '{"A":"1"}', 512, '["A"]', 0.5)`, pr.ID); err != nil {
 		t.Fatal(err)
 	}
 	d, err := old.CreateDeployment(ctx, store.Deployment{ServiceID: pg.ID, Status: store.DeploymentSucceeded, Image: "postgres:17"})

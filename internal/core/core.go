@@ -287,7 +287,7 @@ func (c *Core) GetProject(ctx context.Context, id string) (store.Project, error)
 	return maskedProject(p), err
 }
 
-// DeleteProject removes every container and database volume of the project,
+// DeleteProject removes every container and volume of the project's services,
 // its record and its private network. The caller must confirm with the name.
 func (c *Core) DeleteProject(ctx context.Context, id, confirm string) error {
 	p, err := c.store.GetProject(ctx, id)
