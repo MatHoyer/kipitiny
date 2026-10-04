@@ -67,6 +67,7 @@ type Core struct {
 	ceremonies    pending[ceremony]
 	stats         statsState
 	uptime        uptimeState
+	health        healthState
 	uptimeHTTP    *http.Client // nil: probe's default; tests redirect it
 }
 

@@ -224,6 +224,7 @@ Later: optional VictoriaLogs or Loki, opt-in.
 - Kinds: Discord webhook now; email (SMTP), in-app and generic webhooks later.
 - Channels live in `notification_channels` and subscribe to event types (deploy/backup/restore/restore-test outcomes, restarted services, cleanup errors, new versions). Secrets are masked on read.
 - Core emits events where operations finish; delivery runs in the background with a timeout, and keyed events (a crash loop) are throttled.
+- Health alerts: each reconcile round judges every deployed, running service from the containers it already listed. It is healthy while a replica of the current deployment runs and passes its healthcheck (or has none). After 2 minutes without one, `service.unhealthy` goes out, then `service.healthy` once it recovers. Docker doesn't restart unhealthy containers, so this is the only signal for an app or database that runs but no longer answers, public or not. Services being deployed, restarted or restored are skipped. The state is in memory: after a manager restart an ongoing problem is reported again.
 
 ### Resource usage
 
