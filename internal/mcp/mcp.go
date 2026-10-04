@@ -46,13 +46,13 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "rollback",
 		Description: "Redeploy the image of an earlier successful deployment (the previous one by default)."}, t.rollback)
 	mcp.AddTool(server, &mcp.Tool{Name: "backup_database",
-		Description: "Start a pg_dump backup of a PostgreSQL service to a storage (local disk by default; see list_storage)."}, t.backupDatabase)
+		Description: "Start a backup of a service to a storage (local disk by default; see list_storage): a pg_dump of a PostgreSQL service, an archive of the volumes of a Redis service or an app with volumes."}, t.backupDatabase)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_backups", Annotations: readOnly,
-		Description: "Backups of a PostgreSQL service with status, size, storage (targetId) and restore-test result."}, t.listBackups)
+		Description: "Backups of a service with status, size, storage (targetId) and restore-test result."}, t.listBackups)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_storage", Annotations: readOnly,
 		Description: "Where kipitiny can store files (local disk, S3, drives), with their IDs and whether files are encrypted."}, t.listStorage)
 	mcp.AddTool(server, &mcp.Tool{Name: "restore_database", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
-		Description: "Replace a database's data with a backup. Destructive: confirm must repeat the database's service name. Apps referencing it are stopped meanwhile."}, t.restoreDatabase)
+		Description: "Replace a service's data with a backup. Destructive: confirm must repeat the service name. For a PostgreSQL dump, apps referencing the database are stopped meanwhile; for a volume archive, the service itself is."}, t.restoreDatabase)
 
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{
 		Stateless:    true,
@@ -378,7 +378,7 @@ func (t *tools) rollback(ctx context.Context, _ *mcp.CallToolRequest, in rollbac
 }
 
 type backupIn struct {
-	Database string `json:"database" jsonschema:"the PostgreSQL service as project/service, or its ID"`
+	Database string `json:"database" jsonschema:"the service to back up (PostgreSQL, Redis or an app with volumes) as project/service, or its ID"`
 	Storage  string `json:"storage,omitempty" jsonschema:"storage ID (see list_storage); default local disk"`
 }
 
@@ -388,7 +388,7 @@ func (t *tools) backupDatabase(ctx context.Context, _ *mcp.CallToolRequest, in b
 		if err != nil {
 			return store.Backup{}, err
 		}
-		return t.c.BackupDatabase(ctx, svc.ID, in.Storage)
+		return t.c.BackupService(ctx, svc.ID, in.Storage)
 	})
 	return nil, b, err
 }
@@ -421,7 +421,7 @@ func (t *tools) listStorage(ctx context.Context, _ *mcp.CallToolRequest, _ struc
 }
 
 type listBackupsIn struct {
-	Database string `json:"database" jsonschema:"the PostgreSQL service as project/service, or its ID"`
+	Database string `json:"database" jsonschema:"the service as project/service, or its ID"`
 }
 
 type listBackupsOut struct {
@@ -441,9 +441,9 @@ func (t *tools) listBackups(ctx context.Context, _ *mcp.CallToolRequest, in list
 }
 
 type restoreIn struct {
-	Database string `json:"database" jsonschema:"the PostgreSQL service to overwrite, as project/service or ID"`
+	Database string `json:"database" jsonschema:"the service to overwrite, as project/service or ID"`
 	BackupID string `json:"backup_id" jsonschema:"backup to restore (see list_backups)"`
-	Confirm  string `json:"confirm" jsonschema:"must equal the database's service name to confirm the data will be replaced"`
+	Confirm  string `json:"confirm" jsonschema:"must equal the service name to confirm the data will be replaced"`
 }
 
 func (t *tools) restoreDatabase(ctx context.Context, _ *mcp.CallToolRequest, in restoreIn) (*mcp.CallToolResult, store.Restore, error) {

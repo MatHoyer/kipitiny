@@ -487,7 +487,7 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 	if svc.Kind.IsDatabase() {
 		applyDatabaseSpec(cfg, host, svc)
 	} else {
-		host.Mounts = append(host.Mounts, appVolumeMounts(project.ID, svc)...)
+		host.Mounts = append(host.Mounts, appVolumeMounts(svc)...)
 	}
 	name := fmt.Sprintf("%s-%s-%d", project.Name, svc.Name, replica)
 	if !svc.Kind.IsDatabase() {

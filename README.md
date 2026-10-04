@@ -149,11 +149,18 @@ stays stopped. Services busy with a deploy, backup or restore are left alone.
 - Restores load the dump into a scratch database and swap it in by rename, so the
   result is exactly the backup and a failed restore leaves live data untouched.
   Apps referencing the database are stopped meanwhile. The checksum is verified.
-- Backups outlive their database and project; delete them explicitly.
-- **Schedules** (cron, UTC unless `CRON_TZ=` is given) back up a database to a
+- **Volumes** of Redis services and of apps are backed up as a gzipped tar (one
+  folder per volume, owners and permissions kept), read by a short-lived
+  network-less `busybox` container that mounts them read-only; the service keeps
+  running, so set a *pre-backup command* on an app to flush its files first.
+  Restores extract into a staging volume and check the checksum before touching
+  anything, then stop the service, replace each volume's content and start it
+  again.
+- Backups outlive their service and project; delete them explicitly.
+- **Schedules** (cron, UTC unless `CRON_TZ=` is given) back up a service to a
   target and then apply retention to *their own* backups: keep the last N, plus
   the newest of each of the last N days / ISO weeks / months. Manual backups are
-  never pruned. A run that finds the database busy (deploy, restore) retries for
+  never pruned. A run that finds the service busy (deploy, restore) retries for
   15 minutes.
 
 ### Restore tests
@@ -162,7 +169,9 @@ A backup nobody restored is a hope. *Verify* (or a schedule with restore tests o
 the default) restores a backup into a throwaway PostgreSQL container with no
 network, matching the backup's major version, then runs `ANALYZE` and records
 tables, estimated rows, database size and duration on the backup. The container
-and its volume are always removed; one test runs at a time.
+and its volume are always removed; one test runs at a time. A volume backup's
+test reads the whole archive back (decrypt, gunzip, list) in a throwaway
+container, checks the checksum and records the number of entries.
 
 ### Encryption
 
@@ -172,6 +181,7 @@ safe: without it, those backups are unreadable if this server is lost. Offline:
 
 ```sh
 age -d -i key.txt shop-20260930T030000Z-xxxx.dump.age | pg_restore -d "$DATABASE_URL" --no-owner
+age -d -i key.txt web-20260930T030000Z-xxxx.tar.gz.age | tar -xzf - --numeric-owner   # volumes
 ```
 
 ### Manager state

@@ -225,6 +225,19 @@ func TestBackups(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	vb, err := s.CreateBackup(ctx, store.Backup{
+		Kind: store.BackupKindVolume, ServiceID: "SVC2", ProjectID: "P", ServiceName: "web", ProjectName: "shop",
+		TargetID: store.LocalTargetID, ObjectKey: "shop/web/x.tar.gz", Status: store.OpRunning, Volumes: []string{"uploads", "cache"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.GetBackup(ctx, vb.ID); err != nil || got.Kind != store.BackupKindVolume || !slices.Equal(got.Volumes, vb.Volumes) {
+		t.Fatalf("volume backup round-trip: %+v %v", got, err)
+	}
+	if err := s.DeleteBackup(ctx, vb.ID); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.DeleteBackupTarget(ctx, s3.ID); !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("deleting a target in use: %v", err)
 	}
@@ -865,5 +878,68 @@ func TestUptime(t *testing.T) {
 	}
 	if err := s.DeleteUptimeCheck(ctx, svc.ID); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("delete again: %v", err)
+	}
+}
+
+func TestVolumeBackupsMigration(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "k.db")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	sub, _ := fs.Sub(migrations, "migrations")
+	p, err := goose.NewProvider(goose.DialectSQLite3, db, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 31); err != nil {
+		t.Fatal(err)
+	}
+	// Raw SQL: the current model has columns added after this version.
+	for _, q := range []string{
+		`INSERT INTO projects (id, name, created_at, updated_at) VALUES ('p1', 'shop', '2026-01-01 00:00:00+00:00', '2026-01-01 00:00:00+00:00')`,
+		`INSERT INTO services (id, project_id, name, kind, image, created_at, updated_at) VALUES ('s1', 'p1', 'db', 'postgres', 'postgres:17', '2026-01-01 00:00:00+00:00', '2026-01-01 00:00:00+00:00')`,
+		`INSERT INTO backups (id, service_id, project_id, service_name, project_name, target_id, object_key, status, size_bytes, sha256, pg_version,
+			duration_ms, created_at, schedule_id, kind, encrypted, verify_status, verify_details)
+			VALUES ('b1', 's1', 'p1', 'db', 'shop', 'local', 'shop/db/x.dump', 'succeeded', 42, 'abc', '17.2', 7, '2026-01-01 00:00:00+00:00', 'sc1', 'postgres', 1, 'succeeded', '{"tables":3}')`,
+		`INSERT INTO restores (id, backup_id, service_id, status, created_at) VALUES ('r1', 'b1', 's1', 'succeeded', '2026-01-02 00:00:00+00:00')`,
+		`INSERT INTO backup_schedules (id, kind, service_id, target_id, cron, keep_daily, created_at) VALUES ('sc1', 'postgres', 's1', 'local', '@daily', 7, '2026-01-01 00:00:00+00:00')`,
+	} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	db.Close()
+
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	b, err := s.GetBackup(ctx, "b1")
+	if err != nil || b.SizeBytes != 42 || b.PGVersion != "17.2" || !b.Encrypted || b.ScheduleID != "sc1" ||
+		b.VerifyStatus != store.OpSucceeded || b.VerifyDetails.Tables != 3 || len(b.Volumes) != 0 {
+		t.Fatalf("backup after rebuild = %+v, %v", b, err)
+	}
+	if rs, err := s.ListRestores(ctx, "s1", 10); err != nil || len(rs) != 1 {
+		t.Fatalf("restores after rebuild = %v, %v", rs, err)
+	}
+	if sc, err := s.GetBackupSchedule(ctx, "sc1"); err != nil || sc.KeepDaily != 7 {
+		t.Fatalf("schedule after rebuild = %+v, %v", sc, err)
+	}
+	if _, err := s.CreateBackupSchedule(ctx, store.BackupSchedule{Kind: store.BackupKindVolume, ServiceID: "s1", TargetID: store.LocalTargetID, Cron: "@daily"}); err != nil {
+		t.Fatalf("volume schedule: %v", err)
+	}
+	if _, err := s.CreateBackupSchedule(ctx, store.BackupSchedule{Kind: store.BackupKindVolume, TargetID: store.LocalTargetID, Cron: "@daily"}); err == nil {
+		t.Fatal("service-less volume schedule accepted")
+	}
+	// Restores still cascade with their backup.
+	if err := s.DeleteBackup(ctx, "b1"); err != nil {
+		t.Fatal(err)
+	}
+	if rs, _ := s.ListRestores(ctx, "s1", 10); len(rs) != 0 {
+		t.Fatalf("restores not cascaded: %v", rs)
 	}
 }

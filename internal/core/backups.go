@@ -26,10 +26,12 @@ const (
 	restoreTimeout = 6 * time.Hour
 )
 
-// BackupDatabase starts a pg_dump of a postgres service to a target in the
-// background. The dump runs inside the database container, so the client
-// always matches the server version and the manager needs no Postgres tools.
-func (c *Core) BackupDatabase(ctx context.Context, serviceID, targetID string) (store.Backup, error) {
+// BackupService starts a backup of a service to a target in the background:
+// a pg_dump for PostgreSQL, an archive of its volumes for other databases and
+// apps with volumes. The dump runs inside the database container, so the
+// client always matches the server version and the manager needs no
+// Postgres tools.
+func (c *Core) BackupService(ctx context.Context, serviceID, targetID string) (store.Backup, error) {
 	return c.startBackup(ctx, serviceID, targetID, "", nil)
 }
 
@@ -39,7 +41,15 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, scheduleID 
 	if targetID == "" {
 		targetID = store.LocalTargetID
 	}
-	svc, project, err := c.postgresService(ctx, serviceID)
+	svc, err := c.store.GetService(ctx, serviceID)
+	if err != nil {
+		return store.Backup{}, err
+	}
+	kind, err := backupKind(svc)
+	if err != nil {
+		return store.Backup{}, err
+	}
+	project, err := c.store.GetProject(ctx, svc.ProjectID)
 	if err != nil {
 		return store.Backup{}, err
 	}
@@ -58,7 +68,15 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, scheduleID 
 	if err != nil {
 		return store.Backup{}, err
 	}
-	ct, err := c.runningContainer(ctx, svc)
+	// pg_dump runs in the database; volumes are read by a helper, but must
+	// exist (a never-deployed service has none yet).
+	var ct string
+	ext := ".dump"
+	if kind == store.BackupKindPostgres {
+		ct, err = c.runningContainer(ctx, svc)
+	} else if ext = ".tar.gz"; svc.CurrentDeploymentID == "" {
+		err = fmt.Errorf("%w: %s has not been deployed yet", ErrInvalid, svc.Name)
+	}
 	if err != nil {
 		unlock()
 		return store.Backup{}, err
@@ -66,6 +84,8 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, scheduleID 
 
 	created := time.Now().UTC()
 	b, err := c.store.CreateBackup(ctx, store.Backup{
+		Kind:        kind,
+		Volumes:     volumeNames(svc),
 		ServiceID:   svc.ID,
 		ProjectID:   project.ID,
 		ServiceName: svc.Name,
@@ -73,7 +93,7 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, scheduleID 
 		TargetID:    target.ID,
 		ScheduleID:  scheduleID,
 		// The suffix keeps keys unique for backups started in the same second.
-		ObjectKey: objectKey(fmt.Sprintf("%s/%s/", project.Name, svc.Name), created, ".dump", target),
+		ObjectKey: objectKey(fmt.Sprintf("%s/%s/", project.Name, svc.Name), created, ext, target),
 		Status:    store.OpRunning,
 	})
 	if err != nil {
@@ -109,8 +129,9 @@ func objectKey(dir string, created time.Time, ext string, target store.BackupTar
 	return key
 }
 
-// BackupProject backs up every database of a project to one target.
-// Failures to start are reported per database; the others still run.
+// BackupProject backs up every database and app with volumes of a project
+// to one target. Failures to start are reported per service; the others
+// still run.
 func (c *Core) BackupProject(ctx context.Context, projectID, targetID string) ([]store.Backup, error) {
 	svcs, err := c.store.ListServices(ctx, projectID)
 	if err != nil {
@@ -119,10 +140,10 @@ func (c *Core) BackupProject(ctx context.Context, projectID, targetID string) ([
 	var started []store.Backup
 	var errs []error
 	for _, s := range svcs {
-		if s.Kind != store.ServiceKindPostgres {
+		if _, err := backupKind(s); err != nil {
 			continue
 		}
-		b, err := c.BackupDatabase(ctx, s.ID, targetID)
+		b, err := c.BackupService(ctx, s.ID, targetID)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", s.Name, err))
 			continue
@@ -130,7 +151,7 @@ func (c *Core) BackupProject(ctx context.Context, projectID, targetID string) ([
 		started = append(started, b)
 	}
 	if len(started) == 0 && len(errs) == 0 {
-		return nil, fmt.Errorf("%w: the project has no databases", ErrInvalid)
+		return nil, fmt.Errorf("%w: the project has no databases or volumes", ErrInvalid)
 	}
 	return started, errors.Join(errs...)
 }
@@ -142,7 +163,12 @@ func (c *Core) runBackup(svc store.Service, containerID string, st storage.Stora
 	log := c.log.With("backup", b.ID, "service", svc.Name)
 	start := time.Now()
 
-	err := c.dump(ctx, svc, containerID, st, target, &b)
+	var err error
+	if b.Kind == store.BackupKindVolume {
+		err = c.dumpVolumes(ctx, svc, st, target, &b)
+	} else {
+		err = c.dump(ctx, svc, containerID, st, target, &b)
+	}
 	b.DurationMS = time.Since(start).Milliseconds()
 	b.Status = store.OpSucceeded
 	if err != nil {
@@ -258,10 +284,10 @@ func (h *hashCounter) Write(p []byte) (int, error) {
 	return h.h.Write(p)
 }
 
-// RestoreBackup restores a backup into a postgres service (the backup's own
-// database when targetServiceID is empty) in a single transaction. Apps
-// linked to that database are stopped during the restore and started again
-// afterwards.
+// RestoreBackup restores a backup into a service (the backup's own when
+// targetServiceID is empty). A database dump is loaded aside and swapped in,
+// with the apps linked to the database stopped meanwhile; a volume archive is
+// extracted aside, then copied over the volumes with the service stopped.
 // It overwrites data, so confirm must repeat the target service name.
 func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, confirm string) (store.Restore, error) {
 	b, err := c.store.GetBackup(ctx, backupID)
@@ -271,18 +297,24 @@ func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, con
 	if b.Status != store.OpSucceeded {
 		return store.Restore{}, fmt.Errorf("%w: only successful backups can be restored", ErrInvalid)
 	}
-	if b.Kind != store.BackupKindPostgres {
+	if b.Kind == store.BackupKindManager {
 		return store.Restore{}, fmt.Errorf("%w: manager backups are restored by replacing the data file (see README)", ErrInvalid)
 	}
 	if targetServiceID == "" {
 		targetServiceID = b.ServiceID
 	}
-	svc, _, err := c.postgresService(ctx, targetServiceID)
+	svc, err := c.store.GetService(ctx, targetServiceID)
 	if errors.Is(err, store.ErrNotFound) {
-		return store.Restore{}, fmt.Errorf("%w: the backup's database no longer exists; pick another database", ErrInvalid)
+		return store.Restore{}, fmt.Errorf("%w: the backup's service no longer exists; pick another one", ErrInvalid)
 	}
 	if err != nil {
 		return store.Restore{}, err
+	}
+	if b.Kind == store.BackupKindVolume {
+		return c.restoreVolumeBackup(ctx, b, svc, confirm)
+	}
+	if svc.Kind != store.ServiceKindPostgres {
+		return store.Restore{}, fmt.Errorf("%w: a database dump restores into a PostgreSQL service", ErrInvalid)
 	}
 	if confirm != svc.Name {
 		return store.Restore{}, fmt.Errorf("%w: restoring overwrites %s; confirm with its name", ErrInvalid, svc.Name)
@@ -327,7 +359,6 @@ func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, con
 func (c *Core) runRestore(svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b store.Backup, r store.Restore) {
 	ctx, cancel := context.WithTimeout(c.bg, restoreTimeout)
 	defer cancel()
-	log := c.log.With("restore", r.ID, "backup", b.ID, "service", svc.Name)
 
 	stopped, err := c.stopLinkedApps(ctx, svc)
 	if err == nil {
@@ -336,10 +367,18 @@ func (c *Core) runRestore(svc store.Service, containerID string, st storage.Stor
 	// Bring apps back even if the restore failed: the transaction rolled back.
 	for _, id := range stopped {
 		if _, serr := c.dockerFor(svc.ServerID).ContainerStart(context.WithoutCancel(ctx), id, client.ContainerStartOptions{}); serr != nil {
-			log.Error("cannot restart app using the database", "container", id, "err", serr)
+			c.log.Error("cannot restart app using the database", "container", id, "err", serr)
 		}
 	}
+	c.finishRestore(ctx, svc, target, b, r, err, "The database now holds", "The live database was left unchanged.")
+}
 
+// finishRestore records and reports a restore's outcome. done starts the
+// success message ("<done> the backup of <date>."); failed ends the failure one.
+func (c *Core) finishRestore(ctx context.Context, svc store.Service, target store.BackupTarget, b store.Backup, r store.Restore,
+	err error, done, failed string) {
+
+	log := c.log.With("restore", r.ID, "backup", b.ID, "service", svc.Name)
 	status, msg := store.OpSucceeded, ""
 	if err != nil {
 		status, msg = store.OpFailed, err.Error()
@@ -358,15 +397,15 @@ func (c *Core) runRestore(svc store.Service, containerID string, st storage.Stor
 		Type:    EventRestoreSucceeded,
 		Level:   notify.Success,
 		Title:   fmt.Sprintf("%s/%s restored", b.ProjectName, svc.Name),
-		Message: fmt.Sprintf("The database now holds the backup of %s.", b.CreatedAt.UTC().Format("2006-01-02 15:04 UTC")),
+		Message: fmt.Sprintf("%s the backup of %s.", done, b.CreatedAt.UTC().Format("2006-01-02 15:04 UTC")),
 		Fields: []notify.Field{
 			{Name: "Project", Value: b.ProjectName},
-			{Name: "Database", Value: svc.Name},
+			{Name: "Service", Value: svc.Name},
 			{Name: "Target", Value: target.Name},
 		},
 	}
 	if status == store.OpFailed {
-		e.Type, e.Level, e.Title, e.Message = EventRestoreFailed, notify.Error, fmt.Sprintf("%s/%s restore failed", b.ProjectName, svc.Name), msg+"\nThe live database was left unchanged."
+		e.Type, e.Level, e.Title, e.Message = EventRestoreFailed, notify.Error, fmt.Sprintf("%s/%s restore failed", b.ProjectName, svc.Name), msg+"\n"+failed
 	}
 	c.notify(e, "/services/"+svc.ID, "")
 }
@@ -480,24 +519,35 @@ func pgLiteral(s string) string {
 // pgRestore streams a stored backup (decrypting if needed) into pg_restore
 // against database db, then verifies the checksum of the stored bytes.
 func (c *Core) pgRestore(ctx context.Context, dk *docker.Client, containerID, user, db string, rc io.Reader, target store.BackupTarget, b store.Backup) error {
+	return fromStorage(rc, target, b, func(dump io.Reader) error {
+		err := dk.Exec(ctx, containerID, docker.ExecOptions{
+			Cmd: []string{
+				"pg_restore", "-U", user, "-d", db,
+				"--no-owner", "--no-privileges", "--exit-on-error",
+			},
+			Stdin: dump,
+		})
+		if err != nil {
+			return fmt.Errorf("pg_restore: %w", err)
+		}
+		return nil
+	})
+}
+
+// fromStorage feeds a stored backup (decrypted if needed) to consume, then
+// checks the checksum of the stored bytes.
+func fromStorage(rc io.Reader, target store.BackupTarget, b store.Backup, consume func(io.Reader) error) error {
 	sum := &hashCounter{h: sha256.New()}
 	stored := io.TeeReader(rc, sum)
-	var dump io.Reader = stored
+	var content io.Reader = stored
 	if b.Encrypted {
 		var err error
-		if dump, err = decryptFrom(stored, target.AgeIdentity); err != nil {
+		if content, err = decryptFrom(stored, target.AgeIdentity); err != nil {
 			return err
 		}
 	}
-	err := dk.Exec(ctx, containerID, docker.ExecOptions{
-		Cmd: []string{
-			"pg_restore", "-U", user, "-d", db,
-			"--no-owner", "--no-privileges", "--exit-on-error",
-		},
-		Stdin: dump,
-	})
-	if err != nil {
-		return fmt.Errorf("pg_restore: %w", err)
+	if err := consume(content); err != nil {
+		return err
 	}
 	if _, err := io.Copy(io.Discard, stored); err != nil { // finish the checksum
 		return fmt.Errorf("read backup: %w", err)
@@ -542,18 +592,6 @@ func (c *Core) stopLinkedApps(ctx context.Context, db store.Service) ([]string, 
 		}
 	}
 	return stopped, nil
-}
-
-func (c *Core) postgresService(ctx context.Context, id string) (store.Service, store.Project, error) {
-	svc, err := c.store.GetService(ctx, id)
-	if err != nil {
-		return store.Service{}, store.Project{}, err
-	}
-	if svc.Kind != store.ServiceKindPostgres {
-		return store.Service{}, store.Project{}, fmt.Errorf("%w: not a postgres service", ErrInvalid)
-	}
-	p, err := c.store.GetProject(ctx, svc.ProjectID)
-	return svc, p, err
 }
 
 // runningContainer returns the ID of the service's running container.

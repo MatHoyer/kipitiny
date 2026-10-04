@@ -3,7 +3,6 @@ import { ArchiveRestore, Clock, DatabaseBackup, Download, HardDrive, ShieldCheck
 import type { ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { PostgresIcon } from "@/components/brand-icons";
 import { CopyButton, DangerZone, ErrorText, Mono, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
@@ -11,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { formatBytes, formatDateTime, formatDuration, timeAgo } from "@/lib/format";
 import { api, type Backup as BackupT } from "../api";
-import { backupTitle } from "./BackupList";
+import { BackupIcon, backupTitle } from "./BackupList";
 
 /** One backup: what it holds, where it is, whether it restores, and its restores. */
 export function Backup() {
@@ -25,18 +24,19 @@ export function Backup() {
   });
   const targets = useQuery({ queryKey: ["storage"], queryFn: api.backupTargets });
   const b = backup.data;
-  const isDb = b?.kind === "postgres";
-  // The database may be gone: backups outlive it.
+  // A service's backup (not the manager's). The service may be gone:
+  // backups outlive it.
+  const isService = !!b && b.kind !== "manager";
   const service = useQuery({
     queryKey: ["service", b?.serviceId],
     queryFn: () => api.service(b!.serviceId),
-    enabled: isDb,
+    enabled: isService,
     retry: false,
   });
   const restores = useQuery({
     queryKey: ["restores", b?.serviceId],
     queryFn: () => api.restores(b!.serviceId),
-    enabled: isDb && !!service.data,
+    enabled: isService && !!service.data,
     refetchInterval: (q) => (q.state.data?.some((r) => r.status === "running") ? 1_000 : 15_000),
   });
 
@@ -89,7 +89,7 @@ export function Backup() {
                   Download
                 </a>
               </Button>
-              {isDb && service.data && (
+              {isService && service.data && (
                 <ConfirmDialog
                   trigger={
                     <Button size="sm" disabled={restore.isPending || restoring}>
@@ -98,7 +98,11 @@ export function Backup() {
                     </Button>
                   }
                   title={`Restore into ${b.serviceName}?`}
-                  description="Its current data is replaced by this backup; apps using the database are stopped meanwhile."
+                  description={
+                    b.kind === "volume"
+                      ? "The content of its volumes is replaced by this backup; the service is stopped meanwhile."
+                      : "Its current data is replaced by this backup; apps using the database are stopped meanwhile."
+                  }
                   confirmLabel="Restore"
                   typeToConfirm={b.serviceName}
                   onConfirm={(name) => restore.mutate(name)}
@@ -111,7 +115,7 @@ export function Backup() {
       <PageBody>
         <div className="flex flex-wrap items-center gap-4">
           <span className="flex size-12 items-center justify-center rounded-xl bg-muted">
-            {isDb ? <PostgresIcon className="size-6 text-[#4169E1]" /> : <DatabaseBackup className="size-6" />}
+            <BackupIcon kind={b.kind} className="size-6" />
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="flex flex-wrap items-center gap-2 text-xl font-semibold">
@@ -133,7 +137,13 @@ export function Backup() {
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <StatCard icon={HardDrive} label="Size" value={done ? formatBytes(b.sizeBytes) : "—"} />
           <StatCard icon={Clock} label="Took" value={b.finishedAt ? formatDuration(b.durationMs) : <Spinner className="size-5 text-muted-foreground" />} />
-          <StatCard icon={DatabaseBackup} label={isDb ? "PostgreSQL" : "Kind"} value={isDb ? b.pgVersion || "—" : "SQLite"} />
+          {b.kind === "postgres" ? (
+            <StatCard icon={DatabaseBackup} label="PostgreSQL" value={b.pgVersion || "—"} />
+          ) : b.kind === "volume" ? (
+            <StatCard icon={HardDrive} label={b.volumes?.length === 1 ? "Volume" : "Volumes"} value={b.volumes?.join(", ") || "—"} />
+          ) : (
+            <StatCard icon={DatabaseBackup} label="Kind" value="SQLite" />
+          )}
           <StatCard
             icon={ShieldCheck}
             label="Restore test"
@@ -145,8 +155,8 @@ export function Backup() {
 
         <Section title="Details">
           <dl className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
-            {isDb && (
-              <Detail label="Database">
+            {isService && (
+              <Detail label="Service">
                 {service.data ? (
                   <Link className="font-medium hover:underline" to={`/services/${b.serviceId}`}>
                     {b.serviceName}
@@ -158,7 +168,7 @@ export function Backup() {
                 )}
               </Detail>
             )}
-            {isDb && (
+            {isService && (
               <Detail label="Project">
                 <Link className="hover:underline" to={`/projects/${b.projectId}`}>
                   {b.projectName}
@@ -184,9 +194,9 @@ export function Backup() {
           </dl>
         </Section>
 
-        {isDb && done && <RestoreTest backup={b} onRun={() => verify.mutate()} busy={verify.isPending} />}
+        {isService && done && <RestoreTest backup={b} onRun={() => verify.mutate()} busy={verify.isPending} />}
 
-        {isDb && service.data && (
+        {isService && service.data && (
           <Section title="Restores" description={ownRestores.length === 0 ? "This backup was never restored." : undefined}>
             {ownRestores.length > 0 && (
               <ul className="-my-2 divide-y">
@@ -227,14 +237,20 @@ export function Backup() {
   );
 }
 
-/** The latest restore test: a throwaway PostgreSQL loads the backup. */
+/** The latest restore test: a throwaway PostgreSQL loads the dump, or a
+ * throwaway container reads the whole volume archive. */
 function RestoreTest({ backup: b, onRun, busy }: { backup: BackupT; onRun: () => void; busy: boolean }) {
   const d = b.verifyDetails;
   const running = b.verifyStatus === "running";
+  const volume = b.kind === "volume";
   return (
     <Section
       title="Restore test"
-      description="Loads the backup into a throwaway PostgreSQL with no network, then measures what came back."
+      description={
+        volume
+          ? "Decrypts, decompresses and lists the whole archive in a throwaway container with no network, and checks its checksum."
+          : "Loads the backup into a throwaway PostgreSQL with no network, then measures what came back."
+      }
       actions={
         <Button variant="outline" size="sm" loading={running} disabled={busy} onClick={onRun}>
           <ShieldCheck data-icon="inline-start" />
@@ -247,10 +263,18 @@ function RestoreTest({ backup: b, onRun, busy }: { backup: BackupT; onRun: () =>
       ) : running ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Spinner />
-          Restoring into a scratch container
+          {volume ? "Reading the archive in" : "Restoring into"} a scratch container
         </p>
       ) : b.verifyStatus === "failed" ? (
         <p className="text-sm text-destructive">{b.verifyError}</p>
+      ) : volume ? (
+        <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+          <Detail label="Files and folders">{(d.files ?? 0).toLocaleString()}</Detail>
+          <Detail label="Read in">{formatDuration(d.durationMs)}</Detail>
+          {b.verifiedAt && (
+            <p className="col-span-full text-xs text-muted-foreground">Tested {formatDateTime(b.verifiedAt)}</p>
+          )}
+        </dl>
       ) : (
         <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
           <Detail label="Tables">{d.tables}</Detail>

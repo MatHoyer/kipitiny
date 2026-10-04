@@ -40,7 +40,7 @@ func (a *API) createBackup(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &body) {
 		return
 	}
-	b, err := a.core.BackupDatabase(r.Context(), r.PathValue("id"), body.TargetID)
+	b, err := a.core.BackupService(r.Context(), r.PathValue("id"), body.TargetID)
 	if err != nil {
 		a.fail(w, err)
 		return

@@ -38,7 +38,7 @@ export function Backups() {
           </TabsList>
           <TabsContent value="backups" className="space-y-6">
             <ErrorText error={backups.error} />
-            <FilteredBackups backups={all.filter((b) => b.kind === "postgres")} targets={targets.data ?? []} />
+            <FilteredBackups backups={all.filter((b) => b.kind !== "manager")} targets={targets.data ?? []} />
           </TabsContent>
           <TabsContent value="manager" className="space-y-6">
             <ManagerBackup targets={targets.data ?? []} />
@@ -56,7 +56,7 @@ export function Backups() {
 
 type StatusFilter = "all" | "succeeded" | "failed" | "running";
 
-/** Database backups with search and filters. */
+/** Service backups with search and filters. */
 function FilteredBackups({ backups, targets }: { backups: Backup[]; targets: BackupTarget[] }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -76,7 +76,7 @@ function FilteredBackups({ backups, targets }: { backups: Backup[]; targets: Bac
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-48 flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search databases and projects" aria-label="Search" className="pl-9" />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search services and projects" aria-label="Search" className="pl-9" />
           </div>
           <Select value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
             <SelectTrigger aria-label="Status" className="min-w-32">

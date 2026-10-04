@@ -5,6 +5,9 @@ export type ServiceKind = "app" | DatabaseKind;
 
 export const isDatabase = (kind: ServiceKind): kind is DatabaseKind => kind !== "app";
 
+/** Whether a service has data to back up: a database, or an app with volumes. */
+export const canBackup = (s: Pick<Service, "kind" | "volumes">) => isDatabase(s.kind) || s.volumes.length > 0;
+
 export const databasePorts: Record<DatabaseKind, number> = { postgres: 5432, redis: 6379 };
 
 /** A project database, as env references see it. */
@@ -53,6 +56,8 @@ export type Service = {
   preDeploy: string;
   /** Named volumes mounted in every replica (apps only). */
   volumes: Volume[];
+  /** Runs (sh -c) in a replica before each volume backup. */
+  preBackup: string;
   currentDeploymentId: string;
   stopped: boolean;
   createdAt: string;
@@ -130,6 +135,7 @@ export type ServiceInput = {
   healthPath?: string;
   preDeploy?: string;
   volumes?: Volume[];
+  preBackup?: string;
 };
 
 export type Connection = {
@@ -210,9 +216,12 @@ export type TargetKind = {
   }[];
 };
 
+export type BackupKind = "postgres" | "volume" | "manager";
+
 export type Backup = {
   id: string;
-  kind: "postgres" | "manager";
+  /** postgres: a pg_dump; volume: an archive of a service's volumes. */
+  kind: BackupKind;
   encrypted: boolean;
   serviceId: string;
   projectId: string;
@@ -224,13 +233,15 @@ export type Backup = {
   sizeBytes: number;
   sha256: string;
   pgVersion: string;
+  /** The volumes in a volume backup's archive. */
+  volumes?: string[];
   durationMs: number;
   error?: string;
   createdAt: string;
   finishedAt?: string;
   verifyStatus?: OpStatus;
   verifyError?: string;
-  verifyDetails: { tables: number; rows: number; dbBytes: number; durationMs: number };
+  verifyDetails: { tables: number; rows: number; dbBytes: number; files?: number; durationMs: number };
   verifiedAt?: string;
 };
 
@@ -247,7 +258,7 @@ export type ScheduleInput = {
 
 export type Schedule = ScheduleInput & {
   id: string;
-  kind: "postgres" | "manager";
+  kind: BackupKind;
   serviceId?: string;
   createdAt: string;
   nextRun?: string;

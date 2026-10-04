@@ -32,6 +32,7 @@ import { useTab } from "@/hooks/use-tab";
 import { dbFields, dbRef, envMap, envRows, envSecrets, formatBytes, liveState, sameEnv, troubled, type EnvRow } from "@/lib/format";
 import {
   api,
+  canBackup,
   isDatabase,
   type DatabaseKind,
   type DatabaseRef,
@@ -57,9 +58,9 @@ export function Project() {
   const backupAll = async (targetId: string) => {
     const res = await api.backupProject(id, targetId);
     qc.invalidateQueries({ queryKey: ["backups"] });
-    if (res.error) toast.warning("Some databases were not backed up", { description: res.error });
+    if (res.error) toast.warning("Some services were not backed up", { description: res.error });
   };
-  const hasDatabases = services.data?.some((s) => s.kind === "postgres");
+  const hasBackups = services.data?.some(canBackup);
   const memory = memoryOf(useUsage().data, (u) => u.projectId === id);
   const remove = useMutation({
     meta: { error: "Couldn't delete the project" },
@@ -143,14 +144,14 @@ export function Project() {
             <DatabaseReferences dbs={dbs} />
           </TabsContent>
           <TabsContent value="settings" className="space-y-6">
-            {hasDatabases && (
+            {hasBackups && (
               <Section
-                title="Back up databases"
-                description="Back up every database of the project now, to one storage."
+                title="Back up data"
+                description="Back up every database and app volume of the project now, to one storage."
                 actions={
                   <BackupNowDialog
                     variant="outline"
-                    what={`every database of ${project.data?.name ?? "the project"}`}
+                    what={`the data of ${project.data?.name ?? "the project"}`}
                     targets={targets.data ?? []}
                     onBackup={backupAll}
                   />
@@ -158,7 +159,7 @@ export function Project() {
               />
             )}
             {project.data && (
-              <DangerZone description="Deleting the project destroys all its containers and database data.">
+              <DangerZone description="Deleting the project destroys all its containers, databases and volumes.">
                 <ConfirmDialog
                   trigger={
                     <Button variant="destructive" size="sm" disabled={remove.isPending}>
@@ -167,7 +168,7 @@ export function Project() {
                     </Button>
                   }
                   title={`Delete project ${project.data.name}?`}
-                  description="All its containers and database data will be destroyed."
+                  description="All its containers, databases and volumes will be destroyed."
                   typeToConfirm={project.data.name}
                   onConfirm={(name) => remove.mutate(name)}
                 />

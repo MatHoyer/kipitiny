@@ -40,7 +40,7 @@ function describeRetention(s: ScheduleInput): string {
   return parts.length ? `keep ${parts.join(", ")}` : "keep everything";
 }
 
-/** A database's backup schedules, or the manager's own without serviceId. */
+/** A service's backup schedules, or the manager's own without serviceId. */
 export function Schedules({ serviceId, targets }: { serviceId?: string; targets: BackupTarget[] }) {
   const qc = useQueryClient();
   const key = ["schedules", serviceId ?? "manager"];
@@ -62,7 +62,7 @@ export function Schedules({ serviceId, targets }: { serviceId?: string; targets:
         <ScheduleDialog serviceId={serviceId} targets={targets} />
       </div>
       {schedules.data?.length === 0 && (
-        <Empty>No schedule: {serviceId ? "this database" : "the manager"} is only backed up manually.</Empty>
+        <Empty>No schedule: {serviceId ? "this service" : "the manager"} is only backed up manually.</Empty>
       )}
       <ul className="space-y-2">
         {schedules.data?.map((s) => {
@@ -222,7 +222,7 @@ function ScheduleDialog({ serviceId, targets }: { serviceId?: string; targets: B
           {serviceId && (
             <CheckboxField
               label="Restore-test every backup"
-              description="Restores it into a throwaway, network-less PostgreSQL container and checks the result. A backup you have never restored is a hope, not a backup."
+              description="Restores it into a throwaway, network-less container and checks the result (a database dump is loaded into PostgreSQL, a volume archive read back entirely). A backup you have never restored is a hope, not a backup."
               checked={verify}
               onCheckedChange={setVerify}
             />
