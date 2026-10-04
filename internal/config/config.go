@@ -2,6 +2,7 @@
 package config
 
 import (
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -18,6 +19,9 @@ type Config struct {
 	DataDir string
 	// LogLevel is one of debug, info, warn, error.
 	LogLevel string
+	// TrustedProxies may set the client address in X-Forwarded-For, besides
+	// loopback and the Traefik the manager runs (for a proxy of your own).
+	TrustedProxies []netip.Prefix
 
 	// SetupToken, if set, replaces the random token printed on first start
 	// that is required to create the admin account.
@@ -84,6 +88,7 @@ func Load() Config {
 		Domain:         strings.ToLower(strings.TrimSpace(env("KIPITINY_DOMAIN", ""))),
 		DataDir:        env("KIPITINY_DATA_DIR", "/data"),
 		LogLevel:       env("KIPITINY_LOG_LEVEL", "info"),
+		TrustedProxies: prefixes(env("KIPITINY_TRUSTED_PROXIES", "")),
 		SetupToken:     env("KIPITINY_SETUP_TOKEN", ""),
 		ProtonPassCLI:  env("KIPITINY_PROTONPASS_CLI", "pass-cli"),
 		Rclone:         env("KIPITINY_RCLONE", "rclone"),
@@ -125,6 +130,21 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+// prefixes parses a comma-separated list of CIDRs or addresses, skipping
+// invalid entries.
+func prefixes(list string) []netip.Prefix {
+	var out []netip.Prefix
+	for _, f := range strings.Split(list, ",") {
+		f = strings.TrimSpace(f)
+		if p, err := netip.ParsePrefix(f); err == nil {
+			out = append(out, p.Masked())
+		} else if a, err := netip.ParseAddr(f); err == nil {
+			out = append(out, netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen()))
+		}
+	}
+	return out
 }
 
 func (c Config) DBPath() string {

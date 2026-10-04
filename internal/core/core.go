@@ -56,6 +56,7 @@ type Core struct {
 	update        updateState
 	dns           dnsState
 	dnsKick       chan struct{}
+	proxy         proxyState
 	cleaning      atomic.Bool  // a cleanup is running
 	notified      sync.Map     // notification key -> time.Time last sent
 	notifyHTTP    *http.Client // nil: notify's default; tests redirect it

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"sync"
@@ -209,7 +210,7 @@ type credentials struct {
 }
 
 func (a *API) setup(w http.ResponseWriter, r *http.Request) {
-	if !a.limiter.allow(clientIP(r, a.core.BehindTunnel(r.Context()))) {
+	if !a.limiter.allow(a.clientIP(r)) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return
 	}
@@ -219,7 +220,7 @@ func (a *API) setup(w http.ResponseWriter, r *http.Request) {
 	}
 	u, token, err := a.core.Setup(r.Context(), c.SetupToken, c.Username, c.Password)
 	if err != nil {
-		a.limiter.fail(clientIP(r, a.core.BehindTunnel(r.Context())))
+		a.limiter.fail(a.clientIP(r))
 		a.fail(w, err)
 		return
 	}
@@ -228,7 +229,7 @@ func (a *API) setup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) login(w http.ResponseWriter, r *http.Request) {
-	ip := clientIP(r, a.core.BehindTunnel(r.Context()))
+	ip := a.clientIP(r)
 	if !a.limiter.allow(ip) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return
@@ -255,7 +256,7 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) loginMFA(w http.ResponseWriter, r *http.Request) {
-	ip := clientIP(r, a.core.BehindTunnel(r.Context()))
+	ip := a.clientIP(r)
 	if !a.limiter.allow(ip) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return
@@ -288,7 +289,7 @@ func (a *API) beginPasskeyLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) finishPasskeyLogin(w http.ResponseWriter, r *http.Request) {
-	ip := clientIP(r, a.core.BehindTunnel(r.Context()))
+	ip := a.clientIP(r)
 	if !a.limiter.allow(ip) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return
@@ -338,19 +339,25 @@ func (a *API) logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// clientIP is the socket address, except behind a proxy on a private network
-// (Traefik), where it is the last X-Forwarded-For hop: the one the proxy
-// added. Trusting the header from public peers would let anyone bypass the
-// login limiter; ignoring it behind Traefik would lock everyone out at once.
-// Behind the Cloudflare tunnel every request reaches Traefik from cloudflared,
-// so the client is Cloudflare's CF-Connecting-IP (no port is published there
-// to send a forged one directly).
-func clientIP(r *http.Request, tunnel bool) string {
+// clientIP is the address the login limiter counts failures against.
+func (a *API) clientIP(r *http.Request) string {
+	trusted := func(ip netip.Addr) bool { return a.core.TrustedProxy(r.Context(), ip) }
+	return clientIP(r, trusted, a.core.BehindTunnel(r.Context()))
+}
+
+// clientIP is the socket address, except from a trusted proxy (Traefik), where
+// it is the last X-Forwarded-For hop: the one the proxy added. Trusting the
+// header from any other peer would let it bypass the login limiter, including
+// app containers on kipitiny-proxy that can reach the manager directly;
+// ignoring it behind Traefik would lock everyone out at once. Behind the
+// Cloudflare tunnel every request reaches Traefik from cloudflared, so the
+// client is Cloudflare's CF-Connecting-IP.
+func clientIP(r *http.Request, trusted func(netip.Addr) bool, tunnel bool) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
 	}
-	if ip := net.ParseIP(host); ip == nil || !(ip.IsPrivate() || ip.IsLoopback()) {
+	if ip, err := netip.ParseAddr(host); err != nil || !trusted(ip) {
 		return host
 	}
 	if cf := r.Header.Get("CF-Connecting-IP"); tunnel && net.ParseIP(cf) != nil {
