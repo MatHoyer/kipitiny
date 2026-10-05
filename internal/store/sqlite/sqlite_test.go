@@ -239,12 +239,12 @@ func TestBackups(t *testing.T) {
 	}
 	vb, err := s.CreateBackup(ctx, store.Backup{
 		Kind: store.BackupKindVolume, ServiceID: "SVC2", ProjectID: "P", ServiceName: "web", ProjectName: "shop",
-		TargetID: store.LocalTargetID, ObjectKey: "shop/web/x.tar.gz", Status: store.OpRunning, Volumes: []string{"uploads", "cache"},
+		ServiceKind: store.ServiceKindRedis, TargetID: store.LocalTargetID, ObjectKey: "shop/web/x.tar.gz", Status: store.OpRunning, Volumes: []string{"uploads", "cache"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := s.GetBackup(ctx, vb.ID); err != nil || got.Kind != store.BackupKindVolume || !slices.Equal(got.Volumes, vb.Volumes) {
+	if got, err := s.GetBackup(ctx, vb.ID); err != nil || got.Kind != store.BackupKindVolume || got.ServiceKind != store.ServiceKindRedis || !slices.Equal(got.Volumes, vb.Volumes) {
 		t.Fatalf("volume backup round-trip: %+v %v", got, err)
 	}
 	if err := s.DeleteBackup(ctx, vb.ID); err != nil {

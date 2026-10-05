@@ -115,7 +115,7 @@ export function Backup() {
       <PageBody>
         <div className="flex flex-wrap items-center gap-4">
           <span className="flex size-12 items-center justify-center rounded-xl bg-muted">
-            <BackupIcon kind={b.kind} className="size-6" />
+            <BackupIcon backup={b} className="size-6" />
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="flex flex-wrap items-center gap-2 text-xl font-semibold">

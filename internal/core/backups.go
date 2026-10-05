@@ -89,6 +89,7 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, scheduleID 
 		ServiceID:   svc.ID,
 		ProjectID:   project.ID,
 		ServiceName: svc.Name,
+		ServiceKind: svc.Kind,
 		ProjectName: project.Name,
 		TargetID:    target.ID,
 		ScheduleID:  scheduleID,
