@@ -1,7 +1,6 @@
 import { KeyRound } from "lucide-react";
 import type { ReactNode, SVGProps } from "react";
 import type { DatabaseKind } from "@/api";
-import { cn } from "@/lib/utils";
 
 // Logos from Simple Icons (CC0-1.0), https://simpleicons.org.
 
@@ -23,15 +22,6 @@ export function RedisIcon(props: SVGProps<SVGSVGElement>) {
 }
 
 export const databaseLabels: Record<DatabaseKind, string> = { postgres: "PostgreSQL", redis: "Redis" };
-
-/** A database kind's logo in its brand color. */
-export function DatabaseIcon({ kind, className, ...props }: { kind: DatabaseKind } & SVGProps<SVGSVGElement>) {
-  return kind === "redis" ? (
-    <RedisIcon className={cn("text-[#FF4438]", className)} {...props} />
-  ) : (
-    <PostgresIcon className={cn("text-[#4169E1]", className)} {...props} />
-  );
-}
 
 export function ProtonIcon(props: SVGProps<SVGSVGElement>) {
   return (

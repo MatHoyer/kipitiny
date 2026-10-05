@@ -36,6 +36,9 @@ func TestValidateService(t *testing.T) {
 		{"cpu limit", func(s *store.Service) { s.CPUs = 0.5 }, false},
 		{"tiny cpu limit", func(s *store.Service) { s.CPUs = 0.001 }, true},
 		{"negative cpu limit", func(s *store.Service) { s.CPUs = -1 }, true},
+		{"icon", func(s *store.Service) { s.Icon = "home-assistant" }, false},
+		{"uppercase icon", func(s *store.Service) { s.Icon = "Ghost" }, true},
+		{"icon path", func(s *store.Service) { s.Icon = "../ghost" }, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -221,5 +224,22 @@ func TestTunnelMode(t *testing.T) {
 	}
 	if _, ok := spec.NetworkingConfig.EndpointsConfig[docker.ProxyNetwork]; !ok {
 		t.Error("cloudflared must reach Traefik on the proxy network")
+	}
+}
+
+func TestIconHint(t *testing.T) {
+	for _, tc := range []struct {
+		svc  store.Service
+		want string
+	}{
+		{store.Service{Image: "postgres:17"}, "postgres"},
+		{store.Service{Image: "ghcr.io/n8n-io/n8n:1.0@sha256:" + sha}, "n8n"},
+		{store.Service{Image: "bitnami/redis"}, "redis"},
+		{store.Service{Image: "ghcr.io/org/blog:v2", Icon: "ghost"}, "ghost"},
+		{store.Service{Image: "Not An Image"}, ""},
+	} {
+		if got := IconHint(tc.svc); got != tc.want {
+			t.Errorf("IconHint(%+v) = %q, want %q", tc.svc, got, tc.want)
+		}
 	}
 }

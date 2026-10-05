@@ -3,9 +3,8 @@ import { Activity, Box, ChevronLeft, Database, Globe, Layers, Lock, Plus, Trash2
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { DatabaseIcon, databaseLabels, PostgresIcon, RedisIcon } from "@/components/brand-icons";
-import { cn } from "@/lib/utils";
-import { ChoiceTile, CopyButton, DangerZone, EmptyState, ErrorText, IconTile, Mono, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
+import { ServiceIcon, ServiceIconTile } from "@/components/service-icon";
+import { ChoiceTile, CopyButton, DangerZone, EmptyState, ErrorText, Mono, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
@@ -221,18 +220,7 @@ function ServiceCard({ svc: s }: { svc: ServiceT }) {
     <Link to={`/services/${s.id}`} className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
       <Card className="h-full gap-3 px-4 transition-all group-hover:-translate-y-px group-hover:shadow-md group-hover:ring-foreground/20">
         <div className="flex items-start gap-3">
-          {isDatabase(s.kind) ? (
-            <span
-              className={cn(
-                "flex size-10 shrink-0 items-center justify-center rounded-lg",
-                s.kind === "redis" ? "bg-[#FF4438]/10" : "bg-[#4169E1]/10",
-              )}
-            >
-              <DatabaseIcon kind={s.kind} aria-label={databaseLabels[s.kind]} className="size-5" />
-            </span>
-          ) : (
-            <IconTile icon={Box} />
-          )}
+          <ServiceIconTile service={s} />
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium">{s.name}</p>
             <p className="truncate font-mono text-xs text-muted-foreground">
@@ -322,7 +310,7 @@ function DatabaseReferences({ dbs }: { dbs: DatabaseRef[] }) {
       {dbs.map((db) => (
         <div key={db.name} className="space-y-1.5">
           <p className="flex items-center gap-2 text-sm font-medium">
-            <DatabaseIcon kind={db.kind} className="size-4" />
+            <ServiceIcon service={db} className="size-4" />
             {db.name}
           </p>
           <ul className="flex flex-wrap gap-1.5">
@@ -367,13 +355,13 @@ const choiceGroups: { label: string; choices: { id: Choice; icon: ReactNode; tit
     choices: [
       {
         id: "postgres",
-        icon: <PostgresIcon className="text-[#4169E1]" />,
+        icon: <ServiceIcon service={{ kind: "postgres" }} />,
         title: "PostgreSQL",
         description: "Relational database, backed up on a schedule.",
       },
       {
         id: "redis",
-        icon: <RedisIcon className="text-[#FF4438]" />,
+        icon: <ServiceIcon service={{ kind: "redis" }} />,
         title: "Redis",
         description: "In-memory store for caches, queues and sessions.",
       },

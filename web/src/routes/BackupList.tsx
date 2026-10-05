@@ -1,7 +1,7 @@
 import { ChevronRight, DatabaseBackup, HardDrive, ShieldAlert, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { DatabaseIcon } from "@/components/brand-icons";
+import { ServiceIcon } from "@/components/service-icon";
 import { EmptyState, StateBadge, Tag } from "@/components/common";
 import { byDay, formatBytes, formatDuration, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -71,10 +71,9 @@ export function BackupList({
 }
 
 export function BackupIcon({ backup: b, className }: { backup: Backup; className?: string }) {
-  if (b.kind === "postgres" || b.serviceKind === "postgres") return <DatabaseIcon kind="postgres" className={className} />;
-  if (b.serviceKind === "redis") return <DatabaseIcon kind="redis" className={className} />;
-  if (b.kind === "volume") return <HardDrive className={className} />;
-  return <DatabaseBackup className={className} />;
+  if (b.kind === "manager") return <DatabaseBackup className={className} />;
+  const kind = b.serviceKind ?? (b.kind === "postgres" ? "postgres" : undefined);
+  return <ServiceIcon service={{ icon: b.serviceIcon, kind }} fallback={HardDrive} className={className} />;
 }
 
 export function backupTitle(b: Backup, withProject = true) {

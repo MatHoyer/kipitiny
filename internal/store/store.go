@@ -247,6 +247,9 @@ type Service struct {
 	Name     string      `bun:"name" json:"name"`
 	Kind     ServiceKind `bun:"kind" json:"kind"`
 	Image    string      `bun:"image" json:"image"`
+	// Icon names the logo the UI shows (e.g. ghost), set by a template or
+	// the user; empty picks one from the kind or image.
+	Icon string `bun:"icon" json:"icon"`
 	// Replicas is always 1 for databases.
 	Replicas int `bun:"replicas" json:"replicas"`
 	// Port is the container port Traefik routes to; 0 when not public.
@@ -434,14 +437,16 @@ type Backup struct {
 	ProjectName string     `bun:"project_name" json:"projectName"`
 	// ServiceKind is the backed-up service's kind; empty for the manager.
 	ServiceKind ServiceKind `bun:"service_kind" json:"serviceKind,omitempty"`
-	TargetID    string      `bun:"target_id" json:"targetId"`
-	ScheduleID  string      `bun:"schedule_id" json:"scheduleId,omitempty"`
-	ObjectKey   string      `bun:"object_key" json:"objectKey"`
-	Status      OpStatus    `bun:"status" json:"status"`
-	SizeBytes   int64       `bun:"size_bytes" json:"sizeBytes"`
-	SHA256      string      `bun:"sha256" json:"sha256"`
-	Encrypted   bool        `bun:"encrypted" json:"encrypted"`
-	PGVersion   string      `bun:"pg_version" json:"pgVersion"`
+	// ServiceIcon is the service's icon hint (see core.IconHint).
+	ServiceIcon string   `bun:"service_icon" json:"serviceIcon,omitempty"`
+	TargetID    string   `bun:"target_id" json:"targetId"`
+	ScheduleID  string   `bun:"schedule_id" json:"scheduleId,omitempty"`
+	ObjectKey   string   `bun:"object_key" json:"objectKey"`
+	Status      OpStatus `bun:"status" json:"status"`
+	SizeBytes   int64    `bun:"size_bytes" json:"sizeBytes"`
+	SHA256      string   `bun:"sha256" json:"sha256"`
+	Encrypted   bool     `bun:"encrypted" json:"encrypted"`
+	PGVersion   string   `bun:"pg_version" json:"pgVersion"`
 	// Volumes names the volumes in a volume backup's archive.
 	Volumes    []string   `bun:"volumes" json:"volumes,omitempty"`
 	DurationMS int64      `bun:"duration_ms" json:"durationMs"`

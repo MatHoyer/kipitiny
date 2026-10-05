@@ -2,7 +2,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { Activity, ChevronRight, FolderKanban, Globe, Layers, Plus, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
-import { DatabaseIcon } from "@/components/brand-icons";
+import { ServiceIcon } from "@/components/service-icon";
 import { EmptyState, ErrorText, IconTile, StatCard, Tag, Loading } from "@/components/common";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -96,7 +96,7 @@ function ProjectCard({ project: p, services, server }: { project: ProjectT; serv
             <p className="flex items-center gap-2 font-medium">
               <span className="truncate">{p.name}</span>
               {dbKinds.map((k) => (
-                <DatabaseIcon key={k} kind={k} aria-label={`Has a ${k} database`} className="size-3.5 shrink-0" />
+                <ServiceIcon key={k} service={{ kind: k }} aria-label={`Has a ${k} database`} className="size-3.5 shrink-0" />
               ))}
             </p>
             <p className="text-xs text-muted-foreground">

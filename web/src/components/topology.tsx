@@ -1,7 +1,8 @@
-import { Box, Globe, HardDrive, Lock, Network, Server, ShieldCheck, TriangleAlert } from "lucide-react";
+import { Globe, HardDrive, Lock, Network, Server, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { CloudflareIcon, DatabaseIcon } from "@/components/brand-icons";
+import { CloudflareIcon } from "@/components/brand-icons";
+import { ServiceIcon } from "@/components/service-icon";
 import { stateColors, Tag } from "@/components/common";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -307,7 +308,7 @@ function ServicePills({ services, isPublic, labelled }: { services: TopoService[
             >
               <span className={cn("size-1.5 shrink-0 rounded-full", stateColors[state] ?? "bg-muted-foreground/50")} />
               {isPublic && <Globe className="size-3 shrink-0 text-sky-500" />}
-              {isDatabase(svc.kind) && <DatabaseIcon kind={svc.kind} className="size-3 shrink-0" />}
+              <ServiceIcon service={svc} fallback={null} className="size-3 shrink-0" />
               <span className="truncate">{svc.name}</span>
             </li>
           );
@@ -384,7 +385,7 @@ function ServiceNode({ svc }: { svc: TopoService }) {
   return (
     <Node anchor={`svc-${svc.id}`} className={cn("w-56", svc.domain && "ring-sky-500/40", warning && "ring-destructive/50")}>
       <NodeHead
-        icon={isDatabase(kind) ? <DatabaseIcon kind={kind} className="size-4" /> : <Box className="size-4 text-primary" />}
+        icon={<ServiceIcon service={svc} className="size-4 text-primary" />}
         title={
           <Link to={`/services/${svc.id}`} title={svc.name} className="hover:underline">
             {svc.name}

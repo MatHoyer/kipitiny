@@ -93,6 +93,7 @@ type TopoService struct {
 	Name     string            `json:"name"`
 	Kind     store.ServiceKind `json:"kind"`
 	Image    string            `json:"image"`
+	Icon     string            `json:"icon,omitempty"`
 	Domain   string            `json:"domain,omitempty"`
 	Port     int               `json:"port,omitempty"`
 	Replicas int               `json:"replicas"`
@@ -209,7 +210,7 @@ func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []s
 		dbs := databasesOf(own)
 		for _, s := range own {
 			ts := TopoService{
-				ID: s.ID, Name: s.Name, Kind: s.Kind, Image: s.Image, Domain: s.Domain, Port: s.Port,
+				ID: s.ID, Name: s.Name, Kind: s.Kind, Image: s.Image, Icon: s.Icon, Domain: s.Domain, Port: s.Port,
 				Replicas: s.Replicas, Stopped: s.Stopped, Uses: usedDatabases(s, p, dbs), Containers: []TopoNode{},
 			}
 			ts.Volume = DataVolume(s)

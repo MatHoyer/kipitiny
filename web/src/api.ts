@@ -46,6 +46,8 @@ export type Service = {
   name: string;
   kind: ServiceKind;
   image: string;
+  /** Logo name shown in the UI (e.g. ghost); empty picks one from the kind or image. */
+  icon: string;
   replicas: number;
   port: number;
   domain: string;
@@ -109,6 +111,7 @@ export type TopoService = {
   name: string;
   kind: ServiceKind;
   image: string;
+  icon?: string;
   domain?: string;
   port?: number;
   replicas: number;
@@ -155,6 +158,7 @@ export type ServiceInput = {
   name: string;
   kind?: ServiceKind;
   image?: string;
+  icon?: string;
   replicas?: number;
   port?: number;
   domain?: string;
@@ -262,6 +266,8 @@ export type Backup = {
   projectName: string;
   /** The backed-up service's kind; absent for the manager's own backups. */
   serviceKind?: ServiceKind;
+  /** The service's icon hint (its icon, else its image's base name). */
+  serviceIcon?: string;
   targetId: string;
   objectKey: string;
   status: OpStatus;

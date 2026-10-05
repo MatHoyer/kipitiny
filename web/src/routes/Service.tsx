@@ -20,7 +20,8 @@ import {
 import { lazy, Suspense, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { DatabaseIcon } from "@/components/brand-icons";
+import { ServiceIcon, serviceLogos } from "@/components/service-icon";
+import { FloatingSelect } from "@/components/ui/floating-select";
 import { CopyButton, DangerZone, Empty, EmptyState, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { BasicAuthUsers, type BasicAuthRow } from "@/components/basic-auth-users";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -154,7 +155,7 @@ export function Service() {
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Card size="sm" className="gap-1.5 px-3">
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {isDatabase(svc.kind) ? <DatabaseIcon kind={svc.kind} className="size-3.5" /> : <Activity className="size-3.5" />}
+              <ServiceIcon service={svc} fallback={Activity} className="size-3.5" />
               State
             </p>
             <StateBadge state={state} className="self-start text-sm text-foreground" />
@@ -333,6 +334,7 @@ function ContainerRow({ serviceId, container: c }: { serviceId: string; containe
 /** The settings form's fields, as saved. */
 const settingsForm = (s: ServiceT) => ({
   image: s.image,
+  icon: s.icon || AUTO_ICON,
   domain: s.domain,
   port: s.port ? String(s.port) : "",
   replicas: String(s.replicas),
@@ -342,6 +344,28 @@ const settingsForm = (s: ServiceT) => ({
   preDeploy: s.preDeploy,
   stopGrace: s.stopGraceSeconds ? String(s.stopGraceSeconds) : "",
 });
+
+/** Radix selects can't hold "": this stands for an empty icon. */
+const AUTO_ICON = "auto";
+
+/** Automatic (from the image) or a known logo; an unknown saved icon stays listed. */
+function iconOptions(svc: ServiceT, image: string) {
+  const option = (value: string, icon: string | undefined, label: string) => ({
+    value,
+    label: (
+      <span className="flex items-center gap-2">
+        <ServiceIcon service={{ icon, kind: svc.kind, image: icon ? undefined : image }} className="size-4 shrink-0" />
+        {label}
+      </span>
+    ),
+  });
+  const names = Object.keys(serviceLogos);
+  if (svc.icon && !names.includes(svc.icon)) names.push(svc.icon);
+  return [
+    option(AUTO_ICON, undefined, "Automatic, from the image"),
+    ...names.map((name) => option(name, name, serviceLogos[name]?.label ?? name)),
+  ];
+}
 
 function Settings({ svc }: { svc: ServiceT }) {
   const qc = useQueryClient();
@@ -360,6 +384,7 @@ function Settings({ svc }: { svc: ServiceT }) {
           ? { image: form.image.trim(), memoryMb: Number(form.memory) || 0, cpus: Number(form.cpus) || 0 }
           : {
               image: form.image.trim(),
+              icon: form.icon === AUTO_ICON ? "" : form.icon,
               domain: form.domain.trim(),
               port: Number(form.port) || 0,
               replicas: Number(form.replicas) || 1,
@@ -397,6 +422,13 @@ function Settings({ svc }: { svc: ServiceT }) {
         />
         {!isDb && (
           <>
+            <FloatingSelect
+              label="Icon"
+              value={form.icon}
+              onValueChange={(icon) => setForm({ ...form, icon })}
+              options={iconOptions(svc, form.image)}
+              className="sm:col-span-2"
+            />
             <DomainField value={form.domain} onChange={(domain) => setForm({ ...form, domain })} className="sm:col-span-2" />
             <FloatingInput
               label="Port"
