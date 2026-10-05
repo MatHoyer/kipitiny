@@ -198,6 +198,9 @@ func (s *Store) CreateService(ctx context.Context, svc store.Service) (store.Ser
 	if svc.Volumes == nil {
 		svc.Volumes = []store.Volume{}
 	}
+	if svc.PublishedPorts == nil {
+		svc.PublishedPorts = []store.PublishedPort{}
+	}
 	// Services always run on their project's server.
 	err := s.db.NewSelect().Model((*store.Project)(nil)).Column("server_id").
 		Where("id = ?", svc.ProjectID).Scan(ctx, &svc.ServerID)
@@ -226,7 +229,7 @@ func (s *Store) ListServices(ctx context.Context, projectID string) ([]store.Ser
 func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Service, error) {
 	svc.UpdatedAt = now()
 	res, err := s.db.NewUpdate().Model(&svc).
-		Column("image", "replicas", "port", "domain", "env", "secrets", "memory_mb", "cpus", "health_path", "pre_deploy", "volumes", "middlewares", "pre_backup", "updated_at").
+		Column("image", "replicas", "port", "domain", "env", "secrets", "memory_mb", "cpus", "health_path", "pre_deploy", "volumes", "middlewares", "pre_backup", "published_ports", "updated_at").
 		WherePK().Exec(ctx)
 	if err != nil {
 		return store.Service{}, mapErr(err)

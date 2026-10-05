@@ -89,9 +89,13 @@ func TestProjectsAndServices(t *testing.T) {
 	if svc.Volumes == nil || len(svc.Volumes) != 0 {
 		t.Fatalf("volumes default: %#v", svc.Volumes)
 	}
+	if svc.PublishedPorts == nil || len(svc.PublishedPorts) != 0 {
+		t.Fatalf("published ports default: %#v", svc.PublishedPorts)
+	}
 	svc.Env["B"] = "2"
 	svc.Replicas = 3
 	svc.Volumes = []store.Volume{{Name: "uploads", Path: "/app/uploads"}}
+	svc.PublishedPorts = []store.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}}
 	svc.Middlewares = store.Middlewares{
 		BasicAuth:   []store.BasicAuthUser{{Name: "ann", Hash: "$2a$10$x"}},
 		IPAllowList: []string{"10.0.0.0/8"},
@@ -106,7 +110,7 @@ func TestProjectsAndServices(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got2.Replicas != 3 || got2.Env["A"] != "1" || got2.Env["B"] != "2" || got2.Domain != "shop.example.com" ||
-		!slices.Equal(got2.Volumes, svc.Volumes) || !reflect.DeepEqual(got2.Middlewares, svc.Middlewares) {
+		!slices.Equal(got2.Volumes, svc.Volumes) || !slices.Equal(got2.PublishedPorts, svc.PublishedPorts) || !reflect.DeepEqual(got2.Middlewares, svc.Middlewares) {
 		t.Fatalf("service round-trip mismatch: %+v", got2)
 	}
 

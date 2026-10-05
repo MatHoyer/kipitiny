@@ -120,6 +120,16 @@ Per-app middlewares (basic auth, IP allowlist, rate limit, response headers) are
 
 Databases get no Traefik labels (TCP/SNI routing is a possible later feature).
 
+### Published ports (non-HTTP apps)
+
+Apps that speak something else than HTTP (game servers, MQTT, SMTP…) list **published ports** (`hostPort`, `containerPort`, `tcp`|`udp`), bound by Docker on every host address. Not Traefik TCP/UDP entrypoints: those are static configuration (each new port recreates Traefik, cutting every app), non-TLS TCP can only route `HostSNI(*)` (one service per entrypoint anyway) and the client IP is lost without PROXY protocol.
+
+- Two containers can't bind one host port: an app with published ports runs **1 replica** and deploys stop-then-start (§9).
+- A host port/protocol is used by one service per server, never Traefik's HTTP/HTTPS ports; checked on save, since Docker would only fail at deploy.
+- The pre-deploy container publishes nothing.
+- Databases can't publish ports: they stay private.
+- The host firewall is the operator's; a Cloudflare tunnel only carries HTTP.
+
 ## 8. Replicas
 
 Replicas on one host = several identical containers with **identical Traefik router/service labels** and different names (`shop-web-1`, `shop-web-2`). Traefik merges them into one load balancer.
@@ -149,6 +159,8 @@ Replicas on one host = several identical containers with **identical Traefik rou
 5. Traefik balances between old and new.
 6. Stop and remove the old replica.
 7. On failed health check: remove the new container, stop rollout, keep old replicas (automatic rollback).
+
+Apps with published ports can't overlap, so they **swap**: pre-deploy, stop the old replica (kept for its logs), start the new one, wait for health (probe on the HTTP port, else the first published TCP port, else a stability wait). On failure the new container is removed and the old one started again. Short downtime by design.
 
 No builds on the server (Git builds existed and were removed to keep services simple; may return later). Flow: build once in CI, then deploy by tag (`kipitiny deploy`, a deploy-scoped token that may change the tag, never the repository). Every pull is pinned to its digest in the deployment record, so reconciler recreations and rollbacks never pick up a moved tag.
 

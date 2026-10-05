@@ -52,6 +52,8 @@ type ServiceInput struct {
 	// Middlewares apply to a public app's requests (apps only).
 	Middlewares *MiddlewaresInput `json:"middlewares"`
 	PreBackup   string            `json:"preBackup"`
+	// PublishedPorts bind host ports to the app's container (apps only).
+	PublishedPorts []store.PublishedPort `json:"publishedPorts"`
 }
 
 // ServicePatch updates only the fields that are set. Env replaces the whole
@@ -73,6 +75,8 @@ type ServicePatch struct {
 	// Middlewares replaces the app's middlewares; nil keeps them.
 	Middlewares *MiddlewaresInput `json:"middlewares"`
 	PreBackup   *string           `json:"preBackup"`
+	// PublishedPorts replaces the app's published ports; nil keeps them.
+	PublishedPorts []store.PublishedPort `json:"publishedPorts"`
 }
 
 type ContainerView struct {
@@ -108,20 +112,21 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		in.Replicas = 1
 	}
 	svc := store.Service{
-		ProjectID:  projectID,
-		Name:       in.Name,
-		Kind:       in.Kind,
-		Image:      strings.TrimSpace(in.Image),
-		Replicas:   in.Replicas,
-		Port:       in.Port,
-		Domain:     strings.ToLower(strings.TrimSpace(in.Domain)),
-		Env:        in.Env,
-		MemoryMB:   in.MemoryMB,
-		CPUs:       in.CPUs,
-		HealthPath: strings.TrimSpace(in.HealthPath),
-		PreDeploy:  strings.TrimSpace(in.PreDeploy),
-		Volumes:    normalizeVolumes(in.Volumes),
-		PreBackup:  strings.TrimSpace(in.PreBackup),
+		ProjectID:      projectID,
+		Name:           in.Name,
+		Kind:           in.Kind,
+		Image:          strings.TrimSpace(in.Image),
+		Replicas:       in.Replicas,
+		Port:           in.Port,
+		Domain:         strings.ToLower(strings.TrimSpace(in.Domain)),
+		Env:            in.Env,
+		MemoryMB:       in.MemoryMB,
+		CPUs:           in.CPUs,
+		HealthPath:     strings.TrimSpace(in.HealthPath),
+		PreDeploy:      strings.TrimSpace(in.PreDeploy),
+		Volumes:        normalizeVolumes(in.Volumes),
+		PreBackup:      strings.TrimSpace(in.PreBackup),
+		PublishedPorts: normalizePorts(in.PublishedPorts),
 	}
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
@@ -222,6 +227,9 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	if p.PreBackup != nil {
 		svc.PreBackup = strings.TrimSpace(*p.PreBackup)
 	}
+	if p.PublishedPorts != nil {
+		svc.PublishedPorts = normalizePorts(p.PublishedPorts)
+	}
 	if p.Middlewares != nil {
 		if svc.Middlewares, err = mergeMiddlewares(*p.Middlewares, old.Middlewares); err != nil {
 			return ServiceView{}, err
@@ -269,6 +277,9 @@ func (c *Core) validate(ctx context.Context, s store.Service) error {
 	if err := c.checkBasicAuthSchemes(s.Middlewares); err != nil {
 		return err
 	}
+	if err := c.checkPortsFree(ctx, s); err != nil {
+		return err
+	}
 	return checkRefs(s.Env, envSources{project: project.Env, dbs: dbs})
 }
 
@@ -291,8 +302,8 @@ func validateService(s store.Service) error {
 		if len(s.Volumes) > 0 || s.PreBackup != "" {
 			return fmt.Errorf("%w: databases keep their data in their own volume, backed up as is", ErrInvalid)
 		}
-		if !s.Middlewares.IsZero() {
-			return fmt.Errorf("%w: databases are never public, so take no middlewares", ErrInvalid)
+		if !s.Middlewares.IsZero() || len(s.PublishedPorts) > 0 {
+			return fmt.Errorf("%w: databases are never public, so take no middlewares or published ports", ErrInvalid)
 		}
 		return validateDatabase(s)
 	}
@@ -300,6 +311,9 @@ func validateService(s store.Service) error {
 		return err
 	}
 	if err := validateMiddlewares(s.Middlewares); err != nil {
+		return err
+	}
+	if err := validatePorts(s); err != nil {
 		return err
 	}
 	if s.HealthPath != "" {
@@ -453,6 +467,9 @@ func masked(s store.Service) store.Service {
 	}
 	if s.Volumes == nil {
 		s.Volumes = []store.Volume{}
+	}
+	if s.PublishedPorts == nil {
+		s.PublishedPorts = []store.PublishedPort{}
 	}
 	s.Middlewares = maskMiddlewares(s.Middlewares)
 	return s

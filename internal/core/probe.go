@@ -160,7 +160,7 @@ func imageHealthcheck(ctx context.Context, dk *docker.Client, image string) (boo
 // containers, so a new replica gets traffic once it actually serves, and one
 // that stops answering is taken out of rotation.
 func withProbe(spec *client.ContainerCreateOptions, svc store.Service, m mount.Mount) {
-	target := fmt.Sprintf("tcp://127.0.0.1:%d", svc.Port)
+	target := fmt.Sprintf("tcp://127.0.0.1:%d", probePort(svc))
 	if svc.HealthPath != "" {
 		target = fmt.Sprintf("http://127.0.0.1:%d%s", svc.Port, svc.HealthPath)
 	}
@@ -177,10 +177,10 @@ func withProbe(spec *client.ContainerCreateOptions, svc store.Service, m mount.M
 }
 
 // probeFor returns the probe mount to inject into the service's replicas, or
-// nil when the image has its own healthcheck, the service has no port, or the
-// probe can't run on that server.
+// nil when the image has its own healthcheck, the service has no TCP port, or
+// the probe can't run on that server.
 func (c *Core) probeFor(ctx context.Context, svc store.Service) (*mount.Mount, error) {
-	if svc.Kind != store.ServiceKindApp || svc.Port == 0 {
+	if svc.Kind != store.ServiceKindApp || probePort(svc) == 0 {
 		return nil, nil
 	}
 	has, err := imageHealthcheck(ctx, c.dockerFor(svc.ServerID), svc.Image)

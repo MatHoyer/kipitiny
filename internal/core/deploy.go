@@ -278,8 +278,11 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 			return err
 		}
 	}
-	if svc.Kind.IsDatabase() {
+	switch {
+	case svc.Kind.IsDatabase():
 		return c.recreate(ctx, project, svc, src, dep, logf)
+	case len(svc.PublishedPorts) > 0:
+		return c.swap(ctx, project, svc, src, dep, out, logf)
 	}
 	return c.rollout(ctx, project, svc, src, dep, out, logf)
 }
@@ -348,21 +351,9 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 	dep store.Deployment, out io.Writer, logf func(string, ...any)) error {
 
 	dk := c.dockerFor(svc.ServerID)
-	existing, err := c.serviceContainers(ctx, svc)
+	active, err := c.removeRetired(ctx, svc, logf)
 	if err != nil {
 		return err
-	}
-	var active []container.Summary
-	for _, ct := range existing {
-		if isActive(ct, svc) {
-			active = append(active, ct)
-			continue
-		}
-		// Retired by an earlier deploy (kept for its logs) or left by a failed one.
-		logf("Removing retired container %s", ct.Names[0][1:])
-		if err := dk.RemoveContainer(ctx, ct.ID, stopTimeout); err != nil {
-			return err
-		}
 	}
 
 	if svc.PreDeploy != "" {
@@ -435,6 +426,99 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 	return nil
 }
 
+// removeRetired removes the service's containers retired by an earlier
+// deploy (kept for their logs) or left by a failed one, and returns the
+// active ones.
+func (c *Core) removeRetired(ctx context.Context, svc store.Service, logf func(string, ...any)) ([]container.Summary, error) {
+	dk := c.dockerFor(svc.ServerID)
+	existing, err := c.serviceContainers(ctx, svc)
+	if err != nil {
+		return nil, err
+	}
+	var active []container.Summary
+	for _, ct := range existing {
+		if isActive(ct, svc) {
+			active = append(active, ct)
+			continue
+		}
+		logf("Removing retired container %s", ct.Names[0][1:])
+		if err := dk.RemoveContainer(ctx, ct.ID, stopTimeout); err != nil {
+			return nil, err
+		}
+	}
+	return active, nil
+}
+
+// swap replaces an app that publishes host ports: two containers can't bind
+// the same port, so the old replicas stop before the new one starts, a short
+// downtime. They are kept stopped for their logs; if the new replica doesn't
+// become ready, it is removed and they start again.
+func (c *Core) swap(ctx context.Context, project store.Project, svc store.Service, src envSources,
+	dep store.Deployment, out io.Writer, logf func(string, ...any)) error {
+
+	dk := c.dockerFor(svc.ServerID)
+	active, err := c.removeRetired(ctx, svc, logf)
+	if err != nil {
+		return err
+	}
+	if svc.PreDeploy != "" {
+		if err := c.preDeploy(ctx, project, svc, src, dep, out, logf); err != nil {
+			return err
+		}
+	}
+	probe, err := c.probeFor(ctx, svc)
+	if err != nil {
+		return err
+	}
+
+	var stopped []container.Summary
+	restore := func() {
+		for _, old := range stopped {
+			logf("Starting %s again", old.Names[0][1:])
+			if _, err := dk.ContainerStart(context.WithoutCancel(ctx), old.ID, client.ContainerStartOptions{}); err != nil {
+				logf("Warning: could not start %s: %v", old.Names[0][1:], err)
+			}
+		}
+	}
+	secs := int(stopTimeoutFor(svc).Seconds())
+	for _, old := range active {
+		if old.State != container.StateRunning {
+			continue
+		}
+		logf("Stopping %s to free its ports", old.Names[0][1:])
+		if _, err := dk.ContainerStop(ctx, old.ID, client.ContainerStopOptions{Timeout: &secs}); err != nil {
+			restore()
+			return err
+		}
+		stopped = append(stopped, old)
+	}
+
+	spec := replicaSpec(project, svc, src, dep.ID, 1, probe, c.routeFor(ctx, svc))
+	logf("Starting %s", spec.Name)
+	id, err := dk.Run(ctx, spec)
+	if err == nil {
+		logf("Waiting for the new replica to become ready (%s)", readinessMode(svc))
+		if err = c.waitReady(ctx, dk, id); err != nil {
+			copyContainerLogs(ctx, dk, []string{id}, out)
+			err = fmt.Errorf("new version not ready: %w", err)
+		}
+	}
+	if err == nil {
+		if err = c.store.SetServiceStopped(ctx, svc.ID, false); err == nil {
+			err = c.store.SetCurrentDeployment(ctx, svc.ID, dep.ID)
+		}
+	}
+	if err != nil {
+		logf("Rolling back: removing the new container, the previous version starts again")
+		if id != "" {
+			_ = dk.RemoveContainer(context.WithoutCancel(ctx), id, stopTimeoutFor(svc))
+		}
+		restore()
+		return err
+	}
+	return nil
+}
+
 // isActive reports whether a container belongs to the deployment serving
 // traffic. Containers from before deployments were tracked count while running.
 func isActive(ct container.Summary, svc store.Service) bool {
@@ -448,8 +532,8 @@ func readinessMode(svc store.Service) string {
 	switch {
 	case svc.HealthPath != "":
 		return fmt.Sprintf("HTTP GET :%d%s", svc.Port, svc.HealthPath)
-	case svc.Port > 0:
-		return fmt.Sprintf("port %d accepting connections", svc.Port)
+	case probePort(svc) > 0:
+		return fmt.Sprintf("port %d accepting connections", probePort(svc))
 	}
 	return "running for 5s"
 }
@@ -498,6 +582,7 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 		applyDatabaseSpec(cfg, host, svc)
 	} else {
 		host.Mounts = append(host.Mounts, appVolumeMounts(svc)...)
+		cfg.ExposedPorts, host.PortBindings = portBindings(svc.PublishedPorts)
 	}
 	name := fmt.Sprintf("%s-%s-%d", project.Name, svc.Name, replica)
 	if !svc.Kind.IsDatabase() {
