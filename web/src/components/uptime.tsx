@@ -11,7 +11,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { Tip } from "@/components/ui/tooltip";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { api, type Service, type Uptime, type UptimeResult } from "../api";
+import { api, httpRouted, type Service, type Uptime, type UptimeResult } from "../api";
 
 const pct = (v: number | null) => (v === null ? "–" : `${v >= 99.995 ? 100 : v.toFixed(2)}%`);
 
@@ -21,7 +21,7 @@ export function UptimeSection({ svc }: { svc: Service }) {
   const u = uptime.data;
   const chk = u?.check;
 
-  if (!svc.domain && !chk) return null;
+  if (!httpRouted(svc) && !chk) return null;
   return (
     <Section
       title="Uptime"
@@ -166,7 +166,7 @@ function UptimeDialog({ svc, uptime }: { svc: Service; uptime: Uptime }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="xs" disabled={!svc.domain && !uptime.check}>
+        <Button variant="outline" size="xs" disabled={!httpRouted(svc) && !uptime.check}>
           {uptime.check ? <Pencil data-icon="inline-start" /> : <HeartPulse data-icon="inline-start" />}
           {uptime.check ? "Edit" : "Add check"}
         </Button>

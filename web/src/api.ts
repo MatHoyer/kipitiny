@@ -8,6 +8,9 @@ export const isDatabase = (kind: ServiceKind): kind is DatabaseKind => kind !== 
 /** Whether a service has data to back up: a database, or an app with volumes. */
 export const canBackup = (s: Pick<Service, "kind" | "volumes">) => isDatabase(s.kind) || s.volumes.length > 0;
 
+/** Whether Traefik routes the service's domain: an app with published ports may have a domain only for DNS. */
+export const httpRouted = (s: Pick<Service, "domain" | "port">) => !!s.domain && s.port > 0;
+
 export const databasePorts: Record<DatabaseKind, number> = { postgres: 5432, redis: 6379 };
 
 /** A project database, as env references see it. */
@@ -60,6 +63,10 @@ export type Service = {
   middlewares: Middlewares;
   /** Runs (sh -c) in a replica before each volume backup. */
   preBackup: string;
+  /** Host ports bound straight to the container (apps only); such an app runs one replica. */
+  publishedPorts: PublishedPort[];
+  /** Seconds an app gets to exit after SIGTERM; 0 means 10. */
+  stopGraceSeconds: number;
   currentDeploymentId: string;
   stopped: boolean;
   createdAt: string;
@@ -70,6 +77,8 @@ export type Service = {
 };
 
 export type Volume = { name: string; path: string };
+
+export type PublishedPort = { hostPort: number; containerPort: number; protocol: "tcp" | "udp" };
 
 export type RateLimit = { average: number; burst: number };
 
@@ -158,6 +167,8 @@ export type ServiceInput = {
   volumes?: Volume[];
   middlewares?: MiddlewaresInput;
   preBackup?: string;
+  publishedPorts?: PublishedPort[];
+  stopGraceSeconds?: number;
 };
 
 export type Connection = {
