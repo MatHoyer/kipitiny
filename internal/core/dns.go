@@ -442,14 +442,16 @@ func (c *Core) wantedRecords(ctx context.Context, zones []cloudflare.Zone) (map[
 	}
 
 	wants := map[string]want{}
-	add := func(host, serverID string) {
+	// direct: the record points at the server, never proxied, for traffic
+	// Cloudflare doesn't carry (published ports).
+	add := func(host, serverID string, direct bool) {
 		z, ok := cloudflare.ZoneFor(zones, host)
 		if !ok || isLocalDomain(host) {
 			return
 		}
 		w := want{zone: z, record: cloudflare.Record{Name: host, TTL: 1}}
 		sv := byID[serverID]
-		if token := c.tunnelToken(sv); token != "" {
+		if token := c.tunnelToken(sv); token != "" && !direct {
 			t, err := cloudflare.ParseTunnelToken(token)
 			if err != nil {
 				w.problem = fmt.Sprintf("%s's tunnel token: %v", sv.Name, err)
@@ -461,17 +463,17 @@ func (c *Core) wantedRecords(ctx context.Context, zones []cloudflare.Zone) (map[
 			if err != nil {
 				w.problem = err.Error()
 			}
-			w.record.Type, w.record.Content, w.record.Proxied = "A", ip, proxiedFor(domains, host)
+			w.record.Type, w.record.Content, w.record.Proxied = "A", ip, proxiedFor(domains, host) && !direct
 		}
 		wants[host] = w
 	}
 	for _, svc := range svcs {
 		if svc.Domain != "" {
-			add(svc.Domain, svc.ServerID)
+			add(svc.Domain, svc.ServerID, len(svc.PublishedPorts) > 0)
 		}
 	}
 	if c.cfg.Domain != "" && c.cfg.Traefik.Enabled {
-		add(c.cfg.Domain, store.LocalServerID)
+		add(c.cfg.Domain, store.LocalServerID, false)
 	}
 	return wants, nil
 }

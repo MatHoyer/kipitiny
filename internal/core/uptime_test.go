@@ -104,7 +104,7 @@ func TestUptimeChecks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1, Domain: "shop.example.com"})
+	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1, Domain: "shop.example.com", Port: 80})
 	if err != nil {
 		t.Fatal(err)
 	}

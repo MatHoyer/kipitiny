@@ -75,7 +75,9 @@ updates.
   UDP…). Traefik isn't involved, so the client IP is real. Such an app runs one
   replica, and a host port can be published by one service per server (never
   Traefik's 80/443). Open them in the server's firewall yourself; a Cloudflare
-  tunnel doesn't carry them.
+  tunnel doesn't carry them. Such an app may have a domain without a container
+  port, only for DNS (`mc.example.com:25565`); with Cloudflare connected, its
+  record points at the server and is never proxied, even behind a tunnel.
 - **PostgreSQL** services get generated credentials, a named data volume, a memory
   limit with matching `shared_buffers`, and a `pg_isready` healthcheck. They are
   only reachable inside their project, at `<service-name>:5432`. An app uses one or

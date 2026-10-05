@@ -129,6 +129,7 @@ Apps that speak something else than HTTP (game servers, MQTT, SMTP…) list **pu
 - The pre-deploy container publishes nothing.
 - Databases can't publish ports: they stay private.
 - The host firewall is the operator's; a Cloudflare tunnel only carries HTTP.
+- The domain of such an app may have no container port: no Traefik route, the domain is only for DNS. Managed records of apps with published ports are always a DNS-only `A` to the server (Cloudflare's proxy and tunnels only carry HTTP), so the app's middlewares never trust `X-Forwarded-For`. Behind a tunnel Traefik publishes no port, so an app there can't route HTTP on that domain too (refused on save).
 
 ## 8. Replicas
 

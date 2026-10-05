@@ -289,6 +289,12 @@ func (c *Core) validate(ctx context.Context, s store.Service) error {
 	if err := c.checkPortsFree(ctx, s); err != nil {
 		return err
 	}
+	// Its record points at the server, which publishes no HTTP port behind
+	// a tunnel.
+	if httpRouted(s) && len(s.PublishedPorts) > 0 && c.viaTunnel(ctx, project.ServerID) {
+		return fmt.Errorf("%w: behind a Cloudflare tunnel, an app with published ports can't also route HTTP on its domain: "+
+			"its record must point at the server; clear the container port, or serve HTTP from another service", ErrInvalid)
+	}
 	return checkRefs(s.Env, envSources{project: project.Env, dbs: dbs})
 }
 
@@ -346,7 +352,9 @@ func validateService(s store.Service) error {
 		if !domainRe.MatchString(s.Domain) {
 			return fmt.Errorf("%w: domain %q is not a valid hostname", ErrInvalid, s.Domain)
 		}
-		if s.Port < 1 || s.Port > 65535 {
+		// With published ports and no container port, the domain only gets
+		// a DNS record.
+		if (s.Port < 1 && len(s.PublishedPorts) == 0) || s.Port < 0 || s.Port > 65535 {
 			return fmt.Errorf("%w: a public service needs the container port to route to", ErrInvalid)
 		}
 	} else if s.Port < 0 || s.Port > 65535 {

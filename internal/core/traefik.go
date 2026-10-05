@@ -261,9 +261,17 @@ type route struct {
 
 func (c *Core) routeFor(ctx context.Context, svc store.Service) route {
 	return route{
-		resolver:    c.certResolver(ctx, svc.ServerID, svc.Domain),
-		behindProxy: c.behindCloudflare(ctx, svc.ServerID, svc.Domain),
+		resolver: c.certResolver(ctx, svc.ServerID, svc.Domain),
+		// The domain of an app with published ports is never proxied.
+		behindProxy: len(svc.PublishedPorts) == 0 && c.behindCloudflare(ctx, svc.ServerID, svc.Domain),
 	}
+}
+
+// httpRouted reports whether Traefik routes the service's domain: it has a
+// container port. An app with published ports may have a domain only for
+// DNS.
+func httpRouted(svc store.Service) bool {
+	return svc.Domain != "" && svc.Port > 0
 }
 
 // traefikLabels routes HTTPS traffic for svc.Domain to svc.Port through the

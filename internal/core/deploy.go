@@ -552,7 +552,7 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 		// Other services of the project reach this one by its service name.
 		docker.ProjectNetwork(project.ID): {Aliases: []string{svc.Name}},
 	}
-	if svc.Domain != "" {
+	if httpRouted(svc) {
 		maps.Copy(labels, traefikLabels(svc, rt))
 		endpoints[docker.ProxyNetwork] = &network.EndpointSettings{}
 	}

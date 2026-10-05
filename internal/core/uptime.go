@@ -168,7 +168,7 @@ func (c *Core) scheduleUptime(ctx context.Context) {
 // uptimeTarget returns the URL a check requests, or why it can't run now.
 func uptimeTarget(svc store.Service, chk store.UptimeCheck) (url, problem string) {
 	switch {
-	case svc.Domain == "":
+	case !httpRouted(svc):
 		return "", "the service has no public domain"
 	case svc.Stopped:
 		return "", "the service is stopped"
@@ -340,7 +340,7 @@ func (c *Core) SetUptime(ctx context.Context, serviceID string, in UptimeInput) 
 	if err != nil {
 		return UptimeView{}, err
 	}
-	if svc.Kind != store.ServiceKindApp || svc.Domain == "" {
+	if svc.Kind != store.ServiceKindApp || !httpRouted(svc) {
 		return UptimeView{}, fmt.Errorf("%w: only an app with a public domain can have an uptime check", ErrInvalid)
 	}
 	chk := store.UptimeCheck{
