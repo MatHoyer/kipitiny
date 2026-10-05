@@ -41,6 +41,8 @@ func (c *Core) preDeploy(ctx context.Context, project store.Project, svc store.S
 	}
 	spec.HostConfig.RestartPolicy = container.RestartPolicy{Name: container.RestartPolicyDisabled}
 	delete(spec.NetworkingConfig.EndpointsConfig, docker.ProxyNetwork)
+	// The replica it precedes holds the published ports.
+	spec.Config.ExposedPorts, spec.HostConfig.PortBindings = nil, nil
 
 	logf("Running pre-deploy command: %s", svc.PreDeploy)
 	dk := c.dockerFor(svc.ServerID)

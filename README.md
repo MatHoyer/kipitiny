@@ -70,6 +70,12 @@ updates.
 ## Services
 
 - **Apps** run from an image, optionally public on a domain (HTTPS via Traefik), 1–10 replicas.
+- **Published ports** bind host ports straight to an app's container, for
+  traffic that isn't HTTP (a Minecraft server on `25565/tcp`, MQTT, a game on
+  UDP…). Traefik isn't involved, so the client IP is real. Such an app runs one
+  replica, and a host port can be published by one service per server (never
+  Traefik's 80/443). Open them in the server's firewall yourself; a Cloudflare
+  tunnel doesn't carry them.
 - **PostgreSQL** services get generated credentials, a named data volume, a memory
   limit with matching `shared_buffers`, and a `pg_isready` healthcheck. They are
   only reachable inside their project, at `<service-name>:5432`. An app uses one or
@@ -125,6 +131,10 @@ gets ready, the new containers are removed and the old version keeps serving.
 - Old replicas are stopped one by one and kept (stopped) until the next deploy so
   their logs stay readable. **Roll back** redeploys an earlier image.
 - Databases are recreated in place (a volume can't be shared by two servers).
+- Apps with **published ports** can't run two versions side by side (the port is
+  taken), so the old replica stops before the new one starts: a short downtime.
+  If the new one doesn't get ready, it is removed and the old one starts again.
+  The probe checks the first published TCP port when the app has no HTTP port.
 - **Volumes** keep an app's files across deploys (e.g. uploads): each has a
   name and a mount path, and every replica mounts the same volume. Deleting the
   service destroys them, so it asks for the service name.

@@ -273,6 +273,10 @@ type Service struct {
 	Volumes []Volume `bun:"volumes" json:"volumes"`
 	// Middlewares apply to a public app's requests through Traefik.
 	Middlewares Middlewares `bun:"middlewares,type:text" json:"middlewares"`
+	// PublishedPorts are host ports bound straight to an app's container,
+	// for traffic Traefik doesn't carry (game servers, MQTT…). An app with
+	// published ports runs one replica.
+	PublishedPorts []PublishedPort `bun:"published_ports" json:"publishedPorts"`
 	// PreBackup runs (sh -c) in a running replica before each volume
 	// backup, e.g. to flush to disk. A failure aborts the backup.
 	PreBackup           string `bun:"pre_backup" json:"preBackup"`
@@ -288,6 +292,14 @@ type Service struct {
 type Volume struct {
 	Name string `json:"name"`
 	Path string `json:"path"`
+}
+
+// PublishedPort binds HostPort on the server to ContainerPort of an app.
+type PublishedPort struct {
+	HostPort      int `json:"hostPort"`
+	ContainerPort int `json:"containerPort"`
+	// Protocol is "tcp" or "udp".
+	Protocol string `json:"protocol"`
 }
 
 // Middlewares are the Traefik middlewares on an app's router; the zero
