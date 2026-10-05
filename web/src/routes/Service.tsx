@@ -40,7 +40,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
 import { byDay, envMap, envRows, envSecrets, formatBytes, formatCpu, formatDuration, sameEnv, serviceState, timeAgo, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { api, canBackup, databasePorts, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type LogLine, type Middlewares, type MiddlewaresInput, type Service as ServiceT, type Volume } from "../api";
+import { api, canBackup, databasePorts, httpRouted, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type LogLine, type Middlewares, type MiddlewaresInput, type PublishedPort, type Service as ServiceT, type Volume } from "../api";
 import { BackupList } from "./BackupList";
 import { Schedules } from "./Schedules";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
@@ -179,6 +179,11 @@ export function Service() {
             </p>
             {isDb ? (
               <p className="truncate font-mono text-sm">{svc.name}</p>
+            ) : svc.domain && !httpRouted(svc) ? (
+              <p className="truncate font-mono text-sm">
+                {svc.domain}
+                {svc.publishedPorts[0] && `:${svc.publishedPorts[0].hostPort}`}
+              </p>
             ) : svc.domain ? (
               <a
                 href={`https://${svc.domain}`}
@@ -189,6 +194,8 @@ export function Service() {
                 <span className="truncate">{svc.domain}</span>
                 <ExternalLink className="size-3.5 shrink-0" />
               </a>
+            ) : svc.publishedPorts.length > 0 ? (
+              <p className="truncate font-mono text-sm">{svc.publishedPorts.map(portLabel).join(", ")}</p>
             ) : (
               <p className="text-sm text-muted-foreground">private</p>
             )}
@@ -250,8 +257,9 @@ export function Service() {
           )}
           <TabsContent value="settings" className="space-y-6">
             <Settings svc={svc} />
+            {svc.kind === "app" && <PortsCard key={svc.id} svc={svc} />}
             {svc.kind === "app" && <VolumesCard key={svc.id} svc={svc} />}
-            {svc.kind === "app" && svc.domain && <AccessCard key={svc.id} svc={svc} />}
+            {svc.kind === "app" && httpRouted(svc) && <AccessCard key={svc.id} svc={svc} />}
             {svc.kind === "app" && <DeployFromCICard svc={svc} />}
             <DangerZone
               description={
@@ -332,6 +340,7 @@ const settingsForm = (s: ServiceT) => ({
   cpus: s.cpus ? String(s.cpus) : "",
   healthPath: s.healthPath,
   preDeploy: s.preDeploy,
+  stopGrace: s.stopGraceSeconds ? String(s.stopGraceSeconds) : "",
 });
 
 function Settings({ svc }: { svc: ServiceT }) {
@@ -358,6 +367,7 @@ function Settings({ svc }: { svc: ServiceT }) {
               cpus: Number(form.cpus) || 0,
               healthPath: form.healthPath.trim(),
               preDeploy: form.preDeploy.trim(),
+              stopGraceSeconds: Number(form.stopGrace) || 0,
             },
       ),
     onSuccess: (updated) => {
@@ -388,8 +398,27 @@ function Settings({ svc }: { svc: ServiceT }) {
         {!isDb && (
           <>
             <DomainField value={form.domain} onChange={(domain) => setForm({ ...form, domain })} className="sm:col-span-2" />
-            <FloatingInput label="Port" type="number" min={0} max={65535} value={form.port} onChange={set("port")} />
-            <FloatingInput label="Replicas" type="number" min={1} max={10} value={form.replicas} onChange={set("replicas")} />
+            <FloatingInput
+              label="Port"
+              type="number"
+              min={0}
+              max={65535}
+              value={form.port}
+              onChange={set("port")}
+              description={
+                svc.publishedPorts.length > 0 ? "HTTP port Traefik routes the domain to. Empty: the domain is only for DNS." : undefined
+              }
+            />
+            <FloatingInput
+              label="Replicas"
+              type="number"
+              min={1}
+              max={10}
+              value={form.replicas}
+              onChange={set("replicas")}
+              disabled={svc.publishedPorts.length > 0}
+              description={svc.publishedPorts.length > 0 ? "One: two containers can't publish the same port." : undefined}
+            />
           </>
         )}
         <FloatingInput
@@ -430,10 +459,131 @@ function Settings({ svc }: { svc: ServiceT }) {
               className="sm:col-span-2"
               description="Runs once (sh -c) before replicas start, e.g. migrations."
             />
+            <FloatingInput
+              label="Stop grace period (s)"
+              type="number"
+              min={0}
+              max={600}
+              value={form.stopGrace}
+              onChange={set("stopGrace")}
+              placeholder="10"
+              description="Time to exit after SIGTERM before being killed, e.g. to save a game world. Empty: 10 s."
+            />
           </>
         )}
       </form>
       <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setForm(settingsForm(svc))} />
+    </Section>
+  );
+}
+
+const portLabel = (p: PublishedPort) =>
+  `${p.hostPort}${p.containerPort !== p.hostPort ? `→${p.containerPort}` : ""}/${p.protocol}`;
+
+type PortRow = { hostPort: string; containerPort: string; protocol: PublishedPort["protocol"] };
+
+const portRows = (ports: PublishedPort[]): PortRow[] =>
+  ports.map((p) => ({ hostPort: String(p.hostPort), containerPort: String(p.containerPort), protocol: p.protocol }));
+
+/** Host ports bound straight to an app's container, for traffic that isn't HTTP. */
+function PortsCard({ svc }: { svc: ServiceT }) {
+  const qc = useQueryClient();
+  const [rows, setRows] = useState<PortRow[]>(() => portRows(svc.publishedPorts));
+  const dirty = JSON.stringify(rows) !== JSON.stringify(portRows(svc.publishedPorts));
+  const formId = useId();
+  const save = useMutation({
+    meta: { error: "Couldn't save the ports" },
+    mutationFn: () =>
+      api.updateService(svc.id, {
+        publishedPorts: rows.map((r) => ({
+          hostPort: Number(r.hostPort) || 0,
+          containerPort: Number(r.containerPort) || 0,
+          protocol: r.protocol,
+        })),
+        // An app publishing ports runs one replica.
+        ...(rows.length > 0 && svc.replicas !== 1 ? { replicas: 1 } : {}),
+      }),
+    onSuccess: (updated) => {
+      qc.setQueryData(["service", svc.id], updated);
+      setRows(portRows(updated.publishedPorts));
+      toast.success("Ports saved", { description: "Deploy to apply." });
+    },
+  });
+  const set = (i: number, field: keyof PortRow) => (value: string) =>
+    setRows(rows.map((r, j) => (j === i ? { ...r, [field]: value } : r)));
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    save.mutate();
+  };
+
+  return (
+    <Section
+      title="Published ports"
+      description="Ports of the server bound straight to the container, for traffic that isn't HTTP (a game server, MQTT…). The app then runs one replica, and deploys stop the old container before starting the new one: a short downtime. Open the ports in the server's firewall; a Cloudflare tunnel doesn't carry them."
+      actions={
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setRows([...rows, { hostPort: "", containerPort: "", protocol: "tcp" }])}
+        >
+          <Plus data-icon="inline-start" />
+          Add port
+        </Button>
+      }
+    >
+      {/* Always rendered: the save bar submits it, even to remove the last port. */}
+      <form id={formId} onSubmit={onSubmit} className="space-y-3">
+        {rows.length === 0 && <Empty>No published ports: the app is only reachable through its domain, if any.</Empty>}
+        {rows.map((r, i) => (
+          <div key={i} className="flex items-start gap-2">
+            <FloatingInput
+              label="Host port"
+              required
+              type="number"
+              min={1}
+              max={65535}
+              value={r.hostPort}
+              onChange={(e) => set(i, "hostPort")(e.target.value)}
+              placeholder="25565"
+              className="min-w-0 flex-1"
+              inputClassName="font-mono"
+            />
+            <FloatingInput
+              label="Container port"
+              type="number"
+              min={1}
+              max={65535}
+              value={r.containerPort}
+              onChange={(e) => set(i, "containerPort")(e.target.value)}
+              placeholder={r.hostPort || "same"}
+              className="min-w-0 flex-1"
+              inputClassName="font-mono"
+            />
+            <Select value={r.protocol} onValueChange={set(i, "protocol")}>
+              <SelectTrigger aria-label="Protocol" className="w-24 shrink-0 rounded-xl data-[size=default]:h-14">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tcp">TCP</SelectItem>
+                <SelectItem value="udp">UDP</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              title="Remove"
+              aria-label={`Remove port ${r.hostPort}`}
+              className="mt-3.5 text-muted-foreground hover:text-destructive"
+              onClick={() => setRows(rows.filter((_, j) => j !== i))}
+            >
+              <Trash2 />
+            </Button>
+          </div>
+        ))}
+      </form>
+      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setRows(portRows(svc.publishedPorts))} label="Save ports" />
     </Section>
   );
 }

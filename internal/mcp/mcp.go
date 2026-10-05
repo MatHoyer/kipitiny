@@ -38,7 +38,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "get_logs", Annotations: readOnly,
 		Description: "Recent log lines of a service's running containers, optionally filtered by a case-insensitive substring."}, t.getLogs)
 	mcp.AddTool(server, &mcp.Tool{Name: "deploy",
-		Description: "Deploy a service's current settings (zero-downtime for apps), or another tag of an app's image. Returns the deployment; poll get_app_status for the outcome."}, t.deploy)
+		Description: "Deploy a service's current settings (zero-downtime for apps without published ports), or another tag of an app's image. Returns the deployment; poll get_app_status for the outcome."}, t.deploy)
 	mcp.AddTool(server, &mcp.Tool{Name: "deploy_image",
 		Description: "Create (or update) an app running a Docker image in a project, then deploy it. The project is created if missing."}, t.deployImage)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_project_env",
@@ -256,8 +256,28 @@ type deployImageIn struct {
 	Name    string            `json:"name" jsonschema:"service name (lowercase, digits, dashes)"`
 	Image   string            `json:"image" jsonschema:"Docker image, e.g. ghcr.io/org/app:v1"`
 	Domain  string            `json:"domain,omitempty" jsonschema:"public hostname; omit for a private service"`
-	Port    int               `json:"port,omitempty" jsonschema:"container port the app listens on (required with a domain)"`
+	Port    int               `json:"port,omitempty" jsonschema:"container port Traefik routes HTTPS to (required with a domain, unless the app publishes ports)"`
 	Env     map[string]string `json:"env,omitempty" jsonschema:"environment variables to set; a value may reference a project variable as {{ project.NAME }}"`
+	// Pointers: omitted keeps an existing service's value.
+	PublishedPorts   *[]publishedPortIn `json:"publishedPorts,omitempty" jsonschema:"host ports bound straight to the container, for non-HTTP traffic (e.g. a game server); the app then runs one replica and deploys stop-then-start"`
+	StopGraceSeconds *int               `json:"stopGraceSeconds,omitempty" jsonschema:"seconds the app gets to exit after SIGTERM before it is killed (default 10, max 600)"`
+}
+
+type publishedPortIn struct {
+	HostPort      int    `json:"hostPort" jsonschema:"port on the server"`
+	ContainerPort int    `json:"containerPort,omitempty" jsonschema:"port in the container; defaults to hostPort"`
+	Protocol      string `json:"protocol,omitempty" jsonschema:"tcp (default) or udp"`
+}
+
+func (in deployImageIn) ports() []store.PublishedPort {
+	if in.PublishedPorts == nil {
+		return nil
+	}
+	out := make([]store.PublishedPort, 0, len(*in.PublishedPorts))
+	for _, p := range *in.PublishedPorts {
+		out = append(out, store.PublishedPort{HostPort: p.HostPort, ContainerPort: p.ContainerPort, Protocol: p.Protocol})
+	}
+	return out
 }
 
 func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in deployImageIn) (*mcp.CallToolResult, store.Deployment, error) {
@@ -269,9 +289,13 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 		svc, err := t.c.ResolveService(ctx, project.Name+"/"+in.Name)
 		switch {
 		case errors.Is(err, store.ErrNotFound):
-			view, err := t.c.CreateService(ctx, project.ID, core.ServiceInput{
-				Name: in.Name, Image: in.Image, Domain: in.Domain, Port: in.Port, Env: in.Env,
-			})
+			input := core.ServiceInput{
+				Name: in.Name, Image: in.Image, Domain: in.Domain, Port: in.Port, Env: in.Env, PublishedPorts: in.ports(),
+			}
+			if in.StopGraceSeconds != nil {
+				input.StopGraceSeconds = *in.StopGraceSeconds
+			}
+			view, err := t.c.CreateService(ctx, project.ID, input)
 			if err != nil {
 				return store.Deployment{}, err
 			}
@@ -282,7 +306,8 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 			if svc.Kind != store.ServiceKindApp {
 				return store.Deployment{}, fmt.Errorf("%s/%s exists and is not an app", project.Name, in.Name)
 			}
-			patch := core.ServicePatch{Image: &in.Image, Domain: &in.Domain, Port: &in.Port}
+			patch := core.ServicePatch{Image: &in.Image, Domain: &in.Domain, Port: &in.Port,
+				PublishedPorts: in.ports(), StopGraceSeconds: in.StopGraceSeconds}
 			if in.Env != nil {
 				// Keep existing entries; new ones become secrets.
 				env := maps.Clone(svc.Env)
