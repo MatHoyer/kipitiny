@@ -432,14 +432,16 @@ type Backup struct {
 	ProjectID   string     `bun:"project_id" json:"projectId"`
 	ServiceName string     `bun:"service_name" json:"serviceName"`
 	ProjectName string     `bun:"project_name" json:"projectName"`
-	TargetID    string     `bun:"target_id" json:"targetId"`
-	ScheduleID  string     `bun:"schedule_id" json:"scheduleId,omitempty"`
-	ObjectKey   string     `bun:"object_key" json:"objectKey"`
-	Status      OpStatus   `bun:"status" json:"status"`
-	SizeBytes   int64      `bun:"size_bytes" json:"sizeBytes"`
-	SHA256      string     `bun:"sha256" json:"sha256"`
-	Encrypted   bool       `bun:"encrypted" json:"encrypted"`
-	PGVersion   string     `bun:"pg_version" json:"pgVersion"`
+	// ServiceKind is the backed-up service's kind; empty for the manager.
+	ServiceKind ServiceKind `bun:"service_kind" json:"serviceKind,omitempty"`
+	TargetID    string      `bun:"target_id" json:"targetId"`
+	ScheduleID  string      `bun:"schedule_id" json:"scheduleId,omitempty"`
+	ObjectKey   string      `bun:"object_key" json:"objectKey"`
+	Status      OpStatus    `bun:"status" json:"status"`
+	SizeBytes   int64       `bun:"size_bytes" json:"sizeBytes"`
+	SHA256      string      `bun:"sha256" json:"sha256"`
+	Encrypted   bool        `bun:"encrypted" json:"encrypted"`
+	PGVersion   string      `bun:"pg_version" json:"pgVersion"`
 	// Volumes names the volumes in a volume backup's archive.
 	Volumes    []string   `bun:"volumes" json:"volumes,omitempty"`
 	DurationMS int64      `bun:"duration_ms" json:"durationMs"`

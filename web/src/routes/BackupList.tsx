@@ -1,7 +1,7 @@
 import { ChevronRight, DatabaseBackup, HardDrive, ShieldAlert, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { PostgresIcon } from "@/components/brand-icons";
+import { DatabaseIcon } from "@/components/brand-icons";
 import { EmptyState, StateBadge, Tag } from "@/components/common";
 import { byDay, formatBytes, formatDuration, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -39,7 +39,7 @@ export function BackupList({
                   className="group flex items-center gap-3 px-4 py-3 transition-colors outline-none hover:bg-muted/50 focus-visible:bg-muted/50"
                 >
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-                    <BackupIcon kind={b.kind} className="size-4.5" />
+                    <BackupIcon backup={b} className="size-4.5" />
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
@@ -70,9 +70,10 @@ export function BackupList({
   );
 }
 
-export function BackupIcon({ kind, className }: { kind: Backup["kind"]; className?: string }) {
-  if (kind === "postgres") return <PostgresIcon className={cn("text-[#4169E1]", className)} />;
-  if (kind === "volume") return <HardDrive className={className} />;
+export function BackupIcon({ backup: b, className }: { backup: Backup; className?: string }) {
+  if (b.kind === "postgres" || b.serviceKind === "postgres") return <DatabaseIcon kind="postgres" className={className} />;
+  if (b.serviceKind === "redis") return <DatabaseIcon kind="redis" className={className} />;
+  if (b.kind === "volume") return <HardDrive className={className} />;
   return <DatabaseBackup className={className} />;
 }
 

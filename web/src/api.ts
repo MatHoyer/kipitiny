@@ -260,6 +260,8 @@ export type Backup = {
   projectId: string;
   serviceName: string;
   projectName: string;
+  /** The backed-up service's kind; absent for the manager's own backups. */
+  serviceKind?: ServiceKind;
   targetId: string;
   objectKey: string;
   status: OpStatus;
