@@ -2,12 +2,14 @@ package core
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"slices"
 	"testing"
 
 	"github.com/moby/moby/api/types/network"
 
+	"github.com/MatHoyer/kipitiny/internal/cloudflare"
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -132,5 +134,67 @@ func TestPublishedPortsSpec(t *testing.T) {
 	}
 	if got := probePort(store.Service{PublishedPorts: []store.PublishedPort{{HostPort: 1, ContainerPort: 1, Protocol: "udp"}}}); got != 0 {
 		t.Errorf("udp only: %d", got)
+	}
+}
+
+func TestPublishedPortsDomain(t *testing.T) {
+	ctx := context.Background()
+	tok := base64.StdEncoding.EncodeToString([]byte(`{"a":"acc","t":"tid","s":"x"}`))
+	c := newTestCore(t, config.Config{Tunnel: config.Tunnel{Token: tok}, Traefik: config.Traefik{Enabled: true, HTTPPort: "80", HTTPSPort: "443"}})
+	sv, err := c.store.GetServer(ctx, store.LocalServerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sv.PublicIP = "203.0.113.7"
+	if _, err := c.store.UpdateServer(ctx, sv); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.store.CreateDomain(ctx, store.Domain{Name: "example.com", Proxied: true}); err != nil {
+		t.Fatal(err)
+	}
+	p, _ := c.store.CreateProject(ctx, store.Project{Name: "games", ServerID: store.LocalServerID})
+	ports := []store.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}}
+
+	// Behind the tunnel, the domain of a port-only app is a direct record.
+	view, err := c.CreateService(ctx, p.ID, ServiceInput{Name: "mc", Image: "itzg/minecraft-server", Domain: "mc.example.com", PublishedPorts: ports})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mc := view.Service
+	wants, err := c.wantedRecords(ctx, []cloudflare.Zone{{ID: "z", Name: "example.com"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := wants["mc.example.com"]; w.tunnel != "" || w.record.Type != "A" || w.record.Content != "203.0.113.7" || w.record.Proxied {
+		t.Errorf("record = %+v", w)
+	}
+	spec := containerSpec(p, mc, envSources{}, "D1", 1, c.routeFor(ctx, mc))
+	if spec.Config.Labels["traefik.enable"] != "" {
+		t.Errorf("a domain without a container port must not be routed: %v", spec.Config.Labels)
+	}
+	if _, err := c.SetUptime(ctx, mc.ID, UptimeInput{}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("uptime check on a port-only app: %v", err)
+	}
+
+	// HTTP on the same domain needs the server's own ports: not behind a tunnel.
+	port := 8123
+	if _, err := c.UpdateService(ctx, mc.ID, ServicePatch{Port: &port}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("HTTP behind the tunnel: got %v", err)
+	}
+	// A domain still needs some port.
+	if _, err := c.CreateService(ctx, p.ID, ServiceInput{Name: "web", Image: "nginx", Domain: "web.example.com"}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("domain without any port: got %v", err)
+	}
+
+	c.cfg.Tunnel.Token = ""
+	mc.Port = port
+	if err := c.validate(ctx, mc); err != nil {
+		t.Fatalf("HTTP without a tunnel: %v", err)
+	}
+	if rt := c.routeFor(ctx, mc); rt.behindProxy {
+		t.Error("the record of an app with published ports is never proxied")
+	}
+	if l := containerSpec(p, mc, envSources{}, "D1", 1, c.routeFor(ctx, mc)).Config.Labels; l["traefik.enable"] != "true" {
+		t.Errorf("labels = %v", l)
 	}
 }
