@@ -33,12 +33,14 @@ const (
 var (
 	domainRe = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$|^localhost$|^([a-z0-9-]+\.)+localhost$`)
 	envKeyRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	iconRe   = regexp.MustCompile(`^([a-z0-9][a-z0-9-]{0,39})?$`)
 )
 
 type ServiceInput struct {
 	Name     string            `json:"name"`
 	Kind     store.ServiceKind `json:"kind"`
 	Image    string            `json:"image"`
+	Icon     string            `json:"icon"`
 	Replicas int               `json:"replicas"`
 	Port     int               `json:"port"`
 	Domain   string            `json:"domain"`
@@ -65,6 +67,7 @@ type ServiceInput struct {
 // write-only entries; nil keeps the stored flags.
 type ServicePatch struct {
 	Image      *string           `json:"image"`
+	Icon       *string           `json:"icon"`
 	Replicas   *int              `json:"replicas"`
 	Port       *int              `json:"port"`
 	Domain     *string           `json:"domain"`
@@ -121,6 +124,7 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		Name:             in.Name,
 		Kind:             in.Kind,
 		Image:            strings.TrimSpace(in.Image),
+		Icon:             strings.TrimSpace(in.Icon),
 		Replicas:         in.Replicas,
 		Port:             in.Port,
 		Domain:           strings.ToLower(strings.TrimSpace(in.Domain)),
@@ -196,6 +200,9 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	svc.Env = maps.Clone(old.Env)
 	if p.Image != nil {
 		svc.Image = strings.TrimSpace(*p.Image)
+	}
+	if p.Icon != nil {
+		svc.Icon = strings.TrimSpace(*p.Icon)
 	}
 	if p.Replicas != nil {
 		svc.Replicas = *p.Replicas
@@ -298,9 +305,27 @@ func (c *Core) validate(ctx context.Context, s store.Service) error {
 	return checkRefs(s.Env, envSources{project: project.Env, dbs: dbs})
 }
 
+// IconHint names the logo for svc: its icon, else its image's base name
+// (ghcr.io/n8n-io/n8n:1 → n8n). The UI shows the logo if it knows the name,
+// else one for the kind. Backups keep it, as they outlive the service.
+func IconHint(svc store.Service) string {
+	if svc.Icon != "" {
+		return svc.Icon
+	}
+	named, err := reference.ParseNormalizedNamed(svc.Image)
+	if err != nil {
+		return ""
+	}
+	p := reference.Path(named)
+	return p[strings.LastIndex(p, "/")+1:]
+}
+
 func validateService(s store.Service) error {
 	if _, err := reference.ParseNormalizedNamed(s.Image); err != nil {
 		return fmt.Errorf("%w: image: %v", ErrInvalid, err)
+	}
+	if !iconRe.MatchString(s.Icon) {
+		return fmt.Errorf("%w: icon must be lowercase letters, digits and dashes", ErrInvalid)
 	}
 	for k := range s.Env {
 		if !envKeyRe.MatchString(k) {

@@ -62,6 +62,10 @@ The manager runs as a container and controls the **host** Docker daemon via the 
 
 - **Project:** a group of services (apps + databases) sharing a private network.
 - **Service:** an app (a Docker image) or a database (Postgres or Redis).
+  Its `icon` names the logo the UI shows (set by a template or the user);
+  empty falls back to the database kind, then the image's base name
+  (`ghcr.io/n8n-io/n8n` → `n8n`), then a generic box. Logos live in the UI
+  (`web/src/components/service-icon.tsx`); backups keep the hint.
 - **Replica:** one running container of a service.
 - **Deployment:** one release of a service, with an ID, status, and log file.
 

@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Braces, ChevronLeft, Database, Eye, EyeOff, FolderSearch, KeyRound, Variable, Vault } from "lucide-react";
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
-import { DatabaseIcon, databaseLabels, passwordManagerIcon } from "@/components/brand-icons";
+import { databaseLabels, passwordManagerIcon } from "@/components/brand-icons";
+import { ServiceIcon } from "@/components/service-icon";
 import { ChoiceTile, ErrorText, Mono } from "@/components/common";
 import { TemplateValue } from "@/components/template-value";
 import { Button } from "@/components/ui/button";
@@ -682,7 +683,7 @@ function DatabaseForm({
     <form onSubmit={onSubmit} className="contents">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2 [&>svg]:size-5">
-          <DatabaseIcon kind={db.kind} />
+          <ServiceIcon service={db} />
           Connect a database
         </DialogTitle>
         <DialogDescription>Added as secrets that follow the database&apos;s credentials.</DialogDescription>

@@ -97,6 +97,7 @@ func TestProjectsAndServices(t *testing.T) {
 	svc.Volumes = []store.Volume{{Name: "uploads", Path: "/app/uploads"}}
 	svc.PublishedPorts = []store.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}}
 	svc.StopGraceSeconds = 60
+	svc.Icon = "ghost"
 	svc.Middlewares = store.Middlewares{
 		BasicAuth:   []store.BasicAuthUser{{Name: "ann", Hash: "$2a$10$x"}},
 		IPAllowList: []string{"10.0.0.0/8"},
@@ -111,7 +112,7 @@ func TestProjectsAndServices(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got2.Replicas != 3 || got2.Env["A"] != "1" || got2.Env["B"] != "2" || got2.Domain != "shop.example.com" ||
-		!slices.Equal(got2.Volumes, svc.Volumes) || !slices.Equal(got2.PublishedPorts, svc.PublishedPorts) || got2.StopGraceSeconds != 60 || !reflect.DeepEqual(got2.Middlewares, svc.Middlewares) {
+		!slices.Equal(got2.Volumes, svc.Volumes) || !slices.Equal(got2.PublishedPorts, svc.PublishedPorts) || got2.StopGraceSeconds != 60 || got2.Icon != "ghost" || !reflect.DeepEqual(got2.Middlewares, svc.Middlewares) {
 		t.Fatalf("service round-trip mismatch: %+v", got2)
 	}
 
@@ -239,12 +240,12 @@ func TestBackups(t *testing.T) {
 	}
 	vb, err := s.CreateBackup(ctx, store.Backup{
 		Kind: store.BackupKindVolume, ServiceID: "SVC2", ProjectID: "P", ServiceName: "web", ProjectName: "shop",
-		ServiceKind: store.ServiceKindRedis, TargetID: store.LocalTargetID, ObjectKey: "shop/web/x.tar.gz", Status: store.OpRunning, Volumes: []string{"uploads", "cache"},
+		ServiceKind: store.ServiceKindRedis, ServiceIcon: "redis", TargetID: store.LocalTargetID, ObjectKey: "shop/web/x.tar.gz", Status: store.OpRunning, Volumes: []string{"uploads", "cache"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := s.GetBackup(ctx, vb.ID); err != nil || got.Kind != store.BackupKindVolume || got.ServiceKind != store.ServiceKindRedis || !slices.Equal(got.Volumes, vb.Volumes) {
+	if got, err := s.GetBackup(ctx, vb.ID); err != nil || got.Kind != store.BackupKindVolume || got.ServiceKind != store.ServiceKindRedis || got.ServiceIcon != "redis" || !slices.Equal(got.Volumes, vb.Volumes) {
 		t.Fatalf("volume backup round-trip: %+v %v", got, err)
 	}
 	if err := s.DeleteBackup(ctx, vb.ID); err != nil {
