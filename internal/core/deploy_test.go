@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
+
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -133,5 +135,43 @@ func TestStopGrace(t *testing.T) {
 	db.StopGraceSeconds = 30
 	if err := validateService(db); !errors.Is(err, ErrInvalid) {
 		t.Errorf("database: got %v", err)
+	}
+}
+
+func TestCheckImageLabels(t *testing.T) {
+	ok := &dockerspec.DockerOCIImageConfig{}
+	ok.Labels = map[string]string{"org.opencontainers.image.source": "x"}
+	if err := checkImageLabels(ok); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkImageLabels(nil); err != nil {
+		t.Fatal(err)
+	}
+	bad := &dockerspec.DockerOCIImageConfig{}
+	bad.Labels = map[string]string{"Traefik.http.routers.x.rule": "Host(`manager.example.com`)"}
+	if err := checkImageLabels(bad); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("traefik label accepted: %v", err)
+	}
+}
+
+func TestRetagOptions(t *testing.T) {
+	const dgst = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	for _, tc := range []struct {
+		current, image string
+		want           DeployOptions
+		err            error
+	}{
+		{"ghcr.io/org/app:v1", "ghcr.io/org/app:v2", DeployOptions{Tag: "v2"}, nil},
+		{"nginx:1.25", "docker.io/library/nginx:1.27", DeployOptions{Tag: "1.27"}, nil},
+		{"nginx:1.25", "nginx", DeployOptions{Tag: "latest"}, nil},
+		{"ghcr.io/org/app:v1", "ghcr.io/org/app@" + dgst, DeployOptions{Digest: dgst}, nil},
+		{"ghcr.io/org/app:v1", "ghcr.io/org/app:v2@" + dgst, DeployOptions{Tag: "v2", Digest: dgst}, nil},
+		{"ghcr.io/org/app:v1", "ghcr.io/evil/app:v1", DeployOptions{}, ErrForbidden},
+		{"ghcr.io/org/app:v1", "Not An Image", DeployOptions{}, ErrInvalid},
+	} {
+		got, err := RetagOptions(tc.current, tc.image)
+		if !errors.Is(err, tc.err) || got != tc.want {
+			t.Errorf("RetagOptions(%q, %q) = %+v, %v; want %+v, %v", tc.current, tc.image, got, err, tc.want, tc.err)
+		}
 	}
 }

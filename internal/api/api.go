@@ -17,11 +17,13 @@ type API struct {
 	core    *core.Core
 	log     *slog.Logger
 	limiter *failLimiter
+	// begins counts unauthenticated passkey sign-in starts per IP.
+	begins  *failLimiter
 	handler http.Handler
 }
 
 func New(c *core.Core, log *slog.Logger) *API {
-	a := &API{core: c, log: log, limiter: newFailLimiter(10, 15*time.Minute)}
+	a := &API{core: c, log: log, limiter: newFailLimiter(10, 15*time.Minute), begins: newFailLimiter(30, time.Minute)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", a.health)
 	mux.HandleFunc("GET /api/auth/state", a.authState)

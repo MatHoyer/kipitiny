@@ -25,7 +25,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "kipitiny", Version: version}, &mcp.ServerOptions{
 		Instructions: "Manage apps and PostgreSQL/Redis databases on this kipitiny server. " +
 			"Refer to services as project/service. Read tools need a read token, " +
-			"deploy/rollback/backup need deploy, restore needs admin and an explicit confirmation.",
+			"deploy/rollback/backup need deploy (with deploy, deploy_image only changes the tag of an existing app), set_project_env needs admin, restore needs admin and an explicit confirmation.",
 	})
 	t := &tools{c: c}
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
@@ -40,7 +40,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "deploy",
 		Description: "Deploy a service's current settings (zero-downtime for apps without published ports), or another tag of an app's image. Returns the deployment; poll get_app_status for the outcome."}, t.deploy)
 	mcp.AddTool(server, &mcp.Tool{Name: "deploy_image",
-		Description: "Create (or update) an app running a Docker image in a project, then deploy it. The project is created if missing."}, t.deployImage)
+		Description: "Create (or update) an app running a Docker image in a project, then deploy it. The project is created if missing. With a deploy token, only an existing app's image tag or digest can change; anything else needs admin."}, t.deployImage)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_project_env",
 		Description: "Set or remove a project's shared variables (readable) and secrets (write-only). Services use either as {{ project.NAME }} in an env value; they pick up changes on their next deploy."}, t.setProjectEnv)
 	mcp.AddTool(server, &mcp.Tool{Name: "rollback",
@@ -280,8 +280,15 @@ func (in deployImageIn) ports() []store.PublishedPort {
 	return out
 }
 
+// deployImage needs admin to create apps or change anything but the tag: it
+// could otherwise run any image with env that references password-manager
+// and database secrets, publish host ports and claim domains. A deploy token
+// gets what REST deploy allows, another tag of an existing app's image.
 func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in deployImageIn) (*mcp.CallToolResult, store.Deployment, error) {
 	dep, err := mutate(ctx, t.c, store.ScopeDeploy, "deploy_image", in.Project+"/"+in.Name, func() (store.Deployment, error) {
+		if core.Require(ctx, store.ScopeAdmin) != nil {
+			return t.retag(ctx, in)
+		}
 		project, err := t.findOrCreateProject(ctx, in.Project)
 		if err != nil {
 			return store.Deployment{}, err
@@ -321,6 +328,30 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 		return t.c.Deploy(ctx, svc.ID, core.DeployOptions{})
 	})
 	return nil, dep, err
+}
+
+// retag is deploy_image for a deploy token: the app must exist and only its
+// image tag or digest may change.
+func (t *tools) retag(ctx context.Context, in deployImageIn) (store.Deployment, error) {
+	svc, err := t.c.ResolveService(ctx, in.Project+"/"+in.Name)
+	if errors.Is(err, store.ErrNotFound) {
+		return store.Deployment{}, fmt.Errorf("%w: needs the admin scope to create an app", core.ErrForbidden)
+	}
+	if err != nil {
+		return store.Deployment{}, err
+	}
+	if svc.Kind != store.ServiceKindApp {
+		return store.Deployment{}, fmt.Errorf("%s/%s exists and is not an app", in.Project, in.Name)
+	}
+	if in.Env != nil || in.PublishedPorts != nil || in.StopGraceSeconds != nil ||
+		(in.Domain != "" && in.Domain != svc.Domain) || (in.Port != 0 && in.Port != svc.Port) {
+		return store.Deployment{}, fmt.Errorf("%w: needs the admin scope to change anything but the image tag", core.ErrForbidden)
+	}
+	opts, err := core.RetagOptions(svc.Image, in.Image)
+	if err != nil {
+		return store.Deployment{}, err
+	}
+	return t.c.Deploy(ctx, svc.ID, opts)
 }
 
 type setProjectEnvIn struct {

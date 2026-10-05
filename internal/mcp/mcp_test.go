@@ -107,6 +107,31 @@ func TestTools(t *testing.T) {
 		t.Fatalf("refusal message: %s", text)
 	}
 
+	// With a deploy token, deploy_image only retags an existing app: no new
+	// apps, other images or env (which could pull secrets out).
+	if _, err := st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp,
+		Image: "ghcr.io/org/web:v1", Replicas: 1}); err != nil {
+		t.Fatal(err)
+	}
+	deployTok, _ := c.CreateAPIToken(ctx, "ci", store.ScopeDeploy)
+	ds := connect(deployTok.Token)
+	defer ds.Close()
+	for name, args := range map[string]map[string]any{
+		"new app":     {"project": "shop", "name": "evil", "image": "alpine"},
+		"other image": {"project": "shop", "name": "web", "image": "alpine"},
+		"env":         {"project": "shop", "name": "web", "image": "ghcr.io/org/web:v2", "env": map[string]any{"X": "{{ db.main.PASSWORD }}"}},
+		"ports":       {"project": "shop", "name": "web", "image": "ghcr.io/org/web:v2", "publishedPorts": []any{map[string]any{"hostPort": 2222}}},
+	} {
+		res, err := ds.CallTool(ctx, &mcp.CallToolParams{Name: "deploy_image", Arguments: args})
+		if err != nil || !res.IsError {
+			t.Fatalf("deploy_image %s with deploy token should be refused: %v %+v", name, err, res)
+		}
+		text, _ := json.Marshal(res.Content)
+		if !strings.Contains(string(text), "needs the admin scope") {
+			t.Fatalf("%s refusal message: %s", name, text)
+		}
+	}
+
 	// Unauthenticated connections are rejected.
 	client := mcp.NewClient(&mcp.Implementation{Name: "anon"}, nil)
 	if _, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: srv.URL}, nil); err == nil {

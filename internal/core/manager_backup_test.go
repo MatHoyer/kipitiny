@@ -47,3 +47,18 @@ func TestSeedManagerScheduleOff(t *testing.T) {
 		t.Fatalf("schedule created with KIPITINY_MANAGER_BACKUP_CRON=off: %+v", scs)
 	}
 }
+
+func TestManagerTargetOK(t *testing.T) {
+	for _, tc := range []struct {
+		target store.BackupTarget
+		ok     bool
+	}{
+		{store.BackupTarget{Kind: store.BackupTargetLocal}, true},
+		{store.BackupTarget{Kind: store.BackupTargetS3}, false},
+		{store.BackupTarget{Kind: store.BackupTargetS3, AgeRecipient: "age1xyz"}, true},
+	} {
+		if err := managerTargetOK(tc.target); (err == nil) != tc.ok {
+			t.Errorf("%+v: %v", tc.target, err)
+		}
+	}
+}
