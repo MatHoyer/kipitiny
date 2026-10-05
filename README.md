@@ -294,7 +294,7 @@ claude mcp add --transport http kipitiny https://kipitiny.example.com/mcp \
 ```
 
 Tools are task-oriented rather than a copy of the REST API: `list_services`,
-`get_app_status`, `get_logs`, `deploy`, `deploy_image`, `rollback`,
+`get_app_status`, `get_logs`, `deploy`, `deploy_image` (admin, or a deploy token changing an existing app's tag), `rollback`,
 `backup_database`, `list_backups`, `list_storage`, `restore_database` (admin, requires the
 database name as confirmation). Secrets are masked in every response. Every
 mutation, from the UI, a token or an agent (including refused attempts), lands

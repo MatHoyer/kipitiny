@@ -22,6 +22,16 @@ func (c *Core) BackupManager(ctx context.Context, targetID string) (store.Backup
 	return c.startManagerBackup(ctx, targetID, "", nil)
 }
 
+// managerTargetOK refuses unencrypted remote targets for manager backups:
+// the snapshot holds every credential kipitiny knows (SSH key, registry and
+// cloud tokens, TOTP secret, other targets' age identities) in plaintext.
+func managerTargetOK(t store.BackupTarget) error {
+	if t.Kind != store.BackupTargetLocal && t.AgeRecipient == "" {
+		return fmt.Errorf("%w: manager backups hold every credential; use local disk or a target with encryption", ErrInvalid)
+	}
+	return nil
+}
+
 // startManagerBackup starts a manager backup; done, if set, is closed when it
 // finishes. Backups made by a schedule trigger its retention on success.
 func (c *Core) startManagerBackup(ctx context.Context, targetID, scheduleID string, done chan<- struct{}) (store.Backup, error) {
@@ -33,6 +43,9 @@ func (c *Core) startManagerBackup(ctx context.Context, targetID, scheduleID stri
 		return store.Backup{}, fmt.Errorf("%w: unknown backup target", ErrInvalid)
 	}
 	if err != nil {
+		return store.Backup{}, err
+	}
+	if err := managerTargetOK(target); err != nil {
 		return store.Backup{}, err
 	}
 	st, err := c.openStorage(target)
@@ -125,8 +138,11 @@ func (c *Core) seedManagerSchedule(ctx context.Context) error {
 	}
 	if cfg := c.cfg.ManagerBackup; cfg.Cron != "" {
 		in := ScheduleInput{TargetID: cfg.TargetID, Cron: cfg.Cron, KeepLast: cfg.Keep, Enabled: true}
-		if _, err := c.store.GetBackupTarget(ctx, in.TargetID); err != nil {
+		if t, err := c.store.GetBackupTarget(ctx, in.TargetID); err != nil {
 			c.log.Warn("KIPITINY_MANAGER_BACKUP_TARGET not found, using local disk", "target", in.TargetID)
+			in.TargetID = store.LocalTargetID
+		} else if err := managerTargetOK(t); err != nil {
+			c.log.Warn("KIPITINY_MANAGER_BACKUP_TARGET is not encrypted, using local disk", "target", in.TargetID)
 			in.TargetID = store.LocalTargetID
 		}
 		sc := store.BackupSchedule{Kind: store.BackupKindManager}

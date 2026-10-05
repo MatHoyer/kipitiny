@@ -308,12 +308,16 @@ func (c *Core) applyScheduleInput(ctx context.Context, sc *store.BackupSchedule,
 	if in.TargetID == "" {
 		in.TargetID = store.LocalTargetID
 	}
-	if _, err := c.store.GetBackupTarget(ctx, in.TargetID); errors.Is(err, store.ErrNotFound) {
+	target, err := c.store.GetBackupTarget(ctx, in.TargetID)
+	if errors.Is(err, store.ErrNotFound) {
 		return fmt.Errorf("%w: unknown backup target", ErrInvalid)
 	} else if err != nil {
 		return err
 	}
 	if sc.Kind == store.BackupKindManager {
+		if err := managerTargetOK(target); err != nil {
+			return err
+		}
 		in.Verify = false // the manager's own state has no restore test
 	}
 	sc.TargetID, sc.Cron, sc.Enabled, sc.Verify = in.TargetID, in.Cron, in.Enabled, in.Verify

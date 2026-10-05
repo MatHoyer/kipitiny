@@ -280,6 +280,12 @@ func (a *API) loginMFA(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) beginPasskeyLogin(w http.ResponseWriter, r *http.Request) {
+	ip := a.clientIP(r)
+	if !a.begins.allow(ip) {
+		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
+		return
+	}
+	a.begins.fail(ip) // every start counts: each one holds server memory
 	opts, err := a.core.BeginPasskeyLogin(relyingParty(r))
 	if err != nil {
 		a.fail(w, err)

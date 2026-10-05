@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/distribution/reference"
+	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
@@ -92,6 +93,33 @@ func retagImage(image, tag, dgst string) (string, error) {
 		}
 	}
 	return reference.FamiliarString(ref), nil
+}
+
+// RetagOptions turns image into the DeployOptions that move a service from
+// current to it, refusing a different repository: what a deploy token may
+// do. A bare repository means its latest tag.
+func RetagOptions(current, image string) (DeployOptions, error) {
+	cur, err := reference.ParseNormalizedNamed(current)
+	if err != nil {
+		return DeployOptions{}, fmt.Errorf("%w: service image %q: %v", ErrInvalid, current, err)
+	}
+	named, err := reference.ParseNormalizedNamed(image)
+	if err != nil {
+		return DeployOptions{}, fmt.Errorf("%w: image %q: %v", ErrInvalid, image, err)
+	}
+	if named.Name() != cur.Name() {
+		return DeployOptions{}, fmt.Errorf("%w: needs the admin scope to change the image repository (%s)", ErrForbidden, reference.FamiliarName(cur))
+	}
+	var opts DeployOptions
+	if d, ok := named.(reference.Digested); ok {
+		opts.Digest = d.Digest().String()
+	}
+	if t, ok := named.(reference.Tagged); ok {
+		opts.Tag = t.Tag()
+	} else if opts.Digest == "" {
+		opts.Tag = "latest"
+	}
+	return opts, nil
 }
 
 // deployRequest is what startDeploy ships: image overrides the service's
@@ -271,6 +299,8 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 	}
 	if res, err := dk.ImageInspect(ctx, svc.Image); err != nil {
 		return err
+	} else if err := checkImageLabels(res.Config); err != nil {
+		return err
 	} else if pinned := pinDigest(svc.Image, res.RepoDigests); pinned != svc.Image {
 		logf("Pinned to %s", pinned)
 		svc.Image = pinned
@@ -285,6 +315,28 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 		return c.swap(ctx, project, svc, src, dep, out, logf)
 	}
 	return c.rollout(ctx, project, svc, src, dep, out, logf)
+}
+
+// checkImageLabels refuses images that carry Traefik labels. Docker merges
+// image labels into the container's, and Traefik reads them all: an image
+// could add a router for another app's domain (or the manager's) and hijack
+// it. Routing labels must come from kipitiny only.
+func checkImageLabels(cfg *dockerspec.DockerOCIImageConfig) error {
+	if cfg == nil {
+		return nil
+	}
+	var bad []string
+	for k := range cfg.Labels {
+		if strings.HasPrefix(strings.ToLower(k), "traefik.") {
+			bad = append(bad, k)
+		}
+	}
+	if len(bad) == 0 {
+		return nil
+	}
+	slices.Sort(bad)
+	return fmt.Errorf("%w: the image sets Traefik labels (%s); kipitiny manages routing itself, rebuild the image without them",
+		ErrInvalid, strings.Join(bad, ", "))
 }
 
 // pinDigest pins image to the digest it was pulled at (name:tag@sha256:…), so
@@ -571,6 +623,10 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 	host := &container.HostConfig{
 		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
 		LogConfig:     docker.DefaultLogConfig(),
+		// No raw sockets: a compromised container can't ARP-spoof its
+		// networks (e.g. the plain-HTTP Traefik → manager hop). Ping still
+		// works through Docker's default ping_group_range.
+		CapDrop: []string{"NET_RAW"},
 	}
 	if svc.MemoryMB > 0 {
 		host.Memory = int64(svc.MemoryMB) << 20
