@@ -580,7 +580,7 @@ func (c *Core) stopLinkedApps(ctx context.Context, db store.Service) ([]string, 
 		if err != nil {
 			return stopped, err
 		}
-		secs := int(stopTimeout.Seconds())
+		secs := int(stopTimeoutFor(s).Seconds())
 		for _, ct := range cts {
 			if ct.State != container.StateRunning {
 				continue

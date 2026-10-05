@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/store"
@@ -98,5 +99,39 @@ func TestPinDigest(t *testing.T) {
 		if got := pinDigest(tc.image, tc.digests); got != tc.want {
 			t.Errorf("pinDigest(%q, %v) = %q, want %q", tc.image, tc.digests, got, tc.want)
 		}
+	}
+}
+
+func TestStopGrace(t *testing.T) {
+	app := store.Service{ID: "01ABC", Name: "mc", Kind: store.ServiceKindApp, Image: "itzg/minecraft-server", Replicas: 1}
+	if got := stopTimeoutFor(app); got != stopTimeout {
+		t.Errorf("default = %s", got)
+	}
+	if spec := containerSpec(store.Project{ID: "P1", Name: "games"}, app, envSources{}, "D1", 1, route{}); spec.Config.StopTimeout != nil {
+		t.Errorf("default stop timeout set on the container: %d", *spec.Config.StopTimeout)
+	}
+
+	app.StopGraceSeconds = 90
+	if got := stopTimeoutFor(app); got != 90*time.Second {
+		t.Errorf("custom = %s", got)
+	}
+	spec := containerSpec(store.Project{ID: "P1", Name: "games"}, app, envSources{}, "D1", 1, route{})
+	if spec.Config.StopTimeout == nil || *spec.Config.StopTimeout != 90 {
+		t.Errorf("container stop timeout = %v", spec.Config.StopTimeout)
+	}
+	if err := validateService(app); err != nil {
+		t.Errorf("valid: %v", err)
+	}
+	for _, s := range []int{-1, maxStopGraceSeconds + 1} {
+		app.StopGraceSeconds = s
+		if err := validateService(app); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%d: got %v", s, err)
+		}
+	}
+
+	db := redisService()
+	db.StopGraceSeconds = 30
+	if err := validateService(db); !errors.Is(err, ErrInvalid) {
+		t.Errorf("database: got %v", err)
 	}
 }

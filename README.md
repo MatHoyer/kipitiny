@@ -135,6 +135,9 @@ gets ready, the new containers are removed and the old version keeps serving.
   taken), so the old replica stops before the new one starts: a short downtime.
   If the new one doesn't get ready, it is removed and the old one starts again.
   The probe checks the first published TCP port when the app has no HTTP port.
+- A **stop grace period** (default 10 s, up to 600) is how long an app gets to
+  exit after `SIGTERM` before it is killed, e.g. for a game server saving its
+  world. It applies to deploys, stops and Docker's own restarts.
 - **Volumes** keep an app's files across deploys (e.g. uploads): each has a
   name and a mount path, and every replica mounts the same volume. Deleting the
   service destroys them, so it asks for the service name.

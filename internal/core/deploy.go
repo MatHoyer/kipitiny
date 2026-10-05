@@ -413,7 +413,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 	// Traffic now reaches the new replicas; stop the old ones gracefully but
 	// keep them (and their logs) until the next deploy. One at a time, so
 	// Traefik never holds more than one stopped backend at once.
-	secs := int(stopTimeout.Seconds())
+	secs := int(stopTimeoutFor(svc).Seconds())
 	for i, old := range active {
 		if i > 0 {
 			time.Sleep(retireGap)
@@ -583,6 +583,10 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 	} else {
 		host.Mounts = append(host.Mounts, appVolumeMounts(svc)...)
 		cfg.ExposedPorts, host.PortBindings = portBindings(svc.PublishedPorts)
+		if svc.StopGraceSeconds > 0 {
+			// Docker's own stops (daemon shutdown, restarts) wait as long.
+			cfg.StopTimeout = &svc.StopGraceSeconds
+		}
 	}
 	name := fmt.Sprintf("%s-%s-%d", project.Name, svc.Name, replica)
 	if !svc.Kind.IsDatabase() {
