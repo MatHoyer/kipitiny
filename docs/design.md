@@ -162,6 +162,8 @@ Replicas on one host = several identical containers with **identical Traefik rou
 
 Apps with published ports can't overlap, so they **swap**: pre-deploy, stop the old replica (kept for its logs), start the new one, wait for health (probe on the HTTP port, else the first published TCP port, else a stability wait). On failure the new container is removed and the old one started again. Short downtime by design.
 
+Apps have a **stop grace period** (seconds after SIGTERM before SIGKILL, default 10, max 600), used by every stop the manager makes and set as the container's `StopTimeout` so Docker's own stops honour it. Databases keep their fixed timeouts (Postgres 60 s, Redis 30 s).
+
 No builds on the server (Git builds existed and were removed to keep services simple; may return later). Flow: build once in CI, then deploy by tag (`kipitiny deploy`, a deploy-scoped token that may change the tag, never the repository). Every pull is pinned to its digest in the deployment record, so reconciler recreations and rollbacks never pick up a moved tag.
 
 ## 10. PostgreSQL management and backups (core feature)

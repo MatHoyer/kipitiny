@@ -145,5 +145,8 @@ func stopTimeoutFor(svc store.Service) time.Duration {
 	case store.ServiceKindRedis:
 		return redisStopTimeout
 	}
+	if svc.StopGraceSeconds > 0 {
+		return time.Duration(svc.StopGraceSeconds) * time.Second
+	}
 	return stopTimeout
 }

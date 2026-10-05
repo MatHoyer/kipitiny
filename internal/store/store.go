@@ -277,6 +277,9 @@ type Service struct {
 	// for traffic Traefik doesn't carry (game servers, MQTT…). An app with
 	// published ports runs one replica.
 	PublishedPorts []PublishedPort `bun:"published_ports" json:"publishedPorts"`
+	// StopGraceSeconds is how long an app gets to exit after SIGTERM before
+	// it is killed (e.g. a game server saving its world); 0 means 10 s.
+	StopGraceSeconds int `bun:"stop_grace_seconds" json:"stopGraceSeconds"`
 	// PreBackup runs (sh -c) in a running replica before each volume
 	// backup, e.g. to flush to disk. A failure aborts the backup.
 	PreBackup           string `bun:"pre_backup" json:"preBackup"`

@@ -23,6 +23,8 @@ const SecretMask = "********"
 
 const (
 	maxReplicas = 10
+	// maxStopGraceSeconds bounds how long a stop (and so a deploy) may wait.
+	maxStopGraceSeconds = 600
 	// Docker's NanoCPUs granularity is 0.01 CPU in practice.
 	minCPUs = 0.01
 	maxCPUs = 256.0
@@ -54,6 +56,8 @@ type ServiceInput struct {
 	PreBackup   string            `json:"preBackup"`
 	// PublishedPorts bind host ports to the app's container (apps only).
 	PublishedPorts []store.PublishedPort `json:"publishedPorts"`
+	// StopGraceSeconds is the app's time to exit on stop; 0 means 10 s.
+	StopGraceSeconds int `json:"stopGraceSeconds"`
 }
 
 // ServicePatch updates only the fields that are set. Env replaces the whole
@@ -76,7 +80,8 @@ type ServicePatch struct {
 	Middlewares *MiddlewaresInput `json:"middlewares"`
 	PreBackup   *string           `json:"preBackup"`
 	// PublishedPorts replaces the app's published ports; nil keeps them.
-	PublishedPorts []store.PublishedPort `json:"publishedPorts"`
+	PublishedPorts   []store.PublishedPort `json:"publishedPorts"`
+	StopGraceSeconds *int                  `json:"stopGraceSeconds"`
 }
 
 type ContainerView struct {
@@ -112,21 +117,22 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		in.Replicas = 1
 	}
 	svc := store.Service{
-		ProjectID:      projectID,
-		Name:           in.Name,
-		Kind:           in.Kind,
-		Image:          strings.TrimSpace(in.Image),
-		Replicas:       in.Replicas,
-		Port:           in.Port,
-		Domain:         strings.ToLower(strings.TrimSpace(in.Domain)),
-		Env:            in.Env,
-		MemoryMB:       in.MemoryMB,
-		CPUs:           in.CPUs,
-		HealthPath:     strings.TrimSpace(in.HealthPath),
-		PreDeploy:      strings.TrimSpace(in.PreDeploy),
-		Volumes:        normalizeVolumes(in.Volumes),
-		PreBackup:      strings.TrimSpace(in.PreBackup),
-		PublishedPorts: normalizePorts(in.PublishedPorts),
+		ProjectID:        projectID,
+		Name:             in.Name,
+		Kind:             in.Kind,
+		Image:            strings.TrimSpace(in.Image),
+		Replicas:         in.Replicas,
+		Port:             in.Port,
+		Domain:           strings.ToLower(strings.TrimSpace(in.Domain)),
+		Env:              in.Env,
+		MemoryMB:         in.MemoryMB,
+		CPUs:             in.CPUs,
+		HealthPath:       strings.TrimSpace(in.HealthPath),
+		PreDeploy:        strings.TrimSpace(in.PreDeploy),
+		Volumes:          normalizeVolumes(in.Volumes),
+		PreBackup:        strings.TrimSpace(in.PreBackup),
+		PublishedPorts:   normalizePorts(in.PublishedPorts),
+		StopGraceSeconds: in.StopGraceSeconds,
 	}
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
@@ -230,6 +236,9 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	if p.PublishedPorts != nil {
 		svc.PublishedPorts = normalizePorts(p.PublishedPorts)
 	}
+	if p.StopGraceSeconds != nil {
+		svc.StopGraceSeconds = *p.StopGraceSeconds
+	}
 	if p.Middlewares != nil {
 		if svc.Middlewares, err = mergeMiddlewares(*p.Middlewares, old.Middlewares); err != nil {
 			return ServiceView{}, err
@@ -305,6 +314,9 @@ func validateService(s store.Service) error {
 		if !s.Middlewares.IsZero() || len(s.PublishedPorts) > 0 {
 			return fmt.Errorf("%w: databases are never public, so take no middlewares or published ports", ErrInvalid)
 		}
+		if s.StopGraceSeconds != 0 {
+			return fmt.Errorf("%w: databases have their own stop timeout", ErrInvalid)
+		}
 		return validateDatabase(s)
 	}
 	if err := validateVolumes(s.Volumes); err != nil {
@@ -315,6 +327,9 @@ func validateService(s store.Service) error {
 	}
 	if err := validatePorts(s); err != nil {
 		return err
+	}
+	if s.StopGraceSeconds < 0 || s.StopGraceSeconds > maxStopGraceSeconds {
+		return fmt.Errorf("%w: stop grace period must be between 0 and %d seconds", ErrInvalid, maxStopGraceSeconds)
 	}
 	if s.HealthPath != "" {
 		if !strings.HasPrefix(s.HealthPath, "/") || strings.ContainsAny(s.HealthPath, " \t\n") {
