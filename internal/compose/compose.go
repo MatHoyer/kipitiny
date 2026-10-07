@@ -92,6 +92,9 @@ type RateLimit struct {
 // ExtKey is the service key kipitiny reads its own settings from.
 const ExtKey = "x-kipitiny"
 
+// supportedServiceKeys are the compose service keys Parse reads.
+var supportedServiceKeys = []string{"image", "build", "environment", "ports", "volumes", "deploy", "mem_limit", "cpus", "stop_grace_period", ExtKey}
+
 // Keys that change nothing kipitiny can't do itself (it orders, networks
 // and restarts services on its own): dropped with a warning. Any other
 // unknown key is an error, as ignoring it would run something else than

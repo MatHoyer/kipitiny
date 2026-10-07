@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/MatHoyer/kipitiny/docs"
 	"github.com/MatHoyer/kipitiny/internal/api"
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/core"
@@ -135,6 +137,10 @@ func serve() error {
 	a := api.New(c, log)
 	mux.Handle("/api/", a)
 	mux.Handle("/mcp", a.Authenticated(mcp.Handler(c, version)))
+	mux.HandleFunc("GET /llms.txt", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		_, _ = io.WriteString(w, docs.ComposeReference)
+	})
 	mux.Handle("/", web.Handler())
 
 	srv := &http.Server{

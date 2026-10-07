@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FileCode, FileUp, KeyRound, Rocket, ScanSearch } from "lucide-react";
 import { useState, type ChangeEvent, type FormEvent } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { CheckboxField, CopyButton, ErrorText, Loading, Tag } from "@/components/common";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,11 @@ export function ComposeDialog({ projectId, service, canImport = false }: { proje
         <DialogHeader>
           <DialogTitle>{service ? `${service} as compose` : "Project as compose"}</DialogTitle>
           <DialogDescription>
-            Standard docker-compose; kipitiny settings live in <code>x-kipitiny</code> blocks, which Docker Compose ignores.
+            Standard docker-compose; kipitiny settings live in <code>x-kipitiny</code> blocks, which Docker Compose ignores. See the{" "}
+            <Link to="/docs/compose" className="underline underline-offset-2">
+              compose reference
+            </Link>
+            .
           </DialogDescription>
         </DialogHeader>
         <Tabs value={tab} onValueChange={setTab}>

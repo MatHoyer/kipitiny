@@ -19,6 +19,7 @@ import { Projects } from "./routes/Projects";
 import { Service } from "./routes/Service";
 import { SettingsShell, settingsPages } from "./routes/settings";
 import { ServerPage } from "./routes/settings/Servers";
+import { ComposeReference } from "./routes/ComposeReference";
 
 // A 401 anywhere means the session is gone: re-check auth to show the login.
 const onError = (err: Error) => {
@@ -55,6 +56,7 @@ const router = createBrowserRouter([
       { path: "projects/:id", element: <Project /> },
       { path: "services/:id", element: <Service /> },
       { path: "map", element: <MapPage /> },
+      { path: "docs/compose", element: <ComposeReference /> },
       { path: "account", element: <AccountPage /> },
       { path: "backups", element: <Backups /> },
       { path: "backups/:id", element: <Backup /> },

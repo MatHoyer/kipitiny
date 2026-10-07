@@ -15,6 +15,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/MatHoyer/kipitiny/docs"
 	"github.com/MatHoyer/kipitiny/internal/core"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -45,6 +46,8 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "Set or remove a project's shared variables (readable) and secrets (write-only). Services use either as {{ project.NAME }} in an env value; they pick up changes on their next deploy."}, t.setProjectEnv)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_project_compose", Annotations: readOnly,
 		Description: "A project (or one of its services) as an equivalent docker-compose file, kipitiny settings in x-kipitiny blocks. Secret values are ${NAME} variables without values."}, t.getProjectCompose)
+	mcp.AddTool(server, &mcp.Tool{Name: "get_compose_reference", Annotations: readOnly,
+		Description: "The complete compose file format kipitiny reads (keys, x-kipitiny settings, variables and secrets, git sync rules), to write a file for apply_project_compose."}, t.getComposeReference)
 	mcp.AddTool(server, &mcp.Tool{Name: "apply_project_compose", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Make a project match a docker-compose file (format of get_project_compose): creates and updates services, then deploys the changed ones. " +
 			"dry_run returns the plan only. prune also deletes the apps the file doesn't list (with their volumes): confirm must repeat the project name. Needs admin."}, t.applyProjectCompose)
@@ -423,6 +426,17 @@ func (t *tools) getProjectCompose(ctx context.Context, _ *mcp.CallToolRequest, i
 		return nil, getProjectComposeOut{}, friendly(err)
 	}
 	return nil, getProjectComposeOut{Compose: string(out.Compose)}, nil
+}
+
+type getComposeReferenceOut struct {
+	Reference string `json:"reference"`
+}
+
+func (t *tools) getComposeReference(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, getComposeReferenceOut, error) {
+	if err := core.Require(ctx, store.ScopeRead); err != nil {
+		return nil, getComposeReferenceOut{}, err
+	}
+	return nil, getComposeReferenceOut{Reference: docs.ComposeReference}, nil
 }
 
 type applyProjectComposeIn struct {
