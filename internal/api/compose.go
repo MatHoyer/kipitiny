@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/MatHoyer/kipitiny/internal/compose"
 	"github.com/MatHoyer/kipitiny/internal/core"
 )
 
@@ -62,4 +63,32 @@ func (a *API) exportBundle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, "kipitiny-export.zip"))
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(buf.Bytes())
+}
+
+// applyCompose makes the project match a compose file (see
+// core.ApplyCompose); env is the optional .env text.
+func (a *API) applyCompose(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Compose string `json:"compose"`
+		Env     string `json:"env"`
+		Prune   bool   `json:"prune"`
+		DryRun  bool   `json:"dryRun"`
+		Deploy  bool   `json:"deploy"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	env, err := compose.ParseEnv([]byte(body.Env))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	plan, err := a.core.ApplyCompose(r.Context(), r.PathValue("id"), []byte(body.Compose), core.ApplyOptions{
+		Env: env, Prune: body.Prune, DryRun: body.DryRun, Deploy: body.Deploy,
+	})
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, plan)
 }

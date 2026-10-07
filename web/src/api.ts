@@ -567,6 +567,17 @@ export type Status = {
 /** Secret values come back masked; sending the mask keeps the stored value. */
 export const SECRET_MASK = "********";
 
+export interface ComposePlan {
+  create: string[];
+  update: { name: string; fields: string[] }[];
+  unchanged: string[];
+  delete: string[];
+  orphaned: string[];
+  variables: string[];
+  warnings: string[];
+  deploying: string[];
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -635,6 +646,8 @@ export const api = {
     request<Project>(`/projects/${id}/env`, json("PUT", { env, secrets })),
   compose: (id: string, service?: string) => request<string>(composePath(id, service)),
   composeUrl: (id: string, service?: string) => `/api${composePath(id, service)}${service ? "&" : "?"}download=1`,
+  applyCompose: (id: string, body: { compose: string; env: string; prune: boolean; dryRun?: boolean; deploy?: boolean }) =>
+    request<ComposePlan>(`/projects/${id}/compose`, json("POST", body)),
   /** A zip of compose.yaml and the .env with the secret values. */
   exportBundle: async (id: string, password: string, service?: string) => {
     const res = await fetch(`/api/projects/${id}/export`, {

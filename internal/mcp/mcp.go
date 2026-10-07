@@ -45,6 +45,9 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "Set or remove a project's shared variables (readable) and secrets (write-only). Services use either as {{ project.NAME }} in an env value; they pick up changes on their next deploy."}, t.setProjectEnv)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_project_compose", Annotations: readOnly,
 		Description: "A project (or one of its services) as an equivalent docker-compose file, kipitiny settings in x-kipitiny blocks. Secret values are ${NAME} variables without values."}, t.getProjectCompose)
+	mcp.AddTool(server, &mcp.Tool{Name: "apply_project_compose", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+		Description: "Make a project match a docker-compose file (format of get_project_compose): creates and updates services, then deploys the changed ones. " +
+			"dry_run returns the plan only. prune also deletes the apps the file doesn't list (with their volumes): confirm must repeat the project name. Needs admin."}, t.applyProjectCompose)
 	mcp.AddTool(server, &mcp.Tool{Name: "rollback",
 		Description: "Redeploy the image of an earlier successful deployment (the previous one by default)."}, t.rollback)
 	mcp.AddTool(server, &mcp.Tool{Name: "backup_database",
@@ -420,6 +423,28 @@ func (t *tools) getProjectCompose(ctx context.Context, _ *mcp.CallToolRequest, i
 		return nil, getProjectComposeOut{}, friendly(err)
 	}
 	return nil, getProjectComposeOut{Compose: string(out.Compose)}, nil
+}
+
+type applyProjectComposeIn struct {
+	Project string `json:"project" jsonschema:"the project name"`
+	Compose string `json:"compose" jsonschema:"the compose file"`
+	DryRun  bool   `json:"dry_run,omitempty" jsonschema:"only return what would change"`
+	Prune   bool   `json:"prune,omitempty" jsonschema:"delete the apps the file doesn't list"`
+	Confirm string `json:"confirm,omitempty" jsonschema:"the project name, required with prune"`
+}
+
+func (t *tools) applyProjectCompose(ctx context.Context, _ *mcp.CallToolRequest, in applyProjectComposeIn) (*mcp.CallToolResult, core.ComposePlan, error) {
+	out, err := mutate(ctx, t.c, store.ScopeAdmin, "apply_project_compose", in.Project, func() (core.ComposePlan, error) {
+		project, err := t.findProject(ctx, in.Project)
+		if err != nil {
+			return core.ComposePlan{}, err
+		}
+		if in.Prune && !in.DryRun && in.Confirm != project.Name {
+			return core.ComposePlan{}, errors.New("prune deletes apps and their data: confirm must repeat the project name")
+		}
+		return t.c.ApplyCompose(ctx, project.ID, []byte(in.Compose), core.ApplyOptions{DryRun: in.DryRun, Prune: in.Prune, Deploy: true})
+	})
+	return nil, out, err
 }
 
 func (t *tools) findProject(ctx context.Context, name string) (store.Project, error) {

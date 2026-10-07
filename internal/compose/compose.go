@@ -222,8 +222,9 @@ type Vars struct {
 	// Lookup gives a variable its value; nil knows none.
 	Lookup func(name string) (string, bool)
 	// Ref, if set, stands in for a missing variable that makes up a whole
-	// environment value, e.g. a reference to a project variable.
-	Ref func(name string) string
+	// environment value (service's key), e.g. a reference to a project
+	// variable.
+	Ref func(service, key, name string) string
 }
 
 // Parse reads a compose file. Warnings name what was dropped; an error
@@ -264,6 +265,7 @@ func Parse(data []byte, vars Vars) (File, []string, error) {
 		p.fail("no services")
 	} else {
 		for name, v := range pairs(services) {
+			p.svc = name
 			f.Services[name] = p.service(name, v)
 		}
 	}
@@ -279,6 +281,7 @@ func Parse(data []byte, vars Vars) (File, []string, error) {
 
 type parser struct {
 	vars    Vars
+	svc     string
 	ctx     string
 	warns   []string
 	errs    []string
@@ -415,10 +418,10 @@ func (p *parser) environment(n *yaml.Node) map[string]string {
 	set := func(k string, v *string) {
 		if v == nil {
 			// KEY alone takes its value from the variables, like ${KEY}.
-			env[k] = p.envValue("${" + k + "}")
+			env[k] = p.envValue(k, "${"+k+"}")
 			return
 		}
-		env[k] = p.envValue(*v)
+		env[k] = p.envValue(k, *v)
 	}
 	switch n.Kind {
 	case yaml.MappingNode:
@@ -451,10 +454,10 @@ func (p *parser) environment(n *yaml.Node) map[string]string {
 
 // envValue interpolates an environment value; a missing variable that is
 // the whole value becomes Vars.Ref.
-func (p *parser) envValue(v string) string {
+func (p *parser) envValue(key, v string) string {
 	if name, ok := SoleVar(v); ok && p.vars.Ref != nil {
 		if _, found := p.lookup(name); !found {
-			return p.vars.Ref(name)
+			return p.vars.Ref(p.svc, key, name)
 		}
 	}
 	return p.interpolate(v)

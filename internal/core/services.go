@@ -60,6 +60,9 @@ type ServiceInput struct {
 	PublishedPorts []store.PublishedPort `json:"publishedPorts"`
 	// StopGraceSeconds is the app's time to exit on stop; 0 means 10 s.
 	StopGraceSeconds int `json:"stopGraceSeconds"`
+	// Password is a new database's password, from a compose export; empty
+	// generates one. Not settable through the API.
+	Password string `json:"-"`
 }
 
 // ServicePatch updates only the fields that are set. Env replaces the whole
@@ -113,6 +116,26 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 	if _, err := c.store.GetProject(ctx, projectID); err != nil {
 		return ServiceView{}, err
 	}
+	svc, err := c.serviceFromInput(projectID, in)
+	if err != nil {
+		return ServiceView{}, err
+	}
+	if err := c.validate(ctx, svc); err != nil {
+		return ServiceView{}, err
+	}
+	svc, err = c.store.CreateService(ctx, svc)
+	if err != nil {
+		return ServiceView{}, err
+	}
+	if svc.Domain != "" {
+		c.kickDNS()
+	}
+	return ServiceView{Service: masked(svc), Containers: []ContainerView{}}, nil
+}
+
+// serviceFromInput builds a new service, with the kind's defaults, before
+// validation.
+func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Service, error) {
 	if in.Kind == "" {
 		in.Kind = store.ServiceKindApp
 	}
@@ -143,18 +166,18 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 	}
 	env, secrets, envErr := mergeEnv(svc.Env, in.Secrets, nil, nil)
 	if envErr != nil {
-		return ServiceView{}, envErr
+		return store.Service{}, envErr
 	}
 	svc.Env, svc.Secrets = env, secrets
 	if in.Middlewares != nil {
 		mw, err := mergeMiddlewares(*in.Middlewares, store.Middlewares{})
 		if err != nil {
-			return ServiceView{}, err
+			return store.Service{}, err
 		}
 		svc.Middlewares = mw
 	}
 	if !nameRe.MatchString(svc.Name) {
-		return ServiceView{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
+		return store.Service{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
 	switch svc.Kind {
 	case store.ServiceKindApp:
@@ -167,6 +190,9 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		}
 		// The env is generated and fixed: anything sent in is ignored.
 		svc.Env, svc.Secrets = newPostgresEnv(), []string{pgPassword}
+		if in.Password != "" {
+			svc.Env[pgPassword] = in.Password
+		}
 	case store.ServiceKindRedis:
 		if svc.Image == "" {
 			svc.Image = DefaultRedisImage
@@ -175,20 +201,13 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 			svc.MemoryMB = defaultRedisMemoryMB
 		}
 		svc.Env, svc.Secrets = newRedisEnv(), []string{redisPassword}
+		if in.Password != "" {
+			svc.Env[redisPassword] = in.Password
+		}
 	default:
-		return ServiceView{}, fmt.Errorf("%w: unknown service kind %q", ErrInvalid, svc.Kind)
+		return store.Service{}, fmt.Errorf("%w: unknown service kind %q", ErrInvalid, svc.Kind)
 	}
-	if err := c.validate(ctx, svc); err != nil {
-		return ServiceView{}, err
-	}
-	svc, err := c.store.CreateService(ctx, svc)
-	if err != nil {
-		return ServiceView{}, err
-	}
-	if svc.Domain != "" {
-		c.kickDNS()
-	}
-	return ServiceView{Service: masked(svc), Containers: []ContainerView{}}, nil
+	return svc, nil
 }
 
 func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (ServiceView, error) {
@@ -196,6 +215,28 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	if err != nil {
 		return ServiceView{}, err
 	}
+	svc, err := c.patched(old, p)
+	if err != nil {
+		return ServiceView{}, err
+	}
+	if err := c.validate(ctx, svc); err != nil {
+		return ServiceView{}, err
+	}
+	if svc, err = c.store.UpdateService(ctx, svc); err != nil {
+		return ServiceView{}, err
+	}
+	if svc.Replicas != old.Replicas {
+		c.kick() // scaling applies right away, other changes on the next deploy
+	}
+	if svc.Domain != old.Domain {
+		c.kickDNS()
+	}
+	return c.view(ctx, svc)
+}
+
+// patched is old with p applied, before validation.
+func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error) {
+	var err error
 	svc := old
 	svc.Env = maps.Clone(old.Env)
 	if p.Image != nil {
@@ -219,7 +260,7 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 			in = maskEnv(svc.Env, svc.Secrets)
 		}
 		if svc.Env, svc.Secrets, err = mergeEnv(in, p.Secrets, old.Env, old.Secrets); err != nil {
-			return ServiceView{}, err
+			return store.Service{}, err
 		}
 	}
 	if p.MemoryMB != nil {
@@ -248,37 +289,19 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	}
 	if p.Middlewares != nil {
 		if svc.Middlewares, err = mergeMiddlewares(*p.Middlewares, old.Middlewares); err != nil {
-			return ServiceView{}, err
+			return store.Service{}, err
 		}
 	}
 	if svc.Kind.IsDatabase() {
 		if err := checkDatabaseUpdate(old, svc); err != nil {
-			return ServiceView{}, err
+			return store.Service{}, err
 		}
 	}
-	if err := c.validate(ctx, svc); err != nil {
-		return ServiceView{}, err
-	}
-	if svc, err = c.store.UpdateService(ctx, svc); err != nil {
-		return ServiceView{}, err
-	}
-	if svc.Replicas != old.Replicas {
-		c.kick() // scaling applies right away, other changes on the next deploy
-	}
-	if svc.Domain != old.Domain {
-		c.kickDNS()
-	}
-	return c.view(ctx, svc)
+	return svc, nil
 }
 
 // validate checks a service's fields and that its env references resolve.
 func (c *Core) validate(ctx context.Context, s store.Service) error {
-	if err := validateService(s); err != nil {
-		return err
-	}
-	if s.Domain != "" && s.Domain == c.cfg.Domain {
-		return fmt.Errorf("%w: domain %q is the manager's own", ErrInvalid, s.Domain)
-	}
 	project, err := c.store.GetProject(ctx, s.ProjectID)
 	if err != nil {
 		return err
@@ -286,6 +309,18 @@ func (c *Core) validate(ctx context.Context, s store.Service) error {
 	dbs, err := c.projectDatabases(ctx, s.ProjectID)
 	if err != nil {
 		return err
+	}
+	return c.validateIn(ctx, s, project, dbs)
+}
+
+// validateIn is validate against a project's variables and databases as
+// they will be (ApplyCompose checks a whole file before changing anything).
+func (c *Core) validateIn(ctx context.Context, s store.Service, project store.Project, dbs map[string]store.Service) error {
+	if err := validateService(s); err != nil {
+		return err
+	}
+	if s.Domain != "" && s.Domain == c.cfg.Domain {
+		return fmt.Errorf("%w: domain %q is the manager's own", ErrInvalid, s.Domain)
 	}
 	if err := c.checkSecretSchemes(s.Env); err != nil {
 		return err
