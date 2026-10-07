@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  BookOpen,
   Box,
   ChevronsUpDown,
   DatabaseBackup,
@@ -65,7 +64,6 @@ const nav = [
   { to: "/", label: "Projects", icon: FolderKanban },
   { to: "/map", label: "Map", icon: Waypoints },
   { to: "/backups", label: "Backups", icon: DatabaseBackup },
-  { to: "/docs/compose", label: "Compose reference", icon: BookOpen },
 ];
 
 function App({ username }: { username: string }) {

@@ -1,8 +1,9 @@
-import { Bell, Brush, HardDrive, Globe, Info, KeyRound, KeySquare, Package, ScrollText, Server, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, Brush, HardDrive, Globe, Info, KeyRound, KeySquare, Package, ScrollText, Server, type LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 import { Version } from "./About";
 import { Audit } from "./Audit";
 import { Cleanup } from "./Cleanup";
+import { Docs } from "./Docs";
 import { DomainsPage } from "./Domains";
 import { Notifications } from "./Notifications";
 import { SettingsLabel } from "./page";
@@ -80,6 +81,13 @@ export const settingsPages: SettingsPage[] = [
     label: "Cleanup",
     icon: Brush,
     page: Cleanup,
+  },
+  {
+    slug: "docs",
+    group: "System",
+    label: "Docs",
+    icon: BookOpen,
+    page: Docs,
   },
   {
     slug: "audit",
