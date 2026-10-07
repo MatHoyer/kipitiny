@@ -1,12 +1,12 @@
 # kipitiny — Design
 
-Lightweight self-hosted PaaS (apps + Postgres with clean backups), similar in spirit to Dokploy, written in Go.
+Lightweight self-hosted PaaS (apps + Postgres with clean backups), written in Go.
 
 ## 1. Goals
 
 - Deploy and manage **Docker apps** and **PostgreSQL databases** on a server.
 - **Clean, trustworthy backups** of Postgres are the core strength of the product.
-- **Very low RAM usage.** Dokploy's Next.js app alone uses ~1.5 GB. Target: **30–100 MB total** management overhead (Go binary ~15–30 MB + Traefik ~40–80 MB).
+- **Very low RAM usage.** Target: **30–100 MB total** management overhead (Go binary ~15–30 MB + Traefik ~40–80 MB).
 - Ship as a **single static Go binary** (UI embedded), runnable as a container.
 
 ## 2. Non-goals (for now)
@@ -335,7 +335,6 @@ Deferred until there is a concrete need. Planned approach:
 
 ## 17. Reference projects
 
-- **Dokploy** (Next.js, Swarm, Traefik): feature reference; its Postgres + Redis + Next.js stack is what we avoid.
 - **PG Back Web** (`eduardolat/pgbackweb`, Go): backup UX reference.
 - **nuelScript/skiff** (Go): single-binary Docker PaaS with SQLite and label routing; very similar.
 - **Kamal**: zero-downtime deploys without orchestration.
