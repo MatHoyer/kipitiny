@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FileCode, FileUp, KeyRound, Rocket, ScanSearch } from "lucide-react";
 import { useState, type ChangeEvent, type FormEvent } from "react";
-import { Link } from "react-router";
 import { toast } from "sonner";
 import { CheckboxField, CopyButton, ErrorText, Loading, Tag } from "@/components/common";
 import { Button } from "@/components/ui/button";
@@ -9,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingTextarea } from "@/components/ui/floating-textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DOCS_URL } from "@/lib/docs";
 import { api, type ComposePlan } from "../api";
 
 /** Shows a project (or one service) as a docker-compose file, and exports it
@@ -29,9 +29,9 @@ export function ComposeDialog({ projectId, service, canImport = false }: { proje
           <DialogTitle>{service ? `${service} as compose` : "Project as compose"}</DialogTitle>
           <DialogDescription>
             Standard docker-compose; kipitiny settings live in <code>x-kipitiny</code> blocks, which Docker Compose ignores. See the{" "}
-            <Link to="/docs/compose" className="underline underline-offset-2">
+            <a href={`${DOCS_URL}/compose`} target="_blank" rel="noreferrer" className="underline underline-offset-2">
               compose reference
-            </Link>
+            </a>
             .
           </DialogDescription>
         </DialogHeader>

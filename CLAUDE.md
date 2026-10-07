@@ -10,7 +10,8 @@ Design doc: `docs/design.md` â€” read before architectural changes. Roadmap in Â
 - Docker SDK is `github.com/moby/moby/client` (Options/Result struct API, not the old `docker/docker/client` signatures). Use `cerrdefs.IsNotFound`.
 - Everything created on Docker carries `kipitiny.*` labels (`internal/docker`).
 - Postgres services are always 1 replica.
+- User docs live in `site/docs/*.md` (the website), not in the manager; MCP `get_docs` fetches them (`internal/docs`).
 
 ## Commands
-`make dev-api` / `make dev-ui` / `make test` / `make lint` / `make build` / `make docker`.
+`make dev-api` / `make dev-ui` / `make dev-site` / `make test` / `make lint` / `make build` / `make docker`.
 `go:embed` needs `web/dist`; make targets stub it via `ui-stub`.

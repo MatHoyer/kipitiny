@@ -15,8 +15,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/MatHoyer/kipitiny/docs"
 	"github.com/MatHoyer/kipitiny/internal/core"
+	"github.com/MatHoyer/kipitiny/internal/docs"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -26,9 +26,10 @@ func Handler(c *core.Core, version string) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "kipitiny", Version: version}, &mcp.ServerOptions{
 		Instructions: "Manage apps and PostgreSQL/Redis databases on this kipitiny server. " +
 			"Refer to services as project/service. Read tools need a read token, " +
-			"deploy/rollback/backup need deploy (with deploy, deploy_image only changes the tag of an existing app), set_project_env needs admin, restore needs admin and an explicit confirmation.",
+			"deploy/rollback/backup need deploy (with deploy, deploy_image only changes the tag of an existing app), set_project_env needs admin, restore needs admin and an explicit confirmation. " +
+			"get_docs returns kipitiny's documentation; read the relevant page before guessing how a feature works.",
 	})
-	t := &tools{c: c}
+	t := &tools{c: c, docs: docs.New(version)}
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
 	yes := true
 
@@ -46,8 +47,9 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "Set or remove a project's shared variables (readable) and secrets (write-only). Services use either as {{ project.NAME }} in an env value; they pick up changes on their next deploy."}, t.setProjectEnv)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_project_compose", Annotations: readOnly,
 		Description: "A project (or one of its services) as an equivalent docker-compose file, kipitiny settings in x-kipitiny blocks. Secret values are ${NAME} variables without values."}, t.getProjectCompose)
-	mcp.AddTool(server, &mcp.Tool{Name: "get_compose_reference", Annotations: readOnly,
-		Description: "The complete compose file format kipitiny reads (keys, x-kipitiny settings, variables and secrets, git sync rules), to write a file for apply_project_compose."}, t.getComposeReference)
+	mcp.AddTool(server, &mcp.Tool{Name: "get_docs", Annotations: readOnly,
+		Description: "kipitiny's documentation as markdown. Without doc: the index of pages. doc is a page name from the index (compose for /docs/compose/llms.txt). " +
+			"doc compose is the complete compose file format (keys, x-kipitiny settings, variables and secrets, git sync rules), to write a file for apply_project_compose."}, t.getDocs)
 	mcp.AddTool(server, &mcp.Tool{Name: "apply_project_compose", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Make a project match a docker-compose file (format of get_project_compose): creates and updates services, then deploys the changed ones. " +
 			"dry_run returns the plan only. prune also deletes the apps the file doesn't list (with their volumes): confirm must repeat the project name. Needs admin."}, t.applyProjectCompose)
@@ -68,7 +70,10 @@ func Handler(c *core.Core, version string) http.Handler {
 	})
 }
 
-type tools struct{ c *core.Core }
+type tools struct {
+	c    *core.Core
+	docs *docs.Fetcher
+}
 
 // mutate checks the scope, runs f and records the outcome in the audit log.
 func mutate[T any](ctx context.Context, c *core.Core, scope store.Scope, action, target string, f func() (T, error)) (T, error) {
@@ -428,15 +433,19 @@ func (t *tools) getProjectCompose(ctx context.Context, _ *mcp.CallToolRequest, i
 	return nil, getProjectComposeOut{Compose: string(out.Compose)}, nil
 }
 
-type getComposeReferenceOut struct {
-	Reference string `json:"reference"`
+type getDocsIn struct {
+	Doc string `json:"doc,omitempty" jsonschema:"a page name from the index, e.g. compose; empty for the index"`
 }
 
-func (t *tools) getComposeReference(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, getComposeReferenceOut, error) {
+func (t *tools) getDocs(ctx context.Context, _ *mcp.CallToolRequest, in getDocsIn) (*mcp.CallToolResult, docs.Page, error) {
 	if err := core.Require(ctx, store.ScopeRead); err != nil {
-		return nil, getComposeReferenceOut{}, err
+		return nil, docs.Page{}, err
 	}
-	return nil, getComposeReferenceOut{Reference: docs.ComposeReference}, nil
+	page, err := t.docs.Get(ctx, in.Doc)
+	if errors.Is(err, docs.ErrNotFound) {
+		return nil, docs.Page{}, fmt.Errorf("no documentation page %q; call get_docs without doc for the index", in.Doc)
+	}
+	return nil, page, err
 }
 
 type applyProjectComposeIn struct {

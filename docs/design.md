@@ -180,7 +180,7 @@ A project is also a docker-compose file, so it is never locked in and can be des
 - `internal/compose` (pure: no Docker, no store) parses and writes the subset kipitiny runs: `image`, `environment`, `ports`, named `volumes`, `deploy.replicas`, `deploy.resources.limits`, `stop_grace_period`, plus a per-service `x-kipitiny` block (kind, domain, port, health path, pre-deploy/backup, icon, secrets, middlewares, database password) and a top-level one (project variables). Docker Compose ignores `x-*`. Harmless unknown keys are dropped with a warning; keys that would change what runs are errors. Compose interpolation (`${NAME}`, `$$`) applies outside `x-kipitiny`, whose values core resolves only when a whole value is `${NAME}` (bcrypt hashes are full of `$`).
 - **Export:** secret values (service and project secrets, database passwords, basic auth hashes) become `${SERVICE_KEY}` variables; references stay verbatim. Exporting *with secrets* returns the `.env` too: session only, password re-entered, audited.
 - **Apply** (`core.ApplyCompose`): parse, validate every service against the project's variables and databases *as they will be*, and only then create/update (through the normal service functions), optionally prune apps (never databases: reported as orphaned), and deploy created and changed services, databases first (apps wait for them, so migrations find their database). A missing `${NAME}` that is a whole env value becomes `{{ project.NAME }}`, unless it is an existing secret's export placeholder, which keeps its value. One apply per project at a time.
-- **Reference:** `docs/compose.md` is the format's documentation, embedded in the binary and served at `/docs/compose/llms.txt`, listed by the `/llms.txt` index (public: no secrets), in the UI and by the MCP `get_compose_reference` tool. A test fails when a key the parser reads or drops isn't documented, or an example doesn't parse.
+- **Reference:** `site/docs/compose.md` is the format's documentation, published on the website and handed to agents by the MCP `get_docs` tool. A test fails when a key the parser reads or drops isn't documented, or an example doesn't parse.
 - **Git:** `project_git` links a project to a branch and path (HTTPS, optional token). A loop polls with `ls-remote` (no fetch) and, on a new commit, shallow-clones into a temp dir under `$DATA_DIR/git` (disk, not RAM), reads the file and applies it with pruning; push webhooks and "sync now" force it. Linking shows a dry run first. While linked, service create/update/delete outside the sync is refused (`ErrGitManaged`), except deleting an orphaned database. Each service stores the hash of its compose block: a sync skips a service whose block is unchanged, so a tag deployed by CI (deploy token) stays until the file changes that service. The images the last sync set are kept to show such drift. Outcomes go to `git.sync.failed` / `git.sync.succeeded`.
 
 ## 10. PostgreSQL management and backups (core feature)
@@ -301,6 +301,14 @@ Clients ────┤                            ├──→ core (service la
 - MCP built in (`/mcp` module), Streamable HTTP at `/mcp`, reusing auth, tokens, permissions, audit logs. Standalone stdio proxy later.
 - Task-oriented tools, not 1:1 REST mapping: `deploy_image`, `get_app_status`, `get_logs`, `rollback`, `backup_database`, `restore_database`.
 - Mask secrets in every tool response; scoped tokens (read-only vs deploy); confirmation for destructive tools.
+- `get_docs` hands agents the documentation (§14a), read from the website, or from `site/docs` on GitHub (at the manager's release tag) when the site is down.
+
+## 14a. Website and documentation
+
+- `site/`: landing page and docs, one React Router app prerendered to static HTML (`ssr: false`), served by nginx as `ghcr.io/mathoyer/kipitiny-homepage`. Separate from the manager image: the manager ships no docs and no Node.
+- Docs are `site/docs/<slug>.md` (front matter: title, description, order), also served as markdown at `/docs/<slug>/llms.txt`, indexed by `/llms.txt`.
+- Built on each release tag from the tagged commit, so the docs describe the latest release; the footer shows `VERSION`. Versioned docs (per minor release) may come later.
+- The manager UI links to the site; old `/docs/*` URLs redirect there.
 
 ## 15. Multi-server
 

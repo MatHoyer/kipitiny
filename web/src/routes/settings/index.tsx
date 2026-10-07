@@ -1,9 +1,9 @@
 import { Bell, BookOpen, Brush, HardDrive, Globe, Info, KeyRound, KeySquare, Package, ScrollText, Server, type LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
+import { DOCS_URL } from "@/lib/docs";
 import { Version } from "./About";
 import { Audit } from "./Audit";
 import { Cleanup } from "./Cleanup";
-import { Docs } from "./Docs";
 import { DomainsPage } from "./Domains";
 import { Notifications } from "./Notifications";
 import { SettingsLabel } from "./page";
@@ -22,8 +22,7 @@ type SettingsPage = {
   group: SettingsGroup;
   label: string;
   icon: LucideIcon;
-  page: ComponentType;
-};
+} & ({ page: ComponentType; href?: never } | { href: string; page?: never });
 
 export const settingsPages: SettingsPage[] = [
   {
@@ -87,7 +86,7 @@ export const settingsPages: SettingsPage[] = [
     group: "System",
     label: "Docs",
     icon: BookOpen,
-    page: Docs,
+    href: DOCS_URL,
   },
   {
     slug: "audit",
@@ -108,7 +107,7 @@ export const settingsPages: SettingsPage[] = [
 /** One settings page; the sidebar lists the others. Each page renders its own header. */
 export function SettingsShell({ slug }: { slug: string }) {
   const current = settingsPages.find((p) => p.slug === slug)!;
-  const Page = current.page;
+  const Page = current.page!;
 
   return (
     <SettingsLabel.Provider value={current.label}>

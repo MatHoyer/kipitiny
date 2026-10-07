@@ -4,7 +4,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 export CGO_ENABLED := 0
 DEV_ENV := KIPITINY_ADDR=:8080 KIPITINY_DATA_DIR=./data KIPITINY_LOG_LEVEL=debug
 
-.PHONY: all build ui ui-stub dev-api dev-ui test lint docker clean
+.PHONY: all build ui ui-stub dev-api dev-ui dev-site site test lint docker clean
 
 all: build
 
@@ -26,6 +26,14 @@ dev-api: ui-stub
 dev-ui:
 	cd web && pnpm dev
 
+# The website (landing page and docs), on :5173 like the UI: run one at a time.
+dev-site:
+	cd site && pnpm install --frozen-lockfile && pnpm dev
+
+# Static site in site/build/client.
+site:
+	cd site && pnpm install --frozen-lockfile && pnpm typecheck && pnpm build
+
 test: ui-stub
 	go test ./...
 
@@ -33,6 +41,7 @@ lint: ui-stub
 	@unformatted=$$(gofmt -l .); if [ -n "$$unformatted" ]; then echo "Run gofmt on:"; echo "$$unformatted"; exit 1; fi
 	go vet ./...
 	cd web && pnpm typecheck
+	cd site && pnpm typecheck
 
 docker:
 	docker build --build-arg VERSION=$(VERSION) -t kipitiny -t ghcr.io/mathoyer/kipitiny:dev .

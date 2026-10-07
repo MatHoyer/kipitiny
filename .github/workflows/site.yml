@@ -1,0 +1,40 @@
+# Publishes the website (site/: landing page and docs) as
+# ghcr.io/mathoyer/kipitiny-homepage for amd64 and arm64: on each release tag,
+# so the docs match the latest release, or by hand for a site-only fix.
+name: site
+
+on:
+  push:
+    tags: ["[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Version
+        id: version
+        run: echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: site
+          platforms: linux/amd64,linux/arm64
+          build-args: KIPITINY_VERSION=${{ steps.version.outputs.version }}
+          tags: |
+            ghcr.io/mathoyer/kipitiny-homepage:sha-${{ github.sha }}
+            ghcr.io/mathoyer/kipitiny-homepage:latest
+          push: true
+          cache-from: type=gha,scope=site
+          cache-to: type=gha,mode=max,scope=site

@@ -8,6 +8,7 @@ import { ApiError } from "./api";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import "./index.css";
+import { DocsRedirect } from "./lib/docs";
 import { friendlyError } from "./lib/errors";
 import { AccountPage } from "./routes/Account";
 import { Backup } from "./routes/Backup";
@@ -19,7 +20,6 @@ import { Projects } from "./routes/Projects";
 import { Service } from "./routes/Service";
 import { SettingsShell, settingsPages } from "./routes/settings";
 import { ServerPage } from "./routes/settings/Servers";
-import { DocPage } from "./routes/DocPage";
 
 // A 401 anywhere means the session is gone: re-check auth to show the login.
 const onError = (err: Error) => {
@@ -56,11 +56,11 @@ const router = createBrowserRouter([
       { path: "projects/:id", element: <Project /> },
       { path: "services/:id", element: <Service /> },
       { path: "map", element: <MapPage /> },
-      { path: "docs/:slug", element: <DocPage /> },
+      { path: "docs/*", element: <DocsRedirect /> },
       { path: "account", element: <AccountPage /> },
       { path: "backups", element: <Backups /> },
       { path: "backups/:id", element: <Backup /> },
-      ...settingsPages.map((p) => ({ path: p.slug, element: <SettingsShell slug={p.slug} /> })),
+      ...settingsPages.filter((p) => p.page).map((p) => ({ path: p.slug, element: <SettingsShell slug={p.slug} /> })),
       { path: "servers/:id", element: <ServerPage /> },
     ],
   },
