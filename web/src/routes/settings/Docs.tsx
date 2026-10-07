@@ -24,7 +24,7 @@ export const docs: DocEntry[] = [
       "Describe a project as a docker-compose file: every key kipitiny reads, the x-kipitiny settings, variables and secrets, and how git sync applies it.",
     icon: FileCode,
     topics: ["x-kipitiny", "Databases", "Secrets & .env", "GitOps", "Moving a project"],
-    source: "/llms.txt",
+    source: "/docs/compose/llms.txt",
   },
 ];
 
