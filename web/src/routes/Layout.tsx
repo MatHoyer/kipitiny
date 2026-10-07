@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Box,
   ChevronsUpDown,
   DatabaseBackup,
   FolderKanban,
@@ -46,6 +45,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tip, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { Logo } from "@/components/logo";
 import { api } from "../api";
 import { Login, Setup } from "./Auth";
 import { settingsGroups, settingsPages } from "./settings";
@@ -71,10 +71,7 @@ function App({ username }: { username: string }) {
     <SidebarProvider>
       <Sidebar variant="inset">
         <SidebarHeader>
-          <div className="flex items-center gap-2 px-2 pt-1 font-semibold tracking-tight">
-            <Box className="size-5" />
-            kipitiny
-          </div>
+          <Logo className="px-2 pt-1 text-lg" />
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>

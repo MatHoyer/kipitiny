@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Box, Fingerprint, Loader2 } from "lucide-react";
+import { Fingerprint, Loader2 } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,15 +8,15 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/errors";
 import { isCancelled, passkeysSupported } from "@/lib/webauthn";
+import { Logo } from "@/components/logo";
 import { api } from "../api";
 
 function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
     <div className="flex min-h-svh items-center justify-center bg-muted/40 p-4">
       <div className="w-full max-w-sm space-y-6">
-        <p className="flex items-center justify-center gap-2 text-lg font-semibold tracking-tight">
-          <Box className="size-6" />
-          kipitiny
+        <p className="flex justify-center text-2xl">
+          <Logo />
         </p>
         <Card>
           <CardHeader>
