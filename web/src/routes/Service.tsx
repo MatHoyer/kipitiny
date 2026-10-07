@@ -46,6 +46,7 @@ import { BackupList } from "./BackupList";
 import { Schedules } from "./Schedules";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ComposeDialog } from "@/components/compose-dialog";
 
 export function Service() {
   const { id = "" } = useParams();
@@ -127,6 +128,7 @@ export function Service() {
         crumbs={crumbs}
         actions={
           <>
+            <ComposeDialog projectId={svc.projectId} service={svc.name} />
             {svc.containers.length > 0 && (
               <>
                 <Button variant="outline" size="sm" disabled={busy} onClick={() => action.mutate("restart")}>

@@ -33,6 +33,7 @@ var publicRoutes = map[string]bool{
 func sessionOnly(pattern string) bool {
 	return strings.Contains(pattern, "/api/auth/") || strings.Contains(pattern, "/api/account") ||
 		strings.Contains(pattern, "/api/tokens") ||
+		pattern == "POST /api/projects/{id}/export" || // every secret of a project
 		pattern == "POST /api/update"
 }
 

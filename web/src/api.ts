@@ -591,6 +591,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
 
+const composePath = (id: string, service?: string) =>
+  `/projects/${id}/compose${service ? `?service=${encodeURIComponent(service)}` : ""}`;
+
 export const api = {
   authState: () => request<AuthState>("/auth/state"),
   setup: (setupToken: string, username: string, password: string) =>
@@ -630,6 +633,20 @@ export const api = {
   createProject: (name: string, serverId = "") => request<Project>("/projects", json("POST", { name, serverId })),
   setProjectEnv: (id: string, env: Record<string, string>, secrets: string[]) =>
     request<Project>(`/projects/${id}/env`, json("PUT", { env, secrets })),
+  compose: (id: string, service?: string) => request<string>(composePath(id, service)),
+  composeUrl: (id: string, service?: string) => `/api${composePath(id, service)}${service ? "&" : "?"}download=1`,
+  /** A zip of compose.yaml and the .env with the secret values. */
+  exportBundle: async (id: string, password: string, service?: string) => {
+    const res = await fetch(`/api/projects/${id}/export`, {
+      ...json("POST", { password, service: service ?? "" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, body.error ?? res.statusText);
+    }
+    return res.blob();
+  },
   deleteProject: (id: string, confirm: string) =>
     request<void>(`/projects/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),
 
