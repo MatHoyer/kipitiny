@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -19,15 +20,30 @@ import (
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
+var release = regexp.MustCompile(`^(\d+\.\d+)\.\d+$`)
+
+// docs returns where the docs of this manager version are: the site's index
+// for LLMs, the base of its pages (llms.txt per page) and their sources. A
+// release reads its minor's copy (/docs/0.10/...), a dev build the latest.
+func docs(version string) (index, base, sources string) {
+	const site = "https://kipitiny.mathieuhoyer.fr"
+	if m := release.FindStringSubmatch(version); m != nil {
+		base = site + "/docs/" + m[1]
+		return base + "/llms.txt", base, "https://github.com/MatHoyer/kipitiny/tree/" + version + "/site/docs"
+	}
+	return site + "/llms.txt", site + "/docs", "https://github.com/MatHoyer/kipitiny/tree/main/site/docs"
+}
+
 // Handler serves MCP. It must run behind authentication that puts a
 // core.Actor in the request context.
 func Handler(c *core.Core, version string) http.Handler {
+	docsIndex, docsBase, docsSources := docs(version)
 	server := mcp.NewServer(&mcp.Implementation{Name: "kipitiny", Version: version}, &mcp.ServerOptions{
 		Instructions: "Manage apps and PostgreSQL/Redis databases on this kipitiny server. " +
 			"Refer to services as project/service. Read tools need a read token, " +
 			"deploy/rollback/backup need deploy (with deploy, deploy_image only changes the tag of an existing app), set_project_env needs admin, restore needs admin and an explicit confirmation. " +
-			"Documentation, as markdown: https://kipitiny.mathieuhoyer.fr/llms.txt lists every page; read the relevant one before guessing how a feature works. " +
-			"If the site is unreachable, the same pages are in https://github.com/MatHoyer/kipitiny/tree/main/site/docs.",
+			"Documentation of this version, as markdown: " + docsIndex + " lists every page; read the relevant one before guessing how a feature works. " +
+			"If the site is unreachable, the same pages are in " + docsSources + ".",
 	})
 	t := &tools{c: c}
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
@@ -48,7 +64,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "get_project_compose", Annotations: readOnly,
 		Description: "A project (or one of its services) as an equivalent docker-compose file, kipitiny settings in x-kipitiny blocks. Secret values are ${NAME} variables without values."}, t.getProjectCompose)
 	mcp.AddTool(server, &mcp.Tool{Name: "apply_project_compose", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
-		Description: "Make a project match a docker-compose file (format of get_project_compose, fully documented at https://kipitiny.mathieuhoyer.fr/docs/compose/llms.txt): creates and updates services, then deploys the changed ones. " +
+		Description: "Make a project match a docker-compose file (format of get_project_compose, fully documented at " + docsBase + "/compose/llms.txt): creates and updates services, then deploys the changed ones. " +
 			"dry_run returns the plan only. prune also deletes the apps the file doesn't list (with their volumes): confirm must repeat the project name. Needs admin."}, t.applyProjectCompose)
 	mcp.AddTool(server, &mcp.Tool{Name: "rollback",
 		Description: "Redeploy the image of an earlier successful deployment (the previous one by default)."}, t.rollback)

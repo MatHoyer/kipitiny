@@ -8,7 +8,7 @@ import { PlanView } from "@/components/compose-dialog";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { formatDateTime, timeAgo } from "@/lib/format";
-import { DOCS_URL } from "@/lib/docs";
+import { useDocsUrl } from "@/lib/docs";
 import { api, type ComposePlan, type GitInput, type GitStatus } from "../api";
 
 /** The project's git link, or null; undefined while loading. */
@@ -36,6 +36,7 @@ const emptyInput: GitInput = { repoUrl: "", branch: "main", path: "compose.yaml"
 
 function GitForm({ projectId, current, onDone }: { projectId: string; current?: GitStatus; onDone: () => void }) {
   const qc = useQueryClient();
+  const docs = useDocsUrl();
   const [input, setInput] = useState<GitInput>(current ? { ...current } : emptyInput);
   const [plan, setPlan] = useState<ComposePlan | null>(null);
   const set = (patch: Partial<GitInput>) => {
@@ -64,7 +65,7 @@ function GitForm({ projectId, current, onDone }: { projectId: string; current?: 
         <>
           The project's services follow a compose file in the repository: created, updated and (apps only) deleted to match it on every
           push. Services can then only change through the file; CI can still deploy another image tag. The file's format is in the{" "}
-          <a href={`${DOCS_URL}/compose`} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+          <a href={`${docs}/compose`} target="_blank" rel="noreferrer" className="underline underline-offset-2">
             compose reference
           </a>
           .

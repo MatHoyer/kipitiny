@@ -138,3 +138,15 @@ func TestTools(t *testing.T) {
 		t.Fatal("anonymous MCP connection accepted")
 	}
 }
+
+func TestDocs(t *testing.T) {
+	for _, tc := range []struct{ version, index, base, sources string }{
+		{"0.10.2", "https://kipitiny.mathieuhoyer.fr/docs/0.10/llms.txt", "https://kipitiny.mathieuhoyer.fr/docs/0.10", "https://github.com/MatHoyer/kipitiny/tree/0.10.2/site/docs"},
+		{"dev", "https://kipitiny.mathieuhoyer.fr/llms.txt", "https://kipitiny.mathieuhoyer.fr/docs", "https://github.com/MatHoyer/kipitiny/tree/main/site/docs"},
+	} {
+		index, base, sources := docs(tc.version)
+		if index != tc.index || base != tc.base || sources != tc.sources {
+			t.Errorf("docs(%q) = %q, %q, %q", tc.version, index, base, sources)
+		}
+	}
+}
