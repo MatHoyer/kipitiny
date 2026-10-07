@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingTextarea } from "@/components/ui/floating-textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DOCS_URL } from "@/lib/docs";
+import { useDocsUrl } from "@/lib/docs";
 import { api, type ComposePlan } from "../api";
 
 /** Shows a project (or one service) as a docker-compose file, and exports it
@@ -16,6 +16,7 @@ import { api, type ComposePlan } from "../api";
 export function ComposeDialog({ projectId, service, canImport = false }: { projectId: string; service?: string; canImport?: boolean }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("view");
+  const docs = useDocsUrl();
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -29,7 +30,7 @@ export function ComposeDialog({ projectId, service, canImport = false }: { proje
           <DialogTitle>{service ? `${service} as compose` : "Project as compose"}</DialogTitle>
           <DialogDescription>
             Standard docker-compose; kipitiny settings live in <code>x-kipitiny</code> blocks, which Docker Compose ignores. See the{" "}
-            <a href={`${DOCS_URL}/compose`} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+            <a href={`${docs}/compose`} target="_blank" rel="noreferrer" className="underline underline-offset-2">
               compose reference
             </a>
             .

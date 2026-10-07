@@ -121,6 +121,7 @@ function MainNav() {
 function SettingsNav() {
   const { pathname } = useLocation();
   const { setOpenMobile } = useSidebar();
+  const status = useQuery({ queryKey: ["status"], queryFn: api.status });
   return settingsGroups.map((group) => (
     <SidebarGroup key={group}>
       <SidebarGroupLabel>{group}</SidebarGroupLabel>
@@ -132,7 +133,7 @@ function SettingsNav() {
               <SidebarMenuItem key={slug}>
                 {href ? (
                   <SidebarMenuButton asChild>
-                    <a href={href} target="_blank" rel="noreferrer">
+                    <a href={href(status.data?.version)} target="_blank" rel="noreferrer">
                       <Icon />
                       {label}
                       <ExternalLink className="ml-auto size-3.5! text-muted-foreground" />

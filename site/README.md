@@ -21,7 +21,8 @@ the repo's `VERSION`.
 `make dev-site` and the workflow) copies `docs/` at the last patch tag of every
 minor release since 0.10 into `versions/`, so `/docs/0.10/compose` describes
 0.10.x and a patch release replaces its minor's copy. Each copy has its own
-`/docs/<minor>/llms.txt` and a version picker switches between them.
+`/docs/<minor>/llms.txt` and a version picker switches between them; the
+manager (UI links, MCP instructions) points to its own version.
 
 ```sh
 make dev-site    # from the repo root: http://localhost:5173

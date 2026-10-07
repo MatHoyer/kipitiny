@@ -1,6 +1,6 @@
 import { Bell, BookOpen, Brush, HardDrive, Globe, Info, KeyRound, KeySquare, Package, ScrollText, Server, type LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
-import { DOCS_URL } from "@/lib/docs";
+import { docsUrl } from "@/lib/docs";
 import { Version } from "./About";
 import { Audit } from "./Audit";
 import { Cleanup } from "./Cleanup";
@@ -22,7 +22,7 @@ type SettingsPage = {
   group: SettingsGroup;
   label: string;
   icon: LucideIcon;
-} & ({ page: ComponentType; href?: never } | { href: string; page?: never });
+} & ({ page: ComponentType; href?: never } | { href: (version?: string) => string; page?: never });
 
 export const settingsPages: SettingsPage[] = [
   {
@@ -86,7 +86,7 @@ export const settingsPages: SettingsPage[] = [
     group: "System",
     label: "Docs",
     icon: BookOpen,
-    href: DOCS_URL,
+    href: docsUrl,
   },
   {
     slug: "audit",

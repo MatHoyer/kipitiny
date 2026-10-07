@@ -301,14 +301,15 @@ Clients ────┤                            ├──→ core (service la
 - MCP built in (`/mcp` module), Streamable HTTP at `/mcp`, reusing auth, tokens, permissions, audit logs. Standalone stdio proxy later.
 - Task-oriented tools, not 1:1 REST mapping: `deploy_image`, `get_app_status`, `get_logs`, `rollback`, `backup_database`, `restore_database`.
 - Mask secrets in every tool response; scoped tokens (read-only vs deploy); confirmation for destructive tools.
-- No docs tool: the server instructions give agents the docs URLs (§14a) and GitHub's `site/docs` as a fallback.
+- No docs tool: the server instructions give agents the docs URLs of their version (§14a) and GitHub's `site/docs` at that tag as a fallback.
 
 ## 14a. Website and documentation
 
 - `site/`: landing page and docs, one React Router app prerendered to static HTML (`ssr: false`), served by nginx as `ghcr.io/mathoyer/kipitiny-homepage`. Separate from the manager image: the manager ships no docs and no Node.
 - Docs are `site/docs/<slug>.md` (front matter: title, description, order), also served as markdown at `/docs/<slug>/llms.txt`, indexed by `/llms.txt`.
-- Built on each release tag from the tagged commit, so the docs describe the latest release; the footer shows `VERSION`. Versioned docs (per minor release) may come later.
-- The manager UI links to the site; old `/docs/*` URLs redirect there.
+- Built on each release tag from the tagged commit, so `/docs` describes the latest release; the footer shows `VERSION`.
+- Versioned: `site/scripts/versions.sh` copies `site/docs` at the last patch tag of each minor since 0.10 to `/docs/<minor>/...` (own `llms.txt`, version picker, banner on old versions). Generated in CI from tags, not committed.
+- The manager UI and MCP instructions link to the manager's own minor (`/docs/0.10/...`; a dev build gets the latest); old `/docs/*` URLs redirect there.
 
 ## 15. Multi-server
 
