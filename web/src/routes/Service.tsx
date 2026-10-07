@@ -253,7 +253,7 @@ export function Service() {
           <TabsContent value="terminal">
             <ServiceTerminal svc={svc} />
           </TabsContent>
-          <TabsContent value="environment" className="space-y-6">
+          <TabsContent value="environment" className="flex flex-col gap-6">
             {gitManaged && <GitManagedNote path={git.data!.path} />}
             <fieldset disabled={gitManaged} className="contents">
               <EnvironmentCard key={svc.id} svc={svc} />
@@ -264,7 +264,7 @@ export function Service() {
               <BackupsCard serviceId={svc.id} name={project.data ? `${project.data.name}/${svc.name}` : svc.name} />
             </TabsContent>
           )}
-          <TabsContent value="settings" className="space-y-6">
+          <TabsContent value="settings" className="flex flex-col gap-6">
             {gitManaged && <GitManagedNote path={git.data!.path} />}
             <fieldset disabled={gitManaged} className="contents">
               <Settings svc={svc} />
