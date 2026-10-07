@@ -137,9 +137,19 @@ func serve() error {
 	a := api.New(c, log)
 	mux.Handle("/api/", a)
 	mux.Handle("/mcp", a.Authenticated(mcp.Handler(c, version)))
+	// Documentation as markdown, for LLMs: public, it holds no secrets.
 	mux.HandleFunc("GET /llms.txt", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-		_, _ = io.WriteString(w, docs.ComposeReference)
+		_, _ = io.WriteString(w, docs.Index())
+	})
+	mux.HandleFunc("GET /docs/{slug}/llms.txt", func(w http.ResponseWriter, r *http.Request) {
+		d, ok := docs.Find(r.PathValue("slug"))
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		_, _ = io.WriteString(w, d.Content)
 	})
 	mux.Handle("/", web.Handler())
 
