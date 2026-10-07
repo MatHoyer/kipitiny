@@ -43,6 +43,8 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "Create (or update) an app running a Docker image in a project, then deploy it. The project is created if missing. With a deploy token, only an existing app's image tag or digest can change; anything else needs admin."}, t.deployImage)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_project_env",
 		Description: "Set or remove a project's shared variables (readable) and secrets (write-only). Services use either as {{ project.NAME }} in an env value; they pick up changes on their next deploy."}, t.setProjectEnv)
+	mcp.AddTool(server, &mcp.Tool{Name: "get_project_compose", Annotations: readOnly,
+		Description: "A project (or one of its services) as an equivalent docker-compose file, kipitiny settings in x-kipitiny blocks. Secret values are ${NAME} variables without values."}, t.getProjectCompose)
 	mcp.AddTool(server, &mcp.Tool{Name: "rollback",
 		Description: "Redeploy the image of an earlier successful deployment (the previous one by default)."}, t.rollback)
 	mcp.AddTool(server, &mcp.Tool{Name: "backup_database",
@@ -394,6 +396,30 @@ func (t *tools) setProjectEnv(ctx context.Context, _ *mcp.CallToolRequest, in se
 		return out, nil
 	})
 	return nil, out, err
+}
+
+type getProjectComposeIn struct {
+	Project string `json:"project" jsonschema:"the project name"`
+	Service string `json:"service,omitempty" jsonschema:"only this service of the project"`
+}
+
+type getProjectComposeOut struct {
+	Compose string `json:"compose"`
+}
+
+func (t *tools) getProjectCompose(ctx context.Context, _ *mcp.CallToolRequest, in getProjectComposeIn) (*mcp.CallToolResult, getProjectComposeOut, error) {
+	if err := core.Require(ctx, store.ScopeRead); err != nil {
+		return nil, getProjectComposeOut{}, err
+	}
+	project, err := t.findProject(ctx, in.Project)
+	if err != nil {
+		return nil, getProjectComposeOut{}, friendly(err)
+	}
+	out, err := t.c.ExportCompose(ctx, project.ID, core.ExportOptions{Service: in.Service})
+	if err != nil {
+		return nil, getProjectComposeOut{}, friendly(err)
+	}
+	return nil, getProjectComposeOut{Compose: string(out.Compose)}, nil
 }
 
 func (t *tools) findProject(ctx context.Context, name string) (store.Project, error) {

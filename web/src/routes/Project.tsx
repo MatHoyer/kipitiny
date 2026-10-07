@@ -40,6 +40,7 @@ import {
   type ServiceInput,
 } from "../api";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
+import { ComposeDialog } from "@/components/compose-dialog";
 
 export function Project() {
   const { id = "" } = useParams();
@@ -88,7 +89,17 @@ export function Project() {
 
   return (
     <>
-      <PageHeader crumbs={crumbs} actions={project.data && <NewServiceDialog projectId={id} />} />
+      <PageHeader
+        crumbs={crumbs}
+        actions={
+          project.data && (
+            <>
+              <ComposeDialog projectId={id} />
+              <NewServiceDialog projectId={id} />
+            </>
+          )
+        }
+      />
       <PageBody>
         {list.length > 0 && (
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
