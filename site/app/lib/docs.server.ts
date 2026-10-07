@@ -11,7 +11,15 @@ export type Doc = {
 
 export type DocLink = Pick<Doc, "slug" | "title" | "description">;
 
-const files = import.meta.glob<string>("../../docs/*.md", {
+/** The docs at /docs, from site/docs: what main (or the release tag CI builds) says. */
+const latestFiles = import.meta.glob<string>("../../docs/*.md", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
+
+/** One copy per minor release at /docs/<minor>, from site/versions/<minor> (scripts/versions.sh). */
+const versionFiles = import.meta.glob<string>("../../versions/*/*.md", {
   query: "?raw",
   import: "default",
   eager: true,
@@ -35,13 +43,41 @@ function parse(path: string, raw: string): Doc {
   };
 }
 
-export const docs: Doc[] = Object.entries(files)
-  .map(([path, raw]) => parse(path, raw))
-  .sort((a, b) => a.order - b.order);
+/** The docs of one version ("" for the latest), and the path they're published under. */
+export type DocSet = { version: string; base: string; docs: Doc[] };
 
-export const docLinks: DocLink[] = docs.map(({ slug, title, description }) => ({ slug, title, description }));
+function docSetOf(version: string, files: [string, string][]): DocSet {
+  return {
+    version,
+    base: version ? `/docs/${version}` : "/docs",
+    docs: files.map(([path, raw]) => parse(path, raw)).sort((a, b) => a.order - b.order),
+  };
+}
 
-export const findDoc = (slug: string | undefined) => docs.find((d) => d.slug === slug);
+const byMinor = (a: string, b: string) => {
+  const [am, an] = a.split(".").map(Number);
+  const [bm, bn] = b.split(".").map(Number);
+  return bm - am || bn - an;
+};
+
+export const latest = docSetOf("", Object.entries(latestFiles));
+
+/** Published minor versions, newest first. */
+export const versions: DocSet[] = [...new Set(Object.keys(versionFiles).map((p) => p.split("/").at(-2)!))]
+  .sort(byMinor)
+  .map((v) => docSetOf(v, Object.entries(versionFiles).filter(([p]) => p.split("/").at(-2) === v)));
+
+/** The doc set a request is for: /docs/<minor>/... or the latest. */
+export function docSetFor(request: Request): DocSet {
+  // Client navigations load /docs/<minor>.data, prerendered alongside the HTML.
+  const path = new URL(request.url).pathname.replace(/\.data$/, "");
+  const v = path.match(/^\/docs\/(\d+\.\d+)(?:\/|$)/)?.[1];
+  return versions.find((s) => s.version === v) ?? latest;
+}
+
+export const docLinks = (set: DocSet): DocLink[] => set.docs.map(({ slug, title, description }) => ({ slug, title, description }));
+
+export const findDoc = (set: DocSet, slug: string | undefined) => set.docs.find((d) => d.slug === slug);
 
 /** GitHub-style heading ids, so the docs' #links keep working. */
 export const headingId = (text: string) =>
@@ -77,10 +113,16 @@ export function render(doc: Doc): { html: string; headings: Heading[] } {
 /** The markdown served at /docs/<slug>/llms.txt. */
 export const llmsText = (doc: Doc) => `# ${doc.title}\n\n${doc.markdown}`;
 
-/** /llms.txt: what kipitiny is and where each document is. */
-export function llmsIndex(origin = "") {
+/** /llms.txt (or /docs/<minor>/llms.txt): what kipitiny is and where each document is. */
+export function llmsIndex(set: DocSet, origin = "") {
   let s =
-    "# kipitiny\n\n> Lightweight self-hosted PaaS: Docker apps and databases with restore-tested backups, in one small Go process. Each document below is plain markdown.\n\n## Docs\n\n";
-  for (const d of docs) s += `- [${d.title}](${origin}/docs/${d.slug}/llms.txt): ${d.description}\n`;
+    "# kipitiny\n\n> Lightweight self-hosted PaaS: Docker apps and databases with restore-tested backups, in one small Go process. Each document below is plain markdown.\n\n";
+  if (set.version) s += `These are the docs of kipitiny ${set.version}.x; the latest are at ${origin}/llms.txt.\n\n`;
+  s += "## Docs\n\n";
+  for (const d of set.docs) s += `- [${d.title}](${origin}${set.base}/${d.slug}/llms.txt): ${d.description}\n`;
+  if (!set.version && versions.length) {
+    s += "\n## Versions\n\nThe docs of a given release, if it differs from the latest:\n\n";
+    for (const v of versions) s += `- [${v.version}](${origin}${v.base}/llms.txt)\n`;
+  }
   return s;
 }

@@ -28,10 +28,12 @@ dev-ui:
 
 # The website (landing page and docs), on :5173 like the UI: run one at a time.
 dev-site:
+	site/scripts/versions.sh
 	cd site && pnpm install --frozen-lockfile && pnpm dev
 
-# Static site in site/build/client.
+# Static site in site/build/client, with the docs of each release since 0.10.
 site:
+	site/scripts/versions.sh
 	cd site && pnpm install --frozen-lockfile && pnpm typecheck && pnpm build
 
 test: ui-stub
