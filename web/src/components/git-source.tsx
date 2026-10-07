@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { GitBranch, Link2Off, RefreshCw, ScanSearch } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { CheckboxField, CopyButton, ErrorText, Loading, Mono, Section, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -62,7 +63,11 @@ function GitForm({ projectId, current, onDone }: { projectId: string; current?: 
       description={
         <>
           The project's services follow a compose file in the repository: created, updated and (apps only) deleted to match it on every
-          push. Services can then only change through the file; CI can still deploy another image tag.
+          push. Services can then only change through the file; CI can still deploy another image tag. The file's format is in the{" "}
+          <Link to="/docs/compose" className="underline underline-offset-2">
+            compose reference
+          </Link>
+          .
         </>
       }
     >
