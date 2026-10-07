@@ -190,22 +190,3 @@
   color: var(--muted-foreground);
   line-height: 1.4;
 }
-
-/* Rendered documentation (the compose reference). */
-.doc {
-  @apply space-y-4 text-sm leading-relaxed;
-  h1 { @apply text-2xl font-semibold tracking-tight; }
-  h2 { @apply mt-10 border-b pb-2 text-lg font-semibold tracking-tight scroll-mt-20; }
-  h3 { @apply mt-8 text-base font-semibold scroll-mt-20; }
-  blockquote { @apply border-l-2 pl-4 text-muted-foreground; }
-  ul { @apply list-disc space-y-1 pl-5; }
-  ol { @apply list-decimal space-y-1 pl-5; }
-  a { @apply text-primary underline underline-offset-2; }
-  code { @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]; }
-  pre { @apply overflow-x-auto rounded-md border bg-muted/40 p-3 text-xs leading-relaxed; }
-  pre code { @apply bg-transparent p-0; }
-  table { @apply block w-full overflow-x-auto border-collapse text-left; }
-  th { @apply border-b px-3 py-2 font-medium whitespace-nowrap; }
-  td { @apply border-b px-3 py-2 align-top; }
-  td:first-child code { @apply whitespace-nowrap; }
-}

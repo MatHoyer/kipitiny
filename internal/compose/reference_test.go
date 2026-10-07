@@ -7,10 +7,10 @@ import (
 	"testing"
 )
 
-// The reference (docs/compose.md) must document every key the parser
+// The reference (site/docs/compose.md) must document every key the parser
 // reads or drops.
 func TestReferenceCoversKeys(t *testing.T) {
-	data, err := os.ReadFile("../../docs/compose.md")
+	data, err := os.ReadFile("../../site/docs/compose.md")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,14 +24,14 @@ func TestReferenceCoversKeys(t *testing.T) {
 	}
 	for _, k := range keys {
 		if !strings.Contains(doc, "`"+k+"`") {
-			t.Errorf("docs/compose.md doesn't mention `%s`", k)
+			t.Errorf("site/docs/compose.md doesn't mention `%s`", k)
 		}
 	}
 }
 
 // The reference's examples are valid files.
 func TestReferenceExamples(t *testing.T) {
-	data, err := os.ReadFile("../../docs/compose.md")
+	data, err := os.ReadFile("../../site/docs/compose.md")
 	if err != nil {
 		t.Fatal(err)
 	}

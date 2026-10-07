@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronsUpDown,
   DatabaseBackup,
+  ExternalLink,
   FolderKanban,
   LoaderCircle,
   LogOut,
@@ -127,14 +128,24 @@ function SettingsNav() {
         <SidebarMenu>
           {settingsPages
             .filter((p) => p.group === group)
-            .map(({ slug, label, icon: Icon }) => (
+            .map(({ slug, label, icon: Icon, href }) => (
               <SidebarMenuItem key={slug}>
-                <SidebarMenuButton asChild isActive={pathname.startsWith(`/${slug}`)}>
-                  <NavLink to={`/${slug}`} onClick={() => setOpenMobile(false)}>
-                    <Icon />
-                    {label}
-                  </NavLink>
-                </SidebarMenuButton>
+                {href ? (
+                  <SidebarMenuButton asChild>
+                    <a href={href} target="_blank" rel="noreferrer">
+                      <Icon />
+                      {label}
+                      <ExternalLink className="ml-auto size-3.5! text-muted-foreground" />
+                    </a>
+                  </SidebarMenuButton>
+                ) : (
+                  <SidebarMenuButton asChild isActive={pathname.startsWith(`/${slug}`)}>
+                    <NavLink to={`/${slug}`} onClick={() => setOpenMobile(false)}>
+                      <Icon />
+                      {label}
+                    </NavLink>
+                  </SidebarMenuButton>
+                )}
               </SidebarMenuItem>
             ))}
         </SidebarMenu>

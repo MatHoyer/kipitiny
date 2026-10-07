@@ -1,15 +1,19 @@
-# kipitiny compose reference
+---
+title: Compose reference
+description: The docker-compose format of a kipitiny project: keys, x-kipitiny settings, variables and secrets, git sync
+order: 6
+---
 
 > A kipitiny project is described by a docker-compose file. You can write it by hand, keep it in git, have an LLM write it, or export it from any project. This page is the complete format: everything kipitiny reads, what each field does, and what it refuses.
 >
-> Served by every manager at `/docs/compose/llms.txt` (no sign-in; `/llms.txt` lists every document) and in the UI under **System › Docs**. It always matches that manager's version.
+> As markdown for LLMs at [`/docs/compose/llms.txt`](/docs/compose/llms.txt) (`/llms.txt` lists every page). Agents connected to a manager's MCP endpoint get it with `get_docs` (`doc: compose`).
 
 ## How a file is used
 
 - **Export:** project page › **Compose** gives the project (or, on a service page, one service) as a file. Secret values are never in it: each one becomes a `${NAME}` variable. **Export with secrets** also downloads the `.env` holding their values.
 - **Import:** project page › **Compose** › **Import** applies a file (and optionally a `.env`) after a preview. It creates the services the file adds and updates the ones that differ. It can also delete the apps the file doesn't list; databases are never deleted.
 - **Git:** project page › **Git** links the project to a file in a repository. Every commit on the branch is applied, apps the file drops are deleted, and the services can no longer be edited any other way (see [Git](#git)).
-- **MCP:** the `get_project_compose` and `apply_project_compose` tools do the same for AI agents; `get_compose_reference` returns this page.
+- **MCP:** the `get_project_compose` and `apply_project_compose` tools do the same for AI agents; `get_docs` with `doc: compose` returns this page.
 
 The file stays a valid docker-compose file: kipitiny's own settings live in `x-kipitiny` blocks, which Docker Compose ignores.
 
