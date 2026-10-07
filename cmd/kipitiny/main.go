@@ -127,6 +127,9 @@ func serve() error {
 	if err := c.StartUptime(); err != nil {
 		return err
 	}
+	if err := c.StartGitSync(); err != nil {
+		return err
+	}
 
 	mux := http.NewServeMux()
 	a := api.New(c, log)

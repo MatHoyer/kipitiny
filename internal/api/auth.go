@@ -26,6 +26,8 @@ var publicRoutes = map[string]bool{
 	"POST /api/auth/login/mfa":      true,
 	"POST /api/auth/passkey/begin":  true,
 	"POST /api/auth/passkey/finish": true,
+	// Push webhooks authenticate with the project's webhook secret.
+	"POST /api/hooks/projects/{id}": true,
 }
 
 // sessionOnly routes can't be used with an API token (a token must not mint
@@ -50,9 +52,11 @@ var deployRoutes = map[string]bool{
 // secretReads reveal credentials or backup contents: admin only.
 var secretReads = map[string]bool{
 	"GET /api/services/{id}/connection": true,
-	"GET /api/storage/{id}/key":         true,
-	"GET /api/backups/{id}/download":    true,
-	"GET /api/audit":                    true,
+	// The webhook secret.
+	"GET /api/projects/{id}/git":     true,
+	"GET /api/storage/{id}/key":      true,
+	"GET /api/backups/{id}/download": true,
+	"GET /api/audit":                 true,
 	// Shells in a container or on a host.
 	"GET /api/services/{id}/terminal": true,
 	"GET /api/servers/{id}/terminal":  true,

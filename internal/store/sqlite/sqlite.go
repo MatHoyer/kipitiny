@@ -855,6 +855,87 @@ func (s *Store) DeleteNotificationChannel(ctx context.Context, id string) error 
 	return deleteByID(ctx, s.db, "notification_channels", id)
 }
 
+func (s *Store) SetServiceGitState(ctx context.Context, serviceID, specHash string, orphaned bool) error {
+	res, err := s.db.NewUpdate().Model((*store.Service)(nil)).
+		Set("git_spec_hash = ?", specHash).Set("orphaned = ?", orphaned).Where("id = ?", serviceID).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) GetProjectGit(ctx context.Context, projectID string) (store.ProjectGit, error) {
+	var g store.ProjectGit
+	err := s.db.NewSelect().Model(&g).Where("project_id = ?", projectID).Scan(ctx)
+	return g, mapErr(err)
+}
+
+func (s *Store) ListProjectGit(ctx context.Context) ([]store.ProjectGit, error) {
+	gs := []store.ProjectGit{}
+	err := s.db.NewSelect().Model(&gs).Order("created_at").Scan(ctx)
+	return gs, mapErr(err)
+}
+
+func (s *Store) SaveProjectGit(ctx context.Context, g store.ProjectGit) (store.ProjectGit, error) {
+	g.CreatedAt = now()
+	if g.Warnings == nil {
+		g.Warnings = []string{}
+	}
+	if g.Applied == nil {
+		g.Applied = map[string]string{}
+	}
+	_, err := s.db.NewInsert().Model(&g).
+		On("CONFLICT (project_id) DO UPDATE").
+		Set("repo_url = EXCLUDED.repo_url").
+		Set("branch = EXCLUDED.branch").
+		Set("path = EXCLUDED.path").
+		Set("token = EXCLUDED.token").
+		Set("auto_sync = EXCLUDED.auto_sync").
+		Set("poll_seconds = EXCLUDED.poll_seconds").
+		Exec(ctx)
+	if err != nil {
+		return store.ProjectGit{}, mapErr(err)
+	}
+	return s.GetProjectGit(ctx, g.ProjectID)
+}
+
+func (s *Store) SetProjectGitSync(ctx context.Context, g store.ProjectGit) error {
+	if g.Warnings == nil {
+		g.Warnings = []string{}
+	}
+	if g.Applied == nil {
+		g.Applied = map[string]string{}
+	}
+	res, err := s.db.NewUpdate().Model(&g).
+		Column("last_commit", "last_synced_at", "last_error", "warnings", "applied").
+		WherePK().Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) DeleteProjectGit(ctx context.Context, projectID string) error {
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		res, err := tx.NewDelete().Model((*store.ProjectGit)(nil)).Where("project_id = ?", projectID).Exec(ctx)
+		if err != nil {
+			return mapErr(err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return store.ErrNotFound
+		}
+		_, err = tx.NewUpdate().Model((*store.Service)(nil)).
+			Set("git_spec_hash = ''").Set("orphaned = 0").Where("project_id = ?", projectID).Exec(ctx)
+		return mapErr(err)
+	})
+}
+
 func (s *Store) ListRegistries(ctx context.Context) ([]store.Registry, error) {
 	rs := []store.Registry{}
 	err := s.db.NewSelect().Model(&rs).Order("host").Scan(ctx)

@@ -48,6 +48,8 @@ export type Service = {
   image: string;
   /** Logo name shown in the UI (e.g. ghost); empty picks one from the kind or image. */
   icon: string;
+  /** A database of a git project that the compose file no longer lists. */
+  orphaned: boolean;
   replicas: number;
   port: number;
   domain: string;
@@ -578,6 +580,28 @@ export interface ComposePlan {
   deploying: string[];
 }
 
+export interface GitInput {
+  repoUrl: string;
+  branch: string;
+  path: string;
+  token: string;
+  autoSync: boolean;
+  pollSeconds: number;
+}
+
+export interface GitStatus extends GitInput {
+  projectId: string;
+  webhookSecret: string;
+  webhookPath: string;
+  lastCommit: string;
+  lastSyncedAt?: string;
+  lastError: string;
+  warnings: string[];
+  applied: Record<string, string>;
+  /** Services deployed with another image than the file's (a tag from CI). */
+  drift: string[];
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -648,6 +672,17 @@ export const api = {
   composeUrl: (id: string, service?: string) => `/api${composePath(id, service)}${service ? "&" : "?"}download=1`,
   applyCompose: (id: string, body: { compose: string; env: string; prune: boolean; dryRun?: boolean; deploy?: boolean }) =>
     request<ComposePlan>(`/projects/${id}/compose`, json("POST", body)),
+  /** The project's git link; null when it has none. */
+  projectGit: (id: string) =>
+    request<GitStatus>(`/projects/${id}/git`).catch((e) => {
+      if (e instanceof ApiError && e.status === 404) return null;
+      throw e;
+    }),
+  linkProjectGit: (id: string, input: GitInput) => request<GitStatus>(`/projects/${id}/git`, json("PUT", input)),
+  previewProjectGit: (id: string, input: GitInput) => request<ComposePlan>(`/projects/${id}/git/preview`, json("POST", input)),
+  unlinkProjectGit: (id: string) => request<void>(`/projects/${id}/git`, { method: "DELETE" }),
+  syncProjectGit: (id: string, dryRun = false) =>
+    request<ComposePlan>(`/projects/${id}/git/sync${dryRun ? "?dryRun=1" : ""}`, { method: "POST" }),
   /** A zip of compose.yaml and the .env with the secret values. */
   exportBundle: async (id: string, password: string, service?: string) => {
     const res = await fetch(`/api/projects/${id}/export`, {

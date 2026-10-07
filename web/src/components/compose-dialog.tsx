@@ -12,7 +12,7 @@ import { api, type ComposePlan } from "../api";
 
 /** Shows a project (or one service) as a docker-compose file, and exports it
  * with its secrets to move it to another kipitiny. */
-export function ComposeDialog({ projectId, service }: { projectId: string; service?: string }) {
+export function ComposeDialog({ projectId, service, canImport = false }: { projectId: string; service?: string; canImport?: boolean }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("view");
   return (
@@ -34,13 +34,13 @@ export function ComposeDialog({ projectId, service }: { projectId: string; servi
           <TabsList variant="line">
             <TabsTrigger value="view">View</TabsTrigger>
             <TabsTrigger value="export">Export with secrets</TabsTrigger>
-            {!service && <TabsTrigger value="import">Import</TabsTrigger>}
+            {canImport && <TabsTrigger value="import">Import</TabsTrigger>}
           </TabsList>
           <TabsContent value="view">{open && <ComposeView projectId={projectId} service={service} />}</TabsContent>
           <TabsContent value="export">
             <ExportBundle projectId={projectId} service={service} onDone={() => setOpen(false)} />
           </TabsContent>
-          {!service && (
+          {canImport && (
             <TabsContent value="import">
               <ImportCompose projectId={projectId} onDone={() => setOpen(false)} />
             </TabsContent>

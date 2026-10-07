@@ -116,6 +116,9 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 	if _, err := c.store.GetProject(ctx, projectID); err != nil {
 		return ServiceView{}, err
 	}
+	if err := c.checkGitOwned(ctx, projectID); err != nil {
+		return ServiceView{}, err
+	}
 	svc, err := c.serviceFromInput(projectID, in)
 	if err != nil {
 		return ServiceView{}, err
@@ -211,19 +214,30 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 }
 
 func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (ServiceView, error) {
-	old, err := c.store.GetService(ctx, id)
+	svc, err := c.updateService(ctx, id, p)
 	if err != nil {
 		return ServiceView{}, err
+	}
+	return c.view(ctx, svc)
+}
+
+func (c *Core) updateService(ctx context.Context, id string, p ServicePatch) (store.Service, error) {
+	old, err := c.store.GetService(ctx, id)
+	if err != nil {
+		return store.Service{}, err
+	}
+	if err := c.checkGitOwned(ctx, old.ProjectID); err != nil {
+		return store.Service{}, err
 	}
 	svc, err := c.patched(old, p)
 	if err != nil {
-		return ServiceView{}, err
+		return store.Service{}, err
 	}
 	if err := c.validate(ctx, svc); err != nil {
-		return ServiceView{}, err
+		return store.Service{}, err
 	}
 	if svc, err = c.store.UpdateService(ctx, svc); err != nil {
-		return ServiceView{}, err
+		return store.Service{}, err
 	}
 	if svc.Replicas != old.Replicas {
 		c.kick() // scaling applies right away, other changes on the next deploy
@@ -231,7 +245,7 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	if svc.Domain != old.Domain {
 		c.kickDNS()
 	}
-	return c.view(ctx, svc)
+	return svc, nil
 }
 
 // patched is old with p applied, before validation.
@@ -571,6 +585,11 @@ func (c *Core) DeleteService(ctx context.Context, id, confirm string) error {
 	svc, err := c.store.GetService(ctx, id)
 	if err != nil {
 		return err
+	}
+	if !svc.Orphaned {
+		if err := c.checkGitOwned(ctx, svc.ProjectID); err != nil {
+			return err
+		}
 	}
 	if hasData(svc) && confirm != svc.Name {
 		return fmt.Errorf("%w: deleting %s destroys its data; confirm with the service name", ErrInvalid, svc.Name)
