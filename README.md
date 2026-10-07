@@ -87,6 +87,77 @@ updates.
   ones that services reference as `{{ project.NAME }}`. References resolve at deploy.
 - Deleting a database or a project destroys data and must be confirmed by typing its name.
 
+## Projects as docker-compose
+
+Every project (or one service) is also a compose file: **Compose** on the
+project or service page shows it. kipitiny's own settings live in `x-kipitiny`
+blocks, which Docker Compose ignores, so the file still runs locally:
+
+```yaml
+name: shop
+services:
+  web:
+    image: ghcr.io/me/shop:1.4.2
+    environment:
+      DATABASE_URL: "{{ db.db.URL }}"
+      API_KEY: ${WEB_API_KEY}
+    volumes: [uploads:/app/uploads]
+    deploy:
+      replicas: 2
+      resources: {limits: {memory: 512M}}
+    x-kipitiny:
+      domain: shop.example.com
+      port: 3000
+      health_path: /healthz
+      pre_deploy: ./migrate up
+      secrets: [API_KEY]
+      middlewares:
+        ip_allowlist: [203.0.113.0/24]
+        rate_limit: {average: 50, burst: 100}
+  db:
+    image: postgres:17-alpine
+    x-kipitiny: {kind: postgres, password: "${DB_PASSWORD}"}
+volumes:
+  uploads: {}
+x-kipitiny:
+  variables: {REGION: eu}   # the project's shared variables
+```
+
+- Compose maps to `image`, `environment`, `ports` (`host:container[/udp]`),
+  named `volumes`, `deploy.replicas`, `deploy.resources.limits` (or
+  `mem_limit`/`cpus`) and `stop_grace_period`. `depends_on`, `restart`,
+  `networks`, `healthcheck`, `labels`… are dropped with a warning; `build`
+  without an image, `command`, bind mounts and other keys kipitiny can't honour
+  are errors. The official `postgres` and `redis` images become managed
+  databases (`kind: app` opts out).
+- Secrets are never in the file: each is a `${NAME}` variable.
+  **Export with secrets** (password asked again) downloads `compose.yaml` and
+  the `.env` giving their values, database passwords and basic auth hashes
+  included: import both on another kipitiny (or `docker compose --env-file .env up`).
+  Data moves with a backup restored there.
+- **Import** (project page › Compose) applies a file after a preview of what it
+  creates and changes; it can also delete the apps the file doesn't list (never
+  databases). A `${NAME}` the `.env` doesn't give becomes a reference to the
+  project variable `NAME`, except a secret exported without its value, which
+  keeps the current one. Databases deploy before apps.
+
+### GitOps
+
+A project can follow a compose file in a git repository (project › Git:
+HTTPS URL, branch, path, and an access token for a private repository). After a
+preview, every change on the branch is applied: polled (default every 5
+minutes), on a push webhook (the URL and secret shown there; GitHub/Gitea
+signature, GitLab token or `Authorization: Bearer`), or by hand.
+
+- The file owns the services: editing or adding them otherwise is refused, and
+  apps it no longer lists are deleted. A database it drops is only flagged; delete
+  it by hand.
+- Keep secrets out of git: `API_KEY: ${API_KEY}` reads the project variable
+  `API_KEY` (or use a password manager reference).
+- `kipitiny deploy --tag` still works: the service keeps that tag (shown as
+  differing from the file) until a commit changes its block in the file.
+- Failed syncs (and, if subscribed, applied ones) are notified.
+
 ## Deploy from CI
 
 Services run Docker images; kipitiny doesn't build them. Build, test and push
