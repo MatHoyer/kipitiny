@@ -43,6 +43,9 @@ type MiddlewaresInput struct {
 type BasicAuthInput struct {
 	Name     string `json:"name"`
 	Password string `json:"password"`
+	// Hash is an existing bcrypt hash, from a compose file; not settable
+	// through the API, which takes passwords.
+	Hash string `json:"-"`
 }
 
 // mergeMiddlewares builds the stored middlewares from in, hashing new
@@ -67,6 +70,11 @@ func mergeMiddlewares(in MiddlewaresInput, old store.Middlewares) (store.Middlew
 		user := store.BasicAuthUser{Name: strings.TrimSpace(u.Name)}
 		pw := strings.TrimSpace(u.Password)
 		switch {
+		case u.Hash != "":
+			if _, err := bcrypt.Cost([]byte(u.Hash)); err != nil {
+				return store.Middlewares{}, fmt.Errorf("%w: basic auth user %q: not a bcrypt hash", ErrInvalid, user.Name)
+			}
+			user.Hash = u.Hash
 		case pw == "":
 			i := slices.IndexFunc(old.BasicAuth, func(o store.BasicAuthUser) bool { return o.Name == user.Name })
 			if i < 0 {

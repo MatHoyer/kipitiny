@@ -80,7 +80,7 @@ volumes:
   pgdata:
     driver: local
 `
-	f, warns, err := Parse([]byte(src), Vars{Ref: func(n string) string { return "{{ project." + n + " }}" }})
+	f, warns, err := Parse([]byte(src), Vars{Ref: func(_, _, n string) string { return "{{ project." + n + " }}" }})
 	if err != nil {
 		t.Fatal(err)
 	}
