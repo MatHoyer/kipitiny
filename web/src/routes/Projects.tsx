@@ -82,7 +82,6 @@ export function Projects() {
 
 function ProjectCard({ project: p, services, server }: { project: ProjectT; services?: Service[]; server?: string }) {
   const domains = services?.filter((s) => s.domain).map((s) => s.domain) ?? [];
-  const dbKinds = [...new Set(services?.map((s) => s.kind).filter(isDatabase))];
   const states = services?.map(liveState) ?? [];
   const bad = states.filter(troubled).length;
   const memory = memoryOf(useUsage().data, (u) => u.projectId === p.id);
@@ -93,12 +92,7 @@ function ProjectCard({ project: p, services, server }: { project: ProjectT; serv
         <div className="flex items-start gap-3">
           <IconTile icon={FolderKanban} />
           <div className="min-w-0 flex-1">
-            <p className="flex items-center gap-2 font-medium">
-              <span className="truncate">{p.name}</span>
-              {dbKinds.map((k) => (
-                <ServiceIcon key={k} service={{ kind: k }} aria-label={`Has a ${k} database`} className="size-3.5 shrink-0" />
-              ))}
-            </p>
+            <p className="truncate font-medium">{p.name}</p>
             <p className="text-xs text-muted-foreground">
               {services ? `${services.length} service${services.length === 1 ? "" : "s"}` : <Spinner className="inline size-3" />}
               {server && ` · ${server}`}
@@ -107,9 +101,18 @@ function ProjectCard({ project: p, services, server }: { project: ProjectT; serv
           <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </div>
         {services && services.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1" aria-label="Service states">
+          <div className="flex flex-wrap items-center gap-1.5" aria-label="Service states">
             {services.map((s, i) => (
-              <span key={s.id} title={`${s.name}: ${states[i]}`} className={cn("size-2 rounded-full", stateDot(states[i]))} />
+              <span
+                key={s.id}
+                role="img"
+                aria-label={`${s.name}: ${states[i]}`}
+                title={`${s.name}: ${states[i]}`}
+                className="relative flex size-6 items-center justify-center rounded-md bg-muted"
+              >
+                <ServiceIcon service={s} className="size-3.5 text-muted-foreground" />
+                <span className={cn("absolute -right-0.5 -bottom-0.5 size-2 rounded-full ring-2 ring-card", stateDot(states[i]))} />
+              </span>
             ))}
             <span className="ml-1 text-xs text-muted-foreground">
               {bad ? `${bad} need${bad === 1 ? "s" : ""} attention` : states.every((s) => s === "running") ? "all running" : ""}
