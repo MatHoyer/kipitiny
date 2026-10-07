@@ -1,26 +1,30 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "react-router";
-import { docs, findDoc, render } from "~/lib/docs.server";
+import { docSetFor, findDoc, latest, render } from "~/lib/docs.server";
 import { seo } from "~/lib/site";
 import type { Route } from "./+types/doc";
 
-export function loader({ params }: Route.LoaderArgs) {
-  const doc = findDoc(params.slug);
+export function loader({ request, params }: Route.LoaderArgs) {
+  const set = docSetFor(request);
+  const doc = findDoc(set, params.slug);
   if (!doc) throw new Response("Not found", { status: 404 });
-  const i = docs.indexOf(doc);
-  const link = (d?: (typeof docs)[number]) => d && { slug: d.slug, title: d.title };
+  const i = set.docs.indexOf(doc);
+  const link = (d?: (typeof set.docs)[number]) => d && { slug: d.slug, title: d.title };
   return {
+    base: set.base,
+    // A release's copy of a page points search engines to the latest one.
+    canonical: findDoc(latest, doc.slug) ? `${latest.base}/${doc.slug}` : `${set.base}/${doc.slug}`,
     slug: doc.slug,
     title: doc.title,
     description: doc.description,
     ...render(doc),
-    prev: link(docs[i - 1]),
-    next: link(docs[i + 1]),
+    prev: link(set.docs[i - 1]),
+    next: link(set.docs[i + 1]),
   };
 }
 
 export const meta: Route.MetaFunction = ({ loaderData: d }) =>
-  d ? seo({ title: `${d.title} · kipitiny`, description: `${d.description}.`, path: `/docs/${d.slug}` }) : [];
+  d ? seo({ title: `${d.title} · kipitiny`, description: `${d.description}.`, path: d.canonical }) : [];
 
 export default function DocPage({ loaderData: d }: Route.ComponentProps) {
   const { hash } = useLocation();
@@ -34,12 +38,12 @@ export default function DocPage({ loaderData: d }: Route.ComponentProps) {
         <h1 className="doc-title">{d.title}</h1>
         <p className="doc-lede">{d.description}.</p>
         <p className="doc-raw">
-          <a href={`/docs/${d.slug}/llms.txt`}>Markdown for LLMs</a>
+          <a href={`${d.base}/${d.slug}/llms.txt`}>Markdown for LLMs</a>
         </p>
         <div className="prose" dangerouslySetInnerHTML={{ __html: d.html }} />
         <nav className="pager" aria-label="Previous and next">
           {d.prev ? (
-            <Link to={`/docs/${d.prev.slug}`} className="prev">
+            <Link to={`${d.base}/${d.prev.slug}`} className="prev">
               <small>Previous</small>
               {d.prev.title}
             </Link>
@@ -47,7 +51,7 @@ export default function DocPage({ loaderData: d }: Route.ComponentProps) {
             <span />
           )}
           {d.next && (
-            <Link to={`/docs/${d.next.slug}`} className="next">
+            <Link to={`${d.base}/${d.next.slug}`} className="next">
               <small>Next</small>
               {d.next.title}
             </Link>

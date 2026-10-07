@@ -1,6 +1,8 @@
 # Publishes the website (site/: landing page and docs) as
 # ghcr.io/mathoyer/kipitiny-homepage for amd64 and arm64: on each release tag,
-# so the docs match the latest release, or by hand for a site-only fix.
+# so the docs match the latest release, or by hand for a site-only fix. Each
+# minor release since 0.10 also keeps its own docs at /docs/<minor>, taken from
+# its last patch tag.
 name: site
 
 on:
@@ -17,6 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Docs of each release
+        run: site/scripts/versions.sh
       - name: Version
         id: version
         run: echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"

@@ -11,10 +11,17 @@ app/routes/docs-*.tsx       /docs and /docs/<slug>
 app/routes/llms.ts          /llms.txt, index of the docs for LLMs
 app/routes/doc-llms.ts      /docs/<slug>/llms.txt, one doc as markdown
 docs/<slug>.md              the docs (front matter: title, description, order)
+versions/<minor>/<slug>.md  generated: the docs of each release, at /docs/<minor>/...
 ```
 
 A new file in `docs/` is a new page; nothing else to register. The footer shows
 the repo's `VERSION`.
+
+`/docs` is always the latest. `scripts/versions.sh` (run by `make site`,
+`make dev-site` and the workflow) copies `docs/` at the last patch tag of every
+minor release since 0.10 into `versions/`, so `/docs/0.10/compose` describes
+0.10.x and a patch release replaces its minor's copy. Each copy has its own
+`/docs/<minor>/llms.txt` and a version picker switches between them.
 
 ```sh
 make dev-site    # from the repo root: http://localhost:5173
