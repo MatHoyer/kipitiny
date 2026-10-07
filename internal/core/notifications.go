@@ -41,6 +41,8 @@ type EventType struct {
 var eventTypes = []EventType{
 	{EventDeployFailed, "Deployment failed", true},
 	{EventDeploySucceeded, "Deployment succeeded", false},
+	{EventGitSyncFailed, "Git sync failed", true},
+	{EventGitSyncSucceeded, "Git sync applied changes", false},
 	{EventServiceRestarted, "Stopped service restarted", true},
 	{EventServiceUnhealthy, "Service unhealthy", true},
 	{EventServiceHealthy, "Service healthy again", true},

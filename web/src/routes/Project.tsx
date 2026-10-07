@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Box, ChevronLeft, Database, Globe, Layers, Lock, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { Activity, Box, ChevronLeft, Database, GitBranch, Globe, Layers, Lock, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -41,13 +41,16 @@ import {
 } from "../api";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
 import { ComposeDialog } from "@/components/compose-dialog";
+import { GitSource, useProjectGit } from "@/components/git-source";
 
 export function Project() {
   const { id = "" } = useParams();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const project = useQuery({ queryKey: ["project", id], queryFn: () => api.project(id) });
-  const [tab, setTab] = useTab(["services", "map", "environment", "settings"], "services");
+  const [tab, setTab] = useTab(["services", "map", "environment", "git", "settings"], "services");
+  const git = useProjectGit(id);
+  const gitManaged = !!git.data;
   const services = useQuery({
     queryKey: ["services", id],
     queryFn: () => api.services(id),
@@ -94,8 +97,14 @@ export function Project() {
         actions={
           project.data && (
             <>
-              <ComposeDialog projectId={id} />
-              <NewServiceDialog projectId={id} />
+              {gitManaged && (
+                <Tag className="flex items-center gap-1">
+                  <GitBranch className="size-3" />
+                  Managed by git
+                </Tag>
+              )}
+              <ComposeDialog projectId={id} canImport={!gitManaged} />
+              {!gitManaged && <NewServiceDialog projectId={id} />}
             </>
           )
         }
@@ -125,6 +134,7 @@ export function Project() {
             <TabsTrigger value="services">Services</TabsTrigger>
             <TabsTrigger value="map">Map</TabsTrigger>
             <TabsTrigger value="environment">Environment</TabsTrigger>
+            <TabsTrigger value="git">Git</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
           <TabsContent value="services" className="space-y-6">
@@ -136,8 +146,12 @@ export function Project() {
               <EmptyState
                 icon={Layers}
                 title="No services yet"
-                description="Add an app from a Docker image, or a PostgreSQL database."
-                action={<NewServiceDialog projectId={id} />}
+                description={
+                  gitManaged
+                    ? "The compose file lists none yet, or the first sync is running."
+                    : "Add an app from a Docker image, or a PostgreSQL database."
+                }
+                action={!gitManaged && <NewServiceDialog projectId={id} />}
               />
             ) : (
               <>
@@ -152,6 +166,9 @@ export function Project() {
           <TabsContent value="environment" className="space-y-6">
             {project.data && <SharedVariables key={project.data.id} project={project.data} />}
             <DatabaseReferences dbs={dbs} />
+          </TabsContent>
+          <TabsContent value="git" className="space-y-6">
+            {tab === "git" && <GitSource projectId={id} />}
           </TabsContent>
           <TabsContent value="settings" className="space-y-6">
             {hasBackups && (

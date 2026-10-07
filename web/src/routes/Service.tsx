@@ -47,6 +47,7 @@ import { Schedules } from "./Schedules";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ComposeDialog } from "@/components/compose-dialog";
+import { useProjectGit } from "@/components/git-source";
 
 export function Service() {
   const { id = "" } = useParams();
@@ -67,6 +68,8 @@ export function Service() {
   const deploying = deployments.data?.some((d) => d.status === "running") ?? false;
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useTab(["overview", "deployments", "logs", "terminal", "environment", "backups", "settings"], "overview");
+  const git = useProjectGit(service.data?.projectId ?? "");
+  const gitManaged = !!git.data;
 
   // Refresh containers as soon as a deploy finishes.
   const wasDeploying = useRef(false);
@@ -250,8 +253,11 @@ export function Service() {
           <TabsContent value="terminal">
             <ServiceTerminal svc={svc} />
           </TabsContent>
-          <TabsContent value="environment">
-            <EnvironmentCard key={svc.id} svc={svc} />
+          <TabsContent value="environment" className="space-y-6">
+            {gitManaged && <GitManagedNote path={git.data!.path} />}
+            <fieldset disabled={gitManaged} className="contents">
+              <EnvironmentCard key={svc.id} svc={svc} />
+            </fieldset>
           </TabsContent>
           {canBackup(svc) && (
             <TabsContent value="backups">
@@ -259,10 +265,13 @@ export function Service() {
             </TabsContent>
           )}
           <TabsContent value="settings" className="space-y-6">
-            <Settings svc={svc} />
-            {svc.kind === "app" && <PortsCard key={svc.id} svc={svc} />}
-            {svc.kind === "app" && <VolumesCard key={svc.id} svc={svc} />}
-            {svc.kind === "app" && httpRouted(svc) && <AccessCard key={svc.id} svc={svc} />}
+            {gitManaged && <GitManagedNote path={git.data!.path} />}
+            <fieldset disabled={gitManaged} className="contents">
+              <Settings svc={svc} />
+              {svc.kind === "app" && <PortsCard key={svc.id} svc={svc} />}
+              {svc.kind === "app" && <VolumesCard key={svc.id} svc={svc} />}
+              {svc.kind === "app" && httpRouted(svc) && <AccessCard key={svc.id} svc={svc} />}
+            </fieldset>
             {svc.kind === "app" && <DeployFromCICard svc={svc} />}
             <DangerZone
               description={
@@ -275,7 +284,7 @@ export function Service() {
             >
               <ConfirmDialog
                 trigger={
-                  <Button variant="destructive" size="sm" disabled={busy}>
+                  <Button variant="destructive" size="sm" disabled={busy || (gitManaged && !svc.orphaned)}>
                     <Trash2 data-icon="inline-start" />
                     {isDb ? "Delete database" : "Delete service"}
                   </Button>
@@ -1411,5 +1420,15 @@ function ServiceTerminal({ svc }: { svc: ServiceT }) {
         </Suspense>
       )}
     </Section>
+  );
+}
+
+/** Says why a git project's service settings are read-only. */
+function GitManagedNote({ path }: { path: string }) {
+  return (
+    <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+      This project follows <Mono>{path}</Mono> in a git repository: change the service there. Deploying another image tag from CI still
+      works until the file changes this service.
+    </p>
   );
 }

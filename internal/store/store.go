@@ -37,6 +37,16 @@ type Store interface {
 	// ListAllServices returns every service of every project.
 	ListAllServices(ctx context.Context) ([]Service, error)
 	DeleteService(ctx context.Context, id string) error
+	// SetServiceGitState records what a git sync applied to a service.
+	SetServiceGitState(ctx context.Context, serviceID, specHash string, orphaned bool) error
+
+	GetProjectGit(ctx context.Context, projectID string) (ProjectGit, error)
+	ListProjectGit(ctx context.Context) ([]ProjectGit, error)
+	// SaveProjectGit creates or updates a project's link (not its sync state).
+	SaveProjectGit(ctx context.Context, g ProjectGit) (ProjectGit, error)
+	// SetProjectGitSync records a sync's outcome.
+	SetProjectGitSync(ctx context.Context, g ProjectGit) error
+	DeleteProjectGit(ctx context.Context, projectID string) error
 
 	CreateDeployment(ctx context.Context, d Deployment) (Deployment, error)
 	GetDeployment(ctx context.Context, id string) (Deployment, error)
@@ -289,9 +299,40 @@ type Service struct {
 	CurrentDeploymentID string `bun:"current_deployment_id" json:"currentDeploymentId"`
 	// Stopped is the desired run state after the user stopped the service.
 	Stopped bool `bun:"stopped" json:"stopped"`
+	// GitSpecHash is the hash of the compose block a git sync last applied.
+	GitSpecHash string `bun:"git_spec_hash" json:"-"`
+	// Orphaned marks a database of a git project that the compose file no
+	// longer lists: kept until deleted by hand.
+	Orphaned bool `bun:"orphaned" json:"orphaned"`
 
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 	UpdatedAt time.Time `bun:"updated_at" json:"updatedAt"`
+}
+
+// ProjectGit links a project to a compose file in a git repository, which
+// then owns its services.
+type ProjectGit struct {
+	bun.BaseModel `bun:"table:project_git,alias:project_git" json:"-"`
+
+	ProjectID string `bun:"project_id,pk" json:"projectId"`
+	RepoURL   string `bun:"repo_url" json:"repoUrl"`
+	Branch    string `bun:"branch" json:"branch"`
+	// Path is the compose file's path in the repository.
+	Path string `bun:"path" json:"path"`
+	// Token is an HTTPS access token; empty for a public repository.
+	Token string `bun:"token" json:"token"`
+	// AutoSync polls the branch every PollSeconds (webhooks sync anyway).
+	AutoSync      bool   `bun:"auto_sync" json:"autoSync"`
+	PollSeconds   int    `bun:"poll_seconds" json:"pollSeconds"`
+	WebhookSecret string `bun:"webhook_secret" json:"webhookSecret"`
+	// LastCommit is the commit last applied.
+	LastCommit   string     `bun:"last_commit" json:"lastCommit"`
+	LastSyncedAt *time.Time `bun:"last_synced_at" json:"lastSyncedAt,omitempty"`
+	LastError    string     `bun:"last_error" json:"lastError"`
+	Warnings     []string   `bun:"warnings" json:"warnings"`
+	// Applied maps each service name to the image the last sync set.
+	Applied   map[string]string `bun:"applied" json:"applied"`
+	CreatedAt time.Time         `bun:"created_at" json:"createdAt"`
 }
 
 // Volume is a named volume mounted at Path in every replica of an app.

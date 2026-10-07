@@ -215,19 +215,34 @@ func composeLock(projectID string) string { return "compose:" + projectID }
 // services it adds, updates the ones that differ and, with Prune, deletes
 // the apps it drops. The whole file is checked before anything changes.
 func (c *Core) ApplyCompose(ctx context.Context, projectID string, data []byte, opts ApplyOptions) (ComposePlan, error) {
+	if c.isGitProject(ctx, projectID) {
+		return ComposePlan{}, ErrGitManaged
+	}
+	a, err := c.applyCompose(ctx, projectID, data, opts, false)
+	if a == nil {
+		return ComposePlan{}, err
+	}
+	return a.plan, err
+}
+
+// applyCompose plans then, unless a dry run, applies a compose file. git
+// marks a git sync: services whose compose block is unchanged since the
+// last sync are left alone, and the sync state is recorded. The applier
+// is returned with what was done, also on a failure while applying.
+func (c *Core) applyCompose(ctx context.Context, projectID string, data []byte, opts ApplyOptions, git bool) (*applier, error) {
 	unlock, err := c.lockService(composeLock(projectID))
 	if err != nil {
-		return ComposePlan{}, err
+		return nil, err
 	}
 	defer unlock()
 
 	project, err := c.store.GetProject(ctx, projectID)
 	if err != nil {
-		return ComposePlan{}, err
+		return nil, err
 	}
 	existing, err := c.store.ListServices(ctx, projectID)
 	if err != nil {
-		return ComposePlan{}, err
+		return nil, err
 	}
 	byName := map[string]store.Service{}
 	for _, s := range existing {
@@ -246,22 +261,20 @@ func (c *Core) ApplyCompose(ctx context.Context, projectID string, data []byte, 
 		},
 	})
 	if err != nil {
-		return ComposePlan{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
-	a := applier{c: c, project: project, opts: opts, byName: byName, plan: ComposePlan{
-		Create: []string{}, Update: []ServiceChange{}, Unchanged: []string{}, Delete: []string{}, Orphaned: []string{},
-		Variables: []string{}, Warnings: append([]string{}, warns...), Deploying: []string{},
-	}}
+	a := &applier{c: c, project: project, opts: opts, git: git, byName: byName,
+		hashes: map[string]string{}, images: map[string]string{}, created: map[string]string{}, plan: ComposePlan{
+			Create: []string{}, Update: []ServiceChange{}, Unchanged: []string{}, Delete: []string{}, Orphaned: []string{},
+			Variables: []string{}, Warnings: append([]string{}, warns...), Deploying: []string{},
+		}}
 	if err := a.prepare(ctx, f); err != nil {
-		return ComposePlan{}, err
+		return a, err
 	}
 	if opts.DryRun {
-		return a.plan, nil
+		return a, nil
 	}
-	if err := a.apply(ctx); err != nil {
-		return a.plan, err
-	}
-	return a.plan, nil
+	return a, a.apply(ctx)
 }
 
 // applier plans then applies one compose file.
@@ -269,8 +282,15 @@ type applier struct {
 	c       *Core
 	project store.Project
 	opts    ApplyOptions
+	git     bool
 	byName  map[string]store.Service
 	plan    ComposePlan
+
+	// hashes and images are each listed service's compose block hash and
+	// image; created maps new services to their ID.
+	hashes  map[string]string
+	images  map[string]string
+	created map[string]string
 
 	// projectEnv and projectSecrets are the project's variables once applied.
 	projectEnv     map[string]string
@@ -325,6 +345,8 @@ func (a *applier) prepare(ctx context.Context, f compose.File) error {
 			continue
 		}
 		inputs[name] = in
+		a.hashes[name] = specHash(f.Services[name])
+		a.images[name] = in.Image
 		if in.Kind.IsDatabase() {
 			if _, ok := dbs[name]; !ok {
 				dbs[name] = store.Service{Name: name, Kind: in.Kind, Env: map[string]string{}}
@@ -478,6 +500,12 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		a.creates = append(a.creates, in)
 		return nil
 	}
+	if a.git && old.GitSpecHash == a.hashes[name] {
+		// Unchanged in the file since the last sync: keep what was done
+		// since (a tag deployed by CI).
+		a.plan.Unchanged = append(a.plan.Unchanged, name)
+		return nil
+	}
 	if old.Kind != in.Kind {
 		return fmt.Errorf("%w: kind changes from %s to %s; delete the service first", ErrInvalid, old.Kind, in.Kind)
 	}
@@ -606,10 +634,11 @@ func (a *applier) apply(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("create %s: %w", in.Name, err)
 		}
+		a.created[in.Name] = svc.ID
 		queue(svc.ID, svc.Kind)
 	}
 	for _, u := range a.updates {
-		svc, err := c.UpdateService(ctx, u.id, u.patch)
+		svc, err := c.updateService(ctx, u.id, u.patch)
 		if err != nil {
 			return fmt.Errorf("update %s: %w", u.name, err)
 		}
@@ -620,6 +649,11 @@ func (a *applier) apply(ctx context.Context) error {
 	for _, s := range a.deletes {
 		if err := c.DeleteService(ctx, s.ID, s.Name); err != nil {
 			return fmt.Errorf("delete %s: %w", s.Name, err)
+		}
+	}
+	if a.git {
+		if err := a.recordGitState(ctx); err != nil {
+			return err
 		}
 	}
 	if !a.opts.Deploy || len(dbs)+len(apps) == 0 {
@@ -638,6 +672,27 @@ func (a *applier) apply(ctx context.Context) error {
 	slices.Sort(a.plan.Deploying)
 	commit := a.opts.Commit
 	return c.goBackground(func() { c.deployInOrder(dbs, apps, commit) })
+}
+
+// recordGitState stores each listed service's compose hash, and flags the
+// databases the file dropped.
+func (a *applier) recordGitState(ctx context.Context) error {
+	for name, hash := range a.hashes {
+		id := a.created[name]
+		if id == "" {
+			id = a.byName[name].ID
+		}
+		if err := a.c.store.SetServiceGitState(ctx, id, hash, false); err != nil {
+			return err
+		}
+	}
+	for _, name := range a.plan.Orphaned {
+		s := a.byName[name]
+		if err := a.c.store.SetServiceGitState(ctx, s.ID, s.GitSpecHash, true); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func boolCmp(x, y bool) int {

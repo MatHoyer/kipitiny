@@ -956,3 +956,49 @@ func TestVolumeBackupsMigration(t *testing.T) {
 		t.Fatalf("restores not cascaded: %v", rs)
 	}
 }
+
+func TestProjectGit(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	p, err := s.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := s.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := s.SaveProjectGit(ctx, store.ProjectGit{ProjectID: p.ID, RepoURL: "https://example.com/r.git", Branch: "main", Path: "compose.yaml",
+		AutoSync: true, PollSeconds: 300, WebhookSecret: "w"})
+	if err != nil || g.Branch != "main" || g.Warnings == nil || g.Applied == nil {
+		t.Fatalf("create: %+v %v", g, err)
+	}
+	synced := time.Now()
+	g.LastCommit, g.LastSyncedAt, g.Warnings, g.Applied = "abc", &synced, []string{"w1"}, map[string]string{"web": "nginx:1"}
+	if err := s.SetProjectGitSync(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	// Saving the link again keeps the sync state and the webhook secret.
+	g, err = s.SaveProjectGit(ctx, store.ProjectGit{ProjectID: p.ID, RepoURL: "https://example.com/r.git", Branch: "prod", Path: "c.yml", WebhookSecret: "new"})
+	if err != nil || g.Branch != "prod" || g.LastCommit != "abc" || g.WebhookSecret != "w" || g.Applied["web"] != "nginx:1" || g.LastSyncedAt == nil {
+		t.Fatalf("update: %+v %v", g, err)
+	}
+	if err := s.SetServiceGitState(ctx, svc.ID, "h", true); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetService(ctx, svc.ID); got.GitSpecHash != "h" || !got.Orphaned {
+		t.Fatalf("service = %+v", got)
+	}
+	if gs, err := s.ListProjectGit(ctx); err != nil || len(gs) != 1 {
+		t.Fatalf("list: %v %v", gs, err)
+	}
+	if err := s.DeleteProjectGit(ctx, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetService(ctx, svc.ID); got.GitSpecHash != "" || got.Orphaned {
+		t.Fatalf("unlinked service = %+v", got)
+	}
+	if _, err := s.GetProjectGit(ctx, p.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("after delete: %v", err)
+	}
+}
