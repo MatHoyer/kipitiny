@@ -92,7 +92,7 @@ updates.
 Every project (or one service) is also a compose file: **Compose** on the
 project or service page shows it. The complete format is in
 [docs/compose.md](docs/compose.md), which every manager also serves at
-`/llms.txt` (for LLMs and `curl`), in the UI (**Compose reference**) and to MCP
+`/llms.txt` (for LLMs and `curl`), in the UI (**System › Docs**) and to MCP
 agents (`get_compose_reference`). kipitiny's own settings live in `x-kipitiny`
 blocks, which Docker Compose ignores, so the file still runs locally:
 

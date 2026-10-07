@@ -2,7 +2,7 @@
 
 > A kipitiny project is described by a docker-compose file. You can write it by hand, keep it in git, have an LLM write it, or export it from any project. This page is the complete format: everything kipitiny reads, what each field does, and what it refuses.
 >
-> Served by every manager at `/llms.txt` (no sign-in) and in the UI under **Compose reference**. It always matches that manager's version.
+> Served by every manager at `/llms.txt` (no sign-in) and in the UI under **System › Docs**. It always matches that manager's version.
 
 ## How a file is used
 

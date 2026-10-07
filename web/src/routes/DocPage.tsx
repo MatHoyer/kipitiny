@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import { useEffect } from "react";
-import { useLocation } from "react-router";
+import { useLocation, useParams } from "react-router";
 import { ErrorText, Loading } from "@/components/common";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { docs } from "./settings/Docs";
 
 /** GitHub-style heading ids, so the reference's #links work. */
 const slug = (text: string) =>
@@ -15,11 +16,11 @@ const slug = (text: string) =>
     .trim()
     .replace(/ /g, "-");
 
-/** Renders the reference the manager serves at /llms.txt. Markdown is
- * parsed in a lazily loaded chunk; the source is the manager's own. */
-async function loadReference() {
-  const [res, { Marked }] = await Promise.all([fetch("/llms.txt"), import("marked")]);
-  if (!res.ok) throw new Error(`reference: ${res.status} ${res.statusText}`);
+/** Renders a document the manager serves. Markdown is parsed in a lazily
+ * loaded chunk; the source is the manager's own. */
+async function loadDoc(source: string) {
+  const [res, { Marked }] = await Promise.all([fetch(source), import("marked")]);
+  if (!res.ok) throw new Error(`${source}: ${res.status} ${res.statusText}`);
   const md = new Marked({
     renderer: {
       heading({ tokens, depth }) {
@@ -31,27 +32,40 @@ async function loadReference() {
   return md.parse(await res.text());
 }
 
-export function ComposeReference() {
-  const doc = useQuery({ queryKey: ["compose-reference"], queryFn: loadReference, staleTime: Infinity });
+/** One document of the Docs page. */
+export function DocPage() {
+  const { slug = "" } = useParams();
+  const entry = docs.find((d) => d.slug === slug);
+  const doc = useQuery({
+    queryKey: ["doc", slug],
+    queryFn: () => loadDoc(entry!.source),
+    enabled: !!entry,
+    staleTime: Infinity,
+  });
   const { hash } = useLocation();
   useEffect(() => {
     if (doc.data && hash) document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
   }, [doc.data, hash]);
+  const crumbs = [{ label: "Docs", to: "/docs" }, { label: entry?.title ?? slug }];
   return (
     <>
       <PageHeader
-        crumbs={[{ label: "Compose reference" }]}
+        crumbs={crumbs}
         actions={
-          <Button size="sm" variant="outline" asChild>
-            <a href="/llms.txt" download="kipitiny-compose.md">
-              <Download data-icon="inline-start" />
-              Markdown
-            </a>
-          </Button>
+          entry && (
+            <Button size="sm" variant="outline" asChild>
+              <a href={entry.source} download={`kipitiny-${entry.slug}.md`}>
+                <Download data-icon="inline-start" />
+                Markdown
+              </a>
+            </Button>
+          )
         }
       />
       <PageBody>
-        {doc.error ? (
+        {!entry ? (
+          <p className="text-sm text-muted-foreground">No such document.</p>
+        ) : doc.error ? (
           <ErrorText error={doc.error} />
         ) : !doc.data ? (
           <Loading />
