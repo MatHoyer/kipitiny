@@ -68,6 +68,8 @@ The manager runs as a container and controls the **host** Docker daemon via the 
   (`web/src/components/service-icon.tsx`); backups keep the hint.
 - **Replica:** one running container of a service.
 - **Deployment:** one release of a service, with an ID, status, and log file.
+- **Compose:** a project maps to a docker-compose file (§9.1), exported for
+  any project, imported, or followed from git.
 
 All managed resources carry labels:
 
@@ -169,7 +171,16 @@ Apps with published ports can't overlap, so they **swap**: pre-deploy, stop the 
 
 Apps have a **stop grace period** (seconds after SIGTERM before SIGKILL, default 10, max 600), used by every stop the manager makes and set as the container's `StopTimeout` so Docker's own stops honour it. Databases keep their fixed timeouts (Postgres 60 s, Redis 30 s).
 
-No builds on the server (Git builds existed and were removed to keep services simple; may return later). Flow: build once in CI, then deploy by tag (`kipitiny deploy`, a deploy-scoped token that may change the tag, never the repository). Every pull is pinned to its digest in the deployment record, so reconciler recreations and rollbacks never pick up a moved tag.
+No builds on the server (Git builds existed and were removed to keep services simple; may return later; git now only describes services, §9.1). Flow: build once in CI, then deploy by tag (`kipitiny deploy`, a deploy-scoped token that may change the tag, never the repository). Every pull is pinned to its digest in the deployment record, so reconciler recreations and rollbacks never pick up a moved tag.
+
+### 9.1 Compose files and GitOps
+
+A project is also a docker-compose file, so it is never locked in and can be described in git.
+
+- `internal/compose` (pure: no Docker, no store) parses and writes the subset kipitiny runs: `image`, `environment`, `ports`, named `volumes`, `deploy.replicas`, `deploy.resources.limits`, `stop_grace_period`, plus a per-service `x-kipitiny` block (kind, domain, port, health path, pre-deploy/backup, icon, secrets, middlewares, database password) and a top-level one (project variables). Docker Compose ignores `x-*`. Harmless unknown keys are dropped with a warning; keys that would change what runs are errors. Compose interpolation (`${NAME}`, `$$`) applies outside `x-kipitiny`, whose values core resolves only when a whole value is `${NAME}` (bcrypt hashes are full of `$`).
+- **Export:** secret values (service and project secrets, database passwords, basic auth hashes) become `${SERVICE_KEY}` variables; references stay verbatim. Exporting *with secrets* returns the `.env` too: session only, password re-entered, audited.
+- **Apply** (`core.ApplyCompose`): parse, validate every service against the project's variables and databases *as they will be*, and only then create/update (through the normal service functions), optionally prune apps (never databases: reported as orphaned), and deploy created and changed services, databases first (apps wait for them, so migrations find their database). A missing `${NAME}` that is a whole env value becomes `{{ project.NAME }}`, unless it is an existing secret's export placeholder, which keeps its value. One apply per project at a time.
+- **Git:** `project_git` links a project to a branch and path (HTTPS, optional token). A loop polls with `ls-remote` (no fetch) and, on a new commit, shallow-clones into a temp dir under `$DATA_DIR/git` (disk, not RAM), reads the file and applies it with pruning; push webhooks and "sync now" force it. Linking shows a dry run first. While linked, service create/update/delete outside the sync is refused (`ErrGitManaged`), except deleting an orphaned database. Each service stores the hash of its compose block: a sync skips a service whose block is unchanged, so a tag deployed by CI (deploy token) stays until the file changes that service. The images the last sync set are kept to show such drift. Outcomes go to `git.sync.failed` / `git.sync.succeeded`.
 
 ## 10. PostgreSQL management and backups (core feature)
 
