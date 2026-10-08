@@ -52,9 +52,8 @@ The manager runs as a container and controls the **host** Docker daemon via the 
 
 ### Password managers
 
-- `internal/secrets`: a `Provider` per password manager, each owning a reference scheme (`pass://` for Proton Pass; `op://` for 1Password would be another provider). Core and the UI only see the interface.
-- Providers wrap the vendor's official CLI (Proton has no public API): bundled in the image, run as short-lived processes, no resident RAM. The manager starts itself (`kipitiny secrets-env`) under the CLI's `run` command to read resolved values back.
-- Env values reference secrets as `{{ pass://Vault/Item/field }}`, in a service or a project entry. They're fetched on each deploy and replica recreation, injected into the containers and never stored by the manager; a database's env can't use them (backups read its credentials as stored).
+- `internal/secrets`: a `Provider` per password manager, each owning a reference scheme (`pass://` for Proton Pass, `op://` for 1Password). Core and the UI only see the interface. No provider ships today: the bundled Proton Pass CLI left the image to keep it small, and comes back as an opt-in one-off container (#125). Optional integrations may run as on-demand containers; the manager's own state never does.
+- Env values reference secrets as `{{ scheme://Vault/Item/field }}`, in a service or a project entry. They're fetched on each deploy and replica recreation, injected into the containers and never stored by the manager; a database's env can't use them (backups read its credentials as stored).
 - Providers that implement `secrets.Browser` feed the env editor's picker (vaults → items → fields): names and references only, admin-only routes.
 - Logged in with a scoped token kept in settings; the CLI session lives in `$DATA_DIR/secrets/<provider>` and is recreated from the token when lost or expired.
 
@@ -285,7 +284,7 @@ Later: optional VictoriaLogs or Loki, opt-in.
 - React SPA (Vite), React Router, TanStack Query, Tailwind. No Next.js / Node at runtime.
 - Embedded in the binary (`web/embed.go`), SPA fallback to `index.html`.
 - Dev: Go on `:8080`, Vite dev server proxies `/api`.
-- Release: multi-stage Dockerfile → distroless image (`cc` variant, for the bundled `pass-cli`; kipitiny itself is static).
+- Release: multi-stage Dockerfile → distroless `static` image (the binary is CGO-free).
 - Web terminal: `docker exec` with a TTY, bridged to xterm.js (lazy-loaded chunk) over a websocket (`golang.org/x/net/websocket`). Browser sends JSON `input`/`resize` messages; the server sends raw output as binary frames, then one `exit`/`error` message. Admin only, Origin must match the host, every session opened/closed lands in the audit log.
 - Server terminal: same bridge, into a throwaway privileged `alpine` container (`--pid=host`, labelled `kipitiny.component=terminal`) running `nsenter -t 1 -m -u -i -n -p` then `su -l root`: a root shell on the host, local or remote, with nothing but Docker access (already root-equivalent). Closing the session removes the container; leftovers are cleaned at startup.
 

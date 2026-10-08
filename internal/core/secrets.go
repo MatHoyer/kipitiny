@@ -3,14 +3,10 @@ package core
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/secrets"
-	"github.com/MatHoyer/kipitiny/internal/secrets/protonpass"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -20,20 +16,6 @@ type SecretProviderView struct {
 	// Available is false when it can't run here (its CLI is missing).
 	Available bool `json:"available"`
 	Connected bool `json:"connected"`
-}
-
-func secretProviders(cfg config.Config) []secrets.Provider {
-	self, err := os.Executable()
-	if err != nil {
-		self = os.Args[0]
-	}
-	dir, err := filepath.Abs(filepath.Join(cfg.DataDir, "secrets"))
-	if err != nil {
-		dir = filepath.Join(cfg.DataDir, "secrets")
-	}
-	return []secrets.Provider{
-		protonpass.New(cfg.ProtonPassCLI, filepath.Join(dir, "protonpass"), []string{self, "secrets-env"}),
-	}
 }
 
 // secretTokenSetting keeps a provider's token, to log in again when its

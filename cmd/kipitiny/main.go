@@ -20,7 +20,6 @@ import (
 	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/mcp"
 	"github.com/MatHoyer/kipitiny/internal/probe"
-	"github.com/MatHoyer/kipitiny/internal/secrets"
 	"github.com/MatHoyer/kipitiny/internal/store/sqlite"
 	"github.com/MatHoyer/kipitiny/web"
 )
@@ -45,13 +44,6 @@ func main() {
 		case "self-update":
 			// Run by the updater container the manager starts (core.ApplyUpdate).
 			run = selfUpdate
-		case "secrets-env":
-			// Started by a password manager CLI to hand resolved references back
-			// (secrets.RefEnv).
-			if secrets.PrintEnv(os.Stdout) != nil {
-				os.Exit(1)
-			}
-			os.Exit(0)
 		case "deploy":
 			// Run from CI against a manager's API (deployCmd).
 			run = deployCmd

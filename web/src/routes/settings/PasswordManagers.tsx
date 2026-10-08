@@ -19,7 +19,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { api, type SecretProvider } from "@/api";
 import { SettingsPage } from "./page";
 
-/** Password managers that service env can reference (e.g. pass://Vault/Item/field). */
+/** Password managers that service env can reference (e.g. op://Vault/Item/field). */
 export function PasswordManagers() {
   const providers = useQuery({ queryKey: ["secret-providers"], queryFn: api.secretProviders });
   const connected = providers.data?.filter((p) => p.connected) ?? [];
@@ -27,7 +27,13 @@ export function PasswordManagers() {
   return (
     <SettingsPage actions={connected.length > 0 && <ConnectDialog providers={providers.data ?? []} />}>
       <ErrorText error={providers.error} />
-      {providers.data && connected.length === 0 ? (
+      {providers.data?.length === 0 ? (
+        <EmptyState
+          icon={KeyRound}
+          title="No password manager available"
+          description="None ships with this version yet. Use secret entries in the env meanwhile."
+        />
+      ) : providers.data && connected.length === 0 ? (
         <EmptyState
           icon={KeyRound}
           title="No password manager connected"

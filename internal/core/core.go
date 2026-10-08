@@ -77,7 +77,6 @@ func New(cfg config.Config, s store.Store, local *docker.Client, log *slog.Logge
 	bg, cancel := context.WithCancel(context.Background())
 	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1), dnsKick: make(chan struct{}, 1), gitKick: make(chan string, 16)}
 	c.pool = docker.NewPool(local, c.connectServer)
-	c.secrets = secretProviders(cfg)
 	return c
 }
 
