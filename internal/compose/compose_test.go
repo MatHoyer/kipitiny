@@ -170,3 +170,54 @@ func TestEnvRoundTrip(t *testing.T) {
 		t.Error("want error for a line without =")
 	}
 }
+
+func TestHostAccess(t *testing.T) {
+	// Beszel's agent, as its docs give it.
+	f, warns, err := Parse([]byte(`services:
+  beszel-agent:
+    image: henrygd/beszel-agent:0.12
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - agent-data:/var/lib/beszel-agent
+    environment:
+      LISTEN: 45876
+`), Vars{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := f.Services["beszel-agent"]
+	if !s.HostNetwork || s.DockerSocket != "ro" || len(s.Volumes) != 1 || s.Volumes[0].Name != "agent-data" || len(warns) != 1 {
+		t.Fatalf("service = %+v, warnings %v", s, warns)
+	}
+	data, err := Marshal(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, _, err := Parse(data, Vars{})
+	if err != nil || !reflect.DeepEqual(back.Services["beszel-agent"], s) {
+		t.Fatalf("round trip = %+v, %v\n%s", back.Services["beszel-agent"], err, data)
+	}
+
+	long, _, err := Parse([]byte(`services:
+  a:
+    image: x
+    volumes: [{type: bind, source: /var/run/docker.sock, target: /var/run/docker.sock}]
+`), Vars{})
+	if err != nil || long.Services["a"].DockerSocket != "rw" {
+		t.Errorf("long form = %+v, %v", long.Services["a"], err)
+	}
+
+	for name, file := range map[string]string{
+		"other bind":   "services: {a: {image: x, volumes: ['/etc:/etc']}}",
+		"socket moved": "services: {a: {image: x, volumes: ['/var/run/docker.sock:/docker.sock']}}",
+		"bridge":       "services: {a: {image: x, network_mode: bridge}}",
+		"service mode": "services: {a: {image: x, network_mode: 'service:b'}}",
+		"database":     "services: {db: {image: 'postgres:17', network_mode: host}}",
+	} {
+		if _, _, err := Parse([]byte(file), Vars{}); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

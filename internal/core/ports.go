@@ -133,3 +133,24 @@ func probePort(svc store.Service) int {
 	}
 	return 0
 }
+
+// validateHostAccess checks an app's host network and Docker socket. In
+// the host's network the app has no project network to be reached on and
+// listens on host ports itself: one replica, no domain, nothing to publish.
+func validateHostAccess(s store.Service) error {
+	if s.DockerSocket != "" && s.DockerSocket != "ro" && s.DockerSocket != "rw" {
+		return fmt.Errorf("%w: Docker socket access must be ro or rw", ErrInvalid)
+	}
+	if !s.HostNetwork {
+		return nil
+	}
+	switch {
+	case s.Replicas != 1:
+		return fmt.Errorf("%w: an app in the host network runs one replica", ErrInvalid)
+	case len(s.PublishedPorts) > 0:
+		return fmt.Errorf("%w: an app in the host network listens on host ports itself; remove its published ports", ErrInvalid)
+	case s.Domain != "" || !s.Middlewares.IsZero():
+		return fmt.Errorf("%w: an app in the host network can't have a domain: Traefik reaches apps on their project network", ErrInvalid)
+	}
+	return nil
+}

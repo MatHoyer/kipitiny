@@ -18,10 +18,12 @@ import (
 	"github.com/distribution/reference"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 	"github.com/opencontainers/go-digest"
 
+	"github.com/MatHoyer/kipitiny/internal/compose"
 	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/notify"
 	"github.com/MatHoyer/kipitiny/internal/store"
@@ -311,7 +313,7 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 	switch {
 	case svc.Kind.IsDatabase():
 		return c.recreate(ctx, project, svc, src, dep, logf)
-	case len(svc.PublishedPorts) > 0:
+	case len(svc.PublishedPorts) > 0 || svc.HostNetwork:
 		return c.swap(ctx, project, svc, src, dep, out, logf)
 	}
 	return c.rollout(ctx, project, svc, src, dep, out, logf)
@@ -604,6 +606,9 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 		// Other services of the project reach this one by its service name.
 		docker.ProjectNetwork(project.ID): {Aliases: []string{svc.Name}},
 	}
+	if svc.HostNetwork {
+		endpoints = map[string]*network.EndpointSettings{}
+	}
 	if httpRouted(svc) {
 		maps.Copy(labels, traefikLabels(svc, rt))
 		endpoints[docker.ProxyNetwork] = &network.EndpointSettings{}
@@ -638,6 +643,14 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 		applyDatabaseSpec(cfg, host, svc)
 	} else {
 		host.Mounts = append(host.Mounts, appVolumeMounts(svc)...)
+		if svc.HostNetwork {
+			host.NetworkMode = "host"
+		}
+		if svc.DockerSocket != "" && rt.dockerSocket != "" {
+			host.Mounts = append(host.Mounts, mount.Mount{
+				Type: mount.TypeBind, Source: rt.dockerSocket, Target: compose.DockerSocket, ReadOnly: svc.DockerSocket == "ro",
+			})
+		}
 		cfg.ExposedPorts, host.PortBindings = portBindings(svc.PublishedPorts)
 		if svc.StopGraceSeconds > 0 {
 			// Docker's own stops (daemon shutdown, restarts) wait as long.

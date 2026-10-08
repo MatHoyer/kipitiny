@@ -39,6 +39,16 @@ func TestValidateService(t *testing.T) {
 		{"icon", func(s *store.Service) { s.Icon = "home-assistant" }, false},
 		{"uppercase icon", func(s *store.Service) { s.Icon = "Ghost" }, true},
 		{"icon path", func(s *store.Service) { s.Icon = "../ghost" }, true},
+		{"host network", func(s *store.Service) { s.HostNetwork, s.Port, s.DockerSocket = true, 45876, "ro" }, false},
+		{"host network replicas", func(s *store.Service) { s.HostNetwork, s.Replicas = true, 2 }, true},
+		{"host network domain", func(s *store.Service) { s.HostNetwork, s.Domain, s.Port = true, "a.example.com", 80 }, true},
+		{"host network ports", func(s *store.Service) {
+			s.HostNetwork, s.PublishedPorts = true, []store.PublishedPort{{HostPort: 9000, ContainerPort: 9000, Protocol: "tcp"}}
+		}, true},
+		{"bad socket mode", func(s *store.Service) { s.DockerSocket = "yes" }, true},
+		{"database socket", func(s *store.Service) {
+			s.Kind, s.Image, s.DockerSocket = store.ServiceKindPostgres, "postgres:17", "ro"
+		}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -241,5 +251,18 @@ func TestIconHint(t *testing.T) {
 		if got := IconHint(tc.svc); got != tc.want {
 			t.Errorf("IconHint(%+v) = %q, want %q", tc.svc, got, tc.want)
 		}
+	}
+}
+
+func TestHostAccessContainerSpec(t *testing.T) {
+	p := store.Project{ID: "P1", Name: "mon"}
+	svc := store.Service{ID: "01ABC", ProjectID: "P1", Name: "agent", Image: "henrygd/beszel-agent", Replicas: 1, HostNetwork: true, DockerSocket: "ro"}
+	spec := containerSpec(p, svc, envSources{}, "D1", 1, route{dockerSocket: "/run/docker.sock"})
+	if spec.HostConfig.NetworkMode != "host" || len(spec.NetworkingConfig.EndpointsConfig) != 0 {
+		t.Errorf("network = %q, endpoints %v", spec.HostConfig.NetworkMode, spec.NetworkingConfig.EndpointsConfig)
+	}
+	m := spec.HostConfig.Mounts
+	if len(m) != 1 || m[0].Source != "/run/docker.sock" || m[0].Target != "/var/run/docker.sock" || !m[0].ReadOnly {
+		t.Errorf("mounts = %+v", m)
 	}
 }

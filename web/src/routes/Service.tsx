@@ -22,7 +22,7 @@ import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { ServiceIcon, serviceLogos } from "@/components/service-icon";
 import { FloatingSelect } from "@/components/ui/floating-select";
-import { CopyButton, DangerZone, Empty, EmptyState, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
+import { CheckboxField, CopyButton, DangerZone, Empty, EmptyState, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { BasicAuthUsers, type BasicAuthRow } from "@/components/basic-auth-users";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
@@ -202,6 +202,8 @@ export function Service() {
               </a>
             ) : svc.publishedPorts.length > 0 ? (
               <p className="truncate font-mono text-sm">{svc.publishedPorts.map(portLabel).join(", ")}</p>
+            ) : svc.hostNetwork ? (
+              <p className="text-sm">host network</p>
             ) : (
               <p className="text-sm text-muted-foreground">private</p>
             )}
@@ -269,6 +271,7 @@ export function Service() {
             <fieldset disabled={gitManaged} className="contents">
               <Settings svc={svc} />
               {svc.kind === "app" && <PortsCard key={svc.id} svc={svc} />}
+              {svc.kind === "app" && <HostAccessCard key={svc.id} svc={svc} />}
               {svc.kind === "app" && <VolumesCard key={svc.id} svc={svc} />}
               {svc.kind === "app" && httpRouted(svc) && <AccessCard key={svc.id} svc={svc} />}
             </fieldset>
@@ -459,8 +462,14 @@ function Settings({ svc }: { svc: ServiceT }) {
               max={10}
               value={form.replicas}
               onChange={set("replicas")}
-              disabled={svc.publishedPorts.length > 0}
-              description={svc.publishedPorts.length > 0 ? "One: two containers can't publish the same port." : undefined}
+              disabled={svc.publishedPorts.length > 0 || svc.hostNetwork}
+              description={
+                svc.publishedPorts.length > 0
+                  ? "One: two containers can't publish the same port."
+                  : svc.hostNetwork
+                    ? "One: the app runs in the host's network."
+                    : undefined
+              }
             />
           </>
         )}
@@ -627,6 +636,63 @@ function PortsCard({ svc }: { svc: ServiceT }) {
         ))}
       </form>
       <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setRows(portRows(svc.publishedPorts))} label="Save ports" />
+    </Section>
+  );
+}
+
+/** Host network and Docker socket, for agents that report on or manage the server (Beszel, node-exporter…). */
+function HostAccessCard({ svc }: { svc: ServiceT }) {
+  const qc = useQueryClient();
+  const initial = { hostNetwork: svc.hostNetwork, dockerSocket: svc.dockerSocket };
+  const [form, setForm] = useState(initial);
+  const dirty = form.hostNetwork !== initial.hostNetwork || form.dockerSocket !== initial.dockerSocket;
+  const formId = useId();
+  const blocked = form.hostNetwork && (!!svc.domain || svc.publishedPorts.length > 0);
+  const save = useMutation({
+    meta: { error: "Couldn't save host access" },
+    mutationFn: () =>
+      api.updateService(svc.id, {
+        ...form,
+        // An app in the host network runs one replica.
+        ...(form.hostNetwork && svc.replicas !== 1 ? { replicas: 1 } : {}),
+      }),
+    onSuccess: (updated) => {
+      qc.setQueryData(["service", svc.id], updated);
+      setForm({ hostNetwork: updated.hostNetwork, dockerSocket: updated.dockerSocket });
+      toast.success("Host access saved", { description: "Deploy to apply." });
+    },
+  });
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    save.mutate();
+  };
+
+  return (
+    <Section
+      title="Host access"
+      description="For agents that report on or manage the server, such as a Beszel agent. Only give it to images you trust: the Docker socket, even read-only, gives control of the server."
+    >
+      <form id={formId} onSubmit={onSubmit} className="space-y-4">
+        <CheckboxField
+          label="Host network"
+          description="The app shares the server's network: it sees the host's interfaces and listens on its ports directly. No domain, published ports or project network (other services can't reach it by name), one replica, and deploys stop the old container first."
+          checked={form.hostNetwork}
+          onCheckedChange={(v) => setForm({ ...form, hostNetwork: v })}
+        />
+        {blocked && <p className="text-sm text-destructive">Remove the domain and published ports first.</p>}
+        <FloatingSelect
+          label="Docker socket"
+          value={form.dockerSocket || "none"}
+          onValueChange={(v) => setForm({ ...form, dockerSocket: v === "none" ? "" : (v as "ro" | "rw") })}
+          options={[
+            { value: "none", label: "Not mounted" },
+            { value: "ro", label: "Read-only (container stats, e.g. Beszel)" },
+            { value: "rw", label: "Read-write (manages containers)" },
+          ]}
+          description={<>Mounted at <Mono>/var/run/docker.sock</Mono>.</>}
+        />
+      </form>
+      <SaveBar form={formId} dirty={dirty && !blocked} saving={save.isPending} onReset={() => setForm(initial)} label="Save host access" />
     </Section>
   );
 }

@@ -94,6 +94,8 @@ func exportFile(p store.Project, svcs []store.Service, withProject bool) (compos
 			MemoryMB:         s.MemoryMB,
 			CPUs:             s.CPUs,
 			StopGraceSeconds: s.StopGraceSeconds,
+			HostNetwork:      s.HostNetwork,
+			DockerSocket:     s.DockerSocket,
 			X: compose.Ext{
 				Domain:     s.Domain,
 				Port:       s.Port,
@@ -435,6 +437,8 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 		PreBackup:        cs.X.PreBackup,
 		PublishedPorts:   cs.Ports,
 		StopGraceSeconds: cs.StopGraceSeconds,
+		HostNetwork:      cs.HostNetwork,
+		DockerSocket:     cs.DockerSocket,
 	}
 	if in.Kind == "" {
 		in.Kind = store.ServiceKindApp
@@ -558,6 +562,8 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 		PreBackup:        &in.PreBackup,
 		PublishedPorts:   in.PublishedPorts,
 		StopGraceSeconds: &in.StopGraceSeconds,
+		HostNetwork:      &in.HostNetwork,
+		DockerSocket:     &in.DockerSocket,
 	}
 	if in.Image == "" { // a database on the default image
 		p.Image = nil
@@ -600,6 +606,8 @@ func changedFields(old, svc store.Service) []string {
 	add("volumes", !slices.Equal(old.Volumes, svc.Volumes))
 	add("publishedPorts", !slices.Equal(old.PublishedPorts, svc.PublishedPorts))
 	add("stopGraceSeconds", old.StopGraceSeconds != svc.StopGraceSeconds)
+	add("hostNetwork", old.HostNetwork != svc.HostNetwork)
+	add("dockerSocket", old.DockerSocket != svc.DockerSocket)
 	add("middlewares", !sameMiddlewares(old.Middlewares, svc.Middlewares))
 	return out
 }

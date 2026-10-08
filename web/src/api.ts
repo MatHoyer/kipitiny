@@ -71,6 +71,10 @@ export type Service = {
   publishedPorts: PublishedPort[];
   /** Seconds an app gets to exit after SIGTERM; 0 means 10. */
   stopGraceSeconds: number;
+  /** Runs in the host's network: one replica, no domain (apps only). */
+  hostNetwork: boolean;
+  /** The host's Docker socket mounted read-only or read-write; "" when not. */
+  dockerSocket: "" | "ro" | "rw";
   currentDeploymentId: string;
   stopped: boolean;
   createdAt: string;
@@ -175,6 +179,8 @@ export type ServiceInput = {
   preBackup?: string;
   publishedPorts?: PublishedPort[];
   stopGraceSeconds?: number;
+  hostNetwork?: boolean;
+  dockerSocket?: "" | "ro" | "rw";
 };
 
 export type Connection = {

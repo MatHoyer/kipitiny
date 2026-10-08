@@ -299,6 +299,12 @@ type Service struct {
 	// StopGraceSeconds is how long an app gets to exit after SIGTERM before
 	// it is killed (e.g. a game server saving its world); 0 means 10 s.
 	StopGraceSeconds int `bun:"stop_grace_seconds" json:"stopGraceSeconds"`
+	// HostNetwork runs an app in the host's network namespace (agents that
+	// report on the host): no project network, no domain, one replica.
+	HostNetwork bool `bun:"host_network" json:"hostNetwork"`
+	// DockerSocket mounts the host's Docker socket in an app: "" none, "ro"
+	// or "rw". Either gives the app control of the host.
+	DockerSocket string `bun:"docker_socket" json:"dockerSocket"`
 	// PreBackup runs (sh -c) in a running replica before each volume
 	// backup, e.g. to flush to disk. A failure aborts the backup.
 	PreBackup           string `bun:"pre_backup" json:"preBackup"`
