@@ -289,6 +289,9 @@ type Service struct {
 	// PreDeploy runs once (sh -c) in a one-off container before a rollout,
 	// e.g. migrations. A failure aborts the deploy.
 	PreDeploy string `bun:"pre_deploy" json:"preDeploy"`
+	// Healthcheck replaces the image's own and the injected probe (apps
+	// only); the zero value has none.
+	Healthcheck Healthcheck `bun:"healthcheck,type:text" json:"healthcheck"`
 	// Volumes are named volumes an app mounts, shared by its replicas and
 	// kept across deploys. Databases keep their data in their own volume.
 	Volumes []Volume `bun:"volumes" json:"volumes"`
@@ -363,6 +366,20 @@ type PublishedPort struct {
 	// Protocol is "tcp" or "udp".
 	Protocol string `json:"protocol"`
 }
+
+// Healthcheck is a Docker healthcheck, as compose's healthcheck key writes
+// it. Test ["NONE"] disables the image's; an empty Test means none set.
+type Healthcheck struct {
+	// Test is ["CMD", args...], ["CMD-SHELL", command] or ["NONE"].
+	Test               []string `json:"test,omitempty"`
+	IntervalSeconds    int      `json:"intervalSeconds,omitempty"`
+	TimeoutSeconds     int      `json:"timeoutSeconds,omitempty"`
+	StartPeriodSeconds int      `json:"startPeriodSeconds,omitempty"`
+	Retries            int      `json:"retries,omitempty"`
+}
+
+// Set reports whether the healthcheck replaces the image's.
+func (h Healthcheck) Set() bool { return len(h.Test) > 0 }
 
 // Middlewares are the Traefik middlewares on an app's router; the zero
 // value adds none.

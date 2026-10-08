@@ -30,7 +30,7 @@ func DataVolume(svc store.Service) string {
 // validateDatabase checks what every database kind shares, then the kind's
 // own rules.
 func validateDatabase(s store.Service) error {
-	if s.HealthPath != "" || s.PreDeploy != "" {
+	if s.HealthPath != "" || s.Healthcheck.Set() || s.PreDeploy != "" {
 		return fmt.Errorf("%w: databases have a built-in healthcheck and no pre-deploy command", ErrInvalid)
 	}
 	if s.Replicas != 1 {

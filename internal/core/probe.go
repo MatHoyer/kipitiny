@@ -176,11 +176,33 @@ func withProbe(spec *client.ContainerCreateOptions, svc store.Service, m mount.M
 	spec.HostConfig.Mounts = append(spec.HostConfig.Mounts, m)
 }
 
+// healthConfig is an app's own healthcheck. Without a start period, it
+// gets the probe's: checked every second while starting, so a new replica's
+// readiness is noticed at once rather than after the first interval.
+func healthConfig(h store.Healthcheck) *container.HealthConfig {
+	if h.Test[0] == "NONE" {
+		return &container.HealthConfig{Test: []string{"NONE"}}
+	}
+	hc := &container.HealthConfig{
+		Test:          h.Test,
+		Interval:      time.Duration(h.IntervalSeconds) * time.Second,
+		Timeout:       time.Duration(h.TimeoutSeconds) * time.Second,
+		StartPeriod:   time.Duration(h.StartPeriodSeconds) * time.Second,
+		StartInterval: time.Second,
+		Retries:       h.Retries,
+	}
+	if hc.StartPeriod == 0 {
+		hc.StartPeriod = readyTimeout
+	}
+	return hc
+}
+
 // probeFor returns the probe mount to inject into the service's replicas, or
-// nil when the image has its own healthcheck, the service has no TCP port, or
+// nil when the image or the service has its own healthcheck, the service has
+// no TCP port, or
 // the probe can't run on that server.
 func (c *Core) probeFor(ctx context.Context, svc store.Service) (*mount.Mount, error) {
-	if svc.Kind != store.ServiceKindApp || probePort(svc) == 0 {
+	if svc.Kind != store.ServiceKindApp || probePort(svc) == 0 || svc.Healthcheck.Set() {
 		return nil, nil
 	}
 	has, err := imageHealthcheck(ctx, c.dockerFor(svc.ServerID), svc.Image)

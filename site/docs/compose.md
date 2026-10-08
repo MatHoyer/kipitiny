@@ -30,6 +30,9 @@ services:
       REGION: "{{ project.REGION }}"
       LOG_LEVEL: info
       API_KEY: ${API_KEY}
+    expose: ["3000"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthz"]
     volumes:
       - uploads:/app/uploads
     deploy:
@@ -39,10 +42,7 @@ services:
     stop_grace_period: 30s
     x-kipitiny:
       domain: shop.example.com
-      port: 3000
-      health_path: /healthz
       pre_deploy: ./bin/migrate up
-      secrets: [API_KEY]
       middlewares:
         rate_limit: {average: 50, burst: 100}
         headers: {X-Frame-Options: DENY}
@@ -60,7 +60,7 @@ x-kipitiny:
     REGION: eu
 ```
 
-`db` and `cache` become a managed PostgreSQL and Redis (official images are recognised), `web` connects to them through references, and `API_KEY` comes from the project variable `API_KEY` (or a `.env`).
+`db` and `cache` become a managed PostgreSQL and Redis (official images are recognised), `web` connects to them through references, and `API_KEY` comes from the project variable `API_KEY` (or a `.env`, which makes it a secret). Plain compose keys say what compose already has words for (the port, the healthcheck); `x-kipitiny` holds only what compose has none for: the domain, the pre-deploy command, Traefik's middlewares.
 
 A real one: this website runs on kipitiny from [`site/compose.yaml`](https://github.com/MatHoyer/kipitiny/blob/main/site/compose.yaml), synced from git, and each release's image is deployed by the [site workflow](https://github.com/MatHoyer/kipitiny/blob/main/.github/workflows/site.yml) (see [Deploy from CI](/docs/deploys#deploy-from-ci)).
 
@@ -74,7 +74,9 @@ Each key under `services` is a service. Its name is also its hostname inside the
 |---|---|
 | `image` | The image to run, pinned by tag (or digest). Required for apps. kipitiny never builds: build and push in CI. |
 | `environment` | Env variables, as a mapping or a `KEY=value` list. Values may hold references (see [Values](#values-references-and-secrets)). A key without a value (`- KEY` or `KEY:`) means `${KEY}`. |
-| `ports` | Host ports published straight to the container, for traffic that isn't HTTP: `"25565:25565"`, `"9000:9000/udp"`, or the long form `{target: 25565, published: 25565, protocol: tcp}`. One port per entry, no ranges. An app with published ports runs one replica. HTTP goes through `x-kipitiny.port` instead. |
+| `expose` | The container port HTTP is routed to from the domain: `["3000"]`. With several, `x-kipitiny.port` picks one. Same as `x-kipitiny.port`. |
+| `healthcheck` | Docker's healthcheck: `test` (a list starting with `CMD` or `CMD-SHELL`, or a string run by the shell), `interval`, `timeout`, `start_period`, `retries`, or `disable: true`. A new replica takes traffic once it passes. Without `start_period`, it is checked every second while starting. The command runs in the container, so the image needs it (`wget`, `curl`…); `x-kipitiny.health_path` works with any image. Not for databases. |
+| `ports` | Host ports published straight to the container, for traffic that isn't HTTP: `"25565:25565"`, `"9000:9000/udp"`, or the long form `{target: 25565, published: 25565, protocol: tcp}`. One port per entry, no ranges. An app with published ports runs one replica. HTTP goes through `expose` (or `x-kipitiny.port`) instead. |
 | `volumes` | Named volumes: `name:/path` or `{type: volume, source: name, target: /path}`. Shared by the service's replicas, kept across deploys, backed up. At most 10. Names: lowercase letters, digits and dashes. The one bind mount allowed is the Docker socket, `/var/run/docker.sock:/var/run/docker.sock` (`:ro` for read-only); see [Host access](#host-access). |
 | `network_mode` | Only `host`: the app runs in the server's network. See [Host access](#host-access). |
 | `deploy` | `replicas` (1–10; databases always 1) and `resources.limits.memory` / `resources.limits.cpus`. |
@@ -88,7 +90,7 @@ Top level: `name` (the project name, informational), `services`, `volumes` (each
 
 ### Ignored with a warning
 
-kipitiny orders, networks, restarts and health-checks services itself, so these are dropped and reported: `container_name`, `depends_on`, `expose`, `healthcheck`, `hostname`, `labels`, `links`, `logging`, `networks`, `pull_policy`, `restart`, `init`, `extra_hosts`, `stop_signal`, and the top-level `version` and `networks`. Other `x-*` keys are ignored silently.
+kipitiny orders, networks and restarts services itself, so these are dropped and reported: `container_name`, `depends_on`, `hostname`, `labels`, `links`, `logging`, `networks`, `pull_policy`, `restart`, `init`, `extra_hosts`, `stop_signal`, and the top-level `version` and `networks`. Other `x-*` keys are ignored silently.
 
 ### Errors
 
@@ -121,12 +123,12 @@ services:
 |---|---|---|---|
 | `kind` | `app` \| `postgres` \| `redis` | all | What the service is. Default: `postgres` or `redis` when the image is the official one (`postgres:17-alpine`, `redis:8`), else `app`. Set `kind: app` to run those images as plain containers. |
 | `domain` | hostname | apps | Public hostname, served over HTTPS by Traefik. Needs `port` (unless the app only publishes ports and the domain is only for DNS). |
-| `port` | 1–65535 | apps | Container port Traefik routes the domain to. |
-| `health_path` | path | apps | HTTP path (e.g. `/healthz`) that must answer 2xx/3xx before a new replica takes traffic. Needs `port`. Without it: the image's healthcheck, else a stability wait. |
+| `port` | 1–65535 | apps | Container port Traefik routes the domain to. Usually written as `expose` instead. |
+| `health_path` | path | apps | HTTP path (e.g. `/healthz`) that must answer 2xx/3xx before a new replica takes traffic, checked by a probe kipitiny injects, so the image needs no `curl`. Needs the port. Without it or a `healthcheck`: the image's healthcheck, else a stability wait. Not with `healthcheck`. |
 | `pre_deploy` | shell command | apps | Runs once (`sh -c`) in a one-off container before a rollout, e.g. migrations. A failure aborts the deploy. |
 | `pre_backup` | shell command | apps | Runs in a running replica before each volume backup, e.g. to flush to disk. |
 | `icon` | name | all | Logo the UI shows (e.g. `ghost`, `n8n`). Default: from the kind or image. |
-| `secrets` | list of env keys | apps | Which `environment` entries are secrets (write-only in the UI and API, masked everywhere, exported only with secrets). |
+| `secrets` | list of env keys | apps | Which `environment` entries are secrets (write-only in the UI and API, masked everywhere, exported only with secrets). Without it, the values given as `${NAME}` are (see [Values](#values-references-and-secrets)). |
 | `password` | string, usually `${NAME}` | databases | The database's password at creation, to keep the credentials of a moved database. Empty generates one. It can't change afterwards. |
 | `middlewares` | mapping | public apps | Applied by Traefik to every request, below. |
 
@@ -165,6 +167,8 @@ When a `${NAME}` has no value:
 - In `environment`, when it is the whole value (`API_KEY: ${API_KEY}`): it becomes `{{ project.API_KEY }}`, a reference to the project variable. **This is how a file in git stays free of secrets:** set the value once as a project variable (project › Environment), and the file only names it.
 - An existing secret exported without its value (`API_KEY: ${WEB_API_KEY}` for the service `web`) keeps its current value.
 - Anywhere else, the file is refused with the list of missing variables.
+
+A value given whole as `${NAME}` (or `- NAME` alone) and found in the `.env` is a **secret** (write-only, masked), unless `x-kipitiny.secrets` lists the secrets explicitly. One that became a project reference keeps the project variable's own flag.
 
 Exports name secret variables `<SERVICE>_<KEY>` (`WEB_API_KEY`), project secrets `PROJECT_<NAME>`, database passwords `<SERVICE>_PASSWORD` and basic auth hashes `<SERVICE>_BASIC_AUTH_<USER>`.
 

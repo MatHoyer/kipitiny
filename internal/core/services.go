@@ -50,7 +50,9 @@ type ServiceInput struct {
 	MemoryMB   int      `json:"memoryMb"`
 	CPUs       float64  `json:"cpus"`
 	HealthPath string   `json:"healthPath"`
-	PreDeploy  string   `json:"preDeploy"`
+	// Healthcheck replaces the image's own and the injected probe (apps only).
+	Healthcheck store.Healthcheck `json:"healthcheck"`
+	PreDeploy   string            `json:"preDeploy"`
 	// Volumes are named volumes mounted in every replica (apps only).
 	Volumes []store.Volume `json:"volumes"`
 	// Middlewares apply to a public app's requests (apps only).
@@ -83,7 +85,9 @@ type ServicePatch struct {
 	MemoryMB   *int              `json:"memoryMb"`
 	CPUs       *float64          `json:"cpus"`
 	HealthPath *string           `json:"healthPath"`
-	PreDeploy  *string           `json:"preDeploy"`
+	// Healthcheck replaces the app's healthcheck; nil keeps it.
+	Healthcheck *store.Healthcheck `json:"healthcheck"`
+	PreDeploy   *string            `json:"preDeploy"`
 	// Volumes replaces the app's volumes; nil keeps them.
 	Volumes []store.Volume `json:"volumes"`
 	// Middlewares replaces the app's middlewares; nil keeps them.
@@ -164,6 +168,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		MemoryMB:         in.MemoryMB,
 		CPUs:             in.CPUs,
 		HealthPath:       strings.TrimSpace(in.HealthPath),
+		Healthcheck:      in.Healthcheck,
 		PreDeploy:        strings.TrimSpace(in.PreDeploy),
 		Volumes:          normalizeVolumes(in.Volumes),
 		PreBackup:        strings.TrimSpace(in.PreBackup),
@@ -296,6 +301,9 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 	}
 	if p.PreDeploy != nil {
 		svc.PreDeploy = strings.TrimSpace(*p.PreDeploy)
+	}
+	if p.Healthcheck != nil {
+		svc.Healthcheck = *p.Healthcheck
 	}
 	if p.Volumes != nil {
 		svc.Volumes = normalizeVolumes(p.Volumes)
@@ -438,6 +446,9 @@ func validateService(s store.Service) error {
 		if s.Port == 0 {
 			return fmt.Errorf("%w: a health path needs the container port", ErrInvalid)
 		}
+	}
+	if err := validateHealthcheck(s); err != nil {
+		return err
 	}
 	if s.Replicas < 1 || s.Replicas > maxReplicas {
 		return fmt.Errorf("%w: replicas must be between 1 and %d", ErrInvalid, maxReplicas)
@@ -703,4 +714,35 @@ func (c *Core) ServiceAction(ctx context.Context, id string, action Action) (Ser
 		}
 	}
 	return c.view(ctx, svc)
+}
+
+// maxHealthcheckSeconds bounds a healthcheck's durations.
+const maxHealthcheckSeconds = 3600
+
+func validateHealthcheck(s store.Service) error {
+	h := s.Healthcheck
+	if !h.Set() {
+		return nil
+	}
+	if s.HealthPath != "" {
+		return fmt.Errorf("%w: set a health path or a healthcheck, not both", ErrInvalid)
+	}
+	switch h.Test[0] {
+	case "NONE":
+	case "CMD", "CMD-SHELL":
+		if len(h.Test) < 2 || strings.TrimSpace(h.Test[1]) == "" {
+			return fmt.Errorf("%w: the healthcheck test needs a command", ErrInvalid)
+		}
+	default:
+		return fmt.Errorf("%w: a healthcheck test starts with CMD, CMD-SHELL or NONE", ErrInvalid)
+	}
+	for _, v := range []int{h.IntervalSeconds, h.TimeoutSeconds, h.StartPeriodSeconds} {
+		if v < 0 || v > maxHealthcheckSeconds {
+			return fmt.Errorf("%w: healthcheck durations must be between 0 and %d seconds", ErrInvalid, maxHealthcheckSeconds)
+		}
+	}
+	if h.Retries < 0 || h.Retries > 100 {
+		return fmt.Errorf("%w: healthcheck retries must be between 0 and 100", ErrInvalid)
+	}
+	return nil
 }
