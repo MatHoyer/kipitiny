@@ -5,11 +5,9 @@ order: 5
 ---
 
 - `pg_dump -Fc` runs **inside** the database container (client always matches the
-  server) and streams straight to the target: local disk (`/data/backups`), any
-  S3-compatible bucket, or a Google Drive / Proton Drive folder. Memory stays
-  constant. Nothing touches a temp file, except on drives that can't stream:
-  Proton Drive transfers go through a file under `/data/protondrive`, so it
-  needs room for the largest dump.
+  server) and streams straight to the target: local disk (`/data/backups`) or
+  any S3-compatible bucket. Memory stays constant and nothing touches a temp
+  file.
 - A backup only counts once `pg_dump` exits 0; partial uploads are deleted. Each
   backup records size, SHA-256, server version and duration.
 - Restores load the dump into a scratch database and swap it in by rename, so the
@@ -41,7 +39,7 @@ container, checks the checksum and records the number of entries.
 
 ## Encryption
 
-An S3 or drive target can encrypt everything stored on it with [age](https://age-encryption.org)
+An S3 target can encrypt everything stored on it with [age](https://age-encryption.org)
 (chosen at creation; the key never changes). Copy the key (*Show key*) somewhere
 safe: without it, those backups are unreadable if this server is lost. Offline:
 
@@ -61,21 +59,8 @@ snapshots contain every secret the manager holds: prefer an encrypted storage.
 To restore one, stop the manager and replace `/data/kipitiny.db` with the file
 (delete `kipitiny.db-wal` and `kipitiny.db-shm` first).
 
-## Drive targets
+## Targets
 
-Drive targets go through a CLI bundled in the image. Each command runs with
-credentials written from the database, and what the CLI changes (a refreshed token)
-is saved back, so the manager's backups carry it.
-
-- **Google Drive** uses [rclone](https://rclone.org) (`KIPITINY_RCLONE` for another
-  binary). On a computer with a browser, run `rclone authorize "drive"` and paste the
-  token it prints. Optionally use your own OAuth client ID (rclone's shared one is
-  rate limited).
-- **Proton Drive** uses Proton's official
-  [Drive CLI](https://proton.me/support/drive-cli) (`KIPITINY_PROTONDRIVE_CLI`). *Sign
-  in with Proton* gives a link to open on any device; the sign-in (2FA included)
-  happens on Proton's page and kipitiny never sees the password. It keeps the session,
-  which holds the key to your drive: treat the manager's data as you would that
-  password. Objects are trashed then deleted.
-
-Targets are checked (a test object is written and deleted) before they are saved.
+S3-compatible targets (AWS S3, Cloudflare R2, Backblaze B2, MinIO…) take an
+endpoint, a bucket, an optional prefix and credentials. Targets are checked (a
+test object is written and deleted) before they are saved.

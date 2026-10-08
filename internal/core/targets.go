@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"strings"
 	"time"
 
@@ -27,100 +26,10 @@ type TargetInput struct {
 	// Encrypt generates an age key for a new target; existing ones use
 	// EncryptBackupTarget.
 	Encrypt bool `json:"encrypt"`
-	// Config is a drive target's fields (TargetKind.Fields); a secret equal
-	// to SecretMask keeps the stored value.
-	Config map[string]string `json:"config"`
-	// Login is a finished Proton sign-in (StartProtonLogin); required to
-	// create a Proton Drive target, optional on update.
-	Login string `json:"login"`
 }
 
-// TargetKind describes a kind of backup target the UI can create.
-type TargetKind struct {
-	Kind        store.BackupTargetKind `json:"kind"`
-	Label       string                 `json:"label"`
-	Description string                 `json:"description"`
-	// Available is false when the manager can't use it (rclone missing).
-	Available bool `json:"available"`
-	// Help says how to get the credentials; `code` spans are commands.
-	Help   string        `json:"help,omitempty"`
-	Fields []TargetField `json:"fields"`
-	// SignIn: credentials come from a browser sign-in, not fields.
-	SignIn bool `json:"signIn,omitempty"`
-}
-
-type TargetField struct {
-	Key         string `json:"key"`
-	Label       string `json:"label"`
-	Placeholder string `json:"placeholder,omitempty"`
-	Description string `json:"description,omitempty"`
-	Required    bool   `json:"required"`
-	Secret      bool   `json:"secret"`
-	Multiline   bool   `json:"multiline,omitempty"`
-}
-
-var driveKinds = []TargetKind{
-	{
-		Kind:        store.BackupTargetGoogleDrive,
-		Label:       "Google Drive",
-		Description: "A folder in your Google Drive.",
-		Help: "On a computer with a browser and rclone, run `rclone authorize \"drive\"`, sign in, " +
-			"and paste the token it prints.",
-		Fields: []TargetField{
-			{Key: "token", Label: "OAuth token", Placeholder: `{"access_token":…}`, Required: true, Secret: true, Multiline: true},
-			{Key: "client_id", Label: "Client ID", Description: "Optional: your own Google OAuth client, as rclone's shared one is rate limited. Authorize with the same one."},
-			{Key: "client_secret", Label: "Client secret", Secret: true},
-		},
-	},
-	{
-		Kind:        store.BackupTargetProtonDrive,
-		Label:       "Proton Drive",
-		Description: "A folder in your Proton Drive, end-to-end encrypted.",
-		Help:        "Sign in with your Proton account in the browser, on any device: kipitiny never sees your password.",
-		Fields:      []TargetField{},
-		SignIn:      true,
-	},
-}
-
-func driveKind(k store.BackupTargetKind) (TargetKind, bool) {
-	for _, d := range driveKinds {
-		if d.Kind == k {
-			return d, true
-		}
-	}
-	return TargetKind{}, false
-}
-
-// BackupTargetKinds lists what can be added: S3 always, drives when their
-// CLI is installed.
-func (c *Core) BackupTargetKinds() []TargetKind {
-	kinds := []TargetKind{{
-		Kind:        store.BackupTargetS3,
-		Label:       "S3-compatible",
-		Description: "AWS S3, Cloudflare R2, Backblaze B2, MinIO…",
-		Available:   true,
-		Fields:      []TargetField{},
-	}}
-	for _, d := range driveKinds {
-		if d.Kind == store.BackupTargetProtonDrive {
-			d.Available = storage.ProtonAvailable(c.cfg.ProtonDriveCLI)
-		} else {
-			d.Available = storage.RcloneAvailable(c.cfg.Rclone)
-		}
-		kinds = append(kinds, d)
-	}
-	return kinds
-}
-
-// openStorage opens a target; credentials a drive's CLI refreshes are saved
-// back.
 func (c *Core) openStorage(t store.BackupTarget) (storage.Storage, error) {
-	return storage.Open(t, storage.Env{
-		DataDir:     c.cfg.DataDir,
-		Rclone:      c.cfg.Rclone,
-		ProtonDrive: c.cfg.ProtonDriveCLI,
-		SaveConfig:  c.store.SetBackupTargetConfig,
-	})
+	return storage.Open(t, storage.Env{DataDir: c.cfg.DataDir})
 }
 
 func (c *Core) ListBackupTargets(ctx context.Context) ([]store.BackupTarget, error) {
@@ -219,13 +128,7 @@ func (c *Core) BackupTargetKey(ctx context.Context, id string) (TargetKey, error
 func (c *Core) applyTargetInput(ctx context.Context, t *store.BackupTarget, in TargetInput) error {
 	t.Name = strings.TrimSpace(in.Name)
 	t.Prefix = strings.Trim(strings.TrimSpace(in.Prefix), "/")
-	switch t.Kind {
-	case store.BackupTargetS3:
-	case store.BackupTargetGoogleDrive:
-		return c.applyDriveConfig(t, in.Config)
-	case store.BackupTargetProtonDrive:
-		return c.applyProtonLogin(t, in.Login)
-	default:
+	if t.Kind != store.BackupTargetS3 {
 		return fmt.Errorf("%w: unknown target kind %q", ErrInvalid, t.Kind)
 	}
 	t.Endpoint = strings.TrimSpace(in.Endpoint)
@@ -246,99 +149,23 @@ func (c *Core) applyTargetInput(ctx context.Context, t *store.BackupTarget, in T
 	return nil
 }
 
-// applyDriveConfig merges a drive target's fields into its rclone options.
-// Changing a credential drops what rclone saved from the old one, so it
-// signs in again.
-func (c *Core) applyDriveConfig(t *store.BackupTarget, in map[string]string) error {
-	kind, _ := driveKind(t.Kind)
-	if !storage.RcloneAvailable(c.cfg.Rclone) {
-		return fmt.Errorf("%w: rclone isn't installed on the manager", ErrInvalid)
-	}
-	cfg := maps.Clone(t.Config)
-	if cfg == nil {
-		cfg = map[string]string{}
-	}
-	changed := false
-	for _, f := range kind.Fields {
-		v := strings.TrimSpace(in[f.Key])
-		if f.Secret && v == SecretMask {
-			continue
-		}
-		if cfg[f.Key] != v {
-			changed = true
-		}
-		if v == "" {
-			delete(cfg, f.Key)
-		} else {
-			cfg[f.Key] = v
-		}
-	}
-	if changed && len(t.Config) > 0 {
-		declared := map[string]bool{}
-		for _, f := range kind.Fields {
-			declared[f.Key] = true
-		}
-		for k := range cfg {
-			if _, fixed := fixedDriveOptions[t.Kind][k]; !declared[k] && !fixed {
-				delete(cfg, k)
-			}
-		}
-	}
-	for k, v := range fixedDriveOptions[t.Kind] {
-		cfg[k] = v
-	}
-	for _, f := range kind.Fields {
-		if f.Required && cfg[f.Key] == "" {
-			return fmt.Errorf("%w: %s is required", ErrInvalid, strings.ToLower(f.Label))
-		}
-	}
-	t.Config = cfg
-	return nil
-}
-
-// fixedDriveOptions are rclone options kipitiny sets itself.
-var fixedDriveOptions = map[store.BackupTargetKind]map[string]string{
-	store.BackupTargetGoogleDrive: {"scope": "drive"},
-}
-
 // checkTarget validates fields, then writes and deletes a test object so a
-// misconfigured target fails now rather than at 3am. A drive target keeps
-// what its CLI refreshed meanwhile.
+// misconfigured target fails now rather than at 3am.
 func (c *Core) checkTarget(ctx context.Context, t *store.BackupTarget) error {
 	if t.Name == "" {
 		return fmt.Errorf("%w: a name is required", ErrInvalid)
 	}
-	if t.Kind == store.BackupTargetS3 && (t.Endpoint == "" || t.Bucket == "" || t.AccessKey == "" || t.SecretKey == "") {
+	if t.Endpoint == "" || t.Bucket == "" || t.AccessKey == "" || t.SecretKey == "" {
 		return fmt.Errorf("%w: name, endpoint, bucket and credentials are required", ErrInvalid)
 	}
-	// Checked under a fresh id: SaveConfig must not write a row mid-edit.
-	probe := *t
-	probe.ID = ""
-	st, err := c.openStorage(probe)
+	st, err := c.openStorage(*t)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
-	timeout := 15 * time.Second
-	if t.Drive() {
-		timeout = time.Minute // signing in to a drive takes a while
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	if err := st.Check(ctx); err != nil {
-		if t.Drive() {
-			return fmt.Errorf("%w: cannot use the drive: %v", ErrInvalid, err)
-		}
 		return fmt.Errorf("%w: cannot use bucket: %v", ErrInvalid, err)
-	}
-	switch st := st.(type) {
-	case *storage.Rclone:
-		t.Config = st.Config()
-	case *storage.ProtonDrive:
-		t.Config = st.Config()
-		// Shown on the target, so you know which account it writes to.
-		if email, err := st.Account(ctx); err == nil && email != "" {
-			t.Config["account"] = email
-		}
 	}
 	return nil
 }
@@ -353,11 +180,7 @@ func (c *Core) TestBackupTarget(ctx context.Context, id string) error {
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
-	timeout := 15 * time.Second
-	if t.Drive() {
-		timeout = time.Minute
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	if err := st.Check(ctx); err != nil {
 		return fmt.Errorf("%w: cannot write to %s: %v", ErrInvalid, t.Name, err)
@@ -365,27 +188,10 @@ func (c *Core) TestBackupTarget(ctx context.Context, id string) error {
 	return nil
 }
 
-// maskedTarget hides credentials; a drive target shows its fields as
-// Settings, secrets masked and rclone's own options left out.
+// maskedTarget hides credentials.
 func maskedTarget(t store.BackupTarget) store.BackupTarget {
 	if t.SecretKey != "" {
 		t.SecretKey = SecretMask
 	}
-	if kind, ok := driveKind(t.Kind); ok {
-		t.Settings = map[string]string{}
-		for _, f := range kind.Fields {
-			v := t.Config[f.Key]
-			if f.Secret && v != "" {
-				v = SecretMask
-			}
-			if v != "" {
-				t.Settings[f.Key] = v
-			}
-		}
-		if a := t.Config["account"]; a != "" {
-			t.Settings["account"] = a
-		}
-	}
-	t.Config = nil
 	return t
 }

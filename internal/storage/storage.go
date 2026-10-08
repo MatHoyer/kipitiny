@@ -1,6 +1,5 @@
-// Package storage writes backup objects to local disk, S3-compatible
-// buckets, Google Drive (rclone) or Proton Drive (its official CLI),
-// streaming in constant memory where the backend allows.
+// Package storage writes backup objects to local disk or S3-compatible
+// buckets, streaming in constant memory where the backend allows.
 package storage
 
 import (
@@ -8,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -31,50 +29,13 @@ type Storage interface {
 
 // Env is what drivers need besides the target.
 type Env struct {
-	// DataDir holds local backups and rclone's per-command files.
+	// DataDir holds local backups.
 	DataDir string
-	// Rclone and ProtonDrive are the CLIs drive targets use (paths or names
-	// on PATH).
-	Rclone      string
-	ProtonDrive string
-	// SaveConfig keeps the options rclone changed on a saved drive target.
-	SaveConfig func(ctx context.Context, targetID string, config map[string]string) error
-}
-
-// rcloneBackends maps drive targets to rclone backend types.
-var rcloneBackends = map[store.BackupTargetKind]string{
-	store.BackupTargetGoogleDrive: "drive",
 }
 
 // Open returns the storage for a target.
 func Open(t store.BackupTarget, env Env) (Storage, error) {
-	if backend, ok := rcloneBackends[t.Kind]; ok {
-		if !RcloneAvailable(env.Rclone) {
-			return nil, errors.New("rclone isn't installed on the manager")
-		}
-		return &Rclone{
-			bin:     env.Rclone,
-			work:    filepath.Join(env.DataDir, "rclone"),
-			id:      t.ID,
-			backend: backend,
-			prefix:  t.Prefix,
-			save:    env.SaveConfig,
-			config:  maps.Clone(t.Config),
-		}, nil
-	}
 	switch t.Kind {
-	case store.BackupTargetProtonDrive:
-		if !ProtonAvailable(env.ProtonDrive) {
-			return nil, errors.New("proton-drive isn't installed on the manager")
-		}
-		return &ProtonDrive{
-			bin:    env.ProtonDrive,
-			work:   filepath.Join(env.DataDir, "protondrive"),
-			id:     t.ID,
-			prefix: t.Prefix,
-			save:   env.SaveConfig,
-			config: maps.Clone(t.Config),
-		}, nil
 	case store.BackupTargetLocal:
 		return &Local{Root: filepath.Join(env.DataDir, "backups")}, nil
 	case store.BackupTargetS3:

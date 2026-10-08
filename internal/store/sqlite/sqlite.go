@@ -543,7 +543,7 @@ func (s *Store) CreateBackupTarget(ctx context.Context, t store.BackupTarget) (s
 
 func (s *Store) UpdateBackupTarget(ctx context.Context, t store.BackupTarget) (store.BackupTarget, error) {
 	res, err := s.db.NewUpdate().Model(&t).
-		Column("name", "endpoint", "region", "bucket", "prefix", "access_key", "secret_key", "use_ssl", "config").
+		Column("name", "endpoint", "region", "bucket", "prefix", "access_key", "secret_key", "use_ssl").
 		WherePK().Exec(ctx)
 	if err != nil {
 		return store.BackupTarget{}, mapErr(err)
@@ -568,18 +568,6 @@ func (s *Store) SetBackupTargetKey(ctx context.Context, id, identity, recipient 
 		return err
 	}
 	return fmt.Errorf("%w: already encrypted", store.ErrConflict)
-}
-
-func (s *Store) SetBackupTargetConfig(ctx context.Context, id string, config map[string]string) error {
-	t := store.BackupTarget{ID: id, Config: config}
-	res, err := s.db.NewUpdate().Model(&t).Column("config").WherePK().Exec(ctx)
-	if err != nil {
-		return mapErr(err)
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return store.ErrNotFound
-	}
-	return nil
 }
 
 func (s *Store) DeleteBackupTarget(ctx context.Context, id string) error {
