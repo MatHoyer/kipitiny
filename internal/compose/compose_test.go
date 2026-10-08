@@ -2,6 +2,7 @@ package compose
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -22,7 +23,7 @@ func TestRoundTrip(t *testing.T) {
 				CPUs:             0.5,
 				StopGraceSeconds: 90,
 				X: Ext{
-					Domain: "shop.example.com", Port: 3000, HealthPath: "/healthz", PreDeploy: "./migrate up",
+					Domain: "shop.example.com", Port: 3000, PreDeploy: "./migrate up",
 					Secrets: []string{"API_KEY"},
 					Middlewares: &Middlewares{
 						BasicAuth:   []BasicAuthUser{{Name: "admin", Hash: "$2a$10$abc"}, {Name: "ops", Ref: "{{ pass://V/I/p }}"}},
@@ -31,6 +32,10 @@ func TestRoundTrip(t *testing.T) {
 						Headers:     map[string]string{"X-Frame-Options": "DENY"},
 					},
 				},
+			},
+			"worker": {
+				Image:       "ghcr.io/me/shop-worker:1.4.2",
+				Healthcheck: &store.Healthcheck{Test: []string{"CMD", "wget", "-qO-", "http://localhost:8080/healthz"}, IntervalSeconds: 30, StartPeriodSeconds: 90, Retries: 3},
 			},
 			"db": {Image: "postgres:17-alpine", MemoryMB: 512, X: Ext{Kind: "postgres", Password: "${DB_PASSWORD}"}},
 		},
@@ -51,6 +56,7 @@ func TestRoundTrip(t *testing.T) {
 	want := in
 	web := want.Services["web"]
 	web.Environment = map[string]string{"DATABASE_URL": "{{ db.db.URL }}", "API_KEY": "secret-WEB_API_KEY", "PRICE": "$5"}
+	web.VarEnv = []string{"API_KEY"}
 	want.Services["web"] = web
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("round trip:\n got %+v\nwant %+v\n%s", got, want, data)
@@ -219,5 +225,66 @@ func TestHostAccess(t *testing.T) {
 		if _, _, err := Parse([]byte(file), Vars{}); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+func TestStandardKeys(t *testing.T) {
+	data := []byte(`
+services:
+  web:
+    image: shop
+    expose: ["3000"]
+    healthcheck:
+      test: wget -qO- http://localhost:3000/healthz || exit 1
+      interval: 30s
+      timeout: 5s
+      start_period: 1m
+      retries: 3
+      start_interval: 2s
+    environment:
+      API_KEY: ${API_KEY}
+      LOG_LEVEL: info
+  api:
+    image: api
+    expose: [8080, "9090"]
+    x-kipitiny: {port: 9090}
+    healthcheck: {disable: true}
+    environment:
+      - TOKEN
+`)
+	f, warns, err := Parse(data, Vars{Lookup: func(n string) (string, bool) { return "v", true }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	web, api := f.Services["web"], f.Services["api"]
+	if web.X.Port != 3000 || api.X.Port != 9090 {
+		t.Errorf("ports = %d, %d", web.X.Port, api.X.Port)
+	}
+	want := &store.Healthcheck{Test: []string{"CMD-SHELL", "wget -qO- http://localhost:3000/healthz || exit 1"},
+		IntervalSeconds: 30, TimeoutSeconds: 5, StartPeriodSeconds: 60, Retries: 3}
+	if !reflect.DeepEqual(web.Healthcheck, want) {
+		t.Errorf("healthcheck = %+v", web.Healthcheck)
+	}
+	if !reflect.DeepEqual(api.Healthcheck, &store.Healthcheck{Test: []string{"NONE"}}) {
+		t.Errorf("disabled healthcheck = %+v", api.Healthcheck)
+	}
+	if !slices.Equal(web.VarEnv, []string{"API_KEY"}) || !slices.Equal(api.VarEnv, []string{"TOKEN"}) {
+		t.Errorf("var env = %v, %v", web.VarEnv, api.VarEnv)
+	}
+	if len(warns) != 1 || !strings.Contains(warns[0], "start_interval") {
+		t.Errorf("warnings = %v", warns)
+	}
+
+	for _, bad := range []string{
+		"services: {web: {image: x, expose: [\"3000-3005\"]}}",
+		"services: {web: {image: x, healthcheck: {interval: 5s}}}",
+		"services: {web: {image: x, healthcheck: {test: [CMD, x], foo: 1}}}",
+	} {
+		if _, _, err := Parse([]byte(bad), Vars{}); err == nil {
+			t.Errorf("%s: want an error", bad)
+		}
+	}
+	if _, warns, _ := Parse([]byte("services: {web: {image: x, expose: [80, 81]}}"), Vars{}); len(warns) != 1 {
+		t.Errorf("several exposed ports without x-kipitiny.port: warnings %v", warns)
 	}
 }

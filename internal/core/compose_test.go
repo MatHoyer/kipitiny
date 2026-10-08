@@ -2,7 +2,9 @@ package core
 
 import (
 	"context"
+	"errors"
 	"slices"
+	"time"
 
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"strings"
@@ -166,5 +168,82 @@ services:
 	}
 	if svcs, _ := c.store.ListServices(ctx, p.ID); len(svcs) != 2 {
 		t.Errorf("a failed apply changed services: %d", len(svcs))
+	}
+}
+
+func TestComposeStandardKeys(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID,
+		Env: map[string]string{"SHARED": "s"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := `
+services:
+  web:
+    image: ghcr.io/me/shop:1
+    expose: ["3000"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthz"]
+      interval: 30s
+    environment:
+      API_KEY: ${API_KEY}
+      SHARED: ${SHARED}
+      LOG_LEVEL: info
+    x-kipitiny:
+      domain: shop.example.com
+`
+	if _, err := c.ApplyCompose(ctx, p.ID, []byte(src), ApplyOptions{Env: map[string]string{"API_KEY": "k3y"}}); err != nil {
+		t.Fatal(err)
+	}
+	svcs, _ := c.store.ListServices(ctx, p.ID)
+	web := svcs[0]
+	if web.Port != 3000 || web.Env["SHARED"] != "{{ project.SHARED }}" {
+		t.Errorf("web = %+v", web)
+	}
+	// ${API_KEY} came from the .env: a secret. ${SHARED} became a project
+	// reference, which keeps the project's own flag.
+	if !slices.Equal(web.Secrets, []string{"API_KEY"}) {
+		t.Errorf("secrets = %v", web.Secrets)
+	}
+	if h := web.Healthcheck; !slices.Equal(h.Test, []string{"CMD", "wget", "-qO-", "http://localhost:3000/healthz"}) || h.IntervalSeconds != 30 {
+		t.Errorf("healthcheck = %+v", h)
+	}
+
+	spec := containerSpec(p, web, envSources{project: p.Env}, "D1", 1, route{})
+	if hc := spec.Config.Healthcheck; hc == nil || hc.Test[0] != "CMD" || hc.StartPeriod != readyTimeout || hc.StartInterval != time.Second {
+		t.Errorf("container healthcheck = %+v", hc)
+	}
+	if readinessMode(web) != "its healthcheck passing" {
+		t.Errorf("readiness = %s", readinessMode(web))
+	}
+
+	out, err := c.ExportCompose(ctx, p.ID, ExportOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(out.Compose)
+	for _, want := range []string{"expose:", `- "3000"`, "healthcheck:", "interval: 30s", "API_KEY: ${WEB_API_KEY}"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("export lacks %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "secrets:") || strings.Contains(text, "port:") {
+		t.Errorf("export still lists secrets or x-kipitiny.port:\n%s", text)
+	}
+	plan, err := c.ApplyCompose(ctx, p.ID, out.Compose, ApplyOptions{DryRun: true})
+	if err != nil || !slices.Equal(plan.Unchanged, []string{"web"}) {
+		t.Errorf("own export re-applied: %+v, %v\n%s", plan, err, text)
+	}
+
+	bad := store.Service{Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Port: 80, HealthPath: "/h",
+		Healthcheck: store.Healthcheck{Test: []string{"CMD", "true"}}}
+	if err := validateService(bad); !errors.Is(err, ErrInvalid) {
+		t.Errorf("health path and healthcheck: %v", err)
+	}
+	bad.HealthPath, bad.Healthcheck.Test = "", []string{"wget"}
+	if err := validateService(bad); !errors.Is(err, ErrInvalid) {
+		t.Errorf("test without CMD: %v", err)
 	}
 }

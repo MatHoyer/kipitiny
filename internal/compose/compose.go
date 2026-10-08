@@ -53,7 +53,13 @@ type Service struct {
 	// DockerSocket is "ro" or "rw" when the service mounts the host's
 	// Docker socket.
 	DockerSocket string
-	X            Ext
+	// Healthcheck is compose's healthcheck key; nil when the file has none.
+	// Tagged so the hash of a service that doesn't use it stays the same.
+	Healthcheck *store.Healthcheck `json:",omitempty"`
+	// VarEnv lists the environment keys whose whole value is a ${NAME}
+	// variable: secrets, unless x-kipitiny.secrets says otherwise.
+	VarEnv []string `json:"-"`
+	X      Ext
 }
 
 // DockerSocket is the only path a service may bind-mount: the host's
@@ -102,7 +108,7 @@ type RateLimit struct {
 const ExtKey = "x-kipitiny"
 
 // supportedServiceKeys are the compose service keys Parse reads.
-var supportedServiceKeys = []string{"image", "build", "environment", "ports", "volumes", "deploy", "mem_limit", "cpus", "stop_grace_period", "network_mode", ExtKey}
+var supportedServiceKeys = []string{"image", "build", "environment", "ports", "expose", "volumes", "deploy", "mem_limit", "cpus", "stop_grace_period", "network_mode", "healthcheck", ExtKey}
 
 // Keys that change nothing kipitiny can't do itself (it orders, networks
 // and restarts services on its own): dropped with a warning. Any other
@@ -110,7 +116,7 @@ var supportedServiceKeys = []string{"image", "build", "environment", "ports", "v
 // the file says.
 var (
 	ignoredServiceKeys = []string{
-		"container_name", "depends_on", "expose", "healthcheck", "hostname",
+		"container_name", "depends_on", "hostname",
 		"labels", "links", "logging", "networks", "pull_policy", "restart",
 		"init", "extra_hosts", "stop_signal",
 	}
@@ -173,7 +179,16 @@ func Marshal(f File) ([]byte, error) {
 			}
 			o.Deploy = d
 		}
-		if x := s.X; !isZeroExt(x) {
+		x := s.X
+		if x.Port != 0 {
+			// The port HTTP is routed to is the one the container exposes.
+			o.Expose = []quoted{quoted(strconv.Itoa(x.Port))}
+			x.Port = 0
+		}
+		if h := s.Healthcheck; h != nil && h.Set() {
+			o.Healthcheck = outHealthcheckOf(*h)
+		}
+		if !isZeroExt(x) {
 			o.X = &x
 		}
 		out.Services[name] = o
@@ -211,11 +226,36 @@ type outService struct {
 	Image           string            `yaml:"image"`
 	Environment     map[string]string `yaml:"environment,omitempty"`
 	Ports           []quoted          `yaml:"ports,omitempty"`
+	Expose          []quoted          `yaml:"expose,omitempty"`
 	Volumes         []string          `yaml:"volumes,omitempty"`
 	NetworkMode     string            `yaml:"network_mode,omitempty"`
 	StopGracePeriod string            `yaml:"stop_grace_period,omitempty"`
+	Healthcheck     *outHealthcheck   `yaml:"healthcheck,omitempty"`
 	Deploy          *outDeploy        `yaml:"deploy,omitempty"`
 	X               *Ext              `yaml:"x-kipitiny,omitempty"`
+}
+
+type outHealthcheck struct {
+	Test        []string `yaml:"test,omitempty,flow"`
+	Interval    string   `yaml:"interval,omitempty"`
+	Timeout     string   `yaml:"timeout,omitempty"`
+	StartPeriod string   `yaml:"start_period,omitempty"`
+	Retries     int      `yaml:"retries,omitempty"`
+	Disable     bool     `yaml:"disable,omitempty"`
+}
+
+func outHealthcheckOf(h store.Healthcheck) *outHealthcheck {
+	if h.Test[0] == "NONE" {
+		return &outHealthcheck{Disable: true}
+	}
+	dur := func(secs int) string {
+		if secs == 0 {
+			return ""
+		}
+		return (time.Duration(secs) * time.Second).String()
+	}
+	return &outHealthcheck{Test: h.Test, Interval: dur(h.IntervalSeconds), Timeout: dur(h.TimeoutSeconds),
+		StartPeriod: dur(h.StartPeriodSeconds), Retries: h.Retries}
 }
 
 type outDeploy struct {
@@ -309,6 +349,9 @@ type parser struct {
 	warns   []string
 	errs    []string
 	missing []string
+	// varEnv collects the current service's environment keys written as a
+	// whole ${NAME}.
+	varEnv []string
 }
 
 func (p *parser) at(format string, args ...any) string {
@@ -365,6 +408,7 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 		return s
 	}
 	hasBuild := false
+	var expose []int
 	for k, v := range pairs(n) {
 		switch {
 		case k == "image":
@@ -375,6 +419,10 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 			s.Environment = p.environment(v)
 		case k == "ports":
 			s.Ports = p.ports(v)
+		case k == "expose":
+			expose = p.expose(v)
+		case k == "healthcheck":
+			s.Healthcheck = p.healthcheck(v)
 		case k == "volumes":
 			s.Volumes, s.DockerSocket = p.volumes(v)
 		case k == "network_mode":
@@ -408,6 +456,14 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 	case hasBuild:
 		p.warn("build is ignored, the image is pulled")
 	}
+	switch {
+	case len(expose) == 1 && s.X.Port == 0:
+		s.X.Port = expose[0]
+	case len(expose) > 1 && s.X.Port == 0:
+		p.warn("expose lists several ports: set x-kipitiny.port to the one HTTP is routed to")
+	}
+	s.VarEnv = slices.Compact(slices.Sorted(slices.Values(p.varEnv)))
+	p.varEnv = nil
 	if s.X.Kind == "" {
 		s.X.Kind = inferKind(s.Image)
 	}
@@ -448,12 +504,14 @@ func inferKind(image string) string {
 func (p *parser) environment(n *yaml.Node) map[string]string {
 	env := map[string]string{}
 	set := func(k string, v *string) {
-		if v == nil {
-			// KEY alone takes its value from the variables, like ${KEY}.
-			env[k] = p.envValue(k, "${"+k+"}")
-			return
+		val := "${" + k + "}" // KEY alone takes its value from the variables
+		if v != nil {
+			val = *v
 		}
-		env[k] = p.envValue(k, *v)
+		if _, ok := SoleVar(val); ok {
+			p.varEnv = append(p.varEnv, k)
+		}
+		env[k] = p.envValue(k, val)
 	}
 	switch n.Kind {
 	case yaml.MappingNode:
@@ -695,6 +753,70 @@ func (p *parser) memory(n *yaml.Node) int {
 }
 
 // duration reads a compose duration (1m30s) or seconds, as whole seconds.
+// expose reads the container ports other services (and kipitiny's router)
+// reach: "3000", 3000 or "3000/tcp".
+func (p *parser) expose(n *yaml.Node) []int {
+	if n.Kind != yaml.SequenceNode {
+		p.fail("expose must be a list")
+		return nil
+	}
+	var out []int
+	for _, item := range n.Content {
+		spec := p.str(item)
+		port, proto, _ := strings.Cut(spec, "/")
+		v, err := strconv.Atoi(port)
+		if err != nil || v < 1 || v > 65535 {
+			p.fail("expose %s: only single ports are supported", spec)
+			continue
+		}
+		if proto != "" && proto != "tcp" {
+			p.warn("expose %s is ignored (HTTP is routed over tcp)", spec)
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+// healthcheck reads compose's healthcheck: test as a string (run by the
+// shell) or a list, the durations, retries, and disable.
+func (p *parser) healthcheck(n *yaml.Node) *store.Healthcheck {
+	h := &store.Healthcheck{}
+	for k, v := range pairs(n) {
+		switch k {
+		case "test":
+			if v.Kind == yaml.SequenceNode {
+				for _, item := range v.Content {
+					h.Test = append(h.Test, p.str(item))
+				}
+			} else if cmd := p.str(v); cmd != "" {
+				h.Test = []string{"CMD-SHELL", cmd}
+			}
+		case "interval":
+			h.IntervalSeconds = p.duration(v)
+		case "timeout":
+			h.TimeoutSeconds = p.duration(v)
+		case "start_period":
+			h.StartPeriodSeconds = p.duration(v)
+		case "retries":
+			h.Retries = p.int(v)
+		case "disable":
+			if p.str(v) == "true" {
+				return &store.Healthcheck{Test: []string{"NONE"}}
+			}
+		case "start_interval":
+			p.warn("healthcheck start_interval is ignored (checked every second while starting)")
+		default:
+			p.fail("healthcheck %s is not supported", k)
+		}
+	}
+	if len(h.Test) == 0 {
+		p.fail("healthcheck needs a test")
+		return nil
+	}
+	return h
+}
+
 func (p *parser) duration(n *yaml.Node) int {
 	s := p.str(n)
 	if v, err := strconv.Atoi(s); err == nil {

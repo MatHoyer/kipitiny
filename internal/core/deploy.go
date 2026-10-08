@@ -584,6 +584,10 @@ func isActive(ct container.Summary, svc store.Service) bool {
 
 func readinessMode(svc store.Service) string {
 	switch {
+	case svc.Healthcheck.Set() && svc.Healthcheck.Test[0] == "NONE":
+		return "running for 5s"
+	case svc.Healthcheck.Set():
+		return "its healthcheck passing"
 	case svc.HealthPath != "":
 		return fmt.Sprintf("HTTP GET :%d%s", svc.Port, svc.HealthPath)
 	case probePort(svc) > 0:
@@ -652,6 +656,9 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 			})
 		}
 		cfg.ExposedPorts, host.PortBindings = portBindings(svc.PublishedPorts)
+		if svc.Healthcheck.Set() {
+			cfg.Healthcheck = healthConfig(svc.Healthcheck)
+		}
 		if svc.StopGraceSeconds > 0 {
 			// Docker's own stops (daemon shutdown, restarts) wait as long.
 			cfg.StopTimeout = &svc.StopGraceSeconds

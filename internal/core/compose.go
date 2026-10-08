@@ -108,6 +108,10 @@ func exportFile(p store.Project, svcs []store.Service, withProject bool) (compos
 		if s.Replicas > 1 {
 			cs.Replicas = s.Replicas
 		}
+		if s.Healthcheck.Set() {
+			h := s.Healthcheck
+			cs.Healthcheck = &h
+		}
 		for _, v := range s.Volumes {
 			if volumeUsers[v.Name] > 1 {
 				v.Name = s.Name + "-" + v.Name
@@ -125,14 +129,21 @@ func exportFile(p store.Project, svcs []store.Service, withProject bool) (compos
 			if len(s.Env) > 0 {
 				cs.Environment = map[string]string{}
 			}
+			// The secrets written as ${NAME} are secrets by default on import:
+			// x-kipitiny.secrets only lists them when that isn't enough (a
+			// secret holding a reference).
+			implicit := true
 			for k, v := range s.Env {
 				if slices.Contains(s.Secrets, k) && !soleRefRe.MatchString(v) {
 					cs.Environment[k] = secret(varName(s.Name, k), v)
 				} else {
 					cs.Environment[k] = compose.Escape(v)
+					implicit = implicit && !slices.Contains(s.Secrets, k)
 				}
 			}
-			cs.X.Secrets = slices.Clone(s.Secrets)
+			if !implicit {
+				cs.X.Secrets = slices.Clone(s.Secrets)
+			}
 		}
 		if m := s.Middlewares; len(m.BasicAuth) > 0 || len(m.IPAllowList) > 0 || m.RateLimit != nil || len(m.Headers) > 0 {
 			cm := &compose.Middlewares{IPAllowList: m.IPAllowList, Headers: m.Headers}
@@ -449,8 +460,19 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 	if in.Env == nil {
 		in.Env = map[string]string{}
 	}
+	if cs.Healthcheck != nil {
+		in.Healthcheck = *cs.Healthcheck
+	}
 	if in.Secrets == nil {
+		// Without x-kipitiny.secrets, a value given as a whole ${NAME} is a
+		// secret, unless it became a reference (a project variable keeps
+		// its own flag).
 		in.Secrets = []string{}
+		for _, k := range cs.VarEnv {
+			if v, ok := in.Env[k]; ok && !soleRefRe.MatchString(v) {
+				in.Secrets = append(in.Secrets, k)
+			}
+		}
 	}
 	if cs.X.Password != "" {
 		if pw, ok := a.resolve(cs.X.Password); ok {
@@ -556,6 +578,7 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 		MemoryMB:         &in.MemoryMB,
 		CPUs:             &in.CPUs,
 		HealthPath:       &in.HealthPath,
+		Healthcheck:      &in.Healthcheck,
 		PreDeploy:        &in.PreDeploy,
 		Volumes:          in.Volumes,
 		Middlewares:      in.Middlewares,
@@ -601,6 +624,9 @@ func changedFields(old, svc store.Service) []string {
 	add("memory", old.MemoryMB != svc.MemoryMB)
 	add("cpus", old.CPUs != svc.CPUs)
 	add("healthPath", old.HealthPath != svc.HealthPath)
+	add("healthcheck", !slices.Equal(old.Healthcheck.Test, svc.Healthcheck.Test) ||
+		old.Healthcheck.IntervalSeconds != svc.Healthcheck.IntervalSeconds || old.Healthcheck.TimeoutSeconds != svc.Healthcheck.TimeoutSeconds ||
+		old.Healthcheck.StartPeriodSeconds != svc.Healthcheck.StartPeriodSeconds || old.Healthcheck.Retries != svc.Healthcheck.Retries)
 	add("preDeploy", old.PreDeploy != svc.PreDeploy)
 	add("preBackup", old.PreBackup != svc.PreBackup)
 	add("volumes", !slices.Equal(old.Volumes, svc.Volumes))
