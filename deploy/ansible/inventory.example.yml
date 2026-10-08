@@ -1,18 +1,38 @@
 # Copy to inventory.yml and fill in. One manager; workers are optional extra
 # Docker hosts the manager drives over SSH (Settings → Servers).
+#
+# Host keys are just labels; ansible_host is the address SSH connects to. Use
+# the server's IP: behind a Cloudflare tunnel the domain resolves to
+# Cloudflare, not to the server.
+#
+# Secrets (tunnel tokens): `ansible-vault encrypt_string '<token>' --name
+# kipitiny_cloudflare_tunnel_token`, paste the output in place of the plain
+# value, then run `ansible-playbook site.yml --ask-vault-pass`.
 all:
   vars:
-    ansible_user: root # or a sudo user
+    ansible_user: root # or a sudo user, logging in with an SSH key
+    # ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+    # ansible_port: 22
   children:
     manager:
       hosts:
-        kipitiny.example.com:
+        kipitiny:
+          ansible_host: 203.0.113.10
           kipitiny_domain: kipitiny.example.com
           kipitiny_acme_email: you@example.com
-          # kipitiny_cloudflare_tunnel_token: "{{ vault_tunnel_token }}"
+          # Cloudflare tunnel token: keeps ports 80/443 closed.
+          # kipitiny_cloudflare_tunnel_token: !vault |
+          #   $ANSIBLE_VAULT;1.1;AES256
+          #   ...
+          # Any other KIPITINY_* setting (docs: /docs/configuration).
+          # kipitiny_env:
+          #   KIPITINY_LOG_LEVEL: debug
+          #   KIPITINY_MANAGER_BACKUP_KEEP: 30
     workers:
       hosts:
-        # worker-1.example.com:
+        # worker-1:
+        #   ansible_host: 203.0.113.11
         #   # Its own tunnel (one per server); also paste it in the manager
         #   # under Settings → Servers → Network.
-        #   kipitiny_cloudflare_tunnel_token: "{{ vault_worker1_tunnel_token }}"
+        #   kipitiny_cloudflare_tunnel_token: !vault |
+        #     ...

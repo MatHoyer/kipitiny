@@ -51,6 +51,6 @@
 - name: Show how to finish the setup
   ansible.builtin.debug:
     msg:
-      - "Open {{ ('https://' + kipitiny_domain) if kipitiny_domain else ('http://' + inventory_hostname + ':3000') }} and create the admin account."
+      - "Open {{ ('https://' + kipitiny_domain) if kipitiny_domain else ('http://' + (ansible_host | default(inventory_hostname)) + ':3000') }} and create the admin account."
       - "Setup token: {{ kipitiny_logs.stdout | regex_findall('setup_token=(\\S+)') | last }}"
   when: kipitiny_auth.json.setupRequired
