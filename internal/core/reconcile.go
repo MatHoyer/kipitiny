@@ -236,13 +236,14 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 	if err != nil {
 		return err
 	}
-	// Recreate replicas as deployed; only the count follows live settings.
+	// Recreate replicas as deployed, but with the live name (a rename doesn't
+	// redeploy) and replica count.
 	want := dep.Config
 	if want.ID == "" { // deployed before snapshots existed
 		want = svc
 		want.Image = dep.Image
 	}
-	want.Replicas = svc.Replicas
+	want.Name, want.Replicas = svc.Name, svc.Replicas
 	if want.Kind.IsDatabase() {
 		want.Replicas = 1
 	}

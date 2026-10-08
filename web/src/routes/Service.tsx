@@ -28,6 +28,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
+import { RenameCard } from "@/components/rename-card";
 import { SaveBar } from "@/components/save-bar";
 import { UptimeSection } from "@/components/uptime";
 import { ServiceUsageSection, UsageGrid, useServiceStats } from "@/components/usage";
@@ -95,6 +96,14 @@ export function Service() {
     meta: { error: "Couldn't change the service state" },
     mutationFn: (a: "start" | "stop" | "restart") => api.serviceAction(id, a),
     onSuccess: (svc) => qc.setQueryData(["service", id], svc),
+  });
+  const rename = useMutation({
+    meta: { error: "Couldn't rename the service" },
+    mutationFn: (name: string) => api.renameService(id, name),
+    onSuccess: (svc) => {
+      qc.setQueryData(["service", id], svc);
+      qc.invalidateQueries({ queryKey: ["services", svc.projectId] });
+    },
   });
   const remove = useMutation({
     meta: { error: "Couldn't delete the service" },
@@ -268,6 +277,18 @@ export function Service() {
           )}
           <TabsContent value="settings" className="flex flex-col gap-6">
             {gitManaged && <GitManagedNote path={git.data!.path} />}
+            <RenameCard
+              key={svc.name}
+              name={svc.name}
+              description={
+                isDb
+                  ? "Nothing restarts. The apps using it get their references updated and are redeployed."
+                  : "Nothing restarts. Until its next deploy, other services can still reach it by its old name."
+              }
+              disabled={gitManaged}
+              pending={rename.isPending}
+              onRename={(name) => rename.mutate(name)}
+            />
             <fieldset disabled={gitManaged} className="contents">
               <Settings svc={svc} />
               {svc.kind === "app" && <PortsCard key={svc.id} svc={svc} />}
