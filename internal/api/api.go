@@ -137,6 +137,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("GET /api/git-providers/{id}/repos", a.gitProviderRepos)
 	mux.HandleFunc("GET /api/git-providers/{id}/branches", a.gitProviderBranches)
 	mux.HandleFunc("POST /api/git-providers/github", a.startGitHubApp)
+	mux.HandleFunc("GET /api/git-providers/github/launch", a.launchGitHubApp)
 	mux.HandleFunc("GET /api/git-providers/github/created", a.gitHubAppCreated)
 	mux.HandleFunc("GET /api/git-providers/github/installed", a.gitHubAppInstalled)
 	mux.HandleFunc("GET /api/git-providers/oauth/callback", a.gitProviderOAuthCallback)

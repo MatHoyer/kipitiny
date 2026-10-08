@@ -775,9 +775,9 @@ export const api = {
   testGitProvider: (id: string) => request<void>(`/git-providers/${id}/test`, { method: "POST" }),
   /** The forge page that connects the provider (OAuth consent, or the GitHub App's installation). */
   authorizeGitProvider: (id: string) => request<{ url: string }>(`/git-providers/${id}/authorize`, { method: "POST" }),
-  /** The GitHub App manifest form to post to GitHub. */
+  /** The manager page that posts the GitHub App manifest to GitHub. */
   startGitHubApp: (input: { name: string; baseUrl: string; org: string }) =>
-    request<{ url: string; manifest: string }>("/git-providers/github", json("POST", input)),
+    request<{ url: string }>("/git-providers/github", json("POST", input)),
   gitProviderRepos: (id: string) => request<GitRepo[]>(`/git-providers/${id}/repos`),
   gitProviderBranches: (id: string, repo: string) =>
     request<string[]>(`/git-providers/${id}/branches?repo=${encodeURIComponent(repo)}`),

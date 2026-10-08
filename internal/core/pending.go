@@ -53,6 +53,18 @@ func (p *pending[T]) evict() {
 	}
 }
 
+// peek returns the entry without removing it, unless it expired.
+func (p *pending[T]) peek(key string) (T, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	e, ok := p.m[key]
+	if !ok || time.Now().After(e.exp) {
+		var zero T
+		return zero, false
+	}
+	return e.v, true
+}
+
 // take removes and returns the entry, unless it expired.
 func (p *pending[T]) take(key string) (T, time.Time, bool) {
 	p.mu.Lock()
