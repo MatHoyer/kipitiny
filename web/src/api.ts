@@ -555,7 +555,8 @@ export interface GitInput {
   repoUrl: string;
   branch: string;
   path: string;
-  token: string;
+  /** The git provider reading a private repository; "" for a public one. */
+  providerId: string;
   autoSync: boolean;
   pollSeconds: number;
 }
@@ -571,6 +572,41 @@ export interface GitStatus extends GitInput {
   applied: Record<string, string>;
   /** Services deployed with another image than the file's (a tag from CI). */
   drift: string[];
+}
+
+export type GitProviderKind = "github" | "gitlab" | "gitea";
+
+/** Read access to a forge account's repositories: a GitHub App installation or a GitLab/Gitea OAuth authorization. */
+export interface GitProvider {
+  id: string;
+  kind: GitProviderKind;
+  name: string;
+  baseUrl: string;
+  /** The account it's installed on or authorized by. */
+  account: string;
+  appSlug?: string;
+  clientId?: string;
+  /** Masked. */
+  clientSecret?: string;
+  connected: boolean;
+  /** Pushes reach the manager through the app, for every repository. */
+  webhooks: boolean;
+  createdAt: string;
+}
+
+export interface GitProviderInput {
+  kind?: GitProviderKind;
+  name: string;
+  baseUrl: string;
+  clientId: string;
+  clientSecret: string;
+}
+
+export interface GitRepo {
+  fullName: string;
+  cloneUrl: string;
+  defaultBranch: string;
+  private: boolean;
 }
 
 export class ApiError extends Error {
@@ -726,6 +762,19 @@ export const api = {
   createServer: (s: ServerInput) => request<Server>("/servers", json("POST", s)),
   updateServer: (id: string, s: ServerInput) => request<Server>(`/servers/${id}`, json("PUT", s)),
   deleteServer: (id: string) => request<void>(`/servers/${id}`, { method: "DELETE" }),
+  gitProviders: () => request<GitProvider[]>("/git-providers"),
+  createGitProvider: (p: GitProviderInput) => request<GitProvider>("/git-providers", json("POST", p)),
+  updateGitProvider: (id: string, p: GitProviderInput) => request<GitProvider>(`/git-providers/${id}`, json("PUT", p)),
+  deleteGitProvider: (id: string) => request<void>(`/git-providers/${id}`, { method: "DELETE" }),
+  testGitProvider: (id: string) => request<void>(`/git-providers/${id}/test`, { method: "POST" }),
+  /** The forge page that connects the provider (OAuth consent, or the GitHub App's installation). */
+  authorizeGitProvider: (id: string) => request<{ url: string }>(`/git-providers/${id}/authorize`, { method: "POST" }),
+  /** The GitHub App manifest form to post to GitHub. */
+  startGitHubApp: (input: { name: string; baseUrl: string; org: string }) =>
+    request<{ url: string; manifest: string }>("/git-providers/github", json("POST", input)),
+  gitProviderRepos: (id: string) => request<GitRepo[]>(`/git-providers/${id}/repos`),
+  gitProviderBranches: (id: string, repo: string) =>
+    request<string[]>(`/git-providers/${id}/branches?repo=${encodeURIComponent(repo)}`),
   registries: () => request<Registry[]>("/registries"),
   createRegistry: (r: RegistryInput) => request<Registry>("/registries", json("POST", r)),
   updateRegistry: (id: string, r: RegistryInput) => request<Registry>(`/registries/${id}`, json("PUT", r)),

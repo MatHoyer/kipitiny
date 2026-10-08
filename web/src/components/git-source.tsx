@@ -1,14 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { GitBranch, Link2Off, RefreshCw, ScanSearch } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { CheckboxField, CopyButton, ErrorText, Loading, Mono, Section, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PlanView } from "@/components/compose-dialog";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
+import { FloatingSelect } from "@/components/ui/floating-select";
 import { formatDateTime, timeAgo } from "@/lib/format";
 import { useDocsUrl } from "@/lib/docs";
+import { gitProviderIcon } from "@/routes/settings/GitProviders";
 import { api, type ComposePlan, type GitInput, type GitStatus } from "../api";
 
 /** The project's git link, or null; undefined while loading. */
@@ -32,17 +35,45 @@ export function GitSource({ projectId }: { projectId: string }) {
   return <GitStatusCard projectId={projectId} git={git.data} onEdit={() => setEditing(true)} />;
 }
 
-const emptyInput: GitInput = { repoUrl: "", branch: "main", path: "compose.yaml", token: "", autoSync: true, pollSeconds: 300 };
+const emptyInput: GitInput = { repoUrl: "", branch: "main", path: "compose.yaml", providerId: "", autoSync: true, pollSeconds: 300 };
+
+/** The select's value for "no provider" (a select item can't be empty). */
+const publicRepo = "public";
+
+const sameRepo = (a: string, b: string) => {
+  const norm = (s: string) => s.trim().toLowerCase().replace(/\/+$/, "").replace(/\.git$/, "");
+  return !!a && norm(a) === norm(b);
+};
+
+const useGitProviders = () => useQuery({ queryKey: ["git-providers"], queryFn: api.gitProviders });
 
 function GitForm({ projectId, current, onDone }: { projectId: string; current?: GitStatus; onDone: () => void }) {
   const qc = useQueryClient();
   const docs = useDocsUrl();
-  const [input, setInput] = useState<GitInput>(current ? { ...current } : emptyInput);
+  const [input, setInput] = useState<GitInput>(current ? { ...current, providerId: current.providerId ?? "" } : emptyInput);
   const [plan, setPlan] = useState<ComposePlan | null>(null);
   const set = (patch: Partial<GitInput>) => {
     setInput({ ...input, ...patch });
     setPlan(null);
   };
+  const providers = useGitProviders();
+  const usable = providers.data?.filter((p) => p.connected || p.id === input.providerId) ?? [];
+  const repos = useQuery({
+    queryKey: ["git-repos", input.providerId],
+    queryFn: () => api.gitProviderRepos(input.providerId),
+    enabled: !!input.providerId,
+    staleTime: 60_000,
+  });
+  const repo = repos.data?.find((r) => sameRepo(r.cloneUrl, input.repoUrl));
+  const branches = useQuery({
+    queryKey: ["git-branches", input.providerId, repo?.fullName],
+    queryFn: () => api.gitProviderBranches(input.providerId, repo!.fullName),
+    enabled: !!repo,
+    staleTime: 60_000,
+  });
+  const repoOptions = (repos.data ?? []).map((r) => ({ value: r.cloneUrl, label: r.fullName }));
+  if (input.repoUrl && !repo) repoOptions.unshift({ value: input.repoUrl, label: input.repoUrl });
+  const branchOptions = [...new Set([input.branch, ...(branches.data ?? [])])].filter(Boolean).map((b) => ({ value: b, label: b }));
   const preview = useMutation({ mutationFn: () => api.previewProjectGit(projectId, input), onSuccess: setPlan });
   const link = useMutation({
     mutationFn: () => api.linkProjectGit(projectId, input),
@@ -74,24 +105,67 @@ function GitForm({ projectId, current, onDone }: { projectId: string; current?: 
     >
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <FloatingInput
-            label="Repository (https)"
-            required
+          <FloatingSelect
+            label="Access"
             className="sm:col-span-2"
-            value={input.repoUrl}
-            onChange={(e) => set({ repoUrl: e.target.value })}
-            placeholder="https://github.com/me/infra.git"
+            value={input.providerId || publicRepo}
+            onValueChange={(v) => set({ providerId: v === publicRepo ? "" : v, repoUrl: "", branch: "main" })}
+            loading={providers.isLoading}
+            options={[
+              { value: publicRepo, label: "Public repository" },
+              ...usable.map((p) => ({
+                value: p.id,
+                label: (
+                  <span className="flex items-center gap-2 [&>svg]:size-4">
+                    {gitProviderIcon(p.kind)}
+                    {p.name}
+                    {p.account && <span className="text-muted-foreground">{p.account}</span>}
+                  </span>
+                ),
+              })),
+            ]}
+            description={
+              <>
+                A private repository is read through a{" "}
+                <Link to="/settings/git-providers" className="underline underline-offset-2">
+                  git provider
+                </Link>
+                .
+              </>
+            }
           />
-          <FloatingInput label="Branch" value={input.branch} onChange={(e) => set({ branch: e.target.value })} placeholder="main" />
+          {input.providerId ? (
+            <FloatingSelect
+              label="Repository"
+              className="sm:col-span-2"
+              value={input.repoUrl}
+              onValueChange={(v) => set({ repoUrl: v, branch: repos.data?.find((r) => r.cloneUrl === v)?.defaultBranch || "main" })}
+              loading={repos.isLoading}
+              options={repoOptions}
+              description={repos.error ? <span className="text-destructive">{repos.error.message}</span> : undefined}
+            />
+          ) : (
+            <FloatingInput
+              label="Repository (https)"
+              required
+              className="sm:col-span-2"
+              value={input.repoUrl}
+              onChange={(e) => set({ repoUrl: e.target.value })}
+              placeholder="https://github.com/me/infra.git"
+            />
+          )}
+          {input.providerId && repo ? (
+            <FloatingSelect
+              label="Branch"
+              value={input.branch}
+              onValueChange={(v) => set({ branch: v })}
+              loading={branches.isLoading}
+              options={branchOptions}
+            />
+          ) : (
+            <FloatingInput label="Branch" value={input.branch} onChange={(e) => set({ branch: e.target.value })} placeholder="main" />
+          )}
           <FloatingInput label="Compose file" value={input.path} onChange={(e) => set({ path: e.target.value })} placeholder="compose.yaml" />
-          <FloatingInput
-            label="Access token"
-            type="password"
-            autoComplete="off"
-            value={input.token}
-            onChange={(e) => set({ token: e.target.value })}
-            description="Read access to the repository's contents; empty for a public one."
-          />
           <FloatingInput
             label="Poll every (seconds)"
             type="number"
@@ -159,6 +233,8 @@ function GitStatusCard({ projectId, git, onEdit }: { projectId: string; git: Git
     onSuccess: refresh,
   });
   const webhook = `${window.location.origin}${git.webhookPath}`;
+  const providers = useGitProviders();
+  const provider = providers.data?.find((p) => p.id === git.providerId);
   return (
     <Section
       title="Git"
@@ -186,17 +262,39 @@ function GitStatusCard({ projectId, git, onEdit }: { projectId: string; git: Git
         <dd>{git.lastCommit ? <Mono>{git.lastCommit.slice(0, 12)}</Mono> : "not synced yet"}</dd>
         <dt className="text-muted-foreground">Last sync</dt>
         <dd title={git.lastSyncedAt && formatDateTime(git.lastSyncedAt)}>{git.lastSyncedAt ? timeAgo(git.lastSyncedAt) : "never"}</dd>
+        <dt className="text-muted-foreground">Access</dt>
+        <dd className="flex items-center gap-1.5 [&>svg]:size-4">
+          {git.providerId ? (
+            provider ? (
+              <>
+                {gitProviderIcon(provider.kind)}
+                {provider.name}
+                {!provider.connected && <span className="text-destructive">(not connected)</span>}
+              </>
+            ) : (
+              "a git provider"
+            )
+          ) : (
+            "public repository"
+          )}
+        </dd>
         <dt className="text-muted-foreground">Push webhook</dt>
-        <dd className="flex min-w-0 items-center gap-1">
-          <Mono>{webhook}</Mono>
-          <CopyButton value={webhook} label="Copy URL" />
-        </dd>
-        <dt className="text-muted-foreground">Webhook secret</dt>
-        <dd className="flex items-center gap-1">
-          <Mono>••••••••</Mono>
-          <CopyButton value={git.webhookSecret} label="Copy secret" />
-          <span className="text-xs text-muted-foreground">GitHub/Gitea secret, GitLab token, or Bearer token.</span>
-        </dd>
+        {provider?.webhooks ? (
+          <dd>Delivered by the GitHub App, nothing to set up.</dd>
+        ) : (
+          <>
+            <dd className="flex min-w-0 items-center gap-1">
+              <Mono>{webhook}</Mono>
+              <CopyButton value={webhook} label="Copy URL" />
+            </dd>
+            <dt className="text-muted-foreground">Webhook secret</dt>
+            <dd className="flex items-center gap-1">
+              <Mono>••••••••</Mono>
+              <CopyButton value={git.webhookSecret} label="Copy secret" />
+              <span className="text-xs text-muted-foreground">GitHub/Gitea secret, GitLab token, or Bearer token.</span>
+            </dd>
+          </>
+        )}
         {git.drift.length > 0 && (
           <>
             <dt className="text-muted-foreground">Other image than the file</dt>
