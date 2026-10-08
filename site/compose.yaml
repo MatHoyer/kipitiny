@@ -7,9 +7,9 @@ services:
   homepage:
     image: ghcr.io/mathoyer/kipitiny-homepage:latest
     mem_limit: 64m
+    expose: ["80"]
     x-kipitiny:
       domain: kipitiny.mathieuhoyer.fr
-      port: 80
       icon: nginx
       middlewares:
         headers:
