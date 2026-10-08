@@ -27,9 +27,6 @@ type Config struct {
 	// that is required to create the admin account.
 	SetupToken string
 
-	// ProtonPassCLI is the pass-cli binary (path or name on PATH).
-	ProtonPassCLI string
-
 	// Version is the running build (set by main, not the environment).
 	Version string
 	Update  Update
@@ -85,7 +82,6 @@ func Load() Config {
 		LogLevel:       env("KIPITINY_LOG_LEVEL", "info"),
 		TrustedProxies: prefixes(env("KIPITINY_TRUSTED_PROXIES", "")),
 		SetupToken:     env("KIPITINY_SETUP_TOKEN", ""),
-		ProtonPassCLI:  env("KIPITINY_PROTONPASS_CLI", "pass-cli"),
 		Traefik: Traefik{
 			Enabled:      env("KIPITINY_TRAEFIK", "true") != "false",
 			Image:        env("KIPITINY_TRAEFIK_IMAGE", "traefik:v3.7"),

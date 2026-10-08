@@ -1,15 +1,10 @@
 // Package secrets connects password managers that service env can reference.
-// Each provider owns a reference scheme (pass:// for Proton Pass); the manager
+// Each provider owns a reference scheme (e.g. op:// for 1Password); the manager
 // resolves references at deploy time and never stores the values.
 package secrets
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"io"
-	"os"
-	"strconv"
 	"strings"
 )
 
@@ -38,51 +33,6 @@ type Info struct {
 	Example string `json:"example"`
 	// Help says how to get a token, as plain text.
 	Help string `json:"help"`
-}
-
-// EnvPrefix names the variables a CLI wrapper resolves for PrintEnv. CLIs
-// such as `pass-cli run` and `op run` resolve references found in the
-// environment of the command they start: the manager starts itself
-// (`kipitiny secrets-env`) to read the results back.
-const EnvPrefix = "KIPITINY_SECRET_"
-
-// RefEnv lists refs as EnvPrefix variables, in order.
-func RefEnv(refs []string) []string {
-	env := make([]string, len(refs))
-	for i, r := range refs {
-		env[i] = EnvPrefix + strconv.Itoa(i) + "=" + r
-	}
-	return env
-}
-
-// PrintEnv writes the EnvPrefix variables of this process as a JSON array, in
-// the order of RefEnv.
-func PrintEnv(w io.Writer) error {
-	var vals []string
-	for i := 0; ; i++ {
-		v, ok := os.LookupEnv(EnvPrefix + strconv.Itoa(i))
-		if !ok {
-			break
-		}
-		vals = append(vals, v)
-	}
-	return json.NewEncoder(w).Encode(vals)
-}
-
-// ParseEnv maps refs to the values PrintEnv wrote for them.
-func ParseEnv(out []byte, refs []string) (map[string]string, error) {
-	var vals []string
-	if err := json.Unmarshal(out, &vals); err != nil {
-		return nil, err
-	}
-	if len(vals) != len(refs) {
-		return nil, errors.New("secrets: resolved values don't match the references")
-	}
-	m := make(map[string]string, len(refs))
-	for i, r := range refs {
-		m[r] = vals[i]
-	}
-	return m, nil
 }
 
 // SchemeOf returns the scheme of a reference, "" if it has none.

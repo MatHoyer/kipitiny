@@ -110,7 +110,7 @@ Any other key is refused, because ignoring it would run something different from
 
 | Field | Meaning |
 |---|---|
-| `basic_auth` | Up to 20 users, each with a `name` and either a `hash` (bcrypt, e.g. from `htpasswd -nbB user pass`) or a `ref` (a password manager reference `{{ pass://Vault/Item/field }}`, hashed at deploy). Plain passwords are refused: they'd sit in the file. |
+| `basic_auth` | Up to 20 users, each with a `name` and either a `hash` (bcrypt, e.g. from `htpasswd -nbB user pass`) or a `ref` (a password manager reference `{{ scheme://Vault/Item/field }}`, hashed at deploy; none ships yet). Plain passwords are refused: they'd sit in the file. |
 | `ip_allowlist` | Up to 50 IPs or CIDR ranges allowed to connect. |
 | `rate_limit` | `average` requests per second per client IP, with bursts up to `burst` (defaults to `average`). |
 | `headers` | Response headers to set (up to 20); an empty value removes the header. |
@@ -133,7 +133,6 @@ Two syntaxes, resolved at different times:
 | `${NAME}` | When the file is applied | A compose variable, from the `.env` given with the file. `$$` is a literal `$`. `${NAME:-default}`, `${NAME-default}`, `${NAME:?message}` and `$NAME` work as in Docker Compose. |
 | `{{ project.NAME }}` | At every deploy | The project's shared variable `NAME`. |
 | `{{ db.SERVICE.FIELD }}` | At every deploy | A database's connection detail (see above). |
-| `{{ pass://Vault/Item/field }}` | At every deploy | A secret read from a connected password manager; never stored by kipitiny. |
 
 Compose variables work in every value except inside `x-kipitiny` blocks (bcrypt hashes are full of `$`). There, a value that is exactly `${NAME}` (`password`, a basic auth `hash`, a project variable) is taken from the `.env`.
 
