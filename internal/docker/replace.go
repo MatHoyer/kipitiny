@@ -25,7 +25,18 @@ func (c *Client) ReplaceContainer(ctx context.Context, id, image string, stopTim
 		return fmt.Errorf("inspect %s: %w", id, err)
 	}
 	old := res.Container
-	spec := replacementSpec(old, image)
+	ref := image
+	// A container on a floating tag (compose's default, :latest) keeps
+	// naming it, pointed at the new image: naming the version instead would
+	// read as a compose pin, and the next `up` would go back to what the tag
+	// named before.
+	if floating(old.Config.Image, image) {
+		if _, err := c.ImageTag(ctx, client.ImageTagOptions{Source: image, Target: old.Config.Image}); err != nil {
+			return fmt.Errorf("tag %s: %w", old.Config.Image, err)
+		}
+		ref = old.Config.Image
+	}
+	spec := replacementSpec(old, ref)
 	// Values the old image supplied (ENV, HEALTHCHECK, ...) must come from
 	// the new image instead, or its changes would be masked.
 	if img, err := c.ImageInspect(ctx, old.Image); err != nil {
@@ -79,6 +90,16 @@ func (c *Client) restart(ctx context.Context, id string, logf func(string, ...an
 	if _, err := c.ContainerStart(ctx, id, client.ContainerStartOptions{}); err != nil {
 		logf("restart previous container: %v", err)
 	}
+}
+
+// floating reports whether ref names image's repository untagged or as
+// latest.
+func floating(ref, image string) bool {
+	repo := image
+	if i := strings.LastIndex(image, ":"); i >= 0 && !strings.Contains(image[i:], "/") {
+		repo = image[:i]
+	}
+	return ref == repo || ref == repo+":latest"
 }
 
 // replacementSpec is old's creation spec with a new image.
