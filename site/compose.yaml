@@ -1,7 +1,7 @@
 # The kipitiny website, as it runs on kipitiny: a project linked to this file
 # (Project › Git, path site/compose.yaml). A commit that changes it is applied
-# by the next sync; each release's image is deployed by the site workflow
-# (`kipitiny deploy --tag`), which the file doesn't need to follow.
+# by the next sync. Each release commit pins the image to its version, and
+# reaches main only once the site workflow has pushed that image.
 name: kipitiny-site
 services:
   homepage:
