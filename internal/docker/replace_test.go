@@ -88,3 +88,22 @@ func TestStripImageDefaults(t *testing.T) {
 		t.Errorf("image defaults kept: %+v", cfg)
 	}
 }
+
+func TestFloating(t *testing.T) {
+	const image = "ghcr.io/mathoyer/kipitiny:1.1.0"
+	tests := map[string]bool{
+		"ghcr.io/mathoyer/kipitiny":        true,
+		"ghcr.io/mathoyer/kipitiny:latest": true,
+		"ghcr.io/mathoyer/kipitiny:1.0.0":  false,
+		"ghcr.io/other/kipitiny:latest":    false,
+		"localhost:5000/kipitiny:latest":   false,
+	}
+	for ref, want := range tests {
+		if got := floating(ref, image); got != want {
+			t.Errorf("floating(%q) = %v, want %v", ref, got, want)
+		}
+	}
+	if !floating("localhost:5000/kipitiny", "localhost:5000/kipitiny:2.0.0") {
+		t.Error("a registry port is not a tag")
+	}
+}
