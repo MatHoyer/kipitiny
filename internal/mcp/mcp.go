@@ -41,7 +41,8 @@ func Handler(c *core.Core, version string) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "kipitiny", Version: version}, &mcp.ServerOptions{
 		Instructions: "Manage apps and PostgreSQL/Redis databases on this kipitiny server. " +
 			"Refer to services as project/service. Read tools need a read token, " +
-			"deploy/rollback/backup need deploy (with deploy, deploy_image only changes the tag of an existing app), set_project_env needs admin, restore needs admin and an explicit confirmation. " +
+			"deploy/rollback/backup/service_action need deploy (with deploy, deploy_image only changes the tag of an existing app); " +
+			"creating, renaming, git links, set_project_env and apply_project_compose need admin; restore needs admin and an explicit confirmation. " +
 			"Documentation of this version, as markdown: " + docsIndex + " lists every page; read the relevant one before guessing how a feature works. " +
 			"If the site is unreachable, the same pages are in " + docsSources + ".",
 	})
@@ -51,6 +52,25 @@ func Handler(c *core.Core, version string) http.Handler {
 
 	mcp.AddTool(server, &mcp.Tool{Name: "list_services", Annotations: readOnly,
 		Description: "List every project with its services, their kind, image, domain and current status."}, t.listServices)
+	mcp.AddTool(server, &mcp.Tool{Name: "list_projects", Annotations: readOnly,
+		Description: "List every project, including empty ones, with its server, service names and the git compose file it follows, if any."}, t.listProjects)
+	mcp.AddTool(server, &mcp.Tool{Name: "create_project",
+		Description: "Create an empty project on a server (this one by default). Add services with deploy_image, apply_project_compose or link_project_git. Needs admin."}, t.createProject)
+	mcp.AddTool(server, &mcp.Tool{Name: "rename_project",
+		Description: "Rename a project. Its containers are renamed in place; nothing restarts. Needs admin."}, t.renameProject)
+	mcp.AddTool(server, &mcp.Tool{Name: "rename_service",
+		Description: "Rename a service. Nothing restarts; until its next deploy it also answers to its old name on the project network. Renaming a database rewrites the {{ db.NAME.* }} references to it and redeploys the apps using it. Not for projects linked to git (edit the file). Needs admin."}, t.renameService)
+	mcp.AddTool(server, &mcp.Tool{Name: "get_project_git", Annotations: readOnly,
+		Description: "A project's git link: repository, branch, compose file path, auto sync, the last sync's commit, time, error and warnings, and the services running another image than the file's."}, t.getProjectGit)
+	mcp.AddTool(server, &mcp.Tool{Name: "link_project_git", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+		Description: "Link a project to a compose file in a git repository (see " + docsBase + "/compose/llms.txt). The file then owns the services: every commit is applied and apps it doesn't list are deleted with their volumes. " +
+			"Run with dry_run first to see what the first sync changes. Needs admin."}, t.linkProjectGit)
+	mcp.AddTool(server, &mcp.Tool{Name: "sync_project_git", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+		Description: "Apply a git-linked project's compose file now, as a push would. dry_run returns the plan only. Needs admin."}, t.syncProjectGit)
+	mcp.AddTool(server, &mcp.Tool{Name: "service_action",
+		Description: "Start, stop or restart a service. A stopped service stays stopped until started."}, t.serviceAction)
+	mcp.AddTool(server, &mcp.Tool{Name: "get_deployment_log", Annotations: readOnly,
+		Description: "The log of a deployment (pull, readiness, errors): a service's latest one, or one by ID from get_app_status."}, t.getDeploymentLog)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_app_status", Annotations: readOnly,
 		Description: "Status of one service: containers and health, settings (secrets masked), the last deployments with errors, current CPU/memory/network use, uptime check results."}, t.getAppStatus)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_logs", Annotations: readOnly,
