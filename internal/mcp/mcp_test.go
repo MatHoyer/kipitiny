@@ -73,7 +73,9 @@ func TestTools(t *testing.T) {
 	for _, tool := range tools.Tools {
 		names = append(names, tool.Name)
 	}
-	for _, want := range []string{"list_services", "get_app_status", "get_logs", "deploy", "deploy_image", "rollback", "backup_database", "list_backups", "list_storage", "restore_database"} {
+	for _, want := range []string{"list_projects", "list_services", "get_app_status", "get_logs", "get_deployment_log", "deploy", "deploy_image", "rollback",
+		"service_action", "create_project", "rename_project", "rename_service", "get_project_git", "link_project_git", "sync_project_git",
+		"backup_database", "list_backups", "list_storage", "restore_database"} {
 		if !strings.Contains(strings.Join(names, ","), want) {
 			t.Errorf("tool %s missing: %v", want, names)
 		}
