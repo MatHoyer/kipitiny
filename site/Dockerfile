@@ -1,4 +1,7 @@
-FROM node:24-alpine AS build
+# The build runs on the runner's platform: its output is static files, the
+# same for every architecture, and node under QEMU emulation is slow and can
+# crash (SIGILL).
+FROM --platform=$BUILDPLATFORM node:24-alpine AS build
 WORKDIR /src
 RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
