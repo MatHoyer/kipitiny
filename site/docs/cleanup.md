@@ -1,7 +1,7 @@
 ---
 title: Cleanup
 description: Free disk space on every server, on a schedule or by hand
-order: 9
+order: 10
 ---
 
 *System › Cleanup* frees disk space on every server, on a cron schedule
