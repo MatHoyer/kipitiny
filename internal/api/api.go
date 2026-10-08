@@ -50,6 +50,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("GET /api/projects/{id}", a.getProject)
 	mux.HandleFunc("DELETE /api/projects/{id}", a.deleteProject)
 	mux.HandleFunc("PUT /api/projects/{id}/env", a.setProjectEnv)
+	mux.HandleFunc("PUT /api/projects/{id}/name", a.renameProject)
 	mux.HandleFunc("GET /api/projects/{id}/compose", a.exportCompose)
 	mux.HandleFunc("POST /api/projects/{id}/compose", a.applyCompose)
 	mux.HandleFunc("POST /api/projects/{id}/export", a.exportBundle)
@@ -66,6 +67,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("GET /api/services/{id}", a.getService)
 	mux.HandleFunc("PATCH /api/services/{id}", a.updateService)
 	mux.HandleFunc("DELETE /api/services/{id}", a.deleteService)
+	mux.HandleFunc("PUT /api/services/{id}/name", a.renameService)
 	mux.HandleFunc("POST /api/services/{id}/deploy", a.deployService)
 	mux.HandleFunc("POST /api/services/{id}/rollback", a.rollbackService)
 	mux.HandleFunc("POST /api/services/{id}/{action}", a.serviceAction)
@@ -231,6 +233,21 @@ func (a *API) setProjectEnv(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, err := a.core.SetProjectEnv(r.Context(), r.PathValue("id"), body.Env, body.Secrets)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
+}
+
+func (a *API) renameProject(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	p, err := a.core.RenameProject(r.Context(), r.PathValue("id"), body.Name)
 	if err != nil {
 		a.fail(w, err)
 		return

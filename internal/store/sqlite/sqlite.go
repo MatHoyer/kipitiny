@@ -167,6 +167,18 @@ func (s *Store) ListProjects(ctx context.Context) ([]store.Project, error) {
 	return ps, mapErr(err)
 }
 
+func (s *Store) RenameProject(ctx context.Context, id, name string) error {
+	res, err := s.db.NewUpdate().Model((*store.Project)(nil)).
+		Set("name = ?", name).Set("updated_at = ?", now()).Where("id = ?", id).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) SetProjectEnv(ctx context.Context, id string, env map[string]string, secrets []string) (store.Project, error) {
 	if env == nil {
 		env = map[string]string{}
@@ -238,6 +250,18 @@ func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Ser
 		return store.Service{}, store.ErrNotFound
 	}
 	return svc, nil
+}
+
+func (s *Store) RenameService(ctx context.Context, id, name string) error {
+	res, err := s.db.NewUpdate().Model((*store.Service)(nil)).
+		Set("name = ?", name).Set("updated_at = ?", now()).Where("id = ?", id).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) SetCurrentDeployment(ctx context.Context, serviceID, deploymentID string) error {

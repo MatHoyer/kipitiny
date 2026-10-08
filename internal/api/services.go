@@ -55,6 +55,21 @@ func (a *API) updateService(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, svc)
 }
 
+func (a *API) renameService(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	svc, err := a.core.RenameService(r.Context(), r.PathValue("id"), body.Name)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, svc)
+}
+
 func (a *API) deleteService(w http.ResponseWriter, r *http.Request) {
 	if err := a.core.DeleteService(r.Context(), r.PathValue("id"), r.URL.Query().Get("confirm")); err != nil {
 		a.fail(w, err)

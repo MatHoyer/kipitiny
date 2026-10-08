@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ServiceIcon, ServiceIconTile } from "@/components/service-icon";
 import { ChoiceTile, CopyButton, DangerZone, EmptyState, ErrorText, Mono, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { RenameCard } from "@/components/rename-card";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
@@ -65,6 +66,14 @@ export function Project() {
   };
   const hasBackups = services.data?.some(canBackup);
   const memory = memoryOf(useUsage().data, (u) => u.projectId === id);
+  const rename = useMutation({
+    meta: { error: "Couldn't rename the project" },
+    mutationFn: (name: string) => api.renameProject(id, name),
+    onSuccess: (p) => {
+      qc.setQueryData(["project", id], p);
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
   const remove = useMutation({
     meta: { error: "Couldn't delete the project" },
     mutationFn: (confirm: string) => api.deleteProject(id, confirm),
@@ -171,6 +180,15 @@ export function Project() {
             {tab === "git" && <GitSource projectId={id} />}
           </TabsContent>
           <TabsContent value="settings" className="space-y-6">
+            {project.data && (
+              <RenameCard
+                key={project.data.name}
+                name={project.data.name}
+                description="Containers are renamed in place; nothing restarts. Tokens and scripts that name the project need the new name."
+                pending={rename.isPending}
+                onRename={(name) => rename.mutate(name)}
+              />
+            )}
             {hasBackups && (
               <Section
                 title="Back up data"

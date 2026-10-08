@@ -254,6 +254,32 @@ func DefaultLogConfig() container.LogConfig {
 	}
 }
 
+// RenameContainer gives a container a new name, ignoring ones that are
+// already gone.
+func (c *Client) RenameContainer(ctx context.Context, id, name string) error {
+	_, err := c.ContainerRename(ctx, id, client.ContainerRenameOptions{NewName: name})
+	if err != nil && !cerrdefs.IsNotFound(err) {
+		return fmt.Errorf("rename container %s: %w", id, err)
+	}
+	return nil
+}
+
+// SetAliases replaces a container's DNS aliases on a network it is attached
+// to, by reconnecting it: open connections through that network are reset.
+func (c *Client) SetAliases(ctx context.Context, networkName, id string, aliases []string) error {
+	if _, err := c.NetworkDisconnect(ctx, networkName, client.NetworkDisconnectOptions{Container: id}); err != nil {
+		return fmt.Errorf("disconnect %s from %s: %w", id, networkName, err)
+	}
+	_, err := c.NetworkConnect(ctx, networkName, client.NetworkConnectOptions{
+		Container:      id,
+		EndpointConfig: &network.EndpointSettings{Aliases: aliases},
+	})
+	if err != nil {
+		return fmt.Errorf("connect %s to %s: %w", id, networkName, err)
+	}
+	return nil
+}
+
 // RemoveVolume deletes a volume, ignoring ones that are already gone.
 func (c *Client) RemoveVolume(ctx context.Context, name string) error {
 	_, err := c.VolumeRemove(ctx, name, client.VolumeRemoveOptions{})

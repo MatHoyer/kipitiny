@@ -21,6 +21,15 @@ order: 3
 - **Environment**: variables are readable, secrets write-only. A project holds shared
   ones that services reference as `{{ project.NAME }}`. References resolve at deploy.
 - Deleting a database or a project destroys data and must be confirmed by typing its name.
+- **Renaming** (Settings › Name) keeps everything else: volumes, backups,
+  deploy history and the project network are tied to IDs, and nothing restarts.
+  Containers are renamed in place. A renamed service also keeps answering to its
+  old name on the project network until its next deploy, so update the apps
+  that call it by hostname. Renaming a database rewrites the `{{ db.<name>.* }}`
+  references to it and redeploys the apps using it. API tokens, scripts and MCP
+  calls that name the project or service need the new name. Services of a
+  project managed by git can't be renamed: the file owns their names, and
+  renaming one there replaces it, volumes included.
 
 ## Private registries
 

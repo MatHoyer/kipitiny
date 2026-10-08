@@ -708,6 +708,7 @@ export const api = {
     }
     return res.blob();
   },
+  renameProject: (id: string, name: string) => request<Project>(`/projects/${id}/name`, json("PUT", { name })),
   deleteProject: (id: string, confirm: string) =>
     request<void>(`/projects/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),
 
@@ -716,6 +717,7 @@ export const api = {
   createService: (projectId: string, input: ServiceInput) =>
     request<Service>(`/projects/${projectId}/services`, json("POST", input)),
   updateService: (id: string, patch: ServicePatch) => request<Service>(`/services/${id}`, json("PATCH", patch)),
+  renameService: (id: string, name: string) => request<Service>(`/services/${id}/name`, json("PUT", { name })),
   deleteService: (id: string, confirm = "") =>
     request<void>(`/services/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),
   connection: (id: string) => request<Connection>(`/services/${id}/connection`),

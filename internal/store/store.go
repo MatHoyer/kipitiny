@@ -22,11 +22,13 @@ type Store interface {
 	ListProjects(ctx context.Context) ([]Project, error)
 	DeleteProject(ctx context.Context, id string) error
 	SetProjectEnv(ctx context.Context, id string, env map[string]string, secrets []string) (Project, error)
+	RenameProject(ctx context.Context, id, name string) error
 
 	CreateService(ctx context.Context, s Service) (Service, error)
 	GetService(ctx context.Context, id string) (Service, error)
 	ListServices(ctx context.Context, projectID string) ([]Service, error)
 	UpdateService(ctx context.Context, s Service) (Service, error)
+	RenameService(ctx context.Context, id, name string) error
 	SetCurrentDeployment(ctx context.Context, serviceID, deploymentID string) error
 	// SetDeploymentImage records the image a deployment runs, pinned to the
 	// digest it was pulled at.
