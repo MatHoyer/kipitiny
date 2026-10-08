@@ -46,7 +46,6 @@ func TestValidateGit(t *testing.T) {
 	for name, mutate := range map[string]func(*store.ProjectGit){
 		"ssh url":        func(g *store.ProjectGit) { g.RepoURL = "git@github.com:me/infra.git" },
 		"creds in url":   func(g *store.ProjectGit) { g.RepoURL = "https://u:p@github.com/me/infra.git" },
-		"token on http":  func(g *store.ProjectGit) { g.RepoURL, g.Token = "http://git.local/r.git", "t" },
 		"bad branch":     func(g *store.ProjectGit) { g.Branch = "a..b" },
 		"poll too often": func(g *store.ProjectGit) { g.PollSeconds = 5 },
 	} {
@@ -97,7 +96,7 @@ func TestGitFetch(t *testing.T) {
 	sha := commit("services: {web: {image: nginx}}\n")
 	c := New(config.Config{DataDir: t.TempDir()}, nil, nil, nil)
 	g := store.ProjectGit{RepoURL: dir, Branch: "main", Path: "deploy/compose.yaml"}
-	head, err := gitHead(ctx, g)
+	head, err := c.gitHead(ctx, g)
 	if err != nil || head != sha {
 		t.Fatalf("head = %q, %v; want %s", head, err, sha)
 	}
@@ -113,7 +112,7 @@ func TestGitFetch(t *testing.T) {
 		t.Error("want an error for a missing file")
 	}
 	g.Branch = "nope"
-	if _, err := gitHead(ctx, g); err == nil {
+	if _, err := c.gitHead(ctx, g); err == nil {
 		t.Error("want an error for a missing branch")
 	}
 }
@@ -170,7 +169,7 @@ func TestGitApply(t *testing.T) {
 	if err := c.store.SetProjectGitSync(ctx, g); err != nil {
 		t.Fatal(err)
 	}
-	if st, err := c.GetProjectGit(ctx, p.ID); err != nil || len(st.Drift) != 1 || st.Drift[0] != "web" || st.Token != "" {
+	if st, err := c.GetProjectGit(ctx, p.ID); err != nil || len(st.Drift) != 1 || st.Drift[0] != "web" {
 		t.Errorf("status = %+v, %v", st, err)
 	}
 

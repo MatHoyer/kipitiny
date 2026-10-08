@@ -23,6 +23,7 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 
+	"github.com/MatHoyer/kipitiny/internal/gitprovider"
 	"github.com/MatHoyer/kipitiny/internal/notify"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -58,14 +59,15 @@ type GitInput struct {
 	Branch string `json:"branch"`
 	// Path defaults to compose.yaml.
 	Path string `json:"path"`
-	// Token is an HTTPS access token; SecretMask keeps the current one.
-	Token    string `json:"token"`
-	AutoSync bool   `json:"autoSync"`
+	// ProviderID is the git provider reading a private repository; empty
+	// for a public one.
+	ProviderID string `json:"providerId"`
+	AutoSync   bool   `json:"autoSync"`
 	// PollSeconds defaults to 300.
 	PollSeconds int `json:"pollSeconds"`
 }
 
-// GitStatus is a project's link, token masked.
+// GitStatus is a project's link.
 type GitStatus struct {
 	store.ProjectGit
 	// WebhookPath receives push webhooks (POST, the secret as GitHub HMAC,
@@ -107,9 +109,6 @@ func (c *Core) GetProjectGit(ctx context.Context, projectID string) (GitStatus, 
 		return GitStatus{}, err
 	}
 	st := GitStatus{ProjectGit: g, WebhookPath: "/api/hooks/projects/" + projectID, Drift: []string{}}
-	if st.Token != "" {
-		st.Token = SecretMask
-	}
 	for _, s := range svcs {
 		if want, ok := g.Applied[s.Name]; ok && want != "" && s.Kind == store.ServiceKindApp && s.Image != want {
 			st.Drift = append(st.Drift, s.Name)
@@ -125,10 +124,10 @@ func (c *Core) LinkProjectGit(ctx context.Context, projectID string, in GitInput
 	if err != nil {
 		return GitStatus{}, err
 	}
-	// Fail now on a wrong URL, branch or token.
+	// Fail now on a wrong URL, branch or provider.
 	tctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
-	if _, err := gitHead(tctx, g); err != nil {
+	if _, err := c.gitHead(tctx, g); err != nil {
 		return GitStatus{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	if _, err := c.store.SaveProjectGit(ctx, g); err != nil {
@@ -165,7 +164,7 @@ func (c *Core) gitFromInput(ctx context.Context, projectID string, in GitInput) 
 		RepoURL:       strings.TrimSpace(in.RepoURL),
 		Branch:        strings.TrimSpace(in.Branch),
 		Path:          strings.TrimPrefix(path.Clean("/"+strings.TrimSpace(in.Path)), "/"),
-		Token:         strings.TrimSpace(in.Token),
+		ProviderID:    strings.TrimSpace(in.ProviderID),
 		AutoSync:      in.AutoSync,
 		PollSeconds:   in.PollSeconds,
 		WebhookSecret: old.WebhookSecret,
@@ -179,13 +178,24 @@ func (c *Core) gitFromInput(ctx context.Context, projectID string, in GitInput) 
 	if g.PollSeconds == 0 {
 		g.PollSeconds = defaultGitPoll
 	}
-	if g.Token == SecretMask {
-		g.Token = old.Token
-	}
 	if g.WebhookSecret == "" {
 		g.WebhookSecret = randomToken(24)
 	}
-	return g, validateGit(g)
+	if err := validateGit(g); err != nil {
+		return store.ProjectGit{}, err
+	}
+	if g.ProviderID != "" {
+		p, err := c.store.GetGitProvider(ctx, g.ProviderID)
+		if errors.Is(err, store.ErrNotFound) {
+			return store.ProjectGit{}, fmt.Errorf("%w: unknown git provider", ErrInvalid)
+		} else if err != nil {
+			return store.ProjectGit{}, err
+		}
+		if err := checkProviderRepo(p, g.RepoURL); err != nil {
+			return store.ProjectGit{}, err
+		}
+	}
+	return g, nil
 }
 
 func validateGit(g store.ProjectGit) error {
@@ -194,10 +204,7 @@ func validateGit(g store.ProjectGit) error {
 		return fmt.Errorf("%w: repository must be an https URL", ErrInvalid)
 	}
 	if u.User != nil {
-		return fmt.Errorf("%w: put credentials in the token field, not the URL", ErrInvalid)
-	}
-	if u.Scheme == "http" && g.Token != "" {
-		return fmt.Errorf("%w: a token is only sent over https", ErrInvalid)
+		return fmt.Errorf("%w: no credentials in the URL; a private repository is read through a git provider", ErrInvalid)
 	}
 	if strings.ContainsAny(g.Branch, " ~^:?*[\\") || strings.Contains(g.Branch, "..") {
 		return fmt.Errorf("%w: invalid branch", ErrInvalid)
@@ -233,7 +240,7 @@ func (c *Core) syncGit(ctx context.Context, g store.ProjectGit, force, dryRun bo
 	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
 	if !force {
-		head, err := gitHead(ctx, g)
+		head, err := c.gitHead(ctx, g)
 		if err != nil {
 			return ComposePlan{}, c.gitSynced(g, "", ComposePlan{}, nil, err)
 		}
@@ -332,20 +339,44 @@ func shortSHA(s string) string {
 	return s
 }
 
-func gitAuth(g store.ProjectGit) transport.AuthMethod {
-	if g.Token == "" {
-		return nil
+// gitAuth is the credential reading the repository: its provider's token
+// (none for a public repository).
+func (c *Core) gitAuth(ctx context.Context, g store.ProjectGit) (transport.AuthMethod, error) {
+	if g.ProviderID == "" {
+		return nil, nil
 	}
-	// Works for GitHub, GitLab, Gitea and Bitbucket tokens over HTTPS.
-	return &githttp.BasicAuth{Username: "x-access-token", Password: g.Token}
+	p, token, err := c.gitProviderToken(ctx, g.ProviderID)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkProviderRepo(p, g.RepoURL); err != nil {
+		return nil, err
+	}
+	return &githttp.BasicAuth{Username: gitprovider.CloneUsername(p.Kind), Password: token}, nil
+}
+
+// gitAccessError explains a refused repository.
+func gitAccessError(g store.ProjectGit, op string, err error) error {
+	if errors.Is(err, transport.ErrAuthenticationRequired) || errors.Is(err, transport.ErrRepositoryNotFound) ||
+		errors.Is(err, transport.ErrAuthorizationFailed) {
+		if g.ProviderID == "" {
+			return fmt.Errorf("%s %s: %w (a private repository? read it through a git provider)", op, g.RepoURL, err)
+		}
+		return fmt.Errorf("%s %s: %w (does the git provider have access to it?)", op, g.RepoURL, err)
+	}
+	return fmt.Errorf("%s %s: %w", op, g.RepoURL, err)
 }
 
 // gitHead returns the commit the branch points at, without fetching.
-func gitHead(ctx context.Context, g store.ProjectGit) (string, error) {
-	rem := git.NewRemote(memory.NewStorage(), &gitconfig.RemoteConfig{Name: "origin", URLs: []string{g.RepoURL}})
-	refs, err := rem.ListContext(ctx, &git.ListOptions{Auth: gitAuth(g)})
+func (c *Core) gitHead(ctx context.Context, g store.ProjectGit) (string, error) {
+	auth, err := c.gitAuth(ctx, g)
 	if err != nil {
-		return "", fmt.Errorf("list %s: %w", g.RepoURL, err)
+		return "", err
+	}
+	rem := git.NewRemote(memory.NewStorage(), &gitconfig.RemoteConfig{Name: "origin", URLs: []string{g.RepoURL}})
+	refs, err := rem.ListContext(ctx, &git.ListOptions{Auth: auth})
+	if err != nil {
+		return "", gitAccessError(g, "list", err)
 	}
 	want := plumbing.NewBranchReferenceName(g.Branch)
 	for _, r := range refs {
@@ -360,6 +391,10 @@ func gitHead(ctx context.Context, g store.ProjectGit) (string, error) {
 // disk: memory stays flat whatever the repository's size) and reads the
 // compose file. Returns its content and the commit.
 func (c *Core) gitReadFile(ctx context.Context, g store.ProjectGit) ([]byte, string, error) {
+	auth, err := c.gitAuth(ctx, g)
+	if err != nil {
+		return nil, "", err
+	}
 	base := filepath.Join(c.cfg.DataDir, "git")
 	if err := os.MkdirAll(base, 0o700); err != nil {
 		return nil, "", err
@@ -371,7 +406,7 @@ func (c *Core) gitReadFile(ctx context.Context, g store.ProjectGit) ([]byte, str
 	defer os.RemoveAll(dir)
 	repo, err := git.PlainCloneContext(ctx, dir, true, &git.CloneOptions{
 		URL:           g.RepoURL,
-		Auth:          gitAuth(g),
+		Auth:          auth,
 		ReferenceName: plumbing.NewBranchReferenceName(g.Branch),
 		SingleBranch:  true,
 		Depth:         1,
@@ -379,7 +414,7 @@ func (c *Core) gitReadFile(ctx context.Context, g store.ProjectGit) ([]byte, str
 		Tags:          git.NoTags,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("clone %s: %w", g.RepoURL, err)
+		return nil, "", gitAccessError(g, "clone", err)
 	}
 	head, err := repo.Head()
 	if err != nil {

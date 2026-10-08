@@ -48,6 +48,14 @@ type Store interface {
 	SetProjectGitSync(ctx context.Context, g ProjectGit) error
 	DeleteProjectGit(ctx context.Context, projectID string) error
 
+	ListGitProviders(ctx context.Context) ([]GitProvider, error)
+	GetGitProvider(ctx context.Context, id string) (GitProvider, error)
+	// CreateGitProvider keeps p.ID when set.
+	CreateGitProvider(ctx context.Context, p GitProvider) (GitProvider, error)
+	UpdateGitProvider(ctx context.Context, p GitProvider) (GitProvider, error)
+	// DeleteGitProvider returns ErrConflict while projects use it.
+	DeleteGitProvider(ctx context.Context, id string) error
+
 	CreateDeployment(ctx context.Context, d Deployment) (Deployment, error)
 	GetDeployment(ctx context.Context, id string) (Deployment, error)
 	// ListDeployments returns the newest first; limit <= 0 returns all.
@@ -317,8 +325,9 @@ type ProjectGit struct {
 	Branch    string `bun:"branch" json:"branch"`
 	// Path is the compose file's path in the repository.
 	Path string `bun:"path" json:"path"`
-	// Token is an HTTPS access token; empty for a public repository.
-	Token string `bun:"token" json:"token"`
+	// ProviderID is the git provider reading the repository; empty for a
+	// public one.
+	ProviderID string `bun:"provider_id,nullzero" json:"providerId"`
 	// AutoSync polls the branch every PollSeconds (webhooks sync anyway).
 	AutoSync      bool   `bun:"auto_sync" json:"autoSync"`
 	PollSeconds   int    `bun:"poll_seconds" json:"pollSeconds"`
@@ -604,6 +613,59 @@ type NotificationChannel struct {
 	Events    []string  `bun:"events" json:"events"`
 	Enabled   bool      `bun:"enabled" json:"enabled"`
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+}
+
+type GitProviderKind string
+
+const (
+	GitHub GitProviderKind = "github"
+	GitLab GitProviderKind = "gitlab"
+	Gitea  GitProviderKind = "gitea"
+)
+
+// GitProvider gives access to the private repositories of a forge account:
+// a GitHub App installation, or a GitLab or Gitea OAuth authorization.
+// Credentials read back masked.
+type GitProvider struct {
+	bun.BaseModel `bun:"table:git_providers,alias:git_provider" json:"-"`
+
+	ID   string          `bun:"id,pk" json:"id"`
+	Kind GitProviderKind `bun:"kind" json:"kind"`
+	Name string          `bun:"name" json:"name"`
+	// BaseURL is the forge's web address (https://github.com, a self-hosted
+	// GitLab or Gitea).
+	BaseURL string `bun:"base_url" json:"baseUrl"`
+	// Account is the user or organization it was installed on or
+	// authorized by; empty until connected.
+	Account string `bun:"account" json:"account"`
+
+	// GitHub App.
+	AppID          int64  `bun:"app_id" json:"appId,omitempty"`
+	AppSlug        string `bun:"app_slug" json:"appSlug,omitempty"`
+	PrivateKey     string `bun:"private_key" json:"-"`
+	InstallationID int64  `bun:"installation_id" json:"installationId,omitempty"`
+	// WebhookSecret signs the app's push webhooks; empty when the app has
+	// none (a manager GitHub can't reach).
+	WebhookSecret string `bun:"webhook_secret" json:"-"`
+
+	// OAuth application (GitLab, Gitea; GitHub's are unused).
+	ClientID     string `bun:"client_id" json:"clientId,omitempty"`
+	ClientSecret string `bun:"client_secret" json:"clientSecret,omitempty"`
+	// RedirectURL is the callback the application was authorized with.
+	RedirectURL    string     `bun:"redirect_url" json:"-"`
+	AccessToken    string     `bun:"access_token" json:"-"`
+	RefreshToken   string     `bun:"refresh_token" json:"-"`
+	TokenExpiresAt *time.Time `bun:"token_expires_at" json:"-"`
+
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+}
+
+// Connected reports whether it can read repositories.
+func (p GitProvider) Connected() bool {
+	if p.Kind == GitHub {
+		return p.InstallationID != 0
+	}
+	return p.AccessToken != ""
 }
 
 // Registry holds the credentials pulls from one image registry host use.

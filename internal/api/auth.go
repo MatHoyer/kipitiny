@@ -28,6 +28,8 @@ var publicRoutes = map[string]bool{
 	"POST /api/auth/passkey/finish": true,
 	// Push webhooks authenticate with the project's webhook secret.
 	"POST /api/hooks/projects/{id}": true,
+	// A GitHub App's webhooks, signed with its secret.
+	"POST /api/hooks/git-providers/{id}": true,
 }
 
 // sessionOnly routes can't be used with an API token (a token must not mint
@@ -36,7 +38,9 @@ func sessionOnly(pattern string) bool {
 	return strings.Contains(pattern, "/api/auth/") || strings.Contains(pattern, "/api/account") ||
 		strings.Contains(pattern, "/api/tokens") ||
 		pattern == "POST /api/projects/{id}/export" || // every secret of a project
-		pattern == "POST /api/update"
+		pattern == "POST /api/update" ||
+		// The forge sends the browser back to these after a connection.
+		strings.HasPrefix(pattern, "GET /api/git-providers/github/") || pattern == "GET /api/git-providers/oauth/callback"
 }
 
 // deployRoutes are the mutations a deploy-scoped token may perform.
@@ -53,10 +57,14 @@ var deployRoutes = map[string]bool{
 var secretReads = map[string]bool{
 	"GET /api/services/{id}/connection": true,
 	// The webhook secret.
-	"GET /api/projects/{id}/git":     true,
-	"GET /api/storage/{id}/key":      true,
-	"GET /api/backups/{id}/download": true,
-	"GET /api/audit":                 true,
+	"GET /api/projects/{id}/git": true,
+	// Connections finished in the browser change providers.
+	"GET /api/git-providers/github/created":   true,
+	"GET /api/git-providers/github/installed": true,
+	"GET /api/git-providers/oauth/callback":   true,
+	"GET /api/storage/{id}/key":               true,
+	"GET /api/backups/{id}/download":          true,
+	"GET /api/audit":                          true,
 	// Shells in a container or on a host.
 	"GET /api/services/{id}/terminal": true,
 	"GET /api/servers/{id}/terminal":  true,

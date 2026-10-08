@@ -1052,3 +1052,50 @@ func TestProjectGit(t *testing.T) {
 		t.Fatalf("after delete: %v", err)
 	}
 }
+
+// Project tokens are dropped: a link that had one keeps its settings and
+// says to pick a git provider.
+func TestGitProvidersMigration(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "k.db")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	sub, _ := fs.Sub(migrations, "migrations")
+	p, err := goose.NewProvider(goose.DialectSQLite3, db, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 39); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`INSERT INTO projects (id, name, server_id, created_at, updated_at) VALUES ('p1', 'shop', 'local', '2026-01-01 00:00:00+00:00', '2026-01-01 00:00:00+00:00'), ('p2', 'blog', 'local', '2026-01-01 00:00:00+00:00', '2026-01-01 00:00:00+00:00')`,
+		`INSERT INTO project_git (project_id, repo_url, branch, path, token, webhook_secret, created_at) VALUES
+			('p1', 'https://github.com/me/private.git', 'main', 'compose.yaml', 'ghp_x', 'w', '2026-01-01 00:00:00+00:00'),
+			('p2', 'https://github.com/me/public.git', 'main', 'compose.yaml', '', 'w', '2026-01-01 00:00:00+00:00')`,
+	} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	g, err := s.GetProjectGit(ctx, "p1")
+	if err != nil || g.ProviderID != "" || !strings.Contains(g.LastError, "git provider") || g.RepoURL != "https://github.com/me/private.git" {
+		t.Fatalf("private link = %+v, %v", g, err)
+	}
+	if g, err := s.GetProjectGit(ctx, "p2"); err != nil || g.LastError != "" {
+		t.Fatalf("public link = %+v, %v", g, err)
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE project_git SET provider_id = 'nope' WHERE project_id = 'p2'`); err == nil {
+		t.Fatal("provider_id isn't a foreign key")
+	}
+}

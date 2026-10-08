@@ -57,6 +57,8 @@ type Core struct {
 	dns           dnsState
 	dnsKick       chan struct{}
 	gitKick       chan string // project IDs to sync
+	gitFlows      pending[gitFlow]
+	gitTokens     gitTokens
 	proxy         proxyState
 	cleaning      atomic.Bool  // a cleanup is running
 	notified      sync.Map     // notification key -> time.Time last sent

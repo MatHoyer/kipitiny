@@ -880,7 +880,7 @@ func (s *Store) SaveProjectGit(ctx context.Context, g store.ProjectGit) (store.P
 		Set("repo_url = EXCLUDED.repo_url").
 		Set("branch = EXCLUDED.branch").
 		Set("path = EXCLUDED.path").
-		Set("token = EXCLUDED.token").
+		Set("provider_id = EXCLUDED.provider_id").
 		Set("auto_sync = EXCLUDED.auto_sync").
 		Set("poll_seconds = EXCLUDED.poll_seconds").
 		Exec(ctx)
@@ -922,6 +922,51 @@ func (s *Store) DeleteProjectGit(ctx context.Context, projectID string) error {
 			Set("git_spec_hash = ''").Set("orphaned = 0").Where("project_id = ?", projectID).Exec(ctx)
 		return mapErr(err)
 	})
+}
+
+func (s *Store) ListGitProviders(ctx context.Context) ([]store.GitProvider, error) {
+	ps := []store.GitProvider{}
+	err := s.db.NewSelect().Model(&ps).Order("name").Scan(ctx)
+	return ps, mapErr(err)
+}
+
+func (s *Store) GetGitProvider(ctx context.Context, id string) (store.GitProvider, error) {
+	var p store.GitProvider
+	err := s.db.NewSelect().Model(&p).Where("id = ?", id).Scan(ctx)
+	return p, mapErr(err)
+}
+
+func (s *Store) CreateGitProvider(ctx context.Context, p store.GitProvider) (store.GitProvider, error) {
+	if p.ID == "" {
+		p.ID = ids.New()
+	}
+	p.CreatedAt = now()
+	if _, err := s.db.NewInsert().Model(&p).Exec(ctx); err != nil {
+		return store.GitProvider{}, mapErr(err)
+	}
+	return p, nil
+}
+
+func (s *Store) UpdateGitProvider(ctx context.Context, p store.GitProvider) (store.GitProvider, error) {
+	res, err := s.db.NewUpdate().Model(&p).ExcludeColumn("id", "kind", "created_at").WherePK().Exec(ctx)
+	if err != nil {
+		return store.GitProvider{}, mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.GitProvider{}, store.ErrNotFound
+	}
+	return s.GetGitProvider(ctx, p.ID)
+}
+
+func (s *Store) DeleteGitProvider(ctx context.Context, id string) error {
+	n, err := s.db.NewSelect().Model((*store.ProjectGit)(nil)).Where("provider_id = ?", id).Count(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n > 0 {
+		return fmt.Errorf("%w: %d projects follow a repository through it", store.ErrConflict, n)
+	}
+	return deleteByID(ctx, s.db, "git_providers", id)
 }
 
 func (s *Store) ListRegistries(ctx context.Context) ([]store.Registry, error) {
