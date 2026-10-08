@@ -673,16 +673,66 @@ func TestDriveTargetsMigration(t *testing.T) {
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO backups (id, service_id, project_id, service_name, project_name, target_id, object_key, status, created_at) VALUES ('b2', 's', 'p', 'db', 'shop', 'nope', 'k', 'running', '2026-01-01 00:00:00+00:00')`); err == nil {
 		t.Fatal("foreign keys are off after the migration")
 	}
+}
 
-	d, err := s.CreateBackupTarget(ctx, store.BackupTarget{Name: "drive", Kind: store.BackupTargetProtonDrive, Config: map[string]string{"username": "me"}})
+// Dropping the drive kinds deletes drive targets with their schedules,
+// backups and restores, and keeps the rest with foreign keys on.
+func TestDropDriveTargetsMigration(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "k.db")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(ON)")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetBackupTargetConfig(ctx, d.ID, map[string]string{"username": "me", "client_uid": "x"}); err != nil {
+	db.SetMaxOpenConns(1)
+	sub, _ := fs.Sub(migrations, "migrations")
+	p, err := goose.NewProvider(goose.DialectSQLite3, db, sub)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := s.GetBackupTarget(ctx, d.ID); got.Config["client_uid"] != "x" {
-		t.Fatalf("config = %v", got.Config)
+	if _, err := p.UpTo(ctx, 38); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`PRAGMA foreign_keys = OFF`, // the restore's service doesn't exist
+		`INSERT INTO backup_targets (id, name, kind, bucket, created_at) VALUES ('s3', 'offsite', 's3', 'b', '2026-01-01 00:00:00+00:00')`,
+		`INSERT INTO backup_targets (id, name, kind, created_at, config) VALUES ('gd', 'drive', 'gdrive', '2026-01-01 00:00:00+00:00', '{"token":"x"}')`,
+		`INSERT INTO backup_schedules (id, kind, target_id, cron, created_at) VALUES ('sc', 'manager', 'gd', '@daily', '2026-01-01 00:00:00+00:00')`,
+		`INSERT INTO backups (id, service_id, project_id, service_name, project_name, target_id, object_key, status, created_at) VALUES ('b1', 's', 'p', 'db', 'shop', 's3', 'k', 'succeeded', '2026-01-01 00:00:00+00:00')`,
+		`INSERT INTO backups (id, service_id, project_id, service_name, project_name, target_id, object_key, status, created_at) VALUES ('b2', 's', 'p', 'db', 'shop', 'gd', 'k', 'succeeded', '2026-01-01 00:00:00+00:00')`,
+		`INSERT INTO restores (id, backup_id, service_id, status, created_at) VALUES ('r2', 'b2', 's', 'succeeded', '2026-01-01 00:00:00+00:00')`,
+	} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if tg, err := s.GetBackupTarget(ctx, "s3"); err != nil || tg.Bucket != "b" {
+		t.Fatalf("s3 target = %+v, %v", tg, err)
+	}
+	if _, err := s.GetBackup(ctx, "b1"); err != nil {
+		t.Fatalf("s3 backup: %v", err)
+	}
+	if _, err := s.GetBackupTarget(ctx, "gd"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("drive target kept: %v", err)
+	}
+	if _, err := s.GetBackup(ctx, "b2"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("drive backup kept: %v", err)
+	}
+	for _, table := range []string{"backup_schedules", "restores"} {
+		var n int
+		if err := s.db.QueryRowContext(ctx, "SELECT count(*) FROM "+table).Scan(&n); err != nil || n != 0 {
+			t.Fatalf("%s left: %d, %v", table, n, err)
+		}
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO backups (id, service_id, project_id, service_name, project_name, target_id, object_key, status, created_at) VALUES ('b3', 's', 'p', 'db', 'shop', 'gd', 'k', 'running', '2026-01-01 00:00:00+00:00')`); err == nil {
+		t.Fatal("foreign keys are off after the migration")
 	}
 }
 

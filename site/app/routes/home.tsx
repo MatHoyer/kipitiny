@@ -107,7 +107,7 @@ export default function Home() {
           <div className="targets">
             <div>
               <h3>Where they go</h3>
-              <p>Local disk, any S3-compatible bucket, Google Drive or Proton Drive. Targets are tested with a write before they're saved.</p>
+              <p>Local disk or any S3-compatible bucket. Targets are tested with a write before they're saved.</p>
             </div>
             <div>
               <h3>Encrypted with age</h3>

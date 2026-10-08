@@ -106,24 +106,6 @@ func (a *API) listRestores(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rs)
 }
 
-func (a *API) startProtonLogin(w http.ResponseWriter, r *http.Request) {
-	l, err := a.core.StartProtonLogin()
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, l)
-}
-
-func (a *API) protonLogin(w http.ResponseWriter, r *http.Request) {
-	l, err := a.core.ProtonLoginStatus(r.PathValue("id"))
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, l)
-}
-
 func (a *API) encryptStorage(w http.ResponseWriter, r *http.Request) {
 	t, err := a.core.EncryptBackupTarget(r.Context(), r.PathValue("id"))
 	if err != nil {
@@ -131,10 +113,6 @@ func (a *API) encryptStorage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, t)
-}
-
-func (a *API) storageKinds(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, a.core.BackupTargetKinds())
 }
 
 func (a *API) listStorage(w http.ResponseWriter, r *http.Request) {

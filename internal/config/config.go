@@ -30,11 +30,6 @@ type Config struct {
 	// ProtonPassCLI is the pass-cli binary (path or name on PATH).
 	ProtonPassCLI string
 
-	// Rclone (Google Drive) and ProtonDriveCLI (proton-drive) reach drive
-	// backup targets.
-	Rclone         string
-	ProtonDriveCLI string
-
 	// Version is the running build (set by main, not the environment).
 	Version string
 	Update  Update
@@ -91,8 +86,6 @@ func Load() Config {
 		TrustedProxies: prefixes(env("KIPITINY_TRUSTED_PROXIES", "")),
 		SetupToken:     env("KIPITINY_SETUP_TOKEN", ""),
 		ProtonPassCLI:  env("KIPITINY_PROTONPASS_CLI", "pass-cli"),
-		Rclone:         env("KIPITINY_RCLONE", "rclone"),
-		ProtonDriveCLI: env("KIPITINY_PROTONDRIVE_CLI", "proton-drive"),
 		Traefik: Traefik{
 			Enabled:      env("KIPITINY_TRAEFIK", "true") != "false",
 			Image:        env("KIPITINY_TRAEFIK_IMAGE", "traefik:v3.7"),

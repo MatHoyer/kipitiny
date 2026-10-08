@@ -97,8 +97,6 @@ type Store interface {
 	// SetBackupTargetKey gives an unencrypted target an age key; ErrConflict
 	// if it already has one (replacing it would orphan its backups).
 	SetBackupTargetKey(ctx context.Context, id, identity, recipient string) error
-	// SetBackupTargetConfig keeps the options rclone changed (refreshed tokens).
-	SetBackupTargetConfig(ctx context.Context, id string, config map[string]string) error
 	// DeleteBackupTarget returns ErrConflict while backups reference it.
 	DeleteBackupTarget(ctx context.Context, id string) error
 
@@ -416,9 +414,6 @@ type BackupTargetKind string
 const (
 	BackupTargetLocal BackupTargetKind = "local"
 	BackupTargetS3    BackupTargetKind = "s3"
-	// Google Drive goes through rclone, Proton Drive through its own CLI.
-	BackupTargetGoogleDrive BackupTargetKind = "gdrive"
-	BackupTargetProtonDrive BackupTargetKind = "protondrive"
 
 	// LocalTargetID is the built-in local disk target.
 	LocalTargetID = "local"
@@ -439,22 +434,12 @@ type BackupTarget struct {
 	UseSSL    bool             `bun:"use_ssl" json:"useSsl"`
 	// AgeRecipient/AgeIdentity are set when backups on this target are
 	// encrypted with age (X25519).
-	AgeRecipient string `bun:"age_recipient" json:"ageRecipient"`
-	AgeIdentity  string `bun:"age_identity" json:"-"`
-	// Config is a drive target's credentials: rclone options, or the
-	// proton-drive session files. Settings is what the API shows of it,
-	// secrets masked.
-	Config    map[string]string `bun:"config" json:"-"`
-	Settings  map[string]string `bun:"-" json:"settings,omitempty"`
-	CreatedAt time.Time         `bun:"created_at" json:"createdAt"`
+	AgeRecipient string    `bun:"age_recipient" json:"ageRecipient"`
+	AgeIdentity  string    `bun:"age_identity" json:"-"`
+	CreatedAt    time.Time `bun:"created_at" json:"createdAt"`
 }
 
 func (t BackupTarget) Encrypted() bool { return t.AgeRecipient != "" }
-
-// Drive reports whether the target is a drive reached through a CLI.
-func (t BackupTarget) Drive() bool {
-	return t.Kind == BackupTargetGoogleDrive || t.Kind == BackupTargetProtonDrive
-}
 
 // OpStatus is the lifecycle of a background operation (backup, restore).
 type OpStatus string
