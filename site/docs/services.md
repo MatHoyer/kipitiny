@@ -21,6 +21,14 @@ order: 3
 - **Environment**: variables are readable, secrets write-only. A project holds shared
   ones that services reference as `{{ project.NAME }}`. References resolve at deploy.
 - Deleting a database or a project destroys data and must be confirmed by typing its name.
+- **Terminal** (service › Terminal): a shell in one of the service's running
+  containers, `bash` when the image has it, else `sh`. *Settings › Servers*
+  opens a root shell on a server itself. Admin only; every session is recorded
+  in the audit log.
+- **Map** (project › Map, or the whole install from the sidebar): what runs
+  where, how traffic gets in (Traefik's entrypoints or a Cloudflare tunnel), the
+  networks, and each container with the networks it is actually attached to.
+- Health, uptime checks and notifications: see [Monitoring](/docs/monitoring).
 - **Renaming** (Settings › Name) keeps everything else: volumes, backups,
   deploy history and the project network are tied to IDs, and nothing restarts.
   Containers are renamed in place. A renamed service also keeps answering to its

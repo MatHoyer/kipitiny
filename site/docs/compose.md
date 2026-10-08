@@ -1,7 +1,7 @@
 ---
 title: Compose reference
 description: The docker-compose format of a kipitiny project: keys, x-kipitiny settings, variables and secrets, git sync
-order: 6
+order: 7
 ---
 
 > A kipitiny project is described by a docker-compose file. You can write it by hand, keep it in git, have an LLM write it, or export it from any project. This page is the complete format: everything kipitiny reads, what each field does, and what it refuses.

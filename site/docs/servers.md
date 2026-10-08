@@ -1,7 +1,7 @@
 ---
 title: Multiple servers
 description: Manage remote Docker hosts over SSH from one manager
-order: 7
+order: 8
 ---
 
 *Settings → Servers* adds remote Docker hosts over SSH. The manager reaches the

@@ -1,7 +1,7 @@
 ---
 title: API tokens, MCP and audit
 description: Scoped tokens, the built-in MCP endpoint for agents, and the audit log
-order: 10
+order: 11
 ---
 
 Create tokens in *Settings*. Scopes: **read** (status, logs, backup lists),
