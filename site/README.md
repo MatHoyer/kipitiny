@@ -31,3 +31,9 @@ docker build -t kipitiny-homepage site && docker run --rm -p 8080:80 kipitiny-ho
 ```
 
 The *site* workflow publishes the image on every release tag, or when run by hand.
+
+It runs on kipitiny itself: a project linked to `compose.yaml` here (Project ›
+Git, path `site/compose.yaml`), and the workflow then deploys the new image with
+`kipitiny deploy --tag`. That deploy needs the repository variable
+`KIPITINY_URL` and a deploy token as the secret `KIPITINY_TOKEN`; without them
+it is skipped.

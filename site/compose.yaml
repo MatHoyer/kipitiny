@@ -1,0 +1,17 @@
+# The kipitiny website, as it runs on kipitiny: a project linked to this file
+# (Project › Git, path site/compose.yaml). A commit that changes it is applied
+# by the next sync; each release's image is deployed by the site workflow
+# (`kipitiny deploy --tag`), which the file doesn't need to follow.
+name: kipitiny-site
+services:
+  homepage:
+    image: ghcr.io/mathoyer/kipitiny-homepage:latest
+    mem_limit: 64m
+    x-kipitiny:
+      domain: kipitiny.mathieuhoyer.fr
+      port: 80
+      icon: nginx
+      middlewares:
+        headers:
+          X-Content-Type-Options: nosniff
+          Referrer-Policy: strict-origin-when-cross-origin
