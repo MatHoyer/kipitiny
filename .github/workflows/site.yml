@@ -1,6 +1,7 @@
 # Publishes the website (site/: landing page and docs) as
 # ghcr.io/mathoyer/kipitiny-homepage for amd64 and arm64: on each release tag,
-# so the docs match the latest release, or by hand for a site-only fix. Each
+# as :1.2.3 and :latest like the manager, so the docs match the latest release;
+# or by hand for a site-only fix, as :sha-<commit> and :latest. Each
 # minor release since 0.10 also keeps its own docs at /docs/<minor>, taken from
 # its last patch tag.
 name: site
@@ -39,7 +40,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           build-args: KIPITINY_VERSION=${{ steps.version.outputs.version }}
           tags: |
-            ghcr.io/mathoyer/kipitiny-homepage:sha-${{ github.sha }}
+            ghcr.io/mathoyer/kipitiny-homepage:${{ github.ref_type == 'tag' && github.ref_name || format('sha-{0}', github.sha) }}
             ghcr.io/mathoyer/kipitiny-homepage:latest
           push: true
           cache-from: type=gha,scope=site
