@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -127,12 +128,31 @@ func TestGitHubAppFlowState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "https://github.com/organizations/acme/settings/apps/new?state="; start.URL[:len(want)] != want {
-		t.Errorf("url = %s", start.URL)
+	u, err := url.Parse(start.URL)
+	if err != nil || u.Host != "localhost:3000" || u.Path != "/api/git-providers/github/launch" {
+		t.Fatalf("start url = %s", start.URL)
+	}
+	state := u.Query().Get("state")
+	launch, err := c.LaunchGitHubApp(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "https://github.com/organizations/acme/settings/apps/new?state=" + state; launch.URL != want {
+		t.Errorf("manifest url = %s, want %s", launch.URL, want)
+	}
+	if launch.Origin != "https://github.com" {
+		t.Errorf("origin = %s", launch.Origin)
 	}
 	// Not reachable by GitHub: no webhook.
-	if strings.Contains(start.Manifest, "hook_attributes") {
-		t.Errorf("manifest = %s", start.Manifest)
+	if strings.Contains(launch.Manifest, "hook_attributes") {
+		t.Errorf("manifest = %s", launch.Manifest)
+	}
+	// Launching doesn't consume the state GitHub sends back.
+	if _, err := c.LaunchGitHubApp(state); err != nil {
+		t.Errorf("second launch: %v", err)
+	}
+	if _, err := c.LaunchGitHubApp("forged"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("unknown launch state: %v", err)
 	}
 	if _, err := c.FinishGitHubApp(ctx, "code", "forged"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("unknown state: %v", err)
@@ -141,8 +161,13 @@ func TestGitHubAppFlowState(t *testing.T) {
 		t.Errorf("unknown installation: %v", err)
 	}
 	pub, err := c.StartGitHubApp(ctx, "https://kipitiny.example.com", GitHubAppInput{Name: "Work"})
-	if err != nil || !strings.Contains(pub.Manifest, `"url":"https://kipitiny.example.com/api/hooks/git-providers/`) {
-		t.Errorf("public manifest = %s, %v", pub.Manifest, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pu, _ := url.Parse(pub.URL)
+	if l, err := c.LaunchGitHubApp(pu.Query().Get("state")); err != nil ||
+		!strings.Contains(l.Manifest, `"url":"https://kipitiny.example.com/api/hooks/git-providers/`) {
+		t.Errorf("public manifest = %s, %v", l.Manifest, err)
 	}
 }
 

@@ -1,7 +1,9 @@
 package api
 
 import (
+	"crypto/rand"
 	"errors"
+	"html/template"
 	"io"
 	"net/http"
 	"net/url"
@@ -105,6 +107,37 @@ func (a *API) startGitHubApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, start)
+}
+
+// launchPage posts the GitHub App manifest. GitHub only takes it as a form
+// post, which the UI's CSP (form-action 'self') refuses for another origin.
+var launchPage = template.Must(template.New("launch").Parse(`<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Connecting GitHub…</title>
+<form id="f" method="post" action="{{.URL}}">
+<input type="hidden" name="manifest" value="{{.Manifest}}">
+<noscript><button type="submit">Continue to GitHub</button></noscript>
+</form>
+<script nonce="{{.Nonce}}">document.getElementById("f").submit()</script>
+</html>
+`))
+
+// launchGitHubApp serves the page that posts the manifest to GitHub, with a
+// CSP allowing only that form target and its own script.
+func (a *API) launchGitHubApp(w http.ResponseWriter, r *http.Request) {
+	l, err := a.core.LaunchGitHubApp(r.URL.Query().Get("state"))
+	if err != nil {
+		a.gitProviderRedirect(w, r, "", "", err)
+		return
+	}
+	nonce := rand.Text()
+	h := w.Header()
+	h.Set("Content-Security-Policy", "default-src 'none'; script-src 'nonce-"+nonce+"'; form-action "+l.Origin+
+		"; base-uri 'none'; frame-ancestors 'none'")
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("Cache-Control", "no-store")
+	_ = launchPage.Execute(w, map[string]string{"URL": l.URL, "Manifest": l.Manifest, "Nonce": nonce})
 }
 
 // The forge sends the browser back to these; they answer with redirects

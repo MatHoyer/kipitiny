@@ -212,19 +212,9 @@ function GitHubAppForm({ onBack }: { onBack: () => void }) {
   const start = useMutation({
     meta: { error: "Couldn't start creating the GitHub App" },
     mutationFn: () => api.startGitHubApp(form),
-    onSuccess: ({ url, manifest }) => {
-      // GitHub takes the manifest as a form post, not a link.
-      const f = document.createElement("form");
-      f.method = "post";
-      f.action = url;
-      const input = document.createElement("input");
-      input.type = "hidden";
-      input.name = "manifest";
-      input.value = manifest;
-      f.appendChild(input);
-      document.body.appendChild(f);
-      f.submit();
-    },
+    // The manager's page posts the manifest: GitHub takes it as a form post,
+    // which this page's CSP doesn't allow to another origin.
+    onSuccess: ({ url }) => window.location.assign(url),
   });
   // As the manager decides whether the app gets webhooks.
   const local = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)|\.(local|localhost|internal|lan)$|^[^.]+$/.test(window.location.hostname);

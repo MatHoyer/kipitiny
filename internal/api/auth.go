@@ -59,6 +59,7 @@ var secretReads = map[string]bool{
 	// The webhook secret.
 	"GET /api/projects/{id}/git": true,
 	// Connections finished in the browser change providers.
+	"GET /api/git-providers/github/launch":    true,
 	"GET /api/git-providers/github/created":   true,
 	"GET /api/git-providers/github/installed": true,
 	"GET /api/git-providers/oauth/callback":   true,

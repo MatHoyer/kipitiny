@@ -42,6 +42,8 @@ type gitFlow struct {
 	// Manifest step: the provider to create.
 	name, baseURL string
 	webhooks      bool
+	// Where the browser posts the manifest, and the manifest.
+	manifestURL, manifest string
 }
 
 // gitTokens caches GitHub installation tokens and serializes OAuth
@@ -198,9 +200,18 @@ type GitHubAppInput struct {
 }
 
 // GitHubAppStart is the form the browser posts to GitHub.
+// GitHubAppStart is where to send the browser: a manager page that posts
+// the manifest to GitHub (the UI's CSP only allows its own form targets).
 type GitHubAppStart struct {
-	URL      string `json:"url"`
-	Manifest string `json:"manifest"`
+	URL string `json:"url"`
+}
+
+// GitHubAppLaunch is the manifest form of a started GitHub App creation.
+type GitHubAppLaunch struct {
+	URL      string
+	Manifest string
+	// Origin is the forge's, the only place the form may post to.
+	Origin string
 }
 
 // StartGitHubApp prepares a GitHub App manifest. managerURL is the
@@ -241,8 +252,25 @@ func (c *Core) StartGitHubApp(ctx context.Context, managerURL string, in GitHubA
 		m.WebhookURL = managerURL + "/api/hooks/git-providers/" + id
 		flow.webhooks = true
 	}
-	state := c.putGitFlow(flow)
-	return GitHubAppStart{URL: gitprovider.ManifestURL(base, org, state), Manifest: gitprovider.Manifest(m)}, nil
+	// The manifest URL carries the state GitHub hands back.
+	state := randomToken(24)
+	flow.manifest, flow.manifestURL = gitprovider.Manifest(m), gitprovider.ManifestURL(base, org, state)
+	c.gitFlows.put(state, flow, time.Now().Add(gitFlowTTL))
+	return GitHubAppStart{URL: managerURL + "/api/git-providers/github/launch?state=" + url.QueryEscape(state)}, nil
+}
+
+// LaunchGitHubApp returns the manifest form of a started creation, without
+// consuming it: GitHub sends the same state back once the app exists.
+func (c *Core) LaunchGitHubApp(state string) (GitHubAppLaunch, error) {
+	f, ok := c.gitFlows.peek(state)
+	if !ok || f.step != gitStepManifest || f.manifestURL == "" {
+		return GitHubAppLaunch{}, fmt.Errorf("%w: this connection expired or was already used; start again", ErrInvalid)
+	}
+	u, err := url.Parse(f.baseURL)
+	if err != nil {
+		return GitHubAppLaunch{}, err
+	}
+	return GitHubAppLaunch{URL: f.manifestURL, Manifest: f.manifest, Origin: u.Scheme + "://" + u.Host}, nil
 }
 
 // FinishGitHubApp saves the app GitHub created and returns where to
