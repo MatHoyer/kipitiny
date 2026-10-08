@@ -205,6 +205,7 @@ Project › **Git**: the repository, a branch (default `main`) and the file's pa
 - CI can still deploy another tag of an app's image (`kipitiny deploy --tag`). The service keeps it until a commit changes that service's block in the file; the Git tab lists the services that run another image than the file's.
 - A failed sync is notified (`git.sync.failed`) and retried; a sync that changed something can be notified too (`git.sync.succeeded`).
 - Unlinking keeps the services as they are and makes them editable again.
+- A sync downloads only the branch's last commit and unpacks it, so the manager briefly uses memory in proportion to that commit's files; it returns it right after. Keep large files (build outputs, binaries) out of the repository. Polling between commits only asks for the branch's commit, which costs next to nothing. The manager's memory may still read a few MB higher for a while after a sync: Linux keeps the files it just wrote in its cache and counts them, and drops them as soon as something else needs the memory.
 
 ### Git providers
 

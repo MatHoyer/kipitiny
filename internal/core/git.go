@@ -13,6 +13,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -390,6 +392,10 @@ func (c *Core) gitHead(ctx context.Context, g store.ProjectGit) (string, error) 
 // gitReadFile shallow-clones the branch into a temporary directory (on
 // disk: memory stays flat whatever the repository's size) and reads the
 // compose file. Returns its content and the commit.
+//
+// Unpacking holds the whole commit's files in memory for a moment. Go would
+// keep that memory for minutes before returning it, which shows as the
+// manager's usage: syncs are rare, so it goes back to the OS right away.
 func (c *Core) gitReadFile(ctx context.Context, g store.ProjectGit) ([]byte, string, error) {
 	auth, err := c.gitAuth(ctx, g)
 	if err != nil {
@@ -404,6 +410,10 @@ func (c *Core) gitReadFile(ctx context.Context, g store.ProjectGit) ([]byte, str
 		return nil, "", err
 	}
 	defer os.RemoveAll(dir)
+	defer func() {
+		runtime.GC() // go-git's pooled buffers only go on the second cycle
+		debug.FreeOSMemory()
+	}()
 	repo, err := git.PlainCloneContext(ctx, dir, true, &git.CloneOptions{
 		URL:           g.RepoURL,
 		Auth:          auth,
