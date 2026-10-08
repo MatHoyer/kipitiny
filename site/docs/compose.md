@@ -73,7 +73,8 @@ Each key under `services` is a service. Its name is also its hostname inside the
 | `image` | The image to run, pinned by tag (or digest). Required for apps. kipitiny never builds: build and push in CI. |
 | `environment` | Env variables, as a mapping or a `KEY=value` list. Values may hold references (see [Values](#values-references-and-secrets)). A key without a value (`- KEY` or `KEY:`) means `${KEY}`. |
 | `ports` | Host ports published straight to the container, for traffic that isn't HTTP: `"25565:25565"`, `"9000:9000/udp"`, or the long form `{target: 25565, published: 25565, protocol: tcp}`. One port per entry, no ranges. An app with published ports runs one replica. HTTP goes through `x-kipitiny.port` instead. |
-| `volumes` | Named volumes: `name:/path` or `{type: volume, source: name, target: /path}`. Shared by the service's replicas, kept across deploys, backed up. At most 10. Names: lowercase letters, digits and dashes. |
+| `volumes` | Named volumes: `name:/path` or `{type: volume, source: name, target: /path}`. Shared by the service's replicas, kept across deploys, backed up. At most 10. Names: lowercase letters, digits and dashes. The one bind mount allowed is the Docker socket, `/var/run/docker.sock:/var/run/docker.sock` (`:ro` for read-only); see [Host access](#host-access). |
+| `network_mode` | Only `host`: the app runs in the server's network. See [Host access](#host-access). |
 | `deploy` | `replicas` (1–10; databases always 1) and `resources.limits.memory` / `resources.limits.cpus`. |
 | `mem_limit` | Same as `deploy.resources.limits.memory` (`512m`, `1g`, bytes). |
 | `cpus` | Same as `deploy.resources.limits.cpus` (cores, `0.5` = half a core; 0.01–256). |
@@ -89,7 +90,28 @@ kipitiny orders, networks, restarts and health-checks services itself, so these 
 
 ### Errors
 
-Any other key is refused, because ignoring it would run something different from what the file says: for example `command`, `entrypoint`, `user`, `working_dir`, `env_file`, `secrets`, `configs`, `privileged`, `cap_add`, `devices`, `network_mode`, `profiles`, `extends`, `tmpfs`. Bind mounts (`./data:/data`, `/srv:/srv`) and anonymous volumes (`/data`) are refused too: use a named volume.
+Any other key is refused, because ignoring it would run something different from what the file says: for example `command`, `entrypoint`, `user`, `working_dir`, `env_file`, `secrets`, `configs`, `privileged`, `cap_add`, `devices`, `profiles`, `extends`, `tmpfs`. Bind mounts (`./data:/data`, `/srv:/srv`, except the Docker socket) and anonymous volumes (`/data`) are refused too: use a named volume. So is any `network_mode` but `host`.
+
+### Host access
+
+Agents that report on or manage the server need what other apps don't: the host's network (to see its interfaces) and the Docker socket (to see its containers). An app can have both, from the file or its **Host access** settings. For example, a [Beszel](https://beszel.dev) agent:
+
+```yaml
+services:
+  beszel-agent:
+    image: henrygd/beszel-agent:latest
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      LISTEN: 45876
+      KEY: ${BESZEL_KEY}
+```
+
+- **`network_mode: host`:** the app shares the server's network and listens on its ports directly (open them in the firewall if needed). It has no domain or published ports, isn't on the project network (other services can't reach it by name), runs one replica, and deploys stop the old container before starting the new one.
+- **The Docker socket** is mounted at `/var/run/docker.sock`, from the server's own socket. Read-only (`:ro`) is enough for stats; without it, the app can create and remove containers.
+- Either one gives the app control of the server: only use images you trust. Databases can't have them.
+- A service runs on its project's server: to monitor several servers, make one project per server. The Beszel hub itself is a normal app (`henrygd/beszel`, port 8090, a volume at `/beszel_data`).
 
 ### `x-kipitiny` (per service)
 

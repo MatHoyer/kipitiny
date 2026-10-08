@@ -60,6 +60,10 @@ type ServiceInput struct {
 	PublishedPorts []store.PublishedPort `json:"publishedPorts"`
 	// StopGraceSeconds is the app's time to exit on stop; 0 means 10 s.
 	StopGraceSeconds int `json:"stopGraceSeconds"`
+	// HostNetwork runs the app in the host's network (apps only).
+	HostNetwork bool `json:"hostNetwork"`
+	// DockerSocket mounts the host's Docker socket: "", "ro" or "rw".
+	DockerSocket string `json:"dockerSocket"`
 	// Password is a new database's password, from a compose export; empty
 	// generates one. Not settable through the API.
 	Password string `json:"-"`
@@ -88,6 +92,8 @@ type ServicePatch struct {
 	// PublishedPorts replaces the app's published ports; nil keeps them.
 	PublishedPorts   []store.PublishedPort `json:"publishedPorts"`
 	StopGraceSeconds *int                  `json:"stopGraceSeconds"`
+	HostNetwork      *bool                 `json:"hostNetwork"`
+	DockerSocket     *string               `json:"dockerSocket"`
 }
 
 type ContainerView struct {
@@ -163,6 +169,8 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		PreBackup:        strings.TrimSpace(in.PreBackup),
 		PublishedPorts:   normalizePorts(in.PublishedPorts),
 		StopGraceSeconds: in.StopGraceSeconds,
+		HostNetwork:      in.HostNetwork,
+		DockerSocket:     in.DockerSocket,
 	}
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
@@ -301,6 +309,12 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 	if p.StopGraceSeconds != nil {
 		svc.StopGraceSeconds = *p.StopGraceSeconds
 	}
+	if p.HostNetwork != nil {
+		svc.HostNetwork = *p.HostNetwork
+	}
+	if p.DockerSocket != nil {
+		svc.DockerSocket = *p.DockerSocket
+	}
 	if p.Middlewares != nil {
 		if svc.Middlewares, err = mergeMiddlewares(*p.Middlewares, old.Middlewares); err != nil {
 			return store.Service{}, err
@@ -397,6 +411,9 @@ func validateService(s store.Service) error {
 		if s.StopGraceSeconds != 0 {
 			return fmt.Errorf("%w: databases have their own stop timeout", ErrInvalid)
 		}
+		if s.HostNetwork || s.DockerSocket != "" {
+			return fmt.Errorf("%w: databases can't use the host network or the Docker socket", ErrInvalid)
+		}
 		return validateDatabase(s)
 	}
 	if err := validateVolumes(s.Volumes); err != nil {
@@ -406,6 +423,9 @@ func validateService(s store.Service) error {
 		return err
 	}
 	if err := validatePorts(s); err != nil {
+		return err
+	}
+	if err := validateHostAccess(s); err != nil {
 		return err
 	}
 	if s.StopGraceSeconds < 0 || s.StopGraceSeconds > maxStopGraceSeconds {

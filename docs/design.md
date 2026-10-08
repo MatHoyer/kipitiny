@@ -67,6 +67,7 @@ The manager runs as a container and controls the **host** Docker daemon via the 
   (`web/src/components/service-icon.tsx`); backups keep the hint.
 - **Replica:** one running container of a service.
 - **Deployment:** one release of a service, with an ID, status, and log file.
+- **Host access:** an app may run in the host's network (`network_mode: host`: no project network, domain or published ports; one replica, stop-then-start deploys) and mount the host's Docker socket (ro/rw), for agents such as Beszel's. Nothing else on the host can be bind-mounted.
 - **Compose:** a project maps to a docker-compose file (§9.1), exported for
   any project, imported, or followed from git.
 

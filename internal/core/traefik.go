@@ -257,14 +257,31 @@ type route struct {
 	// behindProxy: requests come through Cloudflare (tunnel or proxied
 	// record), which puts the client IP last in X-Forwarded-For.
 	behindProxy bool
+	// dockerSocket is the socket's path on the server's host, for an app
+	// that mounts it.
+	dockerSocket string
 }
 
 func (c *Core) routeFor(ctx context.Context, svc store.Service) route {
 	return route{
 		resolver: c.certResolver(ctx, svc.ServerID, svc.Domain),
 		// The domain of an app with published ports is never proxied.
-		behindProxy: len(svc.PublishedPorts) == 0 && c.behindCloudflare(ctx, svc.ServerID, svc.Domain),
+		behindProxy:  len(svc.PublishedPorts) == 0 && c.behindCloudflare(ctx, svc.ServerID, svc.Domain),
+		dockerSocket: c.dockerSocketFor(ctx, svc),
 	}
+}
+
+// dockerSocketFor is the Docker socket's path on svc's server, when svc
+// mounts it.
+func (c *Core) dockerSocketFor(ctx context.Context, svc store.Service) string {
+	if svc.DockerSocket == "" {
+		return ""
+	}
+	sv, err := c.store.GetServer(ctx, svc.ServerID)
+	if err != nil {
+		c.log.Warn("server unavailable, using the default Docker socket", "server", svc.ServerID, "err", err)
+	}
+	return socketPath(sv, c.cfg)
 }
 
 // httpRouted reports whether Traefik routes the service's domain: it has a

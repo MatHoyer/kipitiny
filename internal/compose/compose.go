@@ -48,8 +48,17 @@ type Service struct {
 	MemoryMB         int
 	CPUs             float64
 	StopGraceSeconds int
-	X                Ext
+	// HostNetwork is network_mode: host.
+	HostNetwork bool
+	// DockerSocket is "ro" or "rw" when the service mounts the host's
+	// Docker socket.
+	DockerSocket string
+	X            Ext
 }
+
+// DockerSocket is the only path a service may bind-mount: the host's
+// Docker socket, at the same path in the container.
+const DockerSocket = "/var/run/docker.sock"
 
 // Ext is a service's x-kipitiny block.
 type Ext struct {
@@ -93,7 +102,7 @@ type RateLimit struct {
 const ExtKey = "x-kipitiny"
 
 // supportedServiceKeys are the compose service keys Parse reads.
-var supportedServiceKeys = []string{"image", "build", "environment", "ports", "volumes", "deploy", "mem_limit", "cpus", "stop_grace_period", ExtKey}
+var supportedServiceKeys = []string{"image", "build", "environment", "ports", "volumes", "deploy", "mem_limit", "cpus", "stop_grace_period", "network_mode", ExtKey}
 
 // Keys that change nothing kipitiny can't do itself (it orders, networks
 // and restarts services on its own): dropped with a warning. Any other
@@ -134,6 +143,16 @@ func Marshal(f File) ([]byte, error) {
 				out.Volumes = map[string]struct{}{}
 			}
 			out.Volumes[v.Name] = struct{}{}
+		}
+		if s.DockerSocket != "" {
+			v := DockerSocket + ":" + DockerSocket
+			if s.DockerSocket == "ro" {
+				v += ":ro"
+			}
+			o.Volumes = append(o.Volumes, v)
+		}
+		if s.HostNetwork {
+			o.NetworkMode = "host"
 		}
 		if s.StopGraceSeconds > 0 {
 			o.StopGracePeriod = (time.Duration(s.StopGraceSeconds) * time.Second).String()
@@ -193,6 +212,7 @@ type outService struct {
 	Environment     map[string]string `yaml:"environment,omitempty"`
 	Ports           []quoted          `yaml:"ports,omitempty"`
 	Volumes         []string          `yaml:"volumes,omitempty"`
+	NetworkMode     string            `yaml:"network_mode,omitempty"`
 	StopGracePeriod string            `yaml:"stop_grace_period,omitempty"`
 	Deploy          *outDeploy        `yaml:"deploy,omitempty"`
 	X               *Ext              `yaml:"x-kipitiny,omitempty"`
@@ -356,7 +376,13 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 		case k == "ports":
 			s.Ports = p.ports(v)
 		case k == "volumes":
-			s.Volumes = p.volumes(v)
+			s.Volumes, s.DockerSocket = p.volumes(v)
+		case k == "network_mode":
+			if mode := p.str(v); mode == "host" {
+				s.HostNetwork = true
+			} else {
+				p.fail("network_mode %s is not supported (only host)", mode)
+			}
 		case k == "deploy":
 			p.deploy(v, &s)
 		case k == "mem_limit":
@@ -394,6 +420,9 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 		if len(s.Volumes) > 0 {
 			p.warn("volumes of a %s service are ignored (the manager keeps its data volume)", s.X.Kind)
 			s.Volumes = nil
+		}
+		if s.HostNetwork || s.DockerSocket != "" {
+			p.fail("a %s service can't use the host network or the Docker socket", s.X.Kind)
 		}
 	}
 	return s
@@ -530,15 +559,19 @@ func (p *parser) ports(n *yaml.Node) []store.PublishedPort {
 	return out
 }
 
-func (p *parser) volumes(n *yaml.Node) []store.Volume {
+// volumes reads named volumes, and the Docker socket's bind mount ("ro"
+// or "rw"; "" without one).
+func (p *parser) volumes(n *yaml.Node) ([]store.Volume, string) {
 	var out []store.Volume
+	socket := ""
 	if n.Kind != yaml.SequenceNode {
 		p.fail("volumes must be a list")
-		return nil
+		return nil, ""
 	}
 	for _, item := range n.Content {
 		var v store.Volume
 		typ := "volume"
+		readOnly := false
 		if item.Kind == yaml.MappingNode {
 			for k, val := range pairs(item) {
 				switch k {
@@ -548,7 +581,9 @@ func (p *parser) volumes(n *yaml.Node) []store.Volume {
 					v.Name = p.str(val)
 				case "target":
 					v.Path = p.str(val)
-				case "read_only", "volume":
+				case "read_only":
+					readOnly = p.str(val) == "true"
+				case "volume", "bind":
 					p.warn("volume %s is ignored", k)
 				default:
 					p.fail("volume %s is not supported", k)
@@ -557,7 +592,9 @@ func (p *parser) volumes(n *yaml.Node) []store.Volume {
 		} else {
 			parts := strings.Split(p.str(item), ":")
 			if len(parts) == 3 {
-				p.warn("volume %s: mode %s is ignored", parts[0], parts[2])
+				if slices.Contains(strings.Split(parts[2], ","), "ro") {
+					readOnly = true
+				}
 				parts = parts[:2]
 			}
 			if len(parts) == 2 {
@@ -570,17 +607,26 @@ func (p *parser) volumes(n *yaml.Node) []store.Volume {
 			}
 		}
 		switch {
+		case typ == "bind" && (v.Name == DockerSocket || v.Name == "/run/docker.sock"):
+			if v.Path != DockerSocket {
+				p.fail("the Docker socket must be mounted at %s", DockerSocket)
+			} else if socket = "rw"; readOnly {
+				socket = "ro"
+			}
 		case typ == "bind":
-			p.fail("volume %s: bind mounts are not supported, use a named volume", v.Name)
+			p.fail("volume %s: bind mounts are not supported (only %s), use a named volume", v.Name, DockerSocket)
 		case typ != "volume":
 			p.fail("volume type %s is not supported", typ)
 		case v.Name == "":
 			p.fail("volume %s needs a name (anonymous volumes are not supported)", v.Path)
 		default:
+			if readOnly {
+				p.warn("volume %s: read-only is ignored", v.Name)
+			}
 			out = append(out, v)
 		}
 	}
-	return out
+	return out, socket
 }
 
 func (p *parser) deploy(n *yaml.Node, s *Service) {
