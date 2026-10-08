@@ -62,6 +62,8 @@ x-kipitiny:
 
 `db` and `cache` become a managed PostgreSQL and Redis (official images are recognised), `web` connects to them through references, and `API_KEY` comes from the project variable `API_KEY` (or a `.env`).
 
+A real one: this website runs on kipitiny from [`site/compose.yaml`](https://github.com/MatHoyer/kipitiny/blob/main/site/compose.yaml), synced from git, and each release's image is deployed by the [site workflow](https://github.com/MatHoyer/kipitiny/blob/main/.github/workflows/site.yml) (see [Deploy from CI](/docs/deploys#deploy-from-ci)).
+
 ## Services
 
 Each key under `services` is a service. Its name is also its hostname inside the project: lowercase letters, digits and dashes, at most 40 characters.

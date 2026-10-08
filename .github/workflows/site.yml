@@ -4,6 +4,10 @@
 # or by hand for a site-only fix, as :sha-<commit> and :latest. Each
 # minor release since 0.10 also keeps its own docs at /docs/<minor>, taken from
 # its last patch tag.
+#
+# Then it deploys that image to the website's own kipitiny (site/compose.yaml),
+# when the repository has the KIPITINY_URL variable and a deploy token as the
+# KIPITINY_TOKEN secret.
 name: site
 
 on:
@@ -45,3 +49,17 @@ jobs:
           push: true
           cache-from: type=gha,scope=site
           cache-to: type=gha,mode=max,scope=site
+  deploy:
+    needs: image
+    if: vars.KIPITINY_URL != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        run: >
+          docker run --rm -e KIPITINY_TOKEN
+          ghcr.io/mathoyer/kipitiny deploy
+          --url ${{ vars.KIPITINY_URL }} --service kipitiny-site/homepage
+          --tag ${{ github.ref_type == 'tag' && github.ref_name || format('sha-{0}', github.sha) }}
+          --commit ${{ github.sha }}
+        env:
+          KIPITINY_TOKEN: ${{ secrets.KIPITINY_TOKEN }}
