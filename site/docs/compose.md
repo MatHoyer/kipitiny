@@ -174,13 +174,22 @@ A service can't change kind (an app into a database): delete it first.
 
 ## Git
 
-Project › **Git**: an HTTPS repository URL, a branch (default `main`), the file's path (default `compose.yaml`), and for a private repository an access token with read access to its contents. Linking shows what the first sync will change.
+Project › **Git**: the repository, a branch (default `main`) and the file's path (default `compose.yaml`). A public repository is just its HTTPS URL; a private one is picked from a [git provider](#git-providers). Linking shows what the first sync will change.
 
-- The branch is checked every 5 minutes by default (60 s to 24 h, or never with auto sync off). A push webhook syncs at once: the URL and secret are on the Git tab. GitHub and Gitea sign with the secret, GitLab sends it as a token, anything else as `Authorization: Bearer <secret>`. **Sync now** applies the file by hand, **Preview** shows what it would change.
+- The branch is checked every 5 minutes by default (60 s to 24 h, or never with auto sync off). A push webhook syncs at once. Through a GitHub provider whose app has webhooks, there's nothing to set up. Otherwise the URL and secret are on the Git tab: GitHub and Gitea sign with the secret, GitLab sends it as a token, anything else as `Authorization: Bearer <secret>`. **Sync now** applies the file by hand, **Preview** shows what it would change.
 - The file owns the services. Creating, editing or deleting them any other way (UI, API, MCP) is refused; edit the file. A database the file dropped can still be deleted by hand. Project variables, backups, schedules and uptime checks stay editable: they are not in the file.
 - CI can still deploy another tag of an app's image (`kipitiny deploy --tag`). The service keeps it until a commit changes that service's block in the file; the Git tab lists the services that run another image than the file's.
 - A failed sync is notified (`git.sync.failed`) and retried; a sync that changed something can be notified too (`git.sync.succeeded`).
 - Unlinking keeps the services as they are and makes them editable again.
+
+### Git providers
+
+Settings › **Git providers** gives the manager read access to private repositories, with no token to paste or rotate. A project then picks the provider, the repository and the branch from lists.
+
+- **GitHub:** kipitiny creates a private GitHub App (on your account, or an organization's) that can only read repository contents, then you install it and choose its repositories. It reads them with tokens it mints for an hour at a time. When GitHub can reach the manager's address, the app also delivers push webhooks for every repository it reads. **Repositories** on the provider changes which ones it can read; GitHub Enterprise Server works too.
+- **GitLab** (gitlab.com or self-hosted) and **Gitea** (or Forgejo): create an OAuth application on the forge with the redirect URI shown in kipitiny (GitLab: scopes `read_api` and `read_repository`), paste its ID and secret, then authorize it. kipitiny keeps the token refreshed. Push webhooks are set up per project, as above.
+- A provider only reads repositories on its own server. It can't be removed while projects use it. Removing it in kipitiny doesn't delete the GitHub App or revoke the authorization on the forge: do that there.
+- A revoked authorization or an uninstalled app fails the next sync (notified as `git.sync.failed`): **Reconnect** the provider.
 
 ## Moving a project to another kipitiny
 
