@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"time"
 
@@ -79,13 +80,105 @@ var pgRelKinds = map[string]string{
 	"r": "table", "p": "partitioned table", "v": "view", "m": "materialized view", "f": "foreign table",
 }
 
-// PgTables lists the tables and views of a postgres service, system schemas
-// aside.
-func (c *Core) PgTables(ctx context.Context, id string) ([]PgTable, error) {
+type PgDatabase struct {
+	Name  string `json:"name"`
+	Bytes int64  `json:"bytes"`
+	// Main is the service's own database (POSTGRES_DB), the default.
+	Main bool `json:"main"`
+}
+
+// PgDatabases lists the databases of a postgres service's instance that
+// accept connections, templates and restore leftovers aside.
+func (c *Core) PgDatabases(ctx context.Context, id string) ([]PgDatabase, error) {
 	if err := Require(ctx, store.ScopeRead); err != nil {
 		return nil, err
 	}
 	t, err := c.dataTarget(ctx, id, store.ServiceKindPostgres)
+	if err != nil {
+		return nil, err
+	}
+	return t.pgDatabases(ctx)
+}
+
+func (t dataTarget) pgDatabases(ctx context.Context) ([]PgDatabase, error) {
+	dbs := []PgDatabase{}
+	err := t.psqlJSON(ctx, `SELECT json_build_array(datname, pg_database_size(oid)) FROM pg_database
+WHERE NOT datistemplate AND datallowconn
+  AND datname NOT LIKE '%\_\_restore' AND datname NOT LIKE '%\_\_pre\_restore'
+ORDER BY datname;`, func(row []json.RawMessage) error {
+		var d PgDatabase
+		if err := unmarshalRow(row, &d.Name, &d.Bytes); err != nil {
+			return err
+		}
+		d.Main = d.Name == t.svc.Env[pgDatabase]
+		dbs = append(dbs, d)
+		return nil
+	})
+	return dbs, err
+}
+
+// pgDatabaseNameRe is what CreatePgDatabase accepts: a plain identifier, so
+// the name reads the same in every tool and needs no quoting in URLs.
+var pgDatabaseNameRe = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
+
+// CreatePgDatabase creates a database in a postgres service's instance,
+// owned by the service's user. Admin only.
+func (c *Core) CreatePgDatabase(ctx context.Context, id, name string) (PgDatabase, error) {
+	if err := Require(ctx, store.ScopeAdmin); err != nil {
+		return PgDatabase{}, err
+	}
+	if !pgDatabaseNameRe.MatchString(name) {
+		return PgDatabase{}, fmt.Errorf("%w: a database name is lowercase letters, digits and _, starting with a letter or _ (63 at most)", ErrInvalid)
+	}
+	if strings.HasSuffix(name, "__restore") || strings.HasSuffix(name, "__pre_restore") {
+		return PgDatabase{}, fmt.Errorf("%w: names ending in __restore or __pre_restore are kept for restores", ErrInvalid)
+	}
+	t, err := c.dataTarget(ctx, id, store.ServiceKindPostgres)
+	if err != nil {
+		return PgDatabase{}, err
+	}
+	// CREATE DATABASE can't run in a transaction, nor in the read-only
+	// session the browser uses.
+	ctx, cancel := context.WithTimeout(ctx, dataConsoleTimeout)
+	defer cancel()
+	err = t.dk.Exec(ctx, t.container, docker.ExecOptions{Cmd: []string{
+		"psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-U", t.svc.Env[pgUser], "-d", t.db,
+		"-c", fmt.Sprintf("CREATE DATABASE %s OWNER %s", pgIdent(name), pgIdent(t.svc.Env[pgUser])),
+	}})
+	if err != nil {
+		return PgDatabase{}, clientError(err)
+	}
+	return PgDatabase{Name: name}, nil
+}
+
+// pgTarget resolves a postgres service and the database to query: its own
+// when database is empty, else one of its instance's. The name is checked
+// against the instance's list: psql would also take a connection string.
+func (c *Core) pgTarget(ctx context.Context, id, database string) (dataTarget, error) {
+	t, err := c.dataTarget(ctx, id, store.ServiceKindPostgres)
+	if err != nil || database == "" || database == t.db {
+		return t, err
+	}
+	dbs, err := t.pgDatabases(ctx)
+	if err != nil {
+		return dataTarget{}, err
+	}
+	for _, d := range dbs {
+		if d.Name == database {
+			t.db = database
+			return t, nil
+		}
+	}
+	return dataTarget{}, fmt.Errorf("%w: %s has no database %q", ErrInvalid, t.svc.Name, database)
+}
+
+// PgTables lists the tables and views of one of a postgres service's
+// databases (its own when database is empty), system schemas aside.
+func (c *Core) PgTables(ctx context.Context, id, database string) ([]PgTable, error) {
+	if err := Require(ctx, store.ScopeRead); err != nil {
+		return nil, err
+	}
+	t, err := c.pgTarget(ctx, id, database)
 	if err != nil {
 		return nil, err
 	}
@@ -121,11 +214,11 @@ ORDER BY n.nspname, c.relname;`, func(row []json.RawMessage) error {
 }
 
 // PgRows returns one page of a table's rows with its columns.
-func (c *Core) PgRows(ctx context.Context, id, schema, table string, q RowQuery) (PgRows, error) {
+func (c *Core) PgRows(ctx context.Context, id, database, schema, table string, q RowQuery) (PgRows, error) {
 	if err := Require(ctx, store.ScopeRead); err != nil {
 		return PgRows{}, err
 	}
-	t, err := c.dataTarget(ctx, id, store.ServiceKindPostgres)
+	t, err := c.pgTarget(ctx, id, database)
 	if err != nil {
 		return PgRows{}, err
 	}
@@ -169,11 +262,11 @@ func (c *Core) PgRows(ctx context.Context, id, schema, table string, q RowQuery)
 
 // PgExport streams a table's rows matching q (all of them: no paging) to w
 // as CSV with a header.
-func (c *Core) PgExport(ctx context.Context, id, schema, table string, q RowQuery, w io.Writer) error {
+func (c *Core) PgExport(ctx context.Context, id, database, schema, table string, q RowQuery, w io.Writer) error {
 	if err := Require(ctx, store.ScopeRead); err != nil {
 		return err
 	}
-	t, err := c.dataTarget(ctx, id, store.ServiceKindPostgres)
+	t, err := c.pgTarget(ctx, id, database)
 	if err != nil {
 		return err
 	}
@@ -297,7 +390,7 @@ func (t dataTarget) psql(timeout time.Duration, sql string, stdout io.Writer) do
 	return docker.ExecOptions{
 		Cmd: []string{
 			"psql", "-X", "-q", "-At", "-v", "ON_ERROR_STOP=1",
-			"-U", t.svc.Env[pgUser], "-d", t.svc.Env[pgDatabase], "-f", "-",
+			"-U", t.svc.Env[pgUser], "-d", t.db, "-f", "-",
 		},
 		Env: []string{fmt.Sprintf("PGOPTIONS=-c default_transaction_read_only=on -c statement_timeout=%ds",
 			int(timeout.Seconds()))},

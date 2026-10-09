@@ -13,7 +13,12 @@ running.
 ## Browse
 
 - **PostgreSQL**: the tables and views outside the system schemas are listed on
-  the left (the list can be hidden). A table opens as a grid: each column shows
+  the left (the list can be hidden). When the instance holds several databases
+  (your app created more with `CREATE DATABASE`), pick one at the top right of
+  the tab; Browse and Console share it. The service's own database is the
+  default. **+** creates a new, empty database owned by the service's user (admin
+  only): apps reach it with the same credentials, ending the connection URL with
+  its name. A table opens as a grid: each column shows
   its type, a key marks the primary key and `*` a required column. Rows come 25
   to 200 per page, sorted by the primary key or any column you click. *Search rows*
   matches text in any column. *Filter* adds a condition on one column: compare it

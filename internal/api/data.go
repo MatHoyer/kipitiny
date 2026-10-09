@@ -9,8 +9,32 @@ import (
 	"github.com/MatHoyer/kipitiny/internal/core"
 )
 
+func (a *API) pgDatabases(w http.ResponseWriter, r *http.Request) {
+	dbs, err := a.core.PgDatabases(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, dbs)
+}
+
+func (a *API) createPgDatabase(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	db, err := a.core.CreatePgDatabase(r.Context(), r.PathValue("id"), body.Name)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, db)
+}
+
 func (a *API) pgTables(w http.ResponseWriter, r *http.Request) {
-	ts, err := a.core.PgTables(r.Context(), r.PathValue("id"))
+	ts, err := a.core.PgTables(r.Context(), r.PathValue("id"), r.URL.Query().Get("database"))
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -23,7 +47,7 @@ func (a *API) pgRows(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := a.core.PgRows(r.Context(), r.PathValue("id"), r.PathValue("schema"), r.PathValue("table"), q)
+	rows, err := a.core.PgRows(r.Context(), r.PathValue("id"), r.URL.Query().Get("database"), r.PathValue("schema"), r.PathValue("table"), q)
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -41,7 +65,7 @@ func (a *API) pgExport(w http.ResponseWriter, r *http.Request) {
 		h.Set("Content-Type", "text/csv; charset=utf-8")
 		h.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", schema+"."+table+".csv"))
 	}}
-	err := a.core.PgExport(r.Context(), r.PathValue("id"), schema, table, q, out)
+	err := a.core.PgExport(r.Context(), r.PathValue("id"), r.URL.Query().Get("database"), schema, table, q, out)
 	switch {
 	case err != nil && !out.wrote:
 		a.fail(w, err)
@@ -111,11 +135,14 @@ func (a *API) dataConsole(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Query string `json:"query"`
 		Write bool   `json:"write"`
+		// Database picks one of a postgres instance's databases; empty is
+		// the service's own.
+		Database string `json:"database"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
-	res, err := a.core.DataConsole(r.Context(), r.PathValue("id"), body.Query, body.Write)
+	res, err := a.core.DataConsole(r.Context(), r.PathValue("id"), body.Database, body.Query, body.Write)
 	if err != nil {
 		a.fail(w, err)
 		return

@@ -35,6 +35,8 @@ type dataTarget struct {
 	svc       store.Service
 	dk        *docker.Client
 	container string
+	// db is the postgres database queries run against.
+	db string
 }
 
 // dataTarget resolves a database service of the given kind to its running
@@ -51,7 +53,7 @@ func (c *Core) dataTarget(ctx context.Context, id string, kind store.ServiceKind
 	if err != nil {
 		return dataTarget{}, err
 	}
-	return dataTarget{svc: svc, dk: c.dockerFor(svc.ServerID), container: ct}, nil
+	return dataTarget{svc: svc, dk: c.dockerFor(svc.ServerID), container: ct, db: svc.Env[pgDatabase]}, nil
 }
 
 // execLines runs opts in the target's container and hands each stdout line

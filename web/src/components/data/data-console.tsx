@@ -112,11 +112,11 @@ const consoleError = (err: unknown) => (err instanceof ApiError && err.status ==
 const elapsed = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);
 
 /** SQL console: an editor that knows the schema, results as a typed grid. */
-export function PgConsole({ serviceId }: { serviceId: string }) {
+export function PgConsole({ serviceId, database }: { serviceId: string; database: string }) {
   const [query, setQuery] = useState("");
   const [write, setWrite] = useState(false);
   const hist = useHistory(serviceId);
-  const tables = useQuery({ queryKey: ["data", serviceId, "tables"], queryFn: () => api.pgTables(serviceId) });
+  const tables = useQuery({ queryKey: ["data", serviceId, "tables", database], queryFn: () => api.pgTables(serviceId, database) });
   const schema = useMemo(() => {
     const ns: Record<string, Record<string, string[]>> = {};
     for (const tb of tables.data ?? []) (ns[tb.schema] ??= {})[tb.name] = tb.columns.map((c) => c.name);
@@ -126,7 +126,7 @@ export function PgConsole({ serviceId }: { serviceId: string }) {
     meta: { error: false },
     mutationFn: async (v: { query: string; write: boolean }) => {
       const t0 = performance.now();
-      const res = await api.dataConsole(serviceId, v.query, v.write);
+      const res = await api.dataConsole(serviceId, v.query, v.write, database);
       return { res, ms: performance.now() - t0 };
     },
   });

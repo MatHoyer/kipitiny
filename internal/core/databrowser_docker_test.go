@@ -83,7 +83,7 @@ UPDATE s.items SET name = E'multi\nline', blob = '\xdead' WHERE id = 1;
 UPDATE s.items SET name = repeat('x', 5000) WHERE id = 2;
 CREATE VIEW s.v AS SELECT id FROM s.items;"`)
 
-	tables, err := c.PgTables(ctx, svc.ID)
+	tables, err := c.PgTables(ctx, svc.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ CREATE VIEW s.v AS SELECT id FROM s.items;"`)
 		t.Fatalf("tables: %+v", tables)
 	}
 
-	rows, err := c.PgRows(ctx, svc.ID, "s", "items", RowQuery{})
+	rows, err := c.PgRows(ctx, svc.ID, "", "s", "items", RowQuery{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ CREATE VIEW s.v AS SELECT id FROM s.items;"`)
 		t.Errorf("truncated: %v", rows.Truncated)
 	}
 
-	rows, err = c.PgRows(ctx, svc.ID, "s", "items", RowQuery{Limit: 5, OrderBy: "id", Desc: true,
+	rows, err = c.PgRows(ctx, svc.ID, "", "s", "items", RowQuery{Limit: 5, OrderBy: "id", Desc: true,
 		Filters: []PgFilter{{Column: "id", Op: "<", Value: "100"}, {Column: "name", Op: "like", Value: "item 9%"}}})
 	if err != nil {
 		t.Fatal(err)
@@ -119,31 +119,69 @@ CREATE VIEW s.v AS SELECT id FROM s.items;"`)
 		t.Errorf("filtered: %d rows, first %s", len(rows.Rows), *rows.Rows[0][0])
 	}
 
-	rows, err = c.PgRows(ctx, svc.ID, "s", "items", RowQuery{Search: "ITEM 24", Filters: []PgFilter{{Column: "id", Op: ">", Value: "240"}}})
+	rows, err = c.PgRows(ctx, svc.ID, "", "s", "items", RowQuery{Search: "ITEM 24", Filters: []PgFilter{{Column: "id", Op: ">", Value: "240"}}})
 	if err != nil || len(rows.Rows) != 9 || rows.HasMore {
 		t.Errorf("search: %d rows, %v", len(rows.Rows), err)
 	}
 
-	_, err = c.PgRows(ctx, svc.ID, "s", "items", RowQuery{Filters: []PgFilter{{Column: "id", Op: "=", Value: "abc"}}})
+	_, err = c.PgRows(ctx, svc.ID, "", "s", "items", RowQuery{Filters: []PgFilter{{Column: "id", Op: "=", Value: "abc"}}})
 	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "invalid input syntax") {
 		t.Errorf("bad value: %v", err)
 	}
-	if _, err = c.PgRows(ctx, svc.ID, "s", "missing", RowQuery{}); !errors.Is(err, store.ErrNotFound) {
+	if _, err = c.PgRows(ctx, svc.ID, "", "s", "missing", RowQuery{}); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("missing table: %v", err)
 	}
 
 	var csv strings.Builder
-	if err := c.PgExport(ctx, svc.ID, "s", "items", RowQuery{Filters: []PgFilter{{Column: "id", Op: "<=", Value: "3"}}}, &csv); err != nil {
+	if err := c.PgExport(ctx, svc.ID, "", "s", "items", RowQuery{Filters: []PgFilter{{Column: "id", Op: "<=", Value: "3"}}}, &csv); err != nil {
 		t.Fatal(err)
 	}
 	if lines := strings.Split(strings.TrimSpace(csv.String()), "\n"); lines[0] != "id,name,blob,doc" || len(lines) != 5 {
 		t.Errorf("export:\n%s", csv.String())
 	}
 
-	if _, err := c.PgTables(WithActor(context.Background(), Actor{Scope: store.ScopeRead}), svc.ID); err != nil {
+	// Another database of the instance, picked by name; anything else is refused.
+	exec(`psql -U app -d app -c "CREATE DATABASE other" && psql -U app -d other -c "CREATE TABLE notes (id int PRIMARY KEY); INSERT INTO notes VALUES (7)"`)
+	dbs, err := c.PgDatabases(ctx, svc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dbs) != 3 || dbs[0].Name != "app" || !dbs[0].Main || dbs[1].Name != "other" || dbs[1].Main || dbs[2].Name != "postgres" {
+		t.Errorf("databases: %+v", dbs)
+	}
+	if tables, err := c.PgTables(ctx, svc.ID, "other"); err != nil || len(tables) != 1 || tables[0].Name != "notes" {
+		t.Errorf("other tables: %+v %v", tables, err)
+	}
+	if rows, err := c.PgRows(ctx, svc.ID, "other", "public", "notes", RowQuery{}); err != nil || *rows.Rows[0][0] != "7" {
+		t.Errorf("other rows: %v", err)
+	}
+	if res, err := c.DataConsole(ctx, svc.ID, "other", "SELECT current_database()", false); err != nil || *res.Rows[0][0] != "other" {
+		t.Errorf("other console: %+v %v", res, err)
+	}
+	if _, err := c.CreatePgDatabase(ctx, svc.ID, "reports"); err != nil {
+		t.Fatal(err)
+	}
+	if tables, err := c.PgTables(ctx, svc.ID, "reports"); err != nil || len(tables) != 0 {
+		t.Errorf("new database: %+v %v", tables, err)
+	}
+	for _, name := range []string{"reports", "Bad-Name", "x; DROP DATABASE app", "x__restore", ""} {
+		if _, err := c.CreatePgDatabase(ctx, svc.ID, name); !errors.Is(err, ErrInvalid) {
+			t.Errorf("create %q: %v", name, err)
+		}
+	}
+	if _, err := c.CreatePgDatabase(WithActor(context.Background(), Actor{Scope: store.ScopeRead}), svc.ID, "nope"); !errors.Is(err, ErrForbidden) {
+		t.Errorf("read scope create: %v", err)
+	}
+	for _, db := range []string{"missing", "host=example.com dbname=app", "template0"} {
+		if _, err := c.PgTables(ctx, svc.ID, db); !errors.Is(err, ErrInvalid) {
+			t.Errorf("database %q: %v", db, err)
+		}
+	}
+
+	if _, err := c.PgTables(WithActor(context.Background(), Actor{Scope: store.ScopeRead}), svc.ID, ""); err != nil {
 		t.Errorf("read scope: %v", err)
 	}
-	if _, err := c.PgTables(context.Background(), svc.ID); !errors.Is(err, ErrUnauthorized) {
+	if _, err := c.PgTables(context.Background(), svc.ID, ""); !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("no actor: %v", err)
 	}
 }
@@ -243,31 +281,31 @@ func TestDataConsoleDockerPostgres(t *testing.T) {
 	})
 	exec(`psql -U app -d app -c "CREATE TABLE t (id int, name text); INSERT INTO t SELECT i, 'n' || i FROM generate_series(1, 300) i; INSERT INTO t VALUES (0, NULL), (-1, '')"`)
 
-	res, err := c.DataConsole(ctx, svc.ID, "SELECT 1; SELECT id, name FROM t WHERE id <= 0 ORDER BY id", false)
+	res, err := c.DataConsole(ctx, svc.ID, "", "SELECT 1; SELECT id, name FROM t WHERE id <= 0 ORDER BY id", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(res.Columns, []string{"id", "name"}) || len(res.Rows) != 2 || *res.Rows[0][1] != "" || res.Rows[1][1] != nil {
 		t.Errorf("select: %+v", res)
 	}
-	if res, err = c.DataConsole(ctx, svc.ID, "SELECT * FROM t", false); err != nil || len(res.Rows) != DataPageMax || !res.More {
+	if res, err = c.DataConsole(ctx, svc.ID, "", "SELECT * FROM t", false); err != nil || len(res.Rows) != DataPageMax || !res.More {
 		t.Errorf("capped select: %d rows, more %v, %v", len(res.Rows), res.More, err)
 	}
-	if _, err = c.DataConsole(ctx, svc.ID, "DELETE FROM t", false); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "read-only") {
+	if _, err = c.DataConsole(ctx, svc.ID, "", "DELETE FROM t", false); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "read-only") {
 		t.Errorf("read-only delete: %v", err)
 	}
-	if _, err = c.DataConsole(ctx, svc.ID, "SELECT nope", false); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "nope") {
+	if _, err = c.DataConsole(ctx, svc.ID, "", "SELECT nope", false); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "nope") {
 		t.Errorf("bad sql: %v", err)
 	}
-	if res, err = c.DataConsole(ctx, svc.ID, "DELETE FROM t WHERE id < 0", true); err != nil || res.Output != "DELETE 1" {
+	if res, err = c.DataConsole(ctx, svc.ID, "", "DELETE FROM t WHERE id < 0", true); err != nil || res.Output != "DELETE 1" {
 		t.Errorf("write: %+v %v", res, err)
 	}
 	// A failing statement rolls the whole run back.
-	if _, err = c.DataConsole(ctx, svc.ID, "DELETE FROM t; SELECT nope", true); err == nil {
+	if _, err = c.DataConsole(ctx, svc.ID, "", "DELETE FROM t; SELECT nope", true); err == nil {
 		t.Error("failing write succeeded")
 	}
 	// Past the caps a write still runs to its end.
-	if res, err = c.DataConsole(ctx, svc.ID, "UPDATE t SET name = 'x' RETURNING *", true); err != nil || !res.More {
+	if res, err = c.DataConsole(ctx, svc.ID, "", "UPDATE t SET name = 'x' RETURNING *", true); err != nil || !res.More {
 		t.Errorf("returning: more %v %v", res.More, err)
 	}
 	if got := exec(`psql -U app -d app -tAc "SELECT count(*) FILTER (WHERE name = 'x'), count(*) FROM t"`); got != "301|301" {
@@ -281,7 +319,7 @@ func TestDataConsoleDockerPostgres(t *testing.T) {
 	if len(audit) != 7 || audit[0].Action != "data console (write)" || audit[0].Target != svc.ID {
 		t.Errorf("audit: %+v", audit)
 	}
-	if _, err := c.DataConsole(WithActor(context.Background(), Actor{Scope: store.ScopeRead}), svc.ID, "SELECT 1", false); !errors.Is(err, ErrForbidden) {
+	if _, err := c.DataConsole(WithActor(context.Background(), Actor{Scope: store.ScopeRead}), svc.ID, "", "SELECT 1", false); !errors.Is(err, ErrForbidden) {
 		t.Errorf("read scope: %v", err)
 	}
 }
@@ -294,7 +332,7 @@ func TestDataConsoleDockerRedis(t *testing.T) {
 	})
 	exec(`redis-cli SET greeting hello`)
 	run := func(cmd string, write bool) (string, error) {
-		res, err := c.DataConsole(ctx, svc.ID, cmd, write)
+		res, err := c.DataConsole(ctx, svc.ID, "", cmd, write)
 		return res.Output, err
 	}
 	if out, err := run("GET greeting", false); err != nil || out != `"hello"` {
