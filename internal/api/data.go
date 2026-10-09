@@ -83,3 +83,26 @@ func (l *lazyHeaders) Write(p []byte) (int, error) {
 	}
 	return l.w.Write(p)
 }
+
+func (a *API) redisScan(w http.ResponseWriter, r *http.Request) {
+	v := r.URL.Query()
+	count, _ := strconv.Atoi(v.Get("count"))
+	keys, err := a.core.RedisScan(r.Context(), r.PathValue("id"), v.Get("cursor"), v.Get("pattern"), count)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, keys)
+}
+
+// redisGet takes the key as a query parameter: keys are arbitrary bytes.
+func (a *API) redisGet(w http.ResponseWriter, r *http.Request) {
+	v := r.URL.Query()
+	count, _ := strconv.Atoi(v.Get("count"))
+	val, err := a.core.RedisGet(r.Context(), r.PathValue("id"), v.Get("key"), v.Get("cursor"), count)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, val)
+}
