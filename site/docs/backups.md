@@ -61,6 +61,10 @@ To restore one, stop the manager and replace `/data/kipitiny.db` with the file
 
 ## Targets
 
-S3-compatible targets (AWS S3, Cloudflare R2, Backblaze B2, MinIO…) take an
-endpoint, a bucket, an optional prefix and credentials. Targets are checked (a
-test object is written and deleted) before they are saved.
+S3-compatible targets take a bucket, an optional prefix and credentials.
+Cloudflare R2, AWS S3, Backblaze B2 and Hetzner Object Storage have their own
+form, which builds the endpoint from the account ID and jurisdiction (R2:
+default, EU or FedRAMP, as chosen when the bucket was created), the region (AWS,
+B2) or the location (Hetzner). Any other provider (MinIO, Garage, Scaleway,
+OVH…) takes the endpoint, region and HTTPS setting directly. Targets are checked
+(a test object is written and deleted) before they are saved.

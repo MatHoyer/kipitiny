@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Lock, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, KeyRound, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { CheckboxField, CopyField, ErrorText, Mono, Tag, TestButton } from "@/components/common";
+import { CheckboxField, ChoiceTile, CopyField, ErrorText, Mono, Tag, TestButton } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,12 +15,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
+import { FloatingSelect } from "@/components/ui/floating-select";
 import { api, type BackupTarget, type TargetInput } from "@/api";
-import { storageIcon, storageIcons, storageLocation } from "@/components/storage";
+import {
+  storageForm,
+  storageIcon,
+  storageKind,
+  storageLocation,
+  storageProviders,
+  type StorageProvider,
+} from "@/components/storage";
 import { SettingsPage } from "./page";
 
-/** What the dialog shows: a new target, or a target being edited. */
-type Editing = { step: "new" } | { step: "edit"; target: BackupTarget };
+/** What the dialog shows: the provider picker, a new target, or a target being edited. */
+type Editing = { step: "pick" } | { step: "new"; provider: StorageProvider } | { step: "edit"; target: BackupTarget };
 
 /** Where kipitiny stores files: backups today. */
 export function Storage() {
@@ -44,7 +52,7 @@ export function Storage() {
   return (
     <SettingsPage
       actions={
-        <Button size="sm" onClick={() => setEditing({ step: "new" })}>
+        <Button size="sm" onClick={() => setEditing({ step: "pick" })}>
           <Plus data-icon="inline-start" />
           Add target
         </Button>
@@ -60,7 +68,7 @@ export function Storage() {
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{t.name}</p>
-                <p className="truncate text-xs text-muted-foreground">{t.kind === "local" ? "Built in" : "S3-compatible"}</p>
+                <p className="truncate text-xs text-muted-foreground">{storageKind(t)}</p>
               </div>
               {t.ageRecipient && <Tag className="bg-emerald-500/10 text-emerald-600">encrypted</Tag>}
             </div>
@@ -114,10 +122,39 @@ export function Storage() {
       </div>
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
-          {editing && (
+          {editing?.step === "pick" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Add a target</DialogTitle>
+                <DialogDescription>Where should backups go?</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {storageProviders.map((p) => (
+                  <ChoiceTile
+                    key={p.id}
+                    icon={p.icon}
+                    title={p.label}
+                    description={p.description}
+                    onClick={() => setEditing({ step: "new", provider: p })}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+          {editing?.step === "new" && (
             <TargetForm
-              key={editing.step === "edit" ? editing.target.id : "new"}
-              target={editing.step === "edit" ? editing.target : null}
+              key={editing.provider.id}
+              provider={editing.provider}
+              target={null}
+              onBack={() => setEditing({ step: "pick" })}
+              onDone={() => setEditing(null)}
+            />
+          )}
+          {editing?.step === "edit" && (
+            <TargetForm
+              key={editing.target.id}
+              {...storageForm(editing.target)}
+              target={editing.target}
               onDone={() => setEditing(null)}
             />
           )}
@@ -159,17 +196,38 @@ const emptyTarget: TargetInput = {
   useSsl: true,
 };
 
-function TargetForm({ target, onDone }: { target: BackupTarget | null; onDone: () => void }) {
+function TargetForm({
+  provider: p,
+  location: initialLocation = "",
+  variant: initialVariant = "",
+  target,
+  onBack,
+  onDone,
+}: {
+  provider: StorageProvider;
+  /** The provider's location (account, region…) of the edited target. */
+  location?: string;
+  variant?: string;
+  target: BackupTarget | null;
+  onBack?: () => void;
+  onDone: () => void;
+}) {
   const qc = useQueryClient();
   const [form, setForm] = useState<TargetInput>(() => {
     if (!target) return { ...emptyTarget, kind: "s3" };
     const { name, endpoint, region, bucket, prefix, accessKey, secretKey, useSsl } = target;
     return { name, endpoint, region, bucket, prefix, accessKey, secretKey, useSsl };
   });
+  const loc = p.location;
+  const [location, setLocation] = useState(initialLocation || loc?.options?.[0] || "");
+  const [variant, setVariant] = useState(initialVariant || p.variant?.options[0].value || "");
   const set = (k: keyof TargetInput) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
+  // A provider's form derives the endpoint and region from the location.
+  const input = (): TargetInput =>
+    loc ? { ...form, endpoint: loc.endpoint(location.trim(), variant), region: loc.region(location.trim()), useSsl: true } : form;
   const save = useMutation({
     meta: { error: "Couldn't save the backup target" },
-    mutationFn: () => (target ? api.updateBackupTarget(target.id, form) : api.createBackupTarget(form)),
+    mutationFn: () => (target ? api.updateBackupTarget(target.id, input()) : api.createBackupTarget(input())),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["storage"] });
       onDone();
@@ -183,21 +241,50 @@ function TargetForm({ target, onDone }: { target: BackupTarget | null; onDone: (
     <form onSubmit={onSubmit} className="contents">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2 [&>svg]:size-5">
-          {storageIcons.s3}
-          {target ? `Edit ${target.name}` : "New S3-compatible target"}
+          {p.icon}
+          {target ? `Edit ${target.name}` : `Connect ${p.label}`}
         </DialogTitle>
-        <DialogDescription>AWS S3, Cloudflare R2, Backblaze B2, MinIO… A test file is written and deleted before saving.</DialogDescription>
+        <DialogDescription>{p.help} A test file is written and deleted before saving.</DialogDescription>
       </DialogHeader>
       <div className="grid gap-4 sm:grid-cols-2">
         <FloatingInput label="Name" required autoFocus value={form.name} onChange={set("name")} placeholder="offsite" />
-        <FloatingInput
-          label="Endpoint"
-          required
-          value={form.endpoint}
-          onChange={set("endpoint")}
-          placeholder="s3.eu-west-1.amazonaws.com"
-          description="host[:port]"
-        />
+        {loc?.options ? (
+          <FloatingSelect
+            label={loc.label}
+            value={location}
+            onValueChange={setLocation}
+            options={loc.options.map((o) => ({ value: o, label: o }))}
+            description={loc.description}
+          />
+        ) : loc ? (
+          <FloatingInput
+            label={loc.label}
+            required
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder={loc.placeholder}
+            pattern={loc.pattern}
+            description={loc.description}
+          />
+        ) : (
+          <FloatingInput
+            label="Endpoint"
+            required
+            value={form.endpoint}
+            onChange={set("endpoint")}
+            placeholder="s3.example.com"
+            description="host[:port]"
+          />
+        )}
+        {p.variant && (
+          <FloatingSelect
+            label={p.variant.label}
+            value={variant}
+            onValueChange={setVariant}
+            options={p.variant.options}
+            description={p.variant.description}
+          />
+        )}
         <FloatingInput label="Bucket" required value={form.bucket} onChange={set("bucket")} />
         <FloatingInput
           label="Prefix"
@@ -206,22 +293,27 @@ function TargetForm({ target, onDone }: { target: BackupTarget | null; onDone: (
           placeholder="kipitiny"
           description="Optional folder inside the bucket."
         />
-        <FloatingInput label="Access key" required value={form.accessKey} onChange={set("accessKey")} autoComplete="off" />
+        <FloatingInput label={p.accessKey} required value={form.accessKey} onChange={set("accessKey")} autoComplete="off" />
         <FloatingInput
-          label="Secret key"
+          label={p.secretKey}
           required
           type="password"
           value={form.secretKey}
           onChange={set("secretKey")}
           autoComplete="new-password"
+          description={target ? "Leave as is to keep the saved one." : undefined}
         />
-        <FloatingInput label="Region" value={form.region} onChange={set("region")} description="Usually optional." />
-        <CheckboxField
-          label="Use HTTPS"
-          checked={form.useSsl}
-          onCheckedChange={(v) => setForm({ ...form, useSsl: v })}
-          className="self-center"
-        />
+        {!loc && (
+          <>
+            <FloatingInput label="Region" value={form.region} onChange={set("region")} description="Usually optional." />
+            <CheckboxField
+              label="Use HTTPS"
+              checked={form.useSsl}
+              onCheckedChange={(v) => setForm({ ...form, useSsl: v })}
+              className="self-center"
+            />
+          </>
+        )}
         {!target && (
           <CheckboxField
             label={
@@ -237,6 +329,12 @@ function TargetForm({ target, onDone }: { target: BackupTarget | null; onDone: (
         )}
       </div>
       <DialogFooter>
+        {onBack && (
+          <Button type="button" variant="ghost" className="sm:mr-auto" disabled={save.isPending} onClick={onBack}>
+            <ChevronLeft data-icon="inline-start" />
+            Back
+          </Button>
+        )}
         <Button type="submit" loading={save.isPending}>
           {target ? "Save" : "Add target"}
         </Button>
