@@ -1,7 +1,10 @@
 import { handle } from "./backend";
+import { fakeEventSource, fakeWebSocket } from "./streams";
 
 /** Routes the app's /api calls to the in-browser backend instead of the network. */
 export function install() {
+  window.EventSource = fakeEventSource(window.EventSource);
+  window.WebSocket = fakeWebSocket(window.WebSocket);
   const real = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input), location.href);

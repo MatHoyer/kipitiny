@@ -1,4 +1,19 @@
-import type { CanvasPoint, Deployment, Network, Project, Service } from "@/api";
+import type {
+  ApiToken,
+  AuditEntry,
+  Backup,
+  CanvasPoint,
+  CleanupSettings,
+  Deployment,
+  Domain,
+  Network,
+  NotificationChannel,
+  Project,
+  Registry,
+  Restore,
+  Schedule,
+  Service,
+} from "@/api";
 
 /*
  * What the demo starts with: one project running a small SaaS (a front end
@@ -10,7 +25,7 @@ export type DemoTable = { schema: string; name: string; columns: { name: string;
 export type DemoRedisKey = { key: string; type: "string" | "hash" | "list" | "set" | "zset"; ttl: number; items: string[][] };
 
 export type DemoDb = {
-  version: 1;
+  version: 2;
   projects: Project[];
   services: Omit<Service, "containers">[];
   networks: Omit<Network, "services" | "dockerName">[];
@@ -18,6 +33,15 @@ export type DemoDb = {
   canvas: Record<string, CanvasPoint>;
   tables: DemoTable[];
   redis: DemoRedisKey[];
+  backups: Backup[];
+  schedules: Schedule[];
+  restores: Restore[];
+  domains: Domain[];
+  registries: Registry[];
+  channels: NotificationChannel[];
+  tokens: ApiToken[];
+  audit: AuditEntry[];
+  cleanup: CleanupSettings;
 };
 
 const at = (daysAgo: number, hour = 9) => new Date(Date.UTC(2026, 8, 30, hour) - daysAgo * 86_400_000).toISOString();
@@ -149,6 +173,71 @@ function redis(): DemoRedisKey[] {
   return keys;
 }
 
+/** A week of nightly backups, each restore-tested, plus the manager's own. */
+function backups(): Backup[] {
+  const out: Backup[] = [];
+  const r = rng(99);
+  const base = { encrypted: false, projectId: "acme", projectName: "acme", targetId: "local", status: "succeeded" as const, sha256: "", pgVersion: "" };
+  for (let d = 0; d < 7; d++) {
+    const created = at(d, 3);
+    const db = 4_100_000 + Math.floor(r() * 400_000) + (7 - d) * 30_000;
+    out.push({
+      ...base,
+      id: `bk-db-${d}`,
+      kind: "postgres",
+      database: "postgres",
+      serviceId: "db",
+      serviceName: "db",
+      serviceKind: "postgres",
+      serviceIcon: "postgres",
+      objectKey: `acme/db/${created.slice(0, 10)}.dump`,
+      sizeBytes: db,
+      sha256: (d * 7919).toString(16).padStart(8, "0") + "e3b0c44298fc1c149afbf4c8996fb924",
+      pgVersion: "17.6",
+      durationMs: 1800 + Math.floor(r() * 900),
+      createdAt: created,
+      finishedAt: created,
+      verifyStatus: "succeeded",
+      verifyDetails: { tables: 3, rows: 140 + 4 + 296, dbBytes: db * 3, durationMs: 4200 + Math.floor(r() * 1500) },
+      verifiedAt: created,
+    });
+    out.push({
+      ...base,
+      id: `bk-cache-${d}`,
+      kind: "volume",
+      serviceId: "cache",
+      serviceName: "cache",
+      serviceKind: "redis",
+      serviceIcon: "redis",
+      objectKey: `acme/cache/${created.slice(0, 10)}.tar.gz`,
+      sizeBytes: 180_000 + Math.floor(r() * 40_000),
+      volumes: ["kipitiny-cache-data"],
+      durationMs: 600 + Math.floor(r() * 300),
+      createdAt: created,
+      finishedAt: created,
+      verifyStatus: "succeeded",
+      verifyDetails: { tables: 0, rows: 0, dbBytes: 0, files: 3, durationMs: 900 },
+      verifiedAt: created,
+    });
+  }
+  out.push({
+    ...base,
+    id: "bk-manager-0",
+    kind: "manager",
+    serviceId: "",
+    serviceName: "",
+    projectId: "",
+    projectName: "",
+    objectKey: "manager/2026-09-30.db",
+    sizeBytes: 524_288,
+    durationMs: 120,
+    createdAt: at(0, 4),
+    finishedAt: at(0, 4),
+    verifyDetails: { tables: 0, rows: 0, dbBytes: 0, durationMs: 0 },
+  });
+  return out;
+}
+
 export function seed(): DemoDb {
   const services = [
     service({ id: "web", name: "web", kind: "app", image: "nginx:1.27-alpine", domain: "acme.example", port: 80 }),
@@ -177,7 +266,7 @@ export function seed(): DemoDb {
     service({ id: "cache", name: "cache", kind: "redis", image: "redis:8-alpine", memoryMb: 256, env: { REDIS_PASSWORD: "demo-password" }, secrets: ["REDIS_PASSWORD"] }),
   ];
   return {
-    version: 1,
+    version: 2,
     projects: [{ id: "acme", name: "acme", serverId: "local", env: { APP_URL: "https://acme.example" }, secrets: [], createdAt: at(30), updatedAt: at(2) }],
     services,
     networks: [],
@@ -185,5 +274,30 @@ export function seed(): DemoDb {
     canvas: {},
     tables: tables(),
     redis: redis(),
+    backups: backups(),
+    schedules: [
+      { id: "sch-db", kind: "postgres", serviceId: "db", targetId: "local", cron: "0 3 * * *", keepLast: 0, keepDaily: 7, keepWeekly: 4, keepMonthly: 6, enabled: true, verify: true, createdAt: at(30), nextRun: at(-1, 3) },
+      { id: "sch-cache", kind: "volume", serviceId: "cache", targetId: "local", cron: "0 3 * * *", keepLast: 7, keepDaily: 0, keepWeekly: 0, keepMonthly: 0, enabled: true, verify: true, createdAt: at(30), nextRun: at(-1, 3) },
+      { id: "sch-manager", kind: "manager", targetId: "local", cron: "0 4 * * *", keepLast: 14, keepDaily: 0, keepWeekly: 0, keepMonthly: 0, enabled: true, verify: false, createdAt: at(30), nextRun: at(-1, 4) },
+    ],
+    restores: [{ id: "rs-1", backupId: "bk-db-3", serviceId: "db", status: "succeeded", createdAt: at(3, 11), finishedAt: at(3, 11) }],
+    domains: [{ id: "dom-1", name: "acme.example", proxied: false, createdAt: at(30) }],
+    registries: [{ id: "reg-1", host: "ghcr.io", username: "acme-bot", password: "********", createdAt: at(20) }],
+    channels: [
+      { id: "ch-1", name: "#ops", kind: "discord", config: { webhookUrl: "********" }, events: ["deploy.failed", "backup.failed", "uptime.down", "service.restarted", "service.unhealthy"], enabled: true, createdAt: at(20) },
+    ],
+    tokens: [
+      { id: "tok-1", name: "github-actions", scope: "deploy", createdAt: at(25), lastUsedAt: at(2, 14) },
+      { id: "tok-2", name: "claude-code", scope: "read", createdAt: at(10), lastUsedAt: at(0, 10) },
+    ],
+    audit: [
+      { id: "au-1", actor: "token:github-actions", action: "POST /api/services/{id}/deploy", target: "api", status: 202, createdAt: at(2, 14) },
+      { id: "au-2", actor: "token:github-actions", action: "POST /api/services/{id}/deploy", target: "web", status: 202, createdAt: at(2, 14) },
+      { id: "au-3", actor: "user:demo", action: "POST /api/backups/{id}/restore", target: "bk-db-3", status: 202, createdAt: at(3, 11) },
+      { id: "au-4", actor: "user:demo", action: "PATCH /api/services/{id}", target: "api", status: 200, createdAt: at(4, 16) },
+      { id: "au-5", actor: "token:claude-code", action: "POST /api/services/{id}/deploy", target: "api", status: 403, error: "this token's scope (read) does not allow that", createdAt: at(5, 10) },
+      { id: "au-6", actor: "user:demo", action: "POST /api/projects/{id}/services", target: "acme", status: 201, createdAt: at(30, 9) },
+    ],
+    cleanup: { enabled: true, cron: "0 5 * * 0", minAgeHours: 24, images: "unused", volumes: "anonymous", buildCache: true, containers: true, networks: true, keepDeployments: 20 },
   };
 }
