@@ -331,3 +331,47 @@ func (t *tools) getDeploymentLog(ctx context.Context, _ *mcp.CallToolRequest, in
 	}
 	return nil, out, sc.Err()
 }
+
+type deleteServiceIn struct {
+	Service string `json:"service" jsonschema:"the service as project/service, or its ID"`
+	Confirm string `json:"confirm" jsonschema:"must equal the service name"`
+}
+
+type deleted struct {
+	Deleted string `json:"deleted"`
+}
+
+// deleteService always wants the confirmation, even for an app without
+// data: an agent deleting the wrong service is costly either way.
+func (t *tools) deleteService(ctx context.Context, _ *mcp.CallToolRequest, in deleteServiceIn) (*mcp.CallToolResult, deleted, error) {
+	out, err := mutate(ctx, t.c, store.ScopeAdmin, "delete_service", in.Service, func() (deleted, error) {
+		svc, err := t.c.ResolveService(ctx, in.Service)
+		if err != nil {
+			return deleted{}, err
+		}
+		if in.Confirm != svc.Name {
+			return deleted{}, errors.New("deleting a service removes its containers and data: confirm must repeat the service name")
+		}
+		return deleted{Deleted: in.Service}, t.c.DeleteService(ctx, svc.ID, in.Confirm)
+	})
+	return nil, out, err
+}
+
+type deleteProjectIn struct {
+	Project string `json:"project" jsonschema:"the project name"`
+	Confirm string `json:"confirm" jsonschema:"must equal the project name"`
+}
+
+func (t *tools) deleteProject(ctx context.Context, _ *mcp.CallToolRequest, in deleteProjectIn) (*mcp.CallToolResult, deleted, error) {
+	out, err := mutate(ctx, t.c, store.ScopeAdmin, "delete_project", in.Project, func() (deleted, error) {
+		p, err := t.findProject(ctx, in.Project)
+		if err != nil {
+			return deleted{}, err
+		}
+		if in.Confirm != p.Name {
+			return deleted{}, errors.New("deleting a project removes all its services and their data: confirm must repeat the project name")
+		}
+		return deleted{Deleted: p.Name}, t.c.DeleteProject(ctx, p.ID, in.Confirm)
+	})
+	return nil, out, err
+}
