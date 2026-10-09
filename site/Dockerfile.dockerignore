@@ -1,0 +1,11 @@
+# Context is the repository root; only web/ and site/ are needed.
+*
+!web/
+!site/
+**/node_modules
+web/dist
+web/dist-demo
+site/build
+site/.react-router
+site/public/demo
+site/README.md

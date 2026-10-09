@@ -111,9 +111,15 @@ function Flow({ servers, projectView, className }: { servers: ServerTopology[]; 
       >
         <Background gap={20} size={1.5} />
         <Controls showInteractive={false} />
-        <MiniMap pannable zoomable nodeStrokeWidth={2} nodeColor={(n: Node) => (n.type === "project" || n.type === "server" ? "transparent" : "var(--muted-foreground)")} />
-        <Panel position="top-left" className="flex flex-wrap items-center gap-3 rounded-lg border bg-card/90 px-3 py-1.5 backdrop-blur">
-          <Legend />
+        <MiniMap className="max-sm:hidden" pannable zoomable nodeStrokeWidth={2} nodeColor={(n: Node) => (n.type === "project" || n.type === "server" ? "transparent" : "var(--muted-foreground)")} />
+        <Panel
+          position="top-left"
+          // On a phone the legend hides; the panel too, unless it holds Reset layout.
+          className="flex flex-wrap items-center gap-3 rounded-lg border bg-card/90 px-3 py-1.5 backdrop-blur max-sm:[&:not(:has(>button))]:hidden"
+        >
+          <div className="max-sm:hidden">
+            <Legend />
+          </div>
           {Object.keys(saved).length > 0 && (
             <ConfirmDialog
               trigger={

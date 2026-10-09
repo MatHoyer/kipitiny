@@ -4,7 +4,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 export CGO_ENABLED := 0
 DEV_ENV := KIPITINY_ADDR=:8080 KIPITINY_DATA_DIR=./data KIPITINY_LOG_LEVEL=debug
 
-.PHONY: all build ui ui-stub dev-api dev-ui dev-site site test lint docker clean
+.PHONY: all build ui ui-stub dev-api dev-ui dev-site site site-demo test lint docker clean
 
 all: build
 
@@ -27,14 +27,19 @@ dev-ui:
 	cd web && pnpm dev
 
 # The website (landing page and docs), on :5173 like the UI: run one at a time.
-dev-site:
+dev-site: site-demo
 	site/scripts/versions.sh
 	cd site && pnpm install --frozen-lockfile && pnpm dev
 
 # Static site in site/build/client, with the docs of each release since 0.10.
-site:
+site: site-demo
 	site/scripts/versions.sh
 	cd site && pnpm install --frozen-lockfile && pnpm typecheck && pnpm build
+
+# The manager's UI in demo mode, which the site serves at /demo.
+site-demo:
+	cd web && pnpm install --frozen-lockfile && pnpm build:demo
+	rm -rf site/public/demo && cp -r web/dist-demo site/public/demo
 
 test: ui-stub
 	go test ./...

@@ -171,6 +171,18 @@ section.block { padding: clamp(64px, 10vw, 120px) 0 0; }
 .diagram text.s { fill: var(--ink-soft); font-size: 12px; }
 .diagram .hi + text, .diagram text.on-hi { fill: #0f1e3a; }
 
+/* Live demo: the manager's UI in a browser window */
+.demo { border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; background: var(--panel); box-shadow: 0 12px 40px rgb(15 30 58 / 0.12); }
+.demo-bar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--rule); background: color-mix(in srgb, var(--ink) 4%, var(--panel)); }
+.demo-dots { display: flex; gap: 6px; flex: none; }
+.demo-dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--rule); }
+.demo-tabs { display: flex; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.demo-tabs button { flex: none; font: 500 0.875rem var(--body); color: var(--ink-soft); background: none; border: 0; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.demo-tabs button:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.demo-tabs button[aria-selected="true"] { color: var(--ink); background: color-mix(in srgb, var(--signal) 35%, transparent); }
+.demo-open { flex: none; font-size: 0.8125rem; color: var(--ink-soft); white-space: nowrap; }
+.demo iframe { display: block; width: 100%; height: clamp(520px, 78vh, 760px); border: 0; background: var(--paper); }
+
 /* Install steps */
 .steps { list-style: none; margin: 0; padding: 0; counter-reset: s; display: grid; gap: 28px; max-width: 760px; }
 /* minmax(0, …): a long command scrolls inside its block instead of widening the page. */
@@ -199,6 +211,8 @@ footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
   .server .val.ours { display: none; }
   .install { width: 100%; }
   .steps li { grid-template-columns: 28px minmax(0, 1fr); gap: 0 10px; }
+  .demo-dots { display: none; }
+  .demo-open { display: none; }
   .steps li::before { font-size: 1.5rem; }
 }
 
