@@ -12,11 +12,6 @@
   stroke: #4169e1;
   stroke-dasharray: 5 4;
 }
-.react-flow__edge.map-edge-net path.react-flow__edge-path,
-.map-legend-net path {
-  stroke: var(--color-violet-500);
-  stroke-dasharray: 2 4;
-}
 .react-flow__edge path.react-flow__edge-path {
   stroke-width: 1.5;
 }
@@ -42,4 +37,11 @@
 }
 .react-flow {
   --xy-background-color: transparent;
+}
+/* A network's area only takes clicks (and dropped lines) on its name tab. */
+.react-flow__node-networkArea {
+  pointer-events: none !important;
+}
+.react-flow__node-networkArea .network-tab {
+  pointer-events: auto;
 }

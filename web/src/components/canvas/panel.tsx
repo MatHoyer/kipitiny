@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Globe, Network, Play, RotateCw, Rocket, Square, X } from "lucide-react";
+import { ExternalLink, Globe, LogOut, Network, Play, RotateCw, Rocket, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
@@ -13,6 +13,7 @@ import type { MapNode } from "./build";
 /** Details of the selected node, over the canvas's right edge. */
 export function NodePanel({ node, servers, onClose }: { node: MapNode; servers: ServerTopology[]; onClose: () => void }) {
   const d = node.data;
+  const leave = useLeaveNetwork();
   const server = servers.find((s) => s.id === ("serverId" in d ? d.serverId : d.server.id));
   const networks = server?.networks ?? [];
   let title: ReactNode = null;
@@ -55,9 +56,19 @@ export function NodePanel({ node, servers, onClose }: { node: MapNode; servers: 
             <Field label="Networks">
               <span className="flex flex-wrap gap-1">
                 {joined.map((n) => (
-                  <span key={n.name} className="inline-flex items-center gap-1 rounded-full border border-violet-500/40 px-2 py-0.5 text-xs">
+                  <span key={n.name} className="inline-flex items-center gap-1 rounded-full border border-violet-500/40 py-0.5 pr-0.5 pl-2 text-xs">
                     <Network className="size-3 text-violet-500" />
                     {n.custom}
+                    <button
+                      type="button"
+                      title={`Leave ${n.custom}`}
+                      aria-label={`Leave ${n.custom}`}
+                      disabled={leave.isPending}
+                      className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      onClick={() => leave.mutate({ svc, networkId: n.customId!, name: n.custom! })}
+                    >
+                      <X className="size-3" />
+                    </button>
                   </span>
                 ))}
               </span>
@@ -100,14 +111,38 @@ export function NodePanel({ node, servers, onClose }: { node: MapNode; servers: 
       );
       break;
     case "network": {
-      const members = server?.projects.flatMap((p) => p.services.filter((s) => s.networks.includes(d.net.customId!)).map((s) => `${p.name}-${s.name}`)) ?? [];
+      const members = server?.projects.flatMap((p) => p.services.filter((s) => s.networks.includes(d.net.customId!)).map((s) => ({ svc: s, alias: `${p.name}-${s.name}` }))) ?? [];
       title = d.net.custom;
       body = (
         <>
           <Field label="Docker network">
             <Mono>{d.net.name}</Mono> {d.net.subnet && <span className="text-muted-foreground">{d.net.subnet}</span>}
           </Field>
-          <Field label="Services">{members.length ? members.map((m) => <Mono key={m}>{m} </Mono>) : "None yet"}</Field>
+          <Field label="Services, by the name they answer to">
+            {members.length === 0 ? (
+              "None yet: draw a line from a service to this network."
+            ) : (
+              <ul className="space-y-1">
+                {members.map(({ svc, alias }) => (
+                  <li key={svc.id} className="flex items-center gap-2">
+                    <ServiceIcon service={svc} className="size-3.5 shrink-0 text-muted-foreground" />
+                    <Mono>{alias}</Mono>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      title="Leave the network"
+                      aria-label={`${alias} leaves ${d.net.custom}`}
+                      disabled={leave.isPending}
+                      className="ml-auto size-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => leave.mutate({ svc, networkId: d.net.customId!, name: d.net.custom! })}
+                    >
+                      <LogOut />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Field>
         </>
       );
       break;
@@ -213,4 +248,19 @@ function ServiceActions({ svc }: { svc: TopoService }) {
       )}
     </div>
   );
+}
+
+/** A service leaves a network created by hand, right away; nothing restarts. */
+function useLeaveNetwork() {
+  const qc = useQueryClient();
+  return useMutation({
+    meta: { error: "Couldn't leave the network" },
+    mutationFn: ({ svc, networkId }: { svc: TopoService; networkId: string; name: string }) =>
+      api.setServiceNetworks(svc.id, svc.networks.filter((n) => n !== networkId)),
+    onSuccess: (_, { svc, name }) => toast.success(`${svc.name} left ${name}`),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["topology"] });
+      qc.invalidateQueries({ queryKey: ["networks"] });
+    },
+  });
 }

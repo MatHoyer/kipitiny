@@ -22,7 +22,8 @@ import { api, isDatabase, type ServerTopology, type TopoProject, type TopoServic
  * What the canvas can change by drawing and deleting lines:
  *   service → network created by hand: the service joins it (live, no restart);
  *   app → database of its project: an env variable references it (next deploy).
- * Deleting such a line undoes it. Other lines (routing, tunnel) are read-only.
+ * Deleting a database line undoes it; services leave a network from the side
+ * panel. Other lines (routing, tunnel) are read-only.
  */
 
 type Found = { svc: TopoService; project: TopoProject; server: ServerTopology };
@@ -104,11 +105,10 @@ export function useCanvasEdits(servers: ServerTopology[]) {
   /** Describes what deleting the lines does, and asks first. */
   const onBeforeDelete = async ({ nodes, edges }: { nodes: unknown[]; edges: Edge[] }) => {
     if (nodes.length > 0) return false;
-    const editable = edges.filter((e) => e.data?.kind === "net" || e.data?.kind === "db");
+    const editable = edges.filter((e) => e.data?.kind === "db");
     if (editable.length === 0) return false;
     const lines = editable.map((e) => {
       const from = find(e.source);
-      if (e.data?.kind === "net") return `${from?.svc.name} leaves ${network(e.target)?.net.custom}`;
       return `${from?.svc.name} stops referencing ${find(e.target)?.svc.name} (its variables are removed; applies on its next deploy)`;
     });
     const ok = await new Promise<boolean>((resolve) => {
@@ -125,21 +125,16 @@ export function useCanvasEdits(servers: ServerTopology[]) {
       for (const e of edges) {
         const from = find(e.source);
         if (!from) continue;
-        if (e.data?.kind === "net") {
-          const id = e.target.slice(4);
-          await api.setServiceNetworks(from.svc.id, from.svc.networks.filter((n) => n !== id));
-        } else {
-          const db = find(e.target);
-          if (!db) continue;
-          const svc = await api.service(from.svc.id);
-          const env = Object.fromEntries(Object.entries(svc.env).filter(([, v]) => !envRefRe(db.svc.name).test(v)));
-          if (Object.keys(env).length === Object.keys(svc.env).length) {
-            // The reference sits inside a secret, which reads back masked.
-            toast.error(`${svc.name}'s reference to ${db.svc.name} is inside a secret`, { description: "Edit it in the service's Environment tab." });
-            continue;
-          }
-          await api.updateService(svc.id, { env, secrets: svc.secrets.filter((k) => k in env) });
+        const db = find(e.target);
+        if (!db) continue;
+        const svc = await api.service(from.svc.id);
+        const env = Object.fromEntries(Object.entries(svc.env).filter(([, v]) => !envRefRe(db.svc.name).test(v)));
+        if (Object.keys(env).length === Object.keys(svc.env).length) {
+          // The reference sits inside a secret, which reads back masked.
+          toast.error(`${svc.name}'s reference to ${db.svc.name} is inside a secret`, { description: "Edit it in the service's Environment tab." });
+          continue;
         }
+        await api.updateService(svc.id, { env, secrets: svc.secrets.filter((k) => k in env) });
       }
     } catch (err) {
       toast.error("Couldn't remove the line", { description: err instanceof Error ? err.message : String(err) });

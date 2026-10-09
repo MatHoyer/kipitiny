@@ -30,16 +30,20 @@ order: 3
 - **Map** (the home page for the whole install, and the first tab of each
   project): a canvas of
   what runs where, how traffic gets in (Traefik's entrypoints or a Cloudflare
-  tunnel), which apps use which databases, and the networks created by hand.
+  tunnel), which apps use which databases, and the networks created by hand,
+  each drawn as the smallest rectangle around its services (it follows them
+  as you move them; a network without services is a small node of its own).
   Pan, zoom and drag nodes (a project by its title); positions are saved for
   everyone (*Reset layout* puts them back). Click a node for its details,
   each container's addresses on the networks it is actually attached to, and
   Deploy, Restart or Stop. You can also edit from it:
-  - drag a service's bottom dot onto a network to make it join (right away),
+  - drag a service's bottom dot onto a network (its name tab) to make it join
+    (right away),
     or onto a database of its project to add a secret variable referencing it
     (`DATABASE_URL={{ db.<name>.URL }}`, applied on its next deploy);
-  - select such a line and press Delete to undo it (the variables that
-    reference the database are removed);
+  - select a database line and press Delete to undo it (the variables that
+    reference the database are removed); a service leaves a network from the
+    network's or the service's side panel;
   - **Add** creates a project or a network, and the **+** on a project adds a
     service or database to it.
 - Health, uptime checks and notifications: see [Monitoring](/docs/monitoring).
@@ -76,7 +80,7 @@ service on it can connect. An app in the host network can't join one.
 
 These networks aren't part of a compose file: a project managed by git keeps
 the ones set here across syncs. Deleting a network detaches its services first.
-The **Map** draws them with a line to each of their services.
+The **Map** draws each one as a rectangle around its services.
 
 ## Private registries
 

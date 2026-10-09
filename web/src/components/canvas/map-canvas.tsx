@@ -3,7 +3,7 @@ import { Background, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, use
 import "@xyflow/react/dist/style.css";
 import { FolderPlus, Network, Plus, RotateCcw } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -12,7 +12,7 @@ import { NewProjectDialog } from "@/routes/Projects";
 import { CreateNetworkForm } from "@/routes/settings/Networks";
 import { cn } from "@/lib/utils";
 import { api, type CanvasPoint, type ServerTopology } from "@/api";
-import { buildGraph, type EdgeKind, type MapNode } from "./build";
+import { buildGraph, networkAreas, type EdgeKind, type MapNode, type NetworkData } from "./build";
 import { useCanvasEdits } from "./edit";
 import "./canvas.css";
 import { nodeTypes } from "./nodes";
@@ -39,6 +39,7 @@ function Flow({ servers, projectView, className }: { servers: ServerTopology[]; 
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState<"project" | "network" | null>(null);
+  const [areas, setAreas] = useState<NetworkData[]>([]);
   const saved = layout.data?.positions;
   const edits = useCanvasEdits(servers);
 
@@ -65,10 +66,12 @@ function Flow({ servers, projectView, className }: { servers: ServerTopology[]; 
       const picked = new Set(prev.filter((n) => n.selected).map((n) => n.id));
       return buildGraph(servers, saved, current, { projectView }).nodes.map((n) => ({ ...n, selected: picked.has(n.id) }));
     });
+    const { edges: built, areas } = buildGraph(servers, saved, new Map(), { projectView });
     setEdges((prev) => {
       const picked = new Set(prev.filter((e) => e.selected).map((e) => e.id));
-      return buildGraph(servers, saved, new Map(), { projectView }).edges.map((e) => ({ ...e, selected: picked.has(e.id) }));
+      return built.map((e) => ({ ...e, selected: picked.has(e.id) }));
     });
+    setAreas(areas);
   }, [servers, saved, projectView, setNodes, setEdges]);
 
   const onDragStop: OnNodeDrag<MapNode> = (_, __, dragged) => {
@@ -77,14 +80,25 @@ function Flow({ servers, projectView, className }: { servers: ServerTopology[]; 
     save.mutate(positions);
   };
 
-  const selectedNode = nodes.find((n) => n.id === selected);
+  // Network areas aren't state: they're redrawn around their services on
+  // every move, so they follow a drag.
+  const shown = useMemo(
+    () => {
+      const frame = (n: MapNode) => n.type === "project" || n.type === "server";
+      const drawn = networkAreas(nodes, areas).map((n) => ({ ...n, selected: n.id === selected }));
+      // Over the frames, under the cards.
+      return [...nodes.filter(frame), ...drawn, ...nodes.filter((n) => !frame(n))];
+    },
+    [nodes, areas, selected],
+  );
+  const selectedNode = shown.find((n) => n.id === selected);
   const dark = resolvedTheme === "dark";
 
   if (!saved) return <div className={cn("rounded-xl border bg-muted/20", className)} />;
   return (
     <div className={cn("relative overflow-hidden rounded-xl border", className)}>
       <ReactFlow
-        nodes={nodes}
+        nodes={shown}
         edges={edges}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
@@ -105,7 +119,7 @@ function Flow({ servers, projectView, className }: { servers: ServerTopology[]; 
       >
         <Background gap={20} size={1.5} />
         <Controls showInteractive={false} />
-        <MiniMap pannable zoomable nodeStrokeWidth={2} nodeColor={(n: Node) => (n.type === "project" || n.type === "server" ? "transparent" : "var(--muted-foreground)")} />
+        <MiniMap pannable zoomable nodeStrokeWidth={2} nodeColor={(n: Node) => (n.type === "project" || n.type === "server" || n.type === "networkArea" ? "transparent" : "var(--muted-foreground)")} />
         <Panel position="top-left" className="flex flex-wrap items-center gap-3 rounded-lg border bg-card/90 px-3 py-1.5 backdrop-blur">
           <Legend />
           {Object.keys(saved).length > 0 && (
@@ -163,7 +177,6 @@ const legend: [EdgeKind, string][] = [
   ["web", "HTTP routing"],
   ["tunnel", "Cloudflare tunnel"],
   ["db", "Uses database"],
-  ["net", "On a network"],
 ];
 
 function Legend() {
@@ -177,6 +190,10 @@ function Legend() {
           {label}
         </li>
       ))}
+      <li className="flex items-center gap-1.5">
+        <span className="h-3 w-4 rounded-sm border-2 border-dashed border-violet-500/60" />
+        Network
+      </li>
     </ul>
   );
 }

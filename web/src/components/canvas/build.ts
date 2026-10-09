@@ -27,11 +27,12 @@ export type ServiceData = { kind: "service"; svc: TopoService; project: TopoProj
 export type ProjectData = { kind: "project"; project: TopoProject; net?: TopoNetwork; serverId: string };
 export type ServerData = { kind: "server"; server: ServerTopology };
 export type InfraData = { kind: "internet" | "tunnel" | "traefik" | "manager"; server: ServerTopology };
-export type NetworkData = { kind: "network"; net: TopoNetwork; serverId: string; members: number };
+/** members are the node IDs of its services. */
+export type NetworkData = { kind: "network"; net: TopoNetwork; serverId: string; members: string[] };
 export type MapNodeData = ServiceData | ProjectData | ServerData | InfraData | NetworkData;
 export type MapNode = Node<MapNodeData>;
 
-export type EdgeKind = "web" | "tunnel" | "db" | "net";
+export type EdgeKind = "web" | "tunnel" | "db";
 
 type Size = { w: number; h: number };
 
@@ -43,10 +44,11 @@ export function buildGraph(
   saved: Record<string, CanvasPoint>,
   current: Map<string, CanvasPoint>,
   opts: { projectView?: boolean } = {},
-): { nodes: MapNode[]; edges: Edge[] } {
+): { nodes: MapNode[]; edges: Edge[]; areas: NetworkData[] } {
   const place: Placer = (id, auto) => current.get(id) ?? saved[id] ?? auto;
   const nodes: MapNode[] = [];
   const edges: Edge[] = [];
+  const areas: NetworkData[] = [];
   const framed = servers.length > 1;
   let serverY = 0;
 
@@ -101,16 +103,20 @@ export function buildGraph(
     }
     y += rowH + GAP * 2;
 
-    // Networks created by hand, with an edge from each member shown here.
-    const shown = new Set(s.projects.flatMap((p) => p.services.map((svc) => svc.id)));
+    // Networks created by hand: an area around their services (drawn from
+    // where those are on screen), or a node of their own while empty.
     let nx = x0;
     for (const n of s.networks.filter((n) => n.customId)) {
       const members = s.projects.flatMap((p) => p.services).filter((svc) => svc.networks.includes(n.customId!));
-      if (opts.projectView && members.length === 0) continue;
       const id = `net:${n.customId}`;
-      add({ id, type: "network", position: place(id, { x: nx, y }), data: { kind: "network", net: n, serverId: s.id, members: members.length } }, { w: NET_W, h: NET_H });
+      const data: NetworkData = { kind: "network", net: n, serverId: s.id, members: members.map((svc) => `svc:${svc.id}`) };
+      if (members.length > 0) {
+        areas.push(data);
+        continue;
+      }
+      if (opts.projectView) continue;
+      add({ id, type: "network", position: place(id, { x: nx, y }), data }, { w: NET_W, h: NET_H });
       nx += NET_W + GAP;
-      for (const svc of members) if (shown.has(svc.id)) edges.push(edge(`svc:${svc.id}`, id, "net"));
     }
 
     if (framed) {
@@ -134,7 +140,7 @@ export function buildGraph(
     if (n.type === "project" || n.type === "server") n.dragHandle = ".frame-handle";
   }
   // React Flow wants parents before their children.
-  return { nodes: [...nodes.filter((n) => !n.parentId || n.type === "project"), ...nodes.filter((n) => n.parentId && n.type !== "project")], edges };
+  return { nodes: [...nodes.filter((n) => !n.parentId || n.type === "project"), ...nodes.filter((n) => n.parentId && n.type !== "project")], edges, areas };
 }
 
 function infra(kind: InfraData["kind"], s: ServerTopology, position: CanvasPoint): MapNode {
@@ -180,8 +186,59 @@ function frameSize(children: MapNode[], min: Size): Size {
   return { w, h };
 }
 
-/** Lines of a network or a database reference can be selected and deleted; the others only show traffic. */
+/** Lines of a database reference can be selected and deleted; the others only show traffic. */
 function edge(source: string, target: string, kind: EdgeKind): Edge {
-  const editable = kind === "db" || kind === "net";
+  const editable = kind === "db";
   return { id: `${kind}:${source}:${target}`, source, target, type: "smoothstep", data: { kind }, selectable: editable, deletable: editable, focusable: editable, animated: kind === "web" || kind === "tunnel", className: `map-edge-${kind}` };
 }
+
+/** Space around a network's services; nested networks get a little more each. */
+const AREA_PAD = 10;
+const AREA_NEST = 10;
+/** Room under the services for the network's name. */
+const AREA_LABEL = 26;
+
+/**
+ * The smallest rectangle around each network's services, from where they are
+ * now (so it follows a drag), as nodes drawn under the cards.
+ */
+export function networkAreas(nodes: MapNode[], areas: NetworkData[]): MapNode[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const absolute = (n: MapNode): CanvasPoint => {
+    const parent = n.parentId ? byId.get(n.parentId) : undefined;
+    if (!parent) return n.position;
+    const p = absolute(parent);
+    return { x: p.x + n.position.x, y: p.y + n.position.y };
+  };
+  // Count how many areas each service is already wrapped in, to nest them.
+  const depth = new Map<string, number>();
+  const out: MapNode[] = [];
+  for (const a of areas) {
+    const members = a.members.map((id) => byId.get(id)).filter((n): n is MapNode => !!n);
+    if (members.length === 0) continue;
+    const nest = Math.max(...members.map((m) => depth.get(m.id) ?? 0));
+    for (const m of members) depth.set(m.id, nest + 1);
+    const pad = AREA_PAD + nest * AREA_NEST;
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const m of members) {
+      const p = absolute(m);
+      x1 = Math.min(x1, p.x);
+      y1 = Math.min(y1, p.y);
+      x2 = Math.max(x2, p.x + (m.width ?? SVC_W));
+      y2 = Math.max(y2, p.y + (m.height ?? SVC_H));
+    }
+    out.push({
+      id: `net:${a.net.customId}`,
+      type: "networkArea",
+      position: { x: x1 - pad, y: y1 - pad },
+      width: x2 - x1 + pad * 2,
+      height: y2 - y1 + pad * 2 + AREA_LABEL,
+      data: a,
+      draggable: false,
+      deletable: false,
+      zIndex: 0,
+    });
+  }
+  return out;
+}
+

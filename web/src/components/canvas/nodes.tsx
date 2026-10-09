@@ -162,20 +162,55 @@ function InfraNode({ data: { kind, server: s }, selected }: Props<InfraData>) {
   );
 }
 
-function NetworkNode({ data: { net, members }, selected }: Props<NetworkData>) {
+/** The whole tab is where a line drawn from a service drops to join; it can't start one. */
+const dropHandle = "!absolute !inset-0 !size-auto !translate-0 !rounded-[inherit] !border-0 !bg-transparent";
+
+/** An empty network, as a node of its own until services join it. */
+function NetworkNode({ data: { net }, selected }: Props<NetworkData>) {
   return (
-    <Card selected={selected} className={cn("flex items-center gap-2 rounded-full px-4 py-2 ring-2 ring-violet-500/40", selected && "ring-violet-500")}>
-      <Handle type="target" position={Position.Top} className={handle} />
+    <Card selected={selected} className={cn("relative flex items-center gap-2 rounded-full px-4 py-2 ring-2 ring-violet-500/40", selected && "ring-violet-500")}>
+      <Handle type="target" position={Position.Top} isConnectableStart={false} className={dropHandle} />
       <Network className="size-4 shrink-0 text-violet-500" />
       <div className="min-w-0">
         <p className="truncate text-sm font-medium">{net.custom}</p>
         <p className="truncate font-mono text-[11px] text-muted-foreground">
           {net.missing ? <span className="text-destructive">missing · </span> : net.subnet && `${net.subnet} · `}
-          {members} service{members === 1 ? "" : "s"}
+          no services yet
         </p>
       </div>
     </Card>
   );
 }
 
-export const nodeTypes = { service: ServiceNode, project: ProjectFrame, server: ServerFrame, infra: InfraNode, network: NetworkNode };
+/**
+ * A network with services: the smallest rectangle around them (it follows
+ * them), clicks passing through to what's inside except on its name.
+ */
+function NetworkArea({ data: { net, members }, selected }: Props<NetworkData>) {
+  return (
+    <div className={cn("relative size-full rounded-2xl border-2 border-dashed border-violet-500/50 bg-violet-500/[0.04]", selected && "border-violet-500")}>
+      <div
+        className={cn(
+          "network-tab absolute bottom-1 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-full bg-card px-2 py-0.5 text-xs shadow-xs ring-1 ring-violet-500/40",
+          selected && "ring-violet-500",
+        )}
+      >
+        <Handle type="target" position={Position.Top} isConnectableStart={false} className={dropHandle} />
+        <Network className="size-3.5 shrink-0 text-violet-500" />
+        <span className="truncate font-medium">{net.custom}</span>
+        <span className="shrink-0 text-muted-foreground">
+          {net.missing ? <span className="text-destructive">missing</span> : (net.subnet ?? `${members.length}`)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export const nodeTypes = {
+  service: ServiceNode,
+  project: ProjectFrame,
+  server: ServerFrame,
+  infra: InfraNode,
+  network: NetworkNode,
+  networkArea: NetworkArea,
+};
