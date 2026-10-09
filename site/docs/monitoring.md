@@ -19,6 +19,24 @@ when it recovers (`service.healthy`): a restart or a slow start pages no one.
 The [reconciler](/docs/deploys) restarts crashed replicas on its own; each
 restart is an event too (`service.restarted`).
 
+## Logs
+
+A service's **Logs** tab follows the output of its running replicas, merged in
+time order (the last 200 lines first, then live; up to 2000 kept on the page).
+
+- Lines are coloured by **level**, read from the common formats: JSON (`"level"`),
+  logfmt (`level=`), `ERROR`/`WARN`/`INFO` words, nginx `[error]`, PostgreSQL
+  `ERROR:`/`LOG:`, Redis and klog prefixes, and access-log statuses (5xx as
+  errors, 4xx as warnings). The indented lines of a stack trace take the level
+  of the line above. The app's own ANSI colours are kept.
+- **Filter** by text, minimum level or replica; the error and warning counts
+  filter to them in one click.
+- **Pause** freezes the view while new lines keep arriving; **wrap**, a
+  **download** of the lines shown, and **clear** complete the toolbar.
+
+Deployment logs (on **Deployments**) are coloured the same way, with failures
+and successes highlighted.
+
 ## Uptime checks
 
 An uptime check requests an app's public URL, `https://<domain><path>`, on a
