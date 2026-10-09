@@ -128,6 +128,11 @@ export function buildGraph(
     }
     nodes.push(...inner);
   }
+  for (const n of nodes) {
+    n.deletable = false;
+    // Frames move by their title; the rest lets clicks through to the lines.
+    if (n.type === "project" || n.type === "server") n.dragHandle = ".frame-handle";
+  }
   // React Flow wants parents before their children.
   return { nodes: [...nodes.filter((n) => !n.parentId || n.type === "project"), ...nodes.filter((n) => n.parentId && n.type !== "project")], edges };
 }
@@ -175,6 +180,8 @@ function frameSize(children: MapNode[], min: Size): Size {
   return { w, h };
 }
 
+/** Lines of a network or a database reference can be selected and deleted; the others only show traffic. */
 function edge(source: string, target: string, kind: EdgeKind): Edge {
-  return { id: `${kind}:${source}:${target}`, source, target, type: "smoothstep", data: { kind }, animated: kind === "web" || kind === "tunnel", className: `map-edge-${kind}` };
+  const editable = kind === "db" || kind === "net";
+  return { id: `${kind}:${source}:${target}`, source, target, type: "smoothstep", data: { kind }, selectable: editable, deletable: editable, focusable: editable, animated: kind === "web" || kind === "tunnel", className: `map-edge-${kind}` };
 }

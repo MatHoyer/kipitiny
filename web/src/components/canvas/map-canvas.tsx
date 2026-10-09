@@ -1,14 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Background, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, useNodesState, type Node, type OnNodeDrag } from "@xyflow/react";
+import { Background, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, type Edge, type Node, type OnNodeDrag } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { RotateCcw } from "lucide-react";
+import { FolderPlus, Network, Plus, RotateCcw } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { NewProjectDialog } from "@/routes/Projects";
+import { CreateNetworkForm } from "@/routes/settings/Networks";
 import { cn } from "@/lib/utils";
 import { api, type CanvasPoint, type ServerTopology } from "@/api";
 import { buildGraph, type EdgeKind, type MapNode } from "./build";
+import { useCanvasEdits } from "./edit";
 import "./canvas.css";
 import { nodeTypes } from "./nodes";
 import { NodePanel } from "./panel";
@@ -31,8 +36,11 @@ function Flow({ servers, projectView, className }: { servers: ServerTopology[]; 
   const { resolvedTheme } = useTheme();
   const layout = useQuery({ queryKey: ["canvas"], queryFn: api.canvasLayout });
   const [nodes, setNodes, onNodesChange] = useNodesState<MapNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [adding, setAdding] = useState<"project" | "network" | null>(null);
   const saved = layout.data?.positions;
+  const edits = useCanvasEdits(servers);
 
   const save = useMutation({
     meta: { error: "Couldn't save the layout" },
@@ -48,8 +56,8 @@ function Flow({ servers, projectView, className }: { servers: ServerTopology[]; 
     },
   });
 
-  // Rebuild on every refresh, keeping nodes where they are on screen.
-  const edges = useMemo(() => (saved ? buildGraph(servers, saved, new Map(), { projectView }).edges : []), [servers, saved, projectView]);
+  // Rebuild on every refresh, keeping nodes where they are on screen and
+  // what is selected.
   useEffect(() => {
     if (!saved) return;
     setNodes((prev) => {
@@ -57,7 +65,11 @@ function Flow({ servers, projectView, className }: { servers: ServerTopology[]; 
       const picked = new Set(prev.filter((n) => n.selected).map((n) => n.id));
       return buildGraph(servers, saved, current, { projectView }).nodes.map((n) => ({ ...n, selected: picked.has(n.id) }));
     });
-  }, [servers, saved, projectView, setNodes]);
+    setEdges((prev) => {
+      const picked = new Set(prev.filter((e) => e.selected).map((e) => e.id));
+      return buildGraph(servers, saved, new Map(), { projectView }).edges.map((e) => ({ ...e, selected: picked.has(e.id) }));
+    });
+  }, [servers, saved, projectView, setNodes, setEdges]);
 
   const onDragStop: OnNodeDrag<MapNode> = (_, __, dragged) => {
     const positions: Record<string, CanvasPoint> = {};
@@ -76,10 +88,15 @@ function Flow({ servers, projectView, className }: { servers: ServerTopology[]; 
         edges={edges}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         onNodeDragStop={onDragStop}
         onNodeClick={(_, n) => setSelected(n.id)}
         onPaneClick={() => setSelected(null)}
-        nodesConnectable={false}
+        isValidConnection={edits.isValidConnection}
+        onConnect={edits.onConnect}
+        onBeforeDelete={edits.onBeforeDelete}
+        deleteKeyCode={["Backspace", "Delete"]}
+        connectionLineStyle={{ strokeWidth: 2, strokeDasharray: "4 4" }}
         colorMode={dark ? "dark" : "light"}
         fitView
         fitViewOptions={{ padding: { top: "64px", right: "32px", bottom: "32px", left: "32px" }, maxZoom: 1 }}
@@ -106,7 +123,37 @@ function Flow({ servers, projectView, className }: { servers: ServerTopology[]; 
             />
           )}
         </Panel>
+        <Panel position="top-right" className={cn(selectedNode && "invisible")}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm">
+                <Plus data-icon="inline-start" />
+                Add
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {!projectView && (
+                <DropdownMenuItem onSelect={() => setAdding("project")}>
+                  <FolderPlus />
+                  Project
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onSelect={() => setAdding("network")}>
+                <Network />
+                Network
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <NewProjectDialog stay open={adding === "project"} onOpenChange={(o) => !o && setAdding(null)} />
+        </Panel>
+        <Panel position="bottom-center" className="rounded-md bg-card/80 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur max-sm:hidden">
+          Drag a service's bottom dot onto a database or network · select a line and press Delete to remove it
+        </Panel>
       </ReactFlow>
+      <Dialog open={adding === "network"} onOpenChange={(o) => !o && setAdding(null)}>
+        <DialogContent>{adding === "network" && <CreateNetworkForm onDone={() => setAdding(null)} />}</DialogContent>
+      </Dialog>
+      {edits.dialogs}
       {selectedNode && <NodePanel node={selectedNode} servers={servers} onClose={() => setSelected(null)} />}
     </div>
   );

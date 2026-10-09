@@ -1,11 +1,13 @@
-import { ExternalLink, Globe, Network, X } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ExternalLink, Globe, Network, Play, RotateCw, Rocket, Square, X } from "lucide-react";
+import { toast } from "sonner";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Mono, StateBadge } from "@/components/common";
 import { ServiceIcon } from "@/components/service-icon";
 import { Replicas, serviceState, serviceWarning } from "@/components/topology";
 import { Button } from "@/components/ui/button";
-import type { ServerTopology } from "@/api";
+import { api, type ServerTopology, type TopoService } from "@/api";
 import type { MapNode } from "./build";
 
 /** Details of the selected node, over the canvas's right edge. */
@@ -69,6 +71,7 @@ export function NodePanel({ node, servers, onClose }: { node: MapNode; servers: 
               <Replicas nodes={svc.containers} networks={networks} />
             </Field>
           )}
+          <ServiceActions svc={svc} />
           <Button asChild size="sm" variant="outline" className="w-full">
             <Link to={`/services/${svc.id}`}>
               Open service
@@ -167,6 +170,47 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground">{label}</p>
       <div className="break-all">{children}</div>
+    </div>
+  );
+}
+
+/** Deploy, restart, stop or start the service, like on its page. */
+function ServiceActions({ svc }: { svc: TopoService }) {
+  const qc = useQueryClient();
+  const run = useMutation({
+    meta: { error: "Couldn't do that" },
+    mutationFn: async (action: "deploy" | "start" | "stop" | "restart") => {
+      if (action === "deploy") await api.deploy(svc.id);
+      else await api.serviceAction(svc.id, action);
+    },
+    onSuccess: (_, action) => toast.success(action === "deploy" ? `Deploying ${svc.name}` : `${svc.name}: ${action} requested`),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["topology"] }),
+  });
+  const deployed = svc.containers.length > 0;
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button size="sm" loading={run.isPending && run.variables === "deploy"} onClick={() => run.mutate("deploy")}>
+        <Rocket data-icon="inline-start" />
+        Deploy
+      </Button>
+      {deployed && !svc.stopped && (
+        <>
+          <Button size="sm" variant="outline" disabled={run.isPending} onClick={() => run.mutate("restart")}>
+            <RotateCw data-icon="inline-start" />
+            Restart
+          </Button>
+          <Button size="sm" variant="outline" disabled={run.isPending} onClick={() => run.mutate("stop")}>
+            <Square data-icon="inline-start" />
+            Stop
+          </Button>
+        </>
+      )}
+      {svc.stopped && (
+        <Button size="sm" variant="outline" disabled={run.isPending} onClick={() => run.mutate("start")}>
+          <Play data-icon="inline-start" />
+          Start
+        </Button>
+      )}
     </div>
   );
 }
