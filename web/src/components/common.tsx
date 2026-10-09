@@ -98,7 +98,7 @@ export function Tag({ children, className }: { children: ReactNode; className?: 
 
 export function ErrorText({ error }: { error: Error | null | undefined }) {
   return error ? (
-    <p role="alert" className="text-sm text-destructive">
+    <p role="alert" className="text-sm wrap-break-word text-destructive">
       {friendlyError(error)}
     </p>
   ) : null;

@@ -90,8 +90,10 @@ export function BackupNowDialog({
             <div className="flex items-start gap-3 rounded-xl border p-4">
               <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted [&>svg]:size-5">{storageIcon(target)}</span>
               <div className="min-w-0 flex-1">
-                <p className="font-medium">{target.name}</p>
-                <p className="truncate font-mono text-xs text-muted-foreground">{storageLocation(target)}</p>
+                <p className="truncate font-medium">{target.name}</p>
+                <p className="truncate font-mono text-xs text-muted-foreground" title={storageLocation(target)}>
+                  {storageLocation(target)}
+                </p>
               </div>
             </div>
             {target.ageRecipient ? (
