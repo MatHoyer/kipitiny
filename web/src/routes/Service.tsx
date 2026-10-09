@@ -286,7 +286,7 @@ export function Service() {
           <TabsContent value="settings" className="flex flex-col gap-6">
             {gitManaged && <GitManagedNote path={git.data!.path} />}
             <RenameCard
-              key={svc.name}
+              key={`rename-${svc.name}`}
               name={svc.name}
               description={
                 isDb
@@ -299,13 +299,14 @@ export function Service() {
             />
             <fieldset disabled={gitManaged} className="contents">
               <Settings svc={svc} />
-              {svc.kind === "app" && <PortsCard key={svc.id} svc={svc} />}
-              {svc.kind === "app" && <HostAccessCard key={svc.id} svc={svc} />}
-              {svc.kind === "app" && <VolumesCard key={svc.id} svc={svc} />}
-              {svc.kind === "app" && httpRouted(svc) && <AccessCard key={svc.id} svc={svc} />}
+              {/* Keys reset each card's form when another service opens; siblings need distinct ones. */}
+              {svc.kind === "app" && <PortsCard key={`ports-${svc.id}`} svc={svc} />}
+              {svc.kind === "app" && <HostAccessCard key={`host-${svc.id}`} svc={svc} />}
+              {svc.kind === "app" && <VolumesCard key={`volumes-${svc.id}`} svc={svc} />}
+              {svc.kind === "app" && httpRouted(svc) && <AccessCard key={`access-${svc.id}`} svc={svc} />}
             </fieldset>
             {/* Not in the compose file, so git projects set them here too. */}
-            {!svc.hostNetwork && <NetworksCard key={svc.id} svc={svc} projectName={project.data?.name ?? ""} />}
+            {!svc.hostNetwork && <NetworksCard key={`networks-${svc.id}`} svc={svc} projectName={project.data?.name ?? ""} />}
             {svc.kind === "app" && <DeployFromCICard svc={svc} />}
             <DangerZone
               description={
