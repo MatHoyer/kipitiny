@@ -161,6 +161,10 @@ type Store interface {
 	// SetServiceNetworks replaces the networks a service joins.
 	SetServiceNetworks(ctx context.Context, serviceID string, networkIDs []string) error
 
+	ListCanvasPositions(ctx context.Context) ([]CanvasPosition, error)
+	// SaveCanvasPositions upserts ps and deletes the nodes in remove.
+	SaveCanvasPositions(ctx context.Context, ps []CanvasPosition, remove []string) error
+
 	ListUptimeChecks(ctx context.Context) ([]UptimeCheck, error)
 	GetUptimeCheck(ctx context.Context, serviceID string) (UptimeCheck, error)
 	// SaveUptimeCheck creates or replaces a service's check settings,
@@ -732,6 +736,17 @@ type Network struct {
 	ServerID  string    `bun:"server_id" json:"serverId"`
 	Name      string    `bun:"name" json:"name"`
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+}
+
+// CanvasPosition is where a node of the map canvas was dragged to.
+type CanvasPosition struct {
+	bun.BaseModel `bun:"table:canvas_positions,alias:canvas_position" json:"-"`
+
+	// Node is "<kind>:<id>", e.g. svc:<service id>.
+	Node      string    `bun:"node,pk" json:"node"`
+	X         float64   `bun:"x" json:"x"`
+	Y         float64   `bun:"y" json:"y"`
+	UpdatedAt time.Time `bun:"updated_at" json:"-"`
 }
 
 // UptimeCheck requests a service's public URL on an interval and notifies
