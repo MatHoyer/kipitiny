@@ -1,6 +1,6 @@
 ---
 title: Services
-description: Apps, published ports, databases, environment and private registries
+description: Apps, published ports, databases, environment, networks and private registries
 order: 3
 ---
 
@@ -40,6 +40,30 @@ order: 3
   calls that name the project or service need the new name. Services of a
   project managed by git can't be renamed: the file owns their names, and
   renaming one there replaces it, volumes included.
+
+## Networks
+
+Two kinds of networks are automatic: each project has a private one (its
+services reach each other by service name), and public apps share the proxy
+network with Traefik. To let services of **different projects** talk, e.g.
+several apps sharing one database:
+
+1. *Infrastructure › Networks* › **Create network**, on the server the projects
+   run on (only services on that server can join it).
+2. In each service's *Settings › Networks*, tick the network and save. Running
+   containers join or leave it right away; nothing restarts, and new replicas
+   join it too.
+
+On such a network a service answers as `<project>-<service>`, e.g. the `db`
+database of project `shop` is `shop-db:5432`, so `{{ db.* }}` references
+(which only cover the app's own project) don't apply: write the host in the
+env value and the password as a secret. Renaming the project or service moves
+that name at once. A database on such a network is still never public, but any
+service on it can connect. An app in the host network can't join one.
+
+These networks aren't part of a compose file: a project managed by git keeps
+the ones set here across syncs. Deleting a network detaches its services first.
+The **Map** shows them with each container's address on them.
 
 ## Private registries
 

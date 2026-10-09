@@ -132,6 +132,14 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "Create or replace the uptime check of an app with a public domain: an HTTPS request to a path at an interval, notifying when it goes down. It runs right away; get_app_status shows its results. Needs admin."}, t.setUptimeCheck)
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_uptime_check",
 		Description: "Remove a service's uptime check and its history. Needs admin."}, t.deleteUptimeCheck)
+	mcp.AddTool(server, &mcp.Tool{Name: "list_networks", Annotations: readOnly,
+		Description: "Networks created by hand on each server, next to the automatic proxy and project networks, with the services on them and the name each is reached at (<project>-<service>)."}, t.listNetworks)
+	mcp.AddTool(server, &mcp.Tool{Name: "create_network",
+		Description: "Create a network on a server (this one by default) that services of several projects can join with set_service_networks to reach each other. Needs admin."}, t.createNetwork)
+	mcp.AddTool(server, &mcp.Tool{Name: "delete_network", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+		Description: "Delete a network created by hand. Its services leave it right away (nothing restarts) and can no longer reach each other through it. Needs admin."}, t.deleteNetwork)
+	mcp.AddTool(server, &mcp.Tool{Name: "set_service_networks",
+		Description: "Set the networks created by hand that a service joins, besides its project network; applied to its containers right away, without restarting them. Works on git-linked projects too. Needs admin."}, t.setServiceNetworks)
 
 	mcp.AddTool(server, &mcp.Tool{Name: "list_databases", Annotations: readOnly,
 		Description: "The databases of a PostgreSQL service's instance, with their size; main is the service's own."}, t.listDatabases)

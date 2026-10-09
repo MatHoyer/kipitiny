@@ -1,4 +1,4 @@
-import { Bell, BookOpen, Brush, GitFork, HardDrive, Globe, Info, KeyRound, KeySquare, Package, ScrollText, Server, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, Brush, GitFork, HardDrive, Globe, Info, KeyRound, KeySquare, Network, Package, ScrollText, Server, type LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 import { docsUrl } from "@/lib/docs";
 import { Version } from "./About";
@@ -6,6 +6,7 @@ import { Audit } from "./Audit";
 import { Cleanup } from "./Cleanup";
 import { DomainsPage } from "./Domains";
 import { GitProviders } from "./GitProviders";
+import { Networks } from "./Networks";
 import { Notifications } from "./Notifications";
 import { SettingsLabel } from "./page";
 import { PasswordManagers } from "./PasswordManagers";
@@ -32,6 +33,13 @@ export const settingsPages: SettingsPage[] = [
     label: "Servers",
     icon: Server,
     page: Servers,
+  },
+  {
+    slug: "networks",
+    group: "Infrastructure",
+    label: "Networks",
+    icon: Network,
+    page: Networks,
   },
   {
     slug: "domains",

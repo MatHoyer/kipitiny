@@ -43,6 +43,8 @@ export type Container = {
 export type Service = {
   id: string;
   projectId: string;
+  /** The project's server. */
+  serverId: string;
   name: string;
   kind: ServiceKind;
   image: string;
@@ -75,6 +77,8 @@ export type Service = {
   hostNetwork: boolean;
   /** The host's Docker socket mounted read-only or read-write; "" when not. */
   dockerSocket: "" | "ro" | "rw";
+  /** IDs of the networks created by hand it joins, besides its project network. */
+  networks: string[];
   currentDeploymentId: string;
   stopped: boolean;
   createdAt: string;
@@ -133,8 +137,10 @@ export type TopoNetwork = {
   name: string;
   subnet?: string;
   gateway?: string;
-  /** Empty for the proxy network. */
+  /** Empty for the proxy network and the ones created by hand. */
   projectId?: string;
+  /** Name of a network created by hand. */
+  custom?: string;
   /** Expected but not found on the server. */
   missing?: boolean;
 };
@@ -336,6 +342,12 @@ export type ApiToken = { id: string; name: string; scope: Scope; createdAt: stri
 export type Registry = { id: string; host: string; username: string; password: string; createdAt: string };
 
 export type RegistryInput = Pick<Registry, "host" | "username" | "password">;
+
+/** A service on a network created by hand, reached there as its alias. */
+export type NetworkMember = { id: string; name: string; kind: ServiceKind; projectId: string; projectName: string; alias: string };
+
+/** A network created by hand on a server, which services of any project there can join. */
+export type Network = { id: string; serverId: string; name: string; dockerName: string; services: NetworkMember[]; createdAt: string };
 
 export type AuditEntry = {
   id: string;
@@ -758,6 +770,7 @@ export const api = {
     request<Service>(`/projects/${projectId}/services`, json("POST", input)),
   updateService: (id: string, patch: ServicePatch) => request<Service>(`/services/${id}`, json("PATCH", patch)),
   renameService: (id: string, name: string) => request<Service>(`/services/${id}/name`, json("PUT", { name })),
+  setServiceNetworks: (id: string, networks: string[]) => request<Service>(`/services/${id}/networks`, json("PUT", { networks })),
   deleteService: (id: string, confirm = "") =>
     request<void>(`/services/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),
   connection: (id: string) => request<Connection>(`/services/${id}/connection`),
@@ -825,6 +838,9 @@ export const api = {
   createServer: (s: ServerInput) => request<Server>("/servers", json("POST", s)),
   updateServer: (id: string, s: ServerInput) => request<Server>(`/servers/${id}`, json("PUT", s)),
   deleteServer: (id: string) => request<void>(`/servers/${id}`, { method: "DELETE" }),
+  networks: () => request<Network[]>("/networks"),
+  createNetwork: (n: { serverId: string; name: string }) => request<Network>("/networks", json("POST", n)),
+  deleteNetwork: (id: string) => request<void>(`/networks/${id}`, { method: "DELETE" }),
   gitProviders: () => request<GitProvider[]>("/git-providers"),
   createGitProvider: (p: GitProviderInput) => request<GitProvider>("/git-providers", json("POST", p)),
   updateGitProvider: (id: string, p: GitProviderInput) => request<GitProvider>(`/git-providers/${id}`, json("PUT", p)),

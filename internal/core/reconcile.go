@@ -160,6 +160,9 @@ func (c *Core) reconcileServer(ctx context.Context, sv store.Server, svcs []stor
 	if sv.Kind == store.ServerLocal {
 		c.cleanupUpdater(ctx, dk)
 	}
+	if err := c.ensureNetworks(ctx, sv); err != nil {
+		c.log.Warn("reconcile: networks", "server", sv.Name, "err", err)
+	}
 	all, err := dk.ListContainers(ctx, map[string]string{docker.LabelManaged: "true"})
 	if err != nil {
 		return err
@@ -243,7 +246,7 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 		want = svc
 		want.Image = dep.Image
 	}
-	want.Name, want.Replicas = svc.Name, svc.Replicas
+	want.Name, want.Replicas, want.Networks = svc.Name, svc.Replicas, svc.Networks
 	if want.Kind.IsDatabase() {
 		want.Replicas = 1
 	}
@@ -302,7 +305,7 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 			return err
 		}
 	}
-	return nil
+	return c.syncNetworks(ctx, project, svc, cts, false)
 }
 
 func (c *Core) recreateReplica(ctx context.Context, project store.Project, svc store.Service, deployID string, replica int) error {

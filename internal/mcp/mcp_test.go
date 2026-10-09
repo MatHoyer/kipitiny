@@ -79,7 +79,7 @@ func TestTools(t *testing.T) {
 		"scan_redis_keys", "get_redis_key", "query_database", "get_connection", "delete_service", "delete_project", "list_backup_schedules",
 		"set_backup_schedule", "delete_backup_schedule", "set_uptime_check", "delete_uptime_check", "backup_project", "verify_backup",
 		"delete_backup", "list_restores", "list_deployments", "list_git_repos", "list_git_branches", "get_manager_status", "get_topology",
-		"get_audit_log"} {
+		"get_audit_log", "list_networks", "create_network", "delete_network", "set_service_networks"} {
 		if !strings.Contains(strings.Join(names, ","), want) {
 			t.Errorf("tool %s missing: %v", want, names)
 		}

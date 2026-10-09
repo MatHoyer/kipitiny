@@ -213,6 +213,9 @@ func (s *Store) CreateService(ctx context.Context, svc store.Service) (store.Ser
 	if svc.PublishedPorts == nil {
 		svc.PublishedPorts = []store.PublishedPort{}
 	}
+	if svc.Networks == nil {
+		svc.Networks = []string{}
+	}
 	// Services always run on their project's server.
 	err := s.db.NewSelect().Model((*store.Project)(nil)).Column("server_id").
 		Where("id = ?", svc.ProjectID).Scan(ctx, &svc.ServerID)
@@ -1027,6 +1030,45 @@ func (s *Store) UpdateRegistry(ctx context.Context, r store.Registry) (store.Reg
 
 func (s *Store) DeleteRegistry(ctx context.Context, id string) error {
 	return deleteByID(ctx, s.db, "registries", id)
+}
+
+func (s *Store) ListNetworks(ctx context.Context) ([]store.Network, error) {
+	ns := []store.Network{}
+	err := s.db.NewSelect().Model(&ns).Order("name").Scan(ctx)
+	return ns, mapErr(err)
+}
+
+func (s *Store) GetNetwork(ctx context.Context, id string) (store.Network, error) {
+	var n store.Network
+	err := s.db.NewSelect().Model(&n).Where("id = ?", id).Scan(ctx)
+	return n, mapErr(err)
+}
+
+func (s *Store) CreateNetwork(ctx context.Context, n store.Network) (store.Network, error) {
+	n.ID, n.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&n).Exec(ctx); err != nil {
+		return store.Network{}, mapErr(err)
+	}
+	return n, nil
+}
+
+func (s *Store) DeleteNetwork(ctx context.Context, id string) error {
+	return deleteByID(ctx, s.db, "networks", id)
+}
+
+func (s *Store) SetServiceNetworks(ctx context.Context, serviceID string, networkIDs []string) error {
+	if networkIDs == nil {
+		networkIDs = []string{}
+	}
+	res, err := s.db.NewUpdate().Model(&store.Service{ID: serviceID, Networks: networkIDs}).
+		Column("networks").WherePK().Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) ListUptimeChecks(ctx context.Context) ([]store.UptimeCheck, error) {

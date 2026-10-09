@@ -45,12 +45,16 @@ func (c *Core) RenameProject(ctx context.Context, id, name string) (store.Projec
 		return store.Project{}, err
 	}
 	var errs []error
+	old := p
+	p.Name = name
 	for _, s := range svcs {
-		if err := c.renameContainers(ctx, s, p.Name+"-"+s.Name+"-", name+"-"+s.Name+"-", nil); err != nil {
+		if err := c.renameContainers(ctx, s, old.Name+"-"+s.Name+"-", name+"-"+s.Name+"-", nil); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", s.Name, err))
+		}
+		if err := c.renameOnNetworks(ctx, p, s); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", s.Name, err))
 		}
 	}
-	p.Name = name
 	if err := errors.Join(errs...); err != nil {
 		return maskedProject(p), fmt.Errorf("project renamed but its containers keep their old names until the next deploy: %w", err)
 	}
@@ -115,7 +119,10 @@ func (c *Core) RenameService(ctx context.Context, id, name string) (ServiceView,
 	if !svc.HostNetwork {
 		aliases = []string{name, old}
 	}
-	renameErr := c.renameContainers(ctx, svc, project.Name+"-"+old+"-", project.Name+"-"+name+"-", aliases)
+	renameErr := errors.Join(
+		c.renameContainers(ctx, svc, project.Name+"-"+old+"-", project.Name+"-"+name+"-", aliases),
+		c.renameOnNetworks(ctx, project, svc),
+	)
 
 	// The apps' running containers still reach the database by its old
 	// alias, which its next deploy drops: move them to the new name now.
@@ -155,6 +162,19 @@ func (c *Core) renameContainers(ctx context.Context, svc store.Service, oldPrefi
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// renameOnNetworks moves a renamed service's alias on the networks created by
+// hand (<project>-<service>) to its new name.
+func (c *Core) renameOnNetworks(ctx context.Context, project store.Project, svc store.Service) error {
+	if len(svc.Networks) == 0 {
+		return nil
+	}
+	cts, err := c.serviceContainers(ctx, svc)
+	if err != nil {
+		return err
+	}
+	return c.syncNetworks(ctx, project, svc, cts, true)
 }
 
 func onNetwork(ct container.Summary, name string) bool {

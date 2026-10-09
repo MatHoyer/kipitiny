@@ -43,6 +43,20 @@ func ProjectNetwork(projectID string) string {
 	return "kipitiny-" + projectID
 }
 
+// customNetworkPrefix starts the names of networks created by hand; project
+// IDs never start with "net-".
+const customNetworkPrefix = "kipitiny-net-"
+
+// CustomNetwork is the Docker name of a network created by hand.
+func CustomNetwork(networkID string) string {
+	return customNetworkPrefix + networkID
+}
+
+// IsCustomNetwork tells whether a Docker network name is one created by hand.
+func IsCustomNetwork(name string) bool {
+	return strings.HasPrefix(name, customNetworkPrefix)
+}
+
 type Client struct {
 	*client.Client
 	closer interface{ Close() error } // SSH connection, for remote clients
@@ -107,6 +121,16 @@ func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
 	_, err := c.NetworkRemove(ctx, name, client.NetworkRemoveOptions{})
 	if err != nil && !cerrdefs.IsNotFound(err) {
 		return fmt.Errorf("remove network %s: %w", name, err)
+	}
+	return nil
+}
+
+// DisconnectNetwork detaches a container from a network, ignoring a
+// container or network that is already gone.
+func (c *Client) DisconnectNetwork(ctx context.Context, name, containerID string) error {
+	_, err := c.NetworkDisconnect(ctx, name, client.NetworkDisconnectOptions{Container: containerID})
+	if err != nil && !cerrdefs.IsNotFound(err) {
+		return fmt.Errorf("disconnect %s from %s: %w", containerID, name, err)
 	}
 	return nil
 }

@@ -46,6 +46,7 @@ func TestValidateService(t *testing.T) {
 			s.HostNetwork, s.PublishedPorts = true, []store.PublishedPort{{HostPort: 9000, ContainerPort: 9000, Protocol: "tcp"}}
 		}, true},
 		{"bad socket mode", func(s *store.Service) { s.DockerSocket = "yes" }, true},
+		{"host network on a network", func(s *store.Service) { s.HostNetwork, s.Networks = true, []string{"N1"} }, true},
 		{"database socket", func(s *store.Service) {
 			s.Kind, s.Image, s.DockerSocket = store.ServiceKindPostgres, "postgres:17", "ro"
 		}, true},
@@ -92,6 +93,14 @@ func TestAppContainerSpec(t *testing.T) {
 	if len(eps) != 1 || !slices.Equal(eps[docker.ProjectNetwork("P1")].Aliases, []string{"web"}) {
 		t.Errorf("endpoints = %v", eps)
 	}
+
+	svc.Networks = []string{"N1"}
+	spec = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, route{})
+	eps = spec.NetworkingConfig.EndpointsConfig
+	if len(eps) != 2 || !slices.Equal(eps[docker.CustomNetwork("N1")].Aliases, []string{"shop-web"}) {
+		t.Errorf("endpoints with a network created by hand = %v", eps)
+	}
+	svc.Networks = nil
 
 	svc.Domain, svc.Port = "shop.example.com", 8080
 	spec = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, route{resolver: certResolver})
