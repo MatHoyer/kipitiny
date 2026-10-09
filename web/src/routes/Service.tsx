@@ -115,7 +115,7 @@ export function Service() {
 
   const svc = service.data;
   const crumbs = [
-    { label: "Projects", to: "/" },
+    { label: "Projects", to: "/projects" },
     { label: project.data?.name ?? <Spinner className="size-3.5" />, to: svc && `/projects/${svc.projectId}` },
     { label: svc?.name ?? <Spinner className="size-3.5" /> },
   ];

@@ -27,7 +27,8 @@ order: 3
   containers, `bash` when the image has it, else `sh`. *Settings › Servers*
   opens a root shell on a server itself. Admin only; every session is recorded
   in the audit log.
-- **Map** (project › Map, or the whole install from the sidebar): a canvas of
+- **Map** (the home page for the whole install, and the first tab of each
+  project): a canvas of
   what runs where, how traffic gets in (Traefik's entrypoints or a Cloudflare
   tunnel), which apps use which databases, and the networks created by hand.
   Pan, zoom and drag nodes (a project by its title); positions are saved for

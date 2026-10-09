@@ -50,7 +50,7 @@ export function Project() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const project = useQuery({ queryKey: ["project", id], queryFn: () => api.project(id) });
-  const [tab, setTab] = useTab(["services", "map", "environment", "git", "settings"], "services");
+  const [tab, setTab] = useTab(["map", "services", "environment", "git", "settings"], "map");
   const git = useProjectGit(id);
   const gitManaged = !!git.data;
   const services = useQuery({
@@ -80,11 +80,11 @@ export function Project() {
     mutationFn: (confirm: string) => api.deleteProject(id, confirm),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects"] });
-      navigate("/");
+      navigate("/projects");
     },
   });
 
-  const crumbs = [{ label: "Projects", to: "/" }, { label: project.data?.name ?? <Spinner className="size-3.5" /> }];
+  const crumbs = [{ label: "Projects", to: "/projects" }, { label: project.data?.name ?? <Spinner className="size-3.5" /> }];
   if (project.error)
     return (
       <>
@@ -141,8 +141,8 @@ export function Project() {
         )}
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList variant="line">
-            <TabsTrigger value="services">Services</TabsTrigger>
             <TabsTrigger value="map">Map</TabsTrigger>
+            <TabsTrigger value="services">Services</TabsTrigger>
             <TabsTrigger value="environment">Environment</TabsTrigger>
             <TabsTrigger value="git">Git</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
