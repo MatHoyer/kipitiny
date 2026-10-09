@@ -36,8 +36,8 @@ const opGroups: { label: string; ops: { op: PgFilterOp; label: string }[] }[] = 
 
 const tableKey = (t: Pick<PgTable, "schema" | "name">) => `${t.schema}.${t.name}`;
 
-export function PgBrowser({ serviceId }: { serviceId: string }) {
-  const tables = useQuery({ queryKey: ["data", serviceId, "tables"], queryFn: () => api.pgTables(serviceId) });
+export function PgBrowser({ serviceId, database }: { serviceId: string; database: string }) {
+  const tables = useQuery({ queryKey: ["data", serviceId, "tables", database], queryFn: () => api.pgTables(serviceId, database) });
   const [picked, setPicked] = useState<string | null>(null);
   const [find, setFind] = useState("");
   const [sidebar, setSidebar] = useState(true);
@@ -45,7 +45,7 @@ export function PgBrowser({ serviceId }: { serviceId: string }) {
   if (tables.isPending) return <Loading />;
   if (tables.error) return <ErrorText error={tables.error} />;
   const list = tables.data ?? [];
-  if (list.length === 0) return <Empty>No tables yet. Once your app runs its migrations, its tables show up here.</Empty>;
+  if (list.length === 0) return <Empty>No tables in this database yet. Once your app runs its migrations, its tables show up here.</Empty>;
   const current = list.find((t) => tableKey(t) === picked) ?? list[0];
   const shown = list.filter((t) => tableKey(t).toLowerCase().includes(find.trim().toLowerCase()));
   const schemas = [...new Set(shown.map((t) => t.schema))];
@@ -86,6 +86,7 @@ export function PgBrowser({ serviceId }: { serviceId: string }) {
     <TableView
       key={tableKey(current)}
       serviceId={serviceId}
+      database={database}
       table={current}
       tables={list}
       onPick={setPicked}
@@ -98,6 +99,7 @@ export function PgBrowser({ serviceId }: { serviceId: string }) {
 
 function TableView({
   serviceId,
+  database,
   table,
   tables,
   onPick,
@@ -106,6 +108,7 @@ function TableView({
   onToggleSidebar,
 }: {
   serviceId: string;
+  database: string;
   table: PgTable;
   tables: PgTable[];
   onPick: (key: string) => void;
@@ -120,8 +123,8 @@ function TableView({
   const [search, setSearch] = useState("");
   const q = { limit: size, offset: page * size, orderBy: sort?.column, desc: sort?.desc, filters, search };
   const rows = useQuery({
-    queryKey: ["data", serviceId, "rows", table.schema, table.name, q],
-    queryFn: () => api.pgRows(serviceId, table.schema, table.name, q),
+    queryKey: ["data", serviceId, "rows", database, table.schema, table.name, q],
+    queryFn: () => api.pgRows(serviceId, database, table.schema, table.name, q),
     placeholderData: keepPreviousData,
   });
   const data = rows.data;
@@ -165,7 +168,7 @@ function TableView({
           />
           {filterBar.trigger}
           <Button variant="outline" size="icon-sm" asChild>
-            <a href={api.pgExportUrl(serviceId, table.schema, table.name, q)} download title="Export the rows matching the search and filters as CSV" aria-label="Export CSV">
+            <a href={api.pgExportUrl(serviceId, database, table.schema, table.name, q)} download title="Export the rows matching the search and filters as CSV" aria-label="Export CSV">
               <Download />
             </a>
           </Button>

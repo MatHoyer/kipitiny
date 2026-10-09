@@ -48,7 +48,7 @@ var pgTagRe = regexp.MustCompile(`^[A-Z]+( [A-Z]+)*( [0-9]+){0,2}$`)
 // Unless write is set, the session is read-only (postgres) or commands that
 // write are refused (redis). Every run is audited, without its text, which
 // may hold secrets.
-func (c *Core) DataConsole(ctx context.Context, id, query string, write bool) (res ConsoleResult, err error) {
+func (c *Core) DataConsole(ctx context.Context, id, database, query string, write bool) (res ConsoleResult, err error) {
 	if err := Require(ctx, store.ScopeAdmin); err != nil {
 		return ConsoleResult{}, err
 	}
@@ -73,7 +73,12 @@ func (c *Core) DataConsole(ctx context.Context, id, query string, write bool) (r
 	if err != nil {
 		return ConsoleResult{}, err
 	}
-	t, err := c.dataTarget(ctx, id, svc.Kind)
+	var t dataTarget
+	if svc.Kind == store.ServiceKindPostgres {
+		t, err = c.pgTarget(ctx, id, database)
+	} else {
+		t, err = c.dataTarget(ctx, id, svc.Kind)
+	}
 	if err != nil {
 		return ConsoleResult{}, err
 	}
@@ -95,7 +100,7 @@ func (c *Core) DataConsole(ctx context.Context, id, query string, write bool) (r
 func (t dataTarget) pgConsole(ctx context.Context, sql string, write bool) (ConsoleResult, error) {
 	cmd := []string{
 		"psql", "-X", "--csv", "-v", "ON_ERROR_STOP=1", "-v", "SHOW_ALL_RESULTS=off", "-P", "null=" + pgNull,
-		"-U", t.svc.Env[pgUser], "-d", t.svc.Env[pgDatabase],
+		"-U", t.svc.Env[pgUser], "-d", t.db,
 	}
 	opts := fmt.Sprintf("-c statement_timeout=%ds", int(dataConsoleTimeout.Seconds()))
 	if write {

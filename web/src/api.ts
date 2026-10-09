@@ -615,6 +615,8 @@ export interface GitRepo {
   private: boolean;
 }
 
+/** A database of a postgres instance; main is the service's own (POSTGRES_DB). */
+export type PgDatabase = { name: string; bytes: number; main: boolean };
 /** Data browser: a postgres table or view. rowEstimate is -1 until the table is analyzed. */
 export type PgTable = { schema: string; name: string; kind: string; rowEstimate: number; bytes: number; columns: PgColumn[] };
 export type PgColumn = { name: string; type: string; nullable: boolean; primaryKey: boolean };
@@ -637,8 +639,9 @@ export type ConsoleResult = {
   output?: string;
 };
 
-const rowParams = (q: RowQuery) => {
+const rowParams = (q: RowQuery, database: string) => {
   const p = new URLSearchParams();
+  if (database) p.set("database", database);
   if (q.limit) p.set("limit", String(q.limit));
   if (q.offset) p.set("offset", String(q.offset));
   if (q.orderBy) p.set("order", q.orderBy);
@@ -786,17 +789,21 @@ export const api = {
   verifyBackup: (id: string) => request<Backup>(`/backups/${id}/verify`, { method: "POST" }),
   deleteBackup: (id: string) => request<void>(`/backups/${id}`, { method: "DELETE" }),
   downloadUrl: (id: string) => `/api/backups/${id}/download`,
-  pgTables: (serviceId: string) => request<PgTable[]>(`/services/${serviceId}/data/tables`),
-  pgRows: (serviceId: string, schema: string, table: string, q: RowQuery) =>
-    request<PgRows>(`/services/${serviceId}/data/tables/${encodeURIComponent(schema)}/${encodeURIComponent(table)}?${rowParams(q)}`),
-  pgExportUrl: (serviceId: string, schema: string, table: string, q: RowQuery) =>
-    `/api/services/${serviceId}/data/tables/${encodeURIComponent(schema)}/${encodeURIComponent(table)}/export?${rowParams({ ...q, limit: 0, offset: 0 })}`,
+  pgDatabases: (serviceId: string) => request<PgDatabase[]>(`/services/${serviceId}/data/databases`),
+  createPgDatabase: (serviceId: string, name: string) =>
+    request<PgDatabase>(`/services/${serviceId}/data/databases`, json("POST", { name })),
+  pgTables: (serviceId: string, database: string) =>
+    request<PgTable[]>(`/services/${serviceId}/data/tables?${new URLSearchParams({ database })}`),
+  pgRows: (serviceId: string, database: string, schema: string, table: string, q: RowQuery) =>
+    request<PgRows>(`/services/${serviceId}/data/tables/${encodeURIComponent(schema)}/${encodeURIComponent(table)}?${rowParams(q, database)}`),
+  pgExportUrl: (serviceId: string, database: string, schema: string, table: string, q: RowQuery) =>
+    `/api/services/${serviceId}/data/tables/${encodeURIComponent(schema)}/${encodeURIComponent(table)}/export?${rowParams({ ...q, limit: 0, offset: 0 }, database)}`,
   redisScan: (serviceId: string, cursor: string, pattern: string) =>
     request<RedisKeys>(`/services/${serviceId}/data/keys?${new URLSearchParams({ cursor, pattern })}`),
   redisGet: (serviceId: string, key: string, cursor = "0") =>
     request<RedisValue>(`/services/${serviceId}/data/key?${new URLSearchParams({ key, cursor })}`),
-  dataConsole: (serviceId: string, query: string, write: boolean) =>
-    request<ConsoleResult>(`/services/${serviceId}/data/console`, json("POST", { query, write })),
+  dataConsole: (serviceId: string, query: string, write: boolean, database = "") =>
+    request<ConsoleResult>(`/services/${serviceId}/data/console`, json("POST", { query, write, database })),
   restore: (backupId: string, confirm: string, serviceId = "") =>
     request<Restore>(`/backups/${backupId}/restore`, json("POST", { serviceId, confirm })),
   schedules: (serviceId: string) => request<Schedule[]>(`/services/${serviceId}/schedules`),
