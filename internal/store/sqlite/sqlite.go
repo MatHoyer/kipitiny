@@ -1071,6 +1071,36 @@ func (s *Store) SetServiceNetworks(ctx context.Context, serviceID string, networ
 	return nil
 }
 
+func (s *Store) ListCanvasPositions(ctx context.Context) ([]store.CanvasPosition, error) {
+	ps := []store.CanvasPosition{}
+	err := s.db.NewSelect().Model(&ps).Order("node").Scan(ctx)
+	return ps, mapErr(err)
+}
+
+func (s *Store) SaveCanvasPositions(ctx context.Context, ps []store.CanvasPosition, remove []string) error {
+	return mapErr(s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if len(remove) > 0 {
+			if _, err := tx.NewDelete().Model((*store.CanvasPosition)(nil)).Where("node IN (?)", bun.In(remove)).Exec(ctx); err != nil {
+				return err
+			}
+		}
+		if len(ps) == 0 {
+			return nil
+		}
+		t := now()
+		for i := range ps {
+			ps[i].UpdatedAt = t
+		}
+		_, err := tx.NewInsert().Model(&ps).
+			On("CONFLICT (node) DO UPDATE").
+			Set("x = EXCLUDED.x").
+			Set("y = EXCLUDED.y").
+			Set("updated_at = EXCLUDED.updated_at").
+			Exec(ctx)
+		return err
+	}))
+}
+
 func (s *Store) ListUptimeChecks(ctx context.Context) ([]store.UptimeCheck, error) {
 	cs := []store.UptimeCheck{}
 	err := s.db.NewSelect().Model(&cs).Order("created_at").Scan(ctx)

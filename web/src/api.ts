@@ -346,6 +346,9 @@ export type RegistryInput = Pick<Registry, "host" | "username" | "password">;
 /** A service on a network created by hand, reached there as its alias. */
 export type NetworkMember = { id: string; name: string; kind: ServiceKind; projectId: string; projectName: string; alias: string };
 
+/** Where a map canvas node was dragged to, relative to its parent frame. */
+export type CanvasPoint = { x: number; y: number };
+
 /** A network created by hand on a server, which services of any project there can join. */
 export type Network = { id: string; serverId: string; name: string; dockerName: string; services: NetworkMember[]; createdAt: string };
 
@@ -841,6 +844,9 @@ export const api = {
   networks: () => request<Network[]>("/networks"),
   createNetwork: (n: { serverId: string; name: string }) => request<Network>("/networks", json("POST", n)),
   deleteNetwork: (id: string) => request<void>(`/networks/${id}`, { method: "DELETE" }),
+  canvasLayout: () => request<{ positions: Record<string, CanvasPoint> }>("/canvas"),
+  saveCanvasLayout: (positions: Record<string, CanvasPoint>) => request<void>("/canvas", json("PUT", { positions })),
+  resetCanvasLayout: () => request<void>("/canvas", { method: "DELETE" }),
   gitProviders: () => request<GitProvider[]>("/git-providers"),
   createGitProvider: (p: GitProviderInput) => request<GitProvider>("/git-providers", json("POST", p)),
   updateGitProvider: (id: string, p: GitProviderInput) => request<GitProvider>(`/git-providers/${id}`, json("PUT", p)),
