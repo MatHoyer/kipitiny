@@ -8,7 +8,7 @@ A database's **Data** tab shows what it holds without deploying pgAdmin, Adminer
 or RedisInsight next to it. The manager runs the database's own client (`psql`,
 `redis-cli`) inside its container, like backups do: nothing is exposed, nothing
 is installed, and the client always matches the server. The database must be
-running.
+running. Agents get the same through [MCP](/docs/api) tools, with the same scopes.
 
 ## Browse
 

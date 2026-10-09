@@ -42,7 +42,7 @@ func Handler(c *core.Core, version string) http.Handler {
 		Instructions: "Manage apps and PostgreSQL/Redis databases on this kipitiny server. " +
 			"Refer to services as project/service. Read tools need a read token, " +
 			"deploy/rollback/backup/service_action need deploy (with deploy, deploy_image only changes the tag of an existing app); " +
-			"creating, renaming, git links, set_project_env and apply_project_compose need admin; restore needs admin and an explicit confirmation. " +
+			"creating, renaming, git links, set_project_env, apply_project_compose, query_database and get_connection need admin; restore needs admin and an explicit confirmation. " +
 			"Documentation of this version, as markdown: " + docsIndex + " lists every page; read the relevant one before guessing how a feature works. " +
 			"If the site is unreachable, the same pages are in " + docsSources + ".",
 	})
@@ -96,6 +96,23 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "Where kipitiny can store files (local disk, S3, drives), with their IDs and whether files are encrypted."}, t.listStorage)
 	mcp.AddTool(server, &mcp.Tool{Name: "restore_database", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Replace a service's data with a backup. Destructive: confirm must repeat the service name. For a PostgreSQL dump, apps referencing the database are stopped meanwhile; for a volume archive, the service itself is."}, t.restoreDatabase)
+
+	mcp.AddTool(server, &mcp.Tool{Name: "list_databases", Annotations: readOnly,
+		Description: "The databases of a PostgreSQL service's instance, with their size; main is the service's own."}, t.listDatabases)
+	mcp.AddTool(server, &mcp.Tool{Name: "create_database",
+		Description: "Create a database in a PostgreSQL service's instance, owned by the service's user. Needs admin."}, t.createDatabase)
+	mcp.AddTool(server, &mcp.Tool{Name: "list_tables", Annotations: readOnly,
+		Description: "Tables and views of a PostgreSQL database with their columns, estimated rows and size."}, t.listTables)
+	mcp.AddTool(server, &mcp.Tool{Name: "read_table", Annotations: readOnly,
+		Description: "Rows of a PostgreSQL table or view, paged, sorted and filtered. Cells are text (null is NULL); long ones are cut and listed in truncated."}, t.readTable)
+	mcp.AddTool(server, &mcp.Tool{Name: "scan_redis_keys", Annotations: readOnly,
+		Description: "One SCAN step over a Redis service's keys, with their type, TTL and size. Call again with the returned cursor until it is 0."}, t.scanRedisKeys)
+	mcp.AddTool(server, &mcp.Tool{Name: "get_redis_key", Annotations: readOnly,
+		Description: "One page of a Redis key's value: [value] for a string, [field, value] pairs for a hash, [member, score] for a sorted set."}, t.getRedisKey)
+	mcp.AddTool(server, &mcp.Tool{Name: "query_database", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+		Description: "Run SQL on a PostgreSQL service or a command on a Redis one; read-only unless write is set. Prefer read_table and get_redis_key to look at data. Needs admin."}, t.queryDatabase)
+	mcp.AddTool(server, &mcp.Tool{Name: "get_connection",
+		Description: "A database service's host, port, user, password and URL, as apps of its project reach it. Needs admin."}, t.getConnection)
 
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{
 		Stateless:    true,
