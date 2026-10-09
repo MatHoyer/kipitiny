@@ -130,6 +130,9 @@ export type TopoService = {
   volume?: string;
   /** IDs of the project databases its env references. */
   uses: string[];
+  /** IDs of the networks created by hand it joins. */
+  networks: string[];
+  hostNetwork?: boolean;
   containers: TopoNode[];
 };
 
@@ -139,8 +142,9 @@ export type TopoNetwork = {
   gateway?: string;
   /** Empty for the proxy network and the ones created by hand. */
   projectId?: string;
-  /** Name of a network created by hand. */
+  /** Name and ID of a network created by hand. */
   custom?: string;
+  customId?: string;
   /** Expected but not found on the server. */
   missing?: boolean;
 };

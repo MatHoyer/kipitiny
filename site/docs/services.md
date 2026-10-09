@@ -27,9 +27,12 @@ order: 3
   containers, `bash` when the image has it, else `sh`. *Settings › Servers*
   opens a root shell on a server itself. Admin only; every session is recorded
   in the audit log.
-- **Map** (project › Map, or the whole install from the sidebar): what runs
-  where, how traffic gets in (Traefik's entrypoints or a Cloudflare tunnel), the
-  networks, and each container with the networks it is actually attached to.
+- **Map** (project › Map, or the whole install from the sidebar): a canvas of
+  what runs where, how traffic gets in (Traefik's entrypoints or a Cloudflare
+  tunnel), which apps use which databases, and the networks created by hand.
+  Pan, zoom and drag nodes; positions are saved for everyone (*Reset layout*
+  puts them back). Click a node for its details and each container's
+  addresses on the networks it is actually attached to.
 - Health, uptime checks and notifications: see [Monitoring](/docs/monitoring).
 - **Renaming** (Settings › Name) keeps everything else: volumes, backups,
   deploy history and the project network are tied to IDs, and nothing restarts.
@@ -63,7 +66,7 @@ service on it can connect. An app in the host network can't join one.
 
 These networks aren't part of a compose file: a project managed by git keeps
 the ones set here across syncs. Deleting a network detaches its services first.
-The **Map** shows them with each container's address on them.
+The **Map** draws them with a line to each of their services.
 
 ## Private registries
 
