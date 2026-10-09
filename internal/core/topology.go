@@ -85,9 +85,12 @@ type ManagerNode struct {
 }
 
 type TopoProject struct {
-	ID       string        `json:"id"`
-	Name     string        `json:"name"`
-	Network  string        `json:"network"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Network string `json:"network"`
+	// GitPath is the compose file a project linked to git follows: its
+	// services are changed there, not from the map.
+	GitPath  string        `json:"gitPath,omitempty"`
 	Services []TopoService `json:"services"`
 }
 
@@ -138,6 +141,14 @@ func (c *Core) Topology(ctx context.Context, projectID string) (Topology, error)
 	if err != nil {
 		return Topology{}, err
 	}
+	links, err := c.store.ListProjectGit(ctx)
+	if err != nil {
+		return Topology{}, err
+	}
+	gitPaths := make(map[string]string, len(links))
+	for _, l := range links {
+		gitPaths[l.ProjectID] = l.Path
+	}
 
 	out := Topology{Servers: make([]ServerTopology, len(servers))}
 	done := make(chan struct{})
@@ -152,7 +163,7 @@ func (c *Core) Topology(ctx context.Context, projectID string) (Topology, error)
 			defer func() { done <- struct{}{} }()
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
-			out.Servers[i] = c.serverTopology(ctx, sv, mine, svcs)
+			out.Servers[i] = c.serverTopology(ctx, sv, mine, svcs, gitPaths)
 		}()
 	}
 	for range servers {
@@ -161,7 +172,7 @@ func (c *Core) Topology(ctx context.Context, projectID string) (Topology, error)
 	return out, nil
 }
 
-func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []store.Project, svcs []store.Service) ServerTopology {
+func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []store.Project, svcs []store.Service, gitPaths map[string]string) ServerTopology {
 	t := ServerTopology{ID: sv.ID, Name: sv.Name, Kind: sv.Kind, Traefik: c.cfg.Traefik.Enabled, Entrypoints: []Entrypoint{}, Networks: []TopoNetwork{}, Projects: []TopoProject{}}
 	if t.Traefik {
 		t.Tunnel = c.tunnelToken(sv) != ""
@@ -221,7 +232,7 @@ func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []s
 		}
 		netName := docker.ProjectNetwork(p.ID)
 		t.Networks = append(t.Networks, topoNetwork(nets, netName, p.ID, err == nil))
-		tp := TopoProject{ID: p.ID, Name: p.Name, Network: netName, Services: make([]TopoService, 0, len(own))}
+		tp := TopoProject{ID: p.ID, Name: p.Name, Network: netName, GitPath: gitPaths[p.ID], Services: make([]TopoService, 0, len(own))}
 		dbs := databasesOf(own)
 		for _, s := range own {
 			ts := TopoService{

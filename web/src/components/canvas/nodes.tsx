@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Globe, HardDrive, Lock, Network, Plus, Server, ShieldCheck, TriangleAlert } from "lucide-react";
+import { GitFork, Globe, HardDrive, Lock, Network, Plus, Server, ShieldCheck, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { CloudflareIcon } from "@/components/brand-icons";
 import { stateColors } from "@/components/common";
@@ -91,15 +91,23 @@ function ProjectFrame({ data: { project, net }, selected }: Props<ProjectData>) 
               {problems}
             </span>
           )}
-          <NewServiceDialog
-            projectId={project.id}
-            stay
-            trigger={
-              <Button variant="ghost" size="icon-sm" title="Add a service" aria-label={`Add a service to ${project.name}`} className="nodrag size-6">
-                <Plus />
-              </Button>
-            }
-          />
+          {project.gitPath ? (
+            // Its services come from the compose file: none to add here.
+            <span title={`Follows ${project.gitPath} in git: add and change services in that file.`} className="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <GitFork className="size-3" />
+              {project.gitPath}
+            </span>
+          ) : (
+            <NewServiceDialog
+              projectId={project.id}
+              stay
+              trigger={
+                <Button variant="ghost" size="icon-sm" title="Add a service" aria-label={`Add a service to ${project.name}`} className="nodrag size-6">
+                  <Plus />
+                </Button>
+              }
+            />
+          )}
         </span>
       </header>
       {project.services.length === 0 && <p className="px-4 pt-2 text-xs text-muted-foreground">No services.</p>}
