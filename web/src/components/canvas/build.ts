@@ -57,7 +57,7 @@ export function buildGraph(
     let y = framed ? HEAD : 0;
     const x0 = framed ? PAD : 0;
     const add = (n: MapNode, size: Size) => {
-      inner.push({ ...n, parentId: parent, extent: parent ? "parent" : undefined, width: size.w, height: size.h });
+      inner.push({ ...n, parentId: parent, extent: parent ? "parent" : undefined, expandParent: !!parent, width: size.w, height: size.h });
     };
 
     // Ingress: Internet → (tunnel →) Traefik, and the manager's own domain.
@@ -128,6 +128,11 @@ export function buildGraph(
     }
     nodes.push(...inner);
   }
+  for (const n of nodes) {
+    n.deletable = false;
+    // Frames move by their title; the rest lets clicks through to the lines.
+    if (n.type === "project" || n.type === "server") n.dragHandle = ".frame-handle";
+  }
   // React Flow wants parents before their children.
   return { nodes: [...nodes.filter((n) => !n.parentId || n.type === "project"), ...nodes.filter((n) => n.parentId && n.type !== "project")], edges };
 }
@@ -175,6 +180,49 @@ function frameSize(children: MapNode[], min: Size): Size {
   return { w, h };
 }
 
+/** Lines of a network or a database reference can be selected and deleted; the others only show traffic. */
 function edge(source: string, target: string, kind: EdgeKind): Edge {
-  return { id: `${kind}:${source}:${target}`, source, target, type: "smoothstep", data: { kind }, animated: kind === "web" || kind === "tunnel", className: `map-edge-${kind}` };
+  const editable = kind === "db" || kind === "net";
+  return { id: `${kind}:${source}:${target}`, source, target, type: "smoothstep", data: { kind }, selectable: editable, deletable: editable, focusable: editable, animated: kind === "web" || kind === "tunnel", className: `map-edge-${kind}` };
 }
+
+/**
+ * Fits every frame tightly around its children, on all four sides: React
+ * Flow only ever grows a parent, so a frame stretched by a drag (up and left
+ * included) would keep its size. A frame whose content moved right or down
+ * moves with it, its children shifting back so nothing moves on screen.
+ * Returns the nodes and the IDs whose position changed (to save).
+ */
+export function fitFrames(nodes: MapNode[]): { nodes: MapNode[]; moved: string[] } {
+  const out = nodes.map((n) => ({ ...n, position: { ...n.position } }));
+  const moved = new Set<string>();
+  // Project frames first: a server frame fits around their new size.
+  const frames = out.filter((n) => n.type === "project" || n.type === "server").sort((a, b) => (a.type === "project" ? -1 : 1) - (b.type === "project" ? -1 : 1));
+  for (const f of frames) {
+    const children = out.filter((n) => n.parentId === f.id);
+    const min = f.type === "server" ? { w: 600, h: 200 } : { w: EMPTY_W, h: EMPTY_H };
+    if (children.length === 0) {
+      f.width = min.w;
+      f.height = min.h;
+      continue;
+    }
+    const x1 = Math.min(...children.map((c) => c.position.x));
+    const y1 = Math.min(...children.map((c) => c.position.y));
+    const x2 = Math.max(...children.map((c) => c.position.x + (c.width ?? SVC_W)));
+    const y2 = Math.max(...children.map((c) => c.position.y + (c.height ?? SVC_H)));
+    const dx = Math.round(x1 - PAD);
+    const dy = Math.round(y1 - HEAD);
+    if (dx !== 0 || dy !== 0) {
+      f.position = { x: f.position.x + dx, y: f.position.y + dy };
+      moved.add(f.id);
+      for (const c of children) {
+        c.position = { x: c.position.x - dx, y: c.position.y - dy };
+        moved.add(c.id);
+      }
+    }
+    f.width = Math.max(min.w, Math.round(x2 - x1) + PAD * 2);
+    f.height = Math.max(min.h, Math.round(y2 - y1) + HEAD + PAD);
+  }
+  return { nodes: out, moved: [...moved] };
+}
+

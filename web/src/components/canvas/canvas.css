@@ -1,18 +1,18 @@
 /* Edge colors of the map canvas, matching its legend. */
-.react-flow__edge.map-edge-web path,
+.react-flow__edge.map-edge-web path.react-flow__edge-path,
 .map-legend-web path {
   stroke: var(--color-sky-500);
 }
-.react-flow__edge.map-edge-tunnel path,
+.react-flow__edge.map-edge-tunnel path.react-flow__edge-path,
 .map-legend-tunnel path {
   stroke: var(--color-orange-500);
 }
-.react-flow__edge.map-edge-db path,
+.react-flow__edge.map-edge-db path.react-flow__edge-path,
 .map-legend-db path {
   stroke: #4169e1;
   stroke-dasharray: 5 4;
 }
-.react-flow__edge.map-edge-net path,
+.react-flow__edge.map-edge-net path.react-flow__edge-path,
 .map-legend-net path {
   stroke: var(--color-violet-500);
   stroke-dasharray: 2 4;
@@ -27,12 +27,18 @@
   font-family: var(--font-mono, monospace);
   font-size: 10px;
 }
-/* Frames carry no box of their own: their component draws it. */
+/* Frames carry no box of their own: their component draws it. Only their
+   title takes clicks, so lines drawn over them stay clickable. */
 .react-flow__node-project,
 .react-flow__node-server {
   padding: 0;
   border: 0;
   background: transparent;
+  pointer-events: none !important;
+}
+.react-flow__node-project .frame-handle,
+.react-flow__node-server .frame-handle {
+  pointer-events: auto;
 }
 .react-flow {
   --xy-background-color: transparent;

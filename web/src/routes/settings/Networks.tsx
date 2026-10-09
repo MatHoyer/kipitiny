@@ -118,7 +118,8 @@ function NetworkCard({ network: n, server, onDelete }: { network: Network; serve
   );
 }
 
-function CreateNetworkForm({ onDone }: { onDone: () => void }) {
+/** Creates a network; a dialog's content. */
+export function CreateNetworkForm({ onDone }: { onDone: () => void }) {
   const qc = useQueryClient();
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.servers });
   const [name, setName] = useState("");
@@ -126,7 +127,10 @@ function CreateNetworkForm({ onDone }: { onDone: () => void }) {
   const create = useMutation({
     meta: { error: "Couldn't create the network" },
     mutationFn: () => api.createNetwork({ name: name.trim(), serverId }),
-    onSettled: () => qc.invalidateQueries({ queryKey: ["networks"] }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["networks"] });
+      qc.invalidateQueries({ queryKey: ["topology"] });
+    },
     onSuccess: onDone,
   });
   const onSubmit = (e: FormEvent) => {

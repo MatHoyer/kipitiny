@@ -141,11 +141,17 @@ function ProjectCard({ project: p, services, server }: { project: ProjectT; serv
 const stateDot = (state: string) =>
   state === "running" ? "bg-emerald-500" : troubled(state) ? "bg-red-500" : state === "starting" ? "animate-pulse bg-amber-500" : "bg-muted-foreground/40";
 
-function NewProjectDialog() {
+/**
+ * Creates a project. With open and onOpenChange, the caller opens it (no
+ * button); stay keeps the user where they are (the map) instead of opening it.
+ */
+export function NewProjectDialog({ stay, ...controlled }: { stay?: boolean; open?: boolean; onOpenChange?: (open: boolean) => void } = {}) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.servers });
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = controlled.onOpenChange ? !!controlled.open : ownOpen;
+  const setOpen = controlled.onOpenChange ?? setOwnOpen;
   const [name, setName] = useState("");
   const [serverId, setServerId] = useState("local");
   const create = useMutation({
@@ -155,7 +161,8 @@ function NewProjectDialog() {
       qc.invalidateQueries({ queryKey: ["projects"] });
       setOpen(false);
       setName("");
-      navigate(`/projects/${p.id}`);
+      qc.invalidateQueries({ queryKey: ["topology"] });
+      if (!stay) navigate(`/projects/${p.id}`);
     },
   });
   const onSubmit = (e: FormEvent) => {
@@ -171,12 +178,14 @@ function NewProjectDialog() {
         if (!o) create.reset();
       }}
     >
-      <DialogTrigger asChild>
-        <Button size="sm">
-          <Plus data-icon="inline-start" />
-          New project
-        </Button>
-      </DialogTrigger>
+      {!controlled.onOpenChange && (
+        <DialogTrigger asChild>
+          <Button size="sm">
+            <Plus data-icon="inline-start" />
+            New project
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent>
         <form onSubmit={onSubmit} className="contents">
           <DialogHeader>
