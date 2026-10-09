@@ -478,17 +478,6 @@ export function NewServiceDialog({ projectId, trigger, stay }: { projectId: stri
   const onOpenChange = (next: boolean) => {
     if (create.isPending) return;
     if (!next) return close();
-    // With a single database of a kind, apps most likely want it.
-    const only = (k: DatabaseKind) => {
-      const of = databases.filter((d) => d.kind === k);
-      return of.length === 1 ? of[0].name : null;
-    };
-    const pg = only("postgres");
-    const redis = only("redis");
-    setEnv([
-      ...(pg ? [{ key: "DATABASE_URL", value: dbRef(pg, "URL"), secret: true }] : []),
-      ...(redis ? [{ key: "REDIS_URL", value: dbRef(redis, "URL"), secret: true }] : []),
-    ]);
     setOpen(true);
   };
   const onSubmit = (e: FormEvent) => {
