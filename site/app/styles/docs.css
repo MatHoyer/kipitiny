@@ -82,3 +82,20 @@
   .pager { grid-template-columns: 1fr; }
   .pager .next { grid-column: 1; }
 }
+@media (max-width: 560px) {
+  /* Edge to edge: on a phone the card's margin costs more than it gives. */
+  .docs-main { padding: 20px 14px; border-radius: 8px; }
+  /* Tables become stacked rows: the first cell titles the row, the others
+     are labelled with their column, so nothing is squeezed or cut. */
+  .prose table, .prose tbody, .prose tr, .prose td { display: block; width: 100%; }
+  .prose thead { display: none; }
+  .prose tr { border-bottom: 1px solid var(--rule); padding: 10px 0; }
+  .prose tr:first-child { border-top: 2px solid var(--ink); }
+  .prose td { border: 0; padding: 2px 0; overflow-wrap: anywhere; }
+  .prose td code { white-space: normal; overflow-wrap: anywhere; }
+  .prose td:first-child { font-weight: 650; padding-bottom: 4px; }
+  .prose td + td[data-label]::before { content: attr(data-label) ": "; color: var(--ink-soft); font-weight: 600; font-size: 0.8125rem; }
+  /* Two columns read as "name, then what it is": no label needed. */
+  .prose tr:has(> td:nth-child(2):last-child) td + td::before { content: none; }
+  .prose td[data-label=""]::before { content: none !important; }
+}

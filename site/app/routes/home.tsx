@@ -179,7 +179,7 @@ export default function Home() {
               <div>
                 <h3>Start the manager</h3>
                 <pre>{`curl -fsSLO https://raw.githubusercontent.com/MatHoyer/kipitiny/main/docker-compose.yml
-    docker compose up -d`}</pre>
+docker compose up -d`}</pre>
               </div>
             </li>
             <li>
