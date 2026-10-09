@@ -326,7 +326,8 @@ function SharedVariables({ project }: { project: ProjectT }) {
       title="Shared variables & secrets"
       description={
         <>
-          Available to every service of the project as <Mono>{"{{ project.NAME }}"}</Mono>.
+          Available to every service of the project as <Mono>{"{{ project.NAME }}"}</Mono>. Values can be password
+          manager secrets, e.g. <Mono>{"{{ pass://Vault/Item/field }}"}</Mono>.
         </>
       }
     >

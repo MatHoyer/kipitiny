@@ -100,3 +100,53 @@ func TestResolveSecrets(t *testing.T) {
 		t.Errorf("unknown scheme accepted: %v", err)
 	}
 }
+
+// fakeBrowser lists one vault, counting the calls.
+type fakeBrowser struct {
+	fakeProvider
+	lists int
+}
+
+func (f *fakeBrowser) Vaults(context.Context) ([]string, error) {
+	f.lists++
+	return []string{"Work"}, nil
+}
+
+func (f *fakeBrowser) Items(_ context.Context, vault string) ([]secrets.Item, error) {
+	f.lists++
+	return []secrets.Item{{Title: vault + "-item"}}, nil
+}
+
+func TestSecretListingsCache(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	fake := &fakeBrowser{}
+	c.secrets = []secrets.Provider{fake}
+	if _, err := c.ConnectSecretProvider(ctx, "fake", "good"); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if vs, err := c.SecretVaults(ctx, "fake", false); err != nil || len(vs) != 1 {
+			t.Fatalf("vaults = %v, %v", vs, err)
+		}
+		if items, err := c.SecretItems(ctx, "fake", "Work", false); err != nil || items[0].Title != "Work-item" {
+			t.Fatalf("items = %v, %v", items, err)
+		}
+	}
+	if fake.lists != 2 {
+		t.Errorf("listed %d times, want 2 (cached)", fake.lists)
+	}
+	if _, err := c.SecretVaults(ctx, "fake", true); err != nil || fake.lists != 3 {
+		t.Errorf("refresh: %v, %d lists", err, fake.lists)
+	}
+	if _, err := c.SecretItems(ctx, "fake", "", false); !errors.Is(err, ErrInvalid) {
+		t.Errorf("no vault: %v", err)
+	}
+	// Logging in again drops the listings.
+	if _, err := c.ConnectSecretProvider(ctx, "fake", "good"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.SecretVaults(ctx, "fake", false); err != nil || fake.lists != 4 {
+		t.Errorf("after login: %v, %d lists", err, fake.lists)
+	}
+}

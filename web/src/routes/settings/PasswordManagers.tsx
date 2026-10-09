@@ -19,7 +19,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { api, type SecretProvider } from "@/api";
 import { SettingsPage } from "./page";
 
-/** Password managers that service env can reference (e.g. op://Vault/Item/field). */
+/** Password managers that service env can reference (e.g. pass://Vault/Item/field). */
 export function PasswordManagers() {
   const providers = useQuery({ queryKey: ["secret-providers"], queryFn: api.secretProviders });
   const connected = providers.data?.filter((p) => p.connected) ?? [];

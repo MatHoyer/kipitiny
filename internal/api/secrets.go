@@ -30,7 +30,7 @@ func (a *API) disconnectSecretProvider(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) secretVaults(w http.ResponseWriter, r *http.Request) {
-	vs, err := a.core.SecretVaults(r.Context(), r.PathValue("id"))
+	vs, err := a.core.SecretVaults(r.Context(), r.PathValue("id"), r.URL.Query().Has("refresh"))
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -39,7 +39,7 @@ func (a *API) secretVaults(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) secretItems(w http.ResponseWriter, r *http.Request) {
-	items, err := a.core.SecretItems(r.Context(), r.PathValue("id"), r.URL.Query().Get("vault"))
+	items, err := a.core.SecretItems(r.Context(), r.PathValue("id"), r.URL.Query().Get("vault"), r.URL.Query().Has("refresh"))
 	if err != nil {
 		a.fail(w, err)
 		return

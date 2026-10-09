@@ -49,28 +49,29 @@ type Core struct {
 	setupMu    sync.Mutex
 	setupToken string // set while no admin exists
 
-	sched         scheduler
-	verifySem     chan struct{}
-	reconcileKick chan struct{}
-	probes        sync.Map // server ID -> *mount.Mount (nil: no probe there)
-	update        updateState
-	dns           dnsState
-	dnsKick       chan struct{}
-	gitKick       chan string // project IDs to sync
-	gitFlows      pending[gitFlow]
-	gitTokens     gitTokens
-	proxy         proxyState
-	cleaning      atomic.Bool  // a cleanup is running
-	notified      sync.Map     // notification key -> time.Time last sent
-	notifyHTTP    *http.Client // nil: notify's default; tests redirect it
-	secrets       []secrets.Provider
-	mfaTickets    pending[mfaTicket]
-	totpSetups    pending[string] // user ID -> secret awaiting its first code
-	ceremonies    pending[ceremony]
-	stats         statsState
-	uptime        uptimeState
-	health        healthState
-	uptimeHTTP    *http.Client // nil: probe's default; tests redirect it
+	sched          scheduler
+	verifySem      chan struct{}
+	reconcileKick  chan struct{}
+	probes         sync.Map // server ID -> *mount.Mount (nil: no probe there)
+	update         updateState
+	dns            dnsState
+	dnsKick        chan struct{}
+	gitKick        chan string // project IDs to sync
+	gitFlows       pending[gitFlow]
+	gitTokens      gitTokens
+	proxy          proxyState
+	cleaning       atomic.Bool  // a cleanup is running
+	notified       sync.Map     // notification key -> time.Time last sent
+	notifyHTTP     *http.Client // nil: notify's default; tests redirect it
+	secrets        []secrets.Provider
+	secretListings secretListings
+	mfaTickets     pending[mfaTicket]
+	totpSetups     pending[string] // user ID -> secret awaiting its first code
+	ceremonies     pending[ceremony]
+	stats          statsState
+	uptime         uptimeState
+	health         healthState
+	uptimeHTTP     *http.Client // nil: probe's default; tests redirect it
 }
 
 // New builds the core around the local Docker client; remote servers are
@@ -79,6 +80,7 @@ func New(cfg config.Config, s store.Store, local *docker.Client, log *slog.Logge
 	bg, cancel := context.WithCancel(context.Background())
 	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1), dnsKick: make(chan struct{}, 1), gitKick: make(chan string, 16)}
 	c.pool = docker.NewPool(local, c.connectServer)
+	c.secrets = secretProviders(cfg, local)
 	return c
 }
 
@@ -129,6 +131,9 @@ func (c *Core) bootstrapServer(ctx context.Context, sv store.Server) error {
 	}
 	if sv.Kind == store.ServerLocal {
 		c.cleanupUpdater(ctx, dk)
+		if err := c.closeSecretProviders(ctx); err != nil {
+			c.log.Warn("removing password manager helpers failed", "err", err)
+		}
 	}
 	if c.cfg.Traefik.Enabled {
 		if err := c.ensureTraefik(ctx, sv); err != nil {
@@ -170,6 +175,9 @@ func (c *Core) Shutdown(ctx context.Context) error {
 		}
 	}
 	c.cancel()
+	if cerr := c.closeSecretProviders(context.WithoutCancel(ctx)); cerr != nil {
+		c.log.Warn("removing password manager helpers failed", "err", cerr)
+	}
 	select {
 	case <-waitDone(&c.wg):
 	case <-time.After(shutdownCancelGrace):

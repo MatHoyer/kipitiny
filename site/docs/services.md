@@ -20,6 +20,7 @@ order: 3
   (fields: `URL`, `HOST`, `PORT`, `USER`, `PASSWORD`, `DATABASE`).
 - **Environment**: variables are readable, secrets write-only. A project holds shared
   ones that services reference as `{{ project.NAME }}`. References resolve at deploy.
+  Values can also come from a password manager, see below.
 - Deleting a database or a project destroys data and must be confirmed by typing its name.
 - **Terminal** (service › Terminal): a shell in one of the service's running
   containers, `bash` when the image has it, else `sh`. *Settings › Servers*
@@ -45,3 +46,20 @@ order: 3
 registry.gitlab.com, or any other). The manager's Docker checks them on save, as
 `docker login` would; nothing is written to the hosts' Docker config. Every pull,
 on any server, sends the credential of the image's registry. Use read-only tokens.
+
+## Password managers
+
+*Integrations › Password managers* connects **Proton Pass** with a personal
+access token, scoped to the vaults you grant it. Env values (of an app or a
+project entry) then reference its fields as `{{ pass://Vault/Item/field }}`, or
+pick them in the env editor. They're read at each deploy and replica
+recreation and never stored by kipitiny; a database's env can't use them.
+
+The Proton Pass CLI isn't part of the manager's image. The first connection
+pulls `ghcr.io/mathoyer/kipitiny-protonpass` (about 60 MB) on the manager's
+server and runs it as a container named `kipitiny-protonpass` while it's used
+(a deploy, browsing in the env editor); it's removed after 5 minutes idle. Its
+session lives in the `kipitiny-protonpass` volume, deleted on disconnect, and
+is recreated from the saved token when lost (e.g. after restoring a manager
+backup). Mirror the image and set `KIPITINY_PROTONPASS_IMAGE` if the server
+can't reach ghcr.io.

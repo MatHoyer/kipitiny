@@ -29,8 +29,9 @@ gets ready, the new containers are removed and the old version keeps serving.
   name and a mount path, and every replica mounts the same volume. Deleting the
   service destroys them, so it asks for the service name.
 - **Access** settings put Traefik middlewares on an app's domain: basic auth
-  (passwords stored bcrypt-hashed), an IP allowlist, a per-IP rate limit and
-  custom response headers (e.g. `X-Robots-Tag: noindex` for staging). They apply from the next deploy.
+  (passwords stored bcrypt-hashed, or password manager references fetched at
+  each deploy), an IP allowlist, a per-IP rate limit and custom response headers
+  (e.g. `X-Robots-Tag: noindex` for staging). They apply from the next deploy.
 
 A **reconciler** keeps Docker matching the store every 30 s, shortly after any
 change, and whenever a managed container dies or is removed: missing replicas

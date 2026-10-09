@@ -800,9 +800,11 @@ export const api = {
   secretProviders: () => request<SecretProvider[]>("/secret-providers"),
   connectSecretProvider: (id: string, token: string) =>
     request<SecretProvider>(`/secret-providers/${id}`, json("PUT", { token })),
-  secretVaults: (id: string) => request<string[]>(`/secret-providers/${id}/vaults`),
-  secretItems: (id: string, vault: string) =>
-    request<SecretItem[]>(`/secret-providers/${id}/items?vault=${encodeURIComponent(vault)}`),
+  /** Listings are cached by the manager for a few minutes, unless refresh. */
+  secretVaults: (id: string, refresh = false) =>
+    request<string[]>(`/secret-providers/${id}/vaults${refresh ? "?refresh" : ""}`),
+  secretItems: (id: string, vault: string, refresh = false) =>
+    request<SecretItem[]>(`/secret-providers/${id}/items?vault=${encodeURIComponent(vault)}${refresh ? "&refresh" : ""}`),
   disconnectSecretProvider: (id: string) => request<void>(`/secret-providers/${id}`, { method: "DELETE" }),
   testSecretProvider: (id: string) => request<void>(`/secret-providers/${id}/test`, { method: "POST" }),
   setServerNetwork: (id: string, n: ServerNetwork) => request<Server>(`/servers/${id}/network`, json("PUT", n)),
