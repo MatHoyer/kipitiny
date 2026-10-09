@@ -29,6 +29,7 @@ import { DataTab } from "@/components/data/data-tab";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
+import { DeploymentLogView, LiveLogs } from "@/components/logs";
 import { RenameCard } from "@/components/rename-card";
 import { SaveBar } from "@/components/save-bar";
 import { UptimeSection } from "@/components/uptime";
@@ -43,7 +44,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
 import { byDay, envMap, envRows, envSecrets, formatBytes, formatCpu, formatDuration, sameEnv, serviceState, timeAgo, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { api, canBackup, databasePorts, httpRouted, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type LogLine, type Middlewares, type MiddlewaresInput, type PublishedPort, type Service as ServiceT, type Volume } from "../api";
+import { api, canBackup, databasePorts, httpRouted, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type Middlewares, type MiddlewaresInput, type PublishedPort, type Service as ServiceT, type Volume } from "../api";
 import { BackupList } from "./BackupList";
 import { Schedules } from "./Schedules";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
@@ -260,7 +261,7 @@ export function Service() {
               <Empty>Not deployed yet.</Empty>
             ) : (
               // Remount (and reconnect) whenever the set of containers changes.
-              <LiveLogs key={active.map((c) => c.id).join()} serviceId={id} />
+              <LiveLogs key={active.map((c) => c.id).join()} serviceId={id} name={svc.name} />
             )}
           </TabsContent>
           <TabsContent value="terminal">
@@ -1315,116 +1316,14 @@ function DeploymentLog({ deployment }: { deployment: Deployment }) {
     queryFn: () => api.deploymentLog(deployment.id),
     refetchInterval: deployment.status === "running" ? 1_000 : false,
   });
-  const box = useRef<HTMLPreElement>(null);
-  const stick = useRef(true);
-  useEffect(() => {
-    if (stick.current && box.current) box.current.scrollTop = box.current.scrollHeight;
-  }, [log.data]);
   return (
     <div className="space-y-2 px-3 pb-3">
       {deployment.image && deployment.gitCommit && (
         <p className="truncate font-mono text-xs text-muted-foreground">{deployment.image}</p>
       )}
       {deployment.error && <p className="text-sm text-destructive">{deployment.error}</p>}
-      <pre
-        ref={box}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
-        }}
-        className={cn(terminal, "max-h-96")}
-      >
-        {log.isPending ? (
-          <span className="flex items-center gap-2 text-neutral-500">
-            <Spinner className="size-3.5" />
-            Loading log
-          </span>
-        ) : (
-          log.data || <span className="text-neutral-500">No output.</span>
-        )}
-      </pre>
+      <DeploymentLogView text={log.data} pending={log.isPending} className="max-h-96" />
     </div>
-  );
-}
-
-const MAX_LINES = 1000;
-
-// Local HH:MM:SS; lines Docker didn't timestamp come with the zero time.
-function logTime(t: string) {
-  const d = new Date(t);
-  return d.getFullYear() > 1 ? d.toLocaleTimeString([], { hour12: false }) : "--:--:--";
-}
-
-function LiveLogs({ serviceId }: { serviceId: string }) {
-  const [lines, setLines] = useState<LogLine[]>([]);
-  const [ended, setEnded] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  const box = useRef<HTMLPreElement>(null);
-  const stick = useRef(true);
-
-  useEffect(() => {
-    setLines([]);
-    setEnded(false);
-    const es = new EventSource(api.logsUrl(serviceId));
-    es.onmessage = (e) => {
-      const line = JSON.parse(e.data) as LogLine;
-      setLines((prev) => (prev.length >= MAX_LINES ? [...prev.slice(-MAX_LINES + 1), line] : [...prev, line]));
-    };
-    // The server sends "end" when every container stream closed.
-    es.addEventListener("end", () => {
-      es.close();
-      setEnded(true);
-    });
-    es.onerror = () => {
-      es.close();
-      setEnded(true);
-    };
-    return () => es.close();
-  }, [serviceId, attempt]);
-
-  useEffect(() => {
-    if (stick.current && box.current) box.current.scrollTop = box.current.scrollHeight;
-  }, [lines]);
-
-  const multi = new Set(lines.map((l) => l.container)).size > 1;
-
-  return (
-    <Section
-      plain
-      actions={
-        ended && (
-          <Button variant="outline" size="sm" onClick={() => setAttempt((n) => n + 1)}>
-            Reconnect
-          </Button>
-        )
-      }
-    >
-      <pre
-        ref={box}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
-        }}
-        className={cn(terminal, "h-[calc(100svh-24rem)] min-h-80")}
-      >
-        {lines.length === 0 &&
-          (ended ? (
-            <span className="text-neutral-500">Stream closed.</span>
-          ) : (
-            <span className="flex items-center gap-2 text-neutral-500">
-              <Spinner className="size-3.5" />
-              Waiting for logs
-            </span>
-          ))}
-        {lines.map((l, i) => (
-          <div key={i}>
-            <span className="text-neutral-500">{logTime(l.time)} </span>
-            {multi && <span className="text-neutral-500">{l.container} | </span>}
-            {l.text}
-          </div>
-        ))}
-      </pre>
-    </Section>
   );
 }
 
