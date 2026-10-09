@@ -1,7 +1,7 @@
 import { Box, type LucideIcon } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import type { ServiceKind } from "@/api";
-import { BeszelIcon, NginxIcon, PostgresIcon, RedisIcon } from "@/components/brand-icons";
+import { BeszelIcon, NginxIcon, NodeIcon, PostgresIcon, RedisIcon } from "@/components/brand-icons";
 import { cn } from "@/lib/utils";
 
 type Logo = { label: string; color: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
@@ -11,6 +11,7 @@ export const serviceLogos: Record<string, Logo> = {
   postgres: { label: "PostgreSQL", color: "#4169E1", Icon: PostgresIcon },
   redis: { label: "Redis", color: "#FF4438", Icon: RedisIcon },
   nginx: { label: "NGINX", color: "#009639", Icon: NginxIcon },
+  node: { label: "Node.js", color: "#5FA04E", Icon: NodeIcon },
   beszel: { label: "Beszel", color: "#747BFF", Icon: BeszelIcon },
 };
 
@@ -18,6 +19,7 @@ export const serviceLogos: Record<string, Logo> = {
 const aliases: Record<string, string> = {
   postgresql: "postgres",
   "nginx-unprivileged": "nginx",
+  nodejs: "node",
   "beszel-agent": "beszel",
 };
 
