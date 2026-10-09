@@ -113,7 +113,7 @@ services:
 ```
 
 - **`network_mode: host`:** the app shares the server's network and listens on its ports directly (open them in the firewall if needed). It has no domain or published ports, isn't on the project network (other services can't reach it by name), runs one replica, and deploys stop the old container before starting the new one.
-- **The Docker socket** is mounted at `/var/run/docker.sock`, from the server's own socket. Read-only (`:ro`) is enough for stats; without it, the app can create and remove containers.
+- **The Docker socket** is mounted at `/var/run/docker.sock`, from the server's own socket. `:ro` only stops the app from replacing the socket file, not from using it: the app can still create, change and remove containers, so read-only gives no protection.
 - Either one gives the app control of the server: only use images you trust. Databases can't have them.
 - A service runs on its project's server: to monitor several servers, make one project per server. The Beszel hub itself is a normal app (`henrygd/beszel`, port 8090, a volume at `/beszel_data`).
 
