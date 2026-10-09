@@ -40,7 +40,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
         with:
-          context: site
+          context: .
+          file: site/Dockerfile
           platforms: linux/amd64,linux/arm64
           build-args: KIPITINY_VERSION=${{ steps.version.outputs.version }}
           tags: |

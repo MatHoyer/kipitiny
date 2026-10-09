@@ -31,6 +31,44 @@ docker compose up -d`;
 /** Position of a tick on the 0–2048 MB axis. */
 const at = (mb: number) => ({ "--at": mb }) as CSSProperties;
 
+/** Screens of the demo app the window can jump to. */
+const DEMO_VIEWS = [
+  { label: "Map", path: "/demo" },
+  { label: "Database", path: "/demo/services/db?tab=data" },
+  { label: "Redis", path: "/demo/services/cache?tab=data" },
+  { label: "Service", path: "/demo/services/api" },
+];
+
+/**
+ * The manager's own UI in demo mode, in a browser window: it answers its API
+ * in the visitor's browser, so everything here is clickable and kept there.
+ */
+function LiveDemo() {
+  const [view, setView] = useState(DEMO_VIEWS[0]);
+  return (
+    <div className="demo">
+      <div className="demo-bar">
+        <span className="demo-dots" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+        <div className="demo-tabs" role="tablist" aria-label="Demo screens">
+          {DEMO_VIEWS.map((v) => (
+            <button key={v.path} type="button" role="tab" aria-selected={v === view} onClick={() => setView(v)}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+        <a className="demo-open" href={view.path} target="_blank" rel="noopener">
+          Full screen ↗
+        </a>
+      </div>
+      <iframe key={view.path} src={view.path} title={`kipitiny demo: ${view.label}`} loading="lazy" />
+    </div>
+  );
+}
+
 function InstallCommand() {
   const [copied, setCopied] = useState(false);
   const copy = () =>
@@ -80,6 +118,12 @@ export default function Home() {
             <div className="ticks"><ol aria-hidden="true"><li style={at(0)}>0</li><li className="odd" style={at(512)}>512</li><li style={at(1024)}>1024</li><li className="odd" style={at(1536)}>1536</li><li style={at(2048)}>2048 MB</li></ol></div>
             <p className="note">Measured with <code>docker stats</code> on a running install: manager ~15&nbsp;MB, Traefik ~100&nbsp;MB, 0% CPU while nothing is happening.</p>
           </figure>
+        </section>
+
+        <section className="block" id="demo">
+          <h2>Try it, right here</h2>
+          <p className="intro">This is the real kipitiny interface, running a small SaaS: a front end served by nginx, a Node.js API on two replicas, PostgreSQL and Redis. Drag the map around, add services, draw a line from an app to a database, browse the tables and keys. It runs entirely in your browser and keeps your changes there; nothing reaches a server.</p>
+          <LiveDemo />
         </section>
 
         <section className="block" id="backups">

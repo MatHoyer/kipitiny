@@ -59,6 +59,7 @@ jobs:
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm build # tsc -b && vite build
+      - run: pnpm build:demo # the website embeds this one
 
   site:
     runs-on: ubuntu-latest
