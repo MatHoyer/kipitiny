@@ -1099,3 +1099,57 @@ func TestGitProvidersMigration(t *testing.T) {
 		t.Fatal("provider_id isn't a foreign key")
 	}
 }
+
+func TestNetworks(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+
+	n, err := s.CreateNetwork(ctx, store.Network{ServerID: store.LocalServerID, Name: "shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateNetwork(ctx, store.Network{ServerID: store.LocalServerID, Name: "shared"}); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("duplicate name on a server: got %v, want ErrConflict", err)
+	}
+
+	p, err := s.CreateProject(ctx, store.Project{Name: "shop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := s.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if svc.Networks == nil || len(svc.Networks) != 0 {
+		t.Fatalf("new service networks = %#v, want empty", svc.Networks)
+	}
+	if err := s.SetServiceNetworks(ctx, svc.ID, []string{n.ID}); err != nil {
+		t.Fatal(err)
+	}
+	// A settings update (e.g. a git sync) keeps them.
+	svc.Image = "nginx:1.27"
+	if _, err := s.UpdateService(ctx, svc); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetService(ctx, svc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Networks) != 1 || got.Networks[0] != n.ID {
+		t.Fatalf("networks = %v", got.Networks)
+	}
+	if err := s.SetServiceNetworks(ctx, "nope", nil); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("unknown service: got %v", err)
+	}
+
+	ns, err := s.ListNetworks(ctx)
+	if err != nil || len(ns) != 1 || ns[0].Name != "shared" {
+		t.Fatalf("list = %v, %v", ns, err)
+	}
+	if err := s.DeleteNetwork(ctx, n.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetNetwork(ctx, n.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("deleted network: got %v", err)
+	}
+}

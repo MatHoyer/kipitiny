@@ -55,8 +55,10 @@ type TopoNetwork struct {
 	Name    string `json:"name"`
 	Subnet  string `json:"subnet,omitempty"`
 	Gateway string `json:"gateway,omitempty"`
-	// ProjectID is empty for the proxy network.
+	// ProjectID is empty for the proxy network and the ones created by hand.
 	ProjectID string `json:"projectId,omitempty"`
+	// Custom is the name of a network created by hand.
+	Custom string `json:"custom,omitempty"`
 	// Missing: expected (a project exists) but not found on the server.
 	Missing bool `json:"missing,omitempty"`
 }
@@ -179,6 +181,15 @@ func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []s
 	}
 
 	t.Networks = append(t.Networks, topoNetwork(nets, docker.ProxyNetwork, "", err == nil))
+	if custom, cerr := c.store.ListNetworks(ctx); cerr == nil {
+		for _, n := range custom {
+			if n.ServerID == sv.ID {
+				tn := topoNetwork(nets, docker.CustomNetwork(n.ID), "", err == nil)
+				tn.Custom = n.Name
+				t.Networks = append(t.Networks, tn)
+			}
+		}
+	}
 	for _, ct := range cts {
 		switch ct.Labels[docker.LabelComponent] {
 		case traefikComponent:

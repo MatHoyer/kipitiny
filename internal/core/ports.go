@@ -151,6 +151,8 @@ func validateHostAccess(s store.Service) error {
 		return fmt.Errorf("%w: an app in the host network listens on host ports itself; remove its published ports", ErrInvalid)
 	case s.Domain != "" || !s.Middlewares.IsZero():
 		return fmt.Errorf("%w: an app in the host network can't have a domain: Traefik reaches apps on their project network", ErrInvalid)
+	case len(s.Networks) > 0:
+		return fmt.Errorf("%w: an app in the host network can't join other networks; leave them first", ErrInvalid)
 	}
 	return nil
 }

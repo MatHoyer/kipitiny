@@ -18,7 +18,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { ServiceIcon, serviceLogos } from "@/components/service-icon";
 import { FloatingSelect } from "@/components/ui/floating-select";
@@ -304,6 +304,8 @@ export function Service() {
               {svc.kind === "app" && <VolumesCard key={svc.id} svc={svc} />}
               {svc.kind === "app" && httpRouted(svc) && <AccessCard key={svc.id} svc={svc} />}
             </fieldset>
+            {/* Not in the compose file, so git projects set them here too. */}
+            {!svc.hostNetwork && <NetworksCard key={svc.id} svc={svc} projectName={project.data?.name ?? ""} />}
             {svc.kind === "app" && <DeployFromCICard svc={svc} />}
             <DangerZone
               description={
@@ -722,6 +724,72 @@ function HostAccessCard({ svc }: { svc: ServiceT }) {
         />
       </form>
       <SaveBar form={formId} dirty={dirty && !blocked} saving={save.isPending} onReset={() => setForm(initial)} label="Save host access" />
+    </Section>
+  );
+}
+
+/** Networks created by hand the service joins, to reach services of other projects. */
+function NetworksCard({ svc, projectName }: { svc: ServiceT; projectName: string }) {
+  const qc = useQueryClient();
+  const networks = useQuery({ queryKey: ["networks"], queryFn: api.networks });
+  const [selected, setSelected] = useState(svc.networks);
+  const dirty = [...selected].sort().join() !== [...svc.networks].sort().join();
+  const formId = useId();
+  const available = networks.data?.filter((n) => n.serverId === svc.serverId) ?? [];
+  const save = useMutation({
+    meta: { error: "Couldn't save the networks" },
+    mutationFn: () => api.setServiceNetworks(svc.id, selected),
+    onSuccess: (updated) => {
+      qc.setQueryData(["service", svc.id], updated);
+      setSelected(updated.networks);
+      toast.success("Networks saved", { description: "Applied to the running containers; nothing restarted." });
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["networks"] }),
+  });
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    save.mutate();
+  };
+  const toggle = (id: string, on: boolean) => setSelected(on ? [...selected, id] : selected.filter((x) => x !== id));
+
+  return (
+    <Section
+      title="Networks"
+      description={
+        <>
+          Its project network is automatic: the project's services reach it as <Mono>{svc.name}</Mono>. On the networks below, services of
+          other projects reach it as <Mono>{`${projectName}-${svc.name}`}</Mono>.
+        </>
+      }
+    >
+      <ErrorText error={networks.error} />
+      <form id={formId} onSubmit={onSubmit} className="space-y-4">
+        {networks.isPending ? (
+          <Loading />
+        ) : available.length === 0 ? (
+          <Empty>
+            No networks created by hand on this server yet: create one in{" "}
+            <Link to="/networks" className="underline">
+              Infrastructure › Networks
+            </Link>
+            .
+          </Empty>
+        ) : (
+          available.map((n) => {
+            const others = n.services.filter((m) => m.id !== svc.id);
+            return (
+              <CheckboxField
+                key={n.id}
+                label={n.name}
+                description={others.length ? `With ${others.map((m) => m.alias).join(", ")}` : "No other services on it yet."}
+                checked={selected.includes(n.id)}
+                onCheckedChange={(v) => toggle(n.id, v)}
+              />
+            );
+          })
+        )}
+      </form>
+      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setSelected(svc.networks)} label="Save networks" />
     </Section>
   );
 }

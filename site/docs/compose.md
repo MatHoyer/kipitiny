@@ -90,7 +90,7 @@ Top level: `name` (the project name, informational), `services`, `volumes` (each
 
 ### Ignored with a warning
 
-kipitiny orders, networks and restarts services itself, so these are dropped and reported: `container_name`, `depends_on`, `hostname`, `labels`, `links`, `logging`, `networks`, `pull_policy`, `restart`, `init`, `extra_hosts`, `stop_signal`, and the top-level `version` and `networks`. Other `x-*` keys are ignored silently.
+kipitiny orders, networks and restarts services itself, so these are dropped and reported: `container_name`, `depends_on`, `hostname`, `labels`, `links`, `logging`, `networks`, `pull_policy`, `restart`, `init`, `extra_hosts`, `stop_signal`, and the top-level `version` and `networks`. Other `x-*` keys are ignored silently. To connect services of different projects, use the [networks created by hand](/docs/services#networks), set outside the file.
 
 ### Errors
 

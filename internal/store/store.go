@@ -154,6 +154,13 @@ type Store interface {
 	UpdateRegistry(ctx context.Context, r Registry) (Registry, error)
 	DeleteRegistry(ctx context.Context, id string) error
 
+	ListNetworks(ctx context.Context) ([]Network, error)
+	GetNetwork(ctx context.Context, id string) (Network, error)
+	CreateNetwork(ctx context.Context, n Network) (Network, error)
+	DeleteNetwork(ctx context.Context, id string) error
+	// SetServiceNetworks replaces the networks a service joins.
+	SetServiceNetworks(ctx context.Context, serviceID string, networkIDs []string) error
+
 	ListUptimeChecks(ctx context.Context) ([]UptimeCheck, error)
 	GetUptimeCheck(ctx context.Context, serviceID string) (UptimeCheck, error)
 	// SaveUptimeCheck creates or replaces a service's check settings,
@@ -312,8 +319,12 @@ type Service struct {
 	DockerSocket string `bun:"docker_socket" json:"dockerSocket"`
 	// PreBackup runs (sh -c) in a running replica before each volume
 	// backup, e.g. to flush to disk. A failure aborts the backup.
-	PreBackup           string `bun:"pre_backup" json:"preBackup"`
-	CurrentDeploymentID string `bun:"current_deployment_id" json:"currentDeploymentId"`
+	PreBackup string `bun:"pre_backup" json:"preBackup"`
+	// Networks are the IDs of the networks created by hand that the service
+	// joins besides its project network. Set on their own, never by a
+	// compose file, so a git sync keeps them.
+	Networks            []string `bun:"networks" json:"networks"`
+	CurrentDeploymentID string   `bun:"current_deployment_id" json:"currentDeploymentId"`
 	// Stopped is the desired run state after the user stopped the service.
 	Stopped bool `bun:"stopped" json:"stopped"`
 	// GitSpecHash is the hash of the compose block a git sync last applied.
@@ -709,6 +720,17 @@ type Registry struct {
 	Username string `bun:"username" json:"username"`
 	// Password is a password or access token; it reads back masked.
 	Password  string    `bun:"password" json:"password"`
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+}
+
+// Network is a bridge network created by hand on a server, which services
+// of any project on that server can join to reach each other.
+type Network struct {
+	bun.BaseModel `bun:"table:networks,alias:network" json:"-"`
+
+	ID        string    `bun:"id,pk" json:"id"`
+	ServerID  string    `bun:"server_id" json:"serverId"`
+	Name      string    `bun:"name" json:"name"`
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 }
 

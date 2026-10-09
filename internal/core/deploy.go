@@ -610,6 +610,9 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 		// Other services of the project reach this one by its service name.
 		docker.ProjectNetwork(project.ID): {Aliases: []string{svc.Name}},
 	}
+	for _, id := range svc.Networks {
+		endpoints[docker.CustomNetwork(id)] = &network.EndpointSettings{Aliases: []string{networkAlias(project, svc)}}
+	}
 	if svc.HostNetwork {
 		endpoints = map[string]*network.EndpointSettings{}
 	}
