@@ -615,6 +615,38 @@ export interface GitRepo {
   private: boolean;
 }
 
+/** Data browser: a postgres table or view. rowEstimate is -1 until the table is analyzed. */
+export type PgTable = { schema: string; name: string; kind: string; rowEstimate: number; bytes: number };
+export type PgColumn = { name: string; type: string; nullable: boolean; primaryKey: boolean };
+export type PgFilterOp = "=" | "!=" | "<" | "<=" | ">" | ">=" | "like" | "null" | "notnull";
+export type PgFilter = { column: string; op: PgFilterOp; value?: string };
+export type RowQuery = { limit?: number; offset?: number; orderBy?: string; desc?: boolean; filters?: PgFilter[] };
+/** Cells are text, null for NULL; truncated lists the [row, column] cells cut short. */
+export type PgRows = { columns: PgColumn[]; rows: (string | null)[][]; truncated: [number, number][]; hasMore: boolean };
+/** ttl in ms, -1 when the key never expires. */
+export type RedisKey = { key: string; type: string; ttl: number; bytes: number };
+/** cursor "0" once the scan is complete. */
+export type RedisKeys = { keys: RedisKey[]; cursor: string };
+/** items by type: [value], [field, value], [index, value], [member], [member, score], [id, field, value, ...]. */
+export type RedisValue = { type: string; length: number; ttl: number; items: string[][]; truncated: [number, number][]; cursor: string };
+export type ConsoleResult = {
+  columns?: string[];
+  rows?: (string | null)[][];
+  truncated?: [number, number][];
+  more?: boolean;
+  output?: string;
+};
+
+const rowParams = (q: RowQuery) => {
+  const p = new URLSearchParams();
+  if (q.limit) p.set("limit", String(q.limit));
+  if (q.offset) p.set("offset", String(q.offset));
+  if (q.orderBy) p.set("order", q.orderBy);
+  if (q.desc) p.set("desc", "true");
+  if (q.filters?.length) p.set("filters", JSON.stringify(q.filters));
+  return p.toString();
+};
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -753,6 +785,17 @@ export const api = {
   verifyBackup: (id: string) => request<Backup>(`/backups/${id}/verify`, { method: "POST" }),
   deleteBackup: (id: string) => request<void>(`/backups/${id}`, { method: "DELETE" }),
   downloadUrl: (id: string) => `/api/backups/${id}/download`,
+  pgTables: (serviceId: string) => request<PgTable[]>(`/services/${serviceId}/data/tables`),
+  pgRows: (serviceId: string, schema: string, table: string, q: RowQuery) =>
+    request<PgRows>(`/services/${serviceId}/data/tables/${encodeURIComponent(schema)}/${encodeURIComponent(table)}?${rowParams(q)}`),
+  pgExportUrl: (serviceId: string, schema: string, table: string, q: RowQuery) =>
+    `/api/services/${serviceId}/data/tables/${encodeURIComponent(schema)}/${encodeURIComponent(table)}/export?${rowParams({ ...q, limit: 0, offset: 0 })}`,
+  redisScan: (serviceId: string, cursor: string, pattern: string) =>
+    request<RedisKeys>(`/services/${serviceId}/data/keys?${new URLSearchParams({ cursor, pattern })}`),
+  redisGet: (serviceId: string, key: string, cursor = "0") =>
+    request<RedisValue>(`/services/${serviceId}/data/key?${new URLSearchParams({ key, cursor })}`),
+  dataConsole: (serviceId: string, query: string, write: boolean) =>
+    request<ConsoleResult>(`/services/${serviceId}/data/console`, json("POST", { query, write })),
   restore: (backupId: string, confirm: string, serviceId = "") =>
     request<Restore>(`/backups/${backupId}/restore`, json("POST", { serviceId, confirm })),
   schedules: (serviceId: string) => request<Schedule[]>(`/services/${serviceId}/schedules`),

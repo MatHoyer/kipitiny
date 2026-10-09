@@ -25,6 +25,7 @@ import { FloatingSelect } from "@/components/ui/floating-select";
 import { CheckboxField, CopyButton, DangerZone, Empty, EmptyState, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { BasicAuthUsers, type BasicAuthRow } from "@/components/basic-auth-users";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DataTab } from "@/components/data/data-tab";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
@@ -68,7 +69,7 @@ export function Service() {
   });
   const deploying = deployments.data?.some((d) => d.status === "running") ?? false;
   const [selected, setSelected] = useState<string | null>(null);
-  const [tab, setTab] = useTab(["overview", "deployments", "logs", "terminal", "environment", "backups", "settings"], "overview");
+  const [tab, setTab] = useTab(["overview", "deployments", "logs", "terminal", "data", "environment", "backups", "settings"], "overview");
   const git = useProjectGit(service.data?.projectId ?? "");
   const gitManaged = !!git.data;
 
@@ -226,6 +227,7 @@ export function Service() {
             <TabsTrigger value="deployments">Deployments</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
             <TabsTrigger value="terminal">Terminal</TabsTrigger>
+            {isDb && <TabsTrigger value="data">Data</TabsTrigger>}
             <TabsTrigger value="environment">Environment</TabsTrigger>
             {canBackup(svc) && <TabsTrigger value="backups">Backups</TabsTrigger>}
             <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -264,6 +266,11 @@ export function Service() {
           <TabsContent value="terminal">
             <ServiceTerminal svc={svc} />
           </TabsContent>
+          {isDb && (
+            <TabsContent value="data">
+              <DataTab svc={svc} />
+            </TabsContent>
+          )}
           <TabsContent value="environment" className="flex flex-col gap-6">
             {gitManaged && <GitManagedNote path={git.data!.path} />}
             <fieldset disabled={gitManaged} className="contents">
