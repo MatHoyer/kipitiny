@@ -40,9 +40,9 @@ func Handler(c *core.Core, version string) http.Handler {
 	docsIndex, docsBase, docsSources := docs(version)
 	server := mcp.NewServer(&mcp.Implementation{Name: "kipitiny", Version: version}, &mcp.ServerOptions{
 		Instructions: "Manage apps and PostgreSQL/Redis databases on this kipitiny server. " +
-			"Refer to services as project/service. Read tools need a read token, " +
-			"deploy, rollback, backups (backup_database, backup_project, verify_backup) and service_action need deploy (with deploy, deploy_image only changes the tag of an existing app); " +
-			"creating, renaming, deleting (with the name as confirmation), git links, backup schedules, uptime checks, set_project_env, apply_project_compose, query_database and get_connection need admin; restore needs admin and an explicit confirmation. " +
+			"Refer to services as project/service. Read tools need a read token; " +
+			"deploy, rollback, service_action, backup_database, backup_project and verify_backup need deploy (with deploy, deploy_image only changes the tag of an existing app); " +
+			"the other tools need admin (each says so), and deleting a service or project or restoring a backup takes its name as an explicit confirmation. " +
 			"Documentation of this version, as markdown: " + docsIndex + " lists every page; read the relevant one before guessing how a feature works. " +
 			"If the site is unreachable, the same pages are in " + docsSources + ".",
 	})
@@ -54,6 +54,12 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "List every project with its services, their kind, image, domain and current status."}, t.listServices)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_projects", Annotations: readOnly,
 		Description: "List every project, including empty ones, with its server, service names and the git compose file it follows, if any."}, t.listProjects)
+	mcp.AddTool(server, &mcp.Tool{Name: "get_manager_status", Annotations: readOnly,
+		Description: "The manager's version and available update, its Docker engine, and the current CPU, memory and network use of every running service."}, t.getManagerStatus)
+	mcp.AddTool(server, &mcp.Tool{Name: "get_topology", Annotations: readOnly,
+		Description: "The network map of each server: entrypoints and the reverse proxy, Docker networks with subnets, and each project's containers with their IPs and aliases."}, t.getTopology)
+	mcp.AddTool(server, &mcp.Tool{Name: "get_audit_log", Annotations: readOnly,
+		Description: "Recent mutations by users, tokens and agents, including refused ones: actor, action, target, status and error. Needs admin."}, t.getAuditLog)
 	mcp.AddTool(server, &mcp.Tool{Name: "create_project",
 		Description: "Create an empty project on a server (this one by default). Add services with deploy_image, apply_project_compose or link_project_git. Needs admin."}, t.createProject)
 	mcp.AddTool(server, &mcp.Tool{Name: "rename_project",
@@ -72,6 +78,10 @@ func Handler(c *core.Core, version string) http.Handler {
 			"Run with dry_run first to see what the first sync changes. Needs admin."}, t.linkProjectGit)
 	mcp.AddTool(server, &mcp.Tool{Name: "sync_project_git", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Apply a git-linked project's compose file now, as a push would. dry_run returns the plan only. Needs admin."}, t.syncProjectGit)
+	mcp.AddTool(server, &mcp.Tool{Name: "list_git_repos", Annotations: readOnly,
+		Description: "Repositories the connected git providers can read (full name, clone URL, default branch), to pick one for link_project_git."}, t.listGitRepos)
+	mcp.AddTool(server, &mcp.Tool{Name: "list_git_branches", Annotations: readOnly,
+		Description: "Branches of a repository a git provider can read."}, t.listGitBranches)
 	mcp.AddTool(server, &mcp.Tool{Name: "service_action",
 		Description: "Start, stop or restart a service. A stopped service stays stopped until started."}, t.serviceAction)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_deployment_log", Annotations: readOnly,

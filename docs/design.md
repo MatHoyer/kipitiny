@@ -304,6 +304,7 @@ Clients ────┤                            ├──→ core (service la
 - MCP built in (`/mcp` module), Streamable HTTP at `/mcp`, reusing auth, tokens, permissions, audit logs. Standalone stdio proxy later.
 - Task-oriented tools, not 1:1 REST mapping: `deploy_image`, `get_app_status`, `get_logs`, `rollback`, `backup_database`, `restore_database`.
 - Mask secrets in every tool response; scoped tokens (read-only vs deploy); confirmation for destructive tools.
+- MCP covers what an operator does on projects, services, data, backups and git; server settings (servers, storage, providers, notifications, Cloudflare, cleanup, updates) stay in the UI, and session-only routes (tokens, account, project export with every secret) never reach it.
 - No docs tool: the server instructions give agents the docs URLs of their version (§14a) and GitHub's `site/docs` at that tag as a fallback.
 
 ## 14a. Website and documentation
@@ -344,7 +345,7 @@ Deferred until there is a concrete need. Planned approach:
 10. React UI polish; built-in MCP endpoint.
 11. Multi-server over SSH.
 12. Optional: Postgres backend for manager state, PITR, centralized logs.
-13. Built-in data browser for Postgres and Redis (later: read-only `query_database` MCP tool).
+13. Built-in data browser for Postgres and Redis, also as MCP tools (`read_table`, `query_database` read-only unless `write`).
 
 ## 17. Reference projects
 
