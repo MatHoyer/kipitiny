@@ -101,7 +101,7 @@ Internet → Traefik ──→ app1-web        app2-web          │
 - Databases are **only** on the private network, never publicly reachable.
 - Public containers are on both networks.
 - Always set `traefik.docker.network=kipitiny-proxy` on containers attached to multiple networks, otherwise Traefik may pick the wrong network (502/504).
-- Apps get credentials through env references resolved at deploy: `DATABASE_URL={{ db.<service>.URL }}` gives `postgres://user:pass@<service>:5432/app`, or `redis://:pass@<service>:6379` for Redis.
+- Apps get credentials through env references resolved at deploy: `DATABASE_URL={{ db.<service>.URL }}` gives `postgres://user:pass@<service>:5432/postgres` (new services use the instance's default `postgres` database; older ones keep `app`), or `redis://:pass@<service>:6379` for Redis.
 - Stricter isolation later: connect Traefik to each project network instead of one shared proxy network.
 
 ## 7. Reverse proxy (Traefik)

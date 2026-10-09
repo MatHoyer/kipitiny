@@ -359,3 +359,41 @@ func TestDataConsoleDockerRedis(t *testing.T) {
 		}
 	}
 }
+
+// TestRestoreDockerPostgresDatabase dumps and restores a service whose
+// database is postgres, the instance's maintenance database: the swap must
+// run from another one.
+func TestRestoreDockerPostgresDatabase(t *testing.T) {
+	c, ctx, svc, exec := dataTestDB(t, store.ServiceKindPostgres, &container.Config{
+		Image: DefaultPostgresImage,
+		Env:   []string{"POSTGRES_USER=app", "POSTGRES_DB=postgres", "POSTGRES_PASSWORD=secret"},
+	})
+	exec(`psql -U app -d postgres -c "CREATE TABLE t (v text); INSERT INTO t VALUES ('before')"`)
+	target, err := c.store.GetBackupTarget(ctx, store.LocalTargetID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := c.openStorage(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := c.runningContainer(ctx, svc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := store.Backup{ID: "01BACKUPTEST", Kind: store.BackupKindPostgres, TargetID: target.ID, ObjectKey: "test/restore-postgres.dump"}
+	t.Cleanup(func() { _ = st.Delete(context.Background(), b.ObjectKey) })
+	if err := c.dump(ctx, svc, ct, st, target, &b); err != nil {
+		t.Fatal(err)
+	}
+	exec(`psql -U app -d postgres -c "UPDATE t SET v = 'after'"`)
+	if err := c.restore(ctx, svc, ct, st, target, b); err != nil {
+		t.Fatal(err)
+	}
+	if got := exec(`psql -U app -d postgres -tAc "SELECT v FROM t"`); got != "before" {
+		t.Errorf("after restore: %q", got)
+	}
+	if got := exec(`psql -U app -d postgres -tAc "SELECT count(*) FROM pg_database WHERE datname LIKE 'postgres\_\_%'"`); got != "0" {
+		t.Errorf("leftover databases: %s", got)
+	}
+}

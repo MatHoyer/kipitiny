@@ -36,11 +36,13 @@ const (
 // pgManagedKeys are generated once and only read by initdb.
 var pgManagedKeys = []string{pgUser, pgPassword, pgDatabase}
 
+// newPostgresEnv makes a new service's credentials. Its database is the
+// instance's default one, postgres: an app may create more beside it.
 func newPostgresEnv() map[string]string {
 	return map[string]string{
 		pgUser:     "app",
 		pgPassword: randomToken(24),
-		pgDatabase: "app",
+		pgDatabase: "postgres",
 	}
 }
 
