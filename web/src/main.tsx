@@ -2,7 +2,7 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@ta
 import { ThemeProvider } from "next-themes";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserRouter, RouterProvider } from "react-router";
+import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
 import { toast } from "sonner";
 import { ApiError } from "./api";
 import { Toaster } from "./components/ui/sonner";
@@ -52,10 +52,12 @@ const router = createBrowserRouter([
     path: "/",
     element: <Layout />,
     children: [
-      { index: true, element: <Projects /> },
+      { index: true, element: <MapPage /> },
+      { path: "projects", element: <Projects /> },
       { path: "projects/:id", element: <Project /> },
       { path: "services/:id", element: <Service /> },
-      { path: "map", element: <MapPage /> },
+      // The map was here before it became the home page.
+      { path: "map", element: <Navigate to="/" replace /> },
       { path: "docs/*", element: <DocsRedirect /> },
       { path: "account", element: <AccountPage /> },
       { path: "backups", element: <Backups /> },

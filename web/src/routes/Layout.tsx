@@ -62,8 +62,8 @@ export function Layout() {
 }
 
 const nav = [
-  { to: "/", label: "Projects", icon: FolderKanban },
-  { to: "/map", label: "Map", icon: Waypoints },
+  { to: "/", label: "Map", icon: Waypoints },
+  { to: "/projects", label: "Projects", icon: FolderKanban },
   { to: "/backups", label: "Backups", icon: DatabaseBackup },
 ];
 
