@@ -52,10 +52,12 @@ The manager runs as a container and controls the **host** Docker daemon via the 
 
 ### Password managers
 
-- `internal/secrets`: a `Provider` per password manager, each owning a reference scheme (`pass://` for Proton Pass, `op://` for 1Password). Core and the UI only see the interface. No provider ships today: the bundled Proton Pass CLI left the image to keep it small, and comes back as an opt-in one-off container (#125). Optional integrations may run as on-demand containers; the manager's own state never does.
+- `internal/secrets`: a `Provider` per password manager, each owning a reference scheme (`pass://` for Proton Pass, `op://` for 1Password would be another provider). Core and the UI only see the interface.
+- Providers wrap the vendor's official CLI (Proton has no public API), kept out of the manager's image: Proton Pass runs `ghcr.io/mathoyer/kipitiny-protonpass` (`images/protonpass`, tagged by pass-cli version, `KIPITINY_PROTONPASS_IMAGE`) on the manager's own Docker, pulled on first use. One helper container (`sleep`, labelled `kipitiny.component=secrets`, read-only root, no capabilities) starts on the first call; each call is a `docker exec` into it, and it's removed after 5 minutes idle, at startup and at shutdown. Optional integrations may run as on-demand containers; the manager's own state never does.
+- Resolution: references go in the exec's env as `KIPITINY_SECRET_<i>`, `pass-cli run -- env -0` prints them resolved, NUL-separated. The token reaches `pass-cli login` on stdin, never in a container or exec config.
 - Env values reference secrets as `{{ scheme://Vault/Item/field }}`, in a service or a project entry. They're fetched on each deploy and replica recreation, injected into the containers and never stored by the manager; a database's env can't use them (backups read its credentials as stored).
-- Providers that implement `secrets.Browser` feed the env editor's picker (vaults → items → fields): names and references only, admin-only routes.
-- Logged in with a scoped token kept in settings; the CLI session lives in `$DATA_DIR/secrets/<provider>` and is recreated from the token when lost or expired.
+- Providers that implement `secrets.Browser` feed the env editor's picker (vaults → items → fields): names and references only, admin-only routes, cached in memory for 5 minutes (`?refresh` bypasses it; dropped on connect/disconnect).
+- Logged in with a scoped token kept in settings; the CLI session lives in the `kipitiny-protonpass` volume (not in manager backups), removed on disconnect, and is recreated from the token when lost or expired.
 
 ## 5. Core concepts
 

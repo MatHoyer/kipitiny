@@ -2,11 +2,16 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/MatHoyer/kipitiny/internal/config"
+	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/secrets"
+	"github.com/MatHoyer/kipitiny/internal/secrets/protonpass"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -16,6 +21,76 @@ type SecretProviderView struct {
 	// Available is false when it can't run here (its CLI is missing).
 	Available bool `json:"available"`
 	Connected bool `json:"connected"`
+}
+
+// secretHelperIdle is how long a password manager's helper container stays
+// after its last call, and its listings stay cached.
+const secretHelperIdle = 5 * time.Minute
+
+// secretProviders are the password managers this build offers. Their CLIs
+// run in helper containers on the manager's own Docker (none without one, in
+// tests).
+func secretProviders(cfg config.Config, local *docker.Client) []secrets.Provider {
+	if local == nil {
+		return nil
+	}
+	return []secrets.Provider{
+		protonpass.New(protonpass.NewContainerRunner(local, cfg.ProtonPass.Image, secretHelperIdle)),
+	}
+}
+
+// closeSecretProviders removes the providers' helper containers: left by a
+// crash at startup, still idling at shutdown.
+func (c *Core) closeSecretProviders(ctx context.Context) error {
+	var errs []error
+	for _, p := range c.secrets {
+		if cl, ok := p.(interface{ Close(context.Context) error }); ok {
+			errs = append(errs, cl.Close(ctx))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// secretListings caches what providers list for the env picker (names and
+// references, never values), so browsing doesn't run the CLI every time.
+type secretListings struct {
+	mu sync.Mutex
+	m  map[string]secretListing // provider ID + "\x00" + vault ("" for vaults)
+}
+
+type secretListing struct {
+	at  time.Time
+	val any
+}
+
+func (l *secretListings) get(id, vault string) (any, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	e, ok := l.m[id+"\x00"+vault]
+	if !ok || time.Since(e.at) > secretHelperIdle {
+		return nil, false
+	}
+	return e.val, true
+}
+
+func (l *secretListings) put(id, vault string, val any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.m == nil {
+		l.m = map[string]secretListing{}
+	}
+	l.m[id+"\x00"+vault] = secretListing{at: time.Now(), val: val}
+}
+
+// forget drops a provider's listings, after it logs in or out.
+func (l *secretListings) forget(id string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for k := range l.m {
+		if strings.HasPrefix(k, id+"\x00") {
+			delete(l.m, k)
+		}
+	}
 }
 
 // secretTokenSetting keeps a provider's token, to log in again when its
@@ -60,6 +135,7 @@ func (c *Core) ConnectSecretProvider(ctx context.Context, id, token string) (Sec
 	if err := c.store.SetSetting(ctx, secretTokenSetting(id), token); err != nil {
 		return SecretProviderView{}, err
 	}
+	c.secretListings.forget(id)
 	return c.secretProviderView(ctx, p), nil
 }
 
@@ -75,7 +151,8 @@ func (c *Core) TestSecretProvider(ctx context.Context, id string) error {
 	if token == "" {
 		return fmt.Errorf("%w: %s isn't connected", ErrInvalid, name)
 	}
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// Long enough to pull a helper image on first use.
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	b, ok := p.(secrets.Browser)
 	if ok {
@@ -104,6 +181,7 @@ func (c *Core) DisconnectSecretProvider(ctx context.Context, id string) error {
 	if err := p.Disconnect(ctx); err != nil {
 		c.log.Warn("secret provider logout failed", "provider", id, "err", err)
 	}
+	c.secretListings.forget(id)
 	return c.store.SetSetting(ctx, secretTokenSetting(id), "")
 }
 
@@ -167,28 +245,41 @@ func (c *Core) secretBrowser(ctx context.Context, id string) (secrets.Browser, e
 	return b, nil
 }
 
-// SecretVaults lists the vaults the provider's token can read.
-func (c *Core) SecretVaults(ctx context.Context, id string) ([]string, error) {
+// SecretVaults lists the vaults the provider's token can read, from a
+// listing of the last few minutes unless refresh.
+func (c *Core) SecretVaults(ctx context.Context, id string, refresh bool) ([]string, error) {
 	b, err := c.secretBrowser(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if v, ok := c.secretListings.get(id, ""); ok && !refresh {
+		return v.([]string), nil
 	}
 	vs, err := b.Vaults(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
+	c.secretListings.put(id, "", vs)
 	return vs, nil
 }
 
-// SecretItems lists a vault's items with the fields env can reference.
-func (c *Core) SecretItems(ctx context.Context, id, vault string) ([]secrets.Item, error) {
+// SecretItems lists a vault's items with the fields env can reference, from
+// a listing of the last few minutes unless refresh.
+func (c *Core) SecretItems(ctx context.Context, id, vault string, refresh bool) ([]secrets.Item, error) {
+	if vault == "" {
+		return nil, fmt.Errorf("%w: vault is required", ErrInvalid)
+	}
 	b, err := c.secretBrowser(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if v, ok := c.secretListings.get(id, vault); ok && !refresh {
+		return v.([]secrets.Item), nil
 	}
 	items, err := b.Items(ctx, vault)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
+	c.secretListings.put(id, vault, items)
 	return items, nil
 }

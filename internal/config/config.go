@@ -34,6 +34,13 @@ type Config struct {
 	Traefik       Traefik
 	Tunnel        Tunnel
 	ManagerBackup ManagerBackup
+	ProtonPass    ProtonPass
+}
+
+// ProtonPass is the helper image the manager runs pass-cli from, pulled on
+// first use.
+type ProtonPass struct {
+	Image string
 }
 
 // Update is where the manager looks for new versions of itself.
@@ -97,6 +104,9 @@ func Load() Config {
 		Tunnel: Tunnel{
 			Token: env("KIPITINY_CLOUDFLARE_TUNNEL_TOKEN", ""),
 			Image: env("KIPITINY_CLOUDFLARED_IMAGE", "cloudflare/cloudflared:2026.9.3"),
+		},
+		ProtonPass: ProtonPass{
+			Image: env("KIPITINY_PROTONPASS_IMAGE", "ghcr.io/mathoyer/kipitiny-protonpass:2.4.2"),
 		},
 		ManagerBackup: ManagerBackup{
 			Cron:     managerCron(env("KIPITINY_MANAGER_BACKUP_CRON", "@daily")),

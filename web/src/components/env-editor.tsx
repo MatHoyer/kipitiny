@@ -26,7 +26,7 @@ type Mode = "list" | "raw";
  * Edits environment variables and secrets as a list of fields or as
  * KEY=value text. Entries are added and edited in a dialog (EnvEntryDialog).
  * Secrets are write-only: their saved values read back masked. An entry that
- * is exactly one password manager reference ({{ op://Vault/Item/field }})
+ * is exactly one password manager reference ({{ pass://Vault/Item/field }})
  * holds no secret: it's listed on its own, showing where it points. With vars (the
  * project's shared entry names) and databases (its database services), values
  * can reference them as {{ project.NAME }} and {{ db.SERVICE.FIELD }}, alone or

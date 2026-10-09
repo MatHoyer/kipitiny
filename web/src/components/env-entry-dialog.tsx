@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Braces, ChevronLeft, Database, Eye, EyeOff, FolderSearch, KeyRound, Variable, Vault } from "lucide-react";
+import { Braces, ChevronLeft, Database, Eye, EyeOff, FolderSearch, KeyRound, RefreshCw, Variable, Vault } from "lucide-react";
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { databaseLabels, passwordManagerIcon } from "@/components/brand-icons";
@@ -541,16 +541,26 @@ function ProviderPath({
   const [browsing, setBrowsing] = useState(false);
   const [vault, setVault] = useState("");
   const [item, setItem] = useState("");
+  // Set while Refresh refetches past the manager's cache.
+  const fresh = useRef(false);
   const vaults = useQuery({
     queryKey: ["secret-vaults", providerId],
-    queryFn: () => api.secretVaults(providerId!),
+    queryFn: () => api.secretVaults(providerId!, fresh.current),
     enabled: browsing && !!providerId,
   });
   const items = useQuery({
     queryKey: ["secret-items", providerId, vault],
-    queryFn: () => api.secretItems(providerId!, vault),
+    queryFn: () => api.secretItems(providerId!, vault, fresh.current),
     enabled: browsing && !!providerId && !!vault,
   });
+  const refresh = async () => {
+    fresh.current = true;
+    try {
+      await Promise.all([vaults.refetch(), vault ? items.refetch() : undefined]);
+    } finally {
+      fresh.current = false;
+    }
+  };
   // Titles needn't be unique: items are picked by position.
   const picked = item === "" ? undefined : items.data?.[Number(item)];
   const prefix = `${scheme}://`;
@@ -622,7 +632,20 @@ function ProviderPath({
             options={(picked?.fields ?? []).map((f) => ({ value: f.ref, label: f.name }))}
             disabled={!picked?.fields.length}
           />
-          <ErrorText error={vaults.error ?? items.error} />
+          <div className="flex items-center justify-between gap-2">
+            <ErrorText error={vaults.error ?? items.error} />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="ml-auto"
+              loading={vaults.isFetching || items.isFetching}
+              onClick={refresh}
+            >
+              <RefreshCw data-icon="inline-start" />
+              Refresh
+            </Button>
+          </div>
         </div>
       )}
     </div>
