@@ -140,3 +140,91 @@ CREATE VIEW s.v AS SELECT id FROM s.items;"`)
 		t.Errorf("no actor: %v", err)
 	}
 }
+
+func TestDataBrowserDockerRedis(t *testing.T) {
+	c, ctx, svc, exec := dataTestDB(t, store.ServiceKindRedis, &container.Config{
+		Image: DefaultRedisImage,
+		Env:   []string{"REDIS_PASSWORD=secret", "REDISCLI_AUTH=secret"},
+		Cmd:   []string{"redis-server", "--requirepass", "secret"},
+	})
+	exec(`redis-cli SET greeting hello && redis-cli SET big "$(head -c 5000 /dev/zero | tr '\0' x)" &&
+redis-cli HSET user:1 name Ada lang en && redis-cli RPUSH queue a b c d e && redis-cli SADD tags x y &&
+redis-cli ZADD scores 1 low 2 mid 3 high && redis-cli XADD events 1-1 k v1 && redis-cli XADD events 2-1 k v2 &&
+redis-cli SET user:2 Bob EX 3600 && redis-cli SET "odd
+key" v`)
+
+	var all []RedisKey
+	cursor := "0"
+	for {
+		page, err := c.RedisScan(ctx, svc.ID, cursor, "", 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		all = append(all, page.Keys...)
+		if cursor = page.Cursor; cursor == "0" {
+			break
+		}
+	}
+	if len(all) != 9 {
+		t.Fatalf("scan: %d keys: %+v", len(all), all)
+	}
+	users, err := c.RedisScan(ctx, svc.ID, "0", "user:*", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(users.Keys) != 2 || users.Cursor != "0" {
+		t.Errorf("pattern: %+v", users)
+	}
+	for _, k := range users.Keys {
+		if k.Key == "user:2" && (k.TTL <= 0 || k.Type != "string" || k.Bytes <= 0) {
+			t.Errorf("user:2: %+v", k)
+		}
+	}
+
+	get := func(key, cursor string, count int) RedisValue {
+		t.Helper()
+		v, err := c.RedisGet(ctx, svc.ID, key, cursor, count)
+		if err != nil {
+			t.Fatalf("%s: %v", key, err)
+		}
+		return v
+	}
+	if v := get("greeting", "", 0); v.Items[0][0] != "hello" || v.Length != 5 || v.TTL != -1 {
+		t.Errorf("string: %+v", v)
+	}
+	if v := get("big", "", 0); v.Length != 5000 || len(v.Items[0][0]) != DataCellMax || len(v.Truncated) != 1 {
+		t.Errorf("big string: len %d, truncated %v", v.Length, v.Truncated)
+	}
+	if v := get("odd\nkey", "", 0); v.Items[0][0] != "v" {
+		t.Errorf("odd key: %+v", v)
+	}
+	if v := get("user:1", "", 0); v.Type != "hash" || v.Length != 2 || len(v.Items) != 2 || v.Cursor != "" {
+		t.Errorf("hash: %+v", v)
+	}
+	if v := get("tags", "", 0); v.Type != "set" || len(v.Items) != 2 {
+		t.Errorf("set: %+v", v)
+	}
+	v := get("queue", "", 2)
+	if v.Length != 5 || len(v.Items) != 2 || v.Items[1][0] != "1" || v.Items[1][1] != "b" || v.Cursor != "2" {
+		t.Errorf("list page 1: %+v", v)
+	}
+	if v = get("queue", "4", 2); len(v.Items) != 1 || v.Items[0][1] != "e" || v.Cursor != "" {
+		t.Errorf("list last page: %+v", v)
+	}
+	if v = get("scores", "1", 10); v.Type != "zset" || len(v.Items) != 2 || v.Items[0][0] != "mid" || v.Items[0][1] != "2" {
+		t.Errorf("zset: %+v", v)
+	}
+	v = get("events", "", 1)
+	if v.Type != "stream" || v.Length != 2 || v.Items[0][0] != "1-1" || v.Items[0][2] != "v1" || v.Cursor != "1-1" {
+		t.Errorf("stream page 1: %+v", v)
+	}
+	if v = get("events", v.Cursor, 1); len(v.Items) != 1 || v.Items[0][0] != "2-1" {
+		t.Errorf("stream page 2: %+v", v)
+	}
+	if _, err := c.RedisGet(ctx, svc.ID, "missing", "", 0); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("missing key: %v", err)
+	}
+	if _, err := c.RedisGet(ctx, svc.ID, "queue", "1; FLUSHALL", 0); !errors.Is(err, ErrInvalid) {
+		t.Errorf("bad cursor: %v", err)
+	}
+}
