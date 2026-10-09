@@ -462,16 +462,22 @@ func (c *Core) restore(ctx context.Context, svc store.Service, containerID strin
 	user, db := svc.Env[pgUser], svc.Env[pgDatabase]
 	scratch, old := db+"__restore", db+"__pre_restore"
 	dk := c.dockerFor(svc.ServerID)
+	// Run from a maintenance database: the target can't be renamed while
+	// connected to it. That's postgres, unless postgres is the target.
+	maintenance := "postgres"
+	if db == maintenance {
+		maintenance = "template1"
+	}
 	admin := func(sql string) error {
-		// Maintenance database: the target can't be renamed while connected to it.
 		return dk.Exec(ctx, containerID, docker.ExecOptions{
-			Cmd: []string{"psql", "-U", user, "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-qc", sql},
+			Cmd: []string{"psql", "-U", user, "-d", maintenance, "-v", "ON_ERROR_STOP=1", "-qc", sql},
 		})
 	}
 	if err := admin(fmt.Sprintf(`DROP DATABASE IF EXISTS %s WITH (FORCE)`, pgIdent(scratch))); err != nil {
 		return fmt.Errorf("clean scratch database: %w", err)
 	}
-	if err := admin(fmt.Sprintf(`CREATE DATABASE %s OWNER %s`, pgIdent(scratch), pgIdent(user))); err != nil {
+	// From template0: copying template1 fails while we're connected to it.
+	if err := admin(fmt.Sprintf(`CREATE DATABASE %s OWNER %s TEMPLATE template0`, pgIdent(scratch), pgIdent(user))); err != nil {
 		return fmt.Errorf("create scratch database: %w", err)
 	}
 	dropScratch := func() {

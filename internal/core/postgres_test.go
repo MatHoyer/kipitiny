@@ -88,7 +88,7 @@ func TestDatabaseURLEscapes(t *testing.T) {
 	db := pgService()
 	db.Env[pgPassword] = "p@ss/w:rd"
 	got := DatabaseURL(db)
-	if got != "postgres://app:p%40ss%2Fw%3Ard@db:5432/app" {
+	if got != "postgres://app:p%40ss%2Fw%3Ard@db:5432/postgres" {
 		t.Errorf("DatabaseURL = %q", got)
 	}
 }
