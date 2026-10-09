@@ -127,7 +127,7 @@ function GitForm({ projectId, current, onDone }: { projectId: string; current?: 
             description={
               <>
                 A private repository is read through a{" "}
-                <Link to="/settings/git-providers" className="underline underline-offset-2">
+                <Link to="/git-providers" className="underline underline-offset-2">
                   git provider
                 </Link>
                 .

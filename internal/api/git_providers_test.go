@@ -52,7 +52,7 @@ func TestLaunchGitHubApp(t *testing.T) {
 		t.Fatal(err)
 	}
 	res.Body.Close()
-	if res.Request.URL.Path != "/settings/git-providers" || !strings.Contains(res.Request.URL.RawQuery, "error=") {
+	if res.Request.URL.Path != "/git-providers" || !strings.Contains(res.Request.URL.RawQuery, "error=") {
 		t.Errorf("unknown state landed on %s", res.Request.URL)
 	}
 }

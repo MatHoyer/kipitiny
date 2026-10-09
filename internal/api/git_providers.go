@@ -14,7 +14,7 @@ import (
 
 // gitProvidersPage is where the browser lands after connecting a provider
 // on the forge.
-const gitProvidersPage = "/settings/git-providers"
+const gitProvidersPage = "/git-providers"
 
 func (a *API) listGitProviders(w http.ResponseWriter, r *http.Request) {
 	ps, err := a.core.ListGitProviders(r.Context())
