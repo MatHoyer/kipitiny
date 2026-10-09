@@ -20,8 +20,8 @@ Tools are task-oriented rather than a copy of the REST API:
 
 - **Read** (any token): `list_projects` (empty ones too, with their git link), `list_services`, `get_app_status`, `get_logs`, `get_deployment_log`, `get_project_compose`, `get_project_git`, `list_backups`, `list_storage`, and the [data browser](/docs/data): `list_databases`, `list_tables`, `read_table`, `scan_redis_keys`, `get_redis_key`.
 - **Deploy**: `deploy`, `deploy_image` (admin, or a deploy token changing an existing app's tag), `rollback`, `service_action` (start, stop, restart), `backup_database` (`database_name` picks one of a PostgreSQL instance's databases).
-- **Admin**: `create_project`, `rename_project`, `rename_service`, `set_project_env`, `apply_project_compose`, `link_project_git` and `sync_project_git` (both with a `dry_run` preview), `restore_database` (requires the database name as confirmation), `create_database`, `query_database` (the [console](/docs/data#console): read-only unless `write` is set), `get_connection` (reveals credentials).
+- **Admin**: `create_project`, `rename_project`, `rename_service`, `delete_service` and `delete_project` (the name as confirmation; backups are kept), `set_project_env`, `apply_project_compose`, `link_project_git` and `sync_project_git` (both with a `dry_run` preview), `restore_database` (requires the database name as confirmation), `create_database`, `query_database` (the [console](/docs/data#console): read-only unless `write` is set), `get_connection` (reveals credentials).
 
-Deleting projects or services stays in the UI. Secrets are masked in every response. Every
+Secrets are masked in every response. Every
 mutation, from the UI, a token or an agent (including refused attempts), lands
 in the audit log (kept 90 days).

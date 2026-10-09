@@ -42,7 +42,7 @@ func Handler(c *core.Core, version string) http.Handler {
 		Instructions: "Manage apps and PostgreSQL/Redis databases on this kipitiny server. " +
 			"Refer to services as project/service. Read tools need a read token, " +
 			"deploy/rollback/backup/service_action need deploy (with deploy, deploy_image only changes the tag of an existing app); " +
-			"creating, renaming, git links, set_project_env, apply_project_compose, query_database and get_connection need admin; restore needs admin and an explicit confirmation. " +
+			"creating, renaming, deleting (with the name as confirmation), git links, set_project_env, apply_project_compose, query_database and get_connection need admin; restore needs admin and an explicit confirmation. " +
 			"Documentation of this version, as markdown: " + docsIndex + " lists every page; read the relevant one before guessing how a feature works. " +
 			"If the site is unreachable, the same pages are in " + docsSources + ".",
 	})
@@ -60,6 +60,11 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "Rename a project. Its containers are renamed in place; nothing restarts. Needs admin."}, t.renameProject)
 	mcp.AddTool(server, &mcp.Tool{Name: "rename_service",
 		Description: "Rename a service. Nothing restarts; until its next deploy it also answers to its old name on the project network. Renaming a database rewrites the {{ db.NAME.* }} references to it and redeploys the apps using it. Not for projects linked to git (edit the file). Needs admin."}, t.renameService)
+	mcp.AddTool(server, &mcp.Tool{Name: "delete_service", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+		Description: "Delete a service: its containers, volumes (data) and deploy logs; backups are kept. confirm must repeat the service name. " +
+			"A database still referenced by an app, or a service of a git-linked project, is refused. Needs admin."}, t.deleteService)
+	mcp.AddTool(server, &mcp.Tool{Name: "delete_project", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+		Description: "Delete a project with every service, volume and its network; backups are kept. confirm must repeat the project name. Needs admin."}, t.deleteProject)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_project_git", Annotations: readOnly,
 		Description: "A project's git link: repository, branch, compose file path, auto sync, the last sync's commit, time, error and warnings, and the services running another image than the file's."}, t.getProjectGit)
 	mcp.AddTool(server, &mcp.Tool{Name: "link_project_git", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
