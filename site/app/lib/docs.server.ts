@@ -102,11 +102,20 @@ export function render(doc: Doc): { html: string; headings: Heading[] } {
         if (depth === 2) headings.push({ id, text: html.replace(/<[^>]+>/g, "") });
         return `<h${depth} id="${id}"><a class="anchor" href="#${id}" aria-hidden="true" tabindex="-1">#</a>${html}</h${depth}>\n`;
       },
+      // Each cell carries its column's name, so a phone can show rows as
+      // stacked blocks ("Default: :3000") instead of squeezed columns.
+      table({ header, rows }) {
+        const align = (a: string | null) => (a ? ` style="text-align:${a}"` : "");
+        const labels = header.map((h) => this.parser.parseInline(h.tokens).replace(/<[^>]+>/g, "").replace(/"/g, "&quot;"));
+        const head = header.map((h) => `<th${align(h.align)}>${this.parser.parseInline(h.tokens)}</th>`).join("");
+        const body = rows
+          .map((r) => `<tr>${r.map((c, i) => `<td data-label="${labels[i]}"${align(c.align)}>${this.parser.parseInline(c.tokens)}</td>`).join("")}</tr>`)
+          .join("\n");
+        return `<div class="table-wrap"><table>\n<thead><tr>${head}</tr></thead>\n<tbody>${body}</tbody>\n</table></div>\n`;
+      },
     },
   });
-  const html = (md.parse(doc.markdown, { async: false }) as string)
-    .replaceAll("<table>", '<div class="table-wrap"><table>')
-    .replaceAll("</table>", "</table></div>");
+  const html = md.parse(doc.markdown, { async: false }) as string;
   return { html, headings };
 }
 
