@@ -156,20 +156,11 @@ func (c *Core) CreatePgDatabase(ctx context.Context, id, name string) (PgDatabas
 // against the instance's list: psql would also take a connection string.
 func (c *Core) pgTarget(ctx context.Context, id, database string) (dataTarget, error) {
 	t, err := c.dataTarget(ctx, id, store.ServiceKindPostgres)
-	if err != nil || database == "" || database == t.db {
+	if err != nil {
 		return t, err
 	}
-	dbs, err := t.pgDatabases(ctx)
-	if err != nil {
-		return dataTarget{}, err
-	}
-	for _, d := range dbs {
-		if d.Name == database {
-			t.db = database
-			return t, nil
-		}
-	}
-	return dataTarget{}, fmt.Errorf("%w: %s has no database %q", ErrInvalid, t.svc.Name, database)
+	t.db, err = c.pgDatabaseOf(ctx, t.svc, t.container, database)
+	return t, err
 }
 
 // PgTables lists the tables and views of one of a postgres service's

@@ -79,7 +79,7 @@ func TestVolumeBackupDocker(t *testing.T) {
 	if svc, err = c.store.UpdateService(ctx, svc); err != nil {
 		t.Fatal(err)
 	}
-	b, err := c.BackupService(ctx, svc.ID, "")
+	b, err := c.BackupService(ctx, svc.ID, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

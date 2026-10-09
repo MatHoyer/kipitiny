@@ -238,6 +238,8 @@ export type Backup = {
   id: string;
   /** postgres: a pg_dump; volume: an archive of a service's volumes. */
   kind: BackupKind;
+  /** The PostgreSQL database dumped; absent on older backups (the service's own). */
+  database?: string;
   encrypted: boolean;
   serviceId: string;
   projectId: string;
@@ -267,6 +269,8 @@ export type Backup = {
 
 export type ScheduleInput = {
   targetId: string;
+  /** One of a PostgreSQL instance's databases; empty follows the service's own. */
+  database?: string;
   cron: string;
   keepLast: number;
   keepDaily: number;
@@ -783,8 +787,8 @@ export const api = {
 
   backups: (projectId?: string) => request<Backup[]>(`/backups${projectId ? `?projectId=${projectId}` : ""}`),
   serviceBackups: (serviceId: string) => request<Backup[]>(`/services/${serviceId}/backups`),
-  backup: (serviceId: string, targetId: string) =>
-    request<Backup>(`/services/${serviceId}/backups`, json("POST", { targetId })),
+  backup: (serviceId: string, targetId: string, database = "") =>
+    request<Backup>(`/services/${serviceId}/backups`, json("POST", { targetId, database })),
   getBackup: (id: string) => request<Backup>(`/backups/${id}`),
   verifyBackup: (id: string) => request<Backup>(`/backups/${id}/verify`, { method: "POST" }),
   deleteBackup: (id: string) => request<void>(`/backups/${id}`, { method: "DELETE" }),

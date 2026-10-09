@@ -8,6 +8,12 @@ order: 7
   server) and streams straight to the target: local disk (`/data/backups`) or
   any S3-compatible bucket. Memory stays constant and nothing touches a temp
   file.
+- A PostgreSQL backup holds **one database** of the instance: the service's own
+  (`POSTGRES_DB`; `postgres` for services created since 0.17) unless you pick
+  another one your app created. *Back up now* and each schedule list the
+  instance's databases to choose from, so you never type a name. The backup
+  history shows which database each backup holds, and a restore puts back that
+  same database, creating it if the instance no longer has it.
 - A backup only counts once `pg_dump` exits 0; partial uploads are deleted. Each
   backup records size, SHA-256, server version and duration.
 - Restores load the dump into a scratch database and swap it in by rename, so the

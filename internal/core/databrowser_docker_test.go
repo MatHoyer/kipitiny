@@ -397,3 +397,58 @@ func TestRestoreDockerPostgresDatabase(t *testing.T) {
 		t.Errorf("leftover databases: %s", got)
 	}
 }
+
+// TestBackupDockerOtherDatabase backs up one of the instance's other
+// databases, then restores it, also once it has been dropped.
+func TestBackupDockerOtherDatabase(t *testing.T) {
+	c, ctx, svc, exec := dataTestDB(t, store.ServiceKindPostgres, &container.Config{
+		Image: DefaultPostgresImage,
+		Env:   []string{"POSTGRES_USER=app", "POSTGRES_DB=postgres", "POSTGRES_PASSWORD=secret"},
+	})
+	exec(`psql -U app -d postgres -c "CREATE DATABASE other" && psql -U app -d other -c "CREATE TABLE t (v text); INSERT INTO t VALUES ('kept')"`)
+	for _, name := range []string{"missing", "host=example.com"} {
+		if _, err := c.BackupService(ctx, svc.ID, "", name); !errors.Is(err, ErrInvalid) {
+			t.Errorf("backup of %q: %v", name, err)
+		}
+	}
+	b, err := c.BackupService(ctx, svc.ID, "", "other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for b.Status == store.OpRunning {
+		time.Sleep(200 * time.Millisecond)
+		if b, err = c.store.GetBackup(ctx, b.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if b.Status != store.OpSucceeded || b.Database != "other" || !strings.Contains(b.ObjectKey, "/db/other/") {
+		t.Fatalf("backup: %+v", b)
+	}
+	target, _ := c.store.GetBackupTarget(ctx, b.TargetID)
+	st, err := c.openStorage(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, _ := c.runningContainer(ctx, svc)
+	exec(`psql -U app -d other -c "UPDATE t SET v = 'changed'"`)
+	if err := c.restore(ctx, svc, ct, st, target, b); err != nil {
+		t.Fatal(err)
+	}
+	if got := exec(`psql -U app -d other -tAc "SELECT v FROM t"`); got != "kept" {
+		t.Errorf("after restore: %q", got)
+	}
+	exec(`psql -U app -d postgres -c "DROP DATABASE other"`)
+	if err := c.restore(ctx, svc, ct, st, target, b); err != nil {
+		t.Fatal(err)
+	}
+	if got := exec(`psql -U app -d other -tAc "SELECT v FROM t"`); got != "kept" {
+		t.Errorf("restored into a missing database: %q", got)
+	}
+
+	if _, err := c.CreateBackupSchedule(ctx, svc.ID, ScheduleInput{Cron: "@daily", KeepLast: 3, Database: "other"}); err != nil {
+		t.Errorf("schedule of other: %v", err)
+	}
+	if _, err := c.CreateBackupSchedule(ctx, svc.ID, ScheduleInput{Cron: "@daily", KeepLast: 3, Database: "nope"}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("schedule of nope: %v", err)
+	}
+}

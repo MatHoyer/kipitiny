@@ -53,6 +53,7 @@ export function BackupList({
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2 max-sm:hidden">
+                    {b.database && <Tag className="font-mono">{b.database}</Tag>}
                     {b.encrypted && <Tag>age</Tag>}
                     <Verification backup={b} />
                   </div>

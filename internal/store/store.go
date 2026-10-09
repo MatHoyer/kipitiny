@@ -507,6 +507,9 @@ type Backup struct {
 	SHA256      string   `bun:"sha256" json:"sha256"`
 	Encrypted   bool     `bun:"encrypted" json:"encrypted"`
 	PGVersion   string   `bun:"pg_version" json:"pgVersion"`
+	// Database is the PostgreSQL database dumped; empty (older backups) is
+	// the service's own.
+	Database string `bun:"db_name" json:"database,omitempty"`
 	// Volumes names the volumes in a volume backup's archive.
 	Volumes    []string   `bun:"volumes" json:"volumes,omitempty"`
 	DurationMS int64      `bun:"duration_ms" json:"durationMs"`
@@ -573,6 +576,9 @@ type BackupSchedule struct {
 	Kind      BackupKind `bun:"kind" json:"kind"`
 	ServiceID string     `bun:"service_id,nullzero" json:"serviceId,omitempty"`
 	TargetID  string     `bun:"target_id" json:"targetId"`
+	// Database is the PostgreSQL database backed up; empty follows the
+	// service's own.
+	Database string `bun:"db_name" json:"database,omitempty"`
 	// Cron is a standard 5-field expression or a descriptor like @daily.
 	Cron string `bun:"cron" json:"cron"`
 	// KeepLast keeps the N most recent backups.

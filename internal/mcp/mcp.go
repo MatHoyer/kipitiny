@@ -525,6 +525,8 @@ func (t *tools) rollback(ctx context.Context, _ *mcp.CallToolRequest, in rollbac
 type backupIn struct {
 	Database string `json:"database" jsonschema:"the service to back up (PostgreSQL, Redis or an app with volumes) as project/service, or its ID"`
 	Storage  string `json:"storage,omitempty" jsonschema:"storage ID (see list_storage); default local disk"`
+	// The service is "database" for compatibility; this picks inside it.
+	DatabaseName string `json:"database_name,omitempty" jsonschema:"for PostgreSQL, which of the instance's databases to dump; default the service's own"`
 }
 
 func (t *tools) backupDatabase(ctx context.Context, _ *mcp.CallToolRequest, in backupIn) (*mcp.CallToolResult, store.Backup, error) {
@@ -533,7 +535,7 @@ func (t *tools) backupDatabase(ctx context.Context, _ *mcp.CallToolRequest, in b
 		if err != nil {
 			return store.Backup{}, err
 		}
-		return t.c.BackupService(ctx, svc.ID, in.Storage)
+		return t.c.BackupService(ctx, svc.ID, in.Storage, in.DatabaseName)
 	})
 	return nil, b, err
 }

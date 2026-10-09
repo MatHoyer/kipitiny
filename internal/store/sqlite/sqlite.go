@@ -708,7 +708,7 @@ func (s *Store) CreateBackupSchedule(ctx context.Context, sc store.BackupSchedul
 
 func (s *Store) UpdateBackupSchedule(ctx context.Context, sc store.BackupSchedule) (store.BackupSchedule, error) {
 	res, err := s.db.NewUpdate().Model(&sc).
-		Column("target_id", "cron", "keep_last", "keep_daily", "keep_weekly", "keep_monthly", "enabled", "verify").
+		Column("target_id", "db_name", "cron", "keep_last", "keep_daily", "keep_weekly", "keep_monthly", "enabled", "verify").
 		WherePK().Exec(ctx)
 	if err != nil {
 		return store.BackupSchedule{}, mapErr(err)
