@@ -47,6 +47,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tip, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/logo";
+import { DemoBanner } from "@/demo/banner";
 import { api } from "../api";
 import { Login, Setup } from "./Auth";
 import { settingsGroups, settingsPages } from "./settings";
@@ -90,6 +91,7 @@ function App({ username }: { username: string }) {
       </Sidebar>
       {/* The inset variant adds an m-2 margin from md up, so the height gives it back. */}
       <SidebarInset className="h-svh overflow-y-auto md:h-[calc(100svh-1rem)]">
+        {import.meta.env.MODE === "demo" && <DemoBanner />}
         <SaveBarHost>
           <Outlet />
         </SaveBarHost>

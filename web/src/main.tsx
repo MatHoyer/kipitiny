@@ -66,17 +66,25 @@ const router = createBrowserRouter([
       { path: "servers/:id", element: <ServerPage /> },
     ],
   },
-]);
+], {
+  // "/" normally; "/demo" for the demo build the website embeds.
+  basename: import.meta.env.BASE_URL.replace(/\/$/, "") || undefined,
+});
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-      <TooltipProvider>
-        <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>
-        <Toaster />
-      </TooltipProvider>
-    </ThemeProvider>
-  </StrictMode>,
-);
+const start = () =>
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <TooltipProvider>
+          <QueryClientProvider client={queryClient}>
+            <RouterProvider router={router} />
+          </QueryClientProvider>
+          <Toaster />
+        </TooltipProvider>
+      </ThemeProvider>
+    </StrictMode>,
+  );
+
+// The demo build answers /api in the browser; normal builds drop this branch.
+if (import.meta.env.MODE === "demo") import("./demo/install").then((m) => (m.install(), start()));
+else start();
