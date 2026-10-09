@@ -438,7 +438,7 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
 
   const create = useMutation({
     meta: { error: "Couldn't create the service" },
-    mutationFn: async () => {
+    mutationFn: async (deploy: boolean) => {
       const input: ServiceInput =
         kind !== "app"
           ? {
@@ -458,7 +458,7 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
               secrets: envSecrets(env),
             };
       const svc = await api.createService(projectId, input);
-      await api.deploy(svc.id);
+      if (deploy) await api.deploy(svc.id);
       return svc;
     },
     onSuccess: (svc) => {
@@ -493,7 +493,7 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
   };
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    create.mutate();
+    create.mutate(true);
   };
 
   return (
@@ -526,7 +526,11 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
           <form onSubmit={onSubmit} className="contents">
             <DialogHeader>
               <DialogTitle>{choiceTitles[choice]}</DialogTitle>
-              <DialogDescription>It is deployed as soon as it is created.</DialogDescription>
+              <DialogDescription>
+                {kind === "app"
+                  ? "Create it to set volumes, a pre-deploy command or health checks before its first deploy."
+                  : "It is deployed as soon as it is created."}
+              </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 sm:grid-cols-2">
               <FloatingInput
@@ -616,7 +620,18 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
                 <ChevronLeft data-icon="inline-start" />
                 Back
               </Button>
-              <Button type="submit" loading={create.isPending}>
+              {kind === "app" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={create.isPending}
+                  loading={create.isPending && !create.variables}
+                  onClick={(e) => e.currentTarget.form?.reportValidity() && create.mutate(false)}
+                >
+                  Create
+                </Button>
+              )}
+              <Button type="submit" disabled={create.isPending} loading={create.isPending && create.variables}>
                 Create & deploy
               </Button>
             </DialogFooter>
