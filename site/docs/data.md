@@ -12,26 +12,33 @@ running.
 
 ## Browse
 
-- **PostgreSQL**: every table and view outside the system schemas, with its size
-  and estimated row count. A table opens on its columns (types, primary key) and
-  its rows, 50 per page, sorted by the primary key or any column you click.
-  Filters compare a column to a value (`=`, `≠`, `<`, `≤`, `>`, `≥`), match a
-  `like` pattern (case-insensitive, `%` as wildcard) or test for NULL.
-  **CSV** downloads every row matching the filters, streamed (no size cap).
-- **Redis**: keys are listed with `SCAN` (never `KEYS`), filtered by a glob
-  pattern such as `user:*`, with their type, expiry and memory use. A key opens
-  on its value whatever the type (string, hash, list, set, sorted set, stream),
-  paged for big collections.
+- **PostgreSQL**: the tables and views outside the system schemas are listed on
+  the left (the list can be hidden). A table opens as a grid: each column shows
+  its type, a key marks the primary key and `*` a required column. Rows come 25
+  to 200 per page, sorted by the primary key or any column you click. *Search rows*
+  matches text in any column. *Filter* adds a condition on one column: compare it
+  to a value (`=`, `!=`, `<`, `<=`, `>`, `>=`), match an `ilike` pattern (`%` as
+  wildcard) or test for NULL; ✓ or Enter applies it. The download button exports
+  every row matching the search and filters as CSV, streamed (no size cap). The
+  page count is approximate: it comes from Postgres' own row estimate.
+- **Redis**: keys are listed with `SCAN` (never `KEYS`), grouped by their `:`
+  segments (`user:42` under `user:`), with their type; a clock marks keys that
+  expire. *Match keys* takes a word (matched anywhere) or a glob such as `user:*`.
+  A key opens on its value whatever the type (string, hash, list, set, sorted
+  set, stream), paged for big collections.
+- Click a row to see it whole in a side panel, JSON indented, and copy a field or
+  the row as JSON. Values longer than 4 KiB are cut (flagged with `…`).
 - Browsing never writes: queries run in a read-only session with a 5 s
   statement timeout (10 min for a CSV export).
-- Long values are cut at 4 KiB in the grid (flagged with `…`); click a cell to see
-  it whole, JSON indented. `bytea` columns show as hex (`\x…`).
 
 ## Console
 
 *Console* runs SQL against PostgreSQL, or a command against Redis, and shows the
 result (at most 200 rows or 1 MiB of output; add a `LIMIT`, or export the table).
-*Ctrl+Enter* runs it.
+*Ctrl+Enter* runs it. The SQL editor completes keywords and your tables' and
+columns' names; results can be copied as CSV or JSON. The Redis console works like
+`redis-cli`: a transcript of commands and replies, ↑ for past commands. Past
+queries are kept per database in this browser only (*History*).
 
 - By default the console is **read-only**: the PostgreSQL session refuses writes,
   and Redis commands that change data or the server (`SET`, `DEL`, `CONFIG`…)

@@ -616,11 +616,11 @@ export interface GitRepo {
 }
 
 /** Data browser: a postgres table or view. rowEstimate is -1 until the table is analyzed. */
-export type PgTable = { schema: string; name: string; kind: string; rowEstimate: number; bytes: number };
+export type PgTable = { schema: string; name: string; kind: string; rowEstimate: number; bytes: number; columns: PgColumn[] };
 export type PgColumn = { name: string; type: string; nullable: boolean; primaryKey: boolean };
 export type PgFilterOp = "=" | "!=" | "<" | "<=" | ">" | ">=" | "like" | "null" | "notnull";
 export type PgFilter = { column: string; op: PgFilterOp; value?: string };
-export type RowQuery = { limit?: number; offset?: number; orderBy?: string; desc?: boolean; filters?: PgFilter[] };
+export type RowQuery = { limit?: number; offset?: number; orderBy?: string; desc?: boolean; filters?: PgFilter[]; search?: string };
 /** Cells are text, null for NULL; truncated lists the [row, column] cells cut short. */
 export type PgRows = { columns: PgColumn[]; rows: (string | null)[][]; truncated: [number, number][]; hasMore: boolean };
 /** ttl in ms, -1 when the key never expires. */
@@ -644,6 +644,7 @@ const rowParams = (q: RowQuery) => {
   if (q.orderBy) p.set("order", q.orderBy);
   if (q.desc) p.set("desc", "true");
   if (q.filters?.length) p.set("filters", JSON.stringify(q.filters));
+  if (q.search) p.set("search", q.search);
   return p.toString();
 };
 

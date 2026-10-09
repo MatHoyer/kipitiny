@@ -87,7 +87,8 @@ CREATE VIEW s.v AS SELECT id FROM s.items;"`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tables) != 2 || tables[0].Name != "items" || tables[0].Kind != "table" || tables[0].Bytes == 0 || tables[1].Kind != "view" {
+	if len(tables) != 2 || tables[0].Name != "items" || tables[0].Kind != "table" || tables[0].Bytes == 0 || tables[1].Kind != "view" ||
+		len(tables[0].Columns) != 4 || !tables[0].Columns[0].PrimaryKey || tables[0].Columns[3].Type != "jsonb" || len(tables[1].Columns) != 1 {
 		t.Fatalf("tables: %+v", tables)
 	}
 
@@ -116,6 +117,11 @@ CREATE VIEW s.v AS SELECT id FROM s.items;"`)
 	}
 	if len(rows.Rows) != 5 || *rows.Rows[0][0] != "99" || !rows.HasMore {
 		t.Errorf("filtered: %d rows, first %s", len(rows.Rows), *rows.Rows[0][0])
+	}
+
+	rows, err = c.PgRows(ctx, svc.ID, "s", "items", RowQuery{Search: "ITEM 24", Filters: []PgFilter{{Column: "id", Op: ">", Value: "240"}}})
+	if err != nil || len(rows.Rows) != 9 || rows.HasMore {
+		t.Errorf("search: %d rows, %v", len(rows.Rows), err)
 	}
 
 	_, err = c.PgRows(ctx, svc.ID, "s", "items", RowQuery{Filters: []PgFilter{{Column: "id", Op: "=", Value: "abc"}}})

@@ -28,6 +28,10 @@ func TestPgSelect(t *testing.T) {
 			}}, page: true,
 			want: `SELECT json_build_array(left("id"::text, 4097), left("we""ird"::text, 4097), left("tenant"::text, 4097)) FROM "public"."t" WHERE "id" >= '3' AND "we""ird"::text ILIKE '%o''k%' AND "tenant" IS NULL ORDER BY "we""ird" DESC LIMIT 11 OFFSET 0;`,
 		},
+		"search": {
+			q: RowQuery{Limit: 10, Search: `50%_o'k\`}, page: true,
+			want: `SELECT json_build_array(left("id"::text, 4097), left("we""ird"::text, 4097), left("tenant"::text, 4097)) FROM "public"."t" WHERE ("id"::text ILIKE '%50\%\_o''k\\%' OR "we""ird"::text ILIKE '%50\%\_o''k\\%' OR "tenant"::text ILIKE '%50\%\_o''k\\%') ORDER BY "id", "tenant" LIMIT 11 OFFSET 0;`,
+		},
 		"export": {
 			q:    RowQuery{Limit: 10, Offset: 5, Desc: true},
 			want: `SELECT "id", "we""ird", "tenant" FROM "public"."t" ORDER BY "id" DESC, "tenant" DESC;`,

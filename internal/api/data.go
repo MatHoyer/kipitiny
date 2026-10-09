@@ -56,7 +56,7 @@ func (a *API) pgExport(w http.ResponseWriter, r *http.Request) {
 // rowQuery reads paging, sorting and filters (a JSON array) from the URL.
 func rowQuery(w http.ResponseWriter, r *http.Request) (core.RowQuery, bool) {
 	v := r.URL.Query()
-	q := core.RowQuery{OrderBy: v.Get("order"), Desc: v.Get("desc") == "true"}
+	q := core.RowQuery{OrderBy: v.Get("order"), Desc: v.Get("desc") == "true", Search: v.Get("search")}
 	q.Limit, _ = strconv.Atoi(v.Get("limit"))
 	q.Offset, _ = strconv.Atoi(v.Get("offset"))
 	if f := v.Get("filters"); f != "" {
