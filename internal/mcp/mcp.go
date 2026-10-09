@@ -41,7 +41,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "kipitiny", Version: version}, &mcp.ServerOptions{
 		Instructions: "Manage apps and PostgreSQL/Redis databases on this kipitiny server. " +
 			"Refer to services as project/service. Read tools need a read token, " +
-			"deploy/rollback/backup/service_action need deploy (with deploy, deploy_image only changes the tag of an existing app); " +
+			"deploy, rollback, backups (backup_database, backup_project, verify_backup) and service_action need deploy (with deploy, deploy_image only changes the tag of an existing app); " +
 			"creating, renaming, deleting (with the name as confirmation), git links, backup schedules, uptime checks, set_project_env, apply_project_compose, query_database and get_connection need admin; restore needs admin and an explicit confirmation. " +
 			"Documentation of this version, as markdown: " + docsIndex + " lists every page; read the relevant one before guessing how a feature works. " +
 			"If the site is unreachable, the same pages are in " + docsSources + ".",
@@ -102,6 +102,16 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "restore_database", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Replace a service's data with a backup. Destructive: confirm must repeat the service name. For a PostgreSQL dump, apps referencing the database are stopped meanwhile; for a volume archive, the service itself is."}, t.restoreDatabase)
 
+	mcp.AddTool(server, &mcp.Tool{Name: "backup_project",
+		Description: "Back up every database and app with volumes of a project to one storage. Services whose backup can't start are listed in error; the others still run."}, t.backupProject)
+	mcp.AddTool(server, &mcp.Tool{Name: "verify_backup",
+		Description: "Restore-test a successful backup in a throwaway, network-less container; list_backups then shows the result."}, t.verifyBackup)
+	mcp.AddTool(server, &mcp.Tool{Name: "delete_backup", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+		Description: "Delete a backup and its file from storage. Needs admin."}, t.deleteBackup)
+	mcp.AddTool(server, &mcp.Tool{Name: "list_restores", Annotations: readOnly,
+		Description: "Restores of a service: which backup, when and the outcome."}, t.listRestores)
+	mcp.AddTool(server, &mcp.Tool{Name: "list_deployments", Annotations: readOnly,
+		Description: "A service's deployments, newest first: image, status, error, commit and who triggered it. IDs work with get_deployment_log and rollback."}, t.listDeployments)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_backup_schedules", Annotations: readOnly,
 		Description: "A service's backup schedules: cron (UTC), storage, retention, restore tests and next run."}, t.listBackupSchedules)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_backup_schedule",
