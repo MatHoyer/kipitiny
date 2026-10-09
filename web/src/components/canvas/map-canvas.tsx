@@ -100,6 +100,7 @@ function Flow({ servers, projectView, className }: { servers: ServerTopology[]; 
         onPaneClick={() => setSelected(null)}
         isValidConnection={edits.isValidConnection}
         onConnect={edits.onConnect}
+        onConnectEnd={edits.onConnectEnd}
         onBeforeDelete={edits.onBeforeDelete}
         deleteKeyCode={["Backspace", "Delete"]}
         connectionLineStyle={{ strokeWidth: 2, strokeDasharray: "4 4" }}

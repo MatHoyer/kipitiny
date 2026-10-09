@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Connection, Edge, IsValidConnection } from "@xyflow/react";
+import type { Connection, Edge, IsValidConnection, OnConnectEnd } from "@xyflow/react";
 import { useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import {
@@ -79,12 +79,20 @@ export function useCanvasEdits(servers: ServerTopology[]) {
     if (!to || !isDatabase(to.svc.kind)) return "Draw lines to a database or a network";
     if (isDatabase(from.svc.kind)) return "Only apps use databases";
     if (to.project.id !== from.project.id) return "Apps only reference databases of their own project; put both on a network instead";
+    if (from.project.gitPath) return `${from.project.name} follows ${from.project.gitPath} in git: add the reference to ${from.svc.name}'s environment there`;
     if (from.svc.uses.includes(to.svc.id)) return "It already uses this database";
     return "";
   };
 
 
   const isValidConnection: IsValidConnection = (c) => refusal(c) === "";
+
+  /** A line dropped on a node it can't connect to: say why instead of doing nothing. */
+  const onConnectEnd: OnConnectEnd = (_, s) => {
+    if (s.isValid || !s.fromNode || !s.toNode || s.fromNode.id === s.toNode.id) return;
+    const why = refusal({ source: s.fromNode.id, target: s.toNode.id, sourceHandle: null, targetHandle: null });
+    if (why) toast.error(why);
+  };
 
   const onConnect = (c: Connection) => {
     const why = refusal(c);
@@ -106,6 +114,12 @@ export function useCanvasEdits(servers: ServerTopology[]) {
     if (nodes.length > 0) return false;
     const editable = edges.filter((e) => e.data?.kind === "net" || e.data?.kind === "db");
     if (editable.length === 0) return false;
+    // Network lines are set outside the compose file; database references live in it.
+    const owned = editable.filter((e) => e.data?.kind === "db").map((e) => find(e.source)).find((f) => f?.project.gitPath);
+    if (owned) {
+      toast.error(`${owned.project.name} follows ${owned.project.gitPath} in git`, { description: "Remove the reference from the service's environment in that file." });
+      return false;
+    }
     const lines = editable.map((e) => {
       const from = find(e.source);
       if (e.data?.kind === "net") return `${from?.svc.name} leaves ${network(e.target)?.net.custom}`;
@@ -180,7 +194,7 @@ export function useCanvasEdits(servers: ServerTopology[]) {
     </>
   );
 
-  return { isValidConnection, onConnect, onBeforeDelete, dialogs };
+  return { isValidConnection, onConnect, onConnectEnd, onBeforeDelete, dialogs };
 }
 
 /** Adds an env variable referencing a database to an app, as a secret. */
