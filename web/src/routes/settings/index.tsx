@@ -42,7 +42,7 @@ export const settingsPages: SettingsPage[] = [
   },
   {
     slug: "storage",
-    group: "Infrastructure",
+    group: "Integrations",
     label: "Storage",
     icon: HardDrive,
     page: Storage,

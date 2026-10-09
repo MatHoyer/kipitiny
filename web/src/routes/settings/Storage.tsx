@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { api, type BackupTarget, type TargetInput } from "@/api";
-import { storageIcons, storageLocation } from "@/components/storage";
+import { storageIcon, storageIcons, storageLocation } from "@/components/storage";
 import { SettingsPage } from "./page";
 
 /** What the dialog shows: a new target, or a target being edited. */
@@ -56,7 +56,7 @@ export function Storage() {
           <Card key={t.id} size="sm" className="gap-3 px-4">
             <div className="flex items-start gap-3">
               <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted [&>svg]:size-5">
-                {storageIcons[t.kind]}
+                {storageIcon(t)}
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{t.name}</p>

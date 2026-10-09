@@ -3,7 +3,7 @@ import { ChevronLeft, DatabaseBackup, Lock, TriangleAlert } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { ChoiceTile, Tag } from "@/components/common";
-import { storageIcons, storageLocation } from "@/components/storage";
+import { storageIcon, storageLocation } from "@/components/storage";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { BackupTarget } from "@/api";
@@ -68,9 +68,13 @@ export function BackupNowDialog({
               {targets.map((t) => (
                 <ChoiceTile
                   key={t.id}
-                  icon={storageIcons[t.kind]}
+                  icon={storageIcon(t)}
                   title={t.name}
-                  description={storageLocation(t)}
+                  description={
+                    <span className="block truncate font-mono" title={storageLocation(t)}>
+                      {storageLocation(t)}
+                    </span>
+                  }
                   badge={t.ageRecipient && <Tag className="bg-emerald-500/10 text-emerald-600">encrypted</Tag>}
                   onClick={() => setPicked(t)}
                 />
@@ -84,7 +88,7 @@ export function BackupNowDialog({
               <DialogDescription>It runs in the background and shows up in the history.</DialogDescription>
             </DialogHeader>
             <div className="flex items-start gap-3 rounded-xl border p-4">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted [&>svg]:size-5">{storageIcons[target.kind]}</span>
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted [&>svg]:size-5">{storageIcon(target)}</span>
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{target.name}</p>
                 <p className="truncate font-mono text-xs text-muted-foreground">{storageLocation(target)}</p>

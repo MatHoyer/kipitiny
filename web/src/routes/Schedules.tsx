@@ -17,7 +17,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { storageIcons } from "@/components/storage";
+import { storageIcon } from "@/components/storage";
 import { api, type BackupTarget, type Schedule, type ScheduleInput } from "../api";
 
 const presets: [string, string][] = [
@@ -71,7 +71,7 @@ export function Schedules({ serviceId, targets }: { serviceId?: string; targets:
             <li key={s.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm">
               <div className={cn("flex min-w-0 items-center gap-3", !s.enabled && "opacity-50")}>
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted [&>svg]:size-4">
-                  {target ? storageIcons[target.kind] : <HardDrive />}
+                  {target ? storageIcon(target) : <HardDrive />}
                 </span>
                 <div className="min-w-0">
                   <span className="font-medium">{describeCron(s.cron)}</span>
@@ -190,7 +190,7 @@ function ScheduleDialog({ serviceId, targets }: { serviceId?: string; targets: B
                 value: t.id,
                 label: (
                   <span className="flex items-center gap-2 [&>svg]:size-4">
-                    {storageIcons[t.kind]}
+                    {storageIcon(t)}
                     {t.name}
                   </span>
                 ),
