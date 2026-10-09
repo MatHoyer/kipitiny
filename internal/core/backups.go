@@ -31,13 +31,16 @@ const (
 // apps with volumes. The dump runs inside the database container, so the
 // client always matches the server version and the manager needs no
 // Postgres tools.
-func (c *Core) BackupService(ctx context.Context, serviceID, targetID string) (store.Backup, error) {
-	return c.startBackup(ctx, serviceID, targetID, "", nil)
+//
+// database picks which of a PostgreSQL instance's databases to dump; empty
+// is the service's own.
+func (c *Core) BackupService(ctx context.Context, serviceID, targetID, database string) (store.Backup, error) {
+	return c.startBackup(ctx, serviceID, targetID, database, "", nil)
 }
 
 // startBackup starts a backup; done, if set, is closed when it finishes.
 // Backups made by a schedule trigger its retention on success.
-func (c *Core) startBackup(ctx context.Context, serviceID, targetID, scheduleID string, done chan<- struct{}) (store.Backup, error) {
+func (c *Core) startBackup(ctx context.Context, serviceID, targetID, database, scheduleID string, done chan<- struct{}) (store.Backup, error) {
 	if targetID == "" {
 		targetID = store.LocalTargetID
 	}
@@ -71,10 +74,17 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, scheduleID 
 	// pg_dump runs in the database; volumes are read by a helper, but must
 	// exist (a never-deployed service has none yet).
 	var ct string
-	ext := ".dump"
+	ext, dir := ".dump", fmt.Sprintf("%s/%s/", project.Name, svc.Name)
 	if kind == store.BackupKindPostgres {
-		ct, err = c.runningContainer(ctx, svc)
-	} else if ext = ".tar.gz"; svc.CurrentDeploymentID == "" {
+		if ct, err = c.runningContainer(ctx, svc); err == nil {
+			database, err = c.pgDatabaseOf(ctx, svc, ct, database)
+		}
+		if database != svc.Env[pgDatabase] {
+			dir += database + "/"
+		}
+	} else if ext = ".tar.gz"; database != "" {
+		err = fmt.Errorf("%w: only a PostgreSQL service has databases to pick", ErrInvalid)
+	} else if svc.CurrentDeploymentID == "" {
 		err = fmt.Errorf("%w: %s has not been deployed yet", ErrInvalid, svc.Name)
 	}
 	if err != nil {
@@ -94,8 +104,9 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, scheduleID 
 		ProjectName: project.Name,
 		TargetID:    target.ID,
 		ScheduleID:  scheduleID,
+		Database:    database,
 		// The suffix keeps keys unique for backups started in the same second.
-		ObjectKey: objectKey(fmt.Sprintf("%s/%s/", project.Name, svc.Name), created, ext, target),
+		ObjectKey: objectKey(dir, created, ext, target),
 		Status:    store.OpRunning,
 	})
 	if err != nil {
@@ -145,7 +156,7 @@ func (c *Core) BackupProject(ctx context.Context, projectID, targetID string) ([
 		if _, err := backupKind(s); err != nil {
 			continue
 		}
-		b, err := c.BackupService(ctx, s.ID, targetID)
+		b, err := c.BackupService(ctx, s.ID, targetID, "")
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", s.Name, err))
 			continue
@@ -206,7 +217,7 @@ func (c *Core) dump(ctx context.Context, svc store.Service, containerID string, 
 	return c.upload(ctx, st, target, b, func(w io.Writer) error {
 		err := c.dockerFor(svc.ServerID).Exec(ctx, containerID, docker.ExecOptions{
 			// Custom format: compressed, and pg_restore can restore selectively.
-			Cmd:    []string{"pg_dump", "-U", svc.Env[pgUser], "-d", svc.Env[pgDatabase], "-Fc"},
+			Cmd:    []string{"pg_dump", "-U", svc.Env[pgUser], "-d", backupDatabase(svc, *b), "-Fc"},
 			Stdout: w,
 		})
 		if err != nil {
@@ -432,6 +443,9 @@ func (c *Core) notifyBackup(b store.Backup, target store.BackupTarget, path stri
 		e.Type, e.Level, e.Title, e.Message = EventBackupFailed, notify.Error, subject+" backup failed", b.Error
 		e.Fields = e.Fields[:1]
 	}
+	if b.Database != "" {
+		e.Fields = append([]notify.Field{{Name: "Database", Value: b.Database}}, e.Fields...)
+	}
 	c.notify(e, path, "")
 }
 
@@ -459,7 +473,7 @@ func (c *Core) restore(ctx context.Context, svc store.Service, containerID strin
 	}
 	defer rc.Close()
 
-	user, db := svc.Env[pgUser], svc.Env[pgDatabase]
+	user, db := svc.Env[pgUser], backupDatabase(svc, b)
 	scratch, old := db+"__restore", db+"__pre_restore"
 	dk := c.dockerFor(svc.ServerID)
 	// Run from a maintenance database: the target can't be renamed while
@@ -487,6 +501,24 @@ func (c *Core) restore(ctx context.Context, svc store.Service, containerID strin
 	if err := c.pgRestore(ctx, dk, containerID, user, scratch, rc, target, b); err != nil {
 		dropScratch()
 		return err
+	}
+
+	// A database restored into an instance that lacks it is just renamed in.
+	var exists strings.Builder
+	err = dk.Exec(ctx, containerID, docker.ExecOptions{
+		Cmd:    []string{"psql", "-U", user, "-d", maintenance, "-tAc", "SELECT 1 FROM pg_database WHERE datname = " + pgLiteral(db)},
+		Stdout: &exists,
+	})
+	if err != nil {
+		dropScratch()
+		return fmt.Errorf("look up %s: %w", db, err)
+	}
+	if strings.TrimSpace(exists.String()) == "" {
+		if err := admin(fmt.Sprintf(`ALTER DATABASE %s RENAME TO %s`, pgIdent(scratch), pgIdent(db))); err != nil {
+			dropScratch()
+			return fmt.Errorf("swap databases: %w", err)
+		}
+		return nil
 	}
 
 	// Swap. Each statement runs on its own: DROP DATABASE can't run in the
@@ -518,6 +550,36 @@ func (c *Core) restore(ctx context.Context, svc store.Service, containerID strin
 		c.log.Warn("cannot drop pre-restore database", "service", svc.Name, "err", err)
 	}
 	return nil
+}
+
+// backupDatabase is the database a backup holds; older backups predate the
+// choice and hold the service's own.
+func backupDatabase(svc store.Service, b store.Backup) string {
+	if b.Database != "" {
+		return b.Database
+	}
+	return svc.Env[pgDatabase]
+}
+
+// pgDatabaseOf checks that name is a database of svc's instance (its
+// container ct) and returns it; empty is the service's own. Names come from
+// callers: psql and pg_dump would take a connection string as well.
+func (c *Core) pgDatabaseOf(ctx context.Context, svc store.Service, ct, name string) (string, error) {
+	main := svc.Env[pgDatabase]
+	if name == "" || name == main {
+		return main, nil
+	}
+	t := dataTarget{svc: svc, dk: c.dockerFor(svc.ServerID), container: ct, db: main}
+	dbs, err := t.pgDatabases(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, d := range dbs {
+		if d.Name == name {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("%w: %s has no database %q", ErrInvalid, svc.Name, name)
 }
 
 func pgLiteral(s string) string {

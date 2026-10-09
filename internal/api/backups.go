@@ -36,11 +36,14 @@ func (a *API) listBackups(w http.ResponseWriter, r *http.Request) {
 func (a *API) createBackup(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		TargetID string `json:"targetId"`
+		// Database picks one of a PostgreSQL instance's databases; empty is the
+		// service's own.
+		Database string `json:"database"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
-	b, err := a.core.BackupService(r.Context(), r.PathValue("id"), body.TargetID)
+	b, err := a.core.BackupService(r.Context(), r.PathValue("id"), body.TargetID, body.Database)
 	if err != nil {
 		a.fail(w, err)
 		return

@@ -6,7 +6,8 @@ import { ChoiceTile, Tag } from "@/components/common";
 import { storageIcon, storageLocation } from "@/components/storage";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import type { BackupTarget } from "@/api";
+import { FloatingSelect } from "@/components/ui/floating-select";
+import type { BackupTarget, PgDatabase } from "@/api";
 
 /**
  * "Back up now" in two steps: pick a storage, then review and start. With a
@@ -18,12 +19,15 @@ export function BackupNowDialog({
   onBackup,
   sensitive,
   disabled,
+  databases = [],
   variant = "default",
 }: {
   /** What gets backed up, e.g. "shop/db". */
   what: ReactNode;
   targets: BackupTarget[];
-  onBackup: (targetId: string) => Promise<unknown>;
+  onBackup: (targetId: string, database: string) => Promise<unknown>;
+  /** A PostgreSQL instance's databases: with several, the user picks one (the main by default). */
+  databases?: PgDatabase[];
   /** The backup holds secrets: warn when the storage isn't encrypted. */
   sensitive?: boolean;
   disabled?: boolean;
@@ -31,11 +35,13 @@ export function BackupNowDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<BackupTarget | null>(null);
+  const [database, setDatabase] = useState("");
+  const db = database || databases.find((d) => d.main)?.name || "";
   const single = targets.length === 1 ? targets[0] : null;
   const target = picked ?? single;
   const backup = useMutation({
     meta: { error: "Couldn't start the backup" },
-    mutationFn: () => onBackup(target!.id),
+    mutationFn: () => onBackup(target!.id, db),
     onSuccess: () => {
       toast.success("Backup started");
       onOpenChange(false);
@@ -45,6 +51,7 @@ export function BackupNowDialog({
     setOpen(next);
     if (!next) {
       setPicked(null);
+      setDatabase("");
       backup.reset();
     }
   };
@@ -96,6 +103,23 @@ export function BackupNowDialog({
                 </p>
               </div>
             </div>
+            {databases.length > 1 && (
+              <FloatingSelect
+                label="Database"
+                value={db}
+                onValueChange={setDatabase}
+                description="A backup holds one database of the instance."
+                options={databases.map((d) => ({
+                  value: d.name,
+                  label: (
+                    <span className="flex items-center gap-2">
+                      <span className="font-mono">{d.name}</span>
+                      {d.main && <span className="text-muted-foreground">main</span>}
+                    </span>
+                  ),
+                }))}
+              />
+            )}
             {target.ageRecipient ? (
               <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <Lock className="size-4 shrink-0 text-emerald-600" />

@@ -18,7 +18,7 @@ import { FloatingSelect } from "@/components/ui/floating-select";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { storageIcon } from "@/components/storage";
-import { api, type BackupTarget, type Schedule, type ScheduleInput } from "../api";
+import { api, type BackupTarget, type PgDatabase, type Schedule, type ScheduleInput } from "../api";
 
 const presets: [string, string][] = [
   ["0 * * * *", "Every hour"],
@@ -41,15 +41,15 @@ function describeRetention(s: ScheduleInput): string {
 }
 
 /** A service's backup schedules, or the manager's own without serviceId. */
-export function Schedules({ serviceId, targets }: { serviceId?: string; targets: BackupTarget[] }) {
+export function Schedules({ serviceId, targets, databases = [] }: { serviceId?: string; targets: BackupTarget[]; databases?: PgDatabase[] }) {
   const qc = useQueryClient();
   const key = ["schedules", serviceId ?? "manager"];
   const schedules = useQuery({ queryKey: key, queryFn: () => (serviceId ? api.schedules(serviceId) : api.managerSchedules()) });
   const invalidate = () => qc.invalidateQueries({ queryKey: key });
   const toggle = useMutation({
     meta: { error: "Couldn't update the schedule" },
-    mutationFn: ({ id, targetId, cron, keepLast, keepDaily, keepWeekly, keepMonthly, enabled, verify }: Schedule) =>
-      api.updateSchedule(id, { targetId, cron, keepLast, keepDaily, keepWeekly, keepMonthly, verify, enabled: !enabled }),
+    mutationFn: ({ id, targetId, database, cron, keepLast, keepDaily, keepWeekly, keepMonthly, enabled, verify }: Schedule) =>
+      api.updateSchedule(id, { targetId, database, cron, keepLast, keepDaily, keepWeekly, keepMonthly, verify, enabled: !enabled }),
     onSuccess: invalidate,
   });
   const remove = useMutation({ meta: { error: "Couldn't delete the schedule" }, mutationFn: api.deleteSchedule, onSuccess: invalidate });
@@ -59,7 +59,7 @@ export function Schedules({ serviceId, targets }: { serviceId?: string; targets:
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium">Schedules</h3>
-        <ScheduleDialog serviceId={serviceId} targets={targets} />
+        <ScheduleDialog serviceId={serviceId} targets={targets} databases={databases} />
       </div>
       {schedules.data?.length === 0 && (
         <Empty>No schedule: {serviceId ? "this service" : "the manager"} is only backed up manually.</Empty>
@@ -76,6 +76,7 @@ export function Schedules({ serviceId, targets }: { serviceId?: string; targets:
                 <div className="min-w-0">
                   <span className="font-medium">{describeCron(s.cron)}</span>
                   <span className="text-muted-foreground"> → {target?.name ?? s.targetId}</span>
+                  {s.database && <span className="ml-2 font-mono text-xs text-muted-foreground">{s.database}</span>}
                   <p className="text-xs text-muted-foreground">
                     {describeRetention(s)}
                     {s.verify && " · restore-tested"}
@@ -114,13 +115,15 @@ export function Schedules({ serviceId, targets }: { serviceId?: string; targets:
 
 const emptyForm = { targetId: "local", keepLast: "0", keepDaily: "7", keepWeekly: "4", keepMonthly: "6" };
 
-function ScheduleDialog({ serviceId, targets }: { serviceId?: string; targets: BackupTarget[] }) {
+function ScheduleDialog({ serviceId, targets, databases }: { serviceId?: string; targets: BackupTarget[]; databases: PgDatabase[] }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [preset, setPreset] = useState(presets[1][0]);
   const [custom, setCustom] = useState("");
   const [form, setForm] = useState(emptyForm);
   const [verify, setVerify] = useState(true);
+  // Empty follows the service's own database.
+  const [database, setDatabase] = useState("");
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
   const create = useMutation({
@@ -128,6 +131,7 @@ function ScheduleDialog({ serviceId, targets }: { serviceId?: string; targets: B
     mutationFn: () => {
       const input = {
         targetId: form.targetId,
+        database,
         cron: preset === "custom" ? custom : preset,
         keepLast: Number(form.keepLast) || 0,
         keepDaily: Number(form.keepDaily) || 0,
@@ -150,6 +154,7 @@ function ScheduleDialog({ serviceId, targets }: { serviceId?: string; targets: B
       setCustom("");
       setForm(emptyForm);
       setVerify(true);
+      setDatabase("");
       create.reset();
     }
   };
@@ -196,6 +201,18 @@ function ScheduleDialog({ serviceId, targets }: { serviceId?: string; targets: B
                 ),
               }))}
             />
+            {databases.length > 1 && (
+              <FloatingSelect
+                label="Database"
+                value={database || "-"}
+                onValueChange={(v) => setDatabase(v === "-" ? "" : v)}
+                className="sm:col-span-2"
+                options={[
+                  { value: "-", label: `The service's own (${databases.find((d) => d.main)?.name ?? "main"})` },
+                  ...databases.filter((d) => !d.main).map((d) => ({ value: d.name, label: <span className="font-mono">{d.name}</span> })),
+                ]}
+              />
+            )}
             {preset === "custom" && (
               <FloatingInput
                 label="Cron expression"

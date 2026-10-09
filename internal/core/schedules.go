@@ -35,7 +35,10 @@ type scheduler struct {
 }
 
 type ScheduleInput struct {
-	TargetID    string `json:"targetId"`
+	TargetID string `json:"targetId"`
+	// Database picks one of a PostgreSQL instance's databases; empty
+	// follows the service's own.
+	Database    string `json:"database"`
 	Cron        string `json:"cron"`
 	KeepLast    int    `json:"keepLast"`
 	KeepDaily   int    `json:"keepDaily"`
@@ -129,7 +132,7 @@ func (c *Core) runScheduledBackup(scheduleID string) {
 		if sc.Kind == store.BackupKindManager {
 			_, err = c.startManagerBackup(ctx, sc.TargetID, sc.ID, done)
 		} else {
-			_, err = c.startBackup(ctx, sc.ServiceID, sc.TargetID, sc.ID, done)
+			_, err = c.startBackup(ctx, sc.ServiceID, sc.TargetID, sc.Database, sc.ID, done)
 		}
 		if err == nil {
 			select {
@@ -320,7 +323,33 @@ func (c *Core) applyScheduleInput(ctx context.Context, sc *store.BackupSchedule,
 		}
 		in.Verify = false // the manager's own state has no restore test
 	}
-	sc.TargetID, sc.Cron, sc.Enabled, sc.Verify = in.TargetID, in.Cron, in.Enabled, in.Verify
+	if in.Database != "" {
+		if err := c.checkScheduleDatabase(ctx, *sc, in.Database); err != nil {
+			return err
+		}
+	}
+	sc.TargetID, sc.Database, sc.Cron, sc.Enabled, sc.Verify = in.TargetID, in.Database, in.Cron, in.Enabled, in.Verify
 	sc.KeepLast, sc.KeepDaily, sc.KeepWeekly, sc.KeepMonthly = in.KeepLast, in.KeepDaily, in.KeepWeekly, in.KeepMonthly
 	return nil
+}
+
+// checkScheduleDatabase checks a schedule's database against the running
+// instance. Its own database needs no check (nor a running service).
+func (c *Core) checkScheduleDatabase(ctx context.Context, sc store.BackupSchedule, name string) error {
+	if sc.Kind != store.BackupKindPostgres {
+		return fmt.Errorf("%w: only a PostgreSQL service has databases to pick", ErrInvalid)
+	}
+	svc, err := c.store.GetService(ctx, sc.ServiceID)
+	if err != nil {
+		return err
+	}
+	if name == svc.Env[pgDatabase] {
+		return nil
+	}
+	ct, err := c.runningContainer(ctx, svc)
+	if err != nil {
+		return fmt.Errorf("%w: start %s to pick one of its databases", ErrInvalid, svc.Name)
+	}
+	_, err = c.pgDatabaseOf(ctx, svc, ct, name)
+	return err
 }

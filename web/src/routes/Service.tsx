@@ -279,7 +279,7 @@ export function Service() {
           </TabsContent>
           {canBackup(svc) && (
             <TabsContent value="backups">
-              <BackupsCard serviceId={svc.id} name={project.data ? `${project.data.name}/${svc.name}` : svc.name} />
+              <BackupsCard serviceId={svc.id} kind={svc.kind} name={project.data ? `${project.data.name}/${svc.name}` : svc.name} />
             </TabsContent>
           )}
           <TabsContent value="settings" className="flex flex-col gap-6">
@@ -1031,9 +1031,17 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
   );
 }
 
-function BackupsCard({ serviceId, name }: { serviceId: string; name: string }) {
+function BackupsCard({ serviceId, name, kind }: { serviceId: string; name: string; kind: ServiceT["kind"] }) {
   const qc = useQueryClient();
   const targets = useQuery({ queryKey: ["storage"], queryFn: api.backupTargets });
+  // A PostgreSQL instance may hold several databases; a backup picks one. Stopped: no list, the main one.
+  const databases = useQuery({
+    queryKey: ["data", serviceId, "databases"],
+    queryFn: () => api.pgDatabases(serviceId),
+    enabled: kind === "postgres",
+    retry: false,
+    meta: { error: false },
+  });
   const backups = useQuery({
     queryKey: ["backups", serviceId],
     queryFn: () => api.serviceBackups(serviceId),
@@ -1044,8 +1052,8 @@ function BackupsCard({ serviceId, name }: { serviceId: string; name: string }) {
     queryFn: () => api.restores(serviceId),
     refetchInterval: (q) => (q.state.data?.some((r) => r.status === "running") ? 1_000 : 15_000),
   });
-  const backup = async (targetId: string) => {
-    await api.backup(serviceId, targetId);
+  const backup = async (targetId: string, database: string) => {
+    await api.backup(serviceId, targetId, database);
     qc.invalidateQueries({ queryKey: ["backups"] });
   };
   const lastRestore = restores.data?.[0];
@@ -1054,7 +1062,7 @@ function BackupsCard({ serviceId, name }: { serviceId: string; name: string }) {
   return (
     <Section
       plain
-      actions={<BackupNowDialog what={name} targets={targets.data ?? []} disabled={busy} onBackup={backup} />}
+      actions={<BackupNowDialog what={name} targets={targets.data ?? []} disabled={busy} onBackup={backup} databases={databases.data} />}
     >
       {lastRestore && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -1062,7 +1070,7 @@ function BackupsCard({ serviceId, name }: { serviceId: string; name: string }) {
           {lastRestore.error && <span className="truncate text-destructive">{lastRestore.error}</span>}
         </div>
       )}
-      <Schedules serviceId={serviceId} targets={targets.data ?? []} />
+      <Schedules serviceId={serviceId} targets={targets.data ?? []} databases={databases.data} />
       <div className="space-y-2">
         <h3 className="text-sm font-medium">History</h3>
         <BackupList backups={backups.data ?? []} targets={targets.data ?? []} />
