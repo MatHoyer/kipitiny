@@ -42,7 +42,7 @@ func Handler(c *core.Core, version string) http.Handler {
 		Instructions: "Manage apps and PostgreSQL/Redis databases on this kipitiny server. " +
 			"Refer to services as project/service. Read tools need a read token, " +
 			"deploy/rollback/backup/service_action need deploy (with deploy, deploy_image only changes the tag of an existing app); " +
-			"creating, renaming, deleting (with the name as confirmation), git links, set_project_env, apply_project_compose, query_database and get_connection need admin; restore needs admin and an explicit confirmation. " +
+			"creating, renaming, deleting (with the name as confirmation), git links, backup schedules, uptime checks, set_project_env, apply_project_compose, query_database and get_connection need admin; restore needs admin and an explicit confirmation. " +
 			"Documentation of this version, as markdown: " + docsIndex + " lists every page; read the relevant one before guessing how a feature works. " +
 			"If the site is unreachable, the same pages are in " + docsSources + ".",
 	})
@@ -101,6 +101,17 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "Where kipitiny can store files (local disk, S3, drives), with their IDs and whether files are encrypted."}, t.listStorage)
 	mcp.AddTool(server, &mcp.Tool{Name: "restore_database", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Replace a service's data with a backup. Destructive: confirm must repeat the service name. For a PostgreSQL dump, apps referencing the database are stopped meanwhile; for a volume archive, the service itself is."}, t.restoreDatabase)
+
+	mcp.AddTool(server, &mcp.Tool{Name: "list_backup_schedules", Annotations: readOnly,
+		Description: "A service's backup schedules: cron (UTC), storage, retention, restore tests and next run."}, t.listBackupSchedules)
+	mcp.AddTool(server, &mcp.Tool{Name: "set_backup_schedule",
+		Description: "Add a backup schedule to a service, or change one (schedule_id; omitted fields are kept). Each schedule prunes its own backups by its retention. Needs admin."}, t.setBackupSchedule)
+	mcp.AddTool(server, &mcp.Tool{Name: "delete_backup_schedule",
+		Description: "Delete one of a service's backup schedules; the backups it made are kept. Needs admin."}, t.deleteBackupSchedule)
+	mcp.AddTool(server, &mcp.Tool{Name: "set_uptime_check",
+		Description: "Create or replace the uptime check of an app with a public domain: an HTTPS request to a path at an interval, notifying when it goes down. It runs right away; get_app_status shows its results. Needs admin."}, t.setUptimeCheck)
+	mcp.AddTool(server, &mcp.Tool{Name: "delete_uptime_check",
+		Description: "Remove a service's uptime check and its history. Needs admin."}, t.deleteUptimeCheck)
 
 	mcp.AddTool(server, &mcp.Tool{Name: "list_databases", Annotations: readOnly,
 		Description: "The databases of a PostgreSQL service's instance, with their size; main is the service's own."}, t.listDatabases)
