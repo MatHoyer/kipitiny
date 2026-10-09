@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -226,5 +227,91 @@ key" v`)
 	}
 	if _, err := c.RedisGet(ctx, svc.ID, "queue", "1; FLUSHALL", 0); !errors.Is(err, ErrInvalid) {
 		t.Errorf("bad cursor: %v", err)
+	}
+}
+
+func TestDataConsoleDockerPostgres(t *testing.T) {
+	c, ctx, svc, exec := dataTestDB(t, store.ServiceKindPostgres, &container.Config{
+		Image: DefaultPostgresImage,
+		Env:   []string{"POSTGRES_USER=app", "POSTGRES_DB=app", "POSTGRES_PASSWORD=secret"},
+	})
+	exec(`psql -U app -d app -c "CREATE TABLE t (id int, name text); INSERT INTO t SELECT i, 'n' || i FROM generate_series(1, 300) i; INSERT INTO t VALUES (0, NULL), (-1, '')"`)
+
+	res, err := c.DataConsole(ctx, svc.ID, "SELECT 1; SELECT id, name FROM t WHERE id <= 0 ORDER BY id", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(res.Columns, []string{"id", "name"}) || len(res.Rows) != 2 || *res.Rows[0][1] != "" || res.Rows[1][1] != nil {
+		t.Errorf("select: %+v", res)
+	}
+	if res, err = c.DataConsole(ctx, svc.ID, "SELECT * FROM t", false); err != nil || len(res.Rows) != DataPageMax || !res.More {
+		t.Errorf("capped select: %d rows, more %v, %v", len(res.Rows), res.More, err)
+	}
+	if _, err = c.DataConsole(ctx, svc.ID, "DELETE FROM t", false); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "read-only") {
+		t.Errorf("read-only delete: %v", err)
+	}
+	if _, err = c.DataConsole(ctx, svc.ID, "SELECT nope", false); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "nope") {
+		t.Errorf("bad sql: %v", err)
+	}
+	if res, err = c.DataConsole(ctx, svc.ID, "DELETE FROM t WHERE id < 0", true); err != nil || res.Output != "DELETE 1" {
+		t.Errorf("write: %+v %v", res, err)
+	}
+	// A failing statement rolls the whole run back.
+	if _, err = c.DataConsole(ctx, svc.ID, "DELETE FROM t; SELECT nope", true); err == nil {
+		t.Error("failing write succeeded")
+	}
+	// Past the caps a write still runs to its end.
+	if res, err = c.DataConsole(ctx, svc.ID, "UPDATE t SET name = 'x' RETURNING *", true); err != nil || !res.More {
+		t.Errorf("returning: more %v %v", res.More, err)
+	}
+	if got := exec(`psql -U app -d app -tAc "SELECT count(*) FILTER (WHERE name = 'x'), count(*) FROM t"`); got != "301|301" {
+		t.Errorf("after writes: %s", got)
+	}
+
+	audit, err := c.store.ListAudit(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(audit) != 7 || audit[0].Action != "data console (write)" || audit[0].Target != svc.ID {
+		t.Errorf("audit: %+v", audit)
+	}
+	if _, err := c.DataConsole(WithActor(context.Background(), Actor{Scope: store.ScopeRead}), svc.ID, "SELECT 1", false); !errors.Is(err, ErrForbidden) {
+		t.Errorf("read scope: %v", err)
+	}
+}
+
+func TestDataConsoleDockerRedis(t *testing.T) {
+	c, ctx, svc, exec := dataTestDB(t, store.ServiceKindRedis, &container.Config{
+		Image: DefaultRedisImage,
+		Env:   []string{"REDIS_PASSWORD=secret", "REDISCLI_AUTH=secret"},
+		Cmd:   []string{"redis-server", "--requirepass", "secret"},
+	})
+	exec(`redis-cli SET greeting hello`)
+	run := func(cmd string, write bool) (string, error) {
+		res, err := c.DataConsole(ctx, svc.ID, cmd, write)
+		return res.Output, err
+	}
+	if out, err := run("GET greeting", false); err != nil || out != `"hello"` {
+		t.Errorf("get: %q %v", out, err)
+	}
+	if out, err := run("CONFIG GET maxmemory", false); !errors.Is(err, ErrInvalid) {
+		t.Errorf("read-only config: %q %v", out, err)
+	}
+	if _, err := run(`SET greeting "hi there"`, false); !errors.Is(err, ErrInvalid) {
+		t.Errorf("read-only set: %v", err)
+	}
+	if out, err := run(`SET greeting "hi there"`, true); err != nil || out != "OK" {
+		t.Errorf("write set: %q %v", out, err)
+	}
+	if out, _ := run("GET greeting", false); out != `"hi there"` {
+		t.Errorf("after set: %q", out)
+	}
+	if _, err := run("LPUSH greeting x", true); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "WRONGTYPE") {
+		t.Errorf("error reply: %v", err)
+	}
+	for _, cmd := range []string{"MONITOR", "blpop q 0", "XREAD BLOCK 0 STREAMS s $"} {
+		if _, err := run(cmd, true); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: %v", cmd, err)
+		}
 	}
 }

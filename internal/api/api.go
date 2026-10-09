@@ -85,6 +85,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("GET /api/services/{id}/data/tables/{schema}/{table}/export", a.pgExport)
 	mux.HandleFunc("GET /api/services/{id}/data/keys", a.redisScan)
 	mux.HandleFunc("GET /api/services/{id}/data/key", a.redisGet)
+	mux.HandleFunc("POST /api/services/{id}/data/console", a.dataConsole)
 	mux.HandleFunc("GET /api/services/{id}/backups", a.listServiceBackups)
 	mux.HandleFunc("POST /api/services/{id}/backups", a.createBackup)
 	mux.HandleFunc("GET /api/services/{id}/restores", a.listRestores)
