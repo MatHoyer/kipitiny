@@ -32,12 +32,10 @@ function Shell({ title, subtitle, children }: { title: string; subtitle?: string
 
 function Submit({ pending, children }: { pending: boolean; children: ReactNode }) {
   return (
-    <CardFooter className="mt-2">
-      <Button type="submit" size="lg" className="h-11 w-full rounded-xl" disabled={pending}>
-        {pending && <Loader2 className="animate-spin" aria-hidden />}
-        {children}
-      </Button>
-    </CardFooter>
+    <Button type="submit" size="lg" className="mt-2 h-11 w-full rounded-xl" disabled={pending}>
+      {pending && <Loader2 className="animate-spin" aria-hidden />}
+      {children}
+    </Button>
   );
 }
 
@@ -83,8 +81,8 @@ export function Login() {
             onChange={(e) => setPassword(e.target.value)}
             aria-invalid={wrong || undefined}
           />
+          <Submit pending={login.isPending}>Sign in</Submit>
         </CardContent>
-        <Submit pending={login.isPending}>Sign in</Submit>
       </form>
       <PasskeySignIn />
     </Shell>
@@ -102,7 +100,7 @@ function PasskeySignIn() {
   });
   if (!passkeysSupported()) return null;
   return (
-    <CardFooter className="flex-col gap-3">
+    <CardContent className="flex flex-col gap-3">
       <div className="flex w-full items-center gap-3 text-xs text-muted-foreground">
         <Separator className="flex-1" />
         or
@@ -119,7 +117,7 @@ function PasskeySignIn() {
         <Fingerprint data-icon="inline-start" />
         Sign in with a passkey
       </Button>
-    </CardFooter>
+    </CardContent>
   );
 }
 
@@ -175,9 +173,10 @@ function SecondFactor({ ticket, onRestart }: { ticket: string; onRestart: () => 
               inputClassName="font-mono tracking-widest"
             />
           )}
+          <Submit pending={verify.isPending}>Verify</Submit>
         </CardContent>
-        <Submit pending={verify.isPending}>Verify</Submit>
       </form>
+      <PasskeySignIn />
       <CardFooter className="flex-wrap justify-between gap-2 text-sm">
         <Button
           variant="link"
@@ -194,7 +193,6 @@ function SecondFactor({ ticket, onRestart }: { ticket: string; onRestart: () => 
           Back
         </Button>
       </CardFooter>
-      <PasskeySignIn />
     </Shell>
   );
 }
@@ -245,8 +243,8 @@ export function Setup() {
             value={form.confirm}
             onChange={set("confirm")}
           />
+          <Submit pending={setup.isPending}>Create account</Submit>
         </CardContent>
-        <Submit pending={setup.isPending}>Create account</Submit>
       </form>
     </Shell>
   );
