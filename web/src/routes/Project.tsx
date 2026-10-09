@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Box, ChevronLeft, Database, GitBranch, Globe, Layers, Lock, Plus, Trash2, TriangleAlert } from "lucide-react";
-import { useId, useState, type FormEvent, type ReactNode } from "react";
+import { lazy, Suspense, useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { ServiceIcon, ServiceIconTile } from "@/components/service-icon";
@@ -10,7 +10,6 @@ import { RenameCard } from "@/components/rename-card";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
-import { MapLegend, ServerCard } from "@/components/topology";
 import { SaveBar } from "@/components/save-bar";
 import { memoryOf, useUsage } from "@/components/usage";
 import { Button } from "@/components/ui/button";
@@ -43,6 +42,8 @@ import {
 import { BackupNowDialog } from "@/components/backup-now-dialog";
 import { ComposeDialog } from "@/components/compose-dialog";
 import { GitSource, useProjectGit } from "@/components/git-source";
+
+const MapCanvas = lazy(() => import("@/components/canvas/map-canvas"));
 
 export function Project() {
   const { id = "" } = useParams();
@@ -235,12 +236,9 @@ function ProjectMap({ projectId }: { projectId: string }) {
   if (topology.error) return <ErrorText error={topology.error} />;
   if (!topology.data) return <Loading />;
   return (
-    <>
-      <MapLegend />
-      {topology.data.servers.map((s) => (
-        <ServerCard key={s.id} server={s} showName={false} />
-      ))}
-    </>
+    <Suspense fallback={<Loading />}>
+      <MapCanvas servers={topology.data.servers} projectView className="h-[70vh] min-h-[28rem]" />
+    </Suspense>
   );
 }
 

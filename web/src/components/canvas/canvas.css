@@ -1,0 +1,39 @@
+/* Edge colors of the map canvas, matching its legend. */
+.react-flow__edge.map-edge-web path,
+.map-legend-web path {
+  stroke: var(--color-sky-500);
+}
+.react-flow__edge.map-edge-tunnel path,
+.map-legend-tunnel path {
+  stroke: var(--color-orange-500);
+}
+.react-flow__edge.map-edge-db path,
+.map-legend-db path {
+  stroke: #4169e1;
+  stroke-dasharray: 5 4;
+}
+.react-flow__edge.map-edge-net path,
+.map-legend-net path {
+  stroke: var(--color-violet-500);
+  stroke-dasharray: 2 4;
+}
+.react-flow__edge path.react-flow__edge-path {
+  stroke-width: 1.5;
+}
+.react-flow__edge.selected path.react-flow__edge-path {
+  stroke-width: 2.5;
+}
+.react-flow__edge-text {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+}
+/* Frames carry no box of their own: their component draws it. */
+.react-flow__node-project,
+.react-flow__node-server {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.react-flow {
+  --xy-background-color: transparent;
+}

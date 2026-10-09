@@ -57,8 +57,9 @@ type TopoNetwork struct {
 	Gateway string `json:"gateway,omitempty"`
 	// ProjectID is empty for the proxy network and the ones created by hand.
 	ProjectID string `json:"projectId,omitempty"`
-	// Custom is the name of a network created by hand.
-	Custom string `json:"custom,omitempty"`
+	// Custom is the name of a network created by hand, and CustomID its ID.
+	Custom   string `json:"custom,omitempty"`
+	CustomID string `json:"customId,omitempty"`
 	// Missing: expected (a project exists) but not found on the server.
 	Missing bool `json:"missing,omitempty"`
 }
@@ -103,8 +104,11 @@ type TopoService struct {
 	// Volume holds a database's data.
 	Volume string `json:"volume,omitempty"`
 	// Uses are the IDs of the project databases its env references.
-	Uses       []string   `json:"uses"`
-	Containers []TopoNode `json:"containers"`
+	Uses []string `json:"uses"`
+	// Networks are the IDs of the networks created by hand it joins.
+	Networks    []string   `json:"networks"`
+	HostNetwork bool       `json:"hostNetwork,omitempty"`
+	Containers  []TopoNode `json:"containers"`
 }
 
 // Topology maps every server, or only the server and project of projectID.
@@ -185,7 +189,7 @@ func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []s
 		for _, n := range custom {
 			if n.ServerID == sv.ID {
 				tn := topoNetwork(nets, docker.CustomNetwork(n.ID), "", err == nil)
-				tn.Custom = n.Name
+				tn.Custom, tn.CustomID = n.Name, n.ID
 				t.Networks = append(t.Networks, tn)
 			}
 		}
@@ -222,7 +226,11 @@ func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []s
 		for _, s := range own {
 			ts := TopoService{
 				ID: s.ID, Name: s.Name, Kind: s.Kind, Image: s.Image, Icon: s.Icon, Domain: s.Domain, Port: s.Port,
-				Replicas: s.Replicas, Stopped: s.Stopped, Uses: usedDatabases(s, p, dbs), Containers: []TopoNode{},
+				Replicas: s.Replicas, Stopped: s.Stopped, Uses: usedDatabases(s, p, dbs), Networks: s.Networks, HostNetwork: s.HostNetwork,
+				Containers: []TopoNode{},
+			}
+			if ts.Networks == nil {
+				ts.Networks = []string{}
 			}
 			ts.Volume = DataVolume(s)
 			views := make([]ContainerView, 0, len(byService[s.ID]))
