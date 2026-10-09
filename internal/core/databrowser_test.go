@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -74,5 +75,49 @@ func TestTruncate(t *testing.T) {
 	s, cut := truncate(long + "rest")
 	if !cut || len(s) != DataCellMax-1 {
 		t.Errorf("long: len %d cut %v", len(s), cut)
+	}
+}
+
+func TestSplitRedisArgs(t *testing.T) {
+	for line, want := range map[string][]string{
+		`GET key`:                     {"GET", "key"},
+		`  SET  "a b" 'it\'s' `:       {"SET", "a b", "it's"},
+		`SET k "line\nnext\x41\"q\\"`: {"SET", "k", "line\nnextA\"q\\"},
+		`SET k ""`:                    {"SET", "k", ""},
+		`HSET h f 'raw \n'`:           {"HSET", "h", "f", `raw \n`},
+		"":                            nil,
+	} {
+		got, err := splitRedisArgs(line)
+		if err != nil || !slices.Equal(got, want) {
+			t.Errorf("%q: got %q (%v), want %q", line, got, err, want)
+		}
+	}
+	for _, line := range []string{`GET "open`, `GET 'open`, `GET "a"b`, `GET "\x4"`, `GET "\xzz"`} {
+		if _, err := splitRedisArgs(line); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%q: got %v, want ErrInvalid", line, err)
+		}
+	}
+}
+
+func TestPgTagRe(t *testing.T) {
+	for tag, want := range map[string]bool{
+		"UPDATE 3": true, "INSERT 0 1": true, "CREATE TABLE": true, "BEGIN": true,
+		"count": false, "id,name": false, "UPDATE 3 extra words": false,
+	} {
+		if got := pgTagRe.MatchString(tag); got != want {
+			t.Errorf("%q: got %v", tag, got)
+		}
+	}
+}
+
+func TestCapWriter(t *testing.T) {
+	w := &capWriter{max: 5}
+	for _, s := range []string{"abc", "def", "ghi"} {
+		if n, err := w.Write([]byte(s)); n != 3 || err != nil {
+			t.Fatalf("write %q: %d %v", s, n, err)
+		}
+	}
+	if w.b.String() != "abcde" || !w.dropped {
+		t.Errorf("got %q dropped %v", w.b.String(), w.dropped)
 	}
 }

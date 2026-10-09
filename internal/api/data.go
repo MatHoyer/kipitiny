@@ -106,3 +106,19 @@ func (a *API) redisGet(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, val)
 }
+
+func (a *API) dataConsole(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Query string `json:"query"`
+		Write bool   `json:"write"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	res, err := a.core.DataConsole(r.Context(), r.PathValue("id"), body.Query, body.Write)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}

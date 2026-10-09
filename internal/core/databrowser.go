@@ -58,36 +58,42 @@ func (c *Core) dataTarget(ctx context.Context, id string, kind store.ServiceKind
 // to fn. Returning errStopLines from fn ends the read early (the exec is
 // cancelled and its error ignored).
 func (t dataTarget) execLines(ctx context.Context, opts docker.ExecOptions, fn func([]byte) error) error {
+	return t.execStream(ctx, opts, func(r io.Reader) error {
+		sc := bufio.NewScanner(r)
+		sc.Buffer(make([]byte, 0, 64<<10), dataLineMax)
+		for sc.Scan() {
+			if err := fn(sc.Bytes()); err != nil {
+				return err
+			}
+		}
+		return sc.Err()
+	})
+}
+
+// execStream runs opts in the target's container and hands its stdout to
+// read. If read fails, the exec is cancelled; errStopLines from read means it
+// stopped on purpose and is not an error.
+func (t dataTarget) execStream(ctx context.Context, opts docker.ExecOptions, read func(io.Reader) error) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	pr, pw := io.Pipe()
 	opts.Stdout = pw
 	done := make(chan error, 1)
 	go func() {
-		// The scanner sees EOF either way; the exit status comes from done.
+		// The reader sees EOF either way; the exit status comes from done.
 		done <- t.dk.Exec(ctx, t.container, opts)
 		pw.Close()
 	}()
-	sc := bufio.NewScanner(pr)
-	sc.Buffer(make([]byte, 0, 64<<10), dataLineMax)
-	var fnErr error
-	for sc.Scan() {
-		if fnErr = fn(sc.Bytes()); fnErr != nil {
-			break
-		}
-	}
-	if fnErr == nil {
-		fnErr = sc.Err()
-	}
-	if fnErr != nil {
+	if err := read(pr); err != nil {
 		cancel()
-		pr.CloseWithError(fnErr)
+		pr.CloseWithError(err)
 		<-done
-		if errors.Is(fnErr, errStopLines) {
+		if errors.Is(err, errStopLines) {
 			return nil
 		}
-		return fnErr
+		return err
 	}
+	_, _ = io.Copy(io.Discard, pr)
 	return clientError(<-done)
 }
 
