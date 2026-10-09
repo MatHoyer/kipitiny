@@ -30,9 +30,17 @@ order: 3
 - **Map** (project › Map, or the whole install from the sidebar): a canvas of
   what runs where, how traffic gets in (Traefik's entrypoints or a Cloudflare
   tunnel), which apps use which databases, and the networks created by hand.
-  Pan, zoom and drag nodes; positions are saved for everyone (*Reset layout*
-  puts them back). Click a node for its details and each container's
-  addresses on the networks it is actually attached to.
+  Pan, zoom and drag nodes (a project by its title); positions are saved for
+  everyone (*Reset layout* puts them back). Click a node for its details,
+  each container's addresses on the networks it is actually attached to, and
+  Deploy, Restart or Stop. You can also edit from it:
+  - drag a service's bottom dot onto a network to make it join (right away),
+    or onto a database of its project to add a secret variable referencing it
+    (`DATABASE_URL={{ db.<name>.URL }}`, applied on its next deploy);
+  - select such a line and press Delete to undo it (the variables that
+    reference the database are removed);
+  - **Add** creates a project or a network, and the **+** on a project adds a
+    service or database to it.
 - Health, uptime checks and notifications: see [Monitoring](/docs/monitoring).
 - **Renaming** (Settings › Name) keeps everything else: volumes, backups,
   deploy history and the project network are tied to IDs, and nothing restarts.
@@ -53,7 +61,8 @@ several apps sharing one database:
 
 1. *Infrastructure › Networks* › **Create network**, on the server the projects
    run on (only services on that server can join it).
-2. In each service's *Settings › Networks*, tick the network and save. Running
+2. In each service's *Settings › Networks*, tick the network and save (or
+   draw a line from the service to the network on the **Map**). Running
    containers join or leave it right away; nothing restarts, and new replicas
    join it too.
 

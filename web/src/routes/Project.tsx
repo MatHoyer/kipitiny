@@ -419,7 +419,8 @@ const choiceTitles: Record<Choice, string> = {
   redis: "New Redis database",
 };
 
-function NewServiceDialog({ projectId }: { projectId: string }) {
+/** Creates a service in a project. stay keeps the user where they are (the map) instead of opening it. */
+export function NewServiceDialog({ projectId, trigger, stay }: { projectId: string; trigger?: ReactNode; stay?: boolean }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const services = useQuery({ queryKey: ["services", projectId], queryFn: () => api.services(projectId) });
@@ -461,8 +462,9 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
     },
     onSuccess: (svc) => {
       qc.invalidateQueries({ queryKey: ["services", projectId] });
+      qc.invalidateQueries({ queryKey: ["topology"] });
       close();
-      navigate(`/services/${svc.id}`);
+      if (!stay) navigate(`/services/${svc.id}`);
     },
   });
 
@@ -497,10 +499,12 @@ function NewServiceDialog({ projectId }: { projectId: string }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm">
-          <Plus data-icon="inline-start" />
-          New service
-        </Button>
+        {trigger ?? (
+          <Button size="sm">
+            <Plus data-icon="inline-start" />
+            New service
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
         {!choice ? (

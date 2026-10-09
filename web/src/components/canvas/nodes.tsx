@@ -1,11 +1,13 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Globe, HardDrive, Lock, Network, Server, ShieldCheck, TriangleAlert } from "lucide-react";
+import { Globe, HardDrive, Lock, Network, Plus, Server, ShieldCheck, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { CloudflareIcon } from "@/components/brand-icons";
 import { stateColors } from "@/components/common";
 import { ServiceIcon } from "@/components/service-icon";
 import { projectProblems, serviceState, serviceWarning } from "@/components/topology";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { NewServiceDialog } from "@/routes/Project";
 import { databasePorts, isDatabase } from "@/api";
 import type { InfraData, MapNode, NetworkData, ProjectData, ServerData, ServiceData } from "./build";
 
@@ -78,16 +80,27 @@ function ProjectFrame({ data: { project, net }, selected }: Props<ProjectData>) 
   const problems = projectProblems(project);
   return (
     <div className={cn("size-full rounded-2xl border-2 border-dashed bg-muted/20", selected && "border-primary/60", problems > 0 && "border-destructive/40")}>
-      <header className="flex items-center gap-2 px-4 pt-3">
+      <header className="frame-handle flex cursor-grab items-center gap-2 px-4 pt-3">
         <span className="shrink-0 text-sm font-medium">{project.name}</span>
         {net?.subnet && <span className="truncate font-mono text-[11px] text-muted-foreground">{net.subnet}</span>}
         {net?.missing && <span className="text-[11px] text-destructive">network missing</span>}
-        {problems > 0 && (
-          <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-destructive">
-            <TriangleAlert className="size-3" />
-            {problems}
-          </span>
-        )}
+        <span className="ml-auto flex shrink-0 items-center gap-2">
+          {problems > 0 && (
+            <span className="flex items-center gap-1 text-xs text-destructive">
+              <TriangleAlert className="size-3" />
+              {problems}
+            </span>
+          )}
+          <NewServiceDialog
+            projectId={project.id}
+            stay
+            trigger={
+              <Button variant="ghost" size="icon-sm" title="Add a service" aria-label={`Add a service to ${project.name}`} className="nodrag size-6">
+                <Plus />
+              </Button>
+            }
+          />
+        </span>
       </header>
       {project.services.length === 0 && <p className="px-4 pt-2 text-xs text-muted-foreground">No services.</p>}
     </div>
@@ -97,7 +110,7 @@ function ProjectFrame({ data: { project, net }, selected }: Props<ProjectData>) 
 function ServerFrame({ data: { server }, selected }: Props<ServerData>) {
   return (
     <div className={cn("size-full rounded-3xl border bg-muted/10", selected && "border-primary/60")}>
-      <header className="flex items-center gap-2 px-6 pt-4 text-sm font-medium">
+      <header className="frame-handle flex cursor-grab items-center gap-2 px-6 pt-4 text-sm font-medium">
         <Server className="size-4 text-muted-foreground" />
         {server.name}
         {server.error && <span className="truncate text-xs font-normal text-destructive">{server.error}</span>}
