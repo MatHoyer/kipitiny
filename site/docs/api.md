@@ -1,12 +1,13 @@
 ---
 title: API tokens, MCP and audit
 description: Scoped tokens, the built-in MCP endpoint for agents, and the audit log
-order: 11
+order: 12
 ---
 
 Create tokens in *Settings*. Scopes: **read** (status, logs, backup lists),
 **deploy** (plus deploy, including another tag of an app, rollback, start/stop, back up; see [Deploy from CI](/docs/deploys#deploy-from-ci)) and **admin**
-(everything, including settings, revealed secrets and restores). Tokens work as
+(everything, including settings, revealed secrets, restores and the
+[data console](/docs/data#console)). A read token can also browse database contents. Tokens work as
 `Authorization: Bearer kpt_…` on `/api` and on the built-in **MCP** endpoint
 (Streamable HTTP):
 

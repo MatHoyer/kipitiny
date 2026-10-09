@@ -1,7 +1,7 @@
 ---
 title: Domains and HTTPS
 description: HTTPS for the manager, Cloudflare Tunnel and Cloudflare DNS
-order: 9
+order: 10
 ---
 
 ## HTTPS for the manager

@@ -17,7 +17,8 @@ order: 3
   limit with matching `shared_buffers`, and a `pg_isready` healthcheck. They are
   only reachable inside their project, at `<service-name>:5432`. An app uses one or
   more databases through env references, e.g. `DATABASE_URL={{ db.main.URL }}`
-  (fields: `URL`, `HOST`, `PORT`, `USER`, `PASSWORD`, `DATABASE`).
+  (fields: `URL`, `HOST`, `PORT`, `USER`, `PASSWORD`, `DATABASE`). The
+  [data browser](/docs/data) shows its tables and runs queries.
 - **Environment**: variables are readable, secrets write-only. A project holds shared
   ones that services reference as `{{ project.NAME }}`. References resolve at deploy.
   Values can also come from a password manager, see below.
