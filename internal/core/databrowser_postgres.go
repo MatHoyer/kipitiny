@@ -22,6 +22,8 @@ type PgTable struct {
 	// first analyzed.
 	RowEstimate int64 `json:"rowEstimate"`
 	Bytes       int64 `json:"bytes"`
+	// Columns feed the console's completion and the browser's headers.
+	Columns []PgColumn `json:"columns"`
 }
 
 type PgColumn struct {
@@ -44,6 +46,9 @@ type RowQuery struct {
 	OrderBy string     `json:"orderBy,omitempty"`
 	Desc    bool       `json:"desc,omitempty"`
 	Filters []PgFilter `json:"filters,omitempty"`
+	// Search keeps rows where any column, as text, contains it
+	// (case-insensitive).
+	Search string `json:"search,omitempty"`
 }
 
 type PgRows struct {
@@ -68,6 +73,8 @@ var pgFilterOps = map[string]string{
 	"notnull": "%s IS NOT NULL",
 }
 
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
 var pgRelKinds = map[string]string{
 	"r": "table", "p": "partitioned table", "v": "view", "m": "materialized view", "f": "foreign table",
 }
@@ -83,7 +90,11 @@ func (c *Core) PgTables(ctx context.Context, id string) ([]PgTable, error) {
 		return nil, err
 	}
 	tables := []PgTable{}
-	err = t.psqlJSON(ctx, `SELECT json_build_array(n.nspname, c.relname, c.relkind, c.reltuples::bigint, pg_total_relation_size(c.oid))
+	err = t.psqlJSON(ctx, `SELECT json_build_array(n.nspname, c.relname, c.relkind, c.reltuples::bigint, pg_total_relation_size(c.oid),
+  (SELECT coalesce(json_agg(json_build_array(a.attname, format_type(a.atttypid, a.atttypmod), NOT a.attnotnull,
+     coalesce(a.attnum = ANY(i.indkey), false)) ORDER BY a.attnum), '[]')
+   FROM pg_attribute a LEFT JOIN pg_index i ON i.indrelid = c.oid AND i.indisprimary
+   WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped))
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
   AND n.nspname NOT IN ('pg_catalog', 'information_schema')
@@ -91,8 +102,16 @@ WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')
 ORDER BY n.nspname, c.relname;`, func(row []json.RawMessage) error {
 		var tb PgTable
 		var kind string
-		if err := unmarshalRow(row, &tb.Schema, &tb.Name, &kind, &tb.RowEstimate, &tb.Bytes); err != nil {
+		var cols [][]json.RawMessage
+		if err := unmarshalRow(row, &tb.Schema, &tb.Name, &kind, &tb.RowEstimate, &tb.Bytes, &cols); err != nil {
 			return err
+		}
+		tb.Columns = make([]PgColumn, len(cols))
+		for i, col := range cols {
+			c := &tb.Columns[i]
+			if err := unmarshalRow(col, &c.Name, &c.Type, &c.Nullable, &c.PrimaryKey); err != nil {
+				return err
+			}
 		}
 		tb.Kind = pgRelKinds[kind]
 		tables = append(tables, tb)
@@ -224,7 +243,8 @@ func pgSelect(schema, table string, cols []PgColumn, q RowQuery, page bool) (str
 		fmt.Fprintf(&b, "SELECT %s", strings.Join(exprs, ", "))
 	}
 	fmt.Fprintf(&b, " FROM %s.%s", pgIdent(schema), pgIdent(table))
-	for i, f := range q.Filters {
+	var where []string
+	for _, f := range q.Filters {
 		if !known[f.Column] {
 			return "", fmt.Errorf("%w: unknown column %q", ErrInvalid, f.Column)
 		}
@@ -232,12 +252,23 @@ func pgSelect(schema, table string, cols []PgColumn, q RowQuery, page bool) (str
 		if !ok {
 			return "", fmt.Errorf("%w: unknown filter operator %q", ErrInvalid, f.Op)
 		}
-		b.WriteString(map[bool]string{true: " WHERE ", false: " AND "}[i == 0])
 		if strings.Count(op, "%s") == 1 {
-			fmt.Fprintf(&b, op, pgIdent(f.Column))
+			where = append(where, fmt.Sprintf(op, pgIdent(f.Column)))
 		} else {
-			fmt.Fprintf(&b, op, pgIdent(f.Column), pgLiteral(f.Value))
+			where = append(where, fmt.Sprintf(op, pgIdent(f.Column), pgLiteral(f.Value)))
 		}
+	}
+	if q.Search != "" {
+		// Matched literally: LIKE's own wildcards are escaped.
+		pattern := pgLiteral("%" + likeEscaper.Replace(q.Search) + "%")
+		any := make([]string, len(cols))
+		for i, col := range cols {
+			any[i] = fmt.Sprintf("%s::text ILIKE %s", pgIdent(col.Name), pattern)
+		}
+		where = append(where, "("+strings.Join(any, " OR ")+")")
+	}
+	if len(where) > 0 {
+		b.WriteString(" WHERE " + strings.Join(where, " AND "))
 	}
 	order := pk
 	if q.OrderBy != "" {

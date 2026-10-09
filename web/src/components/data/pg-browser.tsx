@@ -1,241 +1,359 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Download, Plus, RefreshCw, Table2, X } from "lucide-react";
-import { useState } from "react";
+import { Check, ChevronLeft, ChevronRight, ChevronsLeft, Download, ListFilter, RefreshCw, X } from "lucide-react";
+import { useRef, useState, type ReactNode } from "react";
 import { Empty, ErrorText, Loading } from "@/components/common";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatBytes } from "@/lib/format";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { api, type PgFilter, type PgFilterOp, type PgTable } from "../../api";
+import { api, type PgColumn, type PgFilter, type PgFilterOp, type PgTable } from "../../api";
+import { BrowserShell, SearchBox, SidebarHeader, SidebarItem, SidebarToggle } from "./browser-shell";
 import { DataTable } from "./data-table";
 
-const PAGE = 50;
+const PAGE_SIZES = [25, 50, 100, 200];
 
-const ops: { op: PgFilterOp; label: string; unary?: boolean }[] = [
-  { op: "=", label: "=" },
-  { op: "!=", label: "≠" },
-  { op: "<", label: "<" },
-  { op: "<=", label: "≤" },
-  { op: ">", label: ">" },
-  { op: ">=", label: "≥" },
-  { op: "like", label: "like" },
-  { op: "null", label: "is null", unary: true },
-  { op: "notnull", label: "is not null", unary: true },
+const opGroups: { label: string; ops: { op: PgFilterOp; label: string }[] }[] = [
+  {
+    label: "Comparison",
+    ops: [
+      { op: "=", label: "=" },
+      { op: "!=", label: "!=" },
+      { op: "<", label: "<" },
+      { op: "<=", label: "<=" },
+      { op: ">", label: ">" },
+      { op: ">=", label: ">=" },
+    ],
+  },
+  { label: "Text search", ops: [{ op: "like", label: "ilike" }] },
+  {
+    label: "Null checks",
+    ops: [
+      { op: "null", label: "is null" },
+      { op: "notnull", label: "is not null" },
+    ],
+  },
 ];
 
 const tableKey = (t: Pick<PgTable, "schema" | "name">) => `${t.schema}.${t.name}`;
 
 export function PgBrowser({ serviceId }: { serviceId: string }) {
   const tables = useQuery({ queryKey: ["data", serviceId, "tables"], queryFn: () => api.pgTables(serviceId) });
-  const [picked, setPicked] = useState<PgTable | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [find, setFind] = useState("");
+  const [sidebar, setSidebar] = useState(true);
 
   if (tables.isPending) return <Loading />;
   if (tables.error) return <ErrorText error={tables.error} />;
   const list = tables.data ?? [];
-  if (list.length === 0) return <Empty>No tables yet.</Empty>;
-  const current = list.find((t) => picked && tableKey(t) === tableKey(picked)) ?? list[0];
-  const schemas = [...new Set(list.map((t) => t.schema))];
+  if (list.length === 0) return <Empty>No tables yet. Once your app runs its migrations, its tables show up here.</Empty>;
+  const current = list.find((t) => tableKey(t) === picked) ?? list[0];
+  const shown = list.filter((t) => tableKey(t).toLowerCase().includes(find.trim().toLowerCase()));
+  const schemas = [...new Set(shown.map((t) => t.schema))];
 
-  return (
-    <div className="grid gap-4 md:grid-cols-[14rem_minmax(0,1fr)]">
-      <nav aria-label="Tables" className="max-h-[70vh] space-y-3 overflow-y-auto md:border-r md:pr-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">{list.length} tables</span>
-          <Button variant="ghost" size="icon-xs" title="Refresh" onClick={() => tables.refetch()}>
+  const nav = (
+    <>
+      <SidebarHeader
+        title="Tables"
+        search={find}
+        onSearch={setFind}
+        actions={
+          <Button variant="ghost" size="icon-xs" title="Reload tables" onClick={() => tables.refetch()}>
             <RefreshCw className={cn(tables.isFetching && "animate-spin")} />
           </Button>
-        </div>
+        }
+      />
+      <nav aria-label="Tables" className="flex-1 space-y-3 overflow-y-auto p-2">
+        {shown.length === 0 && <p className="px-2 text-xs text-muted-foreground">No table matches.</p>}
         {schemas.map((schema) => (
-          <div key={schema} className="space-y-0.5">
-            {schemas.length > 1 && <p className="px-2 text-xs font-medium text-muted-foreground">{schema}</p>}
-            {list
+          <div key={schema} className="space-y-px">
+            {(schemas.length > 1 || schema !== "public") && <p className="px-2 pb-1 text-xs text-muted-foreground">{schema}</p>}
+            {shown
               .filter((t) => t.schema === schema)
               .map((t) => (
-                <button
-                  key={tableKey(t)}
-                  type="button"
-                  onClick={() => setPicked(t)}
-                  aria-current={tableKey(t) === tableKey(current)}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm hover:bg-muted aria-[current=true]:bg-muted aria-[current=true]:font-medium"
-                >
-                  <Table2 className="size-3.5 shrink-0 text-muted-foreground" />
+                <SidebarItem key={tableKey(t)} selected={tableKey(t) === tableKey(current)} onClick={() => setPicked(tableKey(t))} title={t.kind}>
                   <span className="min-w-0 flex-1 truncate">{t.name}</span>
-                  <span className="text-xs text-muted-foreground">{t.kind === "table" ? rowCount(t.rowEstimate) : t.kind}</span>
-                </button>
+                  {t.kind === "view" && <span className="text-[0.65rem] opacity-70">view</span>}
+                  {t.kind === "materialized view" && <span className="text-[0.65rem] opacity-70">mview</span>}
+                </SidebarItem>
               ))}
           </div>
         ))}
       </nav>
-      <TableView key={tableKey(current)} serviceId={serviceId} table={current} />
-    </div>
+    </>
+  );
+
+  return (
+    <TableView
+      key={tableKey(current)}
+      serviceId={serviceId}
+      table={current}
+      tables={list}
+      onPick={setPicked}
+      sidebar={nav}
+      sidebarOpen={sidebar}
+      onToggleSidebar={() => setSidebar(!sidebar)}
+    />
   );
 }
 
-function rowCount(n: number) {
-  if (n < 0) return "";
-  return n >= 1000 ? `~${Intl.NumberFormat(undefined, { notation: "compact" }).format(n)}` : `~${n}`;
-}
-
-function TableView({ serviceId, table }: { serviceId: string; table: PgTable }) {
-  const [offset, setOffset] = useState(0);
+function TableView({
+  serviceId,
+  table,
+  tables,
+  onPick,
+  sidebar,
+  sidebarOpen,
+  onToggleSidebar,
+}: {
+  serviceId: string;
+  table: PgTable;
+  tables: PgTable[];
+  onPick: (key: string) => void;
+  sidebar: ReactNode;
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
+}) {
+  const [size, setSize] = useState(25);
+  const [page, setPage] = useState(0);
   const [sort, setSort] = useState<{ column: string; desc: boolean } | undefined>();
   const [filters, setFilters] = useState<PgFilter[]>([]);
-  const q = { limit: PAGE, offset, orderBy: sort?.column, desc: sort?.desc, filters };
+  const [search, setSearch] = useState("");
+  const q = { limit: size, offset: page * size, orderBy: sort?.column, desc: sort?.desc, filters, search };
   const rows = useQuery({
     queryKey: ["data", serviceId, "rows", table.schema, table.name, q],
     queryFn: () => api.pgRows(serviceId, table.schema, table.name, q),
     placeholderData: keepPreviousData,
   });
   const data = rows.data;
-  const toggleSort = (column: string) => {
-    setOffset(0);
-    setSort((s) => (s?.column !== column ? { column, desc: false } : s.desc ? undefined : { column, desc: true }));
-  };
+  const cols: PgColumn[] = data?.columns ?? table.columns;
+  const columns = cols.map((c) => ({ name: c.name, type: c.type, primaryKey: c.primaryKey, required: !c.nullable && !c.primaryKey }));
+  const pk = cols.flatMap((c, j) => (c.primaryKey ? [j] : []));
+  // From the planner's estimate: rough, and unknown while searching or filtering.
+  const pages = !filters.length && !search && table.rowEstimate > 0 ? Math.max(1, Math.ceil(table.rowEstimate / size)) : null;
+  const filterBar = useFilters(cols, (f) => {
+    setPage(0);
+    setFilters(f);
+  });
 
   return (
-    <div className="min-w-0 space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="font-medium">
-            {table.schema !== "public" && <span className="text-muted-foreground">{table.schema}.</span>}
-            {table.name}
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            {table.kind}
-            {table.bytes > 0 && ` · ${formatBytes(table.bytes)}`}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <a href={api.pgExportUrl(serviceId, table.schema, table.name, q)} download>
-              <Download /> CSV
+    <BrowserShell
+      sidebar={sidebar}
+      sidebarOpen={sidebarOpen}
+      toolbar={
+        <>
+          <SidebarToggle open={sidebarOpen} onToggle={onToggleSidebar} />
+          <Select value={tableKey(table)} onValueChange={onPick}>
+            <SelectTrigger size="sm" aria-label="Table" className="font-mono text-xs md:hidden">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {tables.map((t) => (
+                <SelectItem key={tableKey(t)} value={tableKey(t)} className="font-mono text-xs">
+                  {tableKey(t)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <SearchBox
+            value={search}
+            onChange={(s) => {
+              setPage(0);
+              setSearch(s);
+            }}
+            placeholder="Search rows"
+            className="w-44 sm:w-56"
+          />
+          {filterBar.trigger}
+          <Button variant="outline" size="icon-sm" asChild>
+            <a href={api.pgExportUrl(serviceId, table.schema, table.name, q)} download title="Export the rows matching the search and filters as CSV" aria-label="Export CSV">
+              <Download />
             </a>
           </Button>
-          <Button variant="ghost" size="icon-sm" title="Refresh" onClick={() => rows.refetch()}>
+          <Button variant="outline" size="icon-sm" className="ml-auto" title="Reload rows" onClick={() => rows.refetch()}>
             <RefreshCw className={cn(rows.isFetching && "animate-spin")} />
           </Button>
-        </div>
-      </div>
-      {data && (
-        <Filters
-          columns={data.columns.map((c) => c.name)}
-          filters={filters}
-          onChange={(f) => {
-            setOffset(0);
-            setFilters(f);
-          }}
-        />
-      )}
-      <ErrorText error={rows.error} />
+          {filterBar.pills}
+        </>
+      }
+      footer={
+        <>
+          <div className="flex h-8 items-stretch overflow-hidden rounded-md border">
+            <Button variant="ghost" size="icon-sm" className="h-auto rounded-none" title="First page" disabled={page === 0} onClick={() => setPage(0)}>
+              <ChevronsLeft />
+            </Button>
+            <Button variant="ghost" size="icon-sm" className="h-auto rounded-none border-l" title="Previous page" disabled={page === 0} onClick={() => setPage(page - 1)}>
+              <ChevronLeft />
+            </Button>
+            <span className="flex items-center border-l px-3 text-sm whitespace-nowrap tabular-nums">
+              {page + 1}
+              {pages && <span className="ml-1 text-muted-foreground">of ~{Intl.NumberFormat().format(Math.max(pages, page + 1))}</span>}
+            </span>
+            <Select
+              value={String(size)}
+              onValueChange={(v) => {
+                setPage(0);
+                setSize(Number(v));
+              }}
+            >
+              <SelectTrigger size="sm" aria-label="Rows per page" className="h-auto! rounded-none border-0 border-l shadow-none">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZES.map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    {n} rows per page
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="ghost" size="icon-sm" className="h-auto rounded-none border-l" title="Next page" disabled={!data?.hasMore} onClick={() => setPage(page + 1)}>
+              <ChevronRight />
+            </Button>
+          </div>
+          <ErrorText error={rows.error} />
+        </>
+      }
+    >
       {rows.isPending ? (
         <Loading />
       ) : (
         data && (
-          <>
-            <DataTable
-              columns={data.columns.map((c) => ({ name: c.name, hint: c.type, primaryKey: c.primaryKey }))}
-              rows={data.rows}
-              truncated={data.truncated}
-              sort={sort}
-              onSort={toggleSort}
-              empty={filters.length ? "No rows match." : "No rows."}
-            />
-            <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
-              {data.rows.length > 0 && (
-                <span>
-                  {offset + 1}–{offset + data.rows.length}
-                </span>
-              )}
-              <Button variant="outline" size="icon-xs" title="Previous page" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>
-                <ChevronLeft />
-              </Button>
-              <Button variant="outline" size="icon-xs" title="Next page" disabled={!data.hasMore} onClick={() => setOffset(offset + PAGE)}>
-                <ChevronRight />
-              </Button>
-            </div>
-          </>
+          <DataTable
+            className="max-h-none rounded-none border-0"
+            columns={columns}
+            rows={data.rows}
+            truncated={data.truncated}
+            sort={sort}
+            onSort={(column) => {
+              setPage(0);
+              setSort((s) => (s?.column !== column ? { column, desc: false } : s.desc ? undefined : { column, desc: true }));
+            }}
+            rowLabel={(r, i) => (pk.length ? pk.map((j) => `${cols[j].name} ${r[j]}`).join(", ") : `Row ${page * size + i + 1}`)}
+            empty={filters.length || search ? "No row matches." : "This table is empty."}
+          />
         )
       )}
-    </div>
+    </BrowserShell>
   );
 }
 
-/** Filters apply on submit, not on every keystroke. */
-function Filters({ columns, filters, onChange }: { columns: string[]; filters: PgFilter[]; onChange: (f: PgFilter[]) => void }) {
-  const [draft, setDraft] = useState<PgFilter[]>(filters);
-  const set = (i: number, f: Partial<PgFilter>) => setDraft(draft.map((d, j) => (j === i ? { ...d, ...f } : d)));
-  const dirty = JSON.stringify(draft) !== JSON.stringify(filters);
+type Draft = PgFilter & { id: number; applied: boolean };
 
-  return (
-    <form
-      className="flex flex-wrap items-center gap-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onChange(draft);
-      }}
-    >
-      {draft.map((f, i) => {
-        const unary = ops.find((o) => o.op === f.op)?.unary;
-        return (
-          <div key={i} className="flex items-center gap-1 rounded-lg border p-1">
-            <Select value={f.column} onValueChange={(column) => set(i, { column })}>
-              <SelectTrigger size="sm" aria-label="Column" className="border-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {columns.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={f.op} onValueChange={(op) => set(i, { op: op as PgFilterOp })}>
-              <SelectTrigger size="sm" aria-label="Operator" className="border-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ops.map((o) => (
-                  <SelectItem key={o.op} value={o.op}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {!unary && (
-              <Input
-                aria-label="Value"
-                className="h-8 w-36"
-                value={f.value ?? ""}
-                placeholder={f.op === "like" ? "%pattern%" : "value"}
-                onChange={(e) => set(i, { value: e.target.value })}
-              />
-            )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              title="Remove filter"
-              onClick={() => {
-                const next = draft.filter((_, j) => j !== i);
-                setDraft(next);
-                onChange(next);
-              }}
-            >
-              <X />
-            </Button>
-          </div>
-        );
-      })}
-      <Button type="button" variant="ghost" size="sm" onClick={() => setDraft([...draft, { column: columns[0], op: "=", value: "" }])}>
-        <Plus /> Filter
-      </Button>
-      {dirty && draft.length > 0 && (
-        <Button type="submit" size="sm">
-          Apply
+const isUnary = (op: PgFilterOp) => op === "null" || op === "notnull";
+const ready = (f: PgFilter) => isUnary(f.op) || (f.value ?? "") !== "";
+const strip = ({ column, op, value }: PgFilter): PgFilter => (isUnary(op) ? { column, op } : { column, op, value });
+
+/**
+ * Filters as pills: pick a column from the menu, then an operator and a
+ * value; ✓ (or Enter) applies it. Only applied, complete filters reach the
+ * server, so removing an unfinished one changes nothing.
+ */
+function useFilters(columns: PgColumn[], onChange: (f: PgFilter[]) => void) {
+  const seq = useRef(0);
+  const focusNext = useRef<number | null>(null);
+  const [draft, setDraft] = useState<Draft[]>([]);
+  const publish = (next: Draft[]) => {
+    setDraft(next);
+    onChange(next.filter((d) => d.applied && ready(d)).map(strip));
+  };
+  const edit = (id: number, f: Partial<PgFilter>) => setDraft(draft.map((d) => (d.id === id ? { ...d, ...f, applied: false } : d)));
+  const remove = (id: number) => {
+    const next = draft.filter((d) => d.id !== id);
+    if (draft.find((d) => d.id === id)?.applied) publish(next);
+    else setDraft(next);
+  };
+
+  const trigger = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          <ListFilter /> Filter
         </Button>
-      )}
-    </form>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="max-h-80 w-64 overflow-y-auto"
+        onCloseAutoFocus={(e) => {
+          // Focus goes to the new filter's value, not back to this button.
+          if (focusNext.current === null) return;
+          e.preventDefault();
+          document.getElementById(`filter-${focusNext.current}`)?.focus();
+          focusNext.current = null;
+        }}
+      >
+        {columns.map((c) => (
+          <DropdownMenuItem
+            key={c.name}
+            className="font-mono text-xs"
+            onSelect={() => {
+              focusNext.current = ++seq.current;
+              setDraft([...draft, { id: seq.current, column: c.name, op: "=", value: "", applied: false }]);
+            }}
+          >
+            <span className="flex-1 truncate">{c.name}</span>
+            <span className="text-muted-foreground">{c.type}</span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
+
+  const pills = draft.length > 0 && (
+    <div className="flex w-full flex-wrap gap-1.5 pt-0.5">
+      {draft.map((f) => (
+        <form
+          key={f.id}
+          onSubmit={(e) => {
+            e.preventDefault();
+            publish(draft.map((d) => (d.id === f.id ? { ...d, applied: ready(d) } : d)));
+          }}
+          className={cn("flex h-7 items-stretch overflow-hidden rounded-md border font-mono text-xs", !f.applied && "border-dashed")}
+        >
+          <span className="flex items-center bg-muted/50 px-2 font-medium" title={columns.find((c) => c.name === f.column)?.type}>
+            {f.column}
+          </span>
+          <Select value={f.op} onValueChange={(op) => edit(f.id, { op: op as PgFilterOp })}>
+            <SelectTrigger size="sm" aria-label="Operator" className="h-auto! rounded-none border-0 border-l px-2 font-mono text-xs shadow-none">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {opGroups.map((g) => (
+                <SelectGroup key={g.label}>
+                  <SelectLabel className="text-xs">{g.label}</SelectLabel>
+                  {g.ops.map((o) => (
+                    <SelectItem key={o.op} value={o.op} className="font-mono text-xs">
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              ))}
+            </SelectContent>
+          </Select>
+          {!isUnary(f.op) && (
+            <input
+              id={`filter-${f.id}`}
+              aria-label={`Value for ${f.column}`}
+              value={f.value ?? ""}
+              placeholder={f.op === "like" ? "%pattern%" : "value"}
+              onChange={(e) => edit(f.id, { value: e.target.value })}
+              className="w-32 border-l bg-transparent px-2 outline-none placeholder:text-muted-foreground"
+            />
+          )}
+          <button
+            type="submit"
+            title="Apply filter"
+            disabled={f.applied || !ready(f)}
+            className="flex items-center border-l px-1.5 text-muted-foreground enabled:hover:bg-muted enabled:hover:text-foreground disabled:opacity-40"
+          >
+            <Check className="size-3.5" />
+          </button>
+          <button type="button" title="Remove filter" onClick={() => remove(f.id)} className="flex items-center border-l px-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+            <X className="size-3.5" />
+          </button>
+        </form>
+      ))}
+    </div>
+  );
+
+  return { trigger, pills };
 }
