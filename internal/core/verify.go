@@ -23,7 +23,7 @@ const (
 )
 
 // VerifyBackup proves a backup can actually be restored: a database dump is
-// restored into a throwaway, network-less Postgres container and checked; a
+// restored into a throwaway, network-less server of its kind and checked; a
 // volume archive is read through entirely. The outcome is recorded on the
 // backup.
 func (c *Core) VerifyBackup(ctx context.Context, backupID string) (store.Backup, error) {
@@ -64,9 +64,12 @@ func (c *Core) runVerify(b store.Backup) {
 
 	var details store.VerificationDetails
 	var err error
-	if b.Kind == store.BackupKindVolume {
+	switch b.Kind {
+	case store.BackupKindVolume:
 		details, err = c.verifyVolumes(ctx, b)
-	} else {
+	case store.BackupKindDump:
+		details, err = c.verifyDump(ctx, b)
+	default:
 		details, err = c.verify(ctx, b)
 	}
 	details.DurationMS = time.Since(start).Milliseconds()

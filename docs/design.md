@@ -62,7 +62,7 @@ The manager runs as a container and controls the **host** Docker daemon via the 
 ## 5. Core concepts
 
 - **Project:** a group of services (apps + databases) sharing a private network.
-- **Service:** an app (a Docker image) or a database (Postgres or Redis).
+- **Service:** an app (a Docker image) or a database (Postgres, Redis, MySQL, MariaDB or MongoDB).
   Its `icon` names the logo the UI shows (set by a template or the user);
   empty falls back to the database kind, then the image's base name
   (`ghcr.io/n8n-io/n8n` → `n8n`), then a generic box. Logos live in the UI
@@ -200,6 +200,14 @@ A project is also a docker-compose file, so it is never locked in and can be des
 - Same model as Postgres: one container, one replica, private network only, named volume, password generated at creation and fixed.
 - AOF persistence (`appendonly yes`); `maxmemory` at 75% of the container limit so Redis refuses writes instead of being OOM-killed.
 - Backed up as a volume (see below): a crash-consistent copy of the AOF, which Redis loads even if its tail is cut.
+
+### MySQL, MariaDB and MongoDB
+
+- Same model again; MySQL and MariaDB share code (same environment, protocol and dump format; MariaDB's images only ship the `mariadb-*` client names). An app user owns database `app`; root's password is generated too and only used by the manager. MongoDB's user is the instance's root (`authSource=admin`), so apps may use other databases.
+- Sizing from the memory limit: InnoDB buffer pool at half of it (performance schema off, it costs a few hundred MB); WiredTiger cache like `mongod` sizes it from a machine's RAM. Mongo's `/data/configdb` VOLUME is a tmpfs, so recreates leave no anonymous volumes.
+- Healthchecks must not pass on the images' init-time temporary servers: MySQL's runs with `--skip-networking` (so ping over TCP), Mongo's is forked by the entrypoint before it `exec`s the real one (so PID 1 must be `mongod`).
+- Backed up as dumps (backup kind `dump`, the backup's service kind tells which): `mysqldump --single-transaction` gzipped by the manager, `mongodump --archive --gzip`, through the same exec→upload path as `pg_dump`. A tar of their live data files would not be consistent. Restores read the backup through first (checksum, decryption, gzip); MySQL then loads into a scratch database and, once that worked, into the recreated live one (no cross-database rename for views and triggers); Mongo uses `mongorestore --drop`, skipping `admin`, `config`, `local`. Restore tests load into a throwaway server of the service's image.
+- Compose only infers them from `x-kipitiny.kind`, not from the image: projects already ran these images as apps.
 
 ### Backup method
 

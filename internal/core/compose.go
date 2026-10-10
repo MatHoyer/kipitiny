@@ -118,13 +118,10 @@ func exportFile(p store.Project, svcs []store.Service, withProject bool) (compos
 			}
 			cs.Volumes = append(cs.Volumes, v)
 		}
-		switch s.Kind {
-		case store.ServiceKindPostgres:
+		switch {
+		case s.Kind.IsDatabase():
 			cs.X.Kind = string(s.Kind)
-			cs.X.Password = secret(varName(s.Name, "PASSWORD"), s.Env[pgPassword])
-		case store.ServiceKindRedis:
-			cs.X.Kind = string(s.Kind)
-			cs.X.Password = secret(varName(s.Name, "PASSWORD"), s.Env[redisPassword])
+			cs.X.Password = secret(varName(s.Name, "PASSWORD"), s.Env[databasePasswordKey(s.Kind)])
 		default:
 			if len(s.Env) > 0 {
 				cs.Environment = map[string]string{}
@@ -571,9 +568,15 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 	return nil
 }
 
+// databasePasswordKey is the env key of the password apps connect with.
 func databasePasswordKey(k store.ServiceKind) string {
-	if k == store.ServiceKindRedis {
+	switch k {
+	case store.ServiceKindRedis:
 		return redisPassword
+	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+		return mysqlPassword
+	case store.ServiceKindMongoDB:
+		return mongoPassword
 	}
 	return pgPassword
 }

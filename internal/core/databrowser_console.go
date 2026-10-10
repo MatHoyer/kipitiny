@@ -90,7 +90,7 @@ func (c *Core) DataConsole(ctx context.Context, id, database, query string, writ
 	case store.ServiceKindRedis:
 		return t.redisConsole(ctx, query, write)
 	}
-	return ConsoleResult{}, fmt.Errorf("%w: %s is not a database", ErrInvalid, svc.Name)
+	return ConsoleResult{}, fmt.Errorf("%w: %s has no data console", ErrInvalid, svc.Name)
 }
 
 // pgConsole runs sql as one psql command, so only the last statement's

@@ -40,6 +40,16 @@ function volumesOf(service: { id: string; kind: string; volumes: { name: string;
       mountPath: "/data",
       root: dir({ appendonlydir: dir({ "appendonly.aof.1.base.rdb": file("", at(0), 182_340) }), "dump.rdb": file("", at(1), 180_112) }),
     });
+  else if (service.kind === "mysql" || service.kind === "mariadb")
+    vols.set("data", {
+      mountPath: "/var/lib/mysql",
+      root: dir({ app: dir({ "items.ibd": file("", at(0), 114_688) }), "ibdata1": file("", at(0), 12_582_912), mysql: dir({}) }),
+    });
+  else if (service.kind === "mongodb")
+    vols.set("data", {
+      mountPath: "/data/db",
+      root: dir({ "WiredTiger": file("WiredTiger\n"), "collection-0-123.wt": file("", at(0), 36_864), journal: dir({}) }),
+    });
   else
     for (const v of service.volumes)
       vols.set(v.name, {

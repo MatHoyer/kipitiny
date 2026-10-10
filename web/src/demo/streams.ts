@@ -225,7 +225,7 @@ function serviceShell(serviceId: string, shell: string): Shell {
         case "redis-cli":
           return svc?.kind === "redis" ? "(integer) 28" : `sh: ${bin}: not found`;
         case "nginx":
-          return !node && !svc?.kind.match(/postgres|redis/) ? "nginx version: nginx/1.27.5" : `sh: ${bin}: not found`;
+          return !node && svc?.kind === "app" ? "nginx version: nginx/1.27.5" : `sh: ${bin}: not found`;
         default:
           return common(bin, args);
       }

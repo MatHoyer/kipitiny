@@ -68,8 +68,8 @@ const DockerSocket = "/var/run/docker.sock"
 
 // Ext is a service's x-kipitiny block.
 type Ext struct {
-	// Kind is app, postgres or redis; empty means app, unless the image is
-	// the official postgres or redis one.
+	// Kind is app, postgres, redis, mysql, mariadb or mongodb; empty means
+	// app, unless the image is the official postgres or redis one.
 	Kind       string   `yaml:"kind,omitempty"`
 	Domain     string   `yaml:"domain,omitempty"`
 	Port       int      `yaml:"port,omitempty"`
@@ -467,7 +467,7 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 	if s.X.Kind == "" {
 		s.X.Kind = inferKind(s.Image)
 	}
-	if s.X.Kind == string(store.ServiceKindPostgres) || s.X.Kind == string(store.ServiceKindRedis) {
+	if store.ServiceKind(s.X.Kind).IsDatabase() {
 		// The manager generates a database's environment and owns its volume.
 		if len(s.Environment) > 0 {
 			p.warn("environment of a %s service is ignored (generated)", s.X.Kind)
@@ -485,7 +485,10 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 }
 
 // inferKind turns the official postgres and redis images into managed
-// databases; set x-kipitiny.kind: app to run them as plain apps.
+// databases; set x-kipitiny.kind: app to run them as plain apps. MySQL,
+// MariaDB and MongoDB images stay apps unless the kind says otherwise: they
+// ran as apps before kipitiny managed them, with their own environment and
+// volumes.
 func inferKind(image string) string {
 	repo := image
 	if i := strings.LastIndexAny(repo, ":@"); i > strings.LastIndex(repo, "/") {

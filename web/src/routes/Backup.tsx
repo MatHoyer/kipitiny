@@ -4,12 +4,13 @@ import type { ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { CopyButton, DangerZone, ErrorText, Mono, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
+import { databaseLabels } from "@/components/brand-icons";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { formatBytes, formatDateTime, formatDuration, timeAgo } from "@/lib/format";
-import { api, type Backup as BackupT } from "../api";
+import { api, type Backup as BackupT, type DatabaseKind } from "../api";
 import { BackupIcon, backupTitle } from "./BackupList";
 
 /** One backup: what it holds, where it is, whether it restores, and its restores. */
@@ -137,8 +138,8 @@ export function Backup() {
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <StatCard icon={HardDrive} label="Size" value={done ? formatBytes(b.sizeBytes) : "—"} />
           <StatCard icon={Clock} label="Took" value={b.finishedAt ? formatDuration(b.durationMs) : <Spinner className="size-5 text-muted-foreground" />} />
-          {b.kind === "postgres" ? (
-            <StatCard icon={DatabaseBackup} label="PostgreSQL" value={b.pgVersion || "—"} />
+          {b.kind === "postgres" || b.kind === "dump" ? (
+            <StatCard icon={DatabaseBackup} label={databaseLabels[b.serviceKind as DatabaseKind] ?? "PostgreSQL"} value={b.pgVersion || "—"} />
           ) : b.kind === "volume" ? (
             <StatCard icon={HardDrive} label={b.volumes?.length === 1 ? "Volume" : "Volumes"} value={b.volumes?.join(", ") || "—"} />
           ) : (
@@ -237,19 +238,22 @@ export function Backup() {
   );
 }
 
-/** The latest restore test: a throwaway PostgreSQL loads the dump, or a
- * throwaway container reads the whole volume archive. */
+/** The latest restore test: a throwaway server of the database's kind loads
+ * the dump, or a throwaway container reads the whole volume archive. */
 function RestoreTest({ backup: b, onRun, busy }: { backup: BackupT; onRun: () => void; busy: boolean }) {
   const d = b.verifyDetails;
   const running = b.verifyStatus === "running";
   const volume = b.kind === "volume";
+  const server = databaseLabels[b.serviceKind as DatabaseKind] ?? "PostgreSQL";
+  // Dumps other than PostgreSQL's count rows exactly; MongoDB holds collections of documents.
+  const mongo = b.serviceKind === "mongodb";
   return (
     <Section
       title="Restore test"
       description={
         volume
           ? "Decrypts, decompresses and lists the whole archive in a throwaway container with no network, and checks its checksum."
-          : "Loads the backup into a throwaway PostgreSQL with no network, then measures what came back."
+          : `Loads the backup into a throwaway ${server} with no network, then measures what came back.`
       }
       actions={
         <Button variant="outline" size="sm" loading={running} disabled={busy} onClick={onRun}>
@@ -277,8 +281,8 @@ function RestoreTest({ backup: b, onRun, busy }: { backup: BackupT; onRun: () =>
         </dl>
       ) : (
         <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-          <Detail label="Tables">{d.tables}</Detail>
-          <Detail label="Rows (estimated)">{d.rows.toLocaleString()}</Detail>
+          <Detail label={mongo ? "Collections" : "Tables"}>{d.tables}</Detail>
+          <Detail label={mongo ? "Documents" : b.kind === "dump" ? "Rows" : "Rows (estimated)"}>{d.rows.toLocaleString()}</Detail>
           <Detail label="Database size">{formatBytes(d.dbBytes)}</Detail>
           <Detail label="Restored in">{formatDuration(d.durationMs)}</Detail>
           {b.verifiedAt && (

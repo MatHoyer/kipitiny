@@ -121,7 +121,7 @@ services:
 
 | Field | Type | Applies to | Meaning |
 |---|---|---|---|
-| `kind` | `app` \| `postgres` \| `redis` | all | What the service is. Default: `postgres` or `redis` when the image is the official one (`postgres:17-alpine`, `redis:8`), else `app`. Set `kind: app` to run those images as plain containers. |
+| `kind` | `app` \| `postgres` \| `redis` \| `mysql` \| `mariadb` \| `mongodb` | all | What the service is. Default: `postgres` or `redis` when the image is the official one (`postgres:17-alpine`, `redis:8`), else `app`. Set `kind: app` to run those images as plain containers. MySQL, MariaDB and MongoDB images stay apps unless `kind` says otherwise, so existing files that run them with their own `environment` and `volumes` keep working. |
 | `domain` | hostname | apps | Public hostname, served over HTTPS by Traefik. Needs `port` (unless the app only publishes ports and the domain is only for DNS). |
 | `port` | 1–65535 | apps | Container port Traefik routes the domain to. Usually written as `expose` instead. |
 | `health_path` | path | apps | HTTP path (e.g. `/healthz`) that must answer 2xx/3xx before a new replica takes traffic, checked by a probe kipitiny injects, so the image needs no `curl`. Needs the port. Without it or a `healthcheck`: the image's healthcheck, else a stability wait. Not with `healthcheck`. |
@@ -143,12 +143,14 @@ services:
 
 ### Databases
 
-`postgres` and `redis` services are managed: one replica, a data volume of their own, a generated password, private to the project, backed up and restore-tested.
+`postgres`, `redis`, `mysql`, `mariadb` and `mongodb` services are managed: one replica, a data volume of their own, a generated password, private to the project, backed up and restore-tested.
 
 - Only `image`, the memory and CPU limits, `icon` and `password` apply. `environment`, `volumes` and `ports` are ignored with a warning; `stop_grace_period`, `domain` and `middlewares` are errors.
 - Postgres needs a major version in the tag (`postgres:17-alpine`). It can't change major version afterwards (that takes a dump and restore). Memory: at least 128 MB, default 512 MB.
 - Redis memory: at least 32 MB, default 256 MB; Redis keeps its data within 75% of it.
-- Apps connect through references: `{{ db.<service>.URL }}`, or the fields `HOST`, `PORT`, `USER`, `PASSWORD`, `DATABASE` (Postgres only).
+- MySQL (default `mysql:8.4`) and MariaDB (default `mariadb:11.8`) memory: at least 256 MB, default 512 MB; half of it goes to InnoDB's buffer pool.
+- MongoDB (default `mongo:8.2`) memory: at least 512 MB, default 1 GB; WiredTiger's cache is sized from it like `mongod` does from a machine's memory.
+- Apps connect through references: `{{ db.<service>.URL }}`, or the fields `HOST`, `PORT`, `USER`, `PASSWORD`, `DATABASE` (all but Redis).
 
 ## Values, references and secrets
 

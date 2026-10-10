@@ -380,13 +380,76 @@ const emptyForm = {
   port: "",
   domain: "",
   replicas: "1",
-  version: "17",
-  redisVersion: "8",
-  // Empty: the kind's default (defaultMemory).
+  // Empty: the kind's default (its first version, its memory).
+  version: "",
   memory: "",
 };
 
-const defaultMemory: Record<DatabaseKind, number> = { postgres: 512, redis: 256 };
+type DatabaseChoice = {
+  title: string;
+  /** Major versions offered, newest first. */
+  versions: string[];
+  version: string;
+  image: (version: string) => string;
+  memory: number;
+  minMemory: number;
+  memoryHint: string;
+  placeholder: string;
+};
+
+const databaseChoices: Record<DatabaseKind, DatabaseChoice> = {
+  postgres: {
+    title: "PostgreSQL",
+    versions: ["18", "17", "16", "15"],
+    version: "17",
+    image: (v) => `postgres:${v}-alpine`,
+    memory: 512,
+    minMemory: 128,
+    memoryHint: "Container limit; shared_buffers is sized from it.",
+    placeholder: "db",
+  },
+  redis: {
+    title: "Redis",
+    versions: ["8", "7"],
+    version: "8",
+    image: (v) => `redis:${v}-alpine`,
+    memory: 256,
+    minMemory: 32,
+    memoryHint: "Container limit; Redis keeps its data within 75% of it.",
+    placeholder: "cache",
+  },
+  mysql: {
+    title: "MySQL",
+    versions: ["9", "8.4"],
+    version: "8.4",
+    image: (v) => `mysql:${v}`,
+    memory: 512,
+    minMemory: 256,
+    memoryHint: "Container limit; half of it goes to InnoDB's buffer pool.",
+    placeholder: "mysql",
+  },
+  mariadb: {
+    title: "MariaDB",
+    versions: ["11.8", "11.4", "10.11"],
+    version: "11.8",
+    image: (v) => `mariadb:${v}`,
+    memory: 512,
+    minMemory: 256,
+    memoryHint: "Container limit; half of it goes to InnoDB's buffer pool.",
+    placeholder: "mariadb",
+  },
+  mongodb: {
+    title: "MongoDB",
+    // 8.0 refuses to start on Linux 6.19 and later.
+    versions: ["8.2", "7.0"],
+    version: "8.2",
+    image: (v) => `mongo:${v}`,
+    memory: 1024,
+    minMemory: 512,
+    memoryHint: "Container limit; WiredTiger's cache is sized from it.",
+    placeholder: "mongo",
+  },
+};
 
 type Choice = "image" | DatabaseKind;
 
@@ -400,27 +463,20 @@ const choiceGroups: { label: string; choices: { id: Choice; icon: ReactNode; tit
   {
     label: "Databases",
     choices: [
-      {
-        id: "postgres",
-        icon: <ServiceIcon service={{ kind: "postgres" }} />,
-        title: "PostgreSQL",
-        description: "Relational database, backed up on a schedule.",
-      },
-      {
-        id: "redis",
-        icon: <ServiceIcon service={{ kind: "redis" }} />,
-        title: "Redis",
-        description: "In-memory store for caches, queues and sessions.",
-      },
+      ...dbChoice("postgres", "Relational database, backed up on a schedule."),
+      ...dbChoice("mysql", "The most common relational database for web apps."),
+      ...dbChoice("mariadb", "MySQL-compatible relational database."),
+      ...dbChoice("mongodb", "Document database for JSON-shaped data."),
+      ...dbChoice("redis", "In-memory store for caches, queues and sessions."),
     ],
   },
 ];
 
-const choiceTitles: Record<Choice, string> = {
-  image: "New app from a Docker image",
-  postgres: "New PostgreSQL database",
-  redis: "New Redis database",
-};
+function dbChoice(kind: DatabaseKind, description: string) {
+  return [{ id: kind, icon: <ServiceIcon service={{ kind }} />, title: databaseChoices[kind].title, description }];
+}
+
+const choiceTitle = (c: Choice) => (c === "image" ? "New app from a Docker image" : `New ${databaseChoices[c].title} database`);
 
 /** Creates a service in a project. stay keeps the user where they are (the map) instead of opening it. */
 export function NewServiceDialog({ projectId, trigger, stay }: { projectId: string; trigger?: ReactNode; stay?: boolean }) {
@@ -446,8 +502,8 @@ export function NewServiceDialog({ projectId, trigger, stay }: { projectId: stri
           ? {
               kind,
               name: form.name.trim(),
-              image: kind === "redis" ? `redis:${form.redisVersion}-alpine` : `postgres:${form.version}-alpine`,
-              memoryMb: Number(form.memory) || defaultMemory[kind],
+              image: databaseChoices[kind].image(form.version || databaseChoices[kind].version),
+              memoryMb: Number(form.memory) || databaseChoices[kind].memory,
             }
           : {
               kind,
@@ -519,7 +575,7 @@ export function NewServiceDialog({ projectId, trigger, stay }: { projectId: stri
         ) : (
           <form onSubmit={onSubmit} className="contents">
             <DialogHeader>
-              <DialogTitle>{choiceTitles[choice]}</DialogTitle>
+              <DialogTitle>{choiceTitle(choice)}</DialogTitle>
               <DialogDescription>
                 {kind === "app"
                   ? "Create it to set volumes, a pre-deploy command or health checks before its first deploy."
@@ -533,47 +589,27 @@ export function NewServiceDialog({ projectId, trigger, stay }: { projectId: stri
                 autoFocus
                 value={form.name}
                 onChange={set("name")}
-                placeholder={kind === "postgres" ? "db" : kind === "redis" ? "cache" : "web"}
+                placeholder={kind === "app" ? "web" : databaseChoices[kind].placeholder}
                 description={kind !== "app" ? "Also the hostname apps use to connect." : undefined}
               />
-              {kind === "redis" ? (
+              {kind !== "app" ? (
                 <>
                   <FloatingSelect
-                    key="redisVersion"
+                    key={`version-${kind}`}
                     label="Version"
-                    value={form.redisVersion}
-                    onValueChange={(v) => setForm({ ...form, redisVersion: v })}
-                    options={["8", "7"].map((v) => ({ value: v, label: `Redis ${v}` }))}
-                  />
-                  <FloatingInput
-                    label="Memory (MB)"
-                    type="number"
-                    min={32}
-                    step={64}
-                    value={form.memory}
-                    onChange={set("memory")}
-                    placeholder={String(defaultMemory.redis)}
-                    description="Container limit; Redis keeps its data within 75% of it."
-                  />
-                </>
-              ) : kind === "postgres" ? (
-                <>
-                  <FloatingSelect
-                    key="version"
-                    label="Version"
-                    value={form.version}
+                    value={form.version || databaseChoices[kind].version}
                     onValueChange={(v) => setForm({ ...form, version: v })}
-                    options={["18", "17", "16", "15"].map((v) => ({ value: v, label: `PostgreSQL ${v}` }))}
+                    options={databaseChoices[kind].versions.map((v) => ({ value: v, label: `${databaseChoices[kind].title} ${v}` }))}
                   />
                   <FloatingInput
                     label="Memory (MB)"
                     type="number"
-                    min={128}
-                    step={128}
+                    min={databaseChoices[kind].minMemory}
+                    step={databaseChoices[kind].minMemory < 128 ? 64 : 128}
                     value={form.memory}
                     onChange={set("memory")}
-                    placeholder={String(defaultMemory.postgres)}
-                    description="Container limit; shared_buffers is sized from it."
+                    placeholder={String(databaseChoices[kind].memory)}
+                    description={databaseChoices[kind].memoryHint}
                   />
                 </>
               ) : (

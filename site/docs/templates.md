@@ -76,7 +76,7 @@ volumes:
 
 ### Logos
 
-`icon` names the logo shown for the template and for the services it creates. Either it's one the UI draws itself (`postgres`, `redis`, `nginx`, `node`), or one template brings it: a `logo.svg` next to its `compose.yaml`, and `x-template.logo` with its `label`, its brand `color` (`#rrggbb`, which tints its tile) and the `images` whose base name it also stands for (`ghcr.io/henrygd/beszel-agent:1` → `beszel-agent`), so services deployed without the template get it too. Several templates can share a logo (the Beszel agent uses the hub's); only one brings it.
+`icon` names the logo shown for the template and for the services it creates. Either it's one the UI draws itself (`postgres`, `redis`, `mysql`, `mariadb`, `mongodb`, `nginx`, `node`), or one template brings it: a `logo.svg` next to its `compose.yaml`, and `x-template.logo` with its `label`, its brand `color` (`#rrggbb`, which tints its tile) and the `images` whose base name it also stands for (`ghcr.io/henrygd/beszel-agent:1` → `beszel-agent`), so services deployed without the template get it too. Several templates can share a logo (the Beszel agent uses the hub's); only one brings it.
 
 The SVG is a plain drawing: one `<svg>` element with `xmlns`, at most 16 KB, no scripts, event handlers, `foreignObject` or links outside the file. The UI shows it as an image.
 

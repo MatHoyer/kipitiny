@@ -39,7 +39,7 @@ func docs(version string) (index, base, sources string) {
 func Handler(c *core.Core, version string) http.Handler {
 	docsIndex, docsBase, docsSources := docs(version)
 	server := mcp.NewServer(&mcp.Implementation{Name: "kipitiny", Version: version}, &mcp.ServerOptions{
-		Instructions: "Manage apps and PostgreSQL/Redis databases on this kipitiny server. " +
+		Instructions: "Manage apps and databases (PostgreSQL, Redis, MySQL, MariaDB, MongoDB) on this kipitiny server. " +
 			"Refer to services as project/service. Read tools need a read token; " +
 			"deploy, rollback, service_action, backup_database, backup_project and verify_backup need deploy (with deploy, deploy_image only changes the tag of an existing app); " +
 			"the other tools need admin (each says so), and deleting a service or project or restoring a backup takes its name as an explicit confirmation. " +
@@ -109,7 +109,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "rollback",
 		Description: "Redeploy the image of an earlier successful deployment (the previous one by default)."}, t.rollback)
 	mcp.AddTool(server, &mcp.Tool{Name: "backup_database",
-		Description: "Start a backup of a service to a storage (local disk by default; see list_storage): a pg_dump of a PostgreSQL service, an archive of the volumes of a Redis service or an app with volumes."}, t.backupDatabase)
+		Description: "Start a backup of a service to a storage (local disk by default; see list_storage): a pg_dump of a PostgreSQL service, a dump of a MySQL, MariaDB or MongoDB one by its own tool, an archive of the volumes of a Redis service or an app with volumes."}, t.backupDatabase)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_backups", Annotations: readOnly,
 		Description: "Backups of a service with status, size, storage (targetId) and restore-test result."}, t.listBackups)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_storage", Annotations: readOnly,
@@ -605,7 +605,7 @@ func (t *tools) rollback(ctx context.Context, _ *mcp.CallToolRequest, in rollbac
 }
 
 type backupIn struct {
-	Database string `json:"database" jsonschema:"the service to back up (PostgreSQL, Redis or an app with volumes) as project/service, or its ID"`
+	Database string `json:"database" jsonschema:"the service to back up (a database or an app with volumes) as project/service, or its ID"`
 	Storage  string `json:"storage,omitempty" jsonschema:"storage ID (see list_storage); default local disk"`
 	// The service is "database" for compatibility; this picks inside it.
 	DatabaseName string `json:"database_name,omitempty" jsonschema:"for PostgreSQL, which of the instance's databases to dump; default the service's own"`

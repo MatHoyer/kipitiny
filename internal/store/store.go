@@ -258,12 +258,25 @@ const (
 	ServiceKindApp      ServiceKind = "app"
 	ServiceKindPostgres ServiceKind = "postgres"
 	ServiceKindRedis    ServiceKind = "redis"
+	ServiceKindMySQL    ServiceKind = "mysql"
+	ServiceKindMariaDB  ServiceKind = "mariadb"
+	ServiceKindMongoDB  ServiceKind = "mongodb"
 )
 
 // IsDatabase reports whether the kind is a stateful single-replica service
 // on a data volume, never public.
 func (k ServiceKind) IsDatabase() bool {
-	return k == ServiceKindPostgres || k == ServiceKindRedis
+	switch k {
+	case ServiceKindPostgres, ServiceKindRedis, ServiceKindMySQL, ServiceKindMariaDB, ServiceKindMongoDB:
+		return true
+	}
+	return false
+}
+
+// IsMySQL reports whether the kind speaks the MySQL protocol (MySQL or
+// MariaDB).
+func (k ServiceKind) IsMySQL() bool {
+	return k == ServiceKindMySQL || k == ServiceKindMariaDB
 }
 
 type Service struct {
@@ -503,8 +516,9 @@ type Backup struct {
 	bun.BaseModel `bun:"table:backups,alias:backup" json:"-"`
 
 	ID string `bun:"id,pk" json:"id"`
-	// Kind is postgres (a pg_dump), volume (an archive of a service's
-	// volumes) or manager (the manager's own state).
+	// Kind is postgres (a pg_dump), dump (a MySQL, MariaDB or MongoDB dump,
+	// ServiceKind tells which), volume (an archive of a service's volumes)
+	// or manager (the manager's own state).
 	Kind        BackupKind `bun:"kind" json:"kind"`
 	ServiceID   string     `bun:"service_id" json:"serviceId"`
 	ProjectID   string     `bun:"project_id" json:"projectId"`
@@ -521,7 +535,9 @@ type Backup struct {
 	SizeBytes   int64    `bun:"size_bytes" json:"sizeBytes"`
 	SHA256      string   `bun:"sha256" json:"sha256"`
 	Encrypted   bool     `bun:"encrypted" json:"encrypted"`
-	PGVersion   string   `bun:"pg_version" json:"pgVersion"`
+	// PGVersion is the database server's version (any dumped kind, despite
+	// the name).
+	PGVersion string `bun:"pg_version" json:"pgVersion"`
 	// Database is the PostgreSQL database dumped; empty (older backups) is
 	// the service's own.
 	Database string `bun:"db_name" json:"database,omitempty"`
@@ -555,6 +571,7 @@ type BackupKind string
 
 const (
 	BackupKindPostgres BackupKind = "postgres"
+	BackupKindDump     BackupKind = "dump"
 	BackupKindVolume   BackupKind = "volume"
 	BackupKindManager  BackupKind = "manager"
 )
@@ -586,8 +603,9 @@ type BackupSchedule struct {
 	bun.BaseModel `bun:"table:backup_schedules,alias:schedule" json:"-"`
 
 	ID string `bun:"id,pk" json:"id"`
-	// Kind is what it backs up: a PostgreSQL service, a service's volumes,
-	// or the manager's own state (no ServiceID).
+	// Kind is what it backs up: a PostgreSQL service, a MySQL, MariaDB or
+	// MongoDB one (dump), a service's volumes, or the manager's own state (no
+	// ServiceID).
 	Kind      BackupKind `bun:"kind" json:"kind"`
 	ServiceID string     `bun:"service_id,nullzero" json:"serviceId,omitempty"`
 	TargetID  string     `bun:"target_id" json:"targetId"`

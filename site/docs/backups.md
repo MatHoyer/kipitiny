@@ -19,6 +19,17 @@ order: 8
 - Restores load the dump into a scratch database and swap it in by rename, so the
   result is exactly the backup and a failed restore leaves live data untouched.
   Apps referencing the database are stopped meanwhile. The checksum is verified.
+- **MySQL and MariaDB** are dumped by `mysqldump` (`mariadb-dump`) in one
+  consistent snapshot (`--single-transaction`), with routines, triggers and
+  events, gzipped by the manager; **MongoDB** by `mongodump --archive --gzip`,
+  every database of the instance. Same as `pg_dump`: inside the container, a
+  backup only counts once the tool exits 0. A dump restores into a service of
+  the same kind. The backup is first read through (checksum, decryption,
+  gzip), so a damaged one changes nothing. A MySQL dump is then loaded into a
+  scratch database, and only once that worked into the emptied live database.
+  A MongoDB restore replaces each collection the backup holds
+  (`mongorestore --drop`; `admin`, `config` and `local` are left alone), and
+  collections created since stay.
 - **Volumes** of Redis services and of apps are backed up as a gzipped tar (one
   folder per volume, owners and permissions kept), read by a short-lived
   network-less `busybox` container that mounts them read-only; the service keeps
@@ -38,7 +49,10 @@ order: 8
 A backup nobody restored is a hope. *Verify* (or a schedule with restore tests on,
 the default) restores a backup into a throwaway PostgreSQL container with no
 network, matching the backup's major version, then runs `ANALYZE` and records
-tables, estimated rows, database size and duration on the backup. The container
+tables, estimated rows, database size and duration on the backup. A MySQL,
+MariaDB or MongoDB dump goes into a throwaway server of the service's image
+(the kind's default once the service is gone) and records tables (collections),
+exact rows (documents) and size. The container
 and its volume are always removed; one test runs at a time. A volume backup's
 test reads the whole archive back (decrypt, gunzip, list) in a throwaway
 container, checks the checksum and records the number of entries.
@@ -52,6 +66,8 @@ safe: without it, those backups are unreadable if this server is lost. Offline:
 ```sh
 age -d -i key.txt shop-20260930T030000Z-xxxx.dump.age | pg_restore -d "$DATABASE_URL" --no-owner
 age -d -i key.txt web-20260930T030000Z-xxxx.tar.gz.age | tar -xzf - --numeric-owner   # volumes
+age -d -i key.txt sql-20260930T030000Z-xxxx.sql.gz.age | gunzip | mysql -h 127.0.0.1 -u root -p app
+age -d -i key.txt docs-20260930T030000Z-xxxx.archive.gz.age | mongorestore --archive --gzip --uri "$MONGO_URL"
 ```
 
 ## Manager state

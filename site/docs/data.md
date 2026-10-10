@@ -10,6 +10,12 @@ or RedisInsight next to it. The manager runs the database's own client (`psql`,
 is installed, and the client always matches the server. The database must be
 running. Agents get the same through [MCP](/docs/api) tools, with the same scopes.
 
+MySQL, MariaDB and MongoDB services have no Data tab yet: open their
+[terminal](/docs/services) and use their client with the credentials in the
+container's environment: `mysql -uroot -p"$MYSQL_ROOT_PASSWORD" app` (`mariadb`
+for MariaDB), or `mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p
+"$MONGO_INITDB_ROOT_PASSWORD"`.
+
 ## Browse
 
 - **PostgreSQL**: the tables and views outside the system schemas are listed on

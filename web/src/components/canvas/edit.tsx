@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { FloatingInput } from "@/components/ui/floating-input";
 import { Mono } from "@/components/common";
 import { dbRef } from "@/lib/format";
-import { api, isDatabase, type ServerTopology, type TopoProject, type TopoService } from "@/api";
+import { api, databaseUrlKey, isDatabase, type ServerTopology, type TopoProject, type TopoService } from "@/api";
 
 /*
  * What the canvas can change by drawing and deleting lines:
@@ -199,7 +199,7 @@ export function useCanvasEdits(servers: ServerTopology[]) {
 
 /** Adds an env variable referencing a database to an app, as a secret. */
 function ReferenceForm({ app, db, onDone }: { app: TopoService; db: TopoService; onDone: () => void }) {
-  const [key, setKey] = useState(db.kind === "redis" ? "REDIS_URL" : "DATABASE_URL");
+  const [key, setKey] = useState(isDatabase(db.kind) ? databaseUrlKey(db.kind) : "DATABASE_URL");
   const value = dbRef(db.name, "URL");
   const save = useMutation({
     meta: { error: "Couldn't add the variable" },

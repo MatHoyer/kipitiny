@@ -60,6 +60,9 @@ export type EnvReference =
 export const dbFields: Record<DatabaseKind, readonly string[]> = {
   postgres: ["URL", "HOST", "PORT", "USER", "PASSWORD", "DATABASE"],
   redis: ["URL", "HOST", "PORT", "USER", "PASSWORD"],
+  mysql: ["URL", "HOST", "PORT", "USER", "PASSWORD", "DATABASE"],
+  mariadb: ["URL", "HOST", "PORT", "USER", "PASSWORD", "DATABASE"],
+  mongodb: ["URL", "HOST", "PORT", "USER", "PASSWORD", "DATABASE"],
 };
 
 /** Whether {{ db.NAME.FIELD }} resolves against the project's databases. */

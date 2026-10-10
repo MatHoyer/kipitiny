@@ -19,6 +19,13 @@ order: 3
   more databases through env references, e.g. `DATABASE_URL={{ db.main.URL }}`
   (fields: `URL`, `HOST`, `PORT`, `USER`, `PASSWORD`, `DATABASE`). The
   [data browser](/docs/data) shows its tables and runs queries.
+- **Redis, MySQL, MariaDB and MongoDB** services work the same way, each on its
+  own port (`6379`, `3306`, `27017`). Their `URL` is `redis://:…@cache:6379`,
+  `mysql://app:…@sql:3306/app` (MariaDB too) or
+  `mongodb://app:…@docs:27017/app?authSource=admin`. A MySQL or MariaDB app
+  user owns the database `app`; root's password stays with the manager, for
+  backups. A MongoDB user is the instance's root, so an app may use other
+  databases than `app`. The data browser covers PostgreSQL and Redis only.
 - **Environment**: variables are readable, secrets write-only. A project holds shared
   ones that services reference as `{{ project.NAME }}`. References resolve at deploy.
   Values can also come from a password manager, see below.
