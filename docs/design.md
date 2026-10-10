@@ -224,6 +224,16 @@ Every other stateful service is backed up by archiving its volumes: Redis's data
 - Restore test: stream the archive through `tar -tzf -` in a throwaway helper, check the checksum and record the entry count.
 - Helpers and staging volumes left by a crash are removed at startup only (a server re-check must not kill a running restore).
 
+### Volume files
+
+Every service's volumes can be browsed from the UI, the API and MCP: an app's named volumes, a database's data volume. Apps' are read-write; databases' are read-only (dumps, restores and the data browser cover real needs; editing a data dir by hand breaks it), and core refuses writes there whatever the caller.
+
+- Same helper as backups (`busybox`, no network, `kipitiny.component=volume-helper`, no `kipitiny.service` label so the reconciler never counts it as a replica), mounting the service's volumes under `/v/<name>` (`:ro` for databases). One helper per service, started on first use and kept while used: removed after 5 minutes idle, when its volumes change, before the service's volumes are deleted, and on shutdown. Leftovers go with the startup cleanup.
+- Paths are `<volume>/<relative path>`; the empty path lists the volumes. Core rejects `..`, absolute paths and unknown volumes, and the helper script resolves symlinks (`realpath`) and refuses anything outside `/v/<volume>`. Listing shows symlinks with their target without following them.
+- Commands run over `docker exec` with paths as arguments (`sh -c script sh "$@"`), never interpolated. Listing: `stat` per entry, then the name NUL-terminated (names may hold newlines). Reading a text file: up to 1 MiB, refused when binary. Download: a file's bytes as they are, a folder or several entries as `tar -czf -` streamed to the response.
+- Scopes like the data browser: reading and downloading need `read`, writes need `admin` and are audited with the path.
+- The service keeps running: files are read live (a database's data dir copied this way isn't a consistent backup; the UI says so).
+
 Later: point-in-time recovery via WAL archiving (`wal-g` or `pgBackRest`).
 
 ## 11. Manager state: SQLite

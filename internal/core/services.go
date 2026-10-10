@@ -659,6 +659,7 @@ func (c *Core) removeServiceContainers(ctx context.Context, svc store.Service) e
 			return err
 		}
 	}
+	c.closeFilesHelper(svc.ID) // it holds the volumes
 	return removeServiceVolumes(ctx, dk, svc)
 }
 
