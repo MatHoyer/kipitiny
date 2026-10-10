@@ -708,6 +708,65 @@ export type RedisKey = { key: string; type: string; ttl: number; bytes: number }
 export type RedisKeys = { keys: RedisKey[]; cursor: string };
 /** items by type: [value], [field, value], [index, value], [member], [member, score], [id, field, value, ...]. */
 export type RedisValue = { type: string; length: number; ttl: number; items: string[][]; truncated: [number, number][]; cursor: string };
+/** A file, folder or symlink in a service's volumes; at the root, a volume. Paths are "<volume>/<path>". */
+export type VolumeEntry = {
+  name: string;
+  type: "volume" | "dir" | "file" | "link" | "other";
+  size: number;
+  /** Absent for volumes. */
+  modified?: string;
+  /** Permission bits, octal. */
+  mode?: string;
+  uid: number;
+  gid: number;
+  /** A symlink's, not followed. */
+  target?: string;
+  /** Where a volume is mounted in the service's containers. */
+  mountPath?: string;
+};
+export type VolumeListing = { path: string; readOnly: boolean; entries: VolumeEntry[]; truncated: boolean };
+export type VolumeFile = VolumeEntry & { path: string; readOnly: boolean; content: string };
+
+/**
+ * Uploads a file into a service's volumes with progress (fetch can't report
+ * it). Missing folders are created; an existing file is a 409 unless overwrite.
+ */
+function uploadVolumeFile(
+  serviceId: string,
+  path: string,
+  body: Blob,
+  opts: { overwrite?: boolean; onProgress?: (sent: number) => void; signal?: AbortSignal } = {},
+): Promise<VolumeEntry> {
+  // The demo answers fetch only.
+  if (import.meta.env.MODE === "demo")
+    return request<VolumeEntry>(`/services/${serviceId}/files/content?${new URLSearchParams({ path, ...(opts.overwrite ? { overwrite: "true" } : {}) })}`, {
+      method: "PUT",
+      body,
+      signal: opts.signal,
+    });
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const q = new URLSearchParams({ path, ...(opts.overwrite ? { overwrite: "true" } : {}) });
+    xhr.open("PUT", `/api/services/${serviceId}/files/content?${q}`);
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.upload.onprogress = (e) => opts.onProgress?.(e.loaded);
+    xhr.onload = () => {
+      let body: { error?: string } & Partial<VolumeEntry> = {};
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch {
+        // not JSON: keep the status text
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body as VolumeEntry);
+      else reject(new ApiError(xhr.status, body.error ?? xhr.statusText));
+    };
+    xhr.onerror = () => reject(new TypeError("network error"));
+    xhr.onabort = () => reject(new DOMException("upload cancelled", "AbortError"));
+    opts.signal?.addEventListener("abort", () => xhr.abort());
+    xhr.send(body);
+  });
+}
+
 export type ConsoleResult = {
   columns?: string[];
   rows?: (string | null)[][];
@@ -885,6 +944,28 @@ export const api = {
     request<RedisValue>(`/services/${serviceId}/data/key?${new URLSearchParams({ key, cursor })}`),
   dataConsole: (serviceId: string, query: string, write: boolean, database = "") =>
     request<ConsoleResult>(`/services/${serviceId}/data/console`, json("POST", { query, write, database })),
+  volumeFiles: (serviceId: string, path: string) =>
+    request<VolumeListing>(`/services/${serviceId}/files?${new URLSearchParams({ path })}`),
+  volumeFile: (serviceId: string, path: string) =>
+    request<VolumeFile>(`/services/${serviceId}/files/content?${new URLSearchParams({ path })}`),
+  /** A file as is; a folder, or names in folder path, as a .tar.gz. */
+  volumeDownloadUrl: (serviceId: string, path: string, names: string[] = []) =>
+    `/api/services/${serviceId}/files/download?${new URLSearchParams([["path", path], ...names.map((n) => ["name", n])])}`,
+  uploadVolumeFile,
+  /** Saves an edited text file; modified is the time it was read, so a file changed since is a 409. */
+  saveVolumeFile: (serviceId: string, path: string, content: string, modified?: string) =>
+    request<VolumeEntry>(`/services/${serviceId}/files/content?${new URLSearchParams({ path, overwrite: "true", ...(modified ? { modified } : {}) })}`, {
+      method: "PUT",
+      body: content,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    }),
+  makeVolumeDir: (serviceId: string, path: string) => request<void>(`/services/${serviceId}/files/mkdir`, json("POST", { path })),
+  moveVolumePath: (serviceId: string, from: string, to: string) =>
+    request<void>(`/services/${serviceId}/files/move`, json("POST", { from, to })),
+  copyVolumePath: (serviceId: string, from: string, to: string) =>
+    request<void>(`/services/${serviceId}/files/copy`, json("POST", { from, to })),
+  deleteVolumePaths: (serviceId: string, paths: string[]) =>
+    request<void>(`/services/${serviceId}/files/delete`, json("POST", { paths })),
   restore: (backupId: string, confirm: string, serviceId = "") =>
     request<Restore>(`/backups/${backupId}/restore`, json("POST", { serviceId, confirm })),
   schedules: (serviceId: string) => request<Schedule[]>(`/services/${serviceId}/schedules`),
