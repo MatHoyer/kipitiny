@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Cpu, MemoryStick, Network, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type PointerEvent, type ReactNode } from "react";
 import { Empty, Section } from "@/components/common";
 import { Card } from "@/components/ui/card";
 import { formatBytes, formatCpu, formatRate } from "@/lib/format";
@@ -23,19 +23,64 @@ export function memoryOf(usage: Record<string, ServiceUsage> | undefined, keep: 
     .reduce((n, u) => n + u.memoryBytes, 0);
 }
 
-/** A tiny line chart of values over time, scaled to max (or the largest value). */
-export function Sparkline({ values, max, className }: { values: number[]; max?: number; className?: string }) {
+/** A tiny line chart of values over time, scaled to max (or the largest value). With format, hovering shows the value under the pointer. */
+export function Sparkline({
+  values,
+  max,
+  format,
+  times,
+  className,
+}: {
+  values: number[];
+  max?: number;
+  format?: (v: number) => string;
+  /** ISO time of each value, shown next to it on hover. */
+  times?: string[];
+  className?: string;
+}) {
+  const [hover, setHover] = useState<number | null>(null);
   const w = 120;
   const h = 32;
   if (values.length < 2) return <div className={cn("h-8", className)} />;
   const top = Math.max(max ?? 0, ...values) || 1;
   const pts = values.map((v, i) => [(i / (values.length - 1)) * w, h - 1 - (v / top) * (h - 2)] as const);
   const line = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const onMove = (e: PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const i = Math.round(((e.clientX - r.left) / r.width) * (values.length - 1));
+    setHover(Math.min(values.length - 1, Math.max(0, i)));
+  };
+  const at = hover === null ? null : { x: (pts[hover][0] / w) * 100, y: (pts[hover][1] / h) * 100 };
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-hidden className={cn("h-8 w-full overflow-visible", className)}>
-      <polygon points={`0,${h} ${line} ${w},${h}`} className="fill-current opacity-10" />
-      <polyline points={line} fill="none" stroke="currentColor" strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-    </svg>
+    <div
+      className={cn("relative h-8 w-full", className)}
+      onPointerMove={format && onMove}
+      onPointerLeave={() => setHover(null)}
+    >
+      <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-hidden className="size-full overflow-visible">
+        <polygon points={`0,${h} ${line} ${w},${h}`} className="fill-current opacity-10" />
+        <polyline points={line} fill="none" stroke="currentColor" strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+      </svg>
+      {format && hover !== null && at && (
+        <>
+          <span className="pointer-events-none absolute inset-y-0 w-px bg-current opacity-30" style={{ left: `${at.x}%` }} />
+          <span
+            className="pointer-events-none absolute size-2 -translate-1/2 rounded-full border-2 border-background bg-current"
+            style={{ left: `${at.x}%`, top: `${at.y}%` }}
+          />
+          <span
+            className={cn(
+              "pointer-events-none absolute bottom-full z-10 mb-1.5 rounded-md bg-foreground px-2 py-1 text-xs whitespace-nowrap text-background tabular-nums",
+              at.x < 20 ? "" : at.x > 80 ? "-translate-x-full" : "-translate-x-1/2",
+            )}
+            style={{ left: `${at.x}%` }}
+          >
+            <span className="font-medium">{format(values[hover])}</span>
+            {times?.[hover] && <span className="opacity-70"> · {new Date(times[hover]).toLocaleTimeString()}</span>}
+          </span>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -60,6 +105,7 @@ export function useServiceStats(serviceId: string) {
 
 /** CPU, memory and network cards for one point in time and its recent history. */
 export function UsageGrid({ current: cur, history }: { current: Usage; history: Usage[] }) {
+  const times = history.map((p) => p.at);
   return (
     <div className="grid gap-4 sm:grid-cols-3">
       <UsageCard
@@ -67,14 +113,14 @@ export function UsageGrid({ current: cur, history }: { current: Usage; history: 
         label="CPU"
         value={formatCpu(cur.cpu)}
         hint={cur.cpu >= 100 ? `${(cur.cpu / 100).toFixed(1)} cores` : "of one core"}
-        chart={<Sparkline values={history.map((p) => p.cpu)} max={100} />}
+        chart={<Sparkline values={history.map((p) => p.cpu)} max={100} format={formatCpu} times={times} />}
       />
       <UsageCard
         icon={MemoryStick}
         label="Memory"
         value={formatBytes(cur.memoryBytes)}
         hint={cur.memoryLimitBytes ? `of ${formatBytes(cur.memoryLimitBytes)} (${Math.round((cur.memoryBytes / cur.memoryLimitBytes) * 100)}%)` : "no limit"}
-        chart={<Sparkline values={history.map((p) => p.memoryBytes)} max={cur.memoryLimitBytes} />}
+        chart={<Sparkline values={history.map((p) => p.memoryBytes)} max={cur.memoryLimitBytes} format={formatBytes} times={times} />}
       />
       <UsageCard
         icon={Network}
@@ -92,7 +138,7 @@ export function UsageGrid({ current: cur, history }: { current: Usage; history: 
             </span>
           </span>
         }
-        chart={<Sparkline values={history.map((p) => p.netRx + p.netTx)} />}
+        chart={<Sparkline values={history.map((p) => p.netRx + p.netTx)} format={formatRate} times={times} />}
       />
     </div>
   );

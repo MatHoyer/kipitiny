@@ -88,7 +88,7 @@ function ResultTip({ r }: { r: UptimeResult }) {
 /** One bar per recent check, and their response times. */
 function RecentChecks({ recent }: { recent: UptimeResult[] }) {
   if (recent.length === 0) return <p className="text-sm text-muted-foreground">No check since the manager started.</p>;
-  const latencies = recent.filter((r) => r.ok).map((r) => r.latencyMs);
+  const passed = recent.filter((r) => r.ok);
   // Empty slots first, so the bar keeps its width and fills from the right.
   const empty = Math.max(0, RECENT_SLOTS - recent.length);
   return (
@@ -103,11 +103,11 @@ function RecentChecks({ recent }: { recent: UptimeResult[] }) {
           </Tip>
         ))}
       </div>
-      {latencies.length >= 2 && (
+      {passed.length >= 2 && (
         <div className="space-y-1">
           <p className="text-xs text-muted-foreground">Response time</p>
           <div className="text-primary">
-            <Sparkline values={latencies} />
+            <Sparkline values={passed.map((r) => r.latencyMs)} format={(v) => `${v} ms`} times={passed.map((r) => r.at)} />
           </div>
         </div>
       )}
