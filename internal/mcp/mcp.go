@@ -164,19 +164,20 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "A database service's host, port, user, password and URL, as apps of its project reach it. Needs admin."}, t.getConnection)
 
 	mcp.AddTool(server, &mcp.Tool{Name: "list_volume_files", Annotations: readOnly,
-		Description: "Files and folders in a service's volumes (an app's named volumes, a database's data volume): name, type, size, modified time, mode, owner, symlink target. " +
-			"Paths are <volume>/<path>; an empty path lists the volumes with where they are mounted. Database volumes are read-only."}, t.listVolumeFiles)
+		Description: "Files and folders in a service's volumes (an app's named volumes, a database's data volume) or in its running container: name, type, size, modified time, mode, owner, symlink target. " +
+			"Paths are <volume>/<path>, or @container/<absolute path> for the container's own filesystem (the first running replica; @<container ID>/... picks one); an empty path lists the volumes and @container. " +
+			"A database's files are read-only. Changes in a container's filesystem reach that replica only and are lost on the next deploy: keep files that matter in a volume."}, t.listVolumeFiles)
 	mcp.AddTool(server, &mcp.Tool{Name: "read_volume_file", Annotations: readOnly,
-		Description: "The content of a text file in a service's volumes, up to 1 MiB; binary files are refused. Needs admin (files may hold secrets)."}, t.readVolumeFile)
+		Description: "The content of a text file in a service's volumes or container (see list_volume_files for paths), up to 1 MiB; binary files are refused. Needs admin (files may hold secrets)."}, t.readVolumeFile)
 	mcp.AddTool(server, &mcp.Tool{Name: "write_volume_file",
-		Description: "Write a file in an app's volumes (text, or base64 up to 16 MiB, e.g. a mod's .jar), creating missing folders. New files belong to their folder's owner. " +
+		Description: "Write a file in an app's volumes or container (see list_volume_files for paths; a container's changes are lost on the next deploy), as text or base64 up to 16 MiB (e.g. a plugin's .jar), creating missing folders. New files belong to their folder's owner. " +
 			"The app sees it right away; most apps need a restart (service_action) to load new plugins or config. Needs admin."}, t.writeVolumeFile)
 	mcp.AddTool(server, &mcp.Tool{Name: "make_volume_dir",
-		Description: "Create a folder, with missing parents, in an app's volumes. Needs admin."}, t.makeVolumeDir)
+		Description: "Create a folder, with missing parents, in an app's volumes or container. Needs admin."}, t.makeVolumeDir)
 	mcp.AddTool(server, &mcp.Tool{Name: "move_volume_path",
-		Description: "Move, rename or (with copy) copy a file or folder within an app's volumes. Needs admin."}, t.moveVolumePath)
+		Description: "Move, rename or (with copy) copy a file or folder within an app's volumes, or within its container. Needs admin."}, t.moveVolumePath)
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_volume_paths", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
-		Description: "Delete files or folders (with their content) in an app's volumes; nothing is deleted unless every path exists. Back up first (backup_database) when unsure. Needs admin."}, t.deleteVolumePaths)
+		Description: "Delete files or folders (with their content) in an app's volumes or container; nothing is deleted unless every path exists. Back up first (backup_database) when unsure. Needs admin."}, t.deleteVolumePaths)
 
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{
 		Stateless:    true,

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronRight,
+  Container,
   Copy,
   Download,
   Ellipsis,
@@ -36,6 +37,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatBytes, formatDateTime, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -45,6 +47,9 @@ import { PathDialog } from "./path-dialog";
 import { droppedFiles, pickedFiles, UploadPanel, useUploads } from "./uploads";
 
 const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
+/** "@container" is the first running replica's filesystem, "@<container ID>" a given one's. */
+const CONTAINER = "@container";
+const inContainer = (p: string) => p.startsWith("@");
 
 /** A name for an entry in a folder: no slashes, not . or .. */
 const nameProblem = (name: string) =>
@@ -128,13 +133,6 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
     onSuccess: (_, names) => changed(names.length === 1 ? `Deleted ${names[0]}` : `Deleted ${names.length} items`),
   });
 
-  if (!isDatabase(svc.kind) && svc.volumes.length === 0)
-    return (
-      <p className="text-sm text-muted-foreground">
-        This app has no volumes. Add one in Settings › Volumes and deploy; its files show up here.
-      </p>
-    );
-
   const data = listing.data;
   const readOnly = data?.readOnly ?? isDatabase(svc.kind);
   const atRoot = dir === "";
@@ -150,7 +148,7 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
       return next;
     });
   const open = (e: VolumeEntry) => {
-    if (e.type === "volume" || e.type === "dir" || e.type === "link") go(join(dir, e.name));
+    if (e.type === "volume" || e.type === "container" || e.type === "dir" || e.type === "link") go(join(dir, e.name));
     else if (e.type === "file") setOpenFile(join(dir, e.name));
     else toggle(e.name);
   };
@@ -173,6 +171,10 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
   };
 
   const crumbs = dir ? dir.split("/") : [];
+  const replicas = svc.containers.filter((c) => !c.retired && c.state === "running").sort((a, b) => a.replica - b.replica);
+  const ref = inContainer(dir) ? crumbs[0] : null;
+  const replica = ref === CONTAINER ? replicas[0] : replicas.find((c) => ref && c.id.startsWith(ref.slice(1)));
+  const pickReplica = (id: string) => go([`@${id.slice(0, 12)}`, ...crumbs.slice(1)].join("/"));
 
   return (
     <div className="space-y-3">
@@ -187,16 +189,42 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
         </p>
       )}
 
+      {ref && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+          <TriangleAlert className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <p className="min-w-[min(100%,16rem)] flex-1">
+            The container's own files.{" "}
+            {readOnly
+              ? "Read-only for a database."
+              : "Changes reach this replica only and are lost on the next deploy or recreate: keep files that matter in a volume."}
+          </p>
+          {replicas.length > 1 && (
+            <Select value={replica?.id ?? ""} onValueChange={pickReplica}>
+              <SelectTrigger size="sm" aria-label="Replica" className="bg-background">
+                <SelectValue placeholder="Replica" />
+              </SelectTrigger>
+              <SelectContent>
+                {replicas.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    Replica {c.replica} <span className="font-mono text-xs text-muted-foreground">{c.id.slice(0, 12)}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-1.5">
         <nav aria-label="Folder" className="flex min-w-0 basis-full flex-wrap items-center gap-0.5 font-mono text-sm sm:flex-1 sm:basis-auto">
           <Crumb onClick={() => go("")} current={atRoot}>
-            Volumes
+            Files
           </Crumb>
           {crumbs.map((c, i) => (
             <span key={i} className="flex items-center gap-0.5">
               <ChevronRight className="size-3.5 text-muted-foreground" />
               <Crumb onClick={() => go(crumbs.slice(0, i + 1).join("/"))} current={i === crumbs.length - 1}>
-                {c}
+                {i === 0 && inContainer(c) ? (replica && replicas.length > 1 ? `container (replica ${replica.replica})` : "container") : c}
               </Crumb>
             </span>
           ))}
@@ -342,7 +370,11 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
                       title={e.target ? `${e.name} → ${e.target}` : e.name}
                     >
                       <EntryIcon type={e.type} />
-                      <span className="truncate font-mono text-[13px]">{e.name}</span>
+                      {e.type === "container" ? (
+                        <span className="truncate">Container filesystem</span>
+                      ) : (
+                        <span className="truncate font-mono text-[13px]">{e.name}</span>
+                      )}
                       {e.target && <span className="truncate font-mono text-[13px] text-muted-foreground">→ {e.target}</span>}
                     </button>
                   </td>
@@ -378,11 +410,18 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
                             {writable ? <Pencil /> : <Eye />} {writable ? "Edit" : "View"}
                           </DropdownMenuItem>
                         )}
-                        <DropdownMenuItem asChild>
-                          <a href={downloadUrl([e.name])} download>
-                            <Download /> Download{e.type !== "file" && " (.tar.gz)"}
-                          </a>
-                        </DropdownMenuItem>
+                        {e.type !== "container" && (
+                          <DropdownMenuItem asChild>
+                            <a href={downloadUrl([e.name])} download>
+                              <Download /> Download{e.type !== "file" && " (.tar.gz)"}
+                            </a>
+                          </DropdownMenuItem>
+                        )}
+                        {e.type === "container" && (
+                          <DropdownMenuItem onSelect={() => open(e)}>
+                            <Folder /> Open
+                          </DropdownMenuItem>
+                        )}
                         {writable && (
                           <>
                             <DropdownMenuItem onSelect={() => setDialog({ kind: "rename", entry: e })}>
@@ -419,6 +458,12 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
           </div>
         )}
       </div>
+      {atRoot && data && svc.kind === "app" && svc.volumes.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          This app has no volumes: its files live in the container and are lost on every deploy. Add a volume in Settings › Volumes to keep
+          them.
+        </p>
+      )}
       {data?.truncated && <p className="text-xs text-muted-foreground">Showing the first {entries.length} entries of this folder.</p>}
 
       <UploadPanel uploads={uploads} />
@@ -453,8 +498,8 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
         description={
           (dialog?.kind === "move" || dialog?.kind === "copy") && (
             <>
-              {dialog.names.length === 1 ? <span className="font-mono">{dialog.names[0]}</span> : `${dialog.names.length} items`} into a folder of any of this
-              service's volumes, which must exist.
+              {dialog.names.length === 1 ? <span className="font-mono">{dialog.names[0]}</span> : `${dialog.names.length} items`} into an existing folder:{" "}
+              {inContainer(dir) ? "in this container." : "in any of this service's volumes."}
             </>
           )
         }
@@ -515,6 +560,8 @@ function EntryIcon({ type }: { type: VolumeEntry["type"] }) {
   switch (type) {
     case "volume":
       return <HardDrive className={cn(cls, "text-muted-foreground")} />;
+    case "container":
+      return <Container className={cn(cls, "text-muted-foreground")} />;
     case "dir":
       return <Folder className={cn(cls, "fill-current/15 text-sky-600 dark:text-sky-400")} />;
     case "link":

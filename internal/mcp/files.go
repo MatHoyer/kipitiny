@@ -22,7 +22,7 @@ const maxWriteBase64 = 16 << 20
 
 type volumePathIn struct {
 	Service string `json:"service" jsonschema:"the service as project/service, or its ID"`
-	Path    string `json:"path,omitempty" jsonschema:"<volume>/<path inside it>, e.g. data/mods; empty lists the service's volumes"`
+	Path    string `json:"path,omitempty" jsonschema:"<volume>/<path inside it> (e.g. data/mods) or @container/<absolute path> (e.g. @container/etc/nginx); empty lists the volumes and @container"`
 }
 
 func (t *tools) listVolumeFiles(ctx context.Context, _ *mcp.CallToolRequest, in volumePathIn) (*mcp.CallToolResult, core.VolumeListing, error) {

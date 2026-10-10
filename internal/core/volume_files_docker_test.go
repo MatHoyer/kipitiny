@@ -91,7 +91,7 @@ ln -s .. up
 ln -s mods/a.jar ok-link`)
 
 	root, err := c.ListVolumeFiles(ctx, svc.ID, "")
-	if err != nil || len(root.Entries) != 1 || root.Entries[0].Name != "data" || root.Entries[0].MountPath != "/data" || root.ReadOnly {
+	if err != nil || len(root.Entries) != 2 || root.Entries[0].Name != "data" || root.Entries[0].MountPath != "/data" || root.Entries[1].Name != "@container" || root.ReadOnly {
 		t.Fatalf("root: %+v %v", root, err)
 	}
 	l, err := c.ListVolumeFiles(ctx, svc.ID, "data")
@@ -393,5 +393,120 @@ func TestVolumeFilesDockerDatabaseWrite(t *testing.T) {
 	}
 	if _, err := c.WriteVolumeFile(ctx, svc.ID, "data/x", strings.NewReader("x"), WriteOptions{}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("write in a database: %v", err)
+	}
+}
+
+// containerFilesTest runs image as svc's only replica (not kipitiny.managed:
+// a manager on this daemon would remove it as an orphan).
+func containerFilesTest(t *testing.T, kind store.ServiceKind, image string, cmd ...string) (*Core, context.Context, store.Service, string) {
+	t.Helper()
+	if os.Getenv("KIPITINY_TEST_DOCKER") == "" {
+		t.Skip("KIPITINY_TEST_DOCKER not set")
+	}
+	ctx := context.Background()
+	dk, err := docker.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
+	c.pool = docker.NewPool(dk, c.connectServer)
+	p, _ := c.store.CreateProject(ctx, store.Project{Name: "ctfiles", ServerID: store.LocalServerID})
+	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "app", Kind: kind, Replicas: 1, Env: map[string]string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := dk.Run(ctx, client.ContainerCreateOptions{
+		Name: "kipitiny-test-" + strings.ToLower(svc.ID),
+		Config: &container.Config{Image: image, Cmd: cmd, User: "1000",
+			Labels: map[string]string{docker.LabelProject: p.ID, docker.LabelService: svc.ID, docker.LabelReplica: "1"}},
+		HostConfig: &container.HostConfig{NetworkMode: "none"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = dk.RemoveContainerAndVolumes(context.Background(), id) })
+	return c, WithActor(ctx, Actor{Kind: "user", Name: "admin", Scope: store.ScopeAdmin}), svc, id
+}
+
+func TestVolumeFilesDockerContainer(t *testing.T) {
+	for _, image := range []string{"alpine:3.22", "debian:bookworm-slim"} {
+		t.Run(image, func(t *testing.T) {
+			c, ctx, svc, id := containerFilesTest(t, store.ServiceKindApp, image, "sleep", "infinity")
+			root, err := c.ListVolumeFiles(ctx, svc.ID, "")
+			if err != nil || len(root.Entries) != 1 || root.Entries[0].Name != "@container" || root.Entries[0].Type != "container" {
+				t.Fatalf("root: %+v %v", root, err)
+			}
+			l, err := c.ListVolumeFiles(ctx, svc.ID, "@container")
+			if err != nil || l.Path != "@container" || !slices.ContainsFunc(l.Entries, func(e VolumeEntry) bool { return e.Name == "etc" && e.Type == "dir" }) {
+				t.Fatalf("listing /: %+v %v", l, err)
+			}
+			// Runs as root whatever the image's user (1000 here): /root is 0700.
+			if _, err := c.ListVolumeFiles(ctx, svc.ID, "@container/root"); err != nil {
+				t.Errorf("list /root: %v", err)
+			}
+			f, err := c.ReadVolumeFile(ctx, svc.ID, "@container/etc/hostname")
+			if err != nil || f.Path != "@container/etc/hostname" || f.Content == "" {
+				t.Errorf("read: %+v %v", f, err)
+			}
+			if e, err := c.StatVolumePath(ctx, svc.ID, "@container"); err != nil || e.Type != "container" {
+				t.Errorf("stat /: %+v %v", e, err)
+			}
+
+			// Writes go to that replica, created files owned like their folder.
+			if err := c.MakeVolumeDir(ctx, svc.ID, "@container/srv/conf"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := c.WriteVolumeFile(ctx, svc.ID, "@container/srv/conf/app.ini", strings.NewReader("a=1\n"), WriteOptions{}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := c.WriteVolumeFile(ctx, svc.ID, "@container/top.txt", strings.NewReader("top"), WriteOptions{}); err != nil {
+				t.Errorf("write at /: %v", err)
+			}
+			if err := c.MoveVolumePath(ctx, svc.ID, "@container/top.txt", "@container/srv/top.txt"); err != nil {
+				t.Errorf("move: %v", err)
+			}
+			var out strings.Builder
+			if err := c.dockerFor(svc.ServerID).Exec(ctx, id, docker.ExecOptions{Cmd: []string{"cat", "/srv/conf/app.ini", "/srv/top.txt"}, Stdout: &out}); err != nil || out.String() != "a=1\ntop" {
+				t.Errorf("in the container: %q %v", out.String(), err)
+			}
+			if got := archiveNames(t, c, ctx, svc.ID, "@container/srv", nil); !slices.Contains(got, "srv/conf/app.ini") {
+				t.Errorf("archive: %q", got)
+			}
+			if err := c.ArchiveVolumeFiles(ctx, svc.ID, "@container", nil, io.Discard); !errors.Is(err, ErrInvalid) {
+				t.Errorf("archive of /: %v", err)
+			}
+			if err := c.DeleteVolumePaths(ctx, svc.ID, []string{"@container/srv/conf"}); err != nil {
+				t.Errorf("delete: %v", err)
+			}
+			for p, want := range map[string]error{"@container/nope": store.ErrNotFound, "@container": ErrInvalid} {
+				if err := c.DeleteVolumePaths(ctx, svc.ID, []string{p}); !errors.Is(err, want) {
+					t.Errorf("delete %s: %v, want %v", p, err, want)
+				}
+			}
+			if _, err := c.ListVolumeFiles(ctx, svc.ID, "@"+id[:12]+"/etc"); err != nil {
+				t.Errorf("by container ID: %v", err)
+			}
+			if _, err := c.ListVolumeFiles(ctx, svc.ID, "@0123456789ab/etc"); !errors.Is(err, ErrInvalid) {
+				t.Errorf("unknown container: %v", err)
+			}
+		})
+	}
+}
+
+func TestVolumeFilesDockerContainerNoShell(t *testing.T) {
+	c, ctx, svc, _ := containerFilesTest(t, store.ServiceKindApp, "registry.k8s.io/pause:3.10")
+	_, err := c.ListVolumeFiles(ctx, svc.ID, "@container")
+	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "lacks a shell") {
+		t.Errorf("no shell: %v", err)
+	}
+}
+
+func TestVolumeFilesDockerContainerDatabase(t *testing.T) {
+	c, ctx, svc, _ := containerFilesTest(t, store.ServiceKindRedis, "alpine:3.22", "sleep", "infinity")
+	if _, err := c.ListVolumeFiles(ctx, svc.ID, "@container/etc"); err != nil {
+		t.Errorf("list: %v", err)
+	}
+	if err := c.MakeVolumeDir(ctx, svc.ID, "@container/x"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("write in a database's container: %v", err)
 	}
 }
