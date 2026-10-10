@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Box, ChevronLeft, Database, GitBranch, Globe, Layers, Lock, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { Activity, Box, ChevronLeft, Database, GitBranch, Layers, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { lazy, Suspense, useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -42,6 +42,7 @@ import {
 import { BackupNowDialog } from "@/components/backup-now-dialog";
 import { ComposeDialog } from "@/components/compose-dialog";
 import { TemplateDialog } from "@/components/template-dialog";
+import { ReachIcon, reachOf } from "@/components/reach";
 import { GitSource, useProjectGit } from "@/components/git-source";
 
 const MapCanvas = lazy(() => import("@/components/canvas/map-canvas"));
@@ -287,8 +288,8 @@ function ServiceCard({ svc: s }: { svc: ServiceT }) {
           ) : (
             <>
               <Tag className="flex items-center gap-1 font-mono font-normal">
-                {s.domain ? <Globe className="size-3" /> : <Lock className="size-3" />}
-                {s.domain || "private"}
+                <ReachIcon service={s} className="size-3" />
+                {reachOf(s).label}
               </Tag>
               <Tag>
                 {live.filter((c) => c.state === "running").length}/{s.replicas} replica{s.replicas > 1 ? "s" : ""}

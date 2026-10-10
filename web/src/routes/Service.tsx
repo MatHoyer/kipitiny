@@ -20,6 +20,7 @@ import {
 import { lazy, Suspense, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
+import { portLabel } from "@/components/reach";
 import { ServiceIcon, serviceLogos } from "@/components/service-icon";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { CheckboxField, CopyButton, DangerZone, Empty, EmptyState, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
@@ -560,9 +561,6 @@ function Settings({ svc }: { svc: ServiceT }) {
     </Section>
   );
 }
-
-const portLabel = (p: PublishedPort) =>
-  `${p.hostPort}${p.containerPort !== p.hostPort ? `→${p.containerPort}` : ""}/${p.protocol}`;
 
 type PortRow = { hostPort: string; containerPort: string; protocol: PublishedPort["protocol"] };
 
