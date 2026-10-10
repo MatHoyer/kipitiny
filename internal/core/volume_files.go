@@ -42,6 +42,8 @@ const (
 	filesExitNotFound = 2
 	filesExitOutside  = 3
 	filesExitKind     = 4
+	filesExitExists   = 5
+	filesExitChanged  = 6
 )
 
 // filesGuard resolves $p (an absolute path under the volume root $root) and
@@ -350,6 +352,10 @@ func filesError(p string, err error) error {
 		return fmt.Errorf("%w: %s leads outside its volume", ErrInvalid, p)
 	case filesExitKind:
 		return fmt.Errorf("%w: %s is not the expected kind of entry (file or folder)", ErrInvalid, p)
+	case filesExitExists:
+		return fmt.Errorf("%w: %s already exists", store.ErrConflict, p)
+	case filesExitChanged:
+		return fmt.Errorf("%w: %s changed since it was read", store.ErrConflict, p)
 	}
 	return err
 }
@@ -448,31 +454,38 @@ type filesHelper struct {
 // stdout to read. A helper removed behind the manager's back is started
 // again once.
 func (c *Core) filesExec(ctx context.Context, svc store.Service, cmd []string, read func(io.Reader) error) error {
+	return c.filesExecIn(ctx, svc, docker.ExecOptions{Cmd: cmd}, read)
+}
+
+// filesExecIn is filesExec with stdin; then the helper isn't retried, since
+// stdin may be partly consumed.
+func (c *Core) filesExecIn(ctx context.Context, svc store.Service, opts docker.ExecOptions, read func(io.Reader) error) error {
 	for attempt := 0; ; attempt++ {
 		h, id, err := c.acquireFilesHelper(ctx, svc)
 		if err != nil {
 			return err
 		}
-		err = filesStream(ctx, c.dockerFor(svc.ServerID), id, cmd, read)
+		err = filesStream(ctx, c.dockerFor(svc.ServerID), id, opts, read)
 		gone := cerrdefs.IsNotFound(err) || cerrdefs.IsConflict(err) // removed, or not running
 		c.releaseFilesHelper(h, gone)
-		if gone && attempt == 0 {
+		if gone && attempt == 0 && opts.Stdin == nil {
 			continue
 		}
 		return err
 	}
 }
 
-// filesStream runs cmd in container id and hands its stdout to read. If read
+// filesStream runs opts in container id and hands its stdout to read. If read
 // fails, the exec is cancelled; errStopLines from read means it stopped on
 // purpose and is not an error.
-func filesStream(ctx context.Context, dk *docker.Client, id string, cmd []string, read func(io.Reader) error) error {
+func filesStream(ctx context.Context, dk *docker.Client, id string, opts docker.ExecOptions, read func(io.Reader) error) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	pr, pw := io.Pipe()
+	opts.Stdout = pw
 	done := make(chan error, 1)
 	go func() {
-		done <- dk.Exec(ctx, id, docker.ExecOptions{Cmd: cmd, Stdout: pw})
+		done <- dk.Exec(ctx, id, opts)
 		pw.Close()
 	}()
 	if err := read(pr); err != nil {
