@@ -219,6 +219,105 @@
           "domainInput": "DOMAIN"
         }
       ]
+    },
+    {
+      "id": "paperless",
+      "title": "Paperless-ngx",
+      "description": "Scan, index and archive your documents. OCR makes every scan and PDF searchable; tags, correspondents and rules file them.",
+      "website": "https://docs.paperless-ngx.com",
+      "docs": "https://docs.paperless-ngx.com/usage/",
+      "icon": "paperless",
+      "notes": "Sign in with the admin user and password you give here; add other users in Paperless's settings.\n\n- Add documents by uploading them in the web UI, by email (**Mail** in its settings), or by dropping files in the `consume` volume from the service's **Files** tab.\n- Documents, thumbnails and the search index are in the `media` and `data` volumes, the metadata in the `db` database: back up both.\n- **OCR language** is the main language of your documents, as Tesseract codes (`eng`, `deu`, `fra`, `ita`, `spa` are installed; several with `+`, like `deu+eng`). Others need `PAPERLESS_OCR_LANGUAGES` in the service's environment.\n- OCR of large scans takes memory: give the server 2 GB or more.",
+      "category": "productivity",
+      "tags": [
+        "documents",
+        "ocr",
+        "pdf",
+        "scanner",
+        "archive"
+      ],
+      "inputs": [
+        {
+          "name": "DOMAIN",
+          "label": "Domain",
+          "type": "domain",
+          "placeholder": "paperless.example.com",
+          "required": true
+        },
+        {
+          "name": "ADMIN_USER",
+          "label": "Admin user",
+          "type": "text",
+          "default": "admin"
+        },
+        {
+          "name": "ADMIN_PASSWORD",
+          "label": "Admin password",
+          "type": "secret",
+          "help": "The admin account is created with it on the first start. Change it afterwards in Paperless, not here.",
+          "required": true
+        },
+        {
+          "name": "OCR_LANGUAGE",
+          "label": "OCR language",
+          "type": "text",
+          "help": "The main language of your documents (eng, deu, fra, ita, spa), or several like deu+eng.",
+          "default": "eng"
+        },
+        {
+          "name": "TIME_ZONE",
+          "label": "Time zone",
+          "type": "text",
+          "placeholder": "Europe/Paris",
+          "default": "UTC"
+        },
+        {
+          "name": "SECRET_KEY",
+          "label": "Secret key",
+          "type": "secret",
+          "generate": 48
+        }
+      ],
+      "project": "paperless",
+      "compose": "",
+      "services": [
+        {
+          "name": "broker",
+          "kind": "redis",
+          "image": "redis"
+        },
+        {
+          "name": "db",
+          "kind": "postgres",
+          "image": "postgres"
+        },
+        {
+          "name": "webserver",
+          "kind": "app",
+          "image": "ghcr.io/paperless-ngx/paperless-ngx",
+          "icon": "paperless",
+          "port": 8000,
+          "volumes": [
+            {
+              "name": "data",
+              "path": "/usr/src/paperless/data"
+            },
+            {
+              "name": "media",
+              "path": "/usr/src/paperless/media"
+            },
+            {
+              "name": "consume",
+              "path": "/usr/src/paperless/consume"
+            },
+            {
+              "name": "export",
+              "path": "/usr/src/paperless/export"
+            }
+          ],
+          "domainInput": "DOMAIN"
+        }
+      ]
     }
   ],
   "logos": [
@@ -240,6 +339,15 @@
         "minecraft-server"
       ],
       "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path fill=\"#62b47a\" d=\"M12 2 21 6.5 12 11 3 6.5Z\"/><path fill=\"#8b5a2b\" d=\"M3 6.5 12 11v11l-9-4.5Z\"/><path fill=\"#6b4320\" d=\"M21 6.5 12 11v11l9-4.5Z\"/><path fill=\"#4e9a5f\" d=\"M3 6.5 12 11v3l-1.5-.75v1.5L9 14v-1.5l-1.5-.75v1.5L6 12.5V11l-1.5-.75v1.5L3 11Z\"/><path fill=\"#3f7f4e\" d=\"M21 6.5 12 11v3l1.5-.75v1.5L15 14v-1.5l1.5-.75v1.5l1.5-.75V11l1.5-.75v1.5L21 11Z\"/></svg>"
+    },
+    {
+      "name": "paperless",
+      "label": "Paperless-ngx",
+      "color": "#17541F",
+      "images": [
+        "paperless-ngx"
+      ],
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1000 1000\"><path fill=\"#17541F\" d=\"M341,949.1c-6.9-20.3-20.7-61.2-21.9-61-199.6-88.9-182.5-229.8-134.3-347.5,30,137.2,268.8,148.9,146.2,336-.9,2.2,10,27.8,19.5,51.3,22.7-51.9,58.6-115.5,55.8-120.8C178,398.7,724.9,299,807.1,18.5c83,251.5,53.1,659.8-377.4,814.9-2,1.4-63.5,148.6-66.9,150.2-.2-2.1-33.2,2.9-30.1-8.7,1.6-7,4.8-16.2,8.2-25.6h0v-.2h.1ZM323.1,846.2c48.3-71.9-12.7-120.8-56.9-152.2,81.2,107.4,66.4,120.8,56.9,152.2h0Z\"/></svg>"
     }
   ]
 }
