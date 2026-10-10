@@ -198,10 +198,13 @@ export function Service() {
             {isDb ? (
               <p className="truncate font-mono text-sm">{svc.name}</p>
             ) : svc.domain && !httpRouted(svc) ? (
-              <p className="truncate font-mono text-sm">
-                {svc.domain}
-                {svc.publishedPorts[0] && `:${svc.publishedPorts[0].hostPort}`}
-              </p>
+              <>
+                <p className="truncate font-mono text-sm">
+                  {svc.domain}
+                  {svc.publishedPorts[0] && `:${svc.publishedPorts[0].hostPort}`}
+                </p>
+                <p className="text-xs text-muted-foreground">{dnsOnlyHint(svc.publishedPorts)}</p>
+              </>
             ) : svc.domain ? (
               <a
                 href={`https://${svc.domain}`}
@@ -476,7 +479,12 @@ function Settings({ svc }: { svc: ServiceT }) {
               options={iconOptions(svc, form.image)}
               className="sm:col-span-2"
             />
-            <DomainField value={form.domain} onChange={(domain) => setForm({ ...form, domain })} className="sm:col-span-2" />
+            <DomainField
+              value={form.domain}
+              onChange={(domain) => setForm({ ...form, domain })}
+              note={!Number(form.port) && svc.publishedPorts.length > 0 ? dnsOnlyHint(svc.publishedPorts) : undefined}
+              className="sm:col-span-2"
+            />
             <FloatingInput
               label="Port"
               type="number"
@@ -561,6 +569,10 @@ function Settings({ svc }: { svc: ServiceT }) {
     </Section>
   );
 }
+
+/** A domain without an HTTP port only names the server: Traefik doesn't route it. */
+const dnsOnlyHint = (ports: PublishedPort[]) =>
+  `DNS only: connections go straight to ${ports.length > 1 ? "ports" : "port"} ${ports.map((p) => p.hostPort).join(", ")} on the server, not through Traefik.`;
 
 type PortRow = { hostPort: string; containerPort: string; protocol: PublishedPort["protocol"] };
 
