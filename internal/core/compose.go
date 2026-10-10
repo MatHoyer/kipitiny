@@ -529,6 +529,9 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		if err != nil {
 			return err
 		}
+		// The project may not exist yet (a template's dry run): checks
+		// find its server here, not in the store.
+		svc.ServerID = a.project.ServerID
 		if err := a.c.validateIn(ctx, svc, project, dbs); err != nil {
 			return err
 		}

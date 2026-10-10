@@ -44,12 +44,13 @@ type Template struct {
 type Input struct {
 	Name  string `json:"name"`
 	Label string `json:"label"`
-	// Type is text, secret, domain or url.
-	Type        string `json:"type"`
-	Help        string `json:"help,omitempty"`
-	Placeholder string `json:"placeholder,omitempty"`
-	Default     string `json:"default,omitempty"`
-	Required    bool   `json:"required,omitempty"`
+	// Type is text, secret, domain, url or select (one of Options).
+	Type        string   `json:"type"`
+	Options     []string `json:"options,omitempty"`
+	Help        string   `json:"help,omitempty"`
+	Placeholder string   `json:"placeholder,omitempty"`
+	Default     string   `json:"default,omitempty"`
+	Required    bool     `json:"required,omitempty"`
 	// Generate, when set, is the number of random bytes of a value the
 	// manager generates; such an input isn't asked.
 	Generate int `json:"generate,omitempty"`
@@ -59,7 +60,7 @@ var (
 	idRe   = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 	varRe  = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 	domain = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$|^localhost$|^([a-z0-9-]+\.)+localhost$`)
-	types  = []string{"text", "secret", "domain", "url"}
+	types  = []string{"text", "secret", "domain", "url", "select"}
 	load   = sync.OnceValues(loadAll)
 )
 
@@ -144,6 +145,12 @@ func parse(id string, data []byte) (Template, error) {
 			return Template{}, fmt.Errorf("input %s needs a label", in.Name)
 		}
 		seen[in.Name] = true
+		if (in.Type == "select") != (len(in.Options) > 0) {
+			return Template{}, fmt.Errorf("input %s: options go with type select", in.Name)
+		}
+		if in.Type == "select" && in.Default != "" && !slices.Contains(in.Options, in.Default) {
+			return Template{}, fmt.Errorf("input %s: default %q is not an option", in.Name, in.Default)
+		}
 		if in.Type == "" {
 			t.Inputs[i].Type = "text"
 			if in.Generate > 0 {
@@ -200,6 +207,10 @@ func (in Input) check(v string) error {
 	case "domain":
 		if !domain.MatchString(v) {
 			return fmt.Errorf("%s: %q is not a hostname", in.Label, v)
+		}
+	case "select":
+		if !slices.Contains(in.Options, v) {
+			return fmt.Errorf("%s: %q is not one of %s", in.Label, v, strings.Join(in.Options, ", "))
 		}
 	case "url":
 		if u, err := url.Parse(v); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {

@@ -50,11 +50,16 @@ func TestCatalog(t *testing.T) {
 }
 
 func sample(in Input) string {
+	if in.Default != "" {
+		return in.Default
+	}
 	switch in.Type {
 	case "domain":
 		return "app.example.com"
 	case "url":
 		return "https://app.example.com"
+	case "select":
+		return in.Options[0]
 	}
 	return "value"
 }
@@ -65,6 +70,7 @@ func TestRender(t *testing.T) {
 		{Name: "MODE", Label: "Mode", Type: "text", Default: "prod"},
 		{Name: "URL", Label: "URL", Type: "url"},
 		{Name: "SECRET", Type: "secret", Generate: 8},
+		{Name: "LEVEL", Label: "Level", Type: "select", Options: []string{"low", "high"}, Default: "low"},
 	}}
 	gen := func(n int) string { return strings.Repeat("g", n) }
 
@@ -72,7 +78,7 @@ func TestRender(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]string{"DOMAIN": "app.example.com", "MODE": "prod", "URL": "", "SECRET": "gggggggg"}
+	want := map[string]string{"DOMAIN": "app.example.com", "MODE": "prod", "URL": "", "SECRET": "gggggggg", "LEVEL": "low"}
 	for k, v := range want {
 		if got, ok := env[k]; !ok || got != v {
 			t.Errorf("%s = %q, want %q", k, got, v)
@@ -86,6 +92,7 @@ func TestRender(t *testing.T) {
 		"unknown":   {"DOMAIN": "app.example.com", "OTHER": "x"},
 		"generated": {"DOMAIN": "app.example.com", "SECRET": "mine"},
 		"multiline": {"DOMAIN": "app.example.com", "MODE": "a\nb"},
+		"option":    {"DOMAIN": "app.example.com", "LEVEL": "max"},
 	} {
 		if _, err := tpl.Render(values, gen); err == nil {
 			t.Errorf("%s: no error", name)
@@ -95,12 +102,14 @@ func TestRender(t *testing.T) {
 
 func TestParseRefuses(t *testing.T) {
 	for name, src := range map[string]string{
-		"no header":  "name: app\nservices: {web: {image: nginx:1}}\n",
-		"bad input":  "name: app\nx-template: {title: T, description: D, inputs: [{name: lower, label: L}]}\n",
-		"no label":   "name: app\nx-template: {title: T, description: D, inputs: [{name: A}]}\n",
-		"bad type":   "name: app\nx-template: {title: T, description: D, inputs: [{name: A, label: L, type: number}]}\n",
-		"twice":      "name: app\nx-template: {title: T, description: D, inputs: [{name: A, label: L}, {name: A, label: L}]}\n",
-		"no project": "x-template: {title: T, description: D}\n",
+		"no header":   "name: app\nservices: {web: {image: nginx:1}}\n",
+		"bad input":   "name: app\nx-template: {title: T, description: D, inputs: [{name: lower, label: L}]}\n",
+		"no label":    "name: app\nx-template: {title: T, description: D, inputs: [{name: A}]}\n",
+		"bad type":    "name: app\nx-template: {title: T, description: D, inputs: [{name: A, label: L, type: number}]}\n",
+		"twice":       "name: app\nx-template: {title: T, description: D, inputs: [{name: A, label: L}, {name: A, label: L}]}\n",
+		"no project":  "x-template: {title: T, description: D}\n",
+		"no options":  "name: app\nx-template: {title: T, description: D, inputs: [{name: A, label: L, type: select}]}\n",
+		"bad default": "name: app\nx-template: {title: T, description: D, inputs: [{name: A, label: L, type: select, options: [x], default: y}]}\n",
 	} {
 		if _, err := parse("app", []byte(src)); err == nil {
 			t.Errorf("%s: no error", name)

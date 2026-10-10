@@ -174,22 +174,36 @@ function InstallForm({
             )}
           </div>
         )}
-        {asked.map((i) => (
-          <FloatingInput
-            key={i.name}
-            label={i.required ? i.label : `${i.label} (optional)`}
-            required={i.required}
-            type={i.type === "secret" ? "password" : i.type === "url" ? "url" : "text"}
-            autoComplete="off"
-            placeholder={i.placeholder}
-            description={i.help}
-            value={values[i.name] ?? ""}
-            onChange={(e) => {
-              setValues((v) => ({ ...v, [i.name]: e.target.value }));
-              changed();
-            }}
-          />
-        ))}
+        {asked.map((i) =>
+          i.type === "select" ? (
+            <FloatingSelect
+              key={i.name}
+              label={i.label}
+              description={i.help}
+              value={values[i.name] ?? ""}
+              onValueChange={(v) => {
+                setValues((vs) => ({ ...vs, [i.name]: v }));
+                changed();
+              }}
+              options={(i.options ?? []).map((o) => ({ value: o, label: o }))}
+            />
+          ) : (
+            <FloatingInput
+              key={i.name}
+              label={i.required || i.default ? i.label : `${i.label} (optional)`}
+              required={i.required}
+              type={i.type === "secret" ? "password" : i.type === "url" ? "url" : "text"}
+              autoComplete="off"
+              placeholder={i.placeholder}
+              description={i.help}
+              value={values[i.name] ?? ""}
+              onChange={(e) => {
+                setValues((v) => ({ ...v, [i.name]: e.target.value }));
+                changed();
+              }}
+            />
+          ),
+        )}
         {generated.length > 0 && (
           <p className="text-xs text-muted-foreground">
             Generated for you and kept as secrets: {generated.map((i) => i.label || i.name).join(", ")}.
