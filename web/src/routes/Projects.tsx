@@ -3,6 +3,7 @@ import { Activity, ChevronRight, FolderKanban, Globe, Layers, Plus, TriangleAler
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { ServiceIcon } from "@/components/service-icon";
+import { TemplateDialog } from "@/components/template-dialog";
 import { EmptyState, ErrorText, IconTile, StatCard, Tag, Loading } from "@/components/common";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -42,7 +43,15 @@ export function Projects() {
 
   return (
     <>
-      <PageHeader crumbs={[{ label: "Projects" }]} actions={<NewProjectDialog />} />
+      <PageHeader
+        crumbs={[{ label: "Projects" }]}
+        actions={
+          <>
+            <TemplateDialog />
+            <NewProjectDialog />
+          </>
+        }
+      />
       <PageBody>
         {projects.isPending ? (
           <Loading />
@@ -53,7 +62,12 @@ export function Projects() {
             icon={FolderKanban}
             title="No projects yet"
             description="A project groups apps and databases on one private network."
-            action={<NewProjectDialog />}
+            action={
+              <div className="flex gap-2">
+                <TemplateDialog />
+                <NewProjectDialog />
+              </div>
+            }
           />
         ) : (
           <>

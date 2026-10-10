@@ -581,6 +581,44 @@ export interface ComposePlan {
   deploying: string[];
 }
 
+/** A one-click app: a compose file and the inputs its variables come from. */
+export interface AppTemplate {
+  id: string;
+  title: string;
+  description: string;
+  website?: string;
+  docs?: string;
+  icon?: string;
+  inputs: TemplateInput[];
+  /** The default project name. */
+  project: string;
+  compose: string;
+}
+
+export interface TemplateInput {
+  name: string;
+  label: string;
+  type: "text" | "secret" | "domain" | "url";
+  help?: string;
+  placeholder?: string;
+  default?: string;
+  required?: boolean;
+  /** Random bytes the manager generates; not asked. */
+  generate?: number;
+}
+
+export interface TemplateInstall {
+  projectId?: string;
+  newProject?: { name: string; serverId?: string };
+  values: Record<string, string>;
+  dryRun?: boolean;
+}
+
+export interface TemplateResult {
+  projectId?: string;
+  plan: ComposePlan;
+}
+
 export interface GitInput {
   repoUrl: string;
   branch: string;
@@ -745,6 +783,8 @@ export const api = {
   composeUrl: (id: string, service?: string) => `/api${composePath(id, service)}${service ? "&" : "?"}download=1`,
   applyCompose: (id: string, body: { compose: string; env: string; prune: boolean; dryRun?: boolean; deploy?: boolean }) =>
     request<ComposePlan>(`/projects/${id}/compose`, json("POST", body)),
+  templates: () => request<AppTemplate[]>("/templates"),
+  installTemplate: (id: string, body: TemplateInstall) => request<TemplateResult>(`/templates/${id}/install`, json("POST", body)),
   /** The project's git link; null when it has none. */
   projectGit: (id: string) =>
     request<GitStatus>(`/projects/${id}/git`).catch((e) => {
