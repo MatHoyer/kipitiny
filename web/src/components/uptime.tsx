@@ -15,8 +15,11 @@ import { api, httpRouted, type Service, type Uptime, type UptimeResult } from ".
 
 const pct = (v: number | null) => (v === null ? "–" : `${v >= 99.995 ? 100 : v.toFixed(2)}%`);
 
-/** The uptime check of an app with a public domain: its state, its record, and its settings. */
-export function UptimeSection({ svc }: { svc: Service }) {
+/**
+ * The uptime check of an app with a public domain: its state, its record, and its settings. A git project's check
+ * comes from its compose file (gitPath), so it can't be edited here.
+ */
+export function UptimeSection({ svc, gitPath }: { svc: Service; gitPath?: string }) {
   const uptime = useQuery({ queryKey: ["uptime", svc.id], queryFn: () => api.uptime(svc.id), refetchInterval: 15_000 });
   const u = uptime.data;
   const chk = u?.check;
@@ -35,10 +38,10 @@ export function UptimeSection({ svc }: { svc: Service }) {
           "Request the public URL on an interval and notify when it goes down."
         )
       }
-      actions={u && <UptimeDialog svc={svc} uptime={u} />}
+      actions={u && !gitPath && <UptimeDialog svc={svc} uptime={u} />}
     >
       {!u ? null : !chk ? (
-        <Empty>No uptime check.</Empty>
+        <Empty>{gitPath ? <>No uptime check: set x-kipitiny.uptime in {gitPath}.</> : "No uptime check."}</Empty>
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2 text-sm">

@@ -146,6 +146,12 @@ func TestGitApply(t *testing.T) {
 	if _, err := c.ApplyCompose(ctx, p.ID, []byte(v1), ApplyOptions{}); !errors.Is(err, ErrGitManaged) {
 		t.Errorf("apply: %v", err)
 	}
+	if _, err := c.SetUptime(ctx, svcs["web"].ID, UptimeInput{Enabled: true}); !errors.Is(err, ErrGitManaged) {
+		t.Errorf("uptime: %v", err)
+	}
+	if err := c.DeleteUptime(ctx, svcs["web"].ID); !errors.Is(err, ErrGitManaged) {
+		t.Errorf("delete uptime: %v", err)
+	}
 
 	// CI deploys web:2 (a tag override): a sync where web is unchanged in
 	// the file keeps it, a change to web in the file wins.

@@ -334,17 +334,33 @@ func uptimeOver(hours []store.UptimeHour, since time.Time) (pct *float64, latenc
 	return &p, latency
 }
 
-// SetUptime creates or replaces a service's check. It runs right away.
+// SetUptime creates or replaces a service's check. It runs right away. A
+// git project's checks are in its compose file.
 func (c *Core) SetUptime(ctx context.Context, serviceID string, in UptimeInput) (UptimeView, error) {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
 		return UptimeView{}, err
 	}
+	if err := c.checkGitOwned(ctx, svc.ProjectID); err != nil {
+		return UptimeView{}, err
+	}
+	chk, err := uptimeCheck(svc, in)
+	if err != nil {
+		return UptimeView{}, err
+	}
+	if err := c.saveUptime(ctx, chk); err != nil {
+		return UptimeView{}, err
+	}
+	return c.Uptime(ctx, serviceID)
+}
+
+// uptimeCheck validates svc's check settings, with the defaults applied.
+func uptimeCheck(svc store.Service, in UptimeInput) (store.UptimeCheck, error) {
 	if svc.Kind != store.ServiceKindApp || !httpRouted(svc) {
-		return UptimeView{}, fmt.Errorf("%w: only an app with a public domain can have an uptime check", ErrInvalid)
+		return store.UptimeCheck{}, fmt.Errorf("%w: only an app with a public domain can have an uptime check", ErrInvalid)
 	}
 	chk := store.UptimeCheck{
-		ServiceID:      serviceID,
+		ServiceID:      svc.ID,
 		Path:           strings.TrimSpace(in.Path),
 		IntervalSec:    in.IntervalSec,
 		TimeoutSec:     in.TimeoutSec,
@@ -362,29 +378,51 @@ func (c *Core) SetUptime(ctx context.Context, serviceID string, in UptimeInput) 
 	}
 	switch {
 	case !strings.HasPrefix(chk.Path, "/") || strings.ContainsAny(chk.Path, " #\t\r\n"):
-		return UptimeView{}, fmt.Errorf("%w: path must start with / (e.g. /health)", ErrInvalid)
+		return store.UptimeCheck{}, fmt.Errorf("%w: path must start with / (e.g. /health)", ErrInvalid)
 	case chk.IntervalSec < 30 || chk.IntervalSec > 3600:
-		return UptimeView{}, fmt.Errorf("%w: interval must be between 30 and 3600 seconds", ErrInvalid)
+		return store.UptimeCheck{}, fmt.Errorf("%w: interval must be between 30 and 3600 seconds", ErrInvalid)
 	case chk.TimeoutSec < 1 || chk.TimeoutSec > 60 || chk.TimeoutSec >= chk.IntervalSec:
-		return UptimeView{}, fmt.Errorf("%w: timeout must be between 1 and 60 seconds, and shorter than the interval", ErrInvalid)
+		return store.UptimeCheck{}, fmt.Errorf("%w: timeout must be between 1 and 60 seconds, and shorter than the interval", ErrInvalid)
 	case chk.ExpectedStatus != 0 && (chk.ExpectedStatus < 100 || chk.ExpectedStatus > 599):
-		return UptimeView{}, fmt.Errorf("%w: expected status must be an HTTP status (100-599), or 0 for any below 400", ErrInvalid)
+		return store.UptimeCheck{}, fmt.Errorf("%w: expected status must be an HTTP status (100-599), or 0 for any below 400", ErrInvalid)
 	}
+	return chk, nil
+}
+
+// sameUptime reports whether two checks have the same settings.
+func sameUptime(a, b store.UptimeCheck) bool {
+	return a.Path == b.Path && a.IntervalSec == b.IntervalSec && a.TimeoutSec == b.TimeoutSec &&
+		a.ExpectedStatus == b.ExpectedStatus && a.Enabled == b.Enabled
+}
+
+// saveUptime stores a check and runs it now with the new settings; the
+// notified state is kept.
+func (c *Core) saveUptime(ctx context.Context, chk store.UptimeCheck) error {
 	if _, err := c.store.SaveUptimeCheck(ctx, chk); err != nil {
-		return UptimeView{}, err
+		return err
 	}
-	// Run it now with the new settings; the notified state is kept.
 	c.uptime.mu.Lock()
-	if r := c.uptime.runs[serviceID]; r != nil {
+	if r := c.uptime.runs[chk.ServiceID]; r != nil {
 		r.next = time.Time{}
 	}
 	c.uptime.mu.Unlock()
 	c.kickUptime()
-	return c.Uptime(ctx, serviceID)
+	return nil
 }
 
 // DeleteUptime removes a service's check and its results.
 func (c *Core) DeleteUptime(ctx context.Context, serviceID string) error {
+	svc, err := c.store.GetService(ctx, serviceID)
+	if err != nil {
+		return err
+	}
+	if err := c.checkGitOwned(ctx, svc.ProjectID); err != nil {
+		return err
+	}
+	return c.deleteUptime(ctx, serviceID)
+}
+
+func (c *Core) deleteUptime(ctx context.Context, serviceID string) error {
 	if err := c.store.DeleteUptimeCheck(ctx, serviceID); err != nil {
 		return err
 	}

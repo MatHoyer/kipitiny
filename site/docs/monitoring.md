@@ -42,7 +42,9 @@ and successes highlighted.
 An uptime check requests an app's public URL, `https://<domain><path>`, on a
 schedule, the way a visitor would: through DNS, TLS and Traefik. It catches
 what container health can't, such as an expired certificate, a wrong DNS
-record or a blocked port. Set it on the app's **Overview** (apps with a domain only).
+record or a blocked port. Set it on the app's **Overview** (apps with a domain only),
+or in the compose file as [`x-kipitiny.uptime`](/docs/compose#x-kipitiny-per-service);
+a project synced from git can only set it there.
 
 - **Path** (default `/`), **interval** 30 s to 1 h (default 60 s), **timeout**
   1 to 60 s (default 10 s, shorter than the interval).

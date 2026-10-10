@@ -18,7 +18,7 @@ func TestExportFile(t *testing.T) {
 	p := store.Project{Name: "shop", Env: map[string]string{"REGION": "eu", "TOKEN": "t0k"}, Secrets: []string{"TOKEN"}}
 	svcs := []store.Service{
 		{
-			Name: "web", Kind: store.ServiceKindApp, Image: "ghcr.io/me/shop:1", Replicas: 2, Port: 3000, Domain: "shop.example.com",
+			ID: "w1", Name: "web", Kind: store.ServiceKindApp, Image: "ghcr.io/me/shop:1", Replicas: 2, Port: 3000, Domain: "shop.example.com",
 			Env:     map[string]string{"API_KEY": "s3cr$t", "MODE": "a$b", "DATABASE_URL": "{{ db.db.URL }}", "SHARED": "{{ project.TOKEN }}"},
 			Secrets: []string{"API_KEY", "SHARED"},
 			Volumes: []store.Volume{{Name: "data", Path: "/data"}},
@@ -30,8 +30,15 @@ func TestExportFile(t *testing.T) {
 		{Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17-alpine", Replicas: 1, MemoryMB: 512,
 			Env: map[string]string{pgUser: "app", pgPassword: "pw", pgDatabase: "app"}, Secrets: []string{pgPassword}},
 	}
-	f, env := exportFile(p, svcs, true)
+	checks := map[string]store.UptimeCheck{"w1": {ServiceID: "w1", Path: "/health", IntervalSec: 60, TimeoutSec: 10, Enabled: true}}
+	f, env := exportFile(p, svcs, checks, true)
 	web := f.Services["web"]
+	if u := web.X.Uptime; u == nil || *u != (compose.Uptime{Path: "/health"}) {
+		t.Errorf("uptime = %+v", u)
+	}
+	if f.Services["worker"].X.Uptime != nil {
+		t.Error("worker has no check")
+	}
 	if web.Environment["API_KEY"] != "${WEB_API_KEY}" || env["WEB_API_KEY"] != "s3cr$t" {
 		t.Errorf("secret: %q, env %q", web.Environment["API_KEY"], env)
 	}
@@ -94,6 +101,7 @@ services:
       domain: shop.example.com
       port: 3000
       secrets: [API_KEY]
+      uptime: {path: /health, interval: 2m}
       middlewares:
         basic_auth: [{name: admin, hash: "${WEB_BASIC_AUTH_ADMIN}"}]
 `
@@ -126,6 +134,10 @@ services:
 	if web.Env["API_KEY"] != "k3y" || !slices.Equal(web.Secrets, []string{"API_KEY"}) || web.Middlewares.BasicAuth[0].Hash != hash {
 		t.Errorf("web = %+v", web)
 	}
+	if chk, err := c.store.GetUptimeCheck(ctx, web.ID); err != nil || chk.Path != "/health" || chk.IntervalSec != 120 ||
+		chk.TimeoutSec != defaultUptimeTimeout || !chk.Enabled {
+		t.Errorf("uptime check = %+v, %v", chk, err)
+	}
 	project, _ := c.store.GetProject(ctx, p.ID)
 	if project.Env["TOKEN"] != "t0k" || !slices.Equal(project.Secrets, []string{"TOKEN"}) {
 		t.Errorf("project = %+v", project)
@@ -157,8 +169,24 @@ services:
 		t.Fatal(err)
 	}
 	if len(plan.Update) != 1 || !slices.Contains(plan.Update[0].Fields, "image") || !slices.Contains(plan.Update[0].Fields, "replicas") ||
+		!slices.Contains(plan.Update[0].Fields, "uptime") ||
 		!slices.Equal(plan.Orphaned, []string{"db"}) || len(plan.Delete) != 0 {
 		t.Errorf("change plan = %+v", plan)
+	}
+
+	// Only the check changes: no update of the service, no deploy.
+	paused := strings.Replace(string(out.Compose), "interval: 2m0s", "interval: 2m0s\n        paused: true", 1)
+	plan, err = c.ApplyCompose(ctx, p.ID, []byte(paused), ApplyOptions{})
+	if err != nil || len(plan.Update) != 1 || !slices.Equal(plan.Update[0].Fields, []string{"uptime"}) {
+		t.Fatalf("pause plan = %+v, %v\n%s", plan, err, paused)
+	}
+	if chk, _ := c.store.GetUptimeCheck(ctx, web.ID); chk.Enabled {
+		t.Error("check not paused")
+	}
+	// A check on a service without a domain is refused.
+	noDomain := strings.Replace(paused, "domain: shop.example.com", "", 1)
+	if _, err := c.ApplyCompose(ctx, p.ID, []byte(noDomain), ApplyOptions{DryRun: true}); err == nil || !strings.Contains(err.Error(), "uptime") {
+		t.Errorf("no domain: %v", err)
 	}
 
 	// Errors are reported before any change.

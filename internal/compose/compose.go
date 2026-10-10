@@ -82,6 +82,46 @@ type Ext struct {
 	// one.
 	Password    string       `yaml:"password,omitempty"`
 	Middlewares *Middlewares `yaml:"middlewares,omitempty"`
+	// Uptime is an app's uptime check; nil has none. Tagged so the hash of a
+	// service without one stays the same.
+	Uptime *Uptime `yaml:"uptime,omitempty" json:",omitempty"`
+}
+
+// Uptime is an uptime check: zero values take kipitiny's defaults.
+type Uptime struct {
+	Path           string  `yaml:"path,omitempty"`
+	Interval       Seconds `yaml:"interval,omitempty"`
+	Timeout        Seconds `yaml:"timeout,omitempty"`
+	ExpectedStatus int     `yaml:"expected_status,omitempty"`
+	Paused         bool    `yaml:"paused,omitempty"`
+}
+
+// Seconds is a duration in whole seconds, written as a compose duration
+// (1m30s) and read from one or from a number of seconds.
+type Seconds int
+
+func (s Seconds) MarshalYAML() (any, error) {
+	return (time.Duration(s) * time.Second).String(), nil
+}
+
+func (s *Seconds) UnmarshalYAML(n *yaml.Node) error {
+	secs, err := parseSeconds(n.Value)
+	if n.Kind != yaml.ScalarNode || err != nil {
+		return fmt.Errorf("line %d: %q is not a duration", n.Line, n.Value)
+	}
+	*s = Seconds(secs)
+	return nil
+}
+
+func parseSeconds(v string) (int, error) {
+	if secs, err := strconv.Atoi(v); err == nil {
+		return secs, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return 0, err
+	}
+	return int((d + time.Second - 1) / time.Second), nil
 }
 
 type Middlewares struct {
@@ -212,7 +252,8 @@ func Escape(s string) string {
 
 func isZeroExt(x Ext) bool {
 	return x.Kind == "" && x.Domain == "" && x.Port == 0 && x.HealthPath == "" && x.PreDeploy == "" &&
-		x.PreBackup == "" && x.Icon == "" && len(x.Secrets) == 0 && x.Password == "" && x.Middlewares == nil
+		x.PreBackup == "" && x.Icon == "" && len(x.Secrets) == 0 && x.Password == "" && x.Middlewares == nil &&
+		x.Uptime == nil
 }
 
 type outFile struct {
@@ -822,15 +863,11 @@ func (p *parser) healthcheck(n *yaml.Node) *store.Healthcheck {
 
 func (p *parser) duration(n *yaml.Node) int {
 	s := p.str(n)
-	if v, err := strconv.Atoi(s); err == nil {
-		return v
-	}
-	d, err := time.ParseDuration(s)
+	v, err := parseSeconds(s)
 	if err != nil {
 		p.fail("line %d: %q is not a duration", n.Line, s)
-		return 0
 	}
-	return int((d + time.Second - 1) / time.Second)
+	return v
 }
 
 // strict decodes an x-kipitiny block into v, refusing unknown keys. It
