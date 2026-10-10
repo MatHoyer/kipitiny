@@ -83,5 +83,6 @@ The SVG is a plain drawing: one `<svg>` element with `xmlns`, at most 16 KB, no 
 ### Checks and updates
 
 - A test checks that every template parses, that it uses exactly the variables it declares, and that its logo exists.
+- A smoke test installs every template on a throwaway Docker, with its required inputs filled in, and checks that each service deploys and stays up. CI runs it on pull requests that change a template, and weekly. Locally, against a Docker daemon without kipitiny on it (a `docker:dind` container works): `KIPITINY_TEST_TEMPLATES=1 go test ./internal/core/ -run TemplatesDocker`.
 - After adding or changing one, run `go generate ./internal/templates`: the demo on this website and the list above come from the file it generates, and a test fails while that file is stale.
-- Pin images by version. Dependabot opens a pull request when a newer one is out (the Beszel images move together); CI checks the template still parses. Apps already installed keep their version.
+- Pin images by version. Dependabot opens a pull request when a newer one is out (the Beszel images move together); CI checks the template still parses and runs. Apps already installed keep their version.

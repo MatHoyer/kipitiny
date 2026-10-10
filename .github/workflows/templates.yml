@@ -1,0 +1,36 @@
+# Installs every one-click template on the runner's Docker and checks its
+# services deploy and stay up (internal/core TestTemplatesDocker). Slow, so
+# only when templates change (Dependabot's image bumps included), and weekly
+# to catch an image tag that disappeared or an app that broke upstream.
+name: templates
+
+on:
+  pull_request:
+    paths:
+      - internal/templates/files/**
+      - internal/core/templates_docker_test.go
+      - .github/workflows/templates.yml
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: templates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: make ui-stub
+      - run: go test ./internal/core/ -run TemplatesDocker -v -timeout 40m
+        env:
+          KIPITINY_TEST_TEMPLATES: "1"
