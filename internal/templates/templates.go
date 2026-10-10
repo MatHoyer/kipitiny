@@ -44,7 +44,8 @@ type Template struct {
 type Input struct {
 	Name  string `json:"name"`
 	Label string `json:"label"`
-	// Type is text, secret, domain, url or select (one of Options).
+	// Type is text, secret, domain, url, select (one of Options) or
+	// checkbox ("true" or "false"; required means it must be checked).
 	Type        string   `json:"type"`
 	Options     []string `json:"options,omitempty"`
 	Help        string   `json:"help,omitempty"`
@@ -60,7 +61,7 @@ var (
 	idRe   = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 	varRe  = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 	domain = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$|^localhost$|^([a-z0-9-]+\.)+localhost$`)
-	types  = []string{"text", "secret", "domain", "url", "select"}
+	types  = []string{"text", "secret", "domain", "url", "select", "checkbox"}
 	load   = sync.OnceValues(loadAll)
 )
 
@@ -179,6 +180,9 @@ func (t Template) Render(values map[string]string, gen func(n int) string) (map[
 		if v == "" {
 			v = in.Default
 		}
+		if v == "" && in.Type == "checkbox" {
+			v = "false"
+		}
 		if err := in.check(v); err != nil {
 			errs = append(errs, err.Error())
 		}
@@ -197,6 +201,15 @@ func (t Template) Render(values map[string]string, gen func(n int) string) (map[
 }
 
 func (in Input) check(v string) error {
+	if in.Type == "checkbox" {
+		if v != "true" && v != "false" {
+			return fmt.Errorf("%s: %q is not true or false", in.Label, v)
+		}
+		if in.Required && v != "true" {
+			return fmt.Errorf("%s must be checked", in.Label)
+		}
+		return nil
+	}
 	if v == "" {
 		if in.Required {
 			return fmt.Errorf("%s is required", in.Label)

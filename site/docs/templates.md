@@ -35,7 +35,7 @@ Reports the server it runs on, and its containers, to a Beszel hub. It runs with
 
 A Minecraft Java Edition server ([itzg/minecraft-server](https://docker-minecraft-server.readthedocs.io)): vanilla, Paper, Fabric, Forge, NeoForge or Purpur.
 
-- You accept the [Minecraft EULA](https://aka.ms/MinecraftEULA) by picking `TRUE`; the server doesn't start without it.
+- You accept the [Minecraft EULA](https://aka.ms/MinecraftEULA) by checking its box; the server doesn't start without it.
 - Pick the server type, the version (`LATEST` or e.g. `1.21.4`), difficulty, game mode and message of the day. Change them later in the service's environment and redeploy.
 - **Memory** is the container's limit (default `2g`); the server's Java heap takes three quarters of it.
 - The game port (default `25565`) is published on the server: open it in the firewall. Players connect to the server's address, or to an optional **domain** whose DNS points at it (only for DNS: game traffic never goes through Traefik).
@@ -76,6 +76,6 @@ volumes:
 
 - `name` is the default project name; the file's id (its file name) is the template's.
 - Each input becomes the variable `${NAME}` of the file (the `.env` of a compose import). A `${NAME}` that is a whole `environment` value is stored as a secret, unless `x-kipitiny.secrets` lists the secrets.
-- Input fields: `name` (UPPER_CASE), `label`, `type` (`text`, `secret`, `domain`, `url`, or `select` with its `options`), `help`, `placeholder`, `default`, `required`, and `generate` (a number of random bytes: the value is generated, not asked). Inputs work anywhere compose variables do (`ports`, `mem_limit`…) and in `x-kipitiny.domain`.
+- Input fields: `name` (UPPER_CASE), `label`, `type` (`text`, `secret`, `domain`, `url`, `select` with its `options`, or `checkbox`, whose value is `true` or `false` and which `required` makes mandatory), `help` (its `https://` URLs become links), `placeholder`, `default`, `required`, and `generate` (a number of random bytes: the value is generated, not asked). Inputs work anywhere compose variables do (`ports`, `mem_limit`…) and in `x-kipitiny.domain`.
 - Pin images by version, and update a template by bumping its tag. Apps already installed keep theirs.
 - A test checks that every template parses, and that it uses exactly the variables it declares. The logo named by `icon` must exist in the UI (`web/src/components/service-icon.tsx`).

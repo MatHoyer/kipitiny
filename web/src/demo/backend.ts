@@ -495,8 +495,8 @@ const routes: Route[] = [
       const t = demoTemplates.find((t) => t.id === m[1]);
       if (!t) throw notFound();
       const values: Record<string, string> = body.values ?? {};
-      const missing = t.inputs.filter((i) => i.required && !values[i.name]?.trim());
-      if (missing.length) throw invalid(missing.map((i) => `${i.label} is required`).join("; "));
+      const missing = t.inputs.filter((i) => i.required && (i.type === "checkbox" ? values[i.name] !== "true" : !values[i.name]?.trim()));
+      if (missing.length) throw invalid(missing.map((i) => (i.type === "checkbox" ? `${i.label} must be checked` : `${i.label} is required`)).join("; "));
       const name = String(body.newProject?.name ?? "").trim();
       if (!body.projectId && !nameRe.test(name)) throw invalid("name must be lowercase letters, digits and dashes (max 40)");
       const taken = body.projectId ? db.services.filter((s) => s.projectId === projectOf(body.projectId).id).map((s) => s.name) : [];

@@ -60,6 +60,8 @@ func sample(in Input) string {
 		return "https://app.example.com"
 	case "select":
 		return in.Options[0]
+	case "checkbox":
+		return "true"
 	}
 	return "value"
 }
@@ -71,14 +73,16 @@ func TestRender(t *testing.T) {
 		{Name: "URL", Label: "URL", Type: "url"},
 		{Name: "SECRET", Type: "secret", Generate: 8},
 		{Name: "LEVEL", Label: "Level", Type: "select", Options: []string{"low", "high"}, Default: "low"},
+		{Name: "AGREE", Label: "Agree", Type: "checkbox", Required: true},
+		{Name: "EXTRA", Label: "Extra", Type: "checkbox"},
 	}}
 	gen := func(n int) string { return strings.Repeat("g", n) }
 
-	env, err := tpl.Render(map[string]string{"DOMAIN": " app.example.com "}, gen)
+	env, err := tpl.Render(map[string]string{"DOMAIN": " app.example.com ", "AGREE": "true"}, gen)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]string{"DOMAIN": "app.example.com", "MODE": "prod", "URL": "", "SECRET": "gggggggg", "LEVEL": "low"}
+	want := map[string]string{"DOMAIN": "app.example.com", "MODE": "prod", "URL": "", "SECRET": "gggggggg", "LEVEL": "low", "AGREE": "true", "EXTRA": "false"}
 	for k, v := range want {
 		if got, ok := env[k]; !ok || got != v {
 			t.Errorf("%s = %q, want %q", k, got, v)
@@ -87,12 +91,14 @@ func TestRender(t *testing.T) {
 
 	for name, values := range map[string]map[string]string{
 		"required":  {},
-		"domain":    {"DOMAIN": "not a domain"},
-		"url":       {"DOMAIN": "app.example.com", "URL": "ftp://x"},
-		"unknown":   {"DOMAIN": "app.example.com", "OTHER": "x"},
-		"generated": {"DOMAIN": "app.example.com", "SECRET": "mine"},
-		"multiline": {"DOMAIN": "app.example.com", "MODE": "a\nb"},
-		"option":    {"DOMAIN": "app.example.com", "LEVEL": "max"},
+		"domain":    {"DOMAIN": "not a domain", "AGREE": "true"},
+		"url":       {"DOMAIN": "app.example.com", "AGREE": "true", "URL": "ftp://x"},
+		"unknown":   {"DOMAIN": "app.example.com", "AGREE": "true", "OTHER": "x"},
+		"generated": {"DOMAIN": "app.example.com", "AGREE": "true", "SECRET": "mine"},
+		"multiline": {"DOMAIN": "app.example.com", "AGREE": "true", "MODE": "a\nb"},
+		"option":    {"DOMAIN": "app.example.com", "AGREE": "true", "LEVEL": "max"},
+		"unchecked": {"DOMAIN": "app.example.com"},
+		"not bool":  {"DOMAIN": "app.example.com", "AGREE": "yes"},
 	} {
 		if _, err := tpl.Render(values, gen); err == nil {
 			t.Errorf("%s: no error", name)
