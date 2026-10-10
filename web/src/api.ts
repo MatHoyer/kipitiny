@@ -708,10 +708,14 @@ export type RedisKey = { key: string; type: string; ttl: number; bytes: number }
 export type RedisKeys = { keys: RedisKey[]; cursor: string };
 /** items by type: [value], [field, value], [index, value], [member], [member, score], [id, field, value, ...]. */
 export type RedisValue = { type: string; length: number; ttl: number; items: string[][]; truncated: [number, number][]; cursor: string };
-/** A file, folder or symlink in a service's volumes; at the root, a volume. Paths are "<volume>/<path>". */
+/**
+ * A file, folder or symlink in a service's volumes or container; at the root, a volume or the container.
+ * Paths are "<volume>/<path>", or "@container/<absolute path>" ("@<container ID>/..." for a given replica).
+ */
 export type VolumeEntry = {
   name: string;
-  type: "volume" | "dir" | "file" | "link" | "other";
+  /** "container": at the root, the running container's own filesystem (path "@container"). */
+  type: "volume" | "container" | "dir" | "file" | "link" | "other";
   size: number;
   /** Absent for volumes. */
   modified?: string;

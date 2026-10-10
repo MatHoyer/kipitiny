@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	cerrdefs "github.com/containerd/errdefs"
+	"github.com/moby/moby/api/types/container"
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/ids"
@@ -87,21 +89,57 @@ type VolumeFile struct {
 	Content  string `json:"content"`
 }
 
-// fileVolume is a volume of a service as the browser shows it.
-type fileVolume struct{ name, mountPath string }
+// fileVolume is a volume of a service as the browser shows it, or the
+// filesystem of one of its containers (name "@container" for the first
+// running replica, "@<container ID>" for a given one).
+type fileVolume struct {
+	name, mountPath string
+	container       bool
+}
+
+// containerPrefix starts the path of a container's filesystem; volume names
+// can't hold "@".
+const containerPrefix = "@"
+
+// FilesContainer names the first running replica's filesystem in paths.
+const FilesContainer = containerPrefix + "container"
+
+var containerRefRe = regexp.MustCompile(`^@(container|[0-9a-f]{12,64})$`)
+
+// root is where the volume's paths start: its folder in the helper, or ""
+// for a container's filesystem (paths are then absolute in the container).
+func (v fileVolume) root() string {
+	if v.container {
+		return ""
+	}
+	return helperVolumeRoot + "/" + v.name
+}
+
+// top is the volume's own folder: root, or "/" for a container.
+func (v fileVolume) top() string {
+	if v.container {
+		return "/"
+	}
+	return v.root()
+}
+
+// display turns an absolute path in the volume back into "<volume>/<path>".
+func (v fileVolume) display(abs string) string {
+	return strings.TrimSuffix(v.name+strings.TrimPrefix(abs, v.root()), "/")
+}
 
 // fileVolumes lists what can be browsed: a database's data volume, or an
 // app's volumes.
 func fileVolumes(svc store.Service) []fileVolume {
 	switch svc.Kind {
 	case store.ServiceKindPostgres:
-		return []fileVolume{{dataVolumeName, pgVolumeMount}}
+		return []fileVolume{{name: dataVolumeName, mountPath: pgVolumeMount}}
 	case store.ServiceKindRedis:
-		return []fileVolume{{dataVolumeName, redisVolumeMount}}
+		return []fileVolume{{name: dataVolumeName, mountPath: redisVolumeMount}}
 	}
 	vols := make([]fileVolume, len(svc.Volumes))
 	for i, v := range svc.Volumes {
-		vols[i] = fileVolume{v.Name, v.Path}
+		vols[i] = fileVolume{name: v.Name, mountPath: v.Path}
 	}
 	return vols
 }
@@ -112,7 +150,8 @@ func filesReadOnly(svc store.Service) bool {
 }
 
 // volumePath splits p ("<volume>/<path>") into the volume and the absolute
-// path in the helper. "" is the root, where the volumes are listed.
+// path in the helper, or in the container for "@container/<path>". "" is the
+// root, where the volumes are listed.
 func volumePath(svc store.Service, p string) (vol fileVolume, abs string, err error) {
 	if strings.HasPrefix(p, "/") || strings.ContainsRune(p, 0) {
 		return vol, "", fmt.Errorf("%w: path %q must be relative to the volumes", ErrInvalid, p)
@@ -129,6 +168,12 @@ func volumePath(svc store.Service, p string) (vol fileVolume, abs string, err er
 	}
 	if len(segs) == 0 {
 		return vol, "", nil
+	}
+	if strings.HasPrefix(segs[0], containerPrefix) {
+		if !containerRefRe.MatchString(segs[0]) {
+			return vol, "", fmt.Errorf("%w: %q: use %s or @<container ID>", ErrInvalid, segs[0], FilesContainer)
+		}
+		return fileVolume{name: segs[0], mountPath: "/", container: true}, "/" + strings.Join(segs[1:], "/"), nil
 	}
 	i := slices.IndexFunc(fileVolumes(svc), func(v fileVolume) bool { return v.name == segs[0] })
 	if i < 0 {
@@ -150,20 +195,22 @@ func (c *Core) ListVolumeFiles(ctx context.Context, serviceID, p string) (Volume
 	if err != nil {
 		return VolumeListing{}, err
 	}
-	l := VolumeListing{Path: strings.TrimPrefix(strings.TrimPrefix(abs, helperVolumeRoot), "/"), ReadOnly: filesReadOnly(svc), Entries: []VolumeEntry{}}
+	l := VolumeListing{ReadOnly: filesReadOnly(svc), Entries: []VolumeEntry{}}
 	if abs == "" {
 		for _, v := range fileVolumes(svc) {
 			l.Entries = append(l.Entries, VolumeEntry{Name: v.name, Type: "volume", MountPath: v.mountPath})
 		}
+		l.Entries = append(l.Entries, VolumeEntry{Name: FilesContainer, Type: "container", MountPath: "/"})
 		return l, nil
 	}
+	l.Path = vol.display(abs)
 	ctx, cancel := context.WithTimeout(ctx, filesBrowseTimeout)
 	defer cancel()
 	script := filesGuard + filesStat + `[ -d "$p" ] || exit 4
 cd "$p" || exit 2
 for f in .[!.]* ..?* *; do [ -e "./$f" ] || [ -L "./$f" ] && st "./$f" "$f"; done
 exit 0`
-	err = c.filesExec(ctx, svc, filesCmd(script, vol, abs), func(r io.Reader) error {
+	err = c.filesExec(ctx, svc, vol, filesCmd(script, vol, abs), func(r io.Reader) error {
 		return readEntries(r, func(e VolumeEntry) error {
 			if len(l.Entries) == FilesListMax {
 				l.Truncated = true
@@ -207,14 +254,17 @@ func (c *Core) StatVolumePath(ctx context.Context, serviceID, p string) (VolumeE
 	ctx, cancel := context.WithTimeout(ctx, filesBrowseTimeout)
 	defer cancel()
 	var e VolumeEntry
-	err = c.filesExec(ctx, svc, filesCmd(filesGuard+filesStat+`st "$p" "${p##*/}"`, vol, abs), func(r io.Reader) error {
+	err = c.filesExec(ctx, svc, vol, filesCmd(filesGuard+filesStat+`st "$p" "${p##*/}"`, vol, abs), func(r io.Reader) error {
 		return readEntries(r, func(got VolumeEntry) error { e = got; return nil })
 	})
 	if err != nil {
 		return VolumeEntry{}, filesError(p, err)
 	}
-	if abs == helperVolumeRoot+"/"+vol.name {
+	if abs == vol.top() {
 		e.Type, e.Name, e.MountPath = "volume", vol.name, vol.mountPath
+		if vol.container {
+			e.Type = "container"
+		}
 	}
 	return e, nil
 }
@@ -242,8 +292,8 @@ func (c *Core) ReadVolumeFile(ctx context.Context, serviceID, p string) (VolumeF
 	script := filesGuard + filesStat + `[ -f "$p" ] || exit 4
 st "$p" "${p##*/}"
 head -c ` + strconv.Itoa(FilesTextMax+1) + ` "$p"`
-	f := VolumeFile{Path: strings.TrimPrefix(abs, helperVolumeRoot+"/"), ReadOnly: filesReadOnly(svc)}
-	err = c.filesExec(ctx, svc, filesCmd(script, vol, abs), func(r io.Reader) error {
+	f := VolumeFile{Path: vol.display(abs), ReadOnly: filesReadOnly(svc)}
+	err = c.filesExec(ctx, svc, vol, filesCmd(script, vol, abs), func(r io.Reader) error {
 		br := bufio.NewReader(r)
 		e, err := readEntry(br)
 		if err != nil {
@@ -288,7 +338,7 @@ func (c *Core) DownloadVolumeFile(ctx context.Context, serviceID, p string, w io
 	}
 	ctx, cancel := context.WithTimeout(ctx, filesTransferTimeout)
 	defer cancel()
-	err = c.filesExec(ctx, svc, filesCmd(filesGuard+`[ -f "$p" ] || exit 4
+	err = c.filesExec(ctx, svc, vol, filesCmd(filesGuard+`[ -f "$p" ] || exit 4
 cat "$p"`, vol, abs), func(r io.Reader) error {
 		_, err := io.Copy(w, r)
 		return err
@@ -314,6 +364,9 @@ func (c *Core) ArchiveVolumeFiles(ctx context.Context, serviceID, dir string, na
 	if abs == "" {
 		return fmt.Errorf("%w: pick a volume to download", ErrInvalid)
 	}
+	if vol.container && abs == "/" && len(names) == 0 {
+		return fmt.Errorf("%w: pick the folders of the container to download, not all of it", ErrInvalid)
+	}
 	for _, n := range names {
 		if n == "" || n == "." || n == ".." || strings.ContainsAny(n, "/\x00") {
 			return fmt.Errorf("%w: %q is not a name in %s", ErrInvalid, n, dir)
@@ -322,12 +375,12 @@ func (c *Core) ArchiveVolumeFiles(ctx context.Context, serviceID, dir string, na
 	// The folder itself: archived from its parent, under its own name.
 	script := filesGuard + `[ -d "$p" ] || exit 4
 if [ $# -eq 0 ]; then set -- "${p##*/}"; p=${p%/*}; fi
-cd "$p" || exit 2
+cd "${p:-/}" || exit 2
 for n; do [ -e "$n" ] || [ -L "$n" ] || exit 2; done
 tar -czf - -- "$@"`
 	ctx, cancel := context.WithTimeout(ctx, filesTransferTimeout)
 	defer cancel()
-	err = c.filesExec(ctx, svc, append(filesCmd(script, vol, abs), names...), func(r io.Reader) error {
+	err = c.filesExec(ctx, svc, vol, append(filesCmd(script, vol, abs), names...), func(r io.Reader) error {
 		_, err := io.Copy(w, r)
 		return err
 	})
@@ -338,7 +391,7 @@ tar -czf - -- "$@"`
 // remaining arguments as "$@".
 func filesCmd(script string, vol fileVolume, abs string) []string {
 	return []string{"sh", "-c", `root=$1 p=$2; shift 2
-` + script, "sh", helperVolumeRoot + "/" + vol.name, abs}
+` + script, "sh", vol.root(), abs}
 }
 
 // filesError turns a helper script's exit code into an error for the caller.
@@ -358,6 +411,8 @@ func filesError(p string, err error) error {
 		return fmt.Errorf("%w: %s already exists", store.ErrConflict, p)
 	case filesExitChanged:
 		return fmt.Errorf("%w: %s changed since it was read", store.ErrConflict, p)
+	case 126, 127: // only in a container: its image lacks sh or a tool
+		return fmt.Errorf("%w: the container's image lacks a shell or the tools to browse files (sh, stat, realpath, cat): use a volume", ErrInvalid)
 	}
 	return err
 }
@@ -452,16 +507,24 @@ type filesHelper struct {
 	idle      *time.Timer
 }
 
-// filesExec runs cmd in svc's helper, starting it if needed, and hands its
-// stdout to read. A helper removed behind the manager's back is started
-// again once.
-func (c *Core) filesExec(ctx context.Context, svc store.Service, cmd []string, read func(io.Reader) error) error {
-	return c.filesExecIn(ctx, svc, docker.ExecOptions{Cmd: cmd}, read)
+// filesExec runs cmd where vol's files are, and hands its stdout to read:
+// in svc's helper for a volume (started if needed; one removed behind the
+// manager's back is started again once), or as root in the container.
+func (c *Core) filesExec(ctx context.Context, svc store.Service, vol fileVolume, cmd []string, read func(io.Reader) error) error {
+	return c.filesExecIn(ctx, svc, vol, docker.ExecOptions{Cmd: cmd}, read)
 }
 
 // filesExecIn is filesExec with stdin; then the helper isn't retried, since
 // stdin may be partly consumed.
-func (c *Core) filesExecIn(ctx context.Context, svc store.Service, opts docker.ExecOptions, read func(io.Reader) error) error {
+func (c *Core) filesExecIn(ctx context.Context, svc store.Service, vol fileVolume, opts docker.ExecOptions, read func(io.Reader) error) error {
+	if vol.container {
+		id, err := c.filesContainer(ctx, svc, vol.name)
+		if err != nil {
+			return err
+		}
+		opts.User = "0" // whatever user the image runs as
+		return filesStream(ctx, c.dockerFor(svc.ServerID), id, opts, read)
+	}
 	for attempt := 0; ; attempt++ {
 		h, id, err := c.acquireFilesHelper(ctx, svc)
 		if err != nil {
@@ -505,6 +568,31 @@ func filesStream(ctx context.Context, dk *docker.Client, id string, opts docker.
 	}
 	_, _ = io.Copy(io.Discard, pr)
 	return <-done
+}
+
+// filesContainer resolves "@container" (the first running replica of the
+// serving deployment) or "@<container ID>" to a running container of svc.
+func (c *Core) filesContainer(ctx context.Context, svc store.Service, ref string) (string, error) {
+	cts, err := c.activeContainers(ctx, svc)
+	if ref != FilesContainer {
+		cts, err = c.serviceContainers(ctx, svc)
+	}
+	if err != nil {
+		return "", err
+	}
+	slices.SortFunc(cts, func(a, b container.Summary) int {
+		return strings.Compare(a.Labels[docker.LabelReplica], b.Labels[docker.LabelReplica])
+	})
+	id := strings.TrimPrefix(ref, containerPrefix)
+	for _, ct := range cts {
+		if ct.State == container.StateRunning && (ref == FilesContainer || strings.HasPrefix(ct.ID, id)) {
+			return ct.ID, nil
+		}
+	}
+	if ref == FilesContainer {
+		return "", fmt.Errorf("%w: %s has no running container: start it to browse its files", ErrInvalid, svc.Name)
+	}
+	return "", fmt.Errorf("%w: container %s of %s isn't running (it may have been replaced by a deploy)", ErrInvalid, id, svc.Name)
 }
 
 // acquireFilesHelper returns svc's running helper, marked busy until

@@ -16,6 +16,8 @@ import (
 type ExecOptions struct {
 	Cmd []string
 	Env []string
+	// User runs the process as this user (e.g. "0"); empty is the container's.
+	User string
 	// Stdin, if set, is streamed to the process and then closed.
 	Stdin io.Reader
 	// Stdout receives the process's stdout; nil discards it.
@@ -43,6 +45,7 @@ func (c *Client) Exec(ctx context.Context, containerID string, opts ExecOptions)
 	created, err := c.ExecCreate(ctx, containerID, client.ExecCreateOptions{
 		Cmd:          opts.Cmd,
 		Env:          opts.Env,
+		User:         opts.User,
 		AttachStdin:  opts.Stdin != nil,
 		AttachStdout: true,
 		AttachStderr: true,

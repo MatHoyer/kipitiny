@@ -49,6 +49,15 @@ function volumesOf(service: { id: string; kind: string; volumes: { name: string;
           "README.txt": file("User uploads live here. Back them up with the service.\n"),
         }),
       });
+  // The container's own filesystem, under "@container" like on a server.
+  vols.set("@container", {
+    mountPath: "/",
+    root: dir({
+      etc: dir({ hostname: file(`${service.id}-1\n`), "os-release": file('NAME="Alpine Linux"\nVERSION_ID=3.22.0\n') }),
+      app: service.kind === "app" ? dir({ "package.json": file('{ "name": "app", "version": "1.4.2" }\n'), dist: dir({ "server.js": file("", at(2), 412_337) }) }) : dir({}),
+      tmp: dir({}, at(0)),
+    }),
+  });
   trees.set(service.id, vols);
   return vols;
 }
@@ -66,7 +75,8 @@ class FilesError extends Error {
 function locate(service: Parameters<typeof volumesOf>[0], p: string) {
   const segs = p.split("/").filter((s) => s && s !== ".");
   if (segs.includes("..")) throw new FilesError(400, `path ${p} must not contain ..`);
-  const vol = volumesOf(service).get(segs[0] ?? "");
+  // Any replica of the demo shows the same files.
+  const vol = volumesOf(service).get(segs[0]?.startsWith("@") ? "@container" : (segs[0] ?? ""));
   if (!vol) throw new FilesError(404, "not found");
   let parent: Node | undefined;
   let node: Node | undefined = vol.root;
@@ -88,7 +98,7 @@ function guardWrite(service: { kind: string }) {
 
 /** Like core: parent folders made on the way, conflicts refused. */
 function mkdirs(service: Parameters<typeof volumesOf>[0], segs: string[]): Node {
-  const vol = volumesOf(service).get(segs[0]);
+  const vol = volumesOf(service).get(segs[0].startsWith("@") ? "@container" : segs[0]);
   if (!vol) throw new FilesError(404, "not found");
   let node = vol.root;
   for (const s of segs.slice(1)) {
@@ -114,7 +124,14 @@ export const files = {
         path: "",
         readOnly,
         truncated: false,
-        entries: [...volumesOf(service)].map(([name, v]) => ({ name, type: "volume", size: 0, uid: 0, gid: 0, mountPath: v.mountPath })),
+        entries: [...volumesOf(service)].map(([name, v]) => ({
+          name,
+          type: name.startsWith("@") ? "container" : "volume",
+          size: 0,
+          uid: 0,
+          gid: 0,
+          mountPath: v.mountPath,
+        })),
       };
     const { node, segs } = locate(service, p);
     if (!node) throw new FilesError(404, "not found");
@@ -157,6 +174,7 @@ export const files = {
   },
   transfer(service: Service, from: string, to: string, copy: boolean) {
     guardWrite(service);
+    if (from.startsWith("@") !== to.startsWith("@")) throw new FilesError(400, "a container's files and volumes are apart: download and upload instead");
     const src = locate(service, from);
     const dst = locate(service, to);
     if (!src.node || !src.parent || src.parent.type !== "dir") throw new FilesError(404, "not found");

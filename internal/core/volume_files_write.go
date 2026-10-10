@@ -27,12 +27,14 @@ import (
 //	                  unless that folder exists inside ROOT
 //	mkp ROOT SEG...   creates the folders ROOT/SEG/... one level at a time,
 //	                  refusing a symlink out of ROOT; sets $d to the last
+//
+// ROOT is "" for a container's filesystem: every absolute path is inside.
 const filesWriteLib = `inside() { case "$2" in "$1"|"$1"/*) ;; *) exit 3 ;; esac; }
 own() { stat -c %u:%g "$1"; }
 exists() { [ -e "$1" ] || [ -L "$1" ]; }
-entry() { d=$(realpath "${2%/*}" 2>/dev/null) && [ -d "$d" ] || exit 2; inside "$1" "$d"; e="$d/${2##*/}"; }
+entry() { d=${2%/*}; d=$(realpath "${d:-/}" 2>/dev/null) && [ -d "$d" ] || exit 2; inside "$1" "$d"; e="${d%/}/${2##*/}"; }
 mkp() {
-  r=$1; d=$1; shift
+  r=$1; d=${1:-/}; shift
   for s; do
     n="$d/$s"
     if exists "$n"; then
@@ -62,14 +64,11 @@ func volumeEntry(svc store.Service, p string) (vol fileVolume, abs string, rel [
 	if err != nil {
 		return vol, "", nil, err
 	}
-	root := helperVolumeRoot + "/" + vol.name
-	if abs == "" || abs == root {
+	if abs == "" || abs == vol.top() {
 		return vol, "", nil, fmt.Errorf("%w: give a path inside a volume, not %q", ErrInvalid, p)
 	}
-	return vol, abs, strings.Split(strings.TrimPrefix(abs, root+"/"), "/"), nil
+	return vol, abs, strings.Split(strings.TrimPrefix(abs, vol.root()+"/"), "/"), nil
 }
-
-func volumeRoot(vol fileVolume) string { return helperVolumeRoot + "/" + vol.name }
 
 // writableService loads a service whose volumes may be written.
 func (c *Core) writableService(ctx context.Context, id string) (store.Service, error) {
@@ -95,9 +94,10 @@ func (c *Core) auditFiles(ctx context.Context, action, serviceID, what string, e
 	c.Audit(ctx, "volume "+action, serviceID+":"+what, status, err)
 }
 
-// filesRun runs a write script (filesWriteLib loaded, arguments as "$@").
-func (c *Core) filesRun(ctx context.Context, svc store.Service, script string, args ...string) error {
-	return c.filesExec(ctx, svc, append([]string{"sh", "-c", filesWriteLib + script, "sh"}, args...), func(r io.Reader) error {
+// filesRun runs a write script where vol's files are (filesWriteLib loaded,
+// arguments as "$@").
+func (c *Core) filesRun(ctx context.Context, svc store.Service, vol fileVolume, script string, args ...string) error {
+	return c.filesExec(ctx, svc, vol, append([]string{"sh", "-c", filesWriteLib + script, "sh"}, args...), func(r io.Reader) error {
 		_, err := io.Copy(io.Discard, r)
 		return err
 	})
@@ -120,8 +120,8 @@ func (c *Core) MakeVolumeDir(ctx context.Context, serviceID, p string) (err erro
 mkp "$root" "$@"
 exists "$d/$last" && exit 5
 mkdir "$d/$last" && chown "$(own "$d")" "$d/$last"`
-	args := append([]string{volumeRoot(vol), rel[len(rel)-1]}, rel[:len(rel)-1]...)
-	return filesError(p, c.filesRun(ctx, svc, script, args...))
+	args := append([]string{vol.root(), rel[len(rel)-1]}, rel[:len(rel)-1]...)
+	return filesError(p, c.filesRun(ctx, svc, vol, script, args...))
 }
 
 // WriteVolumeFile streams r into a file of svc's volumes, creating missing
@@ -163,14 +163,14 @@ elif [ -n "$mod" ]; then
   exit 6
 fi
 `
-	args := append([]string{volumeRoot(vol), rel[len(rel)-1], tmp, over, mod}, rel[:len(rel)-1]...)
+	args := append([]string{vol.root(), rel[len(rel)-1], tmp, over, mod}, rel[:len(rel)-1]...)
 	cmd := func(script string) []string {
 		return append([]string{"sh", "-c", filesWriteLib + prelude + script, "sh"}, args...)
 	}
 	cleanup := func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), filesBrowseTimeout)
 		defer cancel()
-		if err := c.filesRun(ctx, svc, prelude+`rm -f "$t"`, args...); err != nil {
+		if err := c.filesRun(ctx, svc, vol, prelude+`rm -f "$t"`, args...); err != nil {
 			c.log.Warn("cannot remove a cut upload", "service", svc.ID, "path", p, "err", err)
 		}
 	}
@@ -179,7 +179,7 @@ fi
 	defer cancel()
 	in := &countingReader{r: r}
 	var size strings.Builder
-	err = c.filesExecIn(ctx, svc, docker.ExecOptions{Cmd: cmd(check + `cat > "$t" && stat -c %s "$t"`), Stdin: in}, func(out io.Reader) error {
+	err = c.filesExecIn(ctx, svc, vol, docker.ExecOptions{Cmd: cmd(check + `cat > "$t" && stat -c %s "$t"`), Stdin: in}, func(out io.Reader) error {
 		_, err := io.Copy(&size, out)
 		return err
 	})
@@ -198,7 +198,7 @@ else chown "$(own "$d")" "$t"; fi || exit 1
 mv -f "$t" "$n" || exit 1
 trap - EXIT
 ` + filesStat + `st "$n" "$name"`
-	err = c.filesExec(ctx, svc, cmd(finish), func(out io.Reader) error {
+	err = c.filesExec(ctx, svc, vol, cmd(finish), func(out io.Reader) error {
 		return readEntries(out, func(got VolumeEntry) error { e = got; return nil })
 	})
 	if err != nil {
@@ -246,7 +246,10 @@ func (c *Core) transferVolumePath(ctx context.Context, serviceID, from, to, op s
 	if err != nil {
 		return err
 	}
-	if toAbs == fromAbs || strings.HasPrefix(toAbs, fromAbs+"/") {
+	if fromVol.container != toVol.container || (fromVol.container && fromVol.name != toVol.name) {
+		return fmt.Errorf("%w: a container's files and volumes are apart: download and upload instead", ErrInvalid)
+	}
+	if fromVol.container == toVol.container && fromVol.name == toVol.name && (toAbs == fromAbs || strings.HasPrefix(toAbs, fromAbs+"/")) {
 		return fmt.Errorf("%w: can't move or copy %s into itself", ErrInvalid, from)
 	}
 	// Deleting from the source first then checking the destination would
@@ -257,7 +260,7 @@ case "$e/" in "$src"/*) exit 4 ;; esac
 ` + op
 	ctx, cancel := context.WithTimeout(ctx, filesTransferTimeout)
 	defer cancel()
-	err = c.filesRun(ctx, svc, script, volumeRoot(fromVol), fromAbs, volumeRoot(toVol), toAbs)
+	err = c.filesRun(ctx, svc, fromVol, script, fromVol.root(), fromAbs, toVol.root(), toAbs)
 	if err != nil {
 		// Which path the code is about isn't known; name both.
 		return filesError(from+" -> "+to, err)
@@ -277,17 +280,23 @@ func (c *Core) DeleteVolumePaths(ctx context.Context, serviceID string, paths []
 		return fmt.Errorf("%w: nothing to delete", ErrInvalid)
 	}
 	args := make([]string, 0, 2*len(paths))
-	for _, p := range paths {
+	var where fileVolume // where the script runs: the helper, or one container
+	for i, p := range paths {
 		vol, abs, _, err := volumeEntry(svc, p)
 		if err != nil {
 			return err
 		}
-		args = append(args, volumeRoot(vol), abs)
+		if i == 0 {
+			where = vol
+		} else if vol.container != where.container || (vol.container && vol.name != where.name) {
+			return fmt.Errorf("%w: delete a container's files and volume files separately", ErrInvalid)
+		}
+		args = append(args, vol.root(), abs)
 	}
 	script := `check() { while [ $# -gt 0 ]; do entry "$1" "$2"; exists "$e" || exit 2; shift 2; done; }
 del() { while [ $# -gt 0 ]; do entry "$1" "$2"; rm -rf -- "$e" || exit 1; shift 2; done; }
 check "$@"; del "$@"`
 	ctx, cancel := context.WithTimeout(ctx, filesTransferTimeout)
 	defer cancel()
-	return filesError(strings.Join(paths, ", "), c.filesRun(ctx, svc, script, args...))
+	return filesError(strings.Join(paths, ", "), c.filesRun(ctx, svc, where, script, args...))
 }

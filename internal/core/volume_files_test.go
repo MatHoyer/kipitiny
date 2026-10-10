@@ -29,6 +29,12 @@ func TestVolumePath(t *testing.T) {
 		{app, "data/a\x00b", "", ErrInvalid},
 		{app, "other/x", "", store.ErrNotFound},
 		{pg, "data/base", "/v/data/base", nil},
+		{app, "@container", "/", nil},
+		{app, "@container/etc/nginx/", "/etc/nginx", nil},
+		{pg, "@0123456789ab/var/run", "/var/run", nil},
+		{app, "@container/../etc", "", ErrInvalid},
+		{app, "@other/x", "", ErrInvalid},
+		{app, "@0123/x", "", ErrInvalid},
 	} {
 		_, got, err := volumePath(tc.svc, tc.in)
 		if !errors.Is(err, tc.err) || got != tc.want {
@@ -37,8 +43,29 @@ func TestVolumePath(t *testing.T) {
 	}
 }
 
+func TestFileVolumeDisplay(t *testing.T) {
+	vol := fileVolume{name: "data"}
+	ct := fileVolume{name: FilesContainer, container: true}
+	for _, tc := range []struct {
+		v        fileVolume
+		abs, out string
+	}{
+		{vol, "/v/data", "data"},
+		{vol, "/v/data/mods/a.jar", "data/mods/a.jar"},
+		{ct, "/", "@container"},
+		{ct, "/etc/nginx", "@container/etc/nginx"},
+	} {
+		if got := tc.v.display(tc.abs); got != tc.out {
+			t.Errorf("display(%q) = %q, want %q", tc.abs, got, tc.out)
+		}
+	}
+	if ct.root() != "" || ct.top() != "/" || vol.top() != "/v/data" {
+		t.Error("roots")
+	}
+}
+
 func TestFileVolumes(t *testing.T) {
-	if v := fileVolumes(store.Service{Kind: store.ServiceKindRedis}); len(v) != 1 || v[0] != (fileVolume{"data", "/data"}) {
+	if v := fileVolumes(store.Service{Kind: store.ServiceKindRedis}); len(v) != 1 || v[0] != (fileVolume{name: "data", mountPath: "/data"}) {
 		t.Errorf("redis: %v", v)
 	}
 	if !filesReadOnly(store.Service{Kind: store.ServiceKindPostgres}) || filesReadOnly(store.Service{Kind: store.ServiceKindApp}) {

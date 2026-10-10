@@ -234,7 +234,7 @@ export function Service() {
             <TabsTrigger value="logs">Logs</TabsTrigger>
             <TabsTrigger value="terminal">Terminal</TabsTrigger>
             {isDb && <TabsTrigger value="data">Data</TabsTrigger>}
-            {hasData && <TabsTrigger value="files">Files</TabsTrigger>}
+            <TabsTrigger value="files">Files</TabsTrigger>
             <TabsTrigger value="environment">Environment</TabsTrigger>
             {canBackup(svc) && <TabsTrigger value="backups">Backups</TabsTrigger>}
             <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -278,11 +278,9 @@ export function Service() {
               <DataTab svc={svc} />
             </TabsContent>
           )}
-          {hasData && (
-            <TabsContent value="files">
-              <FilesTab svc={svc} onBackups={() => setTab("backups")} />
-            </TabsContent>
-          )}
+          <TabsContent value="files">
+            <FilesTab svc={svc} onBackups={() => setTab("backups")} />
+          </TabsContent>
           <TabsContent value="environment" className="flex flex-col gap-6">
             {gitManaged && <GitManagedNote path={git.data!.path} />}
             <fieldset disabled={gitManaged} className="contents">
