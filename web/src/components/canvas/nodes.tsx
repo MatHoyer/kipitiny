@@ -1,8 +1,9 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { GitFork, Globe, HardDrive, Lock, Network, Plus, Server, ShieldCheck, TriangleAlert } from "lucide-react";
+import { GitFork, Globe, HardDrive, Network, Plus, Server, ShieldCheck, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { CloudflareIcon } from "@/components/brand-icons";
 import { stateColors } from "@/components/common";
+import { ReachIcon, reachOf } from "@/components/reach";
 import { ServiceIcon } from "@/components/service-icon";
 import { projectProblems, serviceState, serviceWarning } from "@/components/topology";
 import { Button } from "@/components/ui/button";
@@ -49,9 +50,9 @@ function ServiceNode({ data: { svc }, selected }: Props<ServiceData>) {
         <span title={state} className={cn("mt-1.5 size-2 shrink-0 rounded-full", stateColors[state] ?? "bg-muted-foreground/50")} />
       </div>
       <p className="flex min-w-0 items-center gap-1 font-mono text-[11px] text-muted-foreground">
-        {isDb ? <HardDrive className="size-3 shrink-0" /> : svc.domain ? <Globe className="size-3 shrink-0 text-sky-500" /> : <Lock className="size-3 shrink-0" />}
-        <span className="truncate">{isDb ? `:${databasePorts[svc.kind as keyof typeof databasePorts]}` : svc.domain || (svc.hostNetwork ? "host network" : "private")}</span>
-        {!isDb && svc.port ? <span className="shrink-0">:{svc.port}</span> : null}
+        {isDb ? <HardDrive className="size-3 shrink-0" /> : <ReachIcon service={svc} className="size-3 shrink-0" />}
+        <span className="truncate">{isDb ? `:${databasePorts[svc.kind as keyof typeof databasePorts]}` : reachOf(svc).label}</span>
+        {!isDb && reachOf(svc).kind === "http" ? <span className="shrink-0">:{svc.port}</span> : null}
       </p>
       {warning ? (
         <p className="flex items-center gap-1 truncate text-[11px] text-destructive">

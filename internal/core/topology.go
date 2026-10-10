@@ -109,9 +109,11 @@ type TopoService struct {
 	// Uses are the IDs of the project databases its env references.
 	Uses []string `json:"uses"`
 	// Networks are the IDs of the networks created by hand it joins.
-	Networks    []string   `json:"networks"`
-	HostNetwork bool       `json:"hostNetwork,omitempty"`
-	Containers  []TopoNode `json:"containers"`
+	Networks    []string `json:"networks"`
+	HostNetwork bool     `json:"hostNetwork,omitempty"`
+	// PublishedPorts are host ports published straight to the service.
+	PublishedPorts []store.PublishedPort `json:"publishedPorts,omitempty"`
+	Containers     []TopoNode            `json:"containers"`
 }
 
 // Topology maps every server, or only the server and project of projectID.
@@ -238,7 +240,7 @@ func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []s
 			ts := TopoService{
 				ID: s.ID, Name: s.Name, Kind: s.Kind, Image: s.Image, Icon: s.Icon, Domain: s.Domain, Port: s.Port,
 				Replicas: s.Replicas, Stopped: s.Stopped, Uses: usedDatabases(s, p, dbs), Networks: s.Networks, HostNetwork: s.HostNetwork,
-				Containers: []TopoNode{},
+				PublishedPorts: s.PublishedPorts, Containers: []TopoNode{},
 			}
 			if ts.Networks == nil {
 				ts.Networks = []string{}

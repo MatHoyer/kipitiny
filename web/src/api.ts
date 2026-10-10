@@ -133,6 +133,8 @@ export type TopoService = {
   /** IDs of the networks created by hand it joins. */
   networks: string[];
   hostNetwork?: boolean;
+  /** Host ports published straight to the service. */
+  publishedPorts?: PublishedPort[];
   containers: TopoNode[];
 };
 

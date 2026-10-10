@@ -61,7 +61,7 @@ export function buildGraph(
     };
 
     // Ingress: Internet → (tunnel →) Traefik, and the manager's own domain.
-    const projectsPublic = s.projects.some((p) => p.services.some((svc) => svc.domain));
+    const projectsPublic = s.projects.some((p) => p.services.some((svc) => svc.domain && svc.port));
     if (s.traefik && (!opts.projectView || projectsPublic)) {
       add(infra("internet", s, place(`internet:${s.id}`, { x: x0, y })), { w: INFRA_W, h: INFRA_H });
       if (s.tunnel) {
@@ -95,7 +95,7 @@ export function buildGraph(
       px += size.w + GAP;
       rowH = Math.max(rowH, size.h);
       for (const svc of p.services) {
-        if (svc.domain && s.traefik) edges.push(edge(`traefik:${s.id}`, `svc:${svc.id}`, "web"));
+        if (svc.domain && svc.port && s.traefik) edges.push(edge(`traefik:${s.id}`, `svc:${svc.id}`, "web"));
         for (const db of svc.uses) edges.push(edge(`svc:${svc.id}`, `svc:${db}`, "db"));
       }
     }

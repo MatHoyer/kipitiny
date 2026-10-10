@@ -185,6 +185,7 @@ function topology(projectId?: string): Topology {
                 uses: used(s, p),
                 networks: s.networks,
                 hostNetwork: s.hostNetwork || undefined,
+                publishedPorts: s.publishedPorts.length ? s.publishedPorts : undefined,
                 containers: containers(s).map((c) =>
                   node(c, [
                     { network: projectNet(p), ip: `172.${20 + pi}.0.${ip++}`, aliases: [s.name] },
