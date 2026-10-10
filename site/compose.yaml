@@ -11,6 +11,7 @@ services:
     x-kipitiny:
       domain: kipitiny.mathieuhoyer.fr
       icon: nginx
+      uptime: {path: /, interval: 1m}
       middlewares:
         headers:
           X-Content-Type-Options: nosniff
