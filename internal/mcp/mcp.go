@@ -149,7 +149,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "list_databases", Annotations: readOnly,
 		Description: "The databases of a PostgreSQL, MySQL, MariaDB or MongoDB service's instance, with their size; main is the service's own."}, t.listDatabases)
 	mcp.AddTool(server, &mcp.Tool{Name: "create_database",
-		Description: "Create a database in a PostgreSQL, MySQL or MariaDB service's instance, owned by the service's user. Needs admin."}, t.createDatabase)
+		Description: "Create a database in a PostgreSQL, MySQL or MariaDB service's instance, owned by the service's user, or in a MongoDB one with its first collection. Needs admin."}, t.createDatabase)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_tables", Annotations: readOnly,
 		Description: "Tables and views of a PostgreSQL, MySQL or MariaDB database with their columns, estimated rows and size, or the collections of a MongoDB one (no columns)."}, t.listTables)
 	mcp.AddTool(server, &mcp.Tool{Name: "read_table", Annotations: readOnly,

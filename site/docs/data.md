@@ -37,8 +37,8 @@ from the root one). The server itself refuses writes there.
   owns. Binary columns show as `0x…` hex; `ilike` is `LIKE` with the column's
   collation (usually case-insensitive).
 - **MongoDB**: the collections and views of the picked database (the instance's
-  `admin`, `config` and `local` aside; MongoDB creates a database on its first
-  write, so there is no **+**). Documents show as indented
+  `admin`, `config` and `local` aside). **+** creates a database with its first
+  collection, which it needs to exist (MongoDB keeps no empty database). Documents show as indented
   [Extended JSON](https://www.mongodb.com/docs/manual/reference/mongodb-extended-json/),
   10 to 100 per page. *Filter* and *Sort* take a query and a sort as JSON
   (`{ "status": "active", "age": { "$gte": 18 } }`, `{ "createdAt": -1 }`),

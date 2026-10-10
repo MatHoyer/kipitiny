@@ -123,9 +123,10 @@ ORDER BY datname;`, func(row []json.RawMessage) error {
 var pgDatabaseNameRe = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
 
 // CreatePgDatabase creates a database in a PostgreSQL, MySQL or MariaDB
-// service's instance, owned by the service's user. Admin only. (MongoDB
-// creates a database on its first write.)
-func (c *Core) CreatePgDatabase(ctx context.Context, id, name string) (PgDatabase, error) {
+// service's instance, owned by the service's user, or in a MongoDB one with
+// its first collection (a database without one doesn't exist there).
+// Admin only.
+func (c *Core) CreatePgDatabase(ctx context.Context, id, name, collection string) (PgDatabase, error) {
 	if err := Require(ctx, store.ScopeAdmin); err != nil {
 		return PgDatabase{}, err
 	}
@@ -135,9 +136,18 @@ func (c *Core) CreatePgDatabase(ctx context.Context, id, name string) (PgDatabas
 	if strings.HasSuffix(name, "__restore") || strings.HasSuffix(name, "__pre_restore") {
 		return PgDatabase{}, fmt.Errorf("%w: names ending in __restore or __pre_restore are kept for restores", ErrInvalid)
 	}
-	t, err := c.dataTarget(ctx, id, store.ServiceKindPostgres, store.ServiceKindMySQL, store.ServiceKindMariaDB)
+	t, err := c.dataTarget(ctx, id, store.ServiceKindPostgres, store.ServiceKindMySQL, store.ServiceKindMariaDB, store.ServiceKindMongoDB)
 	if err != nil {
 		return PgDatabase{}, err
+	}
+	if t.svc.Kind == store.ServiceKindMongoDB {
+		if err := t.mongoCreateDatabase(ctx, name, collection); err != nil {
+			return PgDatabase{}, err
+		}
+		return PgDatabase{Name: name}, nil
+	}
+	if collection != "" {
+		return PgDatabase{}, fmt.Errorf("%w: only a MongoDB database starts with a collection", ErrInvalid)
 	}
 	if t.svc.Kind.IsMySQL() {
 		if err := t.mysqlCreateDatabase(ctx, name); err != nil {

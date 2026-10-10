@@ -21,11 +21,13 @@ func (a *API) pgDatabases(w http.ResponseWriter, r *http.Request) {
 func (a *API) createPgDatabase(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name string `json:"name"`
+		// Collection is a MongoDB database's first collection.
+		Collection string `json:"collection"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
-	db, err := a.core.CreatePgDatabase(r.Context(), r.PathValue("id"), body.Name)
+	db, err := a.core.CreatePgDatabase(r.Context(), r.PathValue("id"), body.Name, body.Collection)
 	if err != nil {
 		a.fail(w, err)
 		return

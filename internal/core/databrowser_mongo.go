@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -121,6 +122,34 @@ func (t dataTarget) mongoCollections(ctx context.Context) ([]PgTable, error) {
 	}, "KP_DB="+t.db)
 	slices.SortFunc(tables, func(a, b PgTable) int { return strings.Compare(a.Name, b.Name) })
 	return tables, err
+}
+
+// mongoCollectionRe is what a new database's first collection may be
+// called: plain, so it needs no quoting in mongosh.
+var mongoCollectionRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]{0,119}$`)
+
+// mongoCreateDatabase creates a database by creating its first collection,
+// as root. The name was checked like a PostgreSQL one.
+func (t dataTarget) mongoCreateDatabase(ctx context.Context, name, collection string) error {
+	if slices.Contains(mongoSkipped, name) {
+		return fmt.Errorf("%w: %s is the server's own database", ErrInvalid, name)
+	}
+	if !mongoCollectionRe.MatchString(collection) || strings.HasPrefix(collection, "system.") {
+		return fmt.Errorf("%w: a MongoDB database starts with a collection: letters, digits, _ . and -, starting with a letter or _", ErrInvalid)
+	}
+	dbs, err := t.mongoDatabases(ctx)
+	if err != nil {
+		return err
+	}
+	// The service's own is listed before it holds anything.
+	if slices.ContainsFunc(dbs, func(d PgDatabase) bool { return d.Name == name && (d.Bytes > 0 || !d.Main) }) {
+		return fmt.Errorf("%w: %s already has a database %s", ErrInvalid, t.svc.Name, name)
+	}
+	ctx, cancel := context.WithTimeout(ctx, dataConsoleTimeout)
+	defer cancel()
+	opts := t.mongosh(`db.getSiblingDB(process.env.KP_DB).createCollection(process.env.KP_COLL)`, true, dataConsoleTimeout)
+	opts.Env = []string{"KP_DB=" + name, "KP_COLL=" + collection}
+	return mongoError(clientError(t.dk.Exec(ctx, t.container, opts)))
 }
 
 // MongoDocuments returns one page of a collection's documents.
