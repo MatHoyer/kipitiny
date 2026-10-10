@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { PlanView } from "@/components/compose-dialog";
-import { EmptyState, ErrorText, Loading } from "@/components/common";
+import { CheckboxField, EmptyState, ErrorText, Loading } from "@/components/common";
 import { ServiceIconTile } from "@/components/service-icon";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -175,11 +175,22 @@ function InstallForm({
           </div>
         )}
         {asked.map((i) =>
-          i.type === "select" ? (
+          i.type === "checkbox" ? (
+            <CheckboxField
+              key={i.name}
+              label={i.label}
+              description={i.help && <Linked text={i.help} />}
+              checked={values[i.name] === "true"}
+              onCheckedChange={(v) => {
+                setValues((vs) => ({ ...vs, [i.name]: v ? "true" : "" }));
+                changed();
+              }}
+            />
+          ) : i.type === "select" ? (
             <FloatingSelect
               key={i.name}
               label={i.label}
-              description={i.help}
+              description={i.help && <Linked text={i.help} />}
               value={values[i.name] ?? ""}
               onValueChange={(v) => {
                 setValues((vs) => ({ ...vs, [i.name]: v }));
@@ -195,7 +206,7 @@ function InstallForm({
               type={i.type === "secret" ? "password" : i.type === "url" ? "url" : "text"}
               autoComplete="off"
               placeholder={i.placeholder}
-              description={i.help}
+              description={i.help && <Linked text={i.help} />}
               value={values[i.name] ?? ""}
               onChange={(e) => {
                 setValues((v) => ({ ...v, [i.name]: e.target.value }));
@@ -230,5 +241,18 @@ function InstallForm({
         )}
       </DialogFooter>
     </form>
+  );
+}
+
+/** Help text with its URLs as links. */
+function Linked({ text }: { text: string }) {
+  return text.split(/(https:\/\/[^\s,]+[^\s,.])/).map((part, i) =>
+    i % 2 ? (
+      <a key={i} href={part} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+        {part.replace(/^https:\/\//, "")}
+      </a>
+    ) : (
+      part
+    ),
   );
 }

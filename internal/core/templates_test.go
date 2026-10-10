@@ -30,7 +30,7 @@ func TestInstallTemplateDryRun(t *testing.T) {
 
 	// Defaults fill what isn't given; a published port and a DNS-only domain.
 	res, err = c.InstallTemplate(ctx, "minecraft", TemplateInstall{
-		NewProject: &NewProject{Name: "minecraft"}, Values: map[string]string{"EULA": "TRUE", "DOMAIN": "mc.example.com"}, DryRun: true,
+		NewProject: &NewProject{Name: "minecraft"}, Values: map[string]string{"EULA": "true", "DOMAIN": "mc.example.com"}, DryRun: true,
 	})
 	if err != nil || !slices.Equal(res.Plan.Create, []string{"server"}) {
 		t.Fatalf("minecraft plan = %+v, %v", res, err)

@@ -65,11 +65,10 @@ export const demoTemplates: (AppTemplate & { services: DemoService[] })[] = [
     inputs: [
       {
         name: "EULA",
-        label: "Minecraft EULA",
-        type: "select",
-        options: ["TRUE"],
+        label: "I accept the Minecraft EULA",
+        type: "checkbox",
         required: true,
-        help: "Running a server needs you to accept https://aka.ms/MinecraftEULA (pick TRUE to accept).",
+        help: "Mojang's terms for running a server, https://aka.ms/MinecraftEULA. The server doesn't start without it.",
       },
       { name: "SERVER_TYPE", label: "Server type", type: "select", options: ["VANILLA", "PAPER", "FABRIC", "FORGE", "NEOFORGE", "PURPUR"], default: "VANILLA" },
       { name: "VERSION", label: "Minecraft version", type: "text", default: "LATEST", help: "LATEST, or a version like 1.21.4." },

@@ -600,7 +600,7 @@ export interface AppTemplate {
 export interface TemplateInput {
   name: string;
   label: string;
-  type: "text" | "secret" | "domain" | "url" | "select";
+  type: "text" | "secret" | "domain" | "url" | "select" | "checkbox";
   /** The choices of a select. */
   options?: string[];
   help?: string;
