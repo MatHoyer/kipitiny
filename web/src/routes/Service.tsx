@@ -327,7 +327,7 @@ export function Service() {
             </fieldset>
             {/* Not in the compose file, so git projects set them here too. */}
             {!svc.hostNetwork && <NetworksCard key={`networks-${svc.id}`} svc={svc} projectName={project.data?.name ?? ""} />}
-            {svc.kind === "app" && httpRouted(svc) && <MaintenanceCard key={`maintenance-${svc.id}`} svc={svc} projectName={project.data?.name ?? ""} />}
+            {svc.kind === "app" && httpRouted(svc) && project.data && <MaintenanceCard key={`maintenance-${svc.id}`} svc={svc} projectName={project.data.name} />}
             {svc.kind === "app" && <DeployFromCICard svc={svc} />}
             <DangerZone
               description={
