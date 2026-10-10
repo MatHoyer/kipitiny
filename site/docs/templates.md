@@ -44,7 +44,15 @@ A Minecraft Java Edition server ([itzg/minecraft-server](https://docker-minecraf
 
 ## Writing a template
 
-A template is a [compose file](/docs/compose) in `internal/templates/files/<id>.yaml`, built into kipitiny, with a top-level `x-template` block (which Docker Compose and kipitiny's compose import ignore):
+A template is a folder in `internal/templates/files/`, built into kipitiny:
+
+```
+internal/templates/files/beszel-hub/
+├── compose.yaml   the template
+└── logo.svg       optional: the logo it brings
+```
+
+`compose.yaml` is a [compose file](/docs/compose) with a top-level `x-template` block (which Docker Compose and kipitiny's compose import ignore):
 
 ```yaml
 x-template:
@@ -53,6 +61,12 @@ x-template:
   website: https://beszel.dev
   docs: https://beszel.dev/guide/getting-started
   icon: beszel
+  category: monitoring
+  tags: [metrics, docker, alerts]
+  logo:
+    label: Beszel
+    color: "#747BFF"
+    images: [beszel, beszel-agent]
   inputs:
     - name: DOMAIN
       label: Domain
@@ -74,8 +88,19 @@ volumes:
   data: {}
 ```
 
-- `name` is the default project name; the file's id (its file name) is the template's.
+- The folder name is the template's id; `name` is the default project name.
+- `category` groups the gallery: `monitoring`, `analytics`, `automation`, `development`, `storage`, `media`, `communication`, `productivity`, `security` or `games`. `tags` are extra words its search matches.
 - Each input becomes the variable `${NAME}` of the file (the `.env` of a compose import). A `${NAME}` that is a whole `environment` value is stored as a secret, unless `x-kipitiny.secrets` lists the secrets.
 - Input fields: `name` (UPPER_CASE), `label`, `type` (`text`, `secret`, `domain`, `url`, `select` with its `options`, or `checkbox`, whose value is `true` or `false` and which `required` makes mandatory), `help` (its `https://` URLs become links), `placeholder`, `default`, `required`, and `generate` (a number of random bytes: the value is generated, not asked). Inputs work anywhere compose variables do (`ports`, `mem_limit`…) and in `x-kipitiny.domain`.
-- Pin images by version, and update a template by bumping its tag. Apps already installed keep theirs.
-- A test checks that every template parses, and that it uses exactly the variables it declares. The logo named by `icon` must exist in the UI (`web/src/components/service-icon.tsx`).
+
+### Logos
+
+`icon` names the logo shown for the template and for the services it creates. Either it's one the UI draws itself (`postgres`, `redis`, `nginx`, `node`), or one template brings it: a `logo.svg` next to its `compose.yaml`, and `x-template.logo` with its `label`, its brand `color` (`#rrggbb`, which tints its tile) and the `images` whose base name it also stands for (`ghcr.io/henrygd/beszel-agent:1` → `beszel-agent`), so services deployed without the template get it too. Several templates can share a logo (the Beszel agent uses the hub's); only one brings it.
+
+The SVG is a plain drawing: one `<svg>` element with `xmlns`, at most 16 KB, no scripts, event handlers, `foreignObject` or links outside the file. The UI shows it as an image.
+
+### Checks and updates
+
+- A test checks that every template parses, that it uses exactly the variables it declares, and that its logo exists.
+- After adding or changing one, run `go generate ./internal/templates`: the demo on this website shows the templates from a file it generates, and a test fails while that file is stale.
+- Pin images by version. Dependabot opens a pull request when a newer one is out (the Beszel images move together); CI checks the template still parses. Apps already installed keep their version.

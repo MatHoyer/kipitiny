@@ -7,6 +7,12 @@ x-template:
   website: https://www.minecraft.net
   docs: https://docker-minecraft-server.readthedocs.io
   icon: minecraft
+  category: games
+  tags: [java, paper, fabric, forge]
+  logo:
+    label: Minecraft
+    color: "#62B47A"
+    images: [minecraft-server]
   inputs:
     - name: EULA
       label: I accept the Minecraft EULA

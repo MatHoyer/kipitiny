@@ -7,6 +7,8 @@ x-template:
   website: https://beszel.dev
   docs: https://beszel.dev/guide/agent-installation
   icon: beszel
+  category: monitoring
+  tags: [metrics, docker, agent]
   inputs:
     - name: KEY
       label: Hub public key

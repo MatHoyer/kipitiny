@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/MatHoyer/kipitiny/internal/compose"
 )
@@ -107,18 +108,70 @@ func TestRender(t *testing.T) {
 }
 
 func TestParseRefuses(t *testing.T) {
+	const head = "name: app\nx-template: {title: T, description: D, category: games"
 	for name, src := range map[string]string{
-		"no header":   "name: app\nservices: {web: {image: nginx:1}}\n",
-		"bad input":   "name: app\nx-template: {title: T, description: D, inputs: [{name: lower, label: L}]}\n",
-		"no label":    "name: app\nx-template: {title: T, description: D, inputs: [{name: A}]}\n",
-		"bad type":    "name: app\nx-template: {title: T, description: D, inputs: [{name: A, label: L, type: number}]}\n",
-		"twice":       "name: app\nx-template: {title: T, description: D, inputs: [{name: A, label: L}, {name: A, label: L}]}\n",
-		"no project":  "x-template: {title: T, description: D}\n",
-		"no options":  "name: app\nx-template: {title: T, description: D, inputs: [{name: A, label: L, type: select}]}\n",
-		"bad default": "name: app\nx-template: {title: T, description: D, inputs: [{name: A, label: L, type: select, options: [x], default: y}]}\n",
+		"no header":    "name: app\nservices: {web: {image: nginx:1}}\n",
+		"no category":  "name: app\nx-template: {title: T, description: D}\n",
+		"bad category": "name: app\nx-template: {title: T, description: D, category: misc}\n",
+		"bad input":    head + ", inputs: [{name: lower, label: L}]}\n",
+		"no label":     head + ", inputs: [{name: A}]}\n",
+		"bad type":     head + ", inputs: [{name: A, label: L, type: number}]}\n",
+		"twice":        head + ", inputs: [{name: A, label: L}, {name: A, label: L}]}\n",
+		"no project":   "x-template: {title: T, description: D, category: games}\n",
+		"no options":   head + ", inputs: [{name: A, label: L, type: select}]}\n",
+		"bad default":  head + ", inputs: [{name: A, label: L, type: select, options: [x], default: y}]}\n",
 	} {
-		if _, err := parse("app", []byte(src)); err == nil {
+		if _, _, err := parse("app", []byte(src), nil); err == nil {
 			t.Errorf("%s: no error", name)
 		}
+	}
+}
+
+const okSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1z"/></svg>`
+
+func TestLogos(t *testing.T) {
+	const withLogo = "name: app\nx-template: {title: T, description: D, category: games, icon: app, logo: {label: App, color: \"#112233\"}}\n"
+	_, logo, err := parse("app", []byte(withLogo), []byte(okSVG))
+	if err != nil || logo == nil || logo.Name != "app" || logo.Color != "#112233" {
+		t.Fatalf("logo = %+v, %v", logo, err)
+	}
+	for name, svg := range map[string]string{
+		"script":   `<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`,
+		"handler":  `<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"></svg>`,
+		"external": `<svg xmlns="http://www.w3.org/2000/svg"><image href="https://x.example/a.png"/></svg>`,
+		"foreign":  `<svg xmlns="http://www.w3.org/2000/svg"><foreignObject/></svg>`,
+		"not svg":  `<html></html>`,
+		"no ns":    `<svg viewBox="0 0 1 1"></svg>`,
+	} {
+		if _, _, err := parse("app", []byte(withLogo), []byte(svg)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	if _, _, err := parse("app", []byte(withLogo), nil); err == nil {
+		t.Error("logo without logo.svg accepted")
+	}
+	if _, _, err := parse("app", []byte("name: app\nx-template: {title: T, description: D, category: games}\n"), []byte(okSVG)); err == nil {
+		t.Error("logo.svg without x-template.logo accepted")
+	}
+
+	// Across templates: an icon needs a logo (or a built-in one), brought once.
+	tpl := func(icon, logo string) string {
+		return "name: app\nx-template: {title: T, description: D, category: games, icon: " + icon + logo + "}\nservices: {web: {image: nginx:1}}\n"
+	}
+	logoBlock := `, logo: {label: L, color: "#000000"}`
+	for name, files := range map[string]fstest.MapFS{
+		"missing": {"files/a/compose.yaml": {Data: []byte(tpl("nope", ""))}},
+		"twice": {
+			"files/a/compose.yaml": {Data: []byte(tpl("x", logoBlock))}, "files/a/logo.svg": {Data: []byte(okSVG)},
+			"files/b/compose.yaml": {Data: []byte(tpl("x", logoBlock))}, "files/b/logo.svg": {Data: []byte(okSVG)},
+		},
+		"loose file": {"files/a.yaml": {Data: []byte(tpl("postgres", ""))}},
+	} {
+		if _, err := loadFS(files); err == nil {
+			t.Errorf("%s: loaded", name)
+		}
+	}
+	if _, err := loadFS(fstest.MapFS{"files/a/compose.yaml": {Data: []byte(tpl("postgres", ""))}}); err != nil {
+		t.Errorf("built-in logo: %v", err)
 	}
 }

@@ -6,6 +6,13 @@ x-template:
   website: https://beszel.dev
   docs: https://beszel.dev/guide/getting-started
   icon: beszel
+  category: monitoring
+  tags: [metrics, docker, alerts]
+  # logo.svg in this folder; the agent uses it too.
+  logo:
+    label: Beszel
+    color: "#747BFF"
+    images: [beszel, beszel-agent]
   inputs:
     - name: DOMAIN
       label: Domain

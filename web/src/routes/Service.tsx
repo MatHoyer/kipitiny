@@ -21,7 +21,7 @@ import { lazy, Suspense, useEffect, useId, useRef, useState, type FormEvent, typ
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { portLabel } from "@/components/reach";
-import { ServiceIcon, serviceLogos } from "@/components/service-icon";
+import { ServiceIcon, useServiceLogos, type Logos } from "@/components/service-icon";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { CheckboxField, CopyButton, DangerZone, Empty, EmptyState, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { BasicAuthUsers, type BasicAuthRow } from "@/components/basic-auth-users";
@@ -399,7 +399,7 @@ const settingsForm = (s: ServiceT) => ({
 const AUTO_ICON = "auto";
 
 /** Automatic (from the image) or a known logo; an unknown saved icon stays listed. */
-function iconOptions(svc: ServiceT, image: string) {
+function iconOptions(svc: ServiceT, image: string, { logos }: Logos) {
   const option = (value: string, icon: string | undefined, label: string) => ({
     value,
     label: (
@@ -409,11 +409,11 @@ function iconOptions(svc: ServiceT, image: string) {
       </span>
     ),
   });
-  const names = Object.keys(serviceLogos);
+  const names = Object.keys(logos);
   if (svc.icon && !names.includes(svc.icon)) names.push(svc.icon);
   return [
     option(AUTO_ICON, undefined, "Automatic, from the image"),
-    ...names.map((name) => option(name, name, serviceLogos[name]?.label ?? name)),
+    ...names.map((name) => option(name, name, logos[name]?.label ?? name)),
   ];
 }
 
@@ -423,6 +423,7 @@ function Settings({ svc }: { svc: ServiceT }) {
   const [form, setForm] = useState(() => settingsForm(svc));
   const dirty = JSON.stringify(form) !== JSON.stringify(settingsForm(svc));
   const formId = useId();
+  const logos = useServiceLogos();
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
   const save = useMutation({
@@ -476,7 +477,7 @@ function Settings({ svc }: { svc: ServiceT }) {
               label="Icon"
               value={form.icon}
               onValueChange={(icon) => setForm({ ...form, icon })}
-              options={iconOptions(svc, form.image)}
+              options={iconOptions(svc, form.image, logos)}
               className="sm:col-span-2"
             />
             <DomainField

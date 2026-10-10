@@ -591,10 +591,21 @@ export interface AppTemplate {
   website?: string;
   docs?: string;
   icon?: string;
+  category: string;
+  tags: string[];
   inputs: TemplateInput[];
   /** The default project name. */
   project: string;
   compose: string;
+}
+
+/** A service logo a template brings, for services whose icon is name or whose image is one of images. */
+export interface TemplateLogo {
+  name: string;
+  label: string;
+  color: string;
+  images: string[];
+  svg: string;
 }
 
 export interface TemplateInput {
@@ -788,6 +799,7 @@ export const api = {
   applyCompose: (id: string, body: { compose: string; env: string; prune: boolean; dryRun?: boolean; deploy?: boolean }) =>
     request<ComposePlan>(`/projects/${id}/compose`, json("POST", body)),
   templates: () => request<AppTemplate[]>("/templates"),
+  templateLogos: () => request<TemplateLogo[]>("/templates/logos"),
   installTemplate: (id: string, body: TemplateInstall) => request<TemplateResult>(`/templates/${id}/install`, json("POST", body)),
   /** The project's git link; null when it has none. */
   projectGit: (id: string) =>

@@ -1,0 +1,242 @@
+{
+  "templates": [
+    {
+      "id": "beszel-agent",
+      "title": "Beszel agent",
+      "description": "Reports this server's CPU, memory, disks, network and containers to a Beszel hub.",
+      "website": "https://beszel.dev",
+      "docs": "https://beszel.dev/guide/agent-installation",
+      "icon": "beszel",
+      "category": "monitoring",
+      "tags": [
+        "metrics",
+        "docker",
+        "agent"
+      ],
+      "inputs": [
+        {
+          "name": "KEY",
+          "label": "Hub public key",
+          "type": "text",
+          "help": "In the hub, Add System shows it. Give the system this server's address and port 45876.",
+          "placeholder": "ssh-ed25519 AAAA…",
+          "required": true
+        },
+        {
+          "name": "TOKEN",
+          "label": "Token",
+          "type": "secret",
+          "help": "With the hub URL, the agent connects to the hub itself (no open port needed)."
+        },
+        {
+          "name": "HUB_URL",
+          "label": "Hub URL",
+          "type": "url",
+          "help": "Needed with the token.",
+          "placeholder": "https://beszel.example.com"
+        }
+      ],
+      "project": "beszel-agent",
+      "compose": "",
+      "services": [
+        {
+          "name": "agent",
+          "kind": "app",
+          "image": "henrygd/beszel-agent",
+          "icon": "beszel",
+          "hostNetwork": true,
+          "dockerSocket": "ro"
+        }
+      ]
+    },
+    {
+      "id": "beszel-hub",
+      "title": "Beszel hub",
+      "description": "Lightweight server monitoring with history, Docker stats and alerts. Install the Beszel agent on each server to watch.",
+      "website": "https://beszel.dev",
+      "docs": "https://beszel.dev/guide/getting-started",
+      "icon": "beszel",
+      "category": "monitoring",
+      "tags": [
+        "metrics",
+        "docker",
+        "alerts"
+      ],
+      "inputs": [
+        {
+          "name": "DOMAIN",
+          "label": "Domain",
+          "type": "domain",
+          "help": "Where the dashboard is served. The first visit creates the admin account.",
+          "placeholder": "beszel.example.com",
+          "required": true
+        }
+      ],
+      "project": "beszel",
+      "compose": "",
+      "services": [
+        {
+          "name": "hub",
+          "kind": "app",
+          "image": "henrygd/beszel",
+          "icon": "beszel",
+          "port": 8090,
+          "volumes": [
+            {
+              "name": "data",
+              "path": "/beszel_data"
+            }
+          ],
+          "domainInput": "DOMAIN"
+        }
+      ]
+    },
+    {
+      "id": "minecraft",
+      "title": "Minecraft server",
+      "description": "A Minecraft Java Edition server, vanilla or Paper, Fabric, Forge. The world is kept in a volume and backed up like any other.",
+      "website": "https://www.minecraft.net",
+      "docs": "https://docker-minecraft-server.readthedocs.io",
+      "icon": "minecraft",
+      "category": "games",
+      "tags": [
+        "java",
+        "paper",
+        "fabric",
+        "forge"
+      ],
+      "inputs": [
+        {
+          "name": "EULA",
+          "label": "I accept the Minecraft EULA",
+          "type": "checkbox",
+          "help": "Mojang's terms for running a server, https://aka.ms/MinecraftEULA. The server doesn't start without it.",
+          "required": true
+        },
+        {
+          "name": "SERVER_TYPE",
+          "label": "Server type",
+          "type": "select",
+          "options": [
+            "VANILLA",
+            "PAPER",
+            "FABRIC",
+            "FORGE",
+            "NEOFORGE",
+            "PURPUR"
+          ],
+          "default": "VANILLA"
+        },
+        {
+          "name": "VERSION",
+          "label": "Minecraft version",
+          "type": "text",
+          "help": "LATEST, or a version like 1.21.4.",
+          "default": "LATEST"
+        },
+        {
+          "name": "MEMORY",
+          "label": "Memory",
+          "type": "text",
+          "help": "The container's memory limit; the server gets three quarters of it.",
+          "default": "2g"
+        },
+        {
+          "name": "PORT",
+          "label": "Port",
+          "type": "text",
+          "help": "The host port players connect to. Open it in the server's firewall.",
+          "default": "25565"
+        },
+        {
+          "name": "DIFFICULTY",
+          "label": "Difficulty",
+          "type": "select",
+          "options": [
+            "peaceful",
+            "easy",
+            "normal",
+            "hard"
+          ],
+          "default": "normal"
+        },
+        {
+          "name": "MODE",
+          "label": "Game mode",
+          "type": "select",
+          "options": [
+            "survival",
+            "creative",
+            "adventure"
+          ],
+          "default": "survival"
+        },
+        {
+          "name": "MOTD",
+          "label": "Message of the day",
+          "type": "text",
+          "default": "A kipitiny Minecraft server"
+        },
+        {
+          "name": "DOMAIN",
+          "label": "Domain",
+          "type": "domain",
+          "help": "A DNS name pointing at this server, for players to connect with (with the port when it isn't 25565).",
+          "placeholder": "mc.example.com"
+        },
+        {
+          "name": "RCON_PASSWORD",
+          "label": "RCON password",
+          "type": "secret",
+          "generate": 24
+        }
+      ],
+      "project": "minecraft",
+      "compose": "",
+      "services": [
+        {
+          "name": "server",
+          "kind": "app",
+          "image": "itzg/minecraft-server",
+          "icon": "minecraft",
+          "memoryMb": 2048,
+          "publishedPorts": [
+            {
+              "hostPort": 25565,
+              "containerPort": 25565,
+              "protocol": "tcp"
+            }
+          ],
+          "volumes": [
+            {
+              "name": "data",
+              "path": "/data"
+            }
+          ],
+          "domainInput": "DOMAIN"
+        }
+      ]
+    }
+  ],
+  "logos": [
+    {
+      "name": "beszel",
+      "label": "Beszel",
+      "color": "#747BFF",
+      "images": [
+        "beszel",
+        "beszel-agent"
+      ],
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 56 70\"><defs><linearGradient id=\"g\" x1=\"0%\" y1=\"20%\" x2=\"100%\" y2=\"120%\"><stop offset=\"0%\" stop-color=\"#747bff\"/><stop offset=\"100%\" stop-color=\"#24eb5c\"/></linearGradient></defs><path fill=\"url(#g)\" d=\"M35 70H0V0h35q4.4 0 8.2 1.7a21.4 21.4 0 0 1 6.6 4.5q2.9 2.8 4.5 6.6Q56 16.7 56 21a15.4 15.4 0 0 1-.3 3.2 17.6 17.6 0 0 1-.2.8 19.4 19.4 0 0 1-1.5 4 17 17 0 0 1-2.4 3.4 13.5 13.5 0 0 1-2.6 2.3 12.5 12.5 0 0 1-.4.3q1.7 1 3 2.5Q53 39.1 54 41a18.3 18.3 0 0 1 1.5 4 17.4 17.4 0 0 1 .5 3 15.3 15.3 0 0 1 0 1q0 4.4-1.7 8.2a21.4 21.4 0 0 1-4.5 6.6q-2.8 2.9-6.6 4.6Q39.4 70 35 70ZM14 14v14h21a7 7 0 0 0 2.3-.3 6.6 6.6 0 0 0 .4-.2Q39 27 40 26a6.9 6.9 0 0 0 1.5-2.2q.5-1.3.5-2.8a7 7 0 0 0-.4-2.3 6.6 6.6 0 0 0-.1-.4Q40.9 17 40 16a7 7 0 0 0-2.3-1.4 6.9 6.9 0 0 0-2.5-.6 7.9 7.9 0 0 0-.2 0H14Zm0 28v14h21a7 7 0 0 0 2.3-.4 6.6 6.6 0 0 0 .4-.1Q39 54.9 40 54a7 7 0 0 0 1.5-2.2 6.9 6.9 0 0 0 .5-2.6 7.9 7.9 0 0 0 0-.2 7 7 0 0 0-.4-2.3 6.6 6.6 0 0 0-.1-.4Q40.9 45 40 44a7 7 0 0 0-2.3-1.5 6.9 6.9 0 0 0-2.5-.6 7.9 7.9 0 0 0-.2 0H14Z\"/></svg>"
+    },
+    {
+      "name": "minecraft",
+      "label": "Minecraft",
+      "color": "#62B47A",
+      "images": [
+        "minecraft-server"
+      ],
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path fill=\"#62b47a\" d=\"M12 2 21 6.5 12 11 3 6.5Z\"/><path fill=\"#8b5a2b\" d=\"M3 6.5 12 11v11l-9-4.5Z\"/><path fill=\"#6b4320\" d=\"M21 6.5 12 11v11l9-4.5Z\"/><path fill=\"#4e9a5f\" d=\"M3 6.5 12 11v3l-1.5-.75v1.5L9 14v-1.5l-1.5-.75v1.5L6 12.5V11l-1.5-.75v1.5L3 11Z\"/><path fill=\"#3f7f4e\" d=\"M21 6.5 12 11v3l1.5-.75v1.5L15 14v-1.5l1.5-.75v1.5l1.5-.75V11l1.5-.75v1.5L21 11Z\"/></svg>"
+    }
+  ]
+}

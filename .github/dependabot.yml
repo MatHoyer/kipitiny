@@ -1,0 +1,17 @@
+# Keeps the images the app templates pin up to date
+# (internal/templates/files/<id>/compose.yaml): one pull request per image,
+# or per group of images that must move together, checked by CI like any
+# change to a template.
+version: 2
+updates:
+  - package-ecosystem: docker-compose
+    directories: ["/internal/templates/files/*"]
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(templates)"
+    labels: []
+    groups:
+      # The Beszel hub and agent talk to each other: same version.
+      beszel:
+        patterns: ["henrygd/beszel*"]

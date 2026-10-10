@@ -29,7 +29,7 @@ import type {
   Usage,
 } from "@/api";
 import { seed, service as newService, type DemoDb } from "./seed";
-import { demoTemplates } from "./templates";
+import { demoLogos, demoTemplates } from "./templates";
 
 /*
  * The demo's backend: answers the manager's /api from state kept in this
@@ -488,6 +488,7 @@ const routes: Route[] = [
     },
   ],
   ["GET", /^\/templates$/, () => demoTemplates.map(({ services: _, ...t }) => t)],
+  ["GET", /^\/templates\/logos$/, () => demoLogos],
   [
     "POST",
     /^\/templates\/([^/]+)\/install$/,
@@ -516,7 +517,6 @@ const routes: Route[] = [
           newService({
             ...svc,
             id: newId("s"),
-            kind: "app",
             projectId,
             domain: domainInput ? (values[domainInput] ?? "") : "",
             currentDeploymentId: "",
