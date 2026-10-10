@@ -257,6 +257,17 @@ func (c *Core) applyCompose(ctx context.Context, projectID string, data []byte, 
 	if err != nil {
 		return nil, err
 	}
+	a, err := c.planCompose(ctx, project, existing, data, opts, git)
+	if err != nil || opts.DryRun {
+		return a, err
+	}
+	return a, a.apply(ctx)
+}
+
+// planCompose checks a compose file against a project and its services
+// and plans the changes. The project may not exist yet (a template's dry
+// run): then it has no ID and no services.
+func (c *Core) planCompose(ctx context.Context, project store.Project, existing []store.Service, data []byte, opts ApplyOptions, git bool) (*applier, error) {
 	byName := map[string]store.Service{}
 	for _, s := range existing {
 		byName[s.Name] = s
@@ -281,13 +292,7 @@ func (c *Core) applyCompose(ctx context.Context, projectID string, data []byte, 
 			Create: []string{}, Update: []ServiceChange{}, Unchanged: []string{}, Delete: []string{}, Orphaned: []string{},
 			Variables: []string{}, Warnings: append([]string{}, warns...), Deploying: []string{},
 		}}
-	if err := a.prepare(ctx, f); err != nil {
-		return a, err
-	}
-	if opts.DryRun {
-		return a, nil
-	}
-	return a, a.apply(ctx)
+	return a, a.prepare(ctx, f)
 }
 
 // applier plans then applies one compose file.
@@ -473,6 +478,11 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 				in.Secrets = append(in.Secrets, k)
 			}
 		}
+	}
+	if d, ok := a.resolve(cs.X.Domain); ok {
+		in.Domain = d
+	} else {
+		return ServiceInput{}, fmt.Errorf("service %s: domain: %s is not set", name, cs.X.Domain)
 	}
 	if cs.X.Password != "" {
 		if pw, ok := a.resolve(cs.X.Password); ok {
