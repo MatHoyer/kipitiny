@@ -62,8 +62,8 @@ type VolumeEntry struct {
 	Name     string    `json:"name"`
 	Type     string    `json:"type"` // "volume", "dir", "file", "link" or "other"
 	Size     int64     `json:"size"`
-	Modified time.Time `json:"modified"`
-	Mode     string    `json:"mode"` // permission bits, octal
+	Modified time.Time `json:"modified,omitzero"`
+	Mode     string    `json:"mode,omitempty"` // permission bits, octal
 	UID      int       `json:"uid"`
 	GID      int       `json:"gid"`
 	// Target is a symlink's, not followed.
