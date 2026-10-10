@@ -53,6 +53,7 @@ type Core struct {
 	verifySem      chan struct{}
 	reconcileKick  chan struct{}
 	probes         sync.Map // server ID -> *mount.Mount (nil: no probe there)
+	readUsers      sync.Map // container ID -> struct{}: the data browser's read-only user exists in that database
 	update         updateState
 	dns            dnsState
 	dnsKick        chan struct{}

@@ -1,20 +1,20 @@
 ---
 title: Data browser
-description: Browse PostgreSQL tables and Redis keys, and run queries, from the service page
+description: Browse tables, documents and keys, and run queries, from the service page
 order: 6
 ---
 
-A database's **Data** tab shows what it holds without deploying pgAdmin, Adminer
-or RedisInsight next to it. The manager runs the database's own client (`psql`,
-`redis-cli`) inside its container, like backups do: nothing is exposed, nothing
-is installed, and the client always matches the server. The database must be
-running. Agents get the same through [MCP](/docs/api) tools, with the same scopes.
+Every database's **Data** tab shows what it holds without deploying pgAdmin,
+Adminer, Compass or RedisInsight next to it. The manager runs the database's own
+client (`psql`, `mysql`/`mariadb`, `mongosh`, `redis-cli`) inside its container,
+like backups do: nothing is exposed, nothing is installed, and the client always
+matches the server. The database must be running. Agents get the same through
+[MCP](/docs/api) tools, with the same scopes.
 
-MySQL, MariaDB and MongoDB services have no Data tab yet: open their
-[terminal](/docs/services) and use their client with the credentials in the
-container's environment: `mysql -uroot -p"$MYSQL_ROOT_PASSWORD" app` (`mariadb`
-for MariaDB), or `mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p
-"$MONGO_INITDB_ROOT_PASSWORD"`.
+On MySQL, MariaDB and MongoDB, browsing and the read-only console use a
+**read-only user** the manager creates in the database (`kipitiny_read`, with
+`SELECT` on MySQL and MariaDB, `readAnyDatabase` on MongoDB; its password comes
+from the root one). The server itself refuses writes there.
 
 ## Browse
 
@@ -32,6 +32,17 @@ for MariaDB), or `mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p
   wildcard) or test for NULL; ✓ or Enter applies it. The download button exports
   every row matching the search and filters as CSV, streamed (no size cap). The
   page count is approximate: it comes from Postgres' own row estimate.
+- **MySQL and MariaDB**: the same browser. The database picker lists the
+  instance's databases (the server's own aside), **+** creates one the app user
+  owns. Binary columns show as `0x…` hex; `ilike` is `LIKE` with the column's
+  collation (usually case-insensitive).
+- **MongoDB**: the collections and views of the picked database (the instance's
+  `admin`, `config` and `local` aside; MongoDB creates a database on its first
+  write, so there is no **+**). Documents show as indented
+  [Extended JSON](https://www.mongodb.com/docs/manual/reference/mongodb-extended-json/),
+  10 to 100 per page. *Filter* and *Sort* take a query and a sort as JSON
+  (`{ "status": "active", "age": { "$gte": 18 } }`, `{ "createdAt": -1 }`),
+  applied with Enter.
 - **Redis**: keys are listed with `SCAN` (never `KEYS`), grouped by their `:`
   segments (`user:42` under `user:`), with their type; a clock marks keys that
   expire. *Match keys* takes a word (matched anywhere) or a glob such as `user:*`.
@@ -39,23 +50,28 @@ for MariaDB), or `mongosh -u "$MONGO_INITDB_ROOT_USERNAME" -p
   set, stream), paged for big collections.
 - Click a row to see it whole in a side panel, JSON indented, and copy a field or
   the row as JSON. Values longer than 4 KiB are cut (flagged with `…`).
-- Browsing never writes: queries run in a read-only session with a 5 s
-  statement timeout (10 min for a CSV export).
+- Browsing never writes: queries run in a read-only session (or as the
+  read-only user) with a 5 s timeout (10 min for a CSV export).
 
 ## Console
 
-*Console* runs SQL against PostgreSQL, or a command against Redis, and shows the
-result (at most 200 rows or 1 MiB of output; add a `LIMIT`, or export the table).
+*Console* runs SQL against PostgreSQL, MySQL and MariaDB, JavaScript against
+MongoDB (as in `mongosh`, `db` being the picked database), or a command against
+Redis, and shows the result (at most 200 rows or 1 MiB of output; add a `LIMIT`,
+or export the table).
 *Ctrl+Enter* runs it. The SQL editor completes keywords and your tables' and
 columns' names; results can be copied as CSV or JSON. The Redis console works like
-`redis-cli`: a transcript of commands and replies, ↑ for past commands. Past
+`redis-cli`, and MongoDB's like `mongosh`: a transcript of commands and their
+printout, ↑ for past commands. Past
 queries are kept per database in this browser only (*History*).
 
 - By default the console is **read-only**: the PostgreSQL session refuses writes,
-  and Redis commands that change data or the server (`SET`, `DEL`, `CONFIG`…)
-  are refused. It guards against mistakes; it is not a permission boundary.
+  MySQL, MariaDB and MongoDB run as the read-only user, and Redis commands that
+  change data or the server (`SET`, `DEL`, `CONFIG`…) are refused. It guards
+  against mistakes; the admin can lift it.
 - **Allow writes** (asks first) lifts that. On PostgreSQL the whole input then
-  runs in **one transaction**: if a statement fails, nothing is applied. Only the
+  runs in **one transaction**: if a statement fails, nothing is applied. MySQL,
+  MariaDB and MongoDB then run as root (statements apply one by one). Only the
   last statement's result is shown.
 - Statements time out after 30 s. Redis commands that block or never return
   (`MONITOR`, `SUBSCRIBE`, `BLPOP`, `XREAD BLOCK`…) are always refused: use the
@@ -72,5 +88,7 @@ Endpoints, for scripts: `GET /api/services/{id}/data/tables`,
 `GET /api/services/{id}/data/tables/{schema}/{table}` (`limit`, `offset`, `order`,
 `desc`, `filters` as a JSON array of `{column, op, value}`), `…/export`,
 `GET /api/services/{id}/data/keys` (`cursor`, `pattern`),
-`GET /api/services/{id}/data/key` (`key`, `cursor`) and
-`POST /api/services/{id}/data/console` (`{query, write}`).
+`GET /api/services/{id}/data/key` (`key`, `cursor`),
+`GET /api/services/{id}/data/collections/{collection}/documents` (`database`,
+`filter`, `sort`, `limit`, `skip`) and
+`POST /api/services/{id}/data/console` (`{query, write, database}`).

@@ -135,8 +135,6 @@ export function Service() {
   const busy = deploying || deploy.isPending || action.isPending || remove.isPending;
   const isDb = isDatabase(svc.kind);
   const hasData = isDb || svc.volumes.length > 0;
-  // The data browser speaks PostgreSQL and Redis.
-  const browsable = svc.kind === "postgres" || svc.kind === "redis";
   const running = active.filter((c) => c.state === "running").length;
   const last = deployments.data?.[0];
 
@@ -235,7 +233,7 @@ export function Service() {
             <TabsTrigger value="deployments">Deployments</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
             <TabsTrigger value="terminal">Terminal</TabsTrigger>
-            {browsable && <TabsTrigger value="data">Data</TabsTrigger>}
+            {isDb && <TabsTrigger value="data">Data</TabsTrigger>}
             <TabsTrigger value="files">Files</TabsTrigger>
             <TabsTrigger value="environment">Environment</TabsTrigger>
             {canBackup(svc) && <TabsTrigger value="backups">Backups</TabsTrigger>}
@@ -275,7 +273,7 @@ export function Service() {
           <TabsContent value="terminal">
             <ServiceTerminal svc={svc} />
           </TabsContent>
-          {browsable && (
+          {isDb && (
             <TabsContent value="data">
               <DataTab svc={svc} />
             </TabsContent>

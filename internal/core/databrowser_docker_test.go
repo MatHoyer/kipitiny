@@ -48,11 +48,21 @@ func dataTestDB(t *testing.T, kind store.ServiceKind, cfg *container.Config) (*C
 	// Not kipitiny.managed: a manager running on this daemon would remove
 	// it as an orphan.
 	cfg.Labels = map[string]string{docker.LabelProject: p.ID, docker.LabelService: svc.ID}
+	if kind == store.ServiceKindPostgres {
+		// Commands would otherwise reach initdb's temporary server, which
+		// shuts down right after.
+		cfg.Healthcheck = postgresHealthcheck(svc.Env[pgUser], svc.Env[pgDatabase])
+	}
 	id, err := dk.Run(ctx, client.ContainerCreateOptions{Name: "kipitiny-test-" + strings.ToLower(svc.ID), Config: cfg})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = dk.RemoveContainerAndVolumes(context.Background(), id) })
+	if cfg.Healthcheck != nil {
+		if err := dk.WaitHealthy(ctx, id, databaseReadyTimeout); err != nil {
+			t.Fatal(err)
+		}
+	}
 	exec := func(cmd string) string {
 		t.Helper()
 		var out strings.Builder

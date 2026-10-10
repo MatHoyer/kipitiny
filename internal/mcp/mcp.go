@@ -147,19 +147,21 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "Set the networks created by hand that a service joins, besides its project network; applied to its containers right away, without restarting them. Works on git-linked projects too. Needs admin."}, t.setServiceNetworks)
 
 	mcp.AddTool(server, &mcp.Tool{Name: "list_databases", Annotations: readOnly,
-		Description: "The databases of a PostgreSQL service's instance, with their size; main is the service's own."}, t.listDatabases)
+		Description: "The databases of a PostgreSQL, MySQL, MariaDB or MongoDB service's instance, with their size; main is the service's own."}, t.listDatabases)
 	mcp.AddTool(server, &mcp.Tool{Name: "create_database",
-		Description: "Create a database in a PostgreSQL service's instance, owned by the service's user. Needs admin."}, t.createDatabase)
+		Description: "Create a database in a PostgreSQL, MySQL or MariaDB service's instance, owned by the service's user. Needs admin."}, t.createDatabase)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_tables", Annotations: readOnly,
-		Description: "Tables and views of a PostgreSQL database with their columns, estimated rows and size."}, t.listTables)
+		Description: "Tables and views of a PostgreSQL, MySQL or MariaDB database with their columns, estimated rows and size, or the collections of a MongoDB one (no columns)."}, t.listTables)
 	mcp.AddTool(server, &mcp.Tool{Name: "read_table", Annotations: readOnly,
-		Description: "Rows of a PostgreSQL table or view, paged, sorted and filtered. Cells are text (null is NULL); long ones are cut and listed in truncated."}, t.readTable)
+		Description: "Rows of a PostgreSQL, MySQL or MariaDB table or view, paged, sorted and filtered. Cells are text (null is NULL, binary is 0x hex); long ones are cut and listed in truncated."}, t.readTable)
+	mcp.AddTool(server, &mcp.Tool{Name: "find_documents", Annotations: readOnly,
+		Description: "Documents of a MongoDB collection as relaxed Extended JSON, paged, filtered and sorted; long ones are cut and listed in truncated."}, t.findDocuments)
 	mcp.AddTool(server, &mcp.Tool{Name: "scan_redis_keys", Annotations: readOnly,
 		Description: "One SCAN step over a Redis service's keys, with their type, TTL and size. Call again with the returned cursor until it is 0."}, t.scanRedisKeys)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_redis_key", Annotations: readOnly,
 		Description: "One page of a Redis key's value: [value] for a string, [field, value] pairs for a hash, [member, score] for a sorted set."}, t.getRedisKey)
 	mcp.AddTool(server, &mcp.Tool{Name: "query_database", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
-		Description: "Run SQL on a PostgreSQL service or a command on a Redis one; read-only unless write is set. Prefer read_table and get_redis_key to look at data. Needs admin."}, t.queryDatabase)
+		Description: "Run SQL on a PostgreSQL, MySQL or MariaDB service, a command on a Redis one, or mongosh JavaScript on a MongoDB one; read-only unless write is set. Prefer read_table, find_documents and get_redis_key to look at data. Needs admin."}, t.queryDatabase)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_connection",
 		Description: "A database service's host, port, user, password and URL, as apps of its project reach it. Needs admin."}, t.getConnection)
 

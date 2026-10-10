@@ -26,7 +26,7 @@ func (t *tools) listDatabases(ctx context.Context, _ *mcp.CallToolRequest, in se
 }
 
 type createDatabaseIn struct {
-	Service string `json:"service" jsonschema:"the PostgreSQL service as project/service, or its ID"`
+	Service string `json:"service" jsonschema:"the PostgreSQL, MySQL or MariaDB service as project/service, or its ID"`
 	Name    string `json:"name" jsonschema:"lowercase letters, digits and _, starting with a letter or _"`
 }
 
@@ -42,7 +42,7 @@ func (t *tools) createDatabase(ctx context.Context, _ *mcp.CallToolRequest, in c
 }
 
 type listTablesIn struct {
-	Service  string `json:"service" jsonschema:"the PostgreSQL service as project/service, or its ID"`
+	Service  string `json:"service" jsonschema:"the PostgreSQL, MySQL, MariaDB or MongoDB service as project/service, or its ID"`
 	Database string `json:"database,omitempty" jsonschema:"one of the instance's databases (see list_databases); default the service's own"`
 }
 
@@ -60,9 +60,9 @@ func (t *tools) listTables(ctx context.Context, _ *mcp.CallToolRequest, in listT
 }
 
 type readTableIn struct {
-	Service  string          `json:"service" jsonschema:"the PostgreSQL service as project/service, or its ID"`
+	Service  string          `json:"service" jsonschema:"the PostgreSQL, MySQL or MariaDB service as project/service, or its ID"`
 	Database string          `json:"database,omitempty" jsonschema:"one of the instance's databases; default the service's own"`
-	Schema   string          `json:"schema,omitempty" jsonschema:"default public"`
+	Schema   string          `json:"schema,omitempty" jsonschema:"PostgreSQL: default public; MySQL and MariaDB: the database"`
 	Table    string          `json:"table" jsonschema:"a table or view (see list_tables)"`
 	Limit    int             `json:"limit,omitempty" jsonschema:"rows to return, default 50, max 200"`
 	Offset   int             `json:"offset,omitempty"`
@@ -78,7 +78,7 @@ func (t *tools) readTable(ctx context.Context, _ *mcp.CallToolRequest, in readTa
 		return nil, core.PgRows{}, friendly(err)
 	}
 	schema := in.Schema
-	if schema == "" {
+	if schema == "" && svc.Kind == store.ServiceKindPostgres {
 		schema = "public"
 	}
 	limit := in.Limit
@@ -90,6 +90,31 @@ func (t *tools) readTable(ctx context.Context, _ *mcp.CallToolRequest, in readTa
 		Search: in.Search, Filters: in.Filters,
 	})
 	return nil, rows, friendly(err)
+}
+
+type findDocumentsIn struct {
+	Service    string `json:"service" jsonschema:"the MongoDB service as project/service, or its ID"`
+	Database   string `json:"database,omitempty" jsonschema:"one of the instance's databases (see list_databases); default the service's own"`
+	Collection string `json:"collection" jsonschema:"a collection or view (see list_tables)"`
+	Filter     string `json:"filter,omitempty" jsonschema:"a query as Extended JSON, e.g. {\"status\": \"active\", \"age\": {\"$gte\": 18}}"`
+	Sort       string `json:"sort,omitempty" jsonschema:"a sort as Extended JSON, e.g. {\"createdAt\": -1}"`
+	Limit      int    `json:"limit,omitempty" jsonschema:"documents to return, default 50, max 200"`
+	Skip       int    `json:"skip,omitempty"`
+}
+
+func (t *tools) findDocuments(ctx context.Context, _ *mcp.CallToolRequest, in findDocumentsIn) (*mcp.CallToolResult, core.MongoDocs, error) {
+	svc, err := t.c.ResolveService(ctx, in.Service)
+	if err != nil {
+		return nil, core.MongoDocs{}, friendly(err)
+	}
+	limit := in.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	docs, err := t.c.MongoDocuments(ctx, svc.ID, in.Database, in.Collection, core.DocQuery{
+		Filter: in.Filter, Sort: in.Sort, Limit: min(limit, core.DataPageMax), Skip: in.Skip,
+	})
+	return nil, docs, friendly(err)
 }
 
 type scanRedisKeysIn struct {
@@ -125,10 +150,10 @@ func (t *tools) getRedisKey(ctx context.Context, _ *mcp.CallToolRequest, in getR
 }
 
 type queryDatabaseIn struct {
-	Service  string `json:"service" jsonschema:"the PostgreSQL or Redis service as project/service, or its ID"`
-	Query    string `json:"query" jsonschema:"SQL for PostgreSQL (only the last statement's rows are returned), a redis-cli command for Redis"`
-	Database string `json:"database,omitempty" jsonschema:"PostgreSQL: one of the instance's databases; default the service's own"`
-	Write    bool   `json:"write,omitempty" jsonschema:"allow changes; without it PostgreSQL runs read-only and Redis refuses commands that write. With it, PostgreSQL runs the query in one transaction"`
+	Service  string `json:"service" jsonschema:"the database service as project/service, or its ID"`
+	Query    string `json:"query" jsonschema:"SQL for PostgreSQL, MySQL and MariaDB (only the last statement's rows are returned), a redis-cli command for Redis, mongosh JavaScript for MongoDB (its printout is returned)"`
+	Database string `json:"database,omitempty" jsonschema:"one of the instance's databases (all but Redis); default the service's own"`
+	Write    bool   `json:"write,omitempty" jsonschema:"allow changes; without it PostgreSQL runs read-only, MySQL, MariaDB and MongoDB run as a read-only user, and Redis refuses commands that write. With it, PostgreSQL runs the query in one transaction"`
 }
 
 // queryDatabase is audited by the core, without the query's text.
