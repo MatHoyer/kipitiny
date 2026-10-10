@@ -72,6 +72,7 @@ type Core struct {
 	uptime         uptimeState
 	health         healthState
 	uptimeHTTP     *http.Client // nil: probe's default; tests redirect it
+	files          filesState
 }
 
 // New builds the core around the local Docker client; remote servers are
@@ -175,6 +176,7 @@ func (c *Core) Shutdown(ctx context.Context) error {
 		}
 	}
 	c.cancel()
+	c.closeFilesHelpers()
 	if cerr := c.closeSecretProviders(context.WithoutCancel(ctx)); cerr != nil {
 		c.log.Warn("removing password manager helpers failed", "err", cerr)
 	}
