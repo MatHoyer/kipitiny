@@ -78,6 +78,7 @@ export function service(p: Partial<Service> & Pick<Service, "id" | "name" | "kin
     hostNetwork: false,
     dockerSocket: "",
     networks: [],
+    maintenance: { enabled: false },
     currentDeploymentId: `dep-${p.id}`,
     stopped: false,
     createdAt: at(30),

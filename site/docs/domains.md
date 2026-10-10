@@ -14,6 +14,32 @@ bind it to `127.0.0.1` for SSH-tunnel access. Run on the host, the manager is
 reached through `host.docker.internal`, so it must listen on the Docker bridge
 (the default `:3000` does).
 
+## Maintenance page
+
+When an app's domain has no replica to answer (stopped, crashed, or a deploy
+whose replica never got ready), visitors get a plain page saying the app will
+be back soon, with the project's name, instead of Traefik's bare 404 or 502.
+It answers `503` with `Retry-After`, so search engines come back later instead
+of indexing it, and uptime checks still see the app as down. Replies the app
+sends itself, including its own 503s, pass through unchanged.
+
+Change it in the service's *Settings › Maintenance*: a title and a message, or
+a whole HTML document of your own (up to 64 KiB; inline its styles and images,
+or load them from another site, since the app is down). **Open the saved page**
+shows it.
+
+**Maintenance mode** in the same card sends every visitor to the page while
+the replicas keep running, e.g. during a long migration or manual work. IPs or
+ranges listed under *Still reach the app* get the app as usual (through its
+access settings), to check it before reopening. It applies within seconds and
+restarts nothing; agents turn it on with the `set_maintenance` MCP tool, or
+call `PUT /api/services/{id}/maintenance`. It is not part of compose files, so
+git projects set it there too.
+
+The manager serves these pages through each server's Traefik: there is no
+extra container. Remote servers fetch them from the manager's domain, so they
+need `KIPITINY_DOMAIN`; without it their apps keep Traefik's own errors.
+
 ## Cloudflare Tunnel (no open ports)
 
 To keep ports 80/443 closed, let traffic come in through a

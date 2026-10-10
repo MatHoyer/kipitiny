@@ -1071,6 +1071,18 @@ func (s *Store) SetServiceNetworks(ctx context.Context, serviceID string, networ
 	return nil
 }
 
+func (s *Store) SetServiceMaintenance(ctx context.Context, serviceID string, m store.Maintenance) error {
+	res, err := s.db.NewUpdate().Model(&store.Service{ID: serviceID, Maintenance: m}).
+		Column("maintenance").WherePK().Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) ListCanvasPositions(ctx context.Context) ([]store.CanvasPosition, error) {
 	ps := []store.CanvasPosition{}
 	err := s.db.NewSelect().Model(&ps).Order("node").Scan(ctx)

@@ -137,6 +137,8 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "Create or replace the uptime check of an app with a public domain: an HTTPS request to a path at an interval, notifying when it goes down. It runs right away; get_app_status shows its results. Needs admin."}, t.setUptimeCheck)
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_uptime_check",
 		Description: "Remove a service's uptime check and its history. Needs admin."}, t.deleteUptimeCheck)
+	mcp.AddTool(server, &mcp.Tool{Name: "set_maintenance",
+		Description: "Set an app's maintenance page, shown (503 with Retry-After) while it has no replica to answer, and maintenance mode, which shows it to every visitor except allowed IPs while the replicas keep running (migrations, manual work). Applied within seconds, nothing restarts; works on git-linked projects too. Needs admin."}, t.setMaintenance)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_networks", Annotations: readOnly,
 		Description: "Networks created by hand on each server, next to the automatic proxy and project networks, with the services on them and the name each is reached at (<project>-<service>)."}, t.listNetworks)
 	mcp.AddTool(server, &mcp.Tool{Name: "create_network",

@@ -82,6 +82,8 @@ export type Service = {
   dockerSocket: "" | "ro" | "rw";
   /** IDs of the networks created by hand it joins, besides its project network. */
   networks: string[];
+  /** The page visitors get while the app can't answer, and maintenance mode (apps only). */
+  maintenance: Maintenance;
   currentDeploymentId: string;
   stopped: boolean;
   createdAt: string;
@@ -94,6 +96,17 @@ export type Service = {
 export type Volume = { name: string; path: string };
 
 export type PublishedPort = { hostPort: number; containerPort: number; protocol: "tcp" | "udp" };
+
+export type Maintenance = {
+  /** Maintenance mode: every visitor but allowIps gets the page while the replicas keep running. */
+  enabled: boolean;
+  allowIps?: string[];
+  /** Replace the default page's heading and text; empty keeps them. */
+  title?: string;
+  message?: string;
+  /** A whole HTML document served instead of the default page. */
+  html?: string;
+};
 
 export type RateLimit = { average: number; burst: number };
 
@@ -908,6 +921,7 @@ export const api = {
   updateService: (id: string, patch: ServicePatch) => request<Service>(`/services/${id}`, json("PATCH", patch)),
   renameService: (id: string, name: string) => request<Service>(`/services/${id}/name`, json("PUT", { name })),
   setServiceNetworks: (id: string, networks: string[]) => request<Service>(`/services/${id}/networks`, json("PUT", { networks })),
+  setMaintenance: (id: string, m: Required<Maintenance>) => request<Service>(`/services/${id}/maintenance`, json("PUT", m)),
   deleteService: (id: string, confirm = "") =>
     request<void>(`/services/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),
   connection: (id: string) => request<Connection>(`/services/${id}/connection`),

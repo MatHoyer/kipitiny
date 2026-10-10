@@ -127,6 +127,11 @@ Labels: map[string]string{
 
 Per-app middlewares (basic auth, IP allowlist, rate limit, response headers) are labels too. Traefik drops a router or middleware that containers define differently, and old and new replicas overlap during a rollout, so the router and its middlewares are named after a hash of their configuration (`kipitiny-<service>-<hash>`); a change adds a router next to the old one, both on the same load balancer. Basic auth references are hashed at deploy into the deployment snapshot, which reconciled replicas reuse. Behind Cloudflare (tunnel, or a record the manager keeps proxied) the client IP is the last `X-Forwarded-For` entry: Traefik trusts that header from the proxy network (tunnel) or Cloudflare's ranges (API token connected), and the middlewares read it with `ipStrategy.depth=1`.
 
+**Maintenance pages** (no extra container): the manager serves them under `/api/pages/`, reached by each Traefik through the proxy network (manager's server) or `https://KIPITINY_DOMAIN` (remote servers; none without it). Three pieces:
+- File provider (static, in Traefik's command hash): service `kipitiny-pages` and errors middleware `kipitiny-down` (502/504 → 503, `{url}` names the app, only `Accept-Language` forwarded), set on the `websecure` entrypoint. Static on purpose: a missing middleware would break every router while the manager is down. Apps' own 503s pass through.
+- HTTP provider (`/api/pages/traefik/<server>`, polled every 5 s, HMAC token per server): per routed app a priority-1 `Host()` router to its page, which catches the app when no replica carries its router (Traefik drops routers of stopped or unhealthy containers); in maintenance mode a router above the app's. With allowed IPs that router goes to `kipitiny-<id>@docker` through an `ipAllowList` rejecting with 418, turned into the page by an errors middleware, then the app's own chain read from a running replica's labels.
+- Pages answer 503 + `Retry-After` under a sandbox CSP (custom HTML gets scripts but an opaque origin, also on the manager's domain). Settings live in `services.maintenance`, set on their own (never by compose), so git projects have them too.
+
 Databases get no Traefik labels (TCP/SNI routing is a possible later feature).
 
 ### Published ports (non-HTTP apps)
