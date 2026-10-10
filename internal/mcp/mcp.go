@@ -134,9 +134,9 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_backup_schedule",
 		Description: "Delete one of a service's backup schedules; the backups it made are kept. Needs admin."}, t.deleteBackupSchedule)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_uptime_check",
-		Description: "Create or replace the uptime check of an app with a public domain: an HTTPS request to a path at an interval, notifying when it goes down. It runs right away; get_app_status shows its results. Needs admin."}, t.setUptimeCheck)
+		Description: "Create or replace the uptime check of an app with a public domain: an HTTPS request to a path at an interval, notifying when it goes down. It runs right away; get_app_status shows its results. A git project's checks are in its compose file (x-kipitiny.uptime) instead. Needs admin."}, t.setUptimeCheck)
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_uptime_check",
-		Description: "Remove a service's uptime check and its history. Needs admin."}, t.deleteUptimeCheck)
+		Description: "Remove a service's uptime check and its history. Not for a git project: remove x-kipitiny.uptime from its file. Needs admin."}, t.deleteUptimeCheck)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_maintenance",
 		Description: "Set an app's maintenance page, shown (503 with Retry-After) while it has no replica to answer, and maintenance mode, which shows it to every visitor except allowed IPs while the replicas keep running (migrations, manual work). Applied within seconds, nothing restarts; works on git-linked projects too. Needs admin."}, t.setMaintenance)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_networks", Annotations: readOnly,

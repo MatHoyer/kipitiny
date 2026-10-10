@@ -16,7 +16,7 @@ func TestReferenceCoversKeys(t *testing.T) {
 	}
 	doc := string(data)
 	keys := append(append(append([]string{}, supportedServiceKeys...), ignoredServiceKeys...), ignoredTopKeys...)
-	for _, typ := range []any{Ext{}, FileExt{}, Middlewares{}, BasicAuthUser{}, RateLimit{}} {
+	for _, typ := range []any{Ext{}, FileExt{}, Middlewares{}, BasicAuthUser{}, RateLimit{}, Uptime{}} {
 		rt := reflect.TypeOf(typ)
 		for i := range rt.NumField() {
 			keys = append(keys, strings.Split(rt.Field(i).Tag.Get("yaml"), ",")[0])

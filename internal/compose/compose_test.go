@@ -25,6 +25,7 @@ func TestRoundTrip(t *testing.T) {
 				X: Ext{
 					Domain: "shop.example.com", Port: 3000, PreDeploy: "./migrate up",
 					Secrets: []string{"API_KEY"},
+					Uptime:  &Uptime{Path: "/health", Interval: 90, Timeout: 5, ExpectedStatus: 204, Paused: true},
 					Middlewares: &Middlewares{
 						BasicAuth:   []BasicAuthUser{{Name: "admin", Hash: "$2a$10$abc"}, {Name: "ops", Ref: "{{ pass://V/I/p }}"}},
 						IPAllowList: []string{"1.2.3.0/24"},

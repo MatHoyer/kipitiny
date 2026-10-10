@@ -252,7 +252,7 @@ export function Service() {
           </TabsList>
           <TabsContent value="overview" className="space-y-6">
             {svc.containers.length > 0 && <ServiceUsageSection serviceId={svc.id} />}
-            {svc.kind === "app" && <UptimeSection svc={svc} />}
+            {svc.kind === "app" && <UptimeSection svc={svc} gitPath={git.data?.path} />}
             <Section title="Containers">
               {svc.containers.length === 0 ? (
                 <Empty>Not deployed yet.</Empty>

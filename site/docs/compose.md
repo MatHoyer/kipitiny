@@ -43,6 +43,7 @@ services:
     x-kipitiny:
       domain: shop.example.com
       pre_deploy: ./bin/migrate up
+      uptime: {path: /healthz}
       middlewares:
         rate_limit: {average: 50, burst: 100}
         headers: {X-Frame-Options: DENY}
@@ -60,7 +61,7 @@ x-kipitiny:
     REGION: eu
 ```
 
-`db` and `cache` become a managed PostgreSQL and Redis (official images are recognised), `web` connects to them through references, and `API_KEY` comes from the project variable `API_KEY` (or a `.env`, which makes it a secret). Plain compose keys say what compose already has words for (the port, the healthcheck); `x-kipitiny` holds only what compose has none for: the domain, the pre-deploy command, Traefik's middlewares.
+`db` and `cache` become a managed PostgreSQL and Redis (official images are recognised), `web` connects to them through references, and `API_KEY` comes from the project variable `API_KEY` (or a `.env`, which makes it a secret). Plain compose keys say what compose already has words for (the port, the healthcheck); `x-kipitiny` holds only what compose has none for: the domain, the pre-deploy command, the uptime check, Traefik's middlewares.
 
 A real one: this website runs on kipitiny from [`site/compose.yaml`](https://github.com/MatHoyer/kipitiny/blob/main/site/compose.yaml), synced from git. Each release pins its image tag there, in a commit pushed once the [site workflow](https://github.com/MatHoyer/kipitiny/blob/main/.github/workflows/site.yml) has published that image, so a sync never asks for an image that doesn't exist yet.
 
@@ -131,6 +132,7 @@ services:
 | `secrets` | list of env keys | apps | Which `environment` entries are secrets (write-only in the UI and API, masked everywhere, exported only with secrets). Without it, the values given as `${NAME}` are (see [Values](#values-references-and-secrets)). |
 | `password` | string, usually `${NAME}` | databases | The database's password at creation, to keep the credentials of a moved database. Empty generates one. It can't change afterwards. |
 | `middlewares` | mapping | public apps | Applied by Traefik to every request, below. |
+| `uptime` | mapping | public apps | An [uptime check](/docs/monitoring#uptime-checks) of the domain, below. `uptime: {}` checks `/` with the defaults. Without it, the app has no check: applying the file removes one set in the UI. |
 
 `middlewares`:
 
@@ -140,6 +142,16 @@ services:
 | `ip_allowlist` | Up to 50 IPs or CIDR ranges allowed to connect. |
 | `rate_limit` | `average` requests per second per client IP, with bursts up to `burst` (defaults to `average`). |
 | `headers` | Response headers to set (up to 20); an empty value removes the header. |
+
+`uptime`:
+
+| Field | Meaning |
+|---|---|
+| `path` | Path requested on the domain. Default `/`. |
+| `interval` | Time between checks, 30 s to 1 h (`30s`, `5m`, or seconds). Default 60 s. |
+| `timeout` | 1 to 60 s, shorter than the interval. Default 10 s. |
+| `expected_status` | The HTTP status that means up. Default: any below 400. |
+| `paused` | `true` keeps the check and its history without running it. |
 
 ### Databases
 
@@ -208,7 +220,7 @@ A service can't change kind (an app into a database): delete it first.
 Project › **Git**: the repository, a branch (default `main`) and the file's path (default `compose.yaml`). A public repository is just its HTTPS URL; a private one is picked from a [git provider](#git-providers). Linking shows what the first sync will change.
 
 - The branch is checked every 5 minutes by default (60 s to 24 h, or never with auto sync off). A push webhook syncs at once. Through a GitHub provider whose app has webhooks, there's nothing to set up. Otherwise the URL and secret are on the Git tab: GitHub and Gitea sign with the secret, GitLab sends it as a token, anything else as `Authorization: Bearer <secret>`. **Sync now** applies the file by hand, **Preview** shows what it would change.
-- The file owns the services. Creating, editing or deleting them any other way (UI, API, MCP) is refused; edit the file. A database the file dropped can still be deleted by hand. Project variables, backups, schedules and uptime checks stay editable: they are not in the file.
+- The file owns the services and their uptime checks. Creating, editing or deleting them any other way (UI, API, MCP) is refused; edit the file. A database the file dropped can still be deleted by hand. Project variables, backups and schedules stay editable: they are not in the file.
 - CI can still deploy another tag of an app's image (`kipitiny deploy --tag`). The service keeps it until a commit changes that service's block in the file; the Git tab lists the services that run another image than the file's.
 - A failed sync is notified (`git.sync.failed`) and retried; a sync that changed something can be notified too (`git.sync.succeeded`).
 - Unlinking keeps the services as they are and makes them editable again.

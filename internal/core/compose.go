@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"regexp"
@@ -48,7 +49,15 @@ func (c *Core) ExportCompose(ctx context.Context, projectID string, opts ExportO
 		}
 		svcs = svcs[i : i+1]
 	}
-	f, env := exportFile(p, svcs, opts.Service == "")
+	checks, err := c.store.ListUptimeChecks(ctx)
+	if err != nil {
+		return Export{}, err
+	}
+	byService := map[string]store.UptimeCheck{}
+	for _, chk := range checks {
+		byService[chk.ServiceID] = chk
+	}
+	f, env := exportFile(p, svcs, byService, opts.Service == "")
 	data, err := compose.Marshal(f)
 	if err != nil {
 		return Export{}, err
@@ -60,9 +69,10 @@ func (c *Core) ExportCompose(ctx context.Context, projectID string, opts ExportO
 	return out, nil
 }
 
-// exportFile maps the services to compose, with the variables their secrets
-// became. withProject adds the project's shared variables.
-func exportFile(p store.Project, svcs []store.Service, withProject bool) (compose.File, map[string]string) {
+// exportFile maps the services and their uptime checks (by service ID) to
+// compose, with the variables their secrets became. withProject adds the
+// project's shared variables.
+func exportFile(p store.Project, svcs []store.Service, checks map[string]store.UptimeCheck, withProject bool) (compose.File, map[string]string) {
 	f := compose.File{Name: p.Name, Services: map[string]compose.Service{}}
 	env := map[string]string{}
 	secret := func(name, value string) string {
@@ -156,9 +166,31 @@ func exportFile(p store.Project, svcs []store.Service, withProject bool) (compos
 			}
 			cs.X.Middlewares = cm
 		}
+		if chk, ok := checks[s.ID]; ok {
+			cs.X.Uptime = composeUptime(chk)
+		}
 		f.Services[s.Name] = cs
 	}
 	return f, env
+}
+
+// composeUptime writes a check, leaving out the defaults.
+func composeUptime(chk store.UptimeCheck) *compose.Uptime {
+	u := &compose.Uptime{ExpectedStatus: chk.ExpectedStatus, Paused: !chk.Enabled}
+	if chk.Path != "/" {
+		u.Path = chk.Path
+	}
+	if chk.IntervalSec != defaultUptimeInterval {
+		u.Interval = compose.Seconds(chk.IntervalSec)
+	}
+	if chk.TimeoutSec != defaultUptimeTimeout {
+		u.Timeout = compose.Seconds(chk.TimeoutSec)
+	}
+	return u
+}
+
+func uptimeInput(u compose.Uptime) UptimeInput {
+	return UptimeInput{Path: u.Path, IntervalSec: int(u.Interval), TimeoutSec: int(u.Timeout), ExpectedStatus: u.ExpectedStatus, Enabled: !u.Paused}
 }
 
 var nonVarRe = regexp.MustCompile(`[^A-Z0-9]+`)
@@ -285,7 +317,7 @@ func (c *Core) planCompose(ctx context.Context, project store.Project, existing 
 		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	a := &applier{c: c, project: project, opts: opts, git: git, byName: byName,
-		hashes: map[string]string{}, images: map[string]string{}, created: map[string]string{}, plan: ComposePlan{
+		hashes: map[string]string{}, images: map[string]string{}, created: map[string]string{}, uptimes: map[string]*compose.Uptime{}, plan: ComposePlan{
 			Create: []string{}, Update: []ServiceChange{}, Unchanged: []string{}, Delete: []string{}, Orphaned: []string{},
 			Variables: []string{}, Warnings: append([]string{}, warns...), Deploying: []string{},
 		}}
@@ -313,6 +345,16 @@ type applier struct {
 	creates        []ServiceInput
 	updates        []pendingUpdate
 	deletes        []store.Service
+	// uptimes are the listed services' checks in the file; uptimeOps the
+	// checks to save or delete.
+	uptimes   map[string]*compose.Uptime
+	uptimeOps []uptimeOp
+}
+
+// uptimeOp saves a service's check, or deletes it when check is nil.
+type uptimeOp struct {
+	name  string
+	check *store.UptimeCheck
 }
 
 type pendingUpdate struct {
@@ -362,6 +404,7 @@ func (a *applier) prepare(ctx context.Context, f compose.File) error {
 		inputs[name] = in
 		a.hashes[name] = specHash(f.Services[name])
 		a.images[name] = in.Image
+		a.uptimes[name] = f.Services[name].X.Uptime
 		if in.Kind.IsDatabase() {
 			if _, ok := dbs[name]; !ok {
 				dbs[name] = store.Service{Name: name, Kind: in.Kind, Env: map[string]string{}}
@@ -532,6 +575,13 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		if err := a.c.validateIn(ctx, svc, project, dbs); err != nil {
 			return err
 		}
+		if u := a.uptimes[name]; u != nil {
+			chk, err := uptimeCheck(svc, uptimeInput(*u))
+			if err != nil {
+				return err
+			}
+			a.uptimeOps = append(a.uptimeOps, uptimeOp{name: name, check: &chk})
+		}
 		a.plan.Create = append(a.plan.Create, name)
 		a.creates = append(a.creates, in)
 		return nil
@@ -557,15 +607,50 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		return err
 	}
 	fields := changedFields(old, svc)
-	if len(fields) == 0 {
+	uptimeChanged, err := a.prepareUptime(ctx, name, svc)
+	if err != nil {
+		return err
+	}
+	if len(fields) == 0 && !uptimeChanged {
 		a.plan.Unchanged = append(a.plan.Unchanged, name)
 		return nil
 	}
+	if len(fields) > 0 {
+		// Scaling and the icon apply without a deploy.
+		needsDeploy := slices.ContainsFunc(fields, func(f string) bool { return f != "replicas" && f != "icon" })
+		a.updates = append(a.updates, pendingUpdate{id: old.ID, name: name, patch: patch, deploy: needsDeploy})
+	}
+	if uptimeChanged {
+		fields = append(fields, "uptime")
+	}
 	a.plan.Update = append(a.plan.Update, ServiceChange{Name: name, Fields: fields})
-	// Scaling and the icon apply without a deploy.
-	needsDeploy := slices.ContainsFunc(fields, func(f string) bool { return f != "replicas" && f != "icon" })
-	a.updates = append(a.updates, pendingUpdate{id: old.ID, name: name, patch: patch, deploy: needsDeploy})
 	return nil
+}
+
+// prepareUptime plans the check of an existing service, as svc will be:
+// the file's, or none when the file has none. It reports a change.
+func (a *applier) prepareUptime(ctx context.Context, name string, svc store.Service) (bool, error) {
+	cur, err := a.c.store.GetUptimeCheck(ctx, svc.ID)
+	has := err == nil
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return false, err
+	}
+	u := a.uptimes[name]
+	if u == nil {
+		if has {
+			a.uptimeOps = append(a.uptimeOps, uptimeOp{name: name})
+		}
+		return has, nil
+	}
+	chk, err := uptimeCheck(svc, uptimeInput(*u))
+	if err != nil {
+		return false, err
+	}
+	if has && sameUptime(cur, chk) {
+		return false, nil
+	}
+	a.uptimeOps = append(a.uptimeOps, uptimeOp{name: name, check: &chk})
+	return true, nil
 }
 
 // databasePasswordKey is the env key of the password apps connect with.
@@ -694,6 +779,23 @@ func (a *applier) apply(ctx context.Context) error {
 		}
 		if u.deploy && !svc.Stopped && svc.CurrentDeploymentID != "" {
 			queue(svc.ID, svc.Kind)
+		}
+	}
+	for _, op := range a.uptimeOps {
+		id := a.created[op.name]
+		if id == "" {
+			id = a.byName[op.name].ID
+		}
+		if op.check == nil {
+			if err := c.deleteUptime(ctx, id); err != nil && !errors.Is(err, store.ErrNotFound) {
+				return fmt.Errorf("uptime check of %s: %w", op.name, err)
+			}
+			continue
+		}
+		chk := *op.check
+		chk.ServiceID = id
+		if err := c.saveUptime(ctx, chk); err != nil {
+			return fmt.Errorf("uptime check of %s: %w", op.name, err)
 		}
 	}
 	for _, s := range a.deletes {
