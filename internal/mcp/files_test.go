@@ -64,7 +64,10 @@ func TestVolumeFileTools(t *testing.T) {
 			t.Errorf("%s %v: %s, want %q", tc.name, tc.args, out, tc.want)
 		}
 	}
-	if out, isErr = e.call(read, "read_volume_file", map[string]any{"service": "game/web", "path": ""}); !isErr || !strings.Contains(out, "not a file") {
+	if out, isErr = e.call(read, "read_volume_file", map[string]any{"service": "game/mc", "path": "data/a"}); !isErr || !strings.Contains(out, "needs the admin scope") {
+		t.Errorf("read_volume_file with a read token: %s", out)
+	}
+	if out, isErr = e.call(admin, "read_volume_file", map[string]any{"service": "game/web", "path": ""}); !isErr || !strings.Contains(out, "not a file") {
 		t.Errorf("read_volume_file of the root: %s", out)
 	}
 }
