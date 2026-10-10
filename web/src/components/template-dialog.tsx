@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, LayoutGrid, Rocket, ScanSearch } from "lucide-react";
+import { ArrowLeft, ExternalLink, LayoutGrid, Rocket, ScanSearch, Search } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -54,25 +54,57 @@ export function TemplateDialog({ projectId }: { projectId?: string }) {
 
 function Gallery({ onPick }: { onPick: (t: AppTemplate) => void }) {
   const templates = useQuery({ queryKey: ["templates"], queryFn: api.templates, staleTime: Infinity });
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");
   if (templates.isPending) return <Loading />;
   if (templates.error) return <ErrorText error={templates.error} />;
   if (templates.data.length === 0) return <EmptyState icon={LayoutGrid} title="No templates" description="This version ships none." />;
+
+  const categories = [...new Set(templates.data.map((t) => t.category))].sort();
+  const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = templates.data.filter((t) => {
+    const text = [t.title, t.description, t.category, ...t.tags].join(" ").toLowerCase();
+    return (!category || t.category === category) && words.every((w) => text.includes(w));
+  });
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {templates.data.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          onClick={() => onPick(t)}
-          className="flex items-start gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        >
-          <ServiceIconTile service={{ icon: t.icon }} />
-          <span className="min-w-0 space-y-0.5">
-            <span className="block font-medium">{t.title}</span>
-            <span className="block text-xs text-muted-foreground">{t.description}</span>
-          </span>
-        </button>
-      ))}
+    <div className="space-y-3">
+      <FloatingInput
+        label="Search"
+        size="sm"
+        icon={<Search className="size-4" />}
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        autoFocus
+      />
+      {categories.length > 1 && (
+        <div className="flex flex-wrap gap-1.5">
+          {["", ...categories].map((c) => (
+            <Button key={c} type="button" size="xs" variant={category === c ? "secondary" : "ghost"} onClick={() => setCategory(c)} className="capitalize">
+              {c || "All"}
+            </Button>
+          ))}
+        </div>
+      )}
+      {shown.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">No template matches.</p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {shown.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onPick(t)}
+              className="flex items-start gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              <ServiceIconTile service={{ icon: t.icon }} />
+              <span className="min-w-0 space-y-0.5">
+                <span className="block font-medium">{t.title}</span>
+                <span className="block text-xs text-muted-foreground">{t.description}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

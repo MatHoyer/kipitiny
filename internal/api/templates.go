@@ -10,6 +10,12 @@ func (a *API) listTemplates(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a.core.ListTemplates())
 }
 
+// templateLogos serves the logos templates bring, drawn by the UI for
+// services that use them.
+func (a *API) templateLogos(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.core.TemplateLogos())
+}
+
 // installTemplate installs a template into a project, or a new one; with
 // dryRun, only returns what it would create.
 func (a *API) installTemplate(w http.ResponseWriter, r *http.Request) {

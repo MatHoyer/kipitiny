@@ -34,6 +34,9 @@ type TemplateResult struct {
 
 func (c *Core) ListTemplates() []templates.Template { return templates.List() }
 
+// TemplateLogos are the service logos templates bring, for the UI.
+func (c *Core) TemplateLogos() []templates.Logo { return templates.Logos() }
+
 // InstallTemplate applies a template's compose file with the user's inputs
 // as its .env, then deploys what it created. Nothing is pruned: a template
 // only adds to a project. A new project is created only once the file is
