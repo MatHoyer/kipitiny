@@ -8,6 +8,10 @@ x-template:
   icon: beszel
   category: monitoring
   tags: [metrics, docker, alerts]
+  notes: |
+    The first visit creates the admin account.
+
+    Its data (users, systems, history) is in a volume: back it up from the service's **Backups** tab.
   # logo.svg in this folder; the agent uses it too.
   logo:
     label: Beszel

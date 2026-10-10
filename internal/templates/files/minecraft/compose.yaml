@@ -9,6 +9,13 @@ x-template:
   icon: minecraft
   category: games
   tags: [java, paper, fabric, forge]
+  notes: |
+    - Accepting the [Minecraft EULA](https://aka.ms/MinecraftEULA) is required: the server doesn't start without it.
+    - Server type, version, difficulty, game mode and message of the day can change later in the service's environment, then redeploy.
+    - **Memory** is the container's limit (default `2g`); the server's Java heap takes three quarters of it.
+    - The game port (default `25565`) is published on the server: open it in the firewall. Players connect to the server's address, or to the optional **domain** whose DNS points at it (only for DNS: game traffic never goes through Traefik).
+    - The world is in a volume. Before each volume backup, kipitiny has the server flush it to disk (`rcon-cli save-all flush`, with a generated RCON password).
+    - Mods and plugins: see the image's documentation (`MODRINTH_PROJECTS`, `PLUGINS` and similar variables in the service's environment).
   logo:
     label: Minecraft
     color: "#62B47A"

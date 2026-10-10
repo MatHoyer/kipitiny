@@ -9,6 +9,12 @@ x-template:
   icon: beszel
   category: monitoring
   tags: [metrics, docker, agent]
+  notes: |
+    It runs with the server's network and Docker socket (see [Host access](/docs/compose#host-access)), so only on the server it watches: install it once per server, in a project on that server.
+
+    1. In the hub, **Add System**: copy its **public key**, and give the system the server's address and port `45876`.
+    2. Install the agent with that key. The hub connects to it on port 45876: open it in the server's firewall to the hub only.
+    3. Or give the agent a **token** and the **hub URL** (both from the hub): it connects to the hub itself, and no port needs to be open.
   inputs:
     - name: KEY
       label: Hub public key

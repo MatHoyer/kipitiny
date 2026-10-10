@@ -120,6 +120,7 @@ func TestParseRefuses(t *testing.T) {
 		"no project":   "x-template: {title: T, description: D, category: games}\n",
 		"no options":   head + ", inputs: [{name: A, label: L, type: select}]}\n",
 		"bad default":  head + ", inputs: [{name: A, label: L, type: select, options: [x], default: y}]}\n",
+		"heading":      head + ", notes: \"Intro\\n\\n## Setup\"}\n",
 	} {
 		if _, _, err := parse("app", []byte(src), nil); err == nil {
 			t.Errorf("%s: no error", name)

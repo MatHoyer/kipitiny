@@ -591,6 +591,8 @@ export interface AppTemplate {
   website?: string;
   docs?: string;
   icon?: string;
+  /** Markdown shown after the description: paragraphs, lists, **bold**, `code` and [links](…). */
+  notes?: string;
   category: string;
   tags: string[];
   inputs: TemplateInput[];

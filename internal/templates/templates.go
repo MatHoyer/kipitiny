@@ -36,6 +36,10 @@ type Template struct {
 	Website     string `json:"website,omitempty"`
 	Docs        string `json:"docs,omitempty"`
 	Icon        string `json:"icon,omitempty"`
+	// Notes is markdown shown after the description, in the install dialog
+	// and the docs: what to do after installing, ports to open, caveats.
+	// Paragraphs, lists, **bold**, `code` and [links](…) only.
+	Notes string `json:"notes,omitempty"`
 	// Category is one of Categories; Tags are extra words to search by.
 	Category string   `json:"category"`
 	Tags     []string `json:"tags"`
@@ -162,6 +166,9 @@ func loadFS(fsys fs.FS) (catalog, error) {
 	return c, nil
 }
 
+// notesHeadingRe finds a markdown heading.
+var notesHeadingRe = regexp.MustCompile(`(?m)^#{1,6} `)
+
 func parse(id string, data, svg []byte) (Template, *Logo, error) {
 	var doc struct {
 		Name string `yaml:"name"`
@@ -171,6 +178,7 @@ func parse(id string, data, svg []byte) (Template, *Logo, error) {
 			Website     string   `yaml:"website"`
 			Docs        string   `yaml:"docs"`
 			Icon        string   `yaml:"icon"`
+			Notes       string   `yaml:"notes"`
 			Category    string   `yaml:"category"`
 			Tags        []string `yaml:"tags"`
 			Logo        *struct {
@@ -195,7 +203,7 @@ func parse(id string, data, svg []byte) (Template, *Logo, error) {
 		return Template{}, nil, fmt.Errorf("category is one of %s", strings.Join(Categories, ", "))
 	}
 	t := Template{ID: id, Title: x.Title, Description: x.Description, Website: x.Website, Docs: x.Docs,
-		Icon: x.Icon, Category: x.Category, Tags: x.Tags, Inputs: x.Inputs, Project: doc.Name, Compose: string(data)}
+		Icon: x.Icon, Notes: strings.TrimSpace(x.Notes), Category: x.Category, Tags: x.Tags, Inputs: x.Inputs, Project: doc.Name, Compose: string(data)}
 	if t.Inputs == nil {
 		t.Inputs = []Input{}
 	}
@@ -207,6 +215,9 @@ func parse(id string, data, svg []byte) (Template, *Logo, error) {
 	}
 	if err := checkInputs(t.Inputs); err != nil {
 		return Template{}, nil, err
+	}
+	if notesHeadingRe.MatchString(t.Notes) {
+		return Template{}, nil, fmt.Errorf("notes have no headings: the docs put them under the template's own")
 	}
 
 	var logo *Logo
