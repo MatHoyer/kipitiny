@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { HardDrive, Pause, Play, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { CheckboxField, Empty, Mono } from "@/components/common";
+import { CheckboxField, Empty } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CronField, describeCron } from "@/components/cron-field";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,16 +20,6 @@ import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { storageIcon } from "@/components/storage";
 import { api, type BackupTarget, type PgDatabase, type Schedule, type ScheduleInput } from "../api";
-
-const presets: [string, string][] = [
-  ["0 * * * *", "Every hour"],
-  ["0 3 * * *", "Daily at 03:00 UTC"],
-  ["0 3 * * 0", "Weekly, Sunday 03:00 UTC"],
-];
-
-function describeCron(cron: string): string {
-  return presets.find(([c]) => c === cron)?.[1] ?? cron;
-}
 
 function describeRetention(s: ScheduleInput): string {
   const parts = [
@@ -113,13 +104,13 @@ export function Schedules({ serviceId, targets, databases = [] }: { serviceId?: 
   );
 }
 
+const defaultCron = "0 3 * * *";
 const emptyForm = { targetId: "local", keepLast: "0", keepDaily: "7", keepWeekly: "4", keepMonthly: "6" };
 
 function ScheduleDialog({ serviceId, targets, databases }: { serviceId?: string; targets: BackupTarget[]; databases: PgDatabase[] }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [preset, setPreset] = useState(presets[1][0]);
-  const [custom, setCustom] = useState("");
+  const [cron, setCron] = useState(defaultCron);
   const [form, setForm] = useState(emptyForm);
   const [verify, setVerify] = useState(true);
   // Empty follows the service's own database.
@@ -132,7 +123,7 @@ function ScheduleDialog({ serviceId, targets, databases }: { serviceId?: string;
       const input = {
         targetId: form.targetId,
         database,
-        cron: preset === "custom" ? custom : preset,
+        cron,
         keepLast: Number(form.keepLast) || 0,
         keepDaily: Number(form.keepDaily) || 0,
         keepWeekly: Number(form.keepWeekly) || 0,
@@ -150,8 +141,7 @@ function ScheduleDialog({ serviceId, targets, databases }: { serviceId?: string;
   const onOpenChange = (next: boolean) => {
     setOpen(next);
     if (!next) {
-      setPreset(presets[1][0]);
-      setCustom("");
+      setCron(defaultCron);
       setForm(emptyForm);
       setVerify(true);
       setDatabase("");
@@ -181,12 +171,7 @@ function ScheduleDialog({ serviceId, targets, databases }: { serviceId?: string;
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 sm:grid-cols-2">
-            <FloatingSelect
-              label="When"
-              value={preset}
-              onValueChange={setPreset}
-              options={[...presets.map(([value, label]) => ({ value, label })), { value: "custom", label: "Custom cron…" }]}
-            />
+            <CronField value={cron} onChange={setCron} inputClassName="sm:col-span-2 sm:order-last" />
             <FloatingSelect
               label="Storage"
               value={form.targetId}
@@ -211,22 +196,6 @@ function ScheduleDialog({ serviceId, targets, databases }: { serviceId?: string;
                   { value: "-", label: `The service's own (${databases.find((d) => d.main)?.name ?? "main"})` },
                   ...databases.filter((d) => !d.main).map((d) => ({ value: d.name, label: <span className="font-mono">{d.name}</span> })),
                 ]}
-              />
-            )}
-            {preset === "custom" && (
-              <FloatingInput
-                label="Cron expression"
-                required
-                value={custom}
-                onChange={(e) => setCustom(e.target.value)}
-                placeholder="30 2 * * 1-5"
-                inputClassName="font-mono"
-                className="sm:col-span-2"
-                description={
-                  <>
-                    5 fields, UTC. Prefix with <Mono>CRON_TZ=Europe/Paris</Mono> for another zone.
-                  </>
-                }
               />
             )}
           </div>

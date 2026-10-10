@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, HardDrive, History, Play, Server, Trash2 } from "lucide-react";
 import { useEffect, useId, useState, type FormEvent } from "react";
-import { CheckboxField, ErrorText, Loading, Mono, Section, StatCard } from "@/components/common";
+import { CheckboxField, ErrorText, Loading, Section, StatCard } from "@/components/common";
+import { CronField, cleanupPresets } from "@/components/cron-field";
 import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
@@ -76,18 +77,7 @@ export function Cleanup() {
             onCheckedChange={(v) => set("enabled", v)}
           />
           <div className="grid gap-4 sm:grid-cols-2">
-            <FloatingInput
-              label="Cron expression"
-              required
-              value={form.cron}
-              onChange={(e) => set("cron", e.target.value)}
-              inputClassName="font-mono"
-              description={
-                <>
-                  5 fields, UTC. Prefix with <Mono>CRON_TZ=Europe/Paris</Mono> for another zone.
-                </>
-              }
-            />
+            <CronField value={form.cron} onChange={(v) => set("cron", v)} presets={cleanupPresets} inputClassName="sm:order-last" />
             <FloatingInput
               label="Only older than (hours)"
               type="number"
