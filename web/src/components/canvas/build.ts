@@ -5,8 +5,9 @@ import { isDatabase, type CanvasPoint, type ServerTopology, type TopoNetwork, ty
  * Turns the topology into React Flow nodes and edges. Node IDs are the keys
  * the manager stores positions under ("svc:<id>", "project:<id>"…); a
  * position is relative to the node's parent frame. Nodes nobody moved get a
- * simple layout: Traefik and ingress on top, projects in a grid (apps over
- * databases), networks created by hand below.
+ * simple layout, centred: the ingress stacked on top, then the manager and
+ * the projects in a grid (apps over the databases they use), networks
+ * created by hand below.
  */
 
 export const SVC_W = 240;
@@ -60,57 +61,84 @@ export function buildGraph(
       inner.push({ ...n, parentId: parent, extent: parent ? "parent" : undefined, expandParent: !!parent, width: size.w, height: size.h });
     };
 
+    // Rows, each centred on the widest: Internet, the tunnel and Traefik
+    // stacked, then the manager and the projects (wrapping), then the networks
+    // created by hand. Each item is placed once the row widths are known.
+    type Item = { size: Size; dy?: number; put: (auto: CanvasPoint) => void };
+    const rows: { items: Item[]; gap: number }[] = [];
+    const single = (n: MapNode, size: Size, gap = GAP) => rows.push({ items: [{ size, put: (auto) => add({ ...n, position: place(n.id, auto) }, size) }], gap });
+
     // Ingress: Internet → (tunnel →) Traefik, and the manager's own domain.
     const projectsPublic = s.projects.some((p) => p.services.some((svc) => svc.domain && svc.port));
-    if (s.traefik && (!opts.projectView || projectsPublic)) {
-      add(infra("internet", s, place(`internet:${s.id}`, { x: x0, y })), { w: INFRA_W, h: INFRA_H });
+    const ingress = !!s.traefik && (!opts.projectView || projectsPublic);
+    const top: Item[] = [];
+    if (ingress) {
+      single(infra("internet", s), { w: INFRA_W, h: INFRA_H });
       if (s.tunnel) {
-        add(infra("tunnel", s, place(`tunnel:${s.id}`, { x: x0 + INFRA_W + GAP, y })), { w: INFRA_W, h: INFRA_H });
+        single(infra("tunnel", s), { w: INFRA_W, h: INFRA_H });
         edges.push(edge(`internet:${s.id}`, `tunnel:${s.id}`, "tunnel"), edge(`tunnel:${s.id}`, `traefik:${s.id}`, "tunnel"));
       } else {
         edges.push(edge(`internet:${s.id}`, `traefik:${s.id}`, "web"));
       }
-      y += INFRA_H + GAP;
-      add(infra("traefik", s, place(`traefik:${s.id}`, { x: x0, y })), { w: INFRA_W, h: INFRA_H + 24 });
+      single(infra("traefik", s), { w: INFRA_W, h: INFRA_H + 24 }, GAP * 2);
       if (s.manager && !opts.projectView) {
-        add(infra("manager", s, place(`manager:${s.id}`, { x: x0 + INFRA_W + GAP, y })), { w: INFRA_W, h: INFRA_H });
+        // Level with the services, under Traefik that routes to it.
+        const n = infra("manager", s);
+        const size = { w: INFRA_W, h: INFRA_H };
+        top.push({ size: { w: size.w, h: size.h + HEAD }, dy: HEAD, put: (auto) => add({ ...n, position: place(n.id, auto) }, size) });
         if (s.manager.domain) edges.push(edge(`traefik:${s.id}`, `manager:${s.id}`, "web"));
       }
-      y += INFRA_H + 24 + GAP * 2;
     }
 
     // Projects, wrapping into rows.
     const projectNets = new Map(s.networks.filter((n) => n.projectId).map((n) => [n.projectId!, n]));
-    let px = x0;
-    let rowH = 0;
+    let row: Item[] = top;
+    let rowW = top.length ? INFRA_W : 0;
     for (const p of s.projects) {
       const { frame, children, size } = projectFrame(p, projectNets.get(p.id), s.id, place);
-      if (px > x0 && px + size.w > x0 + ROW_W) {
-        px = x0;
-        y += rowH + GAP;
-        rowH = 0;
+      if (row.length > 0 && rowW + GAP + size.w > ROW_W) {
+        rows.push({ items: row, gap: GAP });
+        row = [];
+        rowW = 0;
       }
-      add({ ...frame, position: place(frame.id, { x: px, y }) }, size);
-      inner.push(...children);
-      px += size.w + GAP;
-      rowH = Math.max(rowH, size.h);
+      row.push({
+        size,
+        put: (auto) => {
+          add({ ...frame, position: place(frame.id, auto) }, size);
+          inner.push(...children);
+        },
+      });
+      rowW += (rowW ? GAP : 0) + size.w;
       for (const svc of p.services) {
         if (svc.domain && svc.port && s.traefik) edges.push(edge(`traefik:${s.id}`, `svc:${svc.id}`, "web"));
         for (const db of svc.uses) edges.push(edge(`svc:${svc.id}`, `svc:${db}`, "db"));
       }
     }
-    y += rowH + GAP * 2;
+    if (row.length > 0) rows.push({ items: row, gap: GAP * 2 });
 
     // Networks created by hand, with an edge from each member shown here.
     const shown = new Set(s.projects.flatMap((p) => p.services.map((svc) => svc.id)));
-    let nx = x0;
+    const nets: Item[] = [];
     for (const n of s.networks.filter((n) => n.customId)) {
       const members = s.projects.flatMap((p) => p.services).filter((svc) => svc.networks.includes(n.customId!));
       if (opts.projectView && members.length === 0) continue;
       const id = `net:${n.customId}`;
-      add({ id, type: "network", position: place(id, { x: nx, y }), data: { kind: "network", net: n, serverId: s.id, members: members.length } }, { w: NET_W, h: NET_H });
-      nx += NET_W + GAP;
+      const node: MapNode = { id, type: "network", position: { x: 0, y: 0 }, data: { kind: "network", net: n, serverId: s.id, members: members.length } };
+      const size = { w: NET_W, h: NET_H };
+      nets.push({ size, put: (auto) => add({ ...node, position: place(id, auto) }, size) });
       for (const svc of members) if (shown.has(svc.id)) edges.push(edge(`svc:${svc.id}`, id, "net"));
+    }
+    if (nets.length > 0) rows.push({ items: nets, gap: GAP });
+
+    const widthOf = (items: Item[]) => items.reduce((w, it) => w + it.size.w, 0) + GAP * (items.length - 1);
+    const width = Math.max(0, ...rows.map((r) => widthOf(r.items)));
+    for (const r of rows) {
+      let x = x0 + Math.round((width - widthOf(r.items)) / 2);
+      for (const it of r.items) {
+        it.put({ x, y: y + (it.dy ?? 0) });
+        x += it.size.w + GAP;
+      }
+      y += Math.max(...r.items.map((it) => it.size.h)) + r.gap;
     }
 
     if (framed) {
@@ -137,8 +165,8 @@ export function buildGraph(
   return { nodes: [...nodes.filter((n) => !n.parentId || n.type === "project"), ...nodes.filter((n) => n.parentId && n.type !== "project")], edges };
 }
 
-function infra(kind: InfraData["kind"], s: ServerTopology, position: CanvasPoint): MapNode {
-  return { id: `${kind}:${s.id}`, type: "infra", position, data: { kind, server: s } };
+function infra(kind: InfraData["kind"], s: ServerTopology): MapNode {
+  return { id: `${kind}:${s.id}`, type: "infra", position: { x: 0, y: 0 }, data: { kind, server: s } };
 }
 
 /** A project's frame and its services: public apps, then the other apps, then databases. */
@@ -146,19 +174,47 @@ function projectFrame(p: TopoProject, net: TopoNetwork | undefined, serverId: st
   const id = `project:${p.id}`;
   const apps = p.services.filter((s) => !isDatabase(s.kind)).sort((a, b) => Number(!!b.domain) - Number(!!a.domain));
   const dbs = p.services.filter((s) => isDatabase(s.kind));
+  // Columns: apps side by side, each database centred under the apps that
+  // use it (a group of databases spread evenly around that point), the
+  // unused ones after. Half columns are fine.
+  const cols = new Map<string, number>(apps.map((a, i) => [a.id, i]));
+  const wants = dbs.flatMap((db) => {
+    const at = apps.flatMap((a, i) => (a.uses.includes(db.id) ? [i] : []));
+    return at.length ? [{ id: db.id, at: at.reduce((x, y) => x + y, 0) / at.length }] : [];
+  });
+  wants.sort((x, y) => x.at - y.at);
+  // Pack them without overlap: neighbours that collide merge into one block,
+  // placed where its members' wishes average out.
+  const blocks: { ids: string[]; sum: number; start: number }[] = [];
+  for (const w of wants) {
+    blocks.push({ ids: [w.id], sum: w.at, start: w.at });
+    for (let last = blocks.at(-1)!, prev = blocks.at(-2); prev && prev.start + prev.ids.length > last.start; last = prev, prev = blocks.at(-2)) {
+      blocks.pop();
+      // sum holds Σ(wish − index in block); last's indexes move up by prev's length.
+      prev.sum += last.sum - prev.ids.length * last.ids.length;
+      prev.ids.push(...last.ids);
+      prev.start = prev.sum / prev.ids.length;
+    }
+  }
+  for (const bl of blocks) bl.ids.forEach((dbId, k) => cols.set(dbId, bl.start + k));
+  let next = Math.max(apps.length, ...[...cols.values()].map((c) => Math.ceil(c + 1)));
+  for (const db of dbs) if (!cols.has(db.id)) cols.set(db.id, next++);
+  const shift = Math.min(0, ...cols.values());
+
   const children: MapNode[] = [];
   [apps, dbs]
     .filter((row) => row.length > 0)
     .forEach((row, r) =>
-      row.forEach((svc, i) => {
+      row.forEach((svc) => {
         const nid = `svc:${svc.id}`;
+        const x = PAD + Math.round((cols.get(svc.id)! - shift) * (SVC_W + GAP));
         children.push({
           id: nid,
           type: "service",
           parentId: id,
           extent: "parent",
           expandParent: true,
-          position: place(nid, { x: PAD + i * (SVC_W + GAP), y: HEAD + r * (SVC_H + GAP) }),
+          position: place(nid, { x, y: HEAD + r * (SVC_H + GAP * 3) }),
           data: { kind: "service", svc, project: p, serverId },
           width: SVC_W,
           height: SVC_H,
