@@ -510,14 +510,14 @@ const routes: Route[] = [
         db.projects.push(p);
         projectId = p.id;
       }
-      for (const svc of t.services) {
+      for (const { domainInput, ...svc } of t.services) {
         db.services.push(
           newService({
             ...svc,
             id: newId("s"),
             kind: "app",
             projectId,
-            domain: svc.port ? (values.DOMAIN ?? "") : "",
+            domain: domainInput ? (values[domainInput] ?? "") : "",
             currentDeploymentId: "",
             createdAt: now(),
             updatedAt: now(),

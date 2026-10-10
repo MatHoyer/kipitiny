@@ -1,0 +1,82 @@
+# A Minecraft Java Edition server (itzg/minecraft-server): vanilla or a
+# modded/plugin server type, its world in a volume, the game port published
+# on the host.
+x-template:
+  title: Minecraft server
+  description: A Minecraft Java Edition server, vanilla or Paper, Fabric, Forge. The world is kept in a volume and backed up like any other.
+  website: https://www.minecraft.net
+  docs: https://docker-minecraft-server.readthedocs.io
+  icon: minecraft
+  inputs:
+    - name: EULA
+      label: Minecraft EULA
+      type: select
+      options: ["TRUE"]
+      required: true
+      help: Running a server needs you to accept https://aka.ms/MinecraftEULA (pick TRUE to accept).
+    - name: SERVER_TYPE
+      label: Server type
+      type: select
+      options: [VANILLA, PAPER, FABRIC, FORGE, NEOFORGE, PURPUR]
+      default: VANILLA
+    - name: VERSION
+      label: Minecraft version
+      default: LATEST
+      help: LATEST, or a version like 1.21.4.
+    - name: MEMORY
+      label: Memory
+      default: 2g
+      help: The container's memory limit; the server gets three quarters of it.
+    - name: PORT
+      label: Port
+      default: "25565"
+      help: The host port players connect to. Open it in the server's firewall.
+    - name: DIFFICULTY
+      label: Difficulty
+      type: select
+      options: [peaceful, easy, normal, hard]
+      default: normal
+    - name: MODE
+      label: Game mode
+      type: select
+      options: [survival, creative, adventure]
+      default: survival
+    - name: MOTD
+      label: Message of the day
+      default: A kipitiny Minecraft server
+    - name: DOMAIN
+      label: Domain
+      type: domain
+      placeholder: mc.example.com
+      help: A DNS name pointing at this server, for players to connect with (with the port when it isn't 25565).
+    - name: RCON_PASSWORD
+      label: RCON password
+      generate: 24
+name: minecraft
+services:
+  server:
+    image: itzg/minecraft-server:2026.9.2-java25
+    ports:
+      - "${PORT}:25565"
+    environment:
+      EULA: ${EULA}
+      TYPE: ${SERVER_TYPE}
+      VERSION: ${VERSION}
+      DIFFICULTY: ${DIFFICULTY}
+      MODE: ${MODE}
+      MOTD: ${MOTD}
+      RCON_PASSWORD: ${RCON_PASSWORD}
+      # Heap from the container's limit instead of a fixed -Xmx.
+      MEMORY: ""
+      JVM_XX_OPTS: -XX:MaxRAMPercentage=75
+    mem_limit: ${MEMORY}
+    volumes:
+      - data:/data
+    stop_grace_period: 1m
+    x-kipitiny:
+      domain: ${DOMAIN}
+      icon: minecraft
+      pre_backup: rcon-cli save-all flush
+      secrets: [RCON_PASSWORD]
+volumes:
+  data: {}

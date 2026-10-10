@@ -1,7 +1,7 @@
 import { Box, type LucideIcon } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import type { ServiceKind } from "@/api";
-import { BeszelIcon, NginxIcon, NodeIcon, PostgresIcon, RedisIcon } from "@/components/brand-icons";
+import { BeszelIcon, MinecraftIcon, NginxIcon, NodeIcon, PostgresIcon, RedisIcon } from "@/components/brand-icons";
 import { cn } from "@/lib/utils";
 
 type Logo = { label: string; color: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
@@ -13,6 +13,7 @@ export const serviceLogos: Record<string, Logo> = {
   nginx: { label: "NGINX", color: "#009639", Icon: NginxIcon },
   node: { label: "Node.js", color: "#5FA04E", Icon: NodeIcon },
   beszel: { label: "Beszel", color: "#747BFF", Icon: BeszelIcon },
+  minecraft: { label: "Minecraft", color: "#62B47A", Icon: MinecraftIcon },
 };
 
 /** Other names images go by, e.g. bitnami/postgresql or henrygd/beszel-agent. */
@@ -21,6 +22,7 @@ const aliases: Record<string, string> = {
   "nginx-unprivileged": "nginx",
   nodejs: "node",
   "beszel-agent": "beszel",
+  "minecraft-server": "minecraft",
 };
 
 /** What picks a service's logo; backups carry icon and kind only. */

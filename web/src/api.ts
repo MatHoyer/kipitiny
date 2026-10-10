@@ -598,7 +598,9 @@ export interface AppTemplate {
 export interface TemplateInput {
   name: string;
   label: string;
-  type: "text" | "secret" | "domain" | "url";
+  type: "text" | "secret" | "domain" | "url" | "select";
+  /** The choices of a select. */
+  options?: string[];
   help?: string;
   placeholder?: string;
   default?: string;

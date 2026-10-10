@@ -28,6 +28,17 @@ func TestInstallTemplateDryRun(t *testing.T) {
 		t.Fatal("dry run created a project")
 	}
 
+	// Defaults fill what isn't given; a published port and a DNS-only domain.
+	res, err = c.InstallTemplate(ctx, "minecraft", TemplateInstall{
+		NewProject: &NewProject{Name: "minecraft"}, Values: map[string]string{"EULA": "TRUE", "DOMAIN": "mc.example.com"}, DryRun: true,
+	})
+	if err != nil || !slices.Equal(res.Plan.Create, []string{"server"}) {
+		t.Fatalf("minecraft plan = %+v, %v", res, err)
+	}
+	if _, err := c.InstallTemplate(ctx, "minecraft", TemplateInstall{NewProject: &NewProject{Name: "minecraft"}, DryRun: true}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("EULA not accepted: %v", err)
+	}
+
 	// An existing project.
 	p, err := c.store.CreateProject(ctx, store.Project{Name: "ops", ServerID: store.LocalServerID})
 	if err != nil {
