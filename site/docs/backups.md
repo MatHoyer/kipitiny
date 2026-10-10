@@ -1,7 +1,7 @@
 ---
 title: Backups
 description: Database and volume backups, restore tests, encryption, retention and storage targets
-order: 7
+order: 8
 ---
 
 - `pg_dump -Fc` runs **inside** the database container (client always matches the

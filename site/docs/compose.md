@@ -1,7 +1,7 @@
 ---
 title: Compose reference
 description: The docker-compose format of a kipitiny project: keys, x-kipitiny settings, variables and secrets, git sync
-order: 8
+order: 9
 ---
 
 > A kipitiny project is described by a docker-compose file. You can write it by hand, keep it in git, have an LLM write it, or export it from any project. This page is the complete format: everything kipitiny reads, what each field does, and what it refuses.
@@ -77,7 +77,7 @@ Each key under `services` is a service. Its name is also its hostname inside the
 | `expose` | The container port HTTP is routed to from the domain: `["3000"]`. With several, `x-kipitiny.port` picks one. Same as `x-kipitiny.port`. |
 | `healthcheck` | Docker's healthcheck: `test` (a list starting with `CMD` or `CMD-SHELL`, or a string run by the shell), `interval`, `timeout`, `start_period`, `retries`, or `disable: true`. A new replica takes traffic once it passes. Without `start_period`, it is checked every second while starting. The command runs in the container, so the image needs it (`wget`, `curl`…); `x-kipitiny.health_path` works with any image. Not for databases. |
 | `ports` | Host ports published straight to the container, for traffic that isn't HTTP: `"25565:25565"`, `"9000:9000/udp"`, or the long form `{target: 25565, published: 25565, protocol: tcp}`. One port per entry, no ranges. An app with published ports runs one replica. HTTP goes through `expose` (or `x-kipitiny.port`) instead. |
-| `volumes` | Named volumes: `name:/path` or `{type: volume, source: name, target: /path}`. Shared by the service's replicas, kept across deploys, backed up. At most 10. Names: lowercase letters, digits and dashes. The one bind mount allowed is the Docker socket, `/var/run/docker.sock:/var/run/docker.sock` (`:ro` for read-only); see [Host access](#host-access). |
+| `volumes` | Named volumes: `name:/path` or `{type: volume, source: name, target: /path}`. Shared by the service's replicas, kept across deploys, backed up, managed from the [Files](/docs/files) tab. At most 10. Names: lowercase letters, digits and dashes. The one bind mount allowed is the Docker socket, `/var/run/docker.sock:/var/run/docker.sock` (`:ro` for read-only); see [Host access](#host-access). |
 | `network_mode` | Only `host`: the app runs in the server's network. See [Host access](#host-access). |
 | `deploy` | `replicas` (1–10; databases always 1) and `resources.limits.memory` / `resources.limits.cpus`. |
 | `mem_limit` | Same as `deploy.resources.limits.memory` (`512m`, `1g`, bytes). |

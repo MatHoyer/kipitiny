@@ -1,7 +1,7 @@
 ---
 title: App templates
 description: One-click apps shipped with kipitiny, what installing one does, and how a template is written
-order: 14
+order: 15
 ---
 
 > A template installs a common self-hosted app in one step: you answer a few questions, see what will be created, and kipitiny creates and deploys it. Afterwards they're ordinary services: edit, back up or delete them like any other.
