@@ -167,7 +167,7 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "Files and folders in a service's volumes (an app's named volumes, a database's data volume): name, type, size, modified time, mode, owner, symlink target. " +
 			"Paths are <volume>/<path>; an empty path lists the volumes with where they are mounted. Database volumes are read-only."}, t.listVolumeFiles)
 	mcp.AddTool(server, &mcp.Tool{Name: "read_volume_file", Annotations: readOnly,
-		Description: "The content of a text file in a service's volumes, up to 1 MiB; binary files are refused."}, t.readVolumeFile)
+		Description: "The content of a text file in a service's volumes, up to 1 MiB; binary files are refused. Needs admin (files may hold secrets)."}, t.readVolumeFile)
 	mcp.AddTool(server, &mcp.Tool{Name: "write_volume_file",
 		Description: "Write a file in an app's volumes (text, or base64 up to 16 MiB, e.g. a mod's .jar), creating missing folders. New files belong to their folder's owner. " +
 			"The app sees it right away; most apps need a restart (service_action) to load new plugins or config. Needs admin."}, t.writeVolumeFile)

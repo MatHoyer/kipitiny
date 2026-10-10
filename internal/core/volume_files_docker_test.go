@@ -128,6 +128,18 @@ ln -s mods/a.jar ok-link`)
 		}
 	}
 
+	// Listing needs read; contents, like backups, admin.
+	if _, err := c.ReadVolumeFile(ctx, svc.ID, "data/server.properties"); !errors.Is(err, ErrForbidden) {
+		t.Errorf("read with a read token: %v", err)
+	}
+	if err := c.DownloadVolumeFile(ctx, svc.ID, "data/server.properties", io.Discard); !errors.Is(err, ErrForbidden) {
+		t.Errorf("download with a read token: %v", err)
+	}
+	if err := c.ArchiveVolumeFiles(ctx, svc.ID, "data", nil, io.Discard); !errors.Is(err, ErrForbidden) {
+		t.Errorf("archive with a read token: %v", err)
+	}
+	ctx = WithActor(ctx, Actor{Kind: "user", Name: "admin", Scope: store.ScopeAdmin})
+
 	f, err := c.ReadVolumeFile(ctx, svc.ID, "data/server.properties")
 	if err != nil || f.Content != "motd=hi\n" || f.Type != "file" || f.Path != "data/server.properties" {
 		t.Errorf("read: %+v %v", f, err)

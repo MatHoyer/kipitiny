@@ -65,7 +65,10 @@ var secretReads = map[string]bool{
 	"GET /api/git-providers/oauth/callback":   true,
 	"GET /api/storage/{id}/key":               true,
 	"GET /api/backups/{id}/download":          true,
-	"GET /api/audit":                          true,
+	// Volume file contents may hold secrets, like backups.
+	"GET /api/services/{id}/files/content":  true,
+	"GET /api/services/{id}/files/download": true,
+	"GET /api/audit":                        true,
 	// Shells in a container or on a host.
 	"GET /api/services/{id}/terminal": true,
 	"GET /api/servers/{id}/terminal":  true,
