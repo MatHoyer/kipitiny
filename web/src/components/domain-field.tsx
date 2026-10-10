@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
@@ -27,10 +27,13 @@ function split(value: string, bases: string[]): { base: string; sub: string } {
 export function DomainField({
   value,
   onChange,
+  note,
   className,
 }: {
   value: string;
   onChange: (domain: string) => void;
+  /** Replaces "Served at …" once a domain is set, e.g. for a DNS-only one. */
+  note?: ReactNode;
   className?: string;
 }) {
   const domains = useQuery({ queryKey: ["domains"], queryFn: api.domains });
@@ -77,7 +80,7 @@ export function DomainField({
         className={className}
         description={
           <>
-            Empty for a private service, reachable only inside the project.{" "}
+            {value && note ? note : "Empty for a private service, reachable only inside the project."}{" "}
             {noList && (
               <>
                 List your domains in{" "}
@@ -117,7 +120,9 @@ export function DomainField({
         />
       </div>
       <p className="px-1 text-xs text-muted-foreground">
-        {value ? (
+        {value && note ? (
+          note
+        ) : value ? (
           <>
             Served at <span className="font-mono">https://{value}</span>
           </>
