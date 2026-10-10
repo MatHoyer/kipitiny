@@ -1,6 +1,6 @@
 import { autocompletion, closeBrackets, closeBracketsKeymap, closeCompletion, completionKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { PostgreSQL, sql, type SQLNamespace } from "@codemirror/lang-sql";
+import { MariaSQL, MySQL, PostgreSQL, sql, type SQLDialect, type SQLNamespace } from "@codemirror/lang-sql";
 import { bracketMatching, HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { Compartment, EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap, placeholder as placeholderExt } from "@codemirror/view";
@@ -35,15 +35,20 @@ const theme = EditorView.theme({
   ".cm-completionDetail": { color: "var(--muted-foreground)", fontStyle: "normal", marginLeft: "0.75rem" },
 });
 
+const dialects: Record<SqlDialect, SQLDialect> = { postgres: PostgreSQL, mysql: MySQL, mariadb: MariaSQL };
+export type SqlDialect = "postgres" | "mysql" | "mariadb";
+
 /**
- * A SQL editor with postgres highlighting and completion of the database's
- * own tables and columns. Mod-Enter runs.
+ * A SQL editor with the database's highlighting and completion of its own
+ * tables and columns. Mod-Enter runs.
  */
 export default function SqlEditor({
   value,
   onChange,
   onRun,
   schema,
+  dialect,
+  defaultSchema,
   placeholder,
   label,
 }: {
@@ -51,6 +56,9 @@ export default function SqlEditor({
   onChange: (v: string) => void;
   onRun: () => void;
   schema: SQLNamespace;
+  dialect: SqlDialect;
+  /** Where unqualified names are looked up: public, or MySQL's current database. */
+  defaultSchema: string;
   placeholder: string;
   label: string;
 }) {
@@ -73,7 +81,7 @@ export default function SqlEditor({
           bracketMatching(),
           autocompletion({ icons: false }),
           keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...completionKeymap, indentWithTab]),
-          lang.current.of(sql({ dialect: PostgreSQL, schema, defaultSchema: "public", upperCaseKeywords: true })),
+          lang.current.of(sql({ dialect: dialects[dialect], schema, defaultSchema, upperCaseKeywords: true })),
           syntaxHighlighting(highlight),
           theme,
           EditorView.lineWrapping,
@@ -91,8 +99,8 @@ export default function SqlEditor({
   }, []);
 
   useEffect(() => {
-    view.current?.dispatch({ effects: lang.current.reconfigure(sql({ dialect: PostgreSQL, schema, defaultSchema: "public", upperCaseKeywords: true })) });
-  }, [schema]);
+    view.current?.dispatch({ effects: lang.current.reconfigure(sql({ dialect: dialects[dialect], schema, defaultSchema, upperCaseKeywords: true })) });
+  }, [schema, dialect, defaultSchema]);
 
   // Outside changes (a query picked from history) replace the text.
   useEffect(() => {

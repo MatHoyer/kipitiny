@@ -36,7 +36,8 @@ const opGroups: { label: string; ops: { op: PgFilterOp; label: string }[] }[] = 
 
 const tableKey = (t: Pick<PgTable, "schema" | "name">) => `${t.schema}.${t.name}`;
 
-export function PgBrowser({ serviceId, database }: { serviceId: string; database: string }) {
+/** defaultSchema's tables are listed without a heading: public, or MySQL's database. */
+export function PgBrowser({ serviceId, database, defaultSchema }: { serviceId: string; database: string; defaultSchema: string }) {
   const tables = useQuery({ queryKey: ["data", serviceId, "tables", database], queryFn: () => api.pgTables(serviceId, database) });
   const [picked, setPicked] = useState<string | null>(null);
   const [find, setFind] = useState("");
@@ -66,7 +67,7 @@ export function PgBrowser({ serviceId, database }: { serviceId: string; database
         {shown.length === 0 && <p className="px-2 text-xs text-muted-foreground">No table matches.</p>}
         {schemas.map((schema) => (
           <div key={schema} className="space-y-px">
-            {(schemas.length > 1 || schema !== "public") && <p className="px-2 pb-1 text-xs text-muted-foreground">{schema}</p>}
+            {(schemas.length > 1 || schema !== defaultSchema) && <p className="px-2 pb-1 text-xs text-muted-foreground">{schema}</p>}
             {shown
               .filter((t) => t.schema === schema)
               .map((t) => (

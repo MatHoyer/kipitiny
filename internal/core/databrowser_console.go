@@ -44,9 +44,10 @@ type ConsoleResult struct {
 // pgTagRe matches a command tag psql prints for a statement without rows.
 var pgTagRe = regexp.MustCompile(`^[A-Z]+( [A-Z]+)*( [0-9]+){0,2}$`)
 
-// DataConsole runs an admin's query: SQL on postgres, a command on redis.
-// Unless write is set, the session is read-only (postgres) or commands that
-// write are refused (redis). Every run is audited, without its text, which
+// DataConsole runs an admin's query: SQL on postgres, mysql and mariadb, a
+// command on redis, JavaScript (mongosh) on mongodb. Unless write is set,
+// the session is read-only (postgres), runs as the read-only user (mysql,
+// mariadb, mongodb) or commands that write are refused (redis). Every run is audited, without its text, which
 // may hold secrets.
 func (c *Core) DataConsole(ctx context.Context, id, database, query string, write bool) (res ConsoleResult, err error) {
 	if err := Require(ctx, store.ScopeAdmin); err != nil {
@@ -74,10 +75,10 @@ func (c *Core) DataConsole(ctx context.Context, id, database, query string, writ
 		return ConsoleResult{}, err
 	}
 	var t dataTarget
-	if svc.Kind == store.ServiceKindPostgres {
-		t, err = c.pgTarget(ctx, id, database)
-	} else {
+	if svc.Kind == store.ServiceKindRedis {
 		t, err = c.dataTarget(ctx, id, svc.Kind)
+	} else {
+		t, err = c.databaseTarget(ctx, id, database)
 	}
 	if err != nil {
 		return ConsoleResult{}, err
@@ -89,6 +90,10 @@ func (c *Core) DataConsole(ctx context.Context, id, database, query string, writ
 		return t.pgConsole(ctx, query, write)
 	case store.ServiceKindRedis:
 		return t.redisConsole(ctx, query, write)
+	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+		return t.mysqlConsole(ctx, query, write)
+	case store.ServiceKindMongoDB:
+		return t.mongoConsole(ctx, query, write)
 	}
 	return ConsoleResult{}, fmt.Errorf("%w: %s has no data console", ErrInvalid, svc.Name)
 }

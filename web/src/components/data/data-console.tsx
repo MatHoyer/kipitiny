@@ -20,6 +20,7 @@ import { friendlyError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { api, ApiError, type ConsoleResult } from "../../api";
 import { DataTable } from "./data-table";
+import type { SqlDialect } from "./sql-editor";
 
 // The editor is its own chunk. Not React.lazy: lazy suspends on its first
 // render even when the chunk is already loaded, which flashes the fallback.
@@ -112,7 +113,7 @@ const consoleError = (err: unknown) => (err instanceof ApiError && err.status ==
 const elapsed = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);
 
 /** SQL console: an editor that knows the schema, results as a typed grid. */
-export function PgConsole({ serviceId, database }: { serviceId: string; database: string }) {
+export function PgConsole({ serviceId, database, dialect }: { serviceId: string; database: string; dialect: SqlDialect }) {
   const [query, setQuery] = useState("");
   const [write, setWrite] = useState(false);
   const hist = useHistory(serviceId);
@@ -143,7 +144,16 @@ export function PgConsole({ serviceId, database }: { serviceId: string; database
     <div className="space-y-4">
       <div className={cn("overflow-hidden rounded-lg border bg-card transition-colors", write && "border-destructive")}>
         {SqlEditor ? (
-          <SqlEditor value={query} onChange={setQuery} onRun={submit} schema={schema} label="SQL" placeholder={placeholder} />
+          <SqlEditor
+            value={query}
+            onChange={setQuery}
+            onRun={submit}
+            schema={schema}
+            dialect={dialect}
+            defaultSchema={dialect === "postgres" ? "public" : database}
+            label="SQL"
+            placeholder={placeholder}
+          />
         ) : (
           // Until the editor loads, the same box with the same placeholder: nothing moves.
           <div className="min-h-[7.5rem] px-4 py-3 font-mono text-[0.85rem] leading-[1.4] text-muted-foreground">{placeholder}</div>
@@ -152,7 +162,7 @@ export function PgConsole({ serviceId, database }: { serviceId: string; database
           <WriteMode write={write} onChange={setWrite} />
           <QueryHistory items={hist.items} onPick={setQuery} />
           <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">
-            {write ? "Runs as one transaction" : "Session is read only"}
+            {dialect === "postgres" ? (write ? "Runs as one transaction" : "Session is read only") : write ? "Runs as root" : "Runs as a read-only user"}
           </span>
           <Button size="sm" variant={write ? "destructive" : "default"} loading={run.isPending} disabled={!query.trim()} onClick={submit}>
             <Play /> Run
@@ -234,10 +244,44 @@ function PgResult({ res, ms }: { res: ConsoleResult; ms: number }) {
 
 type Entry = { id: number; cmd: string; write: boolean; output?: string; error?: string; more?: boolean; ms?: number };
 
-const starters = ["INFO keyspace", "DBSIZE", "SCAN 0 COUNT 20", "MEMORY STATS", "SLOWLOG GET 5"];
+/** What tells one transcript console from the other. */
+type TranscriptKind = {
+  label: string;
+  intro: string;
+  starters: string[];
+  placeholder: string;
+  readHint: string;
+  writeHint: string;
+};
+
+const redisTranscript: TranscriptKind = {
+  label: "Redis command",
+  intro: "Type a command as you would in redis-cli. Try one of these:",
+  starters: ["INFO keyspace", "DBSIZE", "SCAN 0 COUNT 20", "MEMORY STATS", "SLOWLOG GET 5"],
+  placeholder: "GET user:42",
+  readHint: "Commands that change data are refused",
+  writeHint: "Every command runs, except ones that block",
+};
 
 /** Redis console: a transcript like redis-cli, with ↑/↓ through past commands. */
 export function RedisConsole({ serviceId }: { serviceId: string }) {
+  return <TranscriptConsole serviceId={serviceId} database="" kind={redisTranscript} />;
+}
+
+/** MongoDB console: mongosh JavaScript against the picked database, its printout as the reply. */
+export function MongoConsole({ serviceId, database }: { serviceId: string; database: string }) {
+  const kind: TranscriptKind = {
+    label: "mongosh command",
+    intro: `Type JavaScript as you would in mongosh; db is ${database}. Try one of these:`,
+    starters: ["db.getCollectionNames()", "db.stats()", "db.getCollectionInfos()", "db.currentOp().inprog.length"],
+    placeholder: "db.users.find({ active: true }).limit(5)",
+    readHint: "Runs as a read-only user",
+    writeHint: "Runs as the database's root user",
+  };
+  return <TranscriptConsole serviceId={serviceId} database={database} kind={kind} />;
+}
+
+function TranscriptConsole({ serviceId, database, kind }: { serviceId: string; database: string; kind: TranscriptKind }) {
   const [line, setLine] = useState("");
   const [write, setWrite] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -263,7 +307,7 @@ export function RedisConsole({ serviceId }: { serviceId: string }) {
     setBusy(true);
     const t0 = performance.now();
     try {
-      const res = await api.dataConsole(serviceId, cmd, write);
+      const res = await api.dataConsole(serviceId, cmd, write, database);
       setEntries((e) => e.map((x) => (x.id === id ? { ...x, output: res.output ?? "", more: res.more, ms: performance.now() - t0 } : x)));
     } catch (err) {
       setEntries((e) => e.map((x) => (x.id === id ? { ...x, error: consoleError(err), ms: performance.now() - t0 } : x)));
@@ -293,9 +337,9 @@ export function RedisConsole({ serviceId }: { serviceId: string }) {
         <div className="max-h-[55vh] space-y-3 overflow-y-auto p-3" aria-live="polite">
           {entries.length === 0 && (
             <div className="space-y-2 font-sans text-sm text-muted-foreground">
-              <p>Type a command as you would in redis-cli. Try one of these:</p>
+              <p>{kind.intro}</p>
               <div className="flex flex-wrap gap-1.5">
-                {starters.map((s) => (
+                {kind.starters.map((s) => (
                   <button key={s} type="button" onClick={() => runLine(s)} className="rounded-md border bg-background px-2 py-0.5 font-mono text-xs text-foreground hover:border-(--db)/50">
                     {s}
                   </button>
@@ -335,13 +379,13 @@ export function RedisConsole({ serviceId }: { serviceId: string }) {
             <input
               ref={input}
               autoFocus
-              aria-label="Redis command"
+              aria-label={kind.label}
               spellCheck={false}
               autoComplete="off"
               value={line}
               onChange={(e) => setLine(e.target.value)}
               onKeyDown={onKey}
-              placeholder={busy ? "Running…" : "GET user:42"}
+              placeholder={busy ? "Running…" : kind.placeholder}
               className="flex-1 bg-transparent outline-none placeholder:text-muted-foreground/60"
             />
             <span className="hidden font-sans text-xs text-muted-foreground sm:inline">↑ history, Ctrl+L clears</span>
@@ -349,7 +393,7 @@ export function RedisConsole({ serviceId }: { serviceId: string }) {
           <div className="flex flex-wrap items-center gap-2 border-t bg-muted/40 px-2 py-2 font-sans">
             <WriteMode write={write} onChange={setWrite} />
             <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">
-              {write ? "Every command runs, except ones that block" : "Commands that change data are refused"}
+              {write ? kind.writeHint : kind.readHint}
             </span>
             <Button type="submit" size="sm" variant={write ? "destructive" : "default"} loading={busy} disabled={!line.trim()}>
               <Play /> Run

@@ -108,6 +108,21 @@ func (l *lazyHeaders) Write(p []byte) (int, error) {
 	return l.w.Write(p)
 }
 
+// mongoDocuments takes the filter and sort as Extended JSON query
+// parameters.
+func (a *API) mongoDocuments(w http.ResponseWriter, r *http.Request) {
+	v := r.URL.Query()
+	q := core.DocQuery{Filter: v.Get("filter"), Sort: v.Get("sort")}
+	q.Limit, _ = strconv.Atoi(v.Get("limit"))
+	q.Skip, _ = strconv.Atoi(v.Get("skip"))
+	docs, err := a.core.MongoDocuments(r.Context(), r.PathValue("id"), v.Get("database"), r.PathValue("collection"), q)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, docs)
+}
+
 func (a *API) redisScan(w http.ResponseWriter, r *http.Request) {
 	v := r.URL.Query()
 	count, _ := strconv.Atoi(v.Get("count"))
@@ -135,8 +150,8 @@ func (a *API) dataConsole(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Query string `json:"query"`
 		Write bool   `json:"write"`
-		// Database picks one of a postgres instance's databases; empty is
-		// the service's own.
+		// Database picks one of the instance's databases (postgres, mysql,
+		// mariadb, mongodb); empty is the service's own.
 		Database string `json:"database"`
 	}
 	if !decode(w, r, &body) {

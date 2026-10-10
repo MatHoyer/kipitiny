@@ -10,6 +10,7 @@ import type {
   ConsoleResult,
   Container,
   Deployment,
+  MongoDocs,
   Network,
   PgFilter,
   PgRows,
@@ -935,27 +936,57 @@ const routes: Route[] = [
     },
   ],
 
-  ["GET", /^\/services\/([^/]+)\/data\/databases$/, () => [{ name: "postgres", bytes: 9_437_184, main: true }]],
+  [
+    "GET",
+    /^\/services\/([^/]+)\/data\/databases$/,
+    ({ m }) => [serviceOf(m[1]).kind === "postgres" ? { name: "postgres", bytes: 9_437_184, main: true } : { name: "app", bytes: 9_437_184, main: true }],
+  ],
   [
     "GET",
     /^\/services\/([^/]+)\/data\/tables$/,
-    (): PgTable[] =>
-      db.tables.map((t) => ({
-        schema: t.schema,
+    ({ m }): PgTable[] => {
+      // The same demo data in every kind: MySQL's schema is its database, MongoDB's tables are collections.
+      const kind = serviceOf(m[1]).kind;
+      return db.tables.map((t) => ({
+        schema: kind === "postgres" ? t.schema : "app",
         name: t.name,
-        kind: "table",
+        kind: kind === "mongodb" ? "collection" : "table",
         rowEstimate: t.rows.length,
         bytes: t.rows.length * 96 + 8192,
-        columns: t.columns.map((c) => ({ name: c.name, type: c.type, nullable: !!c.nullable, primaryKey: !!c.primaryKey })),
-      })),
+        columns:
+          kind === "mongodb" ? [] : t.columns.map((c) => ({ name: c.name, type: c.type, nullable: !!c.nullable, primaryKey: !!c.primaryKey })),
+      }));
+    },
   ],
   [
     "GET",
     /^\/services\/([^/]+)\/data\/tables\/([^/]+)\/([^/]+)$/,
     ({ m, q }) => {
-      const t = db.tables.find((x) => x.schema === decodeURIComponent(m[2]) && x.name === decodeURIComponent(m[3]));
+      const postgres = serviceOf(m[1]).kind === "postgres";
+      const t = db.tables.find((x) => (!postgres || x.schema === decodeURIComponent(m[2])) && x.name === decodeURIComponent(m[3]));
       if (!t) throw notFound();
       return rows(t, q);
+    },
+  ],
+  [
+    "GET",
+    /^\/services\/([^/]+)\/data\/collections\/([^/]+)\/documents$/,
+    ({ m, q }): MongoDocs => {
+      const t = db.tables.find((x) => x.name === decodeURIComponent(m[2]));
+      if (!t) throw notFound();
+      // A filter on one field's value is all the demo understands.
+      let filter: Record<string, unknown> = {};
+      try {
+        filter = JSON.parse(q.get("filter") || "{}");
+      } catch {
+        throw invalid("the filter is a JSON object, like {\"field\": 1}");
+      }
+      const docs = t.rows
+        .map((r, i) => ({ _id: { $oid: `6aca9c0c13d4e72f99${String(i).padStart(6, "0")}` }, ...Object.fromEntries(t.columns.map((c, j) => [c.name, r[j]])) }))
+        .filter((d) => Object.entries(filter).every(([k, v]) => String((d as Record<string, unknown>)[k]) === String(v)));
+      const skip = Number(q.get("skip")) || 0;
+      const limit = Number(q.get("limit")) || 25;
+      return { documents: docs.slice(skip, skip + limit).map((d) => JSON.stringify(d)), truncated: [], hasMore: docs.length > skip + limit };
     },
   ],
   [
@@ -980,7 +1011,12 @@ const routes: Route[] = [
   [
     "POST",
     /^\/services\/([^/]+)\/data\/console$/,
-    ({ m, body }) => (serviceOf(m[1]).kind === "redis" ? redisConsole(String(body.query)) : pgConsole(String(body.query))),
+    ({ m, body }) => {
+      const kind = serviceOf(m[1]).kind;
+      if (kind === "redis") return redisConsole(String(body.query));
+      if (kind === "mongodb") return { output: "This demo runs no real MongoDB. Browse shows its documents." };
+      return pgConsole(String(body.query));
+    },
   ],
 
   [

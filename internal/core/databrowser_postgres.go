@@ -87,17 +87,18 @@ type PgDatabase struct {
 	Main bool `json:"main"`
 }
 
-// PgDatabases lists the databases of a postgres service's instance that
-// accept connections, templates and restore leftovers aside.
+// PgDatabases lists the databases of a PostgreSQL, MySQL, MariaDB or
+// MongoDB service's instance: for postgres those that accept connections,
+// the server's own, templates and restore leftovers aside.
 func (c *Core) PgDatabases(ctx context.Context, id string) ([]PgDatabase, error) {
 	if err := Require(ctx, store.ScopeRead); err != nil {
 		return nil, err
 	}
-	t, err := c.dataTarget(ctx, id, store.ServiceKindPostgres)
+	t, err := c.databaseTarget(ctx, id, "")
 	if err != nil {
 		return nil, err
 	}
-	return t.pgDatabases(ctx)
+	return t.databases(ctx)
 }
 
 func (t dataTarget) pgDatabases(ctx context.Context) ([]PgDatabase, error) {
@@ -121,8 +122,9 @@ ORDER BY datname;`, func(row []json.RawMessage) error {
 // the name reads the same in every tool and needs no quoting in URLs.
 var pgDatabaseNameRe = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
 
-// CreatePgDatabase creates a database in a postgres service's instance,
-// owned by the service's user. Admin only.
+// CreatePgDatabase creates a database in a PostgreSQL, MySQL or MariaDB
+// service's instance, owned by the service's user. Admin only. (MongoDB
+// creates a database on its first write.)
 func (c *Core) CreatePgDatabase(ctx context.Context, id, name string) (PgDatabase, error) {
 	if err := Require(ctx, store.ScopeAdmin); err != nil {
 		return PgDatabase{}, err
@@ -133,9 +135,15 @@ func (c *Core) CreatePgDatabase(ctx context.Context, id, name string) (PgDatabas
 	if strings.HasSuffix(name, "__restore") || strings.HasSuffix(name, "__pre_restore") {
 		return PgDatabase{}, fmt.Errorf("%w: names ending in __restore or __pre_restore are kept for restores", ErrInvalid)
 	}
-	t, err := c.dataTarget(ctx, id, store.ServiceKindPostgres)
+	t, err := c.dataTarget(ctx, id, store.ServiceKindPostgres, store.ServiceKindMySQL, store.ServiceKindMariaDB)
 	if err != nil {
 		return PgDatabase{}, err
+	}
+	if t.svc.Kind.IsMySQL() {
+		if err := t.mysqlCreateDatabase(ctx, name); err != nil {
+			return PgDatabase{}, err
+		}
+		return PgDatabase{Name: name}, nil
 	}
 	// CREATE DATABASE can't run in a transaction, nor in the read-only
 	// session the browser uses.
@@ -151,27 +159,22 @@ func (c *Core) CreatePgDatabase(ctx context.Context, id, name string) (PgDatabas
 	return PgDatabase{Name: name}, nil
 }
 
-// pgTarget resolves a postgres service and the database to query: its own
-// when database is empty, else one of its instance's. The name is checked
-// against the instance's list: psql would also take a connection string.
-func (c *Core) pgTarget(ctx context.Context, id, database string) (dataTarget, error) {
-	t, err := c.dataTarget(ctx, id, store.ServiceKindPostgres)
-	if err != nil {
-		return t, err
-	}
-	t.db, err = c.pgDatabaseOf(ctx, t.svc, t.container, database)
-	return t, err
-}
-
-// PgTables lists the tables and views of one of a postgres service's
-// databases (its own when database is empty), system schemas aside.
+// PgTables lists the tables and views of one of a service's databases (its
+// own when database is empty), system schemas aside: PostgreSQL, MySQL and
+// MariaDB (whose schema is the database), MongoDB collections (no columns).
 func (c *Core) PgTables(ctx context.Context, id, database string) ([]PgTable, error) {
 	if err := Require(ctx, store.ScopeRead); err != nil {
 		return nil, err
 	}
-	t, err := c.pgTarget(ctx, id, database)
+	t, err := c.databaseTarget(ctx, id, database)
 	if err != nil {
 		return nil, err
+	}
+	switch {
+	case t.svc.Kind.IsMySQL():
+		return t.mysqlTables(ctx)
+	case t.svc.Kind == store.ServiceKindMongoDB:
+		return t.mongoCollections(ctx)
 	}
 	tables := []PgTable{}
 	err = t.psqlJSON(ctx, `SELECT json_build_array(n.nspname, c.relname, c.relkind, c.reltuples::bigint, pg_total_relation_size(c.oid),
@@ -204,14 +207,18 @@ ORDER BY n.nspname, c.relname;`, func(row []json.RawMessage) error {
 	return tables, err
 }
 
-// PgRows returns one page of a table's rows with its columns.
+// PgRows returns one page of a table's rows with its columns (PostgreSQL,
+// MySQL, MariaDB; MongoDB has MongoDocuments).
 func (c *Core) PgRows(ctx context.Context, id, database, schema, table string, q RowQuery) (PgRows, error) {
 	if err := Require(ctx, store.ScopeRead); err != nil {
 		return PgRows{}, err
 	}
-	t, err := c.pgTarget(ctx, id, database)
+	t, err := c.sqlTarget(ctx, id, database)
 	if err != nil {
 		return PgRows{}, err
+	}
+	if t.svc.Kind.IsMySQL() {
+		return t.mysqlRows(ctx, schema, table, q)
 	}
 	cols, err := t.pgColumns(ctx, schema, table)
 	if err != nil {
@@ -257,9 +264,12 @@ func (c *Core) PgExport(ctx context.Context, id, database, schema, table string,
 	if err := Require(ctx, store.ScopeRead); err != nil {
 		return err
 	}
-	t, err := c.pgTarget(ctx, id, database)
+	t, err := c.sqlTarget(ctx, id, database)
 	if err != nil {
 		return err
+	}
+	if t.svc.Kind.IsMySQL() {
+		return t.mysqlExport(ctx, schema, table, q, w)
 	}
 	cols, err := t.pgColumns(ctx, schema, table)
 	if err != nil {
@@ -273,6 +283,15 @@ func (c *Core) PgExport(ctx context.Context, id, database, schema, table string,
 	defer cancel()
 	return clientError(t.dk.Exec(ctx, t.container, t.psql(dataExportTimeout,
 		"COPY ("+strings.TrimSuffix(sql, ";")+") TO STDOUT WITH (FORMAT csv, HEADER)", w)))
+}
+
+// sqlTarget is databaseTarget for the SQL kinds, whose rows are tables'.
+func (c *Core) sqlTarget(ctx context.Context, id, database string) (dataTarget, error) {
+	t, err := c.databaseTarget(ctx, id, database)
+	if err == nil && t.svc.Kind == store.ServiceKindMongoDB {
+		err = fmt.Errorf("%w: %s holds documents, not rows: use its collections' documents", ErrInvalid, t.svc.Name)
+	}
+	return t, err
 }
 
 func (t dataTarget) pgColumns(ctx context.Context, schema, table string) ([]PgColumn, error) {

@@ -707,6 +707,10 @@ export type PgFilterOp = "=" | "!=" | "<" | "<=" | ">" | ">=" | "like" | "null" 
 export type PgFilter = { column: string; op: PgFilterOp; value?: string };
 export type RowQuery = { limit?: number; offset?: number; orderBy?: string; desc?: boolean; filters?: PgFilter[]; search?: string };
 /** Cells are text, null for NULL; truncated lists the [row, column] cells cut short. */
+/** One page of a MongoDB collection: each document as relaxed Extended JSON. */
+export type MongoDocs = { documents: string[]; truncated: number[]; hasMore: boolean };
+export type DocQuery = { filter?: string; sort?: string; limit?: number; skip?: number };
+
 export type PgRows = { columns: PgColumn[]; rows: (string | null)[][]; truncated: [number, number][]; hasMore: boolean };
 /** ttl in ms, -1 when the key never expires. */
 export type RedisKey = { key: string; type: string; ttl: number; bytes: number };
@@ -952,6 +956,16 @@ export const api = {
     request<RedisKeys>(`/services/${serviceId}/data/keys?${new URLSearchParams({ cursor, pattern })}`),
   redisGet: (serviceId: string, key: string, cursor = "0") =>
     request<RedisValue>(`/services/${serviceId}/data/key?${new URLSearchParams({ key, cursor })}`),
+  mongoDocuments: (serviceId: string, database: string, collection: string, q: DocQuery) =>
+    request<MongoDocs>(
+      `/services/${serviceId}/data/collections/${encodeURIComponent(collection)}/documents?${new URLSearchParams({
+        database,
+        filter: q.filter ?? "",
+        sort: q.sort ?? "",
+        limit: String(q.limit ?? 0),
+        skip: String(q.skip ?? 0),
+      })}`,
+    ),
   dataConsole: (serviceId: string, query: string, write: boolean, database = "") =>
     request<ConsoleResult>(`/services/${serviceId}/data/console`, json("POST", { query, write, database })),
   volumeFiles: (serviceId: string, path: string) =>
