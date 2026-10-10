@@ -14,23 +14,33 @@ const HtmlEditor = lazy(() => import("./html-editor"));
 
 type Form = { enabled: boolean; allow: string; custom: boolean; title: string; message: string; html: string };
 
-const toForm = (m: Maintenance | undefined): Form => ({
+/** The default page's text, as the manager renders it (internal/core/maintenance.go). */
+const defaults = (name: string) => ({
+  title: "We'll be back soon",
+  on: `${name} is down for maintenance. Please check back in a few minutes.`,
+  off: `${name} is unavailable right now. Please try again in a few minutes.`,
+});
+type Defaults = ReturnType<typeof defaults>;
+
+// The fields show the default text; left as is, it is saved empty so the
+// message keeps following maintenance mode.
+const toForm = (m: Maintenance | undefined, d: Defaults): Form => ({
   enabled: !!m?.enabled,
   allow: (m?.allowIps ?? []).join("\n"),
   custom: !!m?.html,
-  title: m?.title ?? "",
-  message: m?.message ?? "",
+  title: m?.title || d.title,
+  message: m?.message || (m?.enabled ? d.on : d.off),
   html: m?.html ?? "",
 });
 
-const toInput = (f: Form): Required<Maintenance> => ({
+const toInput = (f: Form, d: Defaults): Required<Maintenance> => ({
   enabled: f.enabled,
   allowIps: f.allow
     .split(/[\s,]+/)
     .map((s) => s.trim())
     .filter(Boolean),
-  title: f.title,
-  message: f.message,
+  title: f.title.trim() === d.title ? "" : f.title,
+  message: [d.on, d.off].includes(f.message.trim()) ? "" : f.message,
   // The default page is the one without HTML.
   html: f.custom ? f.html : "",
 });
@@ -50,15 +60,16 @@ const htmlStarter = `<!doctype html>
 /** Shows the page visitors get while the app can't answer, and turns maintenance mode on. */
 export function MaintenanceCard({ svc, projectName }: { svc: Service; projectName: string }) {
   const qc = useQueryClient();
-  const [form, setForm] = useState(() => toForm(svc.maintenance));
-  const dirty = JSON.stringify(toInput(form)) !== JSON.stringify(toInput(toForm(svc.maintenance)));
+  const d = defaults(projectName || svc.name);
+  const [form, setForm] = useState(() => toForm(svc.maintenance, d));
+  const dirty = JSON.stringify(toInput(form, d)) !== JSON.stringify(toInput(toForm(svc.maintenance, d), d));
   const formId = useId();
   const save = useMutation({
     meta: { error: "Couldn't save the maintenance page" },
-    mutationFn: () => api.setMaintenance(svc.id, toInput(form)),
+    mutationFn: () => api.setMaintenance(svc.id, toInput(form, d)),
     onSuccess: (updated) => {
       qc.setQueryData(["service", svc.id], updated);
-      setForm(toForm(updated.maintenance));
+      setForm(toForm(updated.maintenance, d));
       const was = !!svc.maintenance?.enabled;
       toast.success(updated.maintenance.enabled === was ? "Maintenance page saved" : updated.maintenance.enabled ? "Maintenance mode on" : "Maintenance mode off", {
         description: "Traefik applies it within seconds; nothing restarted.",
@@ -78,11 +89,6 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
     e.preventDefault();
     save.mutate();
   };
-  const name = projectName || svc.name;
-  const defaultText = form.enabled
-    ? `${name} is down for maintenance. Please check back in a few minutes.`
-    : `${name} is unavailable right now. Please try again in a few minutes.`;
-
   return (
     <Section
       title="Maintenance"
@@ -99,7 +105,10 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
             label="Maintenance mode"
             description="Every visitor gets the page while the replicas keep running, e.g. during a migration. Nothing restarts."
             checked={form.enabled}
-            onCheckedChange={(enabled) => setForm({ ...form, enabled })}
+            // The default message follows the mode; a custom one stays.
+            onCheckedChange={(enabled) =>
+              setForm({ ...form, enabled, message: form.message === (enabled ? d.off : d.on) ? (enabled ? d.on : d.off) : form.message })
+            }
           />
           {form.enabled && (
             <FloatingTextarea
@@ -148,15 +157,13 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
                 value={form.title}
                 maxLength={200}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="We'll be back soon"
               />
               <FloatingTextarea
                 label="Message"
                 value={form.message}
                 maxLength={2000}
                 onChange={(e) => setForm({ ...form, message: e.target.value })}
-                placeholder={defaultText}
-                description="Empty keeps the default text, with the project's name."
+                description="The default text follows maintenance mode until you change it."
               />
             </>
           )}
@@ -171,7 +178,7 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
           </a>
         </div>
       </form>
-      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setForm(toForm(svc.maintenance))} label="Save maintenance" />
+      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setForm(toForm(svc.maintenance, d))} label="Save maintenance" />
     </Section>
   );
 }
