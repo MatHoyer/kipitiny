@@ -57,8 +57,7 @@ export function DataTab({ svc }: { svc: Service }) {
         {multi && (
           <div className="ml-auto flex items-center gap-1.5">
             <DatabasePicker databases={dbs} value={database} onChange={setPicked} />
-            {/* MongoDB creates a database on its first write. */}
-            {sql && <NewDatabaseButton serviceId={svc.id} onCreated={setPicked} />}
+            <NewDatabaseButton serviceId={svc.id} mongo={svc.kind === "mongodb"} onCreated={setPicked} />
           </div>
         )}
       </div>

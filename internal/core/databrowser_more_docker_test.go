@@ -75,8 +75,11 @@ CREATE VIEW v AS SELECT id FROM items;"`)
 				t.Fatalf("write = %+v, %v", res, err)
 			}
 
-			if _, err := c.CreatePgDatabase(ctx, svc.ID, "second"); err != nil {
+			if _, err := c.CreatePgDatabase(ctx, svc.ID, "second", ""); err != nil {
 				t.Fatal(err)
+			}
+			if _, err := c.CreatePgDatabase(ctx, svc.ID, "third", "coll"); !errors.Is(err, ErrInvalid) {
+				t.Errorf("collection on a SQL database: %v", err)
 			}
 			// The app user owns it.
 			exec(`MYSQL_PWD="$MYSQL_PASSWORD" ` + client + ` -h 127.0.0.1 -u"$MYSQL_USER" second -e "CREATE TABLE t (x INT); INSERT INTO t VALUES (1)"`)
@@ -144,5 +147,17 @@ db.getSiblingDB("other").logs.insertOne({ a: 1 })'`)
 	res, err = c.DataConsole(ctx, svc.ID, "other", "db.logs.insertOne({ a: 2 }).acknowledged", true)
 	if err != nil || res.Output != "true" {
 		t.Fatalf("write = %+v, %v", res, err)
+	}
+
+	if _, err := c.CreatePgDatabase(ctx, svc.ID, "reports", "events"); err != nil {
+		t.Fatal(err)
+	}
+	if tables, err := c.PgTables(ctx, svc.ID, "reports"); err != nil || len(tables) != 1 || tables[0].Name != "events" {
+		t.Fatalf("new database = %+v, %v", tables, err)
+	}
+	for name, coll := range map[string]string{"reports": "more", "other": "x", "admin": "x", "fresh": "", "fresh2": "system.x", "Bad": "x"} {
+		if _, err := c.CreatePgDatabase(ctx, svc.ID, name, coll); !errors.Is(err, ErrInvalid) {
+			t.Errorf("create %s/%s: %v", name, coll, err)
+		}
 	}
 }

@@ -33,15 +33,20 @@ export function DatabasePicker({ databases, value, onChange, className }: { data
 }
 
 const nameRe = /^[a-z_][a-z0-9_]{0,62}$/;
+const collectionRe = /^[A-Za-z_][A-Za-z0-9_.-]{0,119}$/;
 
-/** Creates a database in the instance, owned by the service's user. */
-export function NewDatabaseButton({ serviceId, onCreated }: { serviceId: string; onCreated: (name: string) => void }) {
+/**
+ * Creates a database in the instance, owned by the service's user. A MongoDB
+ * one (mongo) starts with a collection: without one it doesn't exist.
+ */
+export function NewDatabaseButton({ serviceId, mongo, onCreated }: { serviceId: string; mongo?: boolean; onCreated: (name: string) => void }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [collection, setCollection] = useState("");
   const create = useMutation({
     meta: { error: false },
-    mutationFn: () => api.createPgDatabase(serviceId, name),
+    mutationFn: () => api.createPgDatabase(serviceId, name, mongo ? collection : ""),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["data", serviceId, "databases"] });
       onCreated(name);
@@ -52,10 +57,11 @@ export function NewDatabaseButton({ serviceId, onCreated }: { serviceId: string;
     setOpen(next);
     if (!next) {
       setName("");
+      setCollection("");
       create.reset();
     }
   };
-  const valid = nameRe.test(name);
+  const valid = nameRe.test(name) && (!mongo || (collectionRe.test(collection) && !collection.startsWith("system.")));
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (valid) create.mutate();
@@ -74,8 +80,17 @@ export function NewDatabaseButton({ serviceId, onCreated }: { serviceId: string;
           <DialogHeader>
             <DialogTitle>New database</DialogTitle>
             <DialogDescription>
-              An empty database in this instance, owned by the service&apos;s user. Apps reach it with the same credentials and
-              host, ending the connection URL with its name.
+              {mongo ? (
+                <>
+                  A database in this instance with its first collection: MongoDB only keeps a database that holds one. Apps reach it
+                  with the same credentials and host, ending the connection URL with its name.
+                </>
+              ) : (
+                <>
+                  An empty database in this instance, owned by the service&apos;s user. Apps reach it with the same credentials and
+                  host, ending the connection URL with its name.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <FloatingInput
@@ -87,6 +102,16 @@ export function NewDatabaseButton({ serviceId, onCreated }: { serviceId: string;
             inputClassName="font-mono"
             description="Lowercase letters, digits and _, starting with a letter or _."
           />
+          {mongo && (
+            <FloatingInput
+              label="First collection"
+              autoComplete="off"
+              value={collection}
+              onChange={(e) => setCollection(e.target.value)}
+              inputClassName="font-mono"
+              description="Letters, digits, _ . and -, starting with a letter or _."
+            />
+          )}
           <ErrorText error={create.error} />
           <DialogFooter>
             <Button type="submit" loading={create.isPending} disabled={!valid}>

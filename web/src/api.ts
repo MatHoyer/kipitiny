@@ -944,8 +944,9 @@ export const api = {
   deleteBackup: (id: string) => request<void>(`/backups/${id}`, { method: "DELETE" }),
   downloadUrl: (id: string) => `/api/backups/${id}/download`,
   pgDatabases: (serviceId: string) => request<PgDatabase[]>(`/services/${serviceId}/data/databases`),
-  createPgDatabase: (serviceId: string, name: string) =>
-    request<PgDatabase>(`/services/${serviceId}/data/databases`, json("POST", { name })),
+  /** collection: a MongoDB database's first one, which makes it exist. */
+  createPgDatabase: (serviceId: string, name: string, collection = "") =>
+    request<PgDatabase>(`/services/${serviceId}/data/databases`, json("POST", { name, collection })),
   pgTables: (serviceId: string, database: string) =>
     request<PgTable[]>(`/services/${serviceId}/data/tables?${new URLSearchParams({ database })}`),
   pgRows: (serviceId: string, database: string, schema: string, table: string, q: RowQuery) =>

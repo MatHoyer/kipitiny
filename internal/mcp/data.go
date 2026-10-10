@@ -26,8 +26,9 @@ func (t *tools) listDatabases(ctx context.Context, _ *mcp.CallToolRequest, in se
 }
 
 type createDatabaseIn struct {
-	Service string `json:"service" jsonschema:"the PostgreSQL, MySQL or MariaDB service as project/service, or its ID"`
-	Name    string `json:"name" jsonschema:"lowercase letters, digits and _, starting with a letter or _"`
+	Service    string `json:"service" jsonschema:"the PostgreSQL, MySQL, MariaDB or MongoDB service as project/service, or its ID"`
+	Name       string `json:"name" jsonschema:"lowercase letters, digits and _, starting with a letter or _"`
+	Collection string `json:"collection,omitempty" jsonschema:"MongoDB only, required: the new database's first collection (a database without one doesn't exist)"`
 }
 
 func (t *tools) createDatabase(ctx context.Context, _ *mcp.CallToolRequest, in createDatabaseIn) (*mcp.CallToolResult, core.PgDatabase, error) {
@@ -36,7 +37,7 @@ func (t *tools) createDatabase(ctx context.Context, _ *mcp.CallToolRequest, in c
 		if err != nil {
 			return core.PgDatabase{}, err
 		}
-		return t.c.CreatePgDatabase(ctx, svc.ID, in.Name)
+		return t.c.CreatePgDatabase(ctx, svc.ID, in.Name, in.Collection)
 	})
 	return nil, db, err
 }

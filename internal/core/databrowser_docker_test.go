@@ -168,18 +168,18 @@ CREATE VIEW s.v AS SELECT id FROM s.items;"`)
 	if res, err := c.DataConsole(ctx, svc.ID, "other", "SELECT current_database()", false); err != nil || *res.Rows[0][0] != "other" {
 		t.Errorf("other console: %+v %v", res, err)
 	}
-	if _, err := c.CreatePgDatabase(ctx, svc.ID, "reports"); err != nil {
+	if _, err := c.CreatePgDatabase(ctx, svc.ID, "reports", ""); err != nil {
 		t.Fatal(err)
 	}
 	if tables, err := c.PgTables(ctx, svc.ID, "reports"); err != nil || len(tables) != 0 {
 		t.Errorf("new database: %+v %v", tables, err)
 	}
 	for _, name := range []string{"reports", "Bad-Name", "x; DROP DATABASE app", "x__restore", ""} {
-		if _, err := c.CreatePgDatabase(ctx, svc.ID, name); !errors.Is(err, ErrInvalid) {
+		if _, err := c.CreatePgDatabase(ctx, svc.ID, name, ""); !errors.Is(err, ErrInvalid) {
 			t.Errorf("create %q: %v", name, err)
 		}
 	}
-	if _, err := c.CreatePgDatabase(WithActor(context.Background(), Actor{Scope: store.ScopeRead}), svc.ID, "nope"); !errors.Is(err, ErrForbidden) {
+	if _, err := c.CreatePgDatabase(WithActor(context.Background(), Actor{Scope: store.ScopeRead}), svc.ID, "nope", ""); !errors.Is(err, ErrForbidden) {
 		t.Errorf("read scope create: %v", err)
 	}
 	for _, db := range []string{"missing", "host=example.com dbname=app", "template0"} {
