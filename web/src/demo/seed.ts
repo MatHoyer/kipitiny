@@ -253,6 +253,7 @@ export function seed(): DemoDb {
       preDeploy: "npm run migrate",
       env: { NODE_ENV: "production", DATABASE_URL: "{{ db.db.URL }}", REDIS_URL: "{{ db.cache.URL }}", SESSION_SECRET: "s3cr3t" },
       secrets: ["SESSION_SECRET"],
+      volumes: [{ name: "uploads", path: "/app/uploads" }],
     }),
     service({
       id: "db",

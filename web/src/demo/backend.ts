@@ -28,6 +28,7 @@ import type {
   Uptime,
   Usage,
 } from "@/api";
+import { files } from "./files";
 import { seed, service as newService, type DemoDb } from "./seed";
 import { demoLogos, demoTemplates } from "./templates";
 
@@ -436,6 +437,16 @@ function compose(projectId: string, only?: string): string {
   return lines.join("\n") + "\n";
 }
 
+/** Runs a volume files fake, its errors as HTTP ones. */
+function viaFiles<T>(f: () => T): T {
+  try {
+    return f();
+  } catch (e) {
+    if (e instanceof files.FilesError) throw new HttpError(e.status, e.message);
+    throw e;
+  }
+}
+
 const routes: Route[] = [
   ["GET", /^\/auth\/state$/, (): AuthState => ({ setupRequired: false, user: { id: "demo", username: "demo", createdAt: now() } })],
   ["GET", /^\/account$/, (): Account => ({ username: "demo", totpEnabled: false, recoveryCodes: 0, passkeys: [] })],
@@ -644,6 +655,13 @@ const routes: Route[] = [
       return view(s);
     },
   ],
+  ["GET", /^\/services\/([^/]+)\/files$/, ({ m, q }) => viaFiles(() => files.list(serviceOf(m[1]), q.get("path") ?? ""))],
+  ["GET", /^\/services\/([^/]+)\/files\/content$/, ({ m, q }) => viaFiles(() => files.read(serviceOf(m[1]), q.get("path") ?? ""))],
+  ["PUT", /^\/services\/([^/]+)\/files\/content$/, ({ m, q, body }) => viaFiles(() => files.write(serviceOf(m[1]), q.get("path") ?? "", body, q))],
+  ["POST", /^\/services\/([^/]+)\/files\/mkdir$/, ({ m, body }) => viaFiles(() => files.mkdir(serviceOf(m[1]), body.path))],
+  ["POST", /^\/services\/([^/]+)\/files\/move$/, ({ m, body }) => viaFiles(() => files.transfer(serviceOf(m[1]), body.from, body.to, false))],
+  ["POST", /^\/services\/([^/]+)\/files\/copy$/, ({ m, body }) => viaFiles(() => files.transfer(serviceOf(m[1]), body.from, body.to, true))],
+  ["POST", /^\/services\/([^/]+)\/files\/delete$/, ({ m, body }) => viaFiles(() => files.remove(serviceOf(m[1]), body.paths ?? []))],
   ["GET", /^\/services\/([^/]+)\/deployments$/, ({ m }) => db.deployments.filter((d) => d.serviceId === m[1])],
   ["GET", /^\/deployments\/([^/]+)\/log$/, () => "Pulling image…\nStarting replicas…\nHealthy.\nDeployment succeeded (this is a demo: nothing really ran)."],
   ["GET", /^\/services\/([^/]+)\/stats$/, ({ m }) => serviceStats(serviceOf(m[1]))],

@@ -42,6 +42,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingTextarea } from "@/components/ui/floating-textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FilesTab } from "@/components/files/files-tab";
 import { useTab } from "@/hooks/use-tab";
 import { byDay, envMap, envRows, envSecrets, formatBytes, formatCpu, formatDuration, sameEnv, serviceState, timeAgo, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -71,7 +72,7 @@ export function Service() {
   });
   const deploying = deployments.data?.some((d) => d.status === "running") ?? false;
   const [selected, setSelected] = useState<string | null>(null);
-  const [tab, setTab] = useTab(["overview", "deployments", "logs", "terminal", "data", "environment", "backups", "settings"], "overview");
+  const [tab, setTab] = useTab(["overview", "deployments", "logs", "terminal", "data", "files", "environment", "backups", "settings"], "overview");
   const git = useProjectGit(service.data?.projectId ?? "");
   const gitManaged = !!git.data;
 
@@ -233,6 +234,7 @@ export function Service() {
             <TabsTrigger value="logs">Logs</TabsTrigger>
             <TabsTrigger value="terminal">Terminal</TabsTrigger>
             {isDb && <TabsTrigger value="data">Data</TabsTrigger>}
+            {hasData && <TabsTrigger value="files">Files</TabsTrigger>}
             <TabsTrigger value="environment">Environment</TabsTrigger>
             {canBackup(svc) && <TabsTrigger value="backups">Backups</TabsTrigger>}
             <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -274,6 +276,11 @@ export function Service() {
           {isDb && (
             <TabsContent value="data">
               <DataTab svc={svc} />
+            </TabsContent>
+          )}
+          {hasData && (
+            <TabsContent value="files">
+              <FilesTab svc={svc} onBackups={() => setTab("backups")} />
             </TabsContent>
           )}
           <TabsContent value="environment" className="flex flex-col gap-6">
