@@ -3,6 +3,7 @@ import { GitFork, Globe, HardDrive, Network, Plus, Server, ShieldCheck, Triangle
 import type { ReactNode } from "react";
 import { CloudflareIcon } from "@/components/brand-icons";
 import { stateColors } from "@/components/common";
+import { LogoMark } from "@/components/logo";
 import { ReachIcon, reachOf } from "@/components/reach";
 import { ServiceIcon } from "@/components/service-icon";
 import { projectProblems, serviceState, serviceWarning } from "@/components/topology";
@@ -132,7 +133,7 @@ const infraLabels: Record<InfraData["kind"], { icon: ReactNode; title: string }>
   internet: { icon: <Globe className="size-4 text-sky-500" />, title: "Internet" },
   tunnel: { icon: <CloudflareIcon className="size-4 text-orange-500" />, title: "Cloudflare tunnel" },
   traefik: { icon: <ShieldCheck className="size-4 text-sky-500" />, title: "Traefik" },
-  manager: { icon: <Server className="size-4 text-primary" />, title: "kipitiny" },
+  manager: { icon: <LogoMark className="size-4" />, title: "kipitiny" },
 };
 
 function InfraNode({ data: { kind, server: s }, selected }: Props<InfraData>) {

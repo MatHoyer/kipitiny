@@ -4,11 +4,18 @@ import { cn } from "@/lib/utils";
 export function Logo({ className }: { className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-2 font-display font-bold tracking-[-0.02em]", className)}>
-      <svg viewBox="0 0 26 26" aria-hidden="true" className="size-[1.15em] shrink-0">
-        <rect x="1" y="1" width="24" height="24" rx="5" fill="none" stroke="currentColor" strokeWidth="2" />
-        <rect x="6" y="15" width="5" height="5" rx="1" fill="#f5c518" />
-      </svg>
+      <LogoMark className="size-[1.15em]" />
       kipitiny
     </span>
+  );
+}
+
+/** The mark alone: an outlined square with the yellow block. */
+export function LogoMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 26 26" aria-hidden="true" className={cn("shrink-0", className)}>
+      <rect x="1" y="1" width="24" height="24" rx="5" fill="none" stroke="currentColor" strokeWidth="2" />
+      <rect x="6" y="15" width="5" height="5" rx="1" fill="#f5c518" />
+    </svg>
   );
 }
