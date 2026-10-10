@@ -62,6 +62,15 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
       });
     },
   });
+  // Custom HTML starts from the page visitors get now, the saved default one.
+  const pick = (custom: boolean) => {
+    setForm((f) => ({ ...f, custom }));
+    if (!custom || form.html) return;
+    fetch(`/api/pages/${svc.id}`)
+      .then((r) => (r.headers.get("Content-Type")?.startsWith("text/html") ? r.text() : htmlStarter))
+      .catch(() => htmlStarter)
+      .then((html) => setForm((f) => (f.custom && !f.html ? { ...f, html } : f)));
+  };
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     save.mutate();
@@ -108,7 +117,7 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
             size="sm"
             spacing={0}
             value={form.custom ? "html" : "default"}
-            onValueChange={(v) => v && setForm({ ...form, custom: v === "html", html: v === "html" && !form.html ? htmlStarter : form.html })}
+            onValueChange={(v) => v && pick(v === "html")}
             aria-label="Page"
           >
             <ToggleGroupItem value="default" className="aria-checked:bg-muted">
