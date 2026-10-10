@@ -126,6 +126,7 @@ func serve() error {
 	mux := http.NewServeMux()
 	a := api.New(c, log)
 	mux.Handle("/api/", a)
+	mux.Handle(core.PagesPath, api.Pages(c, log))
 	mux.Handle("/mcp", a.Authenticated(mcp.Handler(c, version)))
 	mux.Handle("/", web.Handler())
 

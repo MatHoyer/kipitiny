@@ -13,7 +13,8 @@ The remote sshd must allow `AllowTcpForwarding yes` (or `local`) and
 
 A project lives on one server (its services share a private network); choose it
 when creating the project. Each server gets its own Traefik, so point a domain's
-DNS at the server running the app. Deploys, builds, backups (streamed back
+DNS at the server running the app. That Traefik reaches the manager at
+`KIPITINY_DOMAIN` for [maintenance pages](/docs/domains#maintenance-page). Deploys, builds, backups (streamed back
 through SSH to any target), restore tests, logs and the reconciler all work the
 same on every server. The injected health probe is copied to each server once
 (it needs the same CPU architecture as the manager; otherwise replicas are

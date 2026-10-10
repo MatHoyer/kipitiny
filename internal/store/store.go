@@ -160,6 +160,8 @@ type Store interface {
 	DeleteNetwork(ctx context.Context, id string) error
 	// SetServiceNetworks replaces the networks a service joins.
 	SetServiceNetworks(ctx context.Context, serviceID string, networkIDs []string) error
+	// SetServiceMaintenance replaces an app's maintenance page and mode.
+	SetServiceMaintenance(ctx context.Context, serviceID string, m Maintenance) error
 
 	ListCanvasPositions(ctx context.Context) ([]CanvasPosition, error)
 	// SaveCanvasPositions upserts ps and deletes the nodes in remove.
@@ -340,8 +342,11 @@ type Service struct {
 	// Networks are the IDs of the networks created by hand that the service
 	// joins besides its project network. Set on their own, never by a
 	// compose file, so a git sync keeps them.
-	Networks            []string `bun:"networks" json:"networks"`
-	CurrentDeploymentID string   `bun:"current_deployment_id" json:"currentDeploymentId"`
+	Networks []string `bun:"networks" json:"networks"`
+	// Maintenance is the page visitors get while the app is down or in
+	// maintenance mode. Set on its own, never by a compose file.
+	Maintenance         Maintenance `bun:"maintenance,type:text" json:"maintenance"`
+	CurrentDeploymentID string      `bun:"current_deployment_id" json:"currentDeploymentId"`
 	// Stopped is the desired run state after the user stopped the service.
 	Stopped bool `bun:"stopped" json:"stopped"`
 	// GitSpecHash is the hash of the compose block a git sync last applied.
@@ -438,6 +443,21 @@ type BasicAuthUser struct {
 type RateLimit struct {
 	Average int `json:"average"`
 	Burst   int `json:"burst"`
+}
+
+// Maintenance is an app's maintenance page, served by the manager through
+// Traefik when the app has no replica to answer, and maintenance mode,
+// which serves it to every visitor while the replicas keep running.
+type Maintenance struct {
+	// Enabled is maintenance mode.
+	Enabled bool `json:"enabled"`
+	// AllowIPs still reach the app in maintenance mode (IPs or CIDR ranges).
+	AllowIPs []string `json:"allowIps,omitempty"`
+	// Title and Message replace the default page's text; empty keeps it.
+	Title   string `json:"title,omitempty"`
+	Message string `json:"message,omitempty"`
+	// HTML, when set, is served instead of the default page.
+	HTML string `json:"html,omitempty"`
 }
 
 // IsZero reports whether no middleware is configured.

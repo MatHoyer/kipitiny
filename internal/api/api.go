@@ -72,6 +72,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("DELETE /api/services/{id}", a.deleteService)
 	mux.HandleFunc("PUT /api/services/{id}/name", a.renameService)
 	mux.HandleFunc("PUT /api/services/{id}/networks", a.setServiceNetworks)
+	mux.HandleFunc("PUT /api/services/{id}/maintenance", a.setMaintenance)
 	mux.HandleFunc("POST /api/services/{id}/deploy", a.deployService)
 	mux.HandleFunc("POST /api/services/{id}/rollback", a.rollbackService)
 	mux.HandleFunc("POST /api/services/{id}/{action}", a.serviceAction)

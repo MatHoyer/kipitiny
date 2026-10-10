@@ -141,7 +141,8 @@ function containers(s: DemoDb["services"][number]): Container[] {
 
 function view(s: DemoDb["services"][number]): Service {
   const env = Object.fromEntries(Object.entries(s.env).map(([k, v]) => [k, s.secrets.includes(k) && !/^\s*\{\{.*\}\}\s*$/.test(v) ? MASK : v]));
-  return { ...s, env, containers: containers(s) };
+  // Saved before maintenance pages existed.
+  return { ...s, maintenance: s.maintenance ?? { enabled: false }, env, containers: containers(s) };
 }
 
 const projectNet = (p: Project) => `kipitiny-${p.id}`;
@@ -633,6 +634,17 @@ const routes: Route[] = [
     ({ m, body }) => {
       const s = serviceOf(m[1]);
       s.networks = (body.networks as string[]).filter((id) => db.networks.some((n) => n.id === id));
+      save();
+      return view(s);
+    },
+  ],
+  [
+    "PUT",
+    /^\/services\/([^/]+)\/maintenance$/,
+    ({ m, body }) => {
+      const s = serviceOf(m[1]);
+      if (body.enabled && !(s.domain && s.port)) throw invalid("maintenance mode needs a domain and a container port");
+      s.maintenance = body;
       save();
       return view(s);
     },

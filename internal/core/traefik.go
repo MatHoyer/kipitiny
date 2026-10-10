@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"strings"
 	"time"
@@ -28,9 +29,11 @@ const (
 
 	// managerAlias names the manager on the proxy network when it runs in a
 	// container; otherwise Traefik reaches it on the host.
-	managerAlias     = "kipitiny-manager"
-	managerHost      = "host.docker.internal"
-	managerRouteFile = "/etc/traefik/kipitiny-manager.yml"
+	managerAlias = "kipitiny-manager"
+	managerHost  = "host.docker.internal"
+	// dynamicFile is Traefik's file provider: the manager's route and the
+	// maintenance pages' service and middleware.
+	dynamicFile = "/etc/traefik/kipitiny-manager.yml"
 )
 
 // ensureTraefik makes sure exactly one Traefik container runs with the
@@ -47,6 +50,17 @@ func (c *Core) ensureTraefik(ctx context.Context, sv store.Server) error {
 		}
 		o.ManagerURL = u
 		o.ManagerResolver = c.certResolver(ctx, sv.ID, c.cfg.Domain)
+	}
+	pages, err := c.pagesUpstream(ctx, sv, o.ManagerURL)
+	if err != nil {
+		return err
+	}
+	if pages != "" {
+		token, err := c.providerToken(ctx, sv.ID)
+		if err != nil {
+			return err
+		}
+		o.Pages = &pagesOpts{Upstream: pages, ServerID: sv.ID, Token: token}
 	}
 	opts, files := c.traefikSpec(socket, o)
 	// Keep this formula stable: any change recreates Traefik on every server
@@ -120,6 +134,16 @@ type traefikOpts struct {
 	Tunnel bool
 	// CFToken enables the Cloudflare DNS challenge (certResolverDNS).
 	CFToken string
+	// Pages, when set, serves the manager's maintenance pages.
+	Pages *pagesOpts
+}
+
+// pagesOpts are how a Traefik reaches the manager's maintenance pages and
+// fetches its dynamic configuration (Core.TraefikConfig).
+type pagesOpts struct {
+	Upstream string
+	ServerID string
+	Token    string
 }
 
 // traefikSpec builds the Traefik container.
@@ -183,11 +207,35 @@ func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreate
 	}
 	var files []docker.File
 	var extraHosts []string
+	dynamic := map[string]any{}
 	if o.ManagerURL != "" {
-		args = append(args, "--providers.file.filename="+managerRouteFile)
-		files = append(files, docker.File{Path: managerRouteFile, Content: managerRoute(c.cfg.Domain, o.ManagerURL, o.ManagerResolver)})
-		if strings.Contains(o.ManagerURL, "//"+managerHost+":") {
+		dynamic = managerRoute(c.cfg.Domain, o.ManagerURL, o.ManagerResolver)
+	}
+	if p := o.Pages; p != nil {
+		// Sections (routers, services…) are merged: both define services.
+		for k, v := range pagesFileConfig(p.Upstream) {
+			if cur, ok := dynamic[k].(map[string]any); ok {
+				maps.Copy(cur, v.(map[string]any))
+			} else {
+				dynamic[k] = v
+			}
+		}
+		args = append(args,
+			"--entrypoints.websecure.http.middlewares="+pagesDown+"@file",
+			"--providers.http.endpoint="+p.Upstream+PagesPath+"traefik/"+p.ServerID,
+			"--providers.http.headers.Authorization=Bearer "+p.Token,
+		)
+	}
+	if len(dynamic) > 0 {
+		// JSON is valid YAML, which the file provider reads.
+		b, _ := json.MarshalIndent(map[string]any{"http": dynamic}, "", "  ")
+		args = append(args, "--providers.file.filename="+dynamicFile)
+		files = append(files, docker.File{Path: dynamicFile, Content: b})
+	}
+	for _, u := range []string{o.ManagerURL, pagesUpstream(o)} {
+		if strings.Contains(u, "//"+managerHost+":") {
 			extraHosts = append(extraHosts, managerHost+":host-gateway")
+			break
 		}
 	}
 
@@ -227,27 +275,31 @@ func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreate
 	}, files
 }
 
-// managerRoute is Traefik dynamic configuration serving domain from url. JSON
-// is valid YAML, which the file provider reads.
-func managerRoute(domain, url, resolver string) []byte {
+func pagesUpstream(o traefikOpts) string {
+	if o.Pages == nil {
+		return ""
+	}
+	return o.Pages.Upstream
+}
+
+// managerRoute is Traefik dynamic configuration (below http) serving domain
+// from url.
+func managerRoute(domain, url, resolver string) map[string]any {
 	tls := map[string]any{}
 	if resolver != "" {
 		tls["certResolver"] = resolver
 	}
-	b, _ := json.MarshalIndent(map[string]any{
-		"http": map[string]any{
-			"routers": map[string]any{managerAlias: map[string]any{
-				"rule":        "Host(`" + domain + "`)",
-				"entryPoints": []string{"websecure"},
-				"service":     managerAlias,
-				"tls":         tls,
-			}},
-			"services": map[string]any{managerAlias: map[string]any{
-				"loadBalancer": map[string]any{"servers": []map[string]string{{"url": url}}},
-			}},
-		},
-	}, "", "  ")
-	return b
+	return map[string]any{
+		"routers": map[string]any{managerAlias: map[string]any{
+			"rule":        "Host(`" + domain + "`)",
+			"entryPoints": []string{"websecure"},
+			"service":     managerAlias,
+			"tls":         tls,
+		}},
+		"services": map[string]any{managerAlias: map[string]any{
+			"loadBalancer": map[string]any{"servers": []map[string]string{{"url": url}}},
+		}},
+	}
 }
 
 // route is how a public service's requests reach Traefik.

@@ -4,6 +4,7 @@ import {
   ChevronRight,
   CircleCheck,
   CircleX,
+  Construction,
   ExternalLink,
   GitCommitHorizontal,
   Globe,
@@ -34,6 +35,7 @@ import { DeploymentLogView, LiveLogs } from "@/components/logs";
 import { RenameCard } from "@/components/rename-card";
 import { SaveBar } from "@/components/save-bar";
 import { UptimeSection } from "@/components/uptime";
+import { MaintenanceCard } from "@/components/maintenance";
 import { ServiceUsageSection, UsageGrid, useServiceStats } from "@/components/usage";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -165,6 +167,15 @@ export function Service() {
         }
       />
       <PageBody>
+        {svc.maintenance?.enabled && (
+          <p role="status" className="flex flex-wrap items-center gap-x-2 text-sm text-amber-600 dark:text-amber-400">
+            <Construction className="size-4" />
+            Maintenance mode: visitors get the maintenance page.
+            <button type="button" className="underline underline-offset-4" onClick={() => setTab("settings")}>
+              Settings
+            </button>
+          </p>
+        )}
         {svc.dns && svc.dns.state !== "synced" && (
           <p role="alert" className="text-sm text-destructive">
             DNS {svc.dns.state}: {svc.dns.message}
@@ -316,6 +327,7 @@ export function Service() {
             </fieldset>
             {/* Not in the compose file, so git projects set them here too. */}
             {!svc.hostNetwork && <NetworksCard key={`networks-${svc.id}`} svc={svc} projectName={project.data?.name ?? ""} />}
+            {svc.kind === "app" && httpRouted(svc) && <MaintenanceCard key={`maintenance-${svc.id}`} svc={svc} projectName={project.data?.name ?? ""} />}
             {svc.kind === "app" && <DeployFromCICard svc={svc} />}
             <DangerZone
               description={

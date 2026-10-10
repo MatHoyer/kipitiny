@@ -132,6 +132,19 @@ func (a *API) deleteUptime(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (a *API) setMaintenance(w http.ResponseWriter, r *http.Request) {
+	var in core.MaintenanceInput
+	if !decode(w, r, &in) {
+		return
+	}
+	v, err := a.core.SetMaintenance(r.Context(), r.PathValue("id"), in)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
 func (a *API) deployService(w http.ResponseWriter, r *http.Request) {
 	var opts core.DeployOptions // optional: an empty body deploys the current settings
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
