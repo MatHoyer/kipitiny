@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Code, ExternalLink, Type } from "lucide-react";
-import { useId, useState, type FormEvent } from "react";
+import { lazy, Suspense, useId, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { CheckboxField, Mono, Section } from "@/components/common";
 import { SaveBar } from "@/components/save-bar";
@@ -8,6 +8,9 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingTextarea } from "@/components/ui/floating-textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { api, type Maintenance, type Service } from "../api";
+
+// CodeMirror and its HTML, CSS and JS modes load only for custom pages.
+const HtmlEditor = lazy(() => import("./html-editor"));
 
 type Form = { enabled: boolean; allow: string; custom: boolean; title: string; message: string; html: string };
 
@@ -130,14 +133,14 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
             </ToggleGroupItem>
           </ToggleGroup>
           {form.custom ? (
-            <FloatingTextarea
-              label="HTML"
-              required
-              value={form.html}
-              onChange={(e) => setForm({ ...form, html: e.target.value })}
-              className="[&_textarea]:min-h-64 [&_textarea]:font-mono [&_textarea]:text-xs"
-              description="A whole document, up to 64 KiB. Inline its styles and images, or load them from another site: the app is down."
-            />
+            <div className="space-y-1.5">
+              <Suspense fallback={<div className="h-64 rounded-md border" />}>
+                <HtmlEditor label="Maintenance page HTML" value={form.html} onChange={(html) => setForm((f) => ({ ...f, html }))} />
+              </Suspense>
+              <p className="text-xs text-muted-foreground">
+                A whole document, up to 64 KiB. Inline its styles and images, or load them from another site: the app is down.
+              </p>
+            </div>
           ) : (
             <>
               <FloatingInput
