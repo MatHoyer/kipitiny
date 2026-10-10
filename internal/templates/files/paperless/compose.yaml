@@ -1,0 +1,84 @@
+# Paperless-ngx: scans and PDFs, OCR'd, tagged and searchable. Its own
+# PostgreSQL and Redis (the task queue), its files in volumes.
+x-template:
+  title: Paperless-ngx
+  description: Scan, index and archive your documents. OCR makes every scan and PDF searchable; tags, correspondents and rules file them.
+  website: https://docs.paperless-ngx.com
+  docs: https://docs.paperless-ngx.com/usage/
+  icon: paperless
+  category: productivity
+  tags: [documents, ocr, pdf, scanner, archive]
+  notes: |
+    Sign in with the admin user and password you give here; add other users in Paperless's settings.
+
+    - Add documents by uploading them in the web UI, by email (**Mail** in its settings), or by dropping files in the `consume` volume from the service's **Files** tab.
+    - Documents, thumbnails and the search index are in the `media` and `data` volumes, the metadata in the `db` database: back up both.
+    - **OCR language** is the main language of your documents, as Tesseract codes (`eng`, `deu`, `fra`, `ita`, `spa` are installed; several with `+`, like `deu+eng`). Others need `PAPERLESS_OCR_LANGUAGES` in the service's environment.
+    - OCR of large scans takes memory: give the server 2 GB or more.
+  logo:
+    label: Paperless-ngx
+    color: "#17541F"
+    images: [paperless-ngx]
+  inputs:
+    - name: DOMAIN
+      label: Domain
+      type: domain
+      required: true
+      placeholder: paperless.example.com
+    - name: ADMIN_USER
+      label: Admin user
+      default: admin
+    - name: ADMIN_PASSWORD
+      label: Admin password
+      type: secret
+      required: true
+      help: The admin account is created with it on the first start. Change it afterwards in Paperless, not here.
+    - name: OCR_LANGUAGE
+      label: OCR language
+      default: eng
+      help: The main language of your documents (eng, deu, fra, ita, spa), or several like deu+eng.
+    - name: TIME_ZONE
+      label: Time zone
+      default: UTC
+      placeholder: Europe/Paris
+    - name: SECRET_KEY
+      label: Secret key
+      generate: 48
+name: paperless
+services:
+  webserver:
+    image: ghcr.io/paperless-ngx/paperless-ngx:3.3.0
+    expose: ["8000"]
+    environment:
+      PAPERLESS_URL: https://${DOMAIN}
+      PAPERLESS_SECRET_KEY: ${SECRET_KEY}
+      PAPERLESS_ADMIN_USER: ${ADMIN_USER}
+      PAPERLESS_ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      PAPERLESS_OCR_LANGUAGE: ${OCR_LANGUAGE}
+      PAPERLESS_TIME_ZONE: ${TIME_ZONE}
+      PAPERLESS_REDIS: "{{ db.broker.URL }}"
+      PAPERLESS_DBENGINE: postgresql
+      PAPERLESS_DBHOST: "{{ db.db.HOST }}"
+      PAPERLESS_DBPORT: "{{ db.db.PORT }}"
+      PAPERLESS_DBNAME: "{{ db.db.DATABASE }}"
+      PAPERLESS_DBUSER: "{{ db.db.USER }}"
+      PAPERLESS_DBPASS: "{{ db.db.PASSWORD }}"
+    volumes:
+      - data:/usr/src/paperless/data
+      - media:/usr/src/paperless/media
+      - consume:/usr/src/paperless/consume
+      - export:/usr/src/paperless/export
+    stop_grace_period: 30s
+    x-kipitiny:
+      domain: ${DOMAIN}
+      icon: paperless
+      secrets: [PAPERLESS_SECRET_KEY, PAPERLESS_ADMIN_PASSWORD]
+  db:
+    image: postgres:17-alpine
+  broker:
+    image: redis:8-alpine
+volumes:
+  data: {}
+  media: {}
+  consume: {}
+  export: {}
