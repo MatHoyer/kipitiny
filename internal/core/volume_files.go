@@ -255,10 +255,10 @@ head -c ` + strconv.Itoa(FilesTextMax+1) + ` "$p"`
 			return err
 		}
 		if len(b) > FilesTextMax {
-			return fmt.Errorf("%w: %s is over %d KiB: download it instead", ErrInvalid, p, FilesTextMax>>10)
+			return fmt.Errorf("%w: the file %s is over %d KiB: download it instead", ErrInvalid, p, FilesTextMax>>10)
 		}
 		if bytes.IndexByte(b, 0) >= 0 || !utf8.Valid(b) {
-			return fmt.Errorf("%w: %s is not a text file: download it instead", ErrInvalid, p)
+			return fmt.Errorf("%w: the file %s is not text: download it instead", ErrInvalid, p)
 		}
 		f.Content = string(b)
 		return nil

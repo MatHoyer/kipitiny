@@ -4,6 +4,7 @@ import {
   Copy,
   Download,
   Ellipsis,
+  Eye,
   File,
   FileSymlink,
   Folder,
@@ -14,6 +15,7 @@ import {
   Lock,
   Pencil,
   RefreshCw,
+  TextCursorInput,
   Trash2,
   TriangleAlert,
   Upload,
@@ -38,6 +40,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { formatBytes, formatDateTime, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, isDatabase, type Service, type VolumeEntry } from "../../api";
+import { FileDialog } from "./file-dialog";
 import { PathDialog } from "./path-dialog";
 import { droppedFiles, pickedFiles, UploadPanel, useUploads } from "./uploads";
 
@@ -75,6 +78,7 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
     setSelection((cur) => ({ dir, names: typeof next === "function" ? next(cur.dir === dir ? cur.names : new Set()) : next }));
   const [dialog, setDialog] = useState<null | { kind: "mkdir" } | { kind: "rename"; entry: VolumeEntry } | { kind: "move" | "copy" | "delete"; names: string[] }>(null);
   const [dragging, setDragging] = useState(false);
+  const [openFile, setOpenFile] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
 
@@ -147,6 +151,7 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
     });
   const open = (e: VolumeEntry) => {
     if (e.type === "volume" || e.type === "dir" || e.type === "link") go(join(dir, e.name));
+    else if (e.type === "file") setOpenFile(join(dir, e.name));
     else toggle(e.name);
   };
   const downloadUrl = (names: string[]) => {
@@ -368,6 +373,11 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {e.type === "file" && (
+                          <DropdownMenuItem onSelect={() => setOpenFile(join(dir, e.name))}>
+                            {writable ? <Pencil /> : <Eye />} {writable ? "Edit" : "View"}
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem asChild>
                           <a href={downloadUrl([e.name])} download>
                             <Download /> Download{e.type !== "file" && " (.tar.gz)"}
@@ -376,7 +386,7 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
                         {writable && (
                           <>
                             <DropdownMenuItem onSelect={() => setDialog({ kind: "rename", entry: e })}>
-                              <Pencil /> Rename
+                              <TextCursorInput /> Rename
                             </DropdownMenuItem>
                             <DropdownMenuItem onSelect={() => setDialog({ kind: "move", names: [e.name] })}>
                               <FolderInput /> Move…
@@ -412,6 +422,8 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
       {data?.truncated && <p className="text-xs text-muted-foreground">Showing the first {entries.length} entries of this folder.</p>}
 
       <UploadPanel uploads={uploads} />
+
+      <FileDialog serviceId={svc.id} path={openFile} onClose={() => setOpenFile(null)} onSaved={() => changed("Saved")} />
 
       <PathDialog
         open={dialog?.kind === "mkdir"}

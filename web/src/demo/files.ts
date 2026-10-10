@@ -127,7 +127,7 @@ export const files = {
     const { node, segs, name } = locate(service, p);
     if (!node) throw new FilesError(404, "not found");
     if (node.type !== "file") throw new FilesError(400, `${p} is not the expected kind of entry (file or folder)`);
-    if (node.size > 0 && node.content === "") throw new FilesError(400, `${p} is not a text file: download it instead`);
+    if (node.size > 0 && node.content === "") throw new FilesError(400, `the file ${p} is not text: download it instead`);
     return { ...entry(name, node), path: segs.join("/"), readOnly: service.kind !== "app", content: node.content };
   },
   write(service: Service, p: string, body: unknown, q: URLSearchParams): VolumeEntry {
