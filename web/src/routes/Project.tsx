@@ -41,6 +41,7 @@ import {
 } from "../api";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
 import { ComposeDialog } from "@/components/compose-dialog";
+import { TemplateDialog } from "@/components/template-dialog";
 import { GitSource, useProjectGit } from "@/components/git-source";
 
 const MapCanvas = lazy(() => import("@/components/canvas/map-canvas"));
@@ -114,6 +115,7 @@ export function Project() {
                 </Tag>
               )}
               <ComposeDialog projectId={id} canImport={!gitManaged} />
+              {!gitManaged && <TemplateDialog projectId={id} />}
               {!gitManaged && <NewServiceDialog projectId={id} />}
             </>
           )

@@ -29,6 +29,7 @@ import type {
   Usage,
 } from "@/api";
 import { seed, service as newService, type DemoDb } from "./seed";
+import { demoTemplates } from "./templates";
 
 /*
  * The demo's backend: answers the manager's /api from state kept in this
@@ -483,6 +484,48 @@ const routes: Route[] = [
       db.projects.push(p);
       save();
       return p;
+    },
+  ],
+  ["GET", /^\/templates$/, () => demoTemplates.map(({ services: _, ...t }) => t)],
+  [
+    "POST",
+    /^\/templates\/([^/]+)\/install$/,
+    ({ m, body }) => {
+      const t = demoTemplates.find((t) => t.id === m[1]);
+      if (!t) throw notFound();
+      const values: Record<string, string> = body.values ?? {};
+      const missing = t.inputs.filter((i) => i.required && !values[i.name]?.trim());
+      if (missing.length) throw invalid(missing.map((i) => `${i.label} is required`).join("; "));
+      const name = String(body.newProject?.name ?? "").trim();
+      if (!body.projectId && !nameRe.test(name)) throw invalid("name must be lowercase letters, digits and dashes (max 40)");
+      const taken = body.projectId ? db.services.filter((s) => s.projectId === projectOf(body.projectId).id).map((s) => s.name) : [];
+      const clash = t.services.find((s) => taken.includes(s.name));
+      if (clash) throw invalid(`service ${clash.name}: already exists`);
+      const names = t.services.map((s) => s.name);
+      const plan = { create: names, update: [], unchanged: [], delete: [], orphaned: [], variables: [], warnings: [], deploying: body.dryRun ? [] : names };
+      if (body.dryRun) return { projectId: body.projectId, plan };
+      let projectId = body.projectId;
+      if (!projectId) {
+        const p: Project = { id: newId("p"), name, serverId: "local", env: {}, secrets: [], createdAt: now(), updatedAt: now() };
+        db.projects.push(p);
+        projectId = p.id;
+      }
+      for (const svc of t.services) {
+        db.services.push(
+          newService({
+            ...svc,
+            id: newId("s"),
+            kind: "app",
+            projectId,
+            domain: svc.port ? (values.DOMAIN ?? "") : "",
+            currentDeploymentId: "",
+            createdAt: now(),
+            updatedAt: now(),
+          }),
+        );
+      }
+      save();
+      return { projectId, plan };
     },
   ],
   ["GET", /^\/projects\/([^/]+)$/, ({ m }) => projectOf(m[1])],
