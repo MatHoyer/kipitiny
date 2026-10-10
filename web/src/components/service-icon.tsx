@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Box, type LucideIcon } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { api, type ServiceKind, type TemplateLogo } from "@/api";
-import { NginxIcon, NodeIcon, PostgresIcon, RedisIcon } from "@/components/brand-icons";
+import { MariaDBIcon, MongoDBIcon, MySQLIcon, NginxIcon, NodeIcon, PostgresIcon, RedisIcon } from "@/components/brand-icons";
 import { cn } from "@/lib/utils";
 
 type Logo = { label: string; color: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
@@ -11,6 +11,10 @@ type Logo = { label: string; color: string; Icon: ComponentType<SVGProps<SVGSVGE
 export const serviceLogos: Record<string, Logo> = {
   postgres: { label: "PostgreSQL", color: "#4169E1", Icon: PostgresIcon },
   redis: { label: "Redis", color: "#FF4438", Icon: RedisIcon },
+  mysql: { label: "MySQL", color: "#4479A1", Icon: MySQLIcon },
+  // The brand's sea lion brown: its navy disappears on dark backgrounds.
+  mariadb: { label: "MariaDB", color: "#C0765A", Icon: MariaDBIcon },
+  mongodb: { label: "MongoDB", color: "#47A248", Icon: MongoDBIcon },
   nginx: { label: "NGINX", color: "#009639", Icon: NginxIcon },
   node: { label: "Node.js", color: "#5FA04E", Icon: NodeIcon },
 };
@@ -18,6 +22,7 @@ export const serviceLogos: Record<string, Logo> = {
 /** Other names images go by, e.g. bitnami/postgresql. */
 const builtinAliases: Record<string, string> = {
   postgresql: "postgres",
+  mongo: "mongodb",
   "nginx-unprivileged": "nginx",
   nodejs: "node",
 };

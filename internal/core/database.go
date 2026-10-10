@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/moby/moby/api/types/container"
@@ -23,6 +24,10 @@ func DataVolume(svc store.Service) string {
 		return PostgresVolume(svc.ID)
 	case store.ServiceKindRedis:
 		return RedisVolume(svc.ID)
+	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+		return MySQLVolume(svc.ID)
+	case store.ServiceKindMongoDB:
+		return MongoVolume(svc.ID)
 	}
 	return ""
 }
@@ -55,6 +60,10 @@ func validateDatabase(s store.Service) error {
 		return validatePostgres(s)
 	case store.ServiceKindRedis:
 		return validateRedis(s)
+	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+		return validateMySQL(s)
+	case store.ServiceKindMongoDB:
+		return validateMongo(s)
 	}
 	return nil
 }
@@ -87,6 +96,10 @@ func databaseField(db store.Service, field string) (string, bool) {
 		return postgresField(db, field)
 	case store.ServiceKindRedis:
 		return redisField(db, field)
+	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+		return mysqlField(db, field)
+	case store.ServiceKindMongoDB:
+		return mongoField(db, field)
 	}
 	return "", false
 }
@@ -94,7 +107,8 @@ func databaseField(db store.Service, field string) (string, bool) {
 type Connection struct {
 	Host string `json:"host"`
 	Port int    `json:"port"`
-	// Database is empty for kinds without named databases (redis).
+	// Database is empty for kinds without named databases (redis); for
+	// MongoDB it's the connection string's default one.
 	Database string `json:"database,omitempty"`
 	User     string `json:"user"`
 	Password string `json:"password"`
@@ -115,10 +129,7 @@ func (c *Core) DatabaseConnection(ctx context.Context, id string) (Connection, e
 		v, _ := databaseField(svc, f)
 		return v
 	}
-	port := 5432
-	if svc.Kind == store.ServiceKindRedis {
-		port = redisPort
-	}
+	port, _ := strconv.Atoi(field("PORT"))
 	return Connection{
 		Host:     svc.Name,
 		Port:     port,
@@ -135,6 +146,10 @@ func applyDatabaseSpec(cfg *container.Config, host *container.HostConfig, svc st
 		applyPostgresSpec(cfg, host, svc)
 	case store.ServiceKindRedis:
 		applyRedisSpec(cfg, host, svc)
+	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+		applyMySQLSpec(cfg, host, svc)
+	case store.ServiceKindMongoDB:
+		applyMongoSpec(cfg, host, svc)
 	}
 }
 
@@ -144,6 +159,10 @@ func stopTimeoutFor(svc store.Service) time.Duration {
 		return postgresStopTimeout
 	case store.ServiceKindRedis:
 		return redisStopTimeout
+	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+		return mysqlStopTimeout
+	case store.ServiceKindMongoDB:
+		return mongoStopTimeout
 	}
 	if svc.StopGraceSeconds > 0 {
 		return time.Duration(svc.StopGraceSeconds) * time.Second

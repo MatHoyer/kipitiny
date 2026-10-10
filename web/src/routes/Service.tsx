@@ -46,7 +46,7 @@ import { FilesTab } from "@/components/files/files-tab";
 import { useTab } from "@/hooks/use-tab";
 import { byDay, envMap, envRows, envSecrets, formatBytes, formatCpu, formatDuration, sameEnv, serviceState, timeAgo, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { api, canBackup, databasePorts, httpRouted, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type Middlewares, type MiddlewaresInput, type PublishedPort, type Service as ServiceT, type Volume } from "../api";
+import { api, canBackup, databasePorts, databaseUrlKey, httpRouted, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type Middlewares, type MiddlewaresInput, type PublishedPort, type Service as ServiceT, type Volume } from "../api";
 import { BackupList } from "./BackupList";
 import { Schedules } from "./Schedules";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
@@ -135,6 +135,8 @@ export function Service() {
   const busy = deploying || deploy.isPending || action.isPending || remove.isPending;
   const isDb = isDatabase(svc.kind);
   const hasData = isDb || svc.volumes.length > 0;
+  // The data browser speaks PostgreSQL and Redis.
+  const browsable = svc.kind === "postgres" || svc.kind === "redis";
   const running = active.filter((c) => c.state === "running").length;
   const last = deployments.data?.[0];
 
@@ -233,7 +235,7 @@ export function Service() {
             <TabsTrigger value="deployments">Deployments</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
             <TabsTrigger value="terminal">Terminal</TabsTrigger>
-            {isDb && <TabsTrigger value="data">Data</TabsTrigger>}
+            {browsable && <TabsTrigger value="data">Data</TabsTrigger>}
             <TabsTrigger value="files">Files</TabsTrigger>
             <TabsTrigger value="environment">Environment</TabsTrigger>
             {canBackup(svc) && <TabsTrigger value="backups">Backups</TabsTrigger>}
@@ -273,7 +275,7 @@ export function Service() {
           <TabsContent value="terminal">
             <ServiceTerminal svc={svc} />
           </TabsContent>
-          {isDb && (
+          {browsable && (
             <TabsContent value="data">
               <DataTab svc={svc} />
             </TabsContent>
@@ -474,7 +476,7 @@ function Settings({ svc }: { svc: ServiceT }) {
           value={form.image}
           onChange={set("image")}
           className="sm:col-span-2"
-          description={svc.kind === "postgres" ? "Minor upgrades only; major versions need a dump and restore." : undefined}
+          description={imageHints[svc.kind]}
         />
         {!isDb && (
           <>
@@ -1215,6 +1217,14 @@ function triggeredBy(t?: string) {
   return name;
 }
 
+/** What changing a database's image can and can't do. */
+const imageHints: Partial<Record<ServiceT["kind"], string>> = {
+  postgres: "Minor upgrades only; major versions need a dump and restore.",
+  mysql: "Upgrades apply on start; going back to an older version needs a dump and restore.",
+  mariadb: "Upgrades apply on start; going back to an older version needs a dump and restore.",
+  mongodb: "One major version at a time, forward only; older versions can't read newer data.",
+};
+
 function ConnectionCard({ serviceId, host, kind }: { serviceId: string; host: string; kind: DatabaseKind }) {
   const [conn, setConn] = useState<Connection | null>(null);
   const reveal = useMutation({ meta: { error: "Couldn't show the connection details" }, mutationFn: () => api.connection(serviceId), onSuccess: setConn });
@@ -1225,7 +1235,7 @@ function ConnectionCard({ serviceId, host, kind }: { serviceId: string; host: st
         <>
           Reachable only inside the project at <Mono>{`${host}:${databasePorts[kind]}`}</Mono>. Apps use it from their
           Environment (Secrets → Connect database), e.g.{" "}
-          <Mono>{`${kind === "redis" ? "REDIS_URL" : "DATABASE_URL"}={{ db.${host}.URL }}`}</Mono>.
+          <Mono>{`${databaseUrlKey(kind)}={{ db.${host}.URL }}`}</Mono>.
         </>
       }
       actions={

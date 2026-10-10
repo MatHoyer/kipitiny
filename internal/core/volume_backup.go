@@ -33,14 +33,15 @@ const (
 	preBackupTimeout = 10 * time.Minute
 )
 
-// volumeNames lists what a volume backup of svc archives: a database's data
-// volume (PostgreSQL excepted: pg_dump), or an app's volumes.
+// volumeNames lists what a volume backup of svc archives: Redis's data
+// volume (the other databases are dumped by their own tool), or an app's
+// volumes.
 func volumeNames(svc store.Service) []string {
 	switch {
-	case svc.Kind == store.ServiceKindPostgres:
-		return nil
-	case svc.Kind.IsDatabase():
+	case svc.Kind == store.ServiceKindRedis:
 		return []string{dataVolumeName}
+	case svc.Kind.IsDatabase():
+		return nil
 	}
 	names := make([]string, len(svc.Volumes))
 	for i, v := range svc.Volumes {
@@ -54,6 +55,8 @@ func backupKind(svc store.Service) (store.BackupKind, error) {
 	switch {
 	case svc.Kind == store.ServiceKindPostgres:
 		return store.BackupKindPostgres, nil
+	case svc.Kind.IsMySQL(), svc.Kind == store.ServiceKindMongoDB:
+		return store.BackupKindDump, nil
 	case len(volumeNames(svc)) > 0:
 		return store.BackupKindVolume, nil
 	}
@@ -155,7 +158,7 @@ func (c *Core) removeHelper(ctx context.Context, dk *docker.Client, id string) {
 // restoreVolumeBackup checks and starts the restore of a volume backup into
 // svc, which must have every volume of the archive.
 func (c *Core) restoreVolumeBackup(ctx context.Context, b store.Backup, svc store.Service, confirm string) (store.Restore, error) {
-	if _, err := backupKind(svc); err != nil || svc.Kind == store.ServiceKindPostgres {
+	if kind, err := backupKind(svc); err != nil || kind != store.BackupKindVolume {
 		return store.Restore{}, fmt.Errorf("%w: %s has no volumes to restore into", ErrInvalid, svc.Name)
 	}
 	have := volumeNames(svc)

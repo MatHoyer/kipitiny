@@ -220,6 +220,28 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		if in.Password != "" {
 			svc.Env[redisPassword] = in.Password
 		}
+	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+		if svc.Image == "" {
+			svc.Image = defaultMySQLImage(svc.Kind)
+		}
+		if svc.MemoryMB == 0 {
+			svc.MemoryMB = defaultMySQLMemoryMB
+		}
+		svc.Env, svc.Secrets = newMySQLEnv(), []string{mysqlPassword, mysqlRootPassword}
+		if in.Password != "" {
+			svc.Env[mysqlPassword] = in.Password
+		}
+	case store.ServiceKindMongoDB:
+		if svc.Image == "" {
+			svc.Image = DefaultMongoImage
+		}
+		if svc.MemoryMB == 0 {
+			svc.MemoryMB = defaultMongoMemoryMB
+		}
+		svc.Env, svc.Secrets = newMongoEnv(), []string{mongoPassword}
+		if in.Password != "" {
+			svc.Env[mongoPassword] = in.Password
+		}
 	default:
 		return store.Service{}, fmt.Errorf("%w: unknown service kind %q", ErrInvalid, svc.Kind)
 	}

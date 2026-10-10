@@ -654,6 +654,21 @@ function ProviderPath({
 
 type DbShape = { label: string; fields: string[][] };
 
+/** Laravel's and most PHP apps' names. */
+const mysqlShapes = {
+  url: { label: "DATABASE_URL", fields: [["DATABASE_URL", "URL"]] },
+  split: {
+    label: "DB_HOST, DB_PORT, DB_DATABASE…",
+    fields: [
+      ["DB_HOST", "HOST"],
+      ["DB_PORT", "PORT"],
+      ["DB_DATABASE", "DATABASE"],
+      ["DB_USERNAME", "USER"],
+      ["DB_PASSWORD", "PASSWORD"],
+    ],
+  },
+};
+
 /** The two ways to connect a database, as the kind's clients expect them. */
 const dbShapes: Record<DatabaseKind, { url: DbShape; split: DbShape }> = {
   postgres: {
@@ -668,6 +683,15 @@ const dbShapes: Record<DatabaseKind, { url: DbShape; split: DbShape }> = {
     split: {
       label: "REDIS_HOST, REDIS_PORT…",
       fields: ["HOST", "PORT", "PASSWORD"].map((f) => [`REDIS_${f}`, f]),
+    },
+  },
+  mysql: mysqlShapes,
+  mariadb: mysqlShapes,
+  mongodb: {
+    url: { label: "MONGODB_URI", fields: [["MONGODB_URI", "URL"]] },
+    split: {
+      label: "MONGO_HOST, MONGO_PORT…",
+      fields: dbFields.mongodb.filter((f) => f !== "URL").map((f) => [`MONGO_${f}`, f]),
     },
   },
 };

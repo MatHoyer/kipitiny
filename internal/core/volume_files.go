@@ -136,6 +136,10 @@ func fileVolumes(svc store.Service) []fileVolume {
 		return []fileVolume{{name: dataVolumeName, mountPath: pgVolumeMount}}
 	case store.ServiceKindRedis:
 		return []fileVolume{{name: dataVolumeName, mountPath: redisVolumeMount}}
+	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+		return []fileVolume{{name: dataVolumeName, mountPath: mysqlVolumeMount}}
+	case store.ServiceKindMongoDB:
+		return []fileVolume{{name: dataVolumeName, mountPath: mongoVolumeMount}}
 	}
 	vols := make([]fileVolume, len(svc.Volumes))
 	for i, v := range svc.Volumes {

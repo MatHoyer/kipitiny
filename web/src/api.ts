@@ -1,6 +1,6 @@
 import { createPasskey, getPasskey, type CreationOptionsJSON, type RequestOptionsJSON } from "./lib/webauthn";
 
-export type DatabaseKind = "postgres" | "redis";
+export type DatabaseKind = "postgres" | "redis" | "mysql" | "mariadb" | "mongodb";
 export type ServiceKind = "app" | DatabaseKind;
 
 export const isDatabase = (kind: ServiceKind): kind is DatabaseKind => kind !== "app";
@@ -11,7 +11,10 @@ export const canBackup = (s: Pick<Service, "kind" | "volumes">) => isDatabase(s.
 /** Whether Traefik routes the service's domain: an app with published ports may have a domain only for DNS. */
 export const httpRouted = (s: Pick<Service, "domain" | "port">) => !!s.domain && s.port > 0;
 
-export const databasePorts: Record<DatabaseKind, number> = { postgres: 5432, redis: 6379 };
+export const databasePorts: Record<DatabaseKind, number> = { postgres: 5432, redis: 6379, mysql: 3306, mariadb: 3306, mongodb: 27017 };
+
+/** The variable apps usually read a database's connection string from. */
+export const databaseUrlKey = (kind: DatabaseKind) => (kind === "redis" ? "REDIS_URL" : kind === "mongodb" ? "MONGODB_URI" : "DATABASE_URL");
 
 /** A project database, as env references see it. */
 export type DatabaseRef = { name: string; kind: DatabaseKind };
@@ -245,7 +248,8 @@ export type TargetInput = Omit<BackupTarget, "id" | "kind" | "createdAt" | "ageR
   encrypt?: boolean;
 };
 
-export type BackupKind = "postgres" | "volume" | "manager";
+/** dump: a MySQL, MariaDB or MongoDB dump (serviceKind tells which). */
+export type BackupKind = "postgres" | "dump" | "volume" | "manager";
 
 export type Backup = {
   id: string;

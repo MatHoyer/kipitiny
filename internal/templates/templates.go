@@ -84,7 +84,7 @@ var Categories = []string{"monitoring", "analytics", "automation", "development"
 // builtinLogos are the logos the UI draws itself
 // (web/src/components/service-icon.tsx): a template may use them without
 // bringing a logo.
-var builtinLogos = []string{"postgres", "redis", "nginx", "node"}
+var builtinLogos = []string{"postgres", "redis", "mysql", "mariadb", "mongodb", "nginx", "node"}
 
 var (
 	idRe    = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)

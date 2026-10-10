@@ -104,7 +104,16 @@ const SERVER: Server = {
 
 const projectOf = (id: string) => db.projects.find((p) => p.id === id) ?? (() => { throw notFound(); })();
 const serviceOf = (id: string) => db.services.find((s) => s.id === id) ?? (() => { throw notFound(); })();
-const isDb = (s: { kind: string }) => s.kind === "postgres" || s.kind === "redis";
+const isDb = (s: { kind: string }) => s.kind !== "app";
+
+/** How the demo's databases are reached, per kind. */
+const dbDemo: Record<string, { image: string; port: number; url: (name: string, password: string) => string; user: string; database?: string }> = {
+  postgres: { image: "postgres:17-alpine", port: 5432, user: "app", database: "postgres", url: (n, pw) => `postgres://app:${pw}@${n}:5432/postgres` },
+  redis: { image: "redis:8-alpine", port: 6379, user: "", url: (n, pw) => `redis://:${pw}@${n}:6379` },
+  mysql: { image: "mysql:8.4", port: 3306, user: "app", database: "app", url: (n, pw) => `mysql://app:${pw}@${n}:3306/app` },
+  mariadb: { image: "mariadb:11.8", port: 3306, user: "app", database: "app", url: (n, pw) => `mysql://app:${pw}@${n}:3306/app` },
+  mongodb: { image: "mongo:8.2", port: 27017, user: "app", database: "app", url: (n, pw) => `mongodb://app:${pw}@${n}:27017/app?authSource=admin` },
+};
 
 /** A short, stable fake container ID. */
 const hash = (s: string) => {
@@ -346,10 +355,12 @@ const EVENTS: Notifications["events"] = [
   { type: "update.available", label: "New kipitiny version", default: true },
 ];
 
+const backupKindOf = (kind: string) => (kind === "postgres" ? "postgres" : kind === "redis" || kind === "app" ? "volume" : "dump");
+
 /** A fresh backup of a service (or the manager), as if it just ran. */
 function newBackup(s: DemoDb["services"][number] | null, targetId = "local"): Backup {
   const p = s ? projectOf(s.projectId) : null;
-  const kind = !s ? "manager" : s.kind === "postgres" ? "postgres" : "volume";
+  const kind = !s ? "manager" : backupKindOf(s.kind);
   const t = now();
   const size = kind === "postgres" ? 4_400_000 + Math.floor(Math.random() * 200_000) : kind === "manager" ? 530_000 : 190_000;
   return {
@@ -364,13 +375,15 @@ function newBackup(s: DemoDb["services"][number] | null, targetId = "local"): Ba
     serviceKind: s?.kind,
     serviceIcon: s ? s.icon || (isDb(s) ? s.kind : "") : undefined,
     targetId,
-    objectKey: s ? `${p!.name}/${s.name}/${t.slice(0, 19)}${kind === "postgres" ? ".dump" : ".tar.gz"}` : `manager/${t.slice(0, 19)}.db`,
+    objectKey: s
+      ? `${p!.name}/${s.name}/${t.slice(0, 19)}${kind === "postgres" ? ".dump" : kind === "volume" ? ".tar.gz" : s.kind === "mongodb" ? ".archive.gz" : ".sql.gz"}`
+      : `manager/${t.slice(0, 19)}.db`,
     status: "succeeded",
     sizeBytes: size,
     sha256: Math.random().toString(16).slice(2, 10) + "e3b0c44298fc1c149afbf4c8996fb924",
-    pgVersion: kind === "postgres" ? "17.6" : "",
+    pgVersion: kind === "postgres" ? "17.6" : kind === "dump" ? (s!.image.split(":")[1] ?? "") : "",
     volumes: kind === "volume" ? [`kipitiny-${s!.id}-data`] : undefined,
-    durationMs: kind === "postgres" ? 2100 : 700,
+    durationMs: kind === "volume" ? 700 : 2100,
     createdAt: t,
     finishedAt: t,
     verifyDetails: { tables: 0, rows: 0, dbBytes: 0, durationMs: 0 },
@@ -553,7 +566,7 @@ const routes: Route[] = [
       if (!nameRe.test(name)) throw invalid("name must be lowercase letters, digits and dashes (max 40)");
       if (db.services.some((s) => s.projectId === p.id && s.name === name)) throw new HttpError(409, "already exists (name or domain taken)");
       const kind = body.kind ?? "app";
-      const image = body.image || (kind === "postgres" ? "postgres:17-alpine" : kind === "redis" ? "redis:8-alpine" : "");
+      const image = body.image || (dbDemo[kind]?.image ?? "");
       if (!image) throw invalid("image: repository name must have at least one component");
       const s = newService({
         id: newId("s"),
@@ -727,7 +740,7 @@ const routes: Route[] = [
       Object.assign(b, {
         verifyStatus: "succeeded",
         verifiedAt: now(),
-        verifyDetails: b.kind === "postgres" ? { tables: db.tables.length, rows: db.tables.reduce((n, t) => n + t.rows.length, 0), dbBytes: b.sizeBytes * 3, durationMs: 4600 } : { tables: 0, rows: 0, dbBytes: 0, files: 3, durationMs: 900 },
+        verifyDetails: b.kind !== "volume" ? { tables: db.tables.length, rows: db.tables.reduce((n, t) => n + t.rows.length, 0), dbBytes: b.sizeBytes * 3, durationMs: 4600 } : { tables: 0, rows: 0, dbBytes: 0, files: 3, durationMs: 900 },
       });
       save();
       return b;
@@ -753,7 +766,7 @@ const routes: Route[] = [
     /^\/services\/([^/]+)\/schedules$/,
     ({ m, body }) => {
       const svc = serviceOf(m[1]);
-      const s = scheduleFrom(body, { serviceId: svc.id, kind: svc.kind === "postgres" ? "postgres" : "volume" });
+      const s = scheduleFrom(body, { serviceId: svc.id, kind: backupKindOf(svc.kind) });
       db.schedules.push(s);
       save();
       return s;
@@ -917,9 +930,8 @@ const routes: Route[] = [
     /^\/services\/([^/]+)\/connection$/,
     ({ m }): Connection => {
       const s = serviceOf(m[1]);
-      return s.kind === "redis"
-        ? { host: s.name, port: 6379, user: "", password: "demo-password", url: `redis://:demo-password@${s.name}:6379` }
-        : { host: s.name, port: 5432, database: "postgres", user: "app", password: "demo-password", url: `postgres://app:demo-password@${s.name}:5432/postgres` };
+      const d = dbDemo[s.kind] ?? dbDemo.postgres;
+      return { host: s.name, port: d.port, database: d.database, user: d.user, password: "demo-password", url: d.url(s.name, "demo-password") };
     },
   ],
 
@@ -1023,7 +1035,7 @@ export function demoService(id: string) {
         ? "********"
         : v.replace(/\{\{\s*db\.([\w-]+)\.URL\s*\}\}/g, (_, name: string) => {
             const d = db.services.find((x) => x.projectId === s.projectId && x.name === name);
-            return d?.kind === "redis" ? `redis://:********@${name}:6379` : `postgres://app:********@${name}:5432/postgres`;
+            return (dbDemo[d?.kind ?? "postgres"] ?? dbDemo.postgres).url(name, "********");
           }).replace(/\{\{\s*project\.(\w+)\s*\}\}/g, (_, key: string) => p.env[key] ?? ""),
     ]),
   );
