@@ -92,6 +92,14 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("GET /api/services/{id}/data/keys", a.redisScan)
 	mux.HandleFunc("GET /api/services/{id}/data/key", a.redisGet)
 	mux.HandleFunc("POST /api/services/{id}/data/console", a.dataConsole)
+	mux.HandleFunc("GET /api/services/{id}/files", a.listVolumeFiles)
+	mux.HandleFunc("GET /api/services/{id}/files/content", a.readVolumeFile)
+	mux.HandleFunc("PUT /api/services/{id}/files/content", a.writeVolumeFile)
+	mux.HandleFunc("GET /api/services/{id}/files/download", a.downloadVolumeFiles)
+	mux.HandleFunc("POST /api/services/{id}/files/mkdir", a.makeVolumeDir)
+	mux.HandleFunc("POST /api/services/{id}/files/move", a.moveVolumePath)
+	mux.HandleFunc("POST /api/services/{id}/files/copy", a.copyVolumePath)
+	mux.HandleFunc("POST /api/services/{id}/files/delete", a.deleteVolumePaths)
 	mux.HandleFunc("GET /api/services/{id}/backups", a.listServiceBackups)
 	mux.HandleFunc("POST /api/services/{id}/backups", a.createBackup)
 	mux.HandleFunc("GET /api/services/{id}/restores", a.listRestores)
@@ -292,7 +300,11 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not found")
 	case errors.Is(err, store.ErrConflict):
-		writeError(w, http.StatusConflict, "already exists (name or domain taken)")
+		msg := "already exists (name or domain taken)"
+		if strings.Contains(err.Error(), store.ErrConflict.Error()+": ") {
+			msg = reason(err, store.ErrConflict) // core's own explanation
+		}
+		writeError(w, http.StatusConflict, msg)
 	case errors.Is(err, core.ErrBusy):
 		writeError(w, http.StatusConflict, "another operation is in progress for this service")
 	default:
