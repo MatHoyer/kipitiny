@@ -129,11 +129,14 @@ section.block { padding: clamp(64px, 10vw, 120px) 0 0; }
 .block .intro { max-width: var(--measure); color: var(--ink-soft); margin: 0 0 44px; font-size: 1.125rem; }
 
 /* Backup pipeline: a real sequence */
-.pipeline { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); counter-reset: step; border-top: 2px solid var(--ink); }
-.pipeline li { counter-increment: step; padding: 18px 22px 0 0; position: relative; }
+.pipeline { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); counter-reset: step; }
+.pipeline li { counter-increment: step; padding: 18px 11px 0; position: relative; text-align: center; }
+/* Each step draws the line from its number to the next one's: it ends on the last number. */
+.pipeline li:not(:last-child)::after { content: ""; position: absolute; top: -1px; left: 50%; width: 100%; height: 2px; background: var(--ink); }
 .pipeline li::before {
   content: counter(step);
-  position: absolute; top: -15px; left: 0;
+  z-index: 1;
+  position: absolute; top: -15px; left: calc(50% - 14px);
   width: 28px; height: 28px; border-radius: 50%;
   display: grid; place-items: center;
   background: var(--paper); border: 2px solid var(--ink);
@@ -198,7 +201,8 @@ footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
 
 @media (max-width: 860px) {
   .pipeline { grid-template-columns: 1fr 1fr; row-gap: 40px; border-top: 0; }
-  .pipeline li { border-top: 2px solid var(--ink); }
+  /* Two per row: 1→2, 3→4. */
+  .pipeline li:nth-child(even)::after { display: none; }
   .targets { grid-template-columns: 1fr; }
   .targets > div + div { border-left: 0; border-top: 1px solid var(--rule); }
   .runs { grid-template-columns: 1fr; }
@@ -207,6 +211,7 @@ footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
 @media (max-width: 560px) {
   .top nav a.hide-sm { display: none; }
   .pipeline { grid-template-columns: 1fr; }
+  .pipeline li::after { display: none; }
   .ticks li.odd { display: none; }
   .server .val.ours { display: none; }
   .install { width: 100%; }
