@@ -7,6 +7,7 @@
       "website": "https://beszel.dev",
       "docs": "https://beszel.dev/guide/agent-installation",
       "icon": "beszel",
+      "notes": "It runs with the server's network and Docker socket (see [Host access](/docs/compose#host-access)), so only on the server it watches: install it once per server, in a project on that server.\n\n1. In the hub, **Add System**: copy its **public key**, and give the system the server's address and port `45876`.\n2. Install the agent with that key. The hub connects to it on port 45876: open it in the server's firewall to the hub only.\n3. Or give the agent a **token** and the **hub URL** (both from the hub): it connects to the hub itself, and no port needs to be open.",
       "category": "monitoring",
       "tags": [
         "metrics",
@@ -56,6 +57,7 @@
       "website": "https://beszel.dev",
       "docs": "https://beszel.dev/guide/getting-started",
       "icon": "beszel",
+      "notes": "The first visit creates the admin account.\n\nIts data (users, systems, history) is in a volume: back it up from the service's **Backups** tab.",
       "category": "monitoring",
       "tags": [
         "metrics",
@@ -98,6 +100,7 @@
       "website": "https://www.minecraft.net",
       "docs": "https://docker-minecraft-server.readthedocs.io",
       "icon": "minecraft",
+      "notes": "- Accepting the [Minecraft EULA](https://aka.ms/MinecraftEULA) is required: the server doesn't start without it.\n- Server type, version, difficulty, game mode and message of the day can change later in the service's environment, then redeploy.\n- **Memory** is the container's limit (default `2g`); the server's Java heap takes three quarters of it.\n- The game port (default `25565`) is published on the server: open it in the firewall. Players connect to the server's address, or to the optional **domain** whose DNS points at it (only for DNS: game traffic never goes through Traefik).\n- The world is in a volume. Before each volume backup, kipitiny has the server flush it to disk (`rcon-cli save-all flush`, with a generated RCON password).\n- Mods and plugins: see the image's documentation (`MODRINTH_PROJECTS`, `PLUGINS` and similar variables in the service's environment).",
       "category": "games",
       "tags": [
         "java",

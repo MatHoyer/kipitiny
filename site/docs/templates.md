@@ -16,31 +16,7 @@ Each template asks only what it can't guess (a domain, a key from another app). 
 
 ## Available templates
 
-### Beszel hub
-
-[Beszel](https://beszel.dev)'s dashboard: server and container metrics, history and alerts.
-
-- Asks for the **domain** it's served on. The first visit creates the admin account.
-- Its data (users, systems, history) is in a volume: back it up from the service's **Backups** tab.
-
-### Beszel agent
-
-Reports the server it runs on, and its containers, to a Beszel hub. It runs with the server's network and Docker socket (see [Host access](/docs/compose#host-access)), so only on the server it watches: install it once per server, in a project on that server.
-
-1. In the hub, **Add System**: copy its **public key**, and give the system the server's address and port `45876`.
-2. Install the agent with that key. The hub connects to it on port 45876: open it in the server's firewall to the hub only.
-3. Or give the agent a **token** and the **hub URL** (both from the hub): it connects to the hub itself, and no port needs to be open.
-
-### Minecraft server
-
-A Minecraft Java Edition server ([itzg/minecraft-server](https://docker-minecraft-server.readthedocs.io)): vanilla, Paper, Fabric, Forge, NeoForge or Purpur.
-
-- You accept the [Minecraft EULA](https://aka.ms/MinecraftEULA) by checking its box; the server doesn't start without it.
-- Pick the server type, the version (`LATEST` or e.g. `1.21.4`), difficulty, game mode and message of the day. Change them later in the service's environment and redeploy.
-- **Memory** is the container's limit (default `2g`); the server's Java heap takes three quarters of it.
-- The game port (default `25565`) is published on the server: open it in the firewall. Players connect to the server's address, or to an optional **domain** whose DNS points at it (only for DNS: game traffic never goes through Traefik).
-- The world is in a volume. Before each volume backup, kipitiny has the server flush it to disk (`rcon-cli save-all flush`, with a generated RCON password).
-- Mods and plugins: see the image's documentation (`MODRINTH_PROJECTS`, `PLUGINS` and similar variables in the service's environment).
+<!-- templates -->
 
 ## Writing a template
 
@@ -63,6 +39,10 @@ x-template:
   icon: beszel
   category: monitoring
   tags: [metrics, docker, alerts]
+  notes: |
+    The first visit creates the admin account.
+
+    Its data is in a volume: back it up from the service's **Backups** tab.
   logo:
     label: Beszel
     color: "#747BFF"
@@ -89,6 +69,7 @@ volumes:
 ```
 
 - The folder name is the template's id; `name` is the default project name.
+- `notes` is markdown shown after the description, in the install dialog and in the list above: what to do after installing, ports to open, caveats. Paragraphs, lists, `**bold**`, `` `code` `` and `[links](…)` only, no headings; a link to `/docs/<page>` opens that page of the docs of the running version.
 - `category` groups the gallery: `monitoring`, `analytics`, `automation`, `development`, `storage`, `media`, `communication`, `productivity`, `security` or `games`. `tags` are extra words its search matches.
 - Each input becomes the variable `${NAME}` of the file (the `.env` of a compose import). A `${NAME}` that is a whole `environment` value is stored as a secret, unless `x-kipitiny.secrets` lists the secrets.
 - Input fields: `name` (UPPER_CASE), `label`, `type` (`text`, `secret`, `domain`, `url`, `select` with its `options`, or `checkbox`, whose value is `true` or `false` and which `required` makes mandatory), `help` (its `https://` URLs become links), `placeholder`, `default`, `required`, and `generate` (a number of random bytes: the value is generated, not asked). Inputs work anywhere compose variables do (`ports`, `mem_limit`…) and in `x-kipitiny.domain`.
@@ -102,5 +83,5 @@ The SVG is a plain drawing: one `<svg>` element with `xmlns`, at most 16 KB, no 
 ### Checks and updates
 
 - A test checks that every template parses, that it uses exactly the variables it declares, and that its logo exists.
-- After adding or changing one, run `go generate ./internal/templates`: the demo on this website shows the templates from a file it generates, and a test fails while that file is stale.
+- After adding or changing one, run `go generate ./internal/templates`: the demo on this website and the list above come from the file it generates, and a test fails while that file is stale.
 - Pin images by version. Dependabot opens a pull request when a newer one is out (the Beszel images move together); CI checks the template still parses. Apps already installed keep their version.

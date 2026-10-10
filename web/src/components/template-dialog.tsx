@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, LayoutGrid, Rocket, ScanSearch, Search } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { PlanView } from "@/components/compose-dialog";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
+import { useDocsUrl } from "@/lib/docs";
 import { api, type AppTemplate, type TemplateInstall, type TemplateResult } from "../api";
 
 /**
@@ -181,6 +182,7 @@ function InstallForm({
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-4">
+        {t.notes && <Notes markdown={t.notes} />}
         {!projectId && (
           <div className="grid gap-3 sm:grid-cols-2">
             <FloatingInput
@@ -286,5 +288,39 @@ function Linked({ text }: { text: string }) {
     ) : (
       part
     ),
+  );
+}
+
+/**
+ * A template's notes: the markdown subset they're written in (paragraphs,
+ * lists, **bold**, `code`, [links](…)). A /docs/<page> link opens that page
+ * of the running version's docs.
+ */
+function Notes({ markdown }: { markdown: string }) {
+  const docs = useDocsUrl();
+  const inline = (text: string) =>
+    text.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)\s]+\))/).map((part, i): ReactNode => {
+      if (i % 2 === 0) return part;
+      if (part.startsWith("**")) return <strong key={i}>{part.slice(2, -2)}</strong>;
+      if (part.startsWith("`")) return <code key={i} className="rounded bg-muted px-1 font-mono text-[0.9em]">{part.slice(1, -1)}</code>;
+      const [, label, href] = part.match(/^\[(.+)\]\((.+)\)$/)!;
+      return (
+        <a key={i} href={href.replace(/^\/docs(?=\/|#|$)/, docs)} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+          {label}
+        </a>
+      );
+    });
+  return (
+    <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+      {markdown.split(/\n\s*\n/).map((block, i) => {
+        const lines = block.trim().split("\n");
+        const items = (re: RegExp) => lines.every((l) => re.test(l)) && lines.map((l, j) => <li key={j}>{inline(l.replace(re, ""))}</li>);
+        const bullets = items(/^[-*] /);
+        if (bullets) return <ul key={i} className="list-disc space-y-1 pl-5">{bullets}</ul>;
+        const numbered = items(/^\d+\. /);
+        if (numbered) return <ol key={i} className="list-decimal space-y-1 pl-5">{numbered}</ol>;
+        return <p key={i}>{inline(lines.join(" "))}</p>;
+      })}
+    </div>
   );
 }

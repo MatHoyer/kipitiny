@@ -19,6 +19,8 @@ WORKDIR /src
 COPY site/package.json site/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY site/ ./
+# The template catalog the docs list (app/lib/docs.server.ts imports it from ../web).
+COPY web/src/demo/catalog.json /web/src/demo/catalog.json
 COPY --from=demo /src/web/dist-demo ./public/demo
 # The release this site documents, shown in the footer.
 ARG KIPITINY_VERSION

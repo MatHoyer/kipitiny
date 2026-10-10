@@ -1,4 +1,5 @@
 import { Marked } from "marked";
+import latestCatalog from "../../../web/src/demo/catalog.json";
 
 /** One page of the documentation, from site/docs/<slug>.md. */
 export type Doc = {
@@ -25,7 +26,31 @@ const versionFiles = import.meta.glob<string>("../../versions/*/*.md", {
   eager: true,
 });
 
-function parse(path: string, raw: string): Doc {
+/**
+ * The template catalog of each release (site/versions/<minor>/catalog.json);
+ * the latest docs use web/src/demo/catalog.json. Both are generated from
+ * internal/templates/files by `go generate ./internal/templates`.
+ */
+const versionCatalogs = import.meta.glob<Catalog>("../../versions/*/catalog.json", { import: "default", eager: true });
+
+type Catalog = {
+  templates: { title: string; description: string; website?: string; docs?: string; notes?: string }[];
+};
+
+/** Where a doc lists the templates: replaced by a section per template of the catalog. */
+const templatesMarker = "<!-- templates -->";
+
+function templatesMarkdown(catalog: Catalog | undefined) {
+  if (!catalog) throw new Error(`${templatesMarker} without a template catalog`);
+  return catalog.templates
+    .map((t) => {
+      const links = [t.website && `[Website](${t.website})`, t.docs && `[Documentation](${t.docs})`].filter(Boolean).join(" · ");
+      return [`### ${t.title}`, t.description, t.notes, links].filter(Boolean).join("\n\n");
+    })
+    .join("\n\n");
+}
+
+function parse(path: string, raw: string, catalog: Catalog | undefined): Doc {
   const slug = path.split("/").pop()!.replace(/\.md$/, "");
   const m = raw.match(/^---\n([\s\S]*?)\n---\n+/);
   if (!m) throw new Error(`${path}: missing front matter`);
@@ -39,18 +64,18 @@ function parse(path: string, raw: string): Doc {
     title: meta.title ?? slug,
     description: meta.description ?? "",
     order: Number(meta.order ?? 99),
-    markdown: raw.slice(m[0].length),
+    markdown: raw.slice(m[0].length).replace(templatesMarker, () => templatesMarkdown(catalog)),
   };
 }
 
 /** The docs of one version ("" for the latest), and the path they're published under. */
 export type DocSet = { version: string; base: string; docs: Doc[] };
 
-function docSetOf(version: string, files: [string, string][]): DocSet {
+function docSetOf(version: string, files: [string, string][], catalog: Catalog | undefined): DocSet {
   return {
     version,
     base: version ? `/docs/${version}` : "/docs",
-    docs: files.map(([path, raw]) => parse(path, raw)).sort((a, b) => a.order - b.order),
+    docs: files.map(([path, raw]) => parse(path, raw, catalog)).sort((a, b) => a.order - b.order),
   };
 }
 
@@ -60,12 +85,18 @@ const byMinor = (a: string, b: string) => {
   return bm - am || bn - an;
 };
 
-export const latest = docSetOf("", Object.entries(latestFiles));
+export const latest = docSetOf("", Object.entries(latestFiles), latestCatalog);
 
 /** Published minor versions, newest first. */
 export const versions: DocSet[] = [...new Set(Object.keys(versionFiles).map((p) => p.split("/").at(-2)!))]
   .sort(byMinor)
-  .map((v) => docSetOf(v, Object.entries(versionFiles).filter(([p]) => p.split("/").at(-2) === v)));
+  .map((v) =>
+    docSetOf(
+      v,
+      Object.entries(versionFiles).filter(([p]) => p.split("/").at(-2) === v),
+      versionCatalogs[`../../versions/${v}/catalog.json`],
+    ),
+  );
 
 /** The doc set a request is for: /docs/<minor>/... or the latest. */
 export function docSetFor(request: Request): DocSet {
