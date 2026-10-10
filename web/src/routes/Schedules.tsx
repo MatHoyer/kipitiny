@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HardDrive, Pause, Play, Plus, Trash2 } from "lucide-react";
+import { HardDrive, Pause, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { CheckboxField, Empty } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -76,6 +76,7 @@ export function Schedules({ serviceId, targets, databases = [] }: { serviceId?: 
                 </div>
               </div>
               <div className="flex gap-0.5">
+                <ScheduleDialog serviceId={serviceId} targets={targets} databases={databases} schedule={s} />
                 <Button
                   variant="ghost"
                   size="icon-xs"
@@ -107,18 +108,34 @@ export function Schedules({ serviceId, targets, databases = [] }: { serviceId?: 
 const defaultCron = "0 3 * * *";
 const emptyForm = { targetId: "local", keepLast: "0", keepDaily: "7", keepWeekly: "4", keepMonthly: "6" };
 
-function ScheduleDialog({ serviceId, targets, databases }: { serviceId?: string; targets: BackupTarget[]; databases: PgDatabase[] }) {
+const formOf = (s?: Schedule) =>
+  s
+    ? { targetId: s.targetId, keepLast: String(s.keepLast), keepDaily: String(s.keepDaily), keepWeekly: String(s.keepWeekly), keepMonthly: String(s.keepMonthly) }
+    : emptyForm;
+
+/** Creates a schedule, or edits `schedule` when given. */
+function ScheduleDialog({
+  serviceId,
+  targets,
+  databases,
+  schedule,
+}: {
+  serviceId?: string;
+  targets: BackupTarget[];
+  databases: PgDatabase[];
+  schedule?: Schedule;
+}) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [cron, setCron] = useState(defaultCron);
-  const [form, setForm] = useState(emptyForm);
-  const [verify, setVerify] = useState(true);
+  const [cron, setCron] = useState(schedule?.cron ?? defaultCron);
+  const [form, setForm] = useState(() => formOf(schedule));
+  const [verify, setVerify] = useState(schedule?.verify ?? true);
   // Empty follows the service's own database.
-  const [database, setDatabase] = useState("");
+  const [database, setDatabase] = useState(schedule?.database ?? "");
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
-  const create = useMutation({
-    meta: { error: "Couldn't create the schedule" },
+  const save = useMutation({
+    meta: { error: schedule ? "Couldn't update the schedule" : "Couldn't create the schedule" },
     mutationFn: () => {
       const input = {
         targetId: form.targetId,
@@ -128,9 +145,10 @@ function ScheduleDialog({ serviceId, targets, databases }: { serviceId?: string;
         keepDaily: Number(form.keepDaily) || 0,
         keepWeekly: Number(form.keepWeekly) || 0,
         keepMonthly: Number(form.keepMonthly) || 0,
-        enabled: true,
+        enabled: schedule?.enabled ?? true,
         verify: !!serviceId && verify,
       };
+      if (schedule) return api.updateSchedule(schedule.id, input);
       return serviceId ? api.createSchedule(serviceId, input) : api.createManagerSchedule(input);
     },
     onSuccess: () => {
@@ -140,31 +158,38 @@ function ScheduleDialog({ serviceId, targets, databases }: { serviceId?: string;
   });
   const onOpenChange = (next: boolean) => {
     setOpen(next);
-    if (!next) {
-      setCron(defaultCron);
-      setForm(emptyForm);
-      setVerify(true);
-      setDatabase("");
-      create.reset();
+    // Opening an edit starts from the schedule as it is now; closing a new one clears it.
+    if (next ? schedule : !schedule) {
+      setCron(schedule?.cron ?? defaultCron);
+      setForm(formOf(schedule));
+      setVerify(schedule?.verify ?? true);
+      setDatabase(schedule?.database ?? "");
+      save.reset();
     }
   };
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    create.mutate();
+    save.mutate();
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="xs">
-          <Plus data-icon="inline-start" />
-          Add schedule
-        </Button>
+        {schedule ? (
+          <Button variant="ghost" size="icon-xs" title="Edit" aria-label="Edit">
+            <Pencil />
+          </Button>
+        ) : (
+          <Button variant="outline" size="xs">
+            <Plus data-icon="inline-start" />
+            Add schedule
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
         <form onSubmit={onSubmit} className="contents">
           <DialogHeader>
-            <DialogTitle>New backup schedule</DialogTitle>
+            <DialogTitle>{schedule ? "Edit backup schedule" : "New backup schedule"}</DialogTitle>
             <DialogDescription>
               After each run, older backups from this schedule are deleted unless a rule keeps them (newest of each day,
               week, month). All zeros keeps everything. Manual backups are never pruned.
@@ -214,8 +239,8 @@ function ScheduleDialog({ serviceId, targets, databases }: { serviceId?: string;
             />
           )}
           <DialogFooter>
-            <Button type="submit" disabled={create.isPending}>
-              Add schedule
+            <Button type="submit" disabled={save.isPending}>
+              {schedule ? "Save" : "Add schedule"}
             </Button>
           </DialogFooter>
         </form>
