@@ -55,6 +55,8 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("POST /api/projects/{id}/compose", a.applyCompose)
 	mux.HandleFunc("POST /api/projects/{id}/export", a.exportBundle)
 	mux.HandleFunc("GET /api/projects/{id}/git", a.projectGit)
+	mux.HandleFunc("GET /api/templates", a.listTemplates)
+	mux.HandleFunc("POST /api/templates/{id}/install", a.installTemplate)
 	mux.HandleFunc("PUT /api/projects/{id}/git", a.linkProjectGit)
 	mux.HandleFunc("DELETE /api/projects/{id}/git", a.unlinkProjectGit)
 	mux.HandleFunc("POST /api/projects/{id}/git/preview", a.previewProjectGit)

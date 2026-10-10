@@ -101,6 +101,11 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "apply_project_compose", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Make a project match a docker-compose file (format of get_project_compose, fully documented at " + docsBase + "/compose/llms.txt): creates and updates services, then deploys the changed ones. " +
 			"dry_run returns the plan only. prune also deletes the apps the file doesn't list (with their volumes): confirm must repeat the project name. Needs admin."}, t.applyProjectCompose)
+	mcp.AddTool(server, &mcp.Tool{Name: "list_templates", Annotations: readOnly,
+		Description: "One-click apps this kipitiny can install: each one's id, description, the inputs it asks for and its compose file."}, t.listTemplates)
+	mcp.AddTool(server, &mcp.Tool{Name: "install_template",
+		Description: "Install a template (see list_templates) into a project, created if missing: applies its compose file with values as the inputs, then deploys. " +
+			"Nothing existing is deleted. dry_run returns the plan only. Needs admin."}, t.installTemplate)
 	mcp.AddTool(server, &mcp.Tool{Name: "rollback",
 		Description: "Redeploy the image of an earlier successful deployment (the previous one by default)."}, t.rollback)
 	mcp.AddTool(server, &mcp.Tool{Name: "backup_database",

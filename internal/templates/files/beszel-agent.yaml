@@ -1,0 +1,39 @@
+# Beszel's agent: reports the server it runs on (and its containers) to a
+# Beszel hub. It needs the host's network and Docker socket, so install it
+# in a project on the server to monitor, one per server.
+x-template:
+  title: Beszel agent
+  description: Reports this server's CPU, memory, disks, network and containers to a Beszel hub.
+  website: https://beszel.dev
+  docs: https://beszel.dev/guide/agent-installation
+  icon: beszel
+  inputs:
+    - name: KEY
+      label: Hub public key
+      required: true
+      placeholder: ssh-ed25519 AAAA…
+      help: In the hub, Add System shows it. Give the system this server's address and port 45876.
+    - name: TOKEN
+      label: Token
+      type: secret
+      help: With the hub URL, the agent connects to the hub itself (no open port needed).
+    - name: HUB_URL
+      label: Hub URL
+      type: url
+      placeholder: https://beszel.example.com
+      help: Needed with the token.
+name: beszel-agent
+services:
+  agent:
+    image: henrygd/beszel-agent:0.21.0
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      LISTEN: 45876
+      KEY: ${KEY}
+      TOKEN: ${TOKEN}
+      HUB_URL: ${HUB_URL}
+    x-kipitiny:
+      icon: beszel
+      secrets: [TOKEN]

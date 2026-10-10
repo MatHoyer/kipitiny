@@ -1,0 +1,29 @@
+# Beszel's hub: the dashboard the agents report to. Pair it with the
+# beszel-agent template on each server to monitor.
+x-template:
+  title: Beszel hub
+  description: Lightweight server monitoring with history, Docker stats and alerts. Install the Beszel agent on each server to watch.
+  website: https://beszel.dev
+  docs: https://beszel.dev/guide/getting-started
+  icon: beszel
+  inputs:
+    - name: DOMAIN
+      label: Domain
+      type: domain
+      required: true
+      placeholder: beszel.example.com
+      help: Where the dashboard is served. The first visit creates the admin account.
+name: beszel
+services:
+  hub:
+    image: henrygd/beszel:0.21.0
+    expose: ["8090"]
+    environment:
+      APP_URL: https://${DOMAIN}
+    volumes:
+      - data:/beszel_data
+    x-kipitiny:
+      domain: ${DOMAIN}
+      icon: beszel
+volumes:
+  data: {}

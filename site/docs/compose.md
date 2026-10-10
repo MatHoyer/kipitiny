@@ -161,7 +161,7 @@ Two syntaxes, resolved at different times:
 | `{{ db.SERVICE.FIELD }}` | At every deploy | A database's connection detail (see above). |
 | `{{ pass://Vault/Item/field }}` | At every deploy | A secret read from a connected password manager; never stored by kipitiny. |
 
-Compose variables work in every value except inside `x-kipitiny` blocks (bcrypt hashes are full of `$`). There, a value that is exactly `${NAME}` (`password`, a basic auth `hash`, a project variable) is taken from the `.env`.
+Compose variables work in every value except inside `x-kipitiny` blocks (bcrypt hashes are full of `$`). There, a value that is exactly `${NAME}` (`domain`, `password`, a basic auth `hash`, a project variable) is taken from the `.env`.
 
 When a `${NAME}` has no value:
 
