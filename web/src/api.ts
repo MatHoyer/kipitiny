@@ -1063,6 +1063,7 @@ export const api = {
   connectCloudflare: (token: string) => request<Cloudflare>("/cloudflare", json("PUT", { token })),
   disconnectCloudflare: () => request<void>("/cloudflare", { method: "DELETE" }),
   testCloudflare: () => request<void>("/cloudflare/test", { method: "POST" }),
+  syncCloudflare: () => request<Cloudflare>("/cloudflare/sync", { method: "POST" }),
   secretProviders: () => request<SecretProvider[]>("/secret-providers"),
   connectSecretProvider: (id: string, token: string) =>
     request<SecretProvider>(`/secret-providers/${id}`, json("PUT", { token })),

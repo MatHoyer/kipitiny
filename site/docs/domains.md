@@ -84,7 +84,10 @@ zones, the manager then keeps the DNS record in sync:
 - behind the tunnel, a proxied **CNAME** to it, and the tunnel's route to
   Traefik.
 
-Records are created, updated and removed as services come and go; they carry
+Records are synced seconds after a domain changes and every ten minutes; the
+refresh button on the Cloudflare card (or the `sync_dns` MCP tool) syncs them
+right away and detects public IPs again. Records are created, updated and
+removed as services come and go; they carry
 the comment `managed by kipitiny`, and records without it are never changed (a
 service whose name already has one shows a DNS conflict). Certificates for these
 domains come from Let's Encrypt through the Cloudflare DNS challenge, so they

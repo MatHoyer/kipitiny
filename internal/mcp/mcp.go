@@ -139,6 +139,8 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "Remove a service's uptime check and its history. Not for a git project: remove x-kipitiny.uptime from its file. Needs admin."}, t.deleteUptimeCheck)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_maintenance",
 		Description: "Set an app's maintenance page, shown (503 with Retry-After) while it has no replica to answer, and maintenance mode, which shows it to every visitor except allowed IPs while the replicas keep running (migrations, manual work). Applied within seconds, nothing restarts; works on git-linked projects too. Needs admin."}, t.setMaintenance)
+	mcp.AddTool(server, &mcp.Tool{Name: "sync_dns", Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
+		Description: "Sync the Cloudflare DNS records and tunnel routes of service domains now instead of waiting for the next round (every ten minutes, and seconds after a domain changes); public IPs are detected again. Returns each managed hostname's state. Needs admin and a connected Cloudflare token."}, t.syncDNS)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_networks", Annotations: readOnly,
 		Description: "Networks created by hand on each server, next to the automatic proxy and project networks, with the services on them and the name each is reached at (<project>-<service>)."}, t.listNetworks)
 	mcp.AddTool(server, &mcp.Tool{Name: "create_network",
