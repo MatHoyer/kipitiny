@@ -10,7 +10,7 @@ SSH, no file manager container next to it. Agents get the same through
 
 The tab starts by listing where files live:
 
-- **Volumes**: an app's named volumes (Settings › Volumes) and a database's data
+- **Volumes**: an app's named volumes (Settings › Storage) and a database's data
   volume, with the path each is mounted at. They survive deploys and are
   [backed up](/docs/backups). A volume is browsed through a short-lived helper
   container that mounts it, so the service doesn't need to run, and its image
