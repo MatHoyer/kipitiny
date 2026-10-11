@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { friendlyError } from "@/lib/errors";
@@ -203,6 +204,32 @@ export function CheckboxField({
         <Label htmlFor={id}>{label}</Label>
         {description && <p className="text-xs text-muted-foreground">{description}</p>}
       </div>
+    </div>
+  );
+}
+
+/** An on/off setting: label and description, the switch on the right. */
+export function SwitchField({
+  label,
+  description,
+  checked,
+  onCheckedChange,
+  className,
+}: {
+  label: ReactNode;
+  description?: ReactNode;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  className?: string;
+}) {
+  const id = useId();
+  return (
+    <div className={cn("flex items-start justify-between gap-4", className)}>
+      <div className="grid gap-1">
+        <Label htmlFor={id}>{label}</Label>
+        {description && <p className="text-xs text-muted-foreground">{description}</p>}
+      </div>
+      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
     </div>
   );
 }

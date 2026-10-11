@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HardDrive, Pause, Pencil, Play, Plus, Trash2 } from "lucide-react";
+import { HardDrive, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { CheckboxField, Empty } from "@/components/common";
+import { Empty, SwitchField } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CronField, describeCron } from "@/components/cron-field";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
+import { Switch } from "@/components/ui/switch";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { storageIcon } from "@/components/storage";
@@ -75,17 +76,16 @@ export function Schedules({ serviceId, targets, databases = [] }: { serviceId?: 
                   </p>
                 </div>
               </div>
-              <div className="flex gap-0.5">
+              <div className="flex items-center gap-0.5">
+                <Switch
+                  checked={s.enabled}
+                  disabled={toggle.isPending && toggle.variables?.id === s.id}
+                  onCheckedChange={() => toggle.mutate(s)}
+                  title={s.enabled ? "On: click to pause" : "Paused: click to resume"}
+                  aria-label="Schedule on"
+                  className="mr-1.5"
+                />
                 <ScheduleDialog serviceId={serviceId} targets={targets} databases={databases} schedule={s} />
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  title={s.enabled ? "Pause" : "Resume"}
-                  aria-label={s.enabled ? "Pause" : "Resume"}
-                  onClick={() => toggle.mutate(s)}
-                >
-                  {s.enabled ? <Pause /> : <Play />}
-                </Button>
                 <ConfirmDialog
                   trigger={
                     <Button variant="ghost" size="icon-xs" title="Delete" aria-label="Delete" className="text-muted-foreground hover:text-destructive">
@@ -231,7 +231,7 @@ function ScheduleDialog({
             <FloatingInput label="Monthly" type="number" min={0} value={form.keepMonthly} onChange={set("keepMonthly")} />
           </div>
           {serviceId && (
-            <CheckboxField
+            <SwitchField
               label="Restore-test every backup"
               description="Restores it into a throwaway, network-less container and checks the result (a database dump is loaded into PostgreSQL, a volume archive read back entirely). A backup you have never restored is a hope, not a backup."
               checked={verify}
