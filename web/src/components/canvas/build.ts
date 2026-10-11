@@ -39,13 +39,23 @@ type Size = { w: number; h: number };
 /** Where a node goes: where it is now, else where it was saved, else auto. */
 type Placer = (id: string, auto: CanvasPoint) => CanvasPoint;
 
+/**
+ * The key a node's position is saved under. A project's map places its frame,
+ * the ingress and the networks apart from the global map ("in:<project>/…"),
+ * as they sit elsewhere there; its services keep one place in their frame.
+ */
+export function layoutKey(id: string, projectId?: string): string {
+  return projectId && !id.startsWith("svc:") ? `in:${projectId}/${id}` : id;
+}
+
 export function buildGraph(
   servers: ServerTopology[],
   saved: Record<string, CanvasPoint>,
   current: Map<string, CanvasPoint>,
-  opts: { projectView?: boolean } = {},
+  opts: { projectId?: string } = {},
 ): { nodes: MapNode[]; edges: Edge[] } {
-  const place: Placer = (id, auto) => current.get(id) ?? saved[id] ?? auto;
+  const place: Placer = (id, auto) => current.get(id) ?? saved[layoutKey(id, opts.projectId)] ?? auto;
+  const projectView = !!opts.projectId;
   const nodes: MapNode[] = [];
   const edges: Edge[] = [];
   const framed = servers.length > 1;
@@ -70,7 +80,7 @@ export function buildGraph(
 
     // Ingress: Internet → (tunnel →) Traefik, and the manager's own domain.
     const projectsPublic = s.projects.some((p) => p.services.some((svc) => svc.domain && svc.port));
-    const ingress = !!s.traefik && (!opts.projectView || projectsPublic);
+    const ingress = !!s.traefik && (!projectView || projectsPublic);
     const top: Item[] = [];
     if (ingress) {
       single(infra("internet", s), { w: INFRA_W, h: INFRA_H });
@@ -81,7 +91,7 @@ export function buildGraph(
         edges.push(edge(`internet:${s.id}`, `traefik:${s.id}`, "web"));
       }
       single(infra("traefik", s), { w: INFRA_W, h: INFRA_H + 24 }, GAP * 2);
-      if (s.manager && !opts.projectView) {
+      if (s.manager && !projectView) {
         // Level with the services, under Traefik that routes to it.
         const n = infra("manager", s);
         const size = { w: INFRA_W, h: INFRA_H };
@@ -121,7 +131,7 @@ export function buildGraph(
     const nets: Item[] = [];
     for (const n of s.networks.filter((n) => n.customId)) {
       const members = s.projects.flatMap((p) => p.services).filter((svc) => svc.networks.includes(n.customId!));
-      if (opts.projectView && members.length === 0) continue;
+      if (projectView && members.length === 0) continue;
       const id = `net:${n.customId}`;
       const node: MapNode = { id, type: "network", position: { x: 0, y: 0 }, data: { kind: "network", net: n, serverId: s.id, members: members.length } };
       const size = { w: NET_W, h: NET_H };
