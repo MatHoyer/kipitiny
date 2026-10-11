@@ -5,14 +5,27 @@ import { Empty } from "@/components/common";
 import { serviceLogos } from "@/components/service-icon";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { api, isDatabase, type Service } from "../../api";
+import { UnsavedChanges, useUnsaved } from "./changes";
 import { MongoConsole, PgConsole, preloadSqlEditor, RedisConsole } from "./data-console";
 import { DatabasePicker, NewDatabaseButton } from "./database-picker";
 import { MongoBrowser } from "./mongo-browser";
 import { PgBrowser } from "./pg-browser";
 import { RedisBrowser } from "./redis-browser";
 
-/** A database's data: browse it, or run queries in a console. Accents take the database's brand hue (--db). */
+/**
+ * A database's data: browse (and edit) it, or run queries in a console.
+ * Accents take the database's brand hue (--db).
+ */
 export function DataTab({ svc }: { svc: Service }) {
+  return (
+    <UnsavedChanges>
+      <Data svc={svc} />
+    </UnsavedChanges>
+  );
+}
+
+function Data({ svc }: { svc: Service }) {
+  const { confirm } = useUnsaved();
   const [view, setView] = useState<"browse" | "console">("browse");
   // SQL kinds share the PostgreSQL browser and console; MongoDB has its own.
   const sql = svc.kind === "postgres" || svc.kind === "mysql" || svc.kind === "mariadb" ? svc.kind : null;
@@ -41,7 +54,7 @@ export function DataTab({ svc }: { svc: Service }) {
         <Segmented
           size="sm"
           value={view}
-          onValueChange={(v) => setView(v as typeof view)}
+          onValueChange={(v) => confirm(() => setView(v as typeof view))}
           aria-label="View"
         >
           <SegmentedItem value="browse">
@@ -53,8 +66,8 @@ export function DataTab({ svc }: { svc: Service }) {
         </Segmented>
         {multi && (
           <div className="ml-auto flex items-center gap-1.5">
-            <DatabasePicker databases={dbs} value={database} onChange={setPicked} />
-            <NewDatabaseButton serviceId={svc.id} mongo={svc.kind === "mongodb"} onCreated={setPicked} />
+            <DatabasePicker databases={dbs} value={database} onChange={(d) => confirm(() => setPicked(d))} />
+            <NewDatabaseButton serviceId={svc.id} mongo={svc.kind === "mongodb"} onCreated={(d) => confirm(() => setPicked(d))} />
           </div>
         )}
       </div>
@@ -62,7 +75,7 @@ export function DataTab({ svc }: { svc: Service }) {
         view === "console" ? (
           <PgConsole key={database} serviceId={svc.id} database={database} dialect={sql} />
         ) : (
-          <PgBrowser key={database} serviceId={svc.id} database={database} defaultSchema={sql === "postgres" ? "public" : database} />
+          <PgBrowser key={database} serviceId={svc.id} database={database} defaultSchema={sql === "postgres" ? "public" : database} dialect={sql} />
         )
       ) : svc.kind === "mongodb" ? (
         view === "console" ? (

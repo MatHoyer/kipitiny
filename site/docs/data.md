@@ -1,6 +1,6 @@
 ---
 title: Data browser
-description: Browse tables, documents and keys, and run queries, from the service page
+description: Browse and edit tables, documents and keys, and run queries, from the service page
 order: 6
 ---
 
@@ -51,7 +51,36 @@ from the root one). The server itself refuses writes there.
 - Click a row to see it whole in a side panel, JSON indented, and copy a field or
   the row as JSON. Values longer than 4 KiB are cut (flagged with `…`).
 - Browsing never writes: queries run in a read-only session (or as the
-  read-only user) with a 5 s timeout (10 min for a CSV export).
+  read-only user) with a 5 s timeout (10 min for a CSV export). To change data,
+  allow writes (below).
+
+## Edit
+
+Browse is read-only until you switch it to **Allow writes** (it asks first; the
+frame turns red, as the console's does). Changes then stay **pending** in your
+browser, marked in the grid, until you save them:
+
+- **PostgreSQL, MySQL and MariaDB**: click a cell to edit it (Enter or leaving it
+  keeps the text, Escape drops it, Tab moves to the next cell). An edited cell
+  turns amber, its old value in its tooltip. **+ Row** adds a row at the top, in
+  green, its cells on `DEFAULT` until you fill them. The bin marks a row for
+  deletion: it shows struck through until you save, and ↶ takes it back. The
+  expand button opens the row whole, to edit long values or set a field to
+  `NULL` (or back to `DEFAULT` on a new row).
+- Only a table with a primary key can be edited: it is how a row is found again.
+  Views, values cut at 4 KiB and, on MySQL and MariaDB, binary columns are left
+  to the console.
+- **Save** (or *Ctrl+S*) first shows the statements the manager wrote for your
+  changes: deletes, then updates, then inserts. Nothing runs until you confirm.
+  They run as **one transaction**, as the service's own user (root on MySQL and
+  MariaDB): if one fails, nothing is saved and your changes stay pending, to fix
+  and save again.
+- An update or delete must find its row as you loaded it: by its primary key, and
+  for an update with the edited columns' values unchanged. If someone changed or
+  deleted the row in the meantime, the save stops rather than overwrite their
+  change; reload and edit it again.
+- Switching table, page, sort, filter, database or view, or leaving the page,
+  asks before dropping pending changes. **Discard** drops them all.
 
 ## Console
 
@@ -79,14 +108,18 @@ queries are kept per database in this browser only (*History*).
 
 ## Access
 
-Browsing (and CSV export) needs a **read** token; the console needs **admin**,
-which the web UI always has. Every console run lands in the
-[audit log](/docs/api) as `data console` or `data console (write)`, with the
-service but without the query, which may hold secrets.
+Browsing (and CSV export) needs a **read** token; editing and the console need
+**admin**, which the web UI always has. Every console run lands in the
+[audit log](/docs/api) as `data console` or `data console (write)`, every save as
+`data edit`, with the service but without the query or values, which may hold
+secrets.
 
 Endpoints, for scripts: `GET /api/services/{id}/data/tables`,
 `GET /api/services/{id}/data/tables/{schema}/{table}` (`limit`, `offset`, `order`,
 `desc`, `filters` as a JSON array of `{column, op, value}`), `…/export`,
+`POST /api/services/{id}/data/tables/{schema}/{table}/changes`
+(`{database, changes: {deletes, updates, inserts}, apply}`; without `apply`, it
+only returns the statements),
 `GET /api/services/{id}/data/keys` (`cursor`, `pattern`),
 `GET /api/services/{id}/data/key` (`key`, `cursor`),
 `GET /api/services/{id}/data/collections/{collection}/documents` (`database`,
