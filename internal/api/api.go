@@ -92,6 +92,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("GET /api/services/{id}/data/tables/{schema}/{table}/export", a.pgExport)
 	mux.HandleFunc("POST /api/services/{id}/data/tables/{schema}/{table}/changes", a.rowChanges)
 	mux.HandleFunc("GET /api/services/{id}/data/collections/{collection}/documents", a.mongoDocuments)
+	mux.HandleFunc("POST /api/services/{id}/data/collections/{collection}/changes", a.docChanges)
 	mux.HandleFunc("GET /api/services/{id}/data/keys", a.redisScan)
 	mux.HandleFunc("GET /api/services/{id}/data/key", a.redisGet)
 	mux.HandleFunc("POST /api/services/{id}/data/console", a.dataConsole)

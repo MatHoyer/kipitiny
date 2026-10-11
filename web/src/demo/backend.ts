@@ -15,6 +15,7 @@ import type {
   PgFilter,
   PgRows,
   RowChanges,
+  DocChanges,
   ChangeResult,
   PgTable,
   Project,
@@ -239,6 +240,50 @@ function serviceStats(s: DemoDb["services"][number]): ServiceStats {
   const history = s.stopped ? [] : Array.from({ length: 30 }, (_, i) => usage(s, t - (29 - i) * 10_000));
   const per = Object.fromEntries(containers(s).map((c) => [c.id.slice(0, 12), { current: history.at(-1) ?? null, history }]));
   return { current: history.at(-1) ?? null, history, containers: per };
+}
+
+/** The demo's documents are its tables' rows; _id is the row's position. */
+const demoOid = (i: number) => ({ $oid: `6aca9c0c13d4e72f99${String(i).padStart(6, "0")}` });
+
+/** Saves document edits like the manager does, onto the demo table behind the collection. */
+function docChanges(t: DemoDb["tables"][number], ch: DocChanges, apply: boolean): ChangeResult {
+  const coll = /^[A-Za-z_][A-Za-z0-9_]*$/.test(t.name) ? `db.${t.name}` : `db.getCollection(${JSON.stringify(t.name)})`;
+  const obj = (fields: [string, string][]) => `{${fields.map(([k, v]) => `${JSON.stringify(k)}: ${v}`).join(", ")}}`;
+  const indexOf = (id: string) => t.rows.findIndex((_, i) => JSON.stringify(demoOid(i)) === JSON.stringify(JSON.parse(id)));
+  const statements: string[] = [];
+  const rows = t.rows.map((r) => [...r]);
+  const gone = new Set<number>();
+  for (const d of ch.deletes ?? []) {
+    statements.push(`${coll}.deleteOne(${obj([["_id", d.id]])})`);
+    gone.add(indexOf(d.id));
+  }
+  for (const u of ch.updates ?? []) {
+    const names = Object.keys(u.set).sort();
+    const filter = obj([["_id", u.id], ...[...names, ...u.unset].map((k): [string, string] => [k, u.was[k] ?? '{"$exists": false}'])]);
+    const update = obj([...(names.length ? [["$set", obj(names.map((k) => [k, u.set[k]]))] as [string, string]] : []), ...(u.unset.length ? [["$unset", obj(u.unset.map((k) => [k, '""']))] as [string, string]] : [])]);
+    statements.push(`${coll}.updateOne(${filter}, ${update})`);
+    const r = rows[indexOf(u.id)];
+    if (!r) throw invalid(`document ${u.id} changed or was deleted since it was loaded; reload and make the change again`);
+    for (const [k, v] of Object.entries(u.set)) {
+      const j = t.columns.findIndex((c) => c.name === k);
+      if (j >= 0) r[j] = JSON.parse(v) === null ? null : String(JSON.parse(v));
+    }
+    for (const k of u.unset) {
+      const j = t.columns.findIndex((c) => c.name === k);
+      if (j >= 0) r[j] = null;
+    }
+  }
+  for (const doc of ch.inserts ?? []) {
+    statements.push(`${coll}.insertOne(${doc})`);
+    const d = JSON.parse(doc) as Record<string, unknown>;
+    rows.push(t.columns.map((c) => (d[c.name] === undefined || d[c.name] === null ? null : String(d[c.name]))));
+  }
+  if (!statements.length) throw invalid("no changes to save");
+  if (apply) {
+    t.rows = rows.filter((_, i) => !gone.has(i));
+    save();
+  }
+  return { statements, applied: apply };
 }
 
 /** Saves edits from the browser like the manager does: checked rows, statements as it writes them. */
@@ -1056,11 +1101,20 @@ const routes: Route[] = [
         throw invalid("the filter is a JSON object, like {\"field\": 1}");
       }
       const docs = t.rows
-        .map((r, i) => ({ _id: { $oid: `6aca9c0c13d4e72f99${String(i).padStart(6, "0")}` }, ...Object.fromEntries(t.columns.map((c, j) => [c.name, r[j]])) }))
+        .map((r, i) => ({ _id: demoOid(i), ...Object.fromEntries(t.columns.map((c, j) => [c.name, r[j]])) }))
         .filter((d) => Object.entries(filter).every(([k, v]) => String((d as Record<string, unknown>)[k]) === String(v)));
       const skip = Number(q.get("skip")) || 0;
       const limit = Number(q.get("limit")) || 25;
       return { documents: docs.slice(skip, skip + limit).map((d) => JSON.stringify(d)), truncated: [], hasMore: docs.length > skip + limit };
+    },
+  ],
+  [
+    "POST",
+    /^\/services\/([^/]+)\/data\/collections\/([^/]+)\/changes$/,
+    ({ m, body }): ChangeResult => {
+      const t = db.tables.find((x) => x.name === decodeURIComponent(m[2]));
+      if (!t) throw notFound();
+      return docChanges(t, body.changes as DocChanges, !!body.apply);
     },
   ],
   [

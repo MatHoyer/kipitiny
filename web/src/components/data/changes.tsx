@@ -143,12 +143,15 @@ export function ReviewDialog({
   onOpenChange,
   run,
   onSaved,
+  onFailed,
   atomic = "They run in one transaction: if one fails, or a row changed since you loaded it, nothing is saved.",
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   run: (apply: boolean) => Promise<ChangeResult>;
   onSaved: (res: ChangeResult) => void;
+  /** A save failed: some changes may have been saved anyway when they don't run as one transaction. */
+  onFailed?: () => void;
   /** How the statements run together. */
   atomic?: string;
 }) {
@@ -160,6 +163,7 @@ export function ReviewDialog({
       onOpenChange(false);
       onSaved(res);
     },
+    onError: () => onFailed?.(),
   });
   const { mutate: load, reset: resetPreview } = preview;
   const { reset: resetApply } = apply;
@@ -188,7 +192,8 @@ export function ReviewDialog({
             <ol className="divide-y font-mono text-xs" aria-label="Statements">
               {statements.map((s, i) => {
                 const tone = verbTone.find(([re]) => re.test(s))?.[1];
-                const [, verb, rest] = /^(\S+)([\s\S]*)$/.exec(s) ?? [, s, ""];
+                // The verb: SQL's first word, or a mongosh call up to its parenthesis.
+                const [, verb, rest] = /^(db\..*?\.\w+(?=\()|\S+)([\s\S]*)$/.exec(s) ?? [, s, ""];
                 return (
                   <li key={i} className="flex gap-3 px-4 py-2">
                     <span className="w-5 shrink-0 text-right text-muted-foreground tabular-nums select-none">{i + 1}</span>

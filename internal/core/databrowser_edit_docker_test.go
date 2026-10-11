@@ -116,3 +116,64 @@ CREATE VIEW v AS SELECT id FROM items;"`)
 		})
 	}
 }
+
+func TestDocChangesDockerMongo(t *testing.T) {
+	c, ctx, svc, exec := dumpTestDB(t, store.ServiceKindMongoDB)
+	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Scope: store.ScopeAdmin})
+	shell := `mongosh --quiet "mongodb://$MONGO_INITDB_ROOT_USERNAME:$MONGO_INITDB_ROOT_PASSWORD@127.0.0.1/app?authSource=admin" --eval `
+	exec(shell + `'
+db.items.insertMany([{ _id: 1, n: NumberLong(5), name: "one", tags: ["a"] }, { _id: 2, name: "two" }, { _id: 3, name: "three" }]);
+db.createView("v", "items", [])'`)
+	s := func(v string) *string { return &v }
+	ch := DocChanges{
+		Deletes: []DocDelete{{ID: "3"}},
+		Updates: []DocUpdate{{ID: "1", Set: map[string]string{"name": `"it's < 1"`, "extra": `{"$date": "2020-01-01T00:00:00Z"}`}, Unset: []string{"tags"},
+			Was: map[string]*string{"name": s(`"one"`), "extra": nil, "tags": s(`["a"]`)}}},
+		Inserts: []string{`{"_id": 4, "name": "four"}`},
+	}
+	res, err := c.ApplyDocChanges(ctx, svc.ID, "", "items", ch, false)
+	if err != nil || res.Applied || len(res.Statements) != 3 ||
+		res.Statements[1] != `db.items.updateOne({"_id": 1, "extra": {"$exists": false}, "name": "one", "tags": ["a"]}, {"$set": {"extra": {"$date":"2020-01-01T00:00:00Z"}, "name": "it's < 1"}, "$unset": {"tags": ""}})` {
+		t.Fatalf("preview = %#v, %v", res, err)
+	}
+	if res, err = c.ApplyDocChanges(ctx, svc.ID, "", "items", ch, true); err != nil || !res.Applied {
+		t.Fatalf("apply = %+v, %v", res, err)
+	}
+	// n keeps its type: the update only touched the fields it changed.
+	got := exec(shell + `'print(EJSON.stringify(db.items.find().sort({ _id: 1 }).toArray(), { relaxed: false }))'`)
+	if got != `[{"_id":{"$numberInt":"1"},"n":{"$numberLong":"5"},"name":"it's < 1","extra":{"$date":{"$numberLong":"1577836800000"}}},{"_id":{"$numberInt":"2"},"name":"two"},{"_id":{"$numberInt":"4"},"name":"four"}]` {
+		t.Errorf("documents after save:\n%s", got)
+	}
+
+	stale := DocChanges{
+		Deletes: []DocDelete{{ID: "2"}},
+		Updates: []DocUpdate{{ID: "1", Set: map[string]string{"name": `"x"`}, Was: map[string]*string{"name": s(`"one"`)}}},
+	}
+	_, err = c.ApplyDocChanges(ctx, svc.ID, "", "items", stale, true)
+	if !errors.Is(err, ErrInvalid) || !strings.HasPrefix(err.Error(), "invalid input: document 1 changed or was deleted") {
+		t.Errorf("stale update: %v", err)
+	}
+	if got := exec(shell + `'print(db.items.countDocuments({ _id: 2 }))'`); got != "1" {
+		t.Errorf("stale save ran its delete")
+	}
+	// A duplicate _id fails the second insert: the first stays.
+	_, err = c.ApplyDocChanges(ctx, svc.ID, "", "items", DocChanges{Inserts: []string{`{"_id": 5}`, `{"_id": 2}`}}, true)
+	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "duplicate key") || !strings.HasSuffix(err.Error(), "(the change before it was saved)") {
+		t.Errorf("duplicate: %v", err)
+	}
+	for name, ch := range map[string]DocChanges{
+		"bad json":  {Inserts: []string{`{nope`}},
+		"not doc":   {Inserts: []string{`[1]`}},
+		"_id":       {Updates: []DocUpdate{{ID: "1", Set: map[string]string{"_id": "9"}, Was: map[string]*string{"_id": s("1")}}}},
+		"dotted":    {Updates: []DocUpdate{{ID: "1", Set: map[string]string{"a.b": "9"}, Was: map[string]*string{"a.b": nil}}}},
+		"no was":    {Updates: []DocUpdate{{ID: "1", Set: map[string]string{"a": "9"}}}},
+		"set+unset": {Updates: []DocUpdate{{ID: "1", Set: map[string]string{"a": "9"}, Unset: []string{"a"}, Was: map[string]*string{"a": nil}}}},
+	} {
+		if _, err := c.ApplyDocChanges(ctx, svc.ID, "", "items", ch, false); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, err = c.ApplyDocChanges(ctx, svc.ID, "", "v", DocChanges{Inserts: []string{`{}`}}, true); !errors.Is(err, ErrInvalid) {
+		t.Errorf("view: %v", err)
+	}
+}

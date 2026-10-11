@@ -184,3 +184,20 @@ func (a *API) rowChanges(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, res)
 }
+
+func (a *API) docChanges(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Database string          `json:"database"`
+		Changes  core.DocChanges `json:"changes"`
+		Apply    bool            `json:"apply"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	res, err := a.core.ApplyDocChanges(r.Context(), r.PathValue("id"), body.Database, r.PathValue("collection"), body.Changes, body.Apply)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}

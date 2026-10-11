@@ -741,6 +741,15 @@ export type RowChanges = {
   updates?: { key: Record<string, string>; set: Record<string, string | null>; was: Record<string, string | null> }[];
   inserts?: Record<string, string | null>[];
 };
+/**
+ * Edits to a collection's documents, values as relaxed Extended JSON. An update sets or unsets top-level fields;
+ * was holds each one as loaded, null when it was absent.
+ */
+export type DocChanges = {
+  deletes?: { id: string }[];
+  updates?: { id: string; set: Record<string, string>; unset: string[]; was: Record<string, string | null> }[];
+  inserts?: string[];
+};
 /** The statements a save runs, in order; applied is false for a preview. */
 export type ChangeResult = { statements: string[]; applied: boolean };
 
@@ -993,6 +1002,8 @@ export const api = {
       `/services/${serviceId}/data/tables/${encodeURIComponent(schema)}/${encodeURIComponent(table)}/changes`,
       json("POST", { database, changes, apply }),
     ),
+  docChanges: (serviceId: string, database: string, collection: string, changes: DocChanges, apply: boolean) =>
+    request<ChangeResult>(`/services/${serviceId}/data/collections/${encodeURIComponent(collection)}/changes`, json("POST", { database, changes, apply })),
   redisScan: (serviceId: string, cursor: string, pattern: string) =>
     request<RedisKeys>(`/services/${serviceId}/data/keys?${new URLSearchParams({ cursor, pattern })}`),
   redisGet: (serviceId: string, key: string, cursor = "0") =>
