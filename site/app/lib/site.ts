@@ -22,6 +22,7 @@ export function seo({ title, description, path }: { title: string; description: 
     { property: "og:image", content: image },
     { property: "og:image:width", content: "1200" },
     { property: "og:image:height", content: "630" },
+    { property: "og:image:alt", content: "kipitiny, a small self-hosted PaaS" },
     { name: "twitter:card", content: "summary_large_image" },
     { name: "twitter:image", content: image },
   ];
