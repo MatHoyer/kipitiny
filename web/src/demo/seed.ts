@@ -37,6 +37,8 @@ export type DemoDb = {
   backups: Backup[];
   schedules: Schedule[];
   uptime: UptimeCheck[];
+  /** IDs of the connected password managers. */
+  passwordManagers: string[];
   restores: Restore[];
   domains: Domain[];
   registries: Registry[];
@@ -254,7 +256,13 @@ export function seed(): DemoDb {
       replicas: 2,
       healthPath: "/healthz",
       preDeploy: "npm run migrate",
-      env: { NODE_ENV: "production", DATABASE_URL: "{{ db.db.URL }}", REDIS_URL: "{{ db.cache.URL }}", SESSION_SECRET: "s3cr3t" },
+      env: {
+        NODE_ENV: "production",
+        DATABASE_URL: "{{ db.db.URL }}",
+        REDIS_URL: "{{ db.cache.URL }}",
+        SESSION_SECRET: "s3cr3t",
+        STRIPE_SECRET_KEY: "{{ pass://Production/Stripe/secret_key }}",
+      },
       secrets: ["SESSION_SECRET"],
       volumes: [{ name: "uploads", path: "/app/uploads" }],
     }),
@@ -288,6 +296,7 @@ export function seed(): DemoDb {
       { serviceId: "web", path: "/", intervalSec: 60, timeoutSec: 10, expectedStatus: 0, enabled: true, down: false, changedAt: at(30), createdAt: at(30) },
       { serviceId: "api", path: "/healthz", intervalSec: 60, timeoutSec: 10, expectedStatus: 200, enabled: true, down: false, changedAt: at(2, 14), createdAt: at(30) },
     ],
+    passwordManagers: ["protonpass"],
     restores: [{ id: "rs-1", backupId: "bk-db-3", serviceId: "db", status: "succeeded", createdAt: at(3, 11), finishedAt: at(3, 11) }],
     domains: [{ id: "dom-1", name: "acme.example", proxied: false, createdAt: at(30) }],
     registries: [{ id: "reg-1", host: "ghcr.io", username: "acme-bot", password: "********", createdAt: at(20) }],
