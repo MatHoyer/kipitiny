@@ -95,6 +95,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("POST /api/services/{id}/data/collections/{collection}/changes", a.docChanges)
 	mux.HandleFunc("GET /api/services/{id}/data/keys", a.redisScan)
 	mux.HandleFunc("GET /api/services/{id}/data/key", a.redisGet)
+	mux.HandleFunc("POST /api/services/{id}/data/key/changes", a.keyChanges)
 	mux.HandleFunc("POST /api/services/{id}/data/console", a.dataConsole)
 	mux.HandleFunc("GET /api/services/{id}/files", a.listVolumeFiles)
 	mux.HandleFunc("GET /api/services/{id}/files/content", a.readVolumeFile)

@@ -201,3 +201,20 @@ func (a *API) docChanges(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, res)
 }
+
+func (a *API) keyChanges(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Key     string          `json:"key"`
+		Changes core.KeyChanges `json:"changes"`
+		Apply   bool            `json:"apply"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	res, err := a.core.ApplyKeyChanges(r.Context(), r.PathValue("id"), body.Key, body.Changes, body.Apply)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}

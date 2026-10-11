@@ -29,6 +29,8 @@ export type GridEdit = {
   onEdit: (row: number, col: number, value: Cell) => void;
   /** Marks a row for deletion or takes the mark back; drops a new row. */
   onDelete: (row: number) => void;
+  /** Cells can hold NULL (SQL): the row's dialog offers it. */
+  nulls?: boolean;
 };
 
 const display = (v: Cell) => (v === undefined ? "DEFAULT" : v === null ? "NULL" : v);
@@ -207,6 +209,7 @@ export function DataTable({
               isCut={(j) => cut.has(`${open}:${j}`)}
               edit={
                 edit && {
+                  nulls: edit.nulls ?? false,
                   state: edit.state(open),
                   was: (j) => edit.was(open, j),
                   locked: (j) => edit.locked(open, j),
@@ -262,6 +265,7 @@ function CellInput({ value, onDone }: { value: Cell; onDone: (value: Cell, move?
 }
 
 type RowEdit = {
+  nulls: boolean;
   state: "new" | "deleted" | undefined;
   was: (col: number) => { value: Cell } | undefined;
   locked: (col: number) => string | undefined;
@@ -300,7 +304,7 @@ function RowDetail({ columns, row, title, isCut, edit }: { columns: DataColumn[]
               </dt>
               <dd className="flex min-w-0 items-start gap-2 font-mono text-xs">
                 {editable && !locked ? (
-                  <FieldInput value={v} isNew={edit.state === "new"} nullable={!c.required && !c.primaryKey} onEdit={(value) => edit.onEdit(j, value)} />
+                  <FieldInput value={v} isNew={edit.state === "new"} nullable={edit.nulls && !c.required && !c.primaryKey} onEdit={(value) => edit.onEdit(j, value)} />
                 ) : (
                   <span className="min-w-0 flex-1 break-all whitespace-pre-wrap">
                     {v === null || v === undefined ? <span className="text-muted-foreground/70">{display(v)}</span> : prettyValue(v, cut)}

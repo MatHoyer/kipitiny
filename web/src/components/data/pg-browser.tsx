@@ -206,6 +206,7 @@ function TableView({
     : loaded;
   const edit: GridEdit | undefined = write
     ? {
+        nulls: true,
         state: (i) => (i < nNew ? "new" : pending.deletes[keyOf(loaded[i - nNew])] ? "deleted" : undefined),
         was: (i, j) => {
           if (i < nNew) return undefined;

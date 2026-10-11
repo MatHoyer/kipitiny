@@ -750,6 +750,19 @@ export type DocChanges = {
   updates?: { id: string; set: Record<string, string>; unset: string[]; was: Record<string, string | null> }[];
   inserts?: string[];
 };
+/**
+ * Edits to a Redis key; items as RedisValue gives them. type is the key's as loaded. delete removes the key, alone;
+ * create makes a new key of type from inserts. A list appends its inserts (their index is ignored); a stream's
+ * entries can only be deleted.
+ */
+export type KeyChanges = {
+  type: string;
+  create?: boolean;
+  delete?: boolean;
+  edits?: { item: string[]; set: string[] }[];
+  deletes?: string[][];
+  inserts?: string[][];
+};
 /** The statements a save runs, in order; applied is false for a preview. */
 export type ChangeResult = { statements: string[]; applied: boolean };
 
@@ -1004,6 +1017,8 @@ export const api = {
     ),
   docChanges: (serviceId: string, database: string, collection: string, changes: DocChanges, apply: boolean) =>
     request<ChangeResult>(`/services/${serviceId}/data/collections/${encodeURIComponent(collection)}/changes`, json("POST", { database, changes, apply })),
+  keyChanges: (serviceId: string, key: string, changes: KeyChanges, apply: boolean) =>
+    request<ChangeResult>(`/services/${serviceId}/data/key/changes`, json("POST", { key, changes, apply })),
   redisScan: (serviceId: string, cursor: string, pattern: string) =>
     request<RedisKeys>(`/services/${serviceId}/data/keys?${new URLSearchParams({ cursor, pattern })}`),
   redisGet: (serviceId: string, key: string, cursor = "0") =>
