@@ -50,7 +50,7 @@ order: 3
   - **Add** creates a project or a network, and the **+** on a project adds a
     service or database to it.
 - Health, uptime checks and notifications: see [Monitoring](/docs/monitoring).
-- **Renaming** (Settings › Name) keeps everything else: volumes, backups,
+- **Renaming** (Settings › General) keeps everything else: volumes, backups,
   deploy history and the project network are tied to IDs, and nothing restarts.
   Containers are renamed in place. A renamed service also keeps answering to its
   old name on the project network until its next deploy, so update the apps
@@ -69,7 +69,7 @@ several apps sharing one database:
 
 1. *Infrastructure › Networks* › **Create network**, on the server the projects
    run on (only services on that server can join it).
-2. In each service's *Settings › Networks*, tick the network and save (or
+2. In each service's *Settings › Networking*, tick the network and save (or
    draw a line from the service to the network on the **Map**). Running
    containers join or leave it right away; nothing restarts, and new replicas
    join it too.

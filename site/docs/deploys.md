@@ -65,6 +65,9 @@ repository, so a deploy token can't run another image; once deployed, the
 service keeps it. The same is `POST /api/services/<id>/deploy` with
 `{"tag": "…", "commit": "…"}`, or the MCP `deploy` tool's `tag`.
 
+An app's *Deployments* tab has this step ready to copy, with its URL and
+service filled in: **Deploy from CI**.
+
 Pulled images are pinned to their digest (`name:tag@sha256:…`): replicas the
 reconciler recreates and rollbacks run the image that was deployed, even if the
 tag moved since. Each deployment records who triggered it (user or token)

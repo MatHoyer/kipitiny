@@ -7,6 +7,7 @@ import { SaveBar } from "@/components/save-bar";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingTextarea } from "@/components/ui/floating-textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Applies } from "@/components/service-settings/parts";
 import { api, type Maintenance, type Service } from "../api";
 
 // CodeMirror and its HTML, CSS and JS modes load only for custom pages.
@@ -91,7 +92,7 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
   };
   return (
     <Section
-      title="Maintenance"
+      title={<Applies title="Maintenance" when="now" />}
       description={
         <>
           Visitors of <Mono>{svc.domain}</Mono> get this page (503, so search engines come back later) while no replica can answer: stopped,

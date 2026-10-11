@@ -10,48 +10,45 @@ import {
   Globe,
   Layers,
   Play,
-  Plus,
   RefreshCw,
   RotateCcw,
   Rocket,
   Square,
   SquareTerminal,
   Trash2,
+  Workflow,
 } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { portLabel } from "@/components/reach";
-import { ServiceIcon, useServiceLogos, type Logos } from "@/components/service-icon";
-import { FloatingSelect } from "@/components/ui/floating-select";
-import { CheckboxField, CopyButton, DangerZone, Empty, EmptyState, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
-import { BasicAuthUsers, type BasicAuthRow } from "@/components/basic-auth-users";
+import { ServiceIcon } from "@/components/service-icon";
+import { CopyButton, DangerZone, Empty, EmptyState, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DataTab } from "@/components/data/data-tab";
-import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { DeploymentLogView, LiveLogs } from "@/components/logs";
-import { RenameCard } from "@/components/rename-card";
 import { SaveBar } from "@/components/save-bar";
 import { UptimeSection } from "@/components/uptime";
-import { MaintenanceCard } from "@/components/maintenance";
 import { ServiceUsageSection, UsageGrid, useServiceStats } from "@/components/usage";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingTextarea } from "@/components/ui/floating-textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FilesTab } from "@/components/files/files-tab";
 import { useTab } from "@/hooks/use-tab";
 import { byDay, envMap, envRows, envSecrets, formatBytes, formatCpu, formatDuration, sameEnv, serviceState, timeAgo, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { api, canBackup, databasePorts, databaseUrlKey, httpRouted, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type Middlewares, type MiddlewaresInput, type PublishedPort, type Service as ServiceT, type Volume } from "../api";
+import { api, canBackup, databasePorts, databaseUrlKey, httpRouted, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type Service as ServiceT } from "../api";
 import { BackupList } from "./BackupList";
 import { Schedules } from "./Schedules";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ServiceSettings } from "@/components/service-settings";
+import { dnsOnlyHint } from "@/components/service-settings/networking";
+import { GitManagedNote } from "@/components/service-settings/parts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ComposeDialog } from "@/components/compose-dialog";
 import { useProjectGit } from "@/components/git-source";
@@ -102,14 +99,6 @@ export function Service() {
     meta: { error: "Couldn't change the service state" },
     mutationFn: (a: "start" | "stop" | "restart") => api.serviceAction(id, a),
     onSuccess: (svc) => qc.setQueryData(["service", id], svc),
-  });
-  const rename = useMutation({
-    meta: { error: "Couldn't rename the service" },
-    mutationFn: (name: string) => api.renameService(id, name),
-    onSuccess: (svc) => {
-      qc.setQueryData(["service", id], svc);
-      qc.invalidateQueries({ queryKey: ["services", svc.projectId] });
-    },
   });
   const remove = useMutation({
     meta: { error: "Couldn't delete the service" },
@@ -171,9 +160,9 @@ export function Service() {
           <p role="status" className="flex flex-wrap items-center gap-x-2 text-sm text-amber-600 dark:text-amber-400">
             <Construction className="size-4" />
             Maintenance mode: visitors get the maintenance page.
-            <button type="button" className="underline underline-offset-4" onClick={() => setTab("settings")}>
+            <Link to="?tab=settings&section=maintenance" replace className="underline underline-offset-4">
               Settings
-            </button>
+            </Link>
           </p>
         )}
         {svc.dns && svc.dns.state !== "synced" && (
@@ -303,60 +292,42 @@ export function Service() {
               <BackupsCard serviceId={svc.id} kind={svc.kind} name={project.data ? `${project.data.name}/${svc.name}` : svc.name} />
             </TabsContent>
           )}
-          <TabsContent value="settings" className="flex flex-col gap-6">
-            {gitManaged && <GitManagedNote path={git.data!.path} />}
-            <RenameCard
-              key={`rename-${svc.name}`}
-              name={svc.name}
-              description={
-                isDb
-                  ? "Nothing restarts. The apps using it get their references updated and are redeployed."
-                  : "Nothing restarts. Until its next deploy, other services can still reach it by its old name."
+          <TabsContent value="settings">
+            <ServiceSettings
+              svc={svc}
+              projectName={project.data?.name}
+              gitPath={git.data?.path}
+              danger={
+                <DangerZone
+                  description={
+                    isDb
+                      ? "Deleting the database destroys its data volume."
+                      : hasData
+                        ? "Deleting the service removes its containers and destroys its volumes."
+                        : "Deleting the service removes its containers."
+                  }
+                >
+                  <ConfirmDialog
+                    trigger={
+                      <Button variant="destructive" size="sm" disabled={busy || (gitManaged && !svc.orphaned)}>
+                        <Trash2 data-icon="inline-start" />
+                        {isDb ? "Delete database" : "Delete service"}
+                      </Button>
+                    }
+                    title={isDb ? `Delete database ${svc.name}?` : `Delete service ${svc.name}?`}
+                    description={
+                      isDb
+                        ? "Its data volume will be destroyed."
+                        : hasData
+                          ? "Its containers are removed and its volumes destroyed."
+                          : "Its containers are removed."
+                    }
+                    typeToConfirm={hasData ? svc.name : undefined}
+                    onConfirm={(name) => remove.mutate(name)}
+                  />
+                </DangerZone>
               }
-              disabled={gitManaged}
-              pending={rename.isPending}
-              onRename={(name) => rename.mutate(name)}
             />
-            <fieldset disabled={gitManaged} className="contents">
-              <Settings svc={svc} />
-              {/* Keys reset each card's form when another service opens; siblings need distinct ones. */}
-              {svc.kind === "app" && <PortsCard key={`ports-${svc.id}`} svc={svc} />}
-              {svc.kind === "app" && <HostAccessCard key={`host-${svc.id}`} svc={svc} />}
-              {svc.kind === "app" && <VolumesCard key={`volumes-${svc.id}`} svc={svc} />}
-              {svc.kind === "app" && httpRouted(svc) && <AccessCard key={`access-${svc.id}`} svc={svc} />}
-            </fieldset>
-            {/* Not in the compose file, so git projects set them here too. */}
-            {!svc.hostNetwork && <NetworksCard key={`networks-${svc.id}`} svc={svc} projectName={project.data?.name ?? ""} />}
-            {svc.kind === "app" && httpRouted(svc) && project.data && <MaintenanceCard key={`maintenance-${svc.id}`} svc={svc} projectName={project.data.name} />}
-            {svc.kind === "app" && <DeployFromCICard svc={svc} />}
-            <DangerZone
-              description={
-                isDb
-                  ? "Deleting the database destroys its data volume."
-                  : hasData
-                    ? "Deleting the service removes its containers and destroys its volumes."
-                    : "Deleting the service removes its containers."
-              }
-            >
-              <ConfirmDialog
-                trigger={
-                  <Button variant="destructive" size="sm" disabled={busy || (gitManaged && !svc.orphaned)}>
-                    <Trash2 data-icon="inline-start" />
-                    {isDb ? "Delete database" : "Delete service"}
-                  </Button>
-                }
-                title={isDb ? `Delete database ${svc.name}?` : `Delete service ${svc.name}?`}
-                description={
-                  isDb
-                    ? "Its data volume will be destroyed."
-                    : hasData
-                      ? "Its containers are removed and its volumes destroyed."
-                      : "Its containers are removed."
-                }
-                typeToConfirm={hasData ? svc.name : undefined}
-                onConfirm={(name) => remove.mutate(name)}
-              />
-            </DangerZone>
           </TabsContent>
         </Tabs>
       </PageBody>
@@ -395,680 +366,6 @@ function ContainerRow({ serviceId, container: c }: { serviceId: string; containe
         </CollapsibleContent>
       </li>
     </Collapsible>
-  );
-}
-
-/** The settings form's fields, as saved. */
-const settingsForm = (s: ServiceT) => ({
-  image: s.image,
-  icon: s.icon || AUTO_ICON,
-  domain: s.domain,
-  port: s.port ? String(s.port) : "",
-  replicas: String(s.replicas),
-  memory: s.memoryMb ? String(s.memoryMb) : "",
-  cpus: s.cpus ? String(s.cpus) : "",
-  healthPath: s.healthPath,
-  preDeploy: s.preDeploy,
-  stopGrace: s.stopGraceSeconds ? String(s.stopGraceSeconds) : "",
-});
-
-/** Radix selects can't hold "": this stands for an empty icon. */
-const AUTO_ICON = "auto";
-
-/** Automatic (from the image) or a known logo; an unknown saved icon stays listed. */
-function iconOptions(svc: ServiceT, image: string, { logos }: Logos) {
-  const option = (value: string, icon: string | undefined, label: string) => ({
-    value,
-    label: (
-      <span className="flex items-center gap-2">
-        <ServiceIcon service={{ icon, kind: svc.kind, image: icon ? undefined : image }} className="size-4 shrink-0" />
-        {label}
-      </span>
-    ),
-  });
-  const names = Object.keys(logos);
-  if (svc.icon && !names.includes(svc.icon)) names.push(svc.icon);
-  return [
-    option(AUTO_ICON, undefined, "Automatic, from the image"),
-    ...names.map((name) => option(name, name, logos[name]?.label ?? name)),
-  ];
-}
-
-function Settings({ svc }: { svc: ServiceT }) {
-  const qc = useQueryClient();
-  const isDb = isDatabase(svc.kind);
-  const [form, setForm] = useState(() => settingsForm(svc));
-  const dirty = JSON.stringify(form) !== JSON.stringify(settingsForm(svc));
-  const formId = useId();
-  const logos = useServiceLogos();
-  const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
-
-  const save = useMutation({
-    meta: { error: "Couldn't save the settings" },
-    mutationFn: () =>
-      api.updateService(
-        svc.id,
-        isDb
-          ? { image: form.image.trim(), memoryMb: Number(form.memory) || 0, cpus: Number(form.cpus) || 0 }
-          : {
-              image: form.image.trim(),
-              icon: form.icon === AUTO_ICON ? "" : form.icon,
-              domain: form.domain.trim(),
-              port: Number(form.port) || 0,
-              replicas: Number(form.replicas) || 1,
-              memoryMb: Number(form.memory) || 0,
-              cpus: Number(form.cpus) || 0,
-              healthPath: form.healthPath.trim(),
-              preDeploy: form.preDeploy.trim(),
-              stopGraceSeconds: Number(form.stopGrace) || 0,
-            },
-      ),
-    onSuccess: (updated) => {
-      qc.setQueryData(["service", svc.id], updated);
-      setForm(settingsForm(updated));
-      toast.success("Settings saved", {
-        description: isDb ? "Deploy to apply." : "Replica count applies now; deploy to apply other changes.",
-      });
-    },
-  });
-
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    save.mutate();
-  };
-
-  return (
-    <Section plain>
-      <form id={formId} onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
-        <FloatingInput
-          label="Image"
-          required
-          value={form.image}
-          onChange={set("image")}
-          className="sm:col-span-2"
-          description={imageHints[svc.kind]}
-        />
-        {!isDb && (
-          <>
-            <FloatingSelect
-              label="Icon"
-              value={form.icon}
-              onValueChange={(icon) => setForm({ ...form, icon })}
-              options={iconOptions(svc, form.image, logos)}
-              className="sm:col-span-2"
-            />
-            <DomainField
-              value={form.domain}
-              onChange={(domain) => setForm({ ...form, domain })}
-              note={!Number(form.port) && svc.publishedPorts.length > 0 ? dnsOnlyHint(svc.publishedPorts) : undefined}
-              className="sm:col-span-2"
-            />
-            <FloatingInput
-              label="Port"
-              type="number"
-              min={0}
-              max={65535}
-              value={form.port}
-              onChange={set("port")}
-              description={
-                svc.publishedPorts.length > 0 ? "HTTP port Traefik routes the domain to. Empty: the domain is only for DNS." : undefined
-              }
-            />
-            <FloatingInput
-              label="Replicas"
-              type="number"
-              min={1}
-              max={10}
-              value={form.replicas}
-              onChange={set("replicas")}
-              disabled={svc.publishedPorts.length > 0 || svc.hostNetwork}
-              description={
-                svc.publishedPorts.length > 0
-                  ? "One: two containers can't publish the same port."
-                  : svc.hostNetwork
-                    ? "One: the app runs in the host's network."
-                    : undefined
-              }
-            />
-          </>
-        )}
-        <FloatingInput
-          label="Memory (MB)"
-          type="number"
-          min={0}
-          step={64}
-          value={form.memory}
-          onChange={set("memory")}
-          description={isDb ? undefined : "Empty for no limit."}
-        />
-        <FloatingInput
-          label="CPUs"
-          type="number"
-          min={0}
-          step={0.25}
-          value={form.cpus}
-          onChange={set("cpus")}
-          placeholder="0.5"
-          description="Cores, e.g. 0.5. Empty for no limit."
-        />
-        {!isDb && (
-          <>
-            <FloatingInput
-              label="Health path"
-              value={form.healthPath}
-              onChange={set("healthPath")}
-              placeholder="/healthz"
-              className="sm:col-span-2"
-              description="New replicas get traffic once this answers < 400. Empty: port accepts connections."
-            />
-            <FloatingInput
-              label="Pre-deploy command"
-              value={form.preDeploy}
-              onChange={set("preDeploy")}
-              placeholder="npm run migrate"
-              inputClassName="font-mono"
-              className="sm:col-span-2"
-              description="Runs once (sh -c) before replicas start, e.g. migrations."
-            />
-            <FloatingInput
-              label="Stop grace period (s)"
-              type="number"
-              min={0}
-              max={600}
-              value={form.stopGrace}
-              onChange={set("stopGrace")}
-              placeholder="10"
-              description="Time to exit after SIGTERM before being killed, e.g. to save a game world. Empty: 10 s."
-            />
-          </>
-        )}
-      </form>
-      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setForm(settingsForm(svc))} />
-    </Section>
-  );
-}
-
-/** A domain without an HTTP port only names the server: Traefik doesn't route it. */
-const dnsOnlyHint = (ports: PublishedPort[]) =>
-  `DNS only: connections go straight to ${ports.length > 1 ? "ports" : "port"} ${ports.map((p) => p.hostPort).join(", ")} on the server, not through Traefik.`;
-
-type PortRow = { hostPort: string; containerPort: string; protocol: PublishedPort["protocol"] };
-
-const portRows = (ports: PublishedPort[]): PortRow[] =>
-  ports.map((p) => ({ hostPort: String(p.hostPort), containerPort: String(p.containerPort), protocol: p.protocol }));
-
-/** Host ports bound straight to an app's container, for traffic that isn't HTTP. */
-function PortsCard({ svc }: { svc: ServiceT }) {
-  const qc = useQueryClient();
-  const [rows, setRows] = useState<PortRow[]>(() => portRows(svc.publishedPorts));
-  const dirty = JSON.stringify(rows) !== JSON.stringify(portRows(svc.publishedPorts));
-  const formId = useId();
-  const save = useMutation({
-    meta: { error: "Couldn't save the ports" },
-    mutationFn: () =>
-      api.updateService(svc.id, {
-        publishedPorts: rows.map((r) => ({
-          hostPort: Number(r.hostPort) || 0,
-          containerPort: Number(r.containerPort) || 0,
-          protocol: r.protocol,
-        })),
-        // An app publishing ports runs one replica.
-        ...(rows.length > 0 && svc.replicas !== 1 ? { replicas: 1 } : {}),
-      }),
-    onSuccess: (updated) => {
-      qc.setQueryData(["service", svc.id], updated);
-      setRows(portRows(updated.publishedPorts));
-      toast.success("Ports saved", { description: "Deploy to apply." });
-    },
-  });
-  const set = (i: number, field: keyof PortRow) => (value: string) =>
-    setRows(rows.map((r, j) => (j === i ? { ...r, [field]: value } : r)));
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    save.mutate();
-  };
-
-  return (
-    <Section
-      title="Published ports"
-      description="Ports of the server bound straight to the container, for traffic that isn't HTTP (a game server, MQTT…). The app then runs one replica, and deploys stop the old container before starting the new one: a short downtime. Open the ports in the server's firewall; a Cloudflare tunnel doesn't carry them."
-      actions={
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => setRows([...rows, { hostPort: "", containerPort: "", protocol: "tcp" }])}
-        >
-          <Plus data-icon="inline-start" />
-          Add port
-        </Button>
-      }
-    >
-      {/* Always rendered: the save bar submits it, even to remove the last port. */}
-      <form id={formId} onSubmit={onSubmit} className="space-y-3">
-        {rows.length === 0 && <Empty>No published ports: the app is only reachable through its domain, if any.</Empty>}
-        {rows.map((r, i) => (
-          <div key={i} className="flex items-start gap-2">
-            <FloatingInput
-              label="Host port"
-              required
-              type="number"
-              min={1}
-              max={65535}
-              value={r.hostPort}
-              onChange={(e) => set(i, "hostPort")(e.target.value)}
-              placeholder="25565"
-              className="min-w-0 flex-1"
-              inputClassName="font-mono"
-            />
-            <FloatingInput
-              label="Container port"
-              type="number"
-              min={1}
-              max={65535}
-              value={r.containerPort}
-              onChange={(e) => set(i, "containerPort")(e.target.value)}
-              placeholder={r.hostPort || "same"}
-              className="min-w-0 flex-1"
-              inputClassName="font-mono"
-            />
-            <Select value={r.protocol} onValueChange={set(i, "protocol")}>
-              <SelectTrigger aria-label="Protocol" className="w-24 shrink-0 rounded-xl data-[size=default]:h-14">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="tcp">TCP</SelectItem>
-                <SelectItem value="udp">UDP</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              title="Remove"
-              aria-label={`Remove port ${r.hostPort}`}
-              className="mt-3.5 text-muted-foreground hover:text-destructive"
-              onClick={() => setRows(rows.filter((_, j) => j !== i))}
-            >
-              <Trash2 />
-            </Button>
-          </div>
-        ))}
-      </form>
-      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setRows(portRows(svc.publishedPorts))} label="Save ports" />
-    </Section>
-  );
-}
-
-/** Host network and Docker socket, for agents that report on or manage the server (Beszel, node-exporter…). */
-function HostAccessCard({ svc }: { svc: ServiceT }) {
-  const qc = useQueryClient();
-  const initial = { hostNetwork: svc.hostNetwork, dockerSocket: svc.dockerSocket };
-  const [form, setForm] = useState(initial);
-  const dirty = form.hostNetwork !== initial.hostNetwork || form.dockerSocket !== initial.dockerSocket;
-  const formId = useId();
-  const blocked = form.hostNetwork && (!!svc.domain || svc.publishedPorts.length > 0);
-  const save = useMutation({
-    meta: { error: "Couldn't save host access" },
-    mutationFn: () =>
-      api.updateService(svc.id, {
-        ...form,
-        // An app in the host network runs one replica.
-        ...(form.hostNetwork && svc.replicas !== 1 ? { replicas: 1 } : {}),
-      }),
-    onSuccess: (updated) => {
-      qc.setQueryData(["service", svc.id], updated);
-      setForm({ hostNetwork: updated.hostNetwork, dockerSocket: updated.dockerSocket });
-      toast.success("Host access saved", { description: "Deploy to apply." });
-    },
-  });
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    save.mutate();
-  };
-
-  return (
-    <Section
-      title="Host access"
-      description="For agents that report on or manage the server, such as a Beszel agent. Only give it to images you trust: the Docker socket, even read-only, gives control of the server."
-    >
-      <form id={formId} onSubmit={onSubmit} className="space-y-4">
-        <CheckboxField
-          label="Host network"
-          description="The app shares the server's network: it sees the host's interfaces and listens on its ports directly. No domain, published ports or project network (other services can't reach it by name), one replica, and deploys stop the old container first."
-          checked={form.hostNetwork}
-          onCheckedChange={(v) => setForm({ ...form, hostNetwork: v })}
-        />
-        {blocked && <p className="text-sm text-destructive">Remove the domain and published ports first.</p>}
-        <FloatingSelect
-          label="Docker socket"
-          value={form.dockerSocket || "none"}
-          onValueChange={(v) => setForm({ ...form, dockerSocket: v === "none" ? "" : (v as "ro" | "rw") })}
-          options={[
-            { value: "none", label: "Not mounted" },
-            { value: "ro", label: "Read-only (container stats, e.g. Beszel)" },
-            { value: "rw", label: "Read-write (manages containers)" },
-          ]}
-          description={<>Mounted at <Mono>/var/run/docker.sock</Mono>.</>}
-        />
-      </form>
-      <SaveBar form={formId} dirty={dirty && !blocked} saving={save.isPending} onReset={() => setForm(initial)} label="Save host access" />
-    </Section>
-  );
-}
-
-/** Networks created by hand the service joins, to reach services of other projects. */
-function NetworksCard({ svc, projectName }: { svc: ServiceT; projectName: string }) {
-  const qc = useQueryClient();
-  const networks = useQuery({ queryKey: ["networks"], queryFn: api.networks });
-  const [selected, setSelected] = useState(svc.networks);
-  const dirty = [...selected].sort().join() !== [...svc.networks].sort().join();
-  const formId = useId();
-  const available = networks.data?.filter((n) => n.serverId === svc.serverId) ?? [];
-  const save = useMutation({
-    meta: { error: "Couldn't save the networks" },
-    mutationFn: () => api.setServiceNetworks(svc.id, selected),
-    onSuccess: (updated) => {
-      qc.setQueryData(["service", svc.id], updated);
-      setSelected(updated.networks);
-      toast.success("Networks saved", { description: "Applied to the running containers; nothing restarted." });
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["networks"] }),
-  });
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    save.mutate();
-  };
-  const toggle = (id: string, on: boolean) => setSelected(on ? [...selected, id] : selected.filter((x) => x !== id));
-
-  return (
-    <Section
-      title="Networks"
-      description={
-        <>
-          Its project network is automatic: the project's services reach it as <Mono>{svc.name}</Mono>. On the networks below, services of
-          other projects reach it as <Mono>{`${projectName}-${svc.name}`}</Mono>.
-        </>
-      }
-    >
-      <ErrorText error={networks.error} />
-      <form id={formId} onSubmit={onSubmit} className="space-y-4">
-        {networks.isPending ? (
-          <Loading />
-        ) : available.length === 0 ? (
-          <Empty>
-            No networks created by hand on this server yet: create one in{" "}
-            <Link to="/networks" className="underline">
-              Infrastructure › Networks
-            </Link>
-            .
-          </Empty>
-        ) : (
-          available.map((n) => {
-            const others = n.services.filter((m) => m.id !== svc.id);
-            return (
-              <CheckboxField
-                key={n.id}
-                label={n.name}
-                description={others.length ? `With ${others.map((m) => m.alias).join(", ")}` : "No other services on it yet."}
-                checked={selected.includes(n.id)}
-                onCheckedChange={(v) => toggle(n.id, v)}
-              />
-            );
-          })
-        )}
-      </form>
-      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setSelected(svc.networks)} label="Save networks" />
-    </Section>
-  );
-}
-
-const volumeNameRe = /^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/;
-
-/** Named volumes of an app: kept across deploys, shared by its replicas. */
-function VolumesCard({ svc }: { svc: ServiceT }) {
-  const qc = useQueryClient();
-  const [rows, setRows] = useState<Volume[]>(svc.volumes);
-  const [preBackup, setPreBackup] = useState(svc.preBackup);
-  const dirty = JSON.stringify(rows) !== JSON.stringify(svc.volumes) || preBackup !== svc.preBackup;
-  const formId = useId();
-  const save = useMutation({
-    meta: { error: "Couldn't save the volumes" },
-    mutationFn: () =>
-      api.updateService(svc.id, {
-        volumes: rows.map((v) => ({ name: v.name.trim(), path: v.path.trim() })),
-        preBackup: rows.length > 0 ? preBackup.trim() : "",
-      }),
-    onSuccess: (updated) => {
-      qc.setQueryData(["service", svc.id], updated);
-      setRows(updated.volumes);
-      setPreBackup(updated.preBackup);
-      toast.success("Volumes saved", { description: "Deploy to apply." });
-    },
-  });
-  const reset = () => {
-    setRows(svc.volumes);
-    setPreBackup(svc.preBackup);
-  };
-  const set = (i: number, field: keyof Volume) => (e: { target: { value: string } }) =>
-    setRows(rows.map((v, j) => (j === i ? { ...v, [field]: e.target.value } : v)));
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    save.mutate();
-  };
-
-  return (
-    <Section
-      title="Volumes"
-      description="Data that outlives deploys, e.g. uploads. Every replica mounts the same volume. A volume removed here keeps its data until the service is deleted."
-      actions={
-        <Button type="button" size="sm" variant="outline" onClick={() => setRows([...rows, { name: "", path: "" }])}>
-          <Plus data-icon="inline-start" />
-          Add volume
-        </Button>
-      }
-    >
-      {/* Always rendered: the save bar submits it, even to remove the last volume. */}
-      <form id={formId} onSubmit={onSubmit} className="space-y-3">
-        {rows.length === 0 && <Empty>No volumes: files written in the containers are lost on every deploy.</Empty>}
-        {rows.map((v, i) => {
-          const name = v.name.trim();
-          const badName = name !== "" && !volumeNameRe.test(name);
-          const isNew = name !== "" && !svc.volumes.some((o) => o.name === name);
-          return (
-            <div key={i} className="flex items-start gap-2">
-              <FloatingInput
-                label="Name"
-                required
-                value={v.name}
-                onChange={set(i, "name")}
-                placeholder="uploads"
-                className="w-40 shrink-0 sm:w-56"
-                inputClassName="font-mono"
-                aria-invalid={badName}
-                description={badName ? "Lowercase letters, digits and dashes." : isNew ? "New volume, created empty." : undefined}
-              />
-              <FloatingInput
-                label="Mount path"
-                required
-                value={v.path}
-                onChange={set(i, "path")}
-                placeholder="/app/uploads"
-                className="min-w-0 flex-1"
-                inputClassName="font-mono"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                title="Remove"
-                aria-label={`Remove ${v.name || "volume"}`}
-                className="mt-3.5 text-muted-foreground hover:text-destructive"
-                onClick={() => setRows(rows.filter((_, j) => j !== i))}
-              >
-                <Trash2 />
-              </Button>
-            </div>
-          );
-        })}
-        {rows.length > 0 && (
-          <FloatingInput
-            label="Pre-backup command"
-            value={preBackup}
-            onChange={(e) => setPreBackup(e.target.value)}
-            placeholder="./bin/flush"
-            inputClassName="font-mono"
-            description="Runs (sh -c) in a running replica before each backup of the volumes, e.g. to flush to disk. Optional."
-          />
-        )}
-      </form>
-      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={reset} label="Save volumes" />
-    </Section>
-  );
-}
-
-type AccessForm = {
-  users: BasicAuthRow[];
-  allow: string;
-  average: string;
-  burst: string;
-  headers: { name: string; value: string }[];
-};
-
-function accessForm(m: Middlewares): AccessForm {
-  return {
-    users: (m.basicAuth ?? []).map((u) => ({ name: u.name, password: u.ref ?? "", stored: true })),
-    allow: (m.ipAllowList ?? []).join("\n"),
-    average: m.rateLimit ? String(m.rateLimit.average) : "",
-    burst: m.rateLimit ? String(m.rateLimit.burst) : "",
-    headers: Object.entries(m.headers ?? {})
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, value]) => ({ name, value })),
-  };
-}
-
-function accessInput(f: AccessForm): MiddlewaresInput {
-  const average = Number(f.average);
-  return {
-    basicAuth: f.users.map((u) => ({ name: u.name.trim(), password: u.password.trim() })),
-    ipAllowList: f.allow.split(/[\s,]+/).filter(Boolean),
-    rateLimit: f.average.trim() ? { average, burst: f.burst.trim() ? Number(f.burst) : average } : null,
-    headers: Object.fromEntries(f.headers.filter((h) => h.name.trim()).map((h) => [h.name.trim(), h.value.trim()])),
-  };
-}
-
-/** Traefik middlewares on the public domain: basic auth, IP allowlist, rate limit, response headers. */
-function AccessCard({ svc }: { svc: ServiceT }) {
-  const qc = useQueryClient();
-  const [form, setForm] = useState(() => accessForm(svc.middlewares));
-  const dirty = JSON.stringify(form) !== JSON.stringify(accessForm(svc.middlewares));
-  const formId = useId();
-  const save = useMutation({
-    meta: { error: "Couldn't save the access settings" },
-    mutationFn: () => api.updateService(svc.id, { middlewares: accessInput(form) }),
-    onSuccess: (updated) => {
-      qc.setQueryData(["service", svc.id], updated);
-      setForm(accessForm(updated.middlewares));
-      toast.success("Access settings saved", { description: "Deploy to apply." });
-    },
-  });
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    save.mutate();
-  };
-  const setHeader = (i: number, patch: Partial<AccessForm["headers"][number]>) =>
-    setForm({ ...form, headers: form.headers.map((h, j) => (j === i ? { ...h, ...patch } : h)) });
-
-  return (
-    <Section title="Access" description={<>Applied by Traefik to every request for <Mono>{svc.domain}</Mono>, from the next deploy.</>}>
-      <form id={formId} onSubmit={onSubmit} className="space-y-6">
-        <BasicAuthUsers rows={form.users} onChange={(users) => setForm({ ...form, users })} />
-
-        <FloatingTextarea
-          label="IP allowlist"
-          value={form.allow}
-          onChange={(e) => setForm({ ...form, allow: e.target.value })}
-          placeholder={"203.0.113.7\n10.0.0.0/8"}
-          className="[&_textarea]:font-mono"
-          description="One IP or CIDR range per line. Empty allows everyone; otherwise other clients get 403."
-        />
-
-        <div className="space-y-3">
-          <div>
-            <h3 className="text-sm font-medium">Rate limit</h3>
-            <p className="text-sm text-muted-foreground">Requests per second per client IP; over the limit, clients get 429. Empty means unlimited.</p>
-          </div>
-          <div className="flex gap-2">
-            <FloatingInput
-              label="Requests / s"
-              type="number"
-              min={1}
-              value={form.average}
-              onChange={(e) => setForm({ ...form, average: e.target.value })}
-              className="w-40"
-            />
-            <FloatingInput
-              label="Burst"
-              type="number"
-              min={1}
-              value={form.burst}
-              onChange={(e) => setForm({ ...form, burst: e.target.value })}
-              placeholder={form.average || "Same as the rate"}
-              className="w-40"
-              disabled={!form.average.trim()}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-medium">Response headers</h3>
-              <p className="text-sm text-muted-foreground">
-                Set on every response, e.g. <Mono>X-Robots-Tag: noindex</Mono> for staging. An empty value removes the header.
-              </p>
-            </div>
-            <Button type="button" size="sm" variant="outline" onClick={() => setForm({ ...form, headers: [...form.headers, { name: "", value: "" }] })}>
-              <Plus data-icon="inline-start" />
-              Add header
-            </Button>
-          </div>
-          {form.headers.map((h, i) => (
-            <div key={i} className="flex items-start gap-2">
-              <FloatingInput
-                label="Header"
-                required
-                value={h.name}
-                onChange={(e) => setHeader(i, { name: e.target.value })}
-                placeholder="X-Robots-Tag"
-                className="w-40 shrink-0 sm:w-56"
-                inputClassName="font-mono"
-              />
-              <FloatingInput
-                label="Value"
-                value={h.value}
-                onChange={(e) => setHeader(i, { value: e.target.value })}
-                placeholder="noindex"
-                className="min-w-0 flex-1"
-                inputClassName="font-mono"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                title="Remove"
-                aria-label={`Remove ${h.name || "header"}`}
-                className="mt-3.5 text-muted-foreground hover:text-destructive"
-                onClick={() => setForm({ ...form, headers: form.headers.filter((_, j) => j !== i) })}
-              >
-                <Trash2 />
-              </Button>
-            </div>
-          ))}
-        </div>
-      </form>
-      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setForm(accessForm(svc.middlewares))} label="Save access" />
-    </Section>
   );
 }
 
@@ -1177,7 +474,8 @@ function BackupsCard({ serviceId, name, kind }: { serviceId: string; name: strin
   );
 }
 
-function DeployFromCICard({ svc }: { svc: ServiceT }) {
+/** The CI step that deploys the tag it just pushed. */
+function DeployFromCIDialog({ svc }: { svc: ServiceT }) {
   const repo = imageRepo(svc.image);
   const step = [
     "- name: Deploy",
@@ -1188,22 +486,29 @@ function DeployFromCICard({ svc }: { svc: ServiceT }) {
     "    --tag sha-${{ github.sha }} --commit ${{ github.sha }}",
   ].join("\n");
   return (
-    <Section
-      title="Deploy from CI"
-      description={
-        <>
-          Build and push <Mono>{repo}</Mono> in CI, then deploy the tag it pushed with a <Mono>deploy</Mono> token (Access ›
-          API tokens & MCP). The service keeps that tag; the step fails if the deployment does.
-        </>
-      }
-    >
-      <div className="relative">
-        <pre className={cn(terminal, "pr-10")}>{step}</pre>
-        <div className="absolute top-1.5 right-1.5 text-neutral-200">
-          <CopyButton value={step} label="Copy step" />
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Workflow data-icon="inline-start" />
+          Deploy from CI
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Deploy from CI</DialogTitle>
+          <DialogDescription>
+            Build and push <Mono>{repo}</Mono> in CI, then deploy the tag it pushed with a <Mono>deploy</Mono> token (Access › API
+            tokens & MCP). The service keeps that tag; the step fails if the deployment does.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="relative">
+          <pre className={cn(terminal, "pr-10")}>{step}</pre>
+          <div className="absolute top-1.5 right-1.5 text-neutral-200">
+            <CopyButton value={step} label="Copy step" />
+          </div>
         </div>
-      </div>
-    </Section>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1226,14 +531,6 @@ function triggeredBy(t?: string) {
   if (kind === "token") return `token ${name}`;
   return name;
 }
-
-/** What changing a database's image can and can't do. */
-const imageHints: Partial<Record<ServiceT["kind"], string>> = {
-  postgres: "Minor upgrades only; major versions need a dump and restore.",
-  mysql: "Upgrades apply on start; going back to an older version needs a dump and restore.",
-  mariadb: "Upgrades apply on start; going back to an older version needs a dump and restore.",
-  mongodb: "One major version at a time, forward only; older versions can't read newer data.",
-};
 
 function ConnectionCard({ serviceId, host, kind }: { serviceId: string; host: string; kind: DatabaseKind }) {
   const [conn, setConn] = useState<Connection | null>(null);
@@ -1308,11 +605,13 @@ function Deployments({
     },
   });
 
+  const ci = svc.kind === "app" && <DeployFromCIDialog svc={svc} />;
   if (deployments.length === 0)
-    return <EmptyState icon={Rocket} title="No deployments yet" description="Deploy the service to see its builds and logs here." />;
+    return <EmptyState icon={Rocket} title="No deployments yet" description="Deploy the service to see its builds and logs here." action={ci} />;
 
   return (
     <div className="space-y-6">
+      {ci && <div className="flex justify-end">{ci}</div>}
       {byDay(deployments).map(([day, rows]) => (
         <section key={day} className="space-y-2">
           <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{day}</h3>
@@ -1526,15 +825,5 @@ function ServiceTerminal({ svc }: { svc: ServiceT }) {
         </Suspense>
       )}
     </Section>
-  );
-}
-
-/** Says why a git project's service settings are read-only. */
-function GitManagedNote({ path }: { path: string }) {
-  return (
-    <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
-      This project follows <Mono>{path}</Mono> in a git repository: change the service there. Deploying another image tag from CI still
-      works until the file changes this service.
-    </p>
   );
 }

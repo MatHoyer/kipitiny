@@ -6,6 +6,9 @@ import { cn } from "@/lib/utils";
 
 const HostContext = createContext<HTMLElement | null>(null);
 
+/** Told whether each save bar's form has unsaved changes, e.g. to mark the tab holding it. */
+export const DirtyContext = createContext<((form: string, dirty: boolean) => void) | null>(null);
+
 /**
  * Where save bars float: stuck to the bottom of the scrolling content, so they
  * stay centered on it and stack when several forms are dirty.
@@ -40,6 +43,11 @@ export function SaveBar({
   label?: string;
 }) {
   const host = useContext(HostContext);
+  const report = useContext(DirtyContext);
+  useEffect(() => {
+    report?.(form, dirty);
+    return () => report?.(form, false);
+  }, [report, form, dirty]);
   // Kept mounted after the form gets clean, until the exit animation ends.
   const [shown, setShown] = useState(dirty);
   useEffect(() => {
