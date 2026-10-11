@@ -6,13 +6,17 @@ name: kipitiny-site
 services:
   homepage:
     image: ghcr.io/mathoyer/kipitiny-homepage:0.24.2
-    mem_limit: 64m
-    expose: ["80"]
+    expose:
+      - "80"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
     x-kipitiny:
       domain: kipitiny.mathieuhoyer.fr
       icon: nginx
-      uptime: {path: /, interval: 1m}
       middlewares:
         headers:
-          X-Content-Type-Options: nosniff
           Referrer-Policy: strict-origin-when-cross-origin
+          X-Content-Type-Options: nosniff
+      uptime: {}
