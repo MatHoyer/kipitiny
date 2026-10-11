@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { formatBytes, formatDateTime, formatDuration, timeAgo } from "@/lib/format";
 import { api, type Backup as BackupT, type DatabaseKind } from "../api";
-import { BackupIcon, backupTitle } from "./BackupList";
+import { BackupIcon, StorageName, backupTitle } from "./BackupList";
 
 /** One backup: what it holds, where it is, whether it restores, and its restores. */
 export function Backup() {
@@ -178,7 +178,7 @@ export function Backup() {
             )}
             <Detail label="Target">
               <Link className="hover:underline" to="/storage">
-                {target?.name ?? "deleted target"}
+                <StorageName target={target} className="[&>svg]:size-3.5" />
               </Link>
             </Detail>
             {b.image && (
