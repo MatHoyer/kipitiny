@@ -59,6 +59,11 @@ export function RedisBrowser({ serviceId }: { serviceId: string }) {
     <>
       <div className="flex h-12 shrink-0 items-center gap-1 border-b px-2">
         <span className="flex-1 px-1 text-sm font-medium">Keys</span>
+        {write && (
+          <Button variant="ghost" size="icon-xs" title="New key" onClick={() => confirm(() => setCreating(true))}>
+            <Plus />
+          </Button>
+        )}
         <Button variant="ghost" size="icon-xs" title="Rescan" onClick={() => keys.refetch()}>
           <RefreshCw className={cn(keys.isFetching && "animate-spin")} />
         </Button>
@@ -115,11 +120,6 @@ export function RedisBrowser({ serviceId }: { serviceId: string }) {
       description="You can then add keys, and edit, add and delete items or whole keys. Nothing is written until you review the commands and save; only a restore from a backup undoes a save."
     />
   );
-  const newKey = write && (
-    <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
-      <Plus /> Key
-    </Button>
-  );
   const dialog = (
     <NewKeyDialog
       open={creating}
@@ -141,15 +141,12 @@ export function RedisBrowser({ serviceId }: { serviceId: string }) {
         toolbar={
           <>
             <SidebarToggle open={sidebar} onToggle={() => setSidebar(!sidebar)} />
-            <span className="ml-auto flex items-center gap-1.5">
-              {newKey}
-              {writeSwitch}
-            </span>
+            <span className="ml-auto flex items-center gap-1.5">{writeSwitch}</span>
             {dialog}
           </>
         }
       >
-        <p className="p-6 text-center text-sm text-muted-foreground">{keys.isPending ? "" : write ? "No keys yet: + Key adds one." : "Nothing to show."}</p>
+        <p className="p-6 text-center text-sm text-muted-foreground">{keys.isPending ? "" : write ? "No keys yet: + in the sidebar adds one." : "Nothing to show."}</p>
       </BrowserShell>
     );
   }
@@ -174,7 +171,6 @@ export function RedisBrowser({ serviceId }: { serviceId: string }) {
           {dialog}
         </>
       }
-      newKey={newKey}
     />
   );
 }
@@ -421,7 +417,6 @@ function ValueView({
   sidebarOpen,
   toolbarStart,
   toolbarEnd,
-  newKey,
   write: writeAllowed,
 }: {
   serviceId: string;
@@ -432,7 +427,6 @@ function ValueView({
   toolbarStart: React.ReactNode;
   /** The write switch, just before Reload. */
   toolbarEnd: React.ReactNode;
-  newKey: React.ReactNode;
   write: boolean;
 }) {
   const pages = useInfiniteQuery({
@@ -553,7 +547,6 @@ function ValueView({
             </span>
           )}
           <span className="ml-auto flex flex-wrap items-center gap-1.5">
-            {newKey}
             {write && type !== "string" && type !== "stream" && !pending.deleteKey && (
               <Button variant="outline" size="sm" onClick={() => setPending((p) => ({ ...p, inserts: [{ id: ++seq.current, item: newItem[type] }, ...p.inserts] }))}>
                 <Plus /> Item
