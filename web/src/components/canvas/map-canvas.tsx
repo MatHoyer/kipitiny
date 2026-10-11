@@ -12,7 +12,7 @@ import { NewProjectDialog } from "@/routes/Projects";
 import { CreateNetworkForm } from "@/routes/settings/Networks";
 import { cn } from "@/lib/utils";
 import { api, type CanvasPoint, type ServerTopology } from "@/api";
-import { buildGraph, fitFrames, type EdgeKind, type MapNode } from "./build";
+import { buildGraph, fitFrames, layoutKey, type EdgeKind, type MapNode } from "./build";
 import { useCanvasEdits } from "./edit";
 import "./canvas.css";
 import { nodeTypes } from "./nodes";
@@ -20,10 +20,11 @@ import { NodePanel } from "./panel";
 
 /**
  * The map as a canvas: pan, zoom, drag nodes (positions are saved for every
- * user), click one for its details. projectView keeps only what a project's
- * map needs (no manager; ingress only if something is public).
+ * user), click one for its details. With projectId, it keeps only what that
+ * project's map needs (no manager; ingress only if something is public), its
+ * frame, ingress and networks placed apart from the global map.
  */
-export default function MapCanvas(props: { servers: ServerTopology[]; projectView?: boolean; className?: string }) {
+export default function MapCanvas(props: { servers: ServerTopology[]; projectId?: string; className?: string }) {
   return (
     <ReactFlowProvider>
       <Flow {...props} />
@@ -31,7 +32,7 @@ export default function MapCanvas(props: { servers: ServerTopology[]; projectVie
   );
 }
 
-function Flow({ servers, projectView, className }: { servers: ServerTopology[]; projectView?: boolean; className?: string }) {
+function Flow({ servers, projectId, className }: { servers: ServerTopology[]; projectId?: string; className?: string }) {
   const qc = useQueryClient();
   const { resolvedTheme } = useTheme();
   const layout = useQuery({ queryKey: ["canvas"], queryFn: api.canvasLayout });
@@ -63,14 +64,14 @@ function Flow({ servers, projectView, className }: { servers: ServerTopology[]; 
     setNodes((prev) => {
       const current = new Map(prev.map((n) => [n.id, n.position]));
       const picked = new Set(prev.filter((n) => n.selected).map((n) => n.id));
-      const built = buildGraph(servers, saved, current, { projectView }).nodes.map((n) => ({ ...n, selected: picked.has(n.id) }));
+      const built = buildGraph(servers, saved, current, { projectId }).nodes.map((n) => ({ ...n, selected: picked.has(n.id) }));
       return fitFrames(built).nodes;
     });
     setEdges((prev) => {
       const picked = new Set(prev.filter((e) => e.selected).map((e) => e.id));
-      return buildGraph(servers, saved, new Map(), { projectView }).edges.map((e) => ({ ...e, selected: picked.has(e.id) }));
+      return buildGraph(servers, saved, new Map(), { projectId }).edges.map((e) => ({ ...e, selected: picked.has(e.id) }));
     });
-  }, [servers, saved, projectView, setNodes, setEdges]);
+  }, [servers, saved, projectId, setNodes, setEdges]);
 
   // Save what was dragged, and what refitting its frames moved.
   const onDragStop: OnNodeDrag<MapNode> = (_, __, dragged) => {
@@ -79,7 +80,7 @@ function Flow({ servers, projectView, className }: { servers: ServerTopology[]; 
     setNodes(fitted);
     const byId = new Map(fitted.map((n) => [n.id, n]));
     const positions: Record<string, CanvasPoint> = {};
-    for (const id of [...dragged.map((n) => n.id), ...moved]) positions[id] = byId.get(id)!.position;
+    for (const id of [...dragged.map((n) => n.id), ...moved]) positions[layoutKey(id, projectId)] = byId.get(id)!.position;
     save.mutate(positions);
   };
 
@@ -145,7 +146,7 @@ function Flow({ servers, projectView, className }: { servers: ServerTopology[]; 
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {!projectView && (
+              {!projectId && (
                 <DropdownMenuItem onSelect={() => setAdding("project")}>
                   <FolderPlus />
                   Project

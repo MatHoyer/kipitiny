@@ -242,7 +242,7 @@ function ProjectMap({ projectId }: { projectId: string }) {
   if (!topology.data) return <Loading />;
   return (
     <Suspense fallback={<Loading />}>
-      <MapCanvas servers={topology.data.servers} projectView className="h-[70vh] min-h-[28rem]" />
+      <MapCanvas servers={topology.data.servers} projectId={projectId} className="h-[70vh] min-h-[28rem]" />
     </Suspense>
   );
 }

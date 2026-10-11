@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -11,7 +12,9 @@ import (
 // The map canvas lays nodes out by itself; where someone drags one is kept
 // here, shared by every user. Nodes are "<kind>:<id>": a server's own nodes
 // (server, internet, tunnel, traefik, manager) take the server ID, the
-// others their project, service or network ID.
+// others their project, service or network ID. A project's own map places
+// its frame, the ingress and the networks apart from the global map, as
+// "in:<project id>/<node>"; services keep one position, inside their frame.
 
 // Point is a node's position, relative to its parent frame if any.
 type Point struct {
@@ -59,6 +62,16 @@ func (c *Core) canvasNodes(ctx context.Context) (map[string]bool, error) {
 	return known, nil
 }
 
+// knownNode tells whether a node key names something that exists: a node
+// of the global map, or one of a project's map other than a service.
+func knownNode(known map[string]bool, node string) bool {
+	if view, ok := strings.CutPrefix(node, "in:"); ok {
+		project, rest, ok := strings.Cut(view, "/")
+		return ok && known["project:"+project] && known[rest] && !strings.HasPrefix(rest, "svc:")
+	}
+	return known[node]
+}
+
 // CanvasLayout returns the saved positions of the nodes that still exist.
 func (c *Core) CanvasLayout(ctx context.Context) (map[string]Point, error) {
 	known, err := c.canvasNodes(ctx)
@@ -71,7 +84,7 @@ func (c *Core) CanvasLayout(ctx context.Context) (map[string]Point, error) {
 	}
 	out := make(map[string]Point, len(ps))
 	for _, p := range ps {
-		if known[p.Node] {
+		if knownNode(known, p.Node) {
 			out[p.Node] = Point{X: p.X, Y: p.Y}
 		}
 	}
@@ -90,7 +103,7 @@ func (c *Core) SaveCanvasLayout(ctx context.Context, positions map[string]Point)
 	}
 	ps := make([]store.CanvasPosition, 0, len(positions))
 	for node, p := range positions {
-		if !known[node] {
+		if !knownNode(known, node) {
 			return fmt.Errorf("%w: unknown node %q", ErrInvalid, node)
 		}
 		if !finite(p.X) || !finite(p.Y) || math.Abs(p.X) > 1e6 || math.Abs(p.Y) > 1e6 {
@@ -126,7 +139,7 @@ func (c *Core) staleCanvasNodes(ctx context.Context, known map[string]bool) ([]s
 	}
 	var stale []string
 	for _, p := range ps {
-		if !known[p.Node] {
+		if !knownNode(known, p.Node) {
 			stale = append(stale, p.Node)
 		}
 	}
