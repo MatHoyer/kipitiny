@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronLeft, ChevronRight, ChevronsLeft, Download, ListFilter, Plus, RefreshCw, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ChevronsLeft, Download, FolderOpen, ListFilter, Plus, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { ErrorText, Loading } from "@/components/common";
@@ -135,20 +135,31 @@ export function PgBrowser({ serviceId, database, defaultSchema, dialect }: { ser
       {newTable}
       <nav aria-label="Tables" className="flex-1 space-y-3 overflow-y-auto p-2">
         {shown.length === 0 && <p className="px-2 text-xs text-muted-foreground">No table matches.</p>}
-        {schemas.map((schema) => (
-          <div key={schema} className="space-y-px">
-            {(schemas.length > 1 || schema !== defaultSchema) && <p className="px-2 pb-1 text-xs text-muted-foreground">{schema}</p>}
-            {shown
-              .filter((t) => t.schema === schema)
-              .map((t) => (
-                <SidebarItem key={tableKey(t)} selected={tableKey(t) === tableKey(current)} onClick={() => pick(tableKey(t))} title={t.kind}>
-                  <span className="min-w-0 flex-1 truncate">{t.name}</span>
-                  {t.kind === "view" && <span className="text-[0.65rem] opacity-70">view</span>}
-                  {t.kind === "materialized view" && <span className="text-[0.65rem] opacity-70">mview</span>}
-                </SidebarItem>
-              ))}
-          </div>
-        ))}
+        {schemas.map((schema) => {
+          // A schema heads its tables, nested under it, unless it's the only (default) one.
+          const heading = schemas.length > 1 || schema !== defaultSchema;
+          return (
+            <div key={schema} className="space-y-1">
+              {heading && (
+                <p className="flex items-center gap-1.5 px-2 text-xs font-semibold text-foreground" title="Schema">
+                  <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 truncate">{schema}</span>
+                </p>
+              )}
+              <div className={cn("space-y-px", heading && "ml-3.5 border-l pl-1.5")}>
+                {shown
+                  .filter((t) => t.schema === schema)
+                  .map((t) => (
+                    <SidebarItem key={tableKey(t)} selected={tableKey(t) === tableKey(current)} onClick={() => pick(tableKey(t))} title={t.kind}>
+                      <span className="min-w-0 flex-1 truncate">{t.name}</span>
+                      {t.kind === "view" && <span className="text-[0.65rem] opacity-70">view</span>}
+                      {t.kind === "materialized view" && <span className="text-[0.65rem] opacity-70">mview</span>}
+                    </SidebarItem>
+                  ))}
+              </div>
+            </div>
+          );
+        })}
       </nav>
     </>
   );
