@@ -175,3 +175,37 @@ func TestRetagOptions(t *testing.T) {
 		}
 	}
 }
+
+func TestRoutePending(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	p, _ := c.store.CreateProject(ctx, store.Project{Name: "a", ServerID: store.LocalServerID})
+	svc, err := c.store.CreateService(ctx, store.Service{
+		ProjectID: p.ID, ServerID: store.LocalServerID, Name: "web", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "old.example.com", Port: 80,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.routePending(ctx, svc) {
+		t.Error("never deployed: nothing to apply")
+	}
+	d, err := c.store.CreateDeployment(ctx, store.Deployment{ServiceID: svc.ID, Status: store.DeploymentSucceeded, Image: "x", Config: svc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.store.SetCurrentDeployment(ctx, svc.ID, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	svc.CurrentDeploymentID = d.ID
+	if c.routePending(ctx, svc) {
+		t.Error("deployed as is")
+	}
+	svc.Domain = "new.example.com"
+	if !c.routePending(ctx, svc) {
+		t.Error("a new domain waits for a deploy")
+	}
+	svc.Stopped = true
+	if c.routePending(ctx, svc) {
+		t.Error("a stopped service serves nothing")
+	}
+}

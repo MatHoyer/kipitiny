@@ -113,7 +113,11 @@ type TopoService struct {
 	HostNetwork bool     `json:"hostNetwork,omitempty"`
 	// PublishedPorts are host ports published straight to the service.
 	PublishedPorts []store.PublishedPort `json:"publishedPorts,omitempty"`
-	Containers     []TopoNode            `json:"containers"`
+	// RoutePending: the domain or port changed since the running deployment.
+	RoutePending bool `json:"routePending,omitempty"`
+	// DNS is set when the manager manages the domain's Cloudflare record.
+	DNS        *DNSStatus `json:"dns,omitempty"`
+	Containers []TopoNode `json:"containers"`
 }
 
 // Topology maps every server, or only the server and project of projectID.
@@ -240,7 +244,10 @@ func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []s
 			ts := TopoService{
 				ID: s.ID, Name: s.Name, Kind: s.Kind, Image: s.Image, Icon: s.Icon, Domain: s.Domain, Port: s.Port,
 				Replicas: s.Replicas, Stopped: s.Stopped, Uses: usedDatabases(s, p, dbs), Networks: s.Networks, HostNetwork: s.HostNetwork,
-				PublishedPorts: s.PublishedPorts, Containers: []TopoNode{},
+				PublishedPorts: s.PublishedPorts, RoutePending: c.routePending(ctx, s), Containers: []TopoNode{},
+			}
+			if s.Domain != "" {
+				ts.DNS = c.dnsStatus(ctx, s.Domain)
 			}
 			if ts.Networks == nil {
 				ts.Networks = []string{}

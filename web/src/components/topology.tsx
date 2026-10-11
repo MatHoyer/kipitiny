@@ -2,24 +2,47 @@ import { stateColors } from "@/components/common";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { liveState, troubled } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { isDatabase, type TopoNetwork, type TopoNode, type TopoProject, type TopoService } from "../api";
+import { isDatabase, type Container, type TopoNetwork, type TopoNode, type TopoProject, type TopoService } from "../api";
 
 export const PROXY_NETWORK = "kipitiny-proxy";
 
-/** Why a service is misconfigured on the map, or "". */
-export function serviceWarning(svc: TopoService): string {
+export type ServiceIssue = {
+  tone: "error" | "warn";
+  /** Fits a map node or a card. */
+  short: string;
+  text: string;
+};
+
+type IssueSource = Pick<TopoService, "kind" | "domain" | "dns" | "routePending"> & {
+  containers: (Container & { endpoints?: TopoNode["endpoints"] })[];
+};
+
+/** What's wrong with a service, worst first: the map and the service cards show the same. */
+export function serviceIssue(svc: IssueSource): ServiceIssue | null {
   const live = svc.containers.filter((c) => !c.retired);
-  const onProxy = live.some((c) => c.endpoints.some((e) => e.network === PROXY_NETWORK));
-  if (isDatabase(svc.kind) && onProxy) return "Attached to the proxy network";
-  if (svc.domain && live.length > 0 && !onProxy) return "Not on the proxy network: Traefik can't reach it";
-  return "";
+  // Only the topology knows the containers' networks.
+  if (live.length > 0 && live.every((c) => c.endpoints)) {
+    const onProxy = live.some((c) => c.endpoints!.some((e) => e.network === PROXY_NETWORK));
+    if (isDatabase(svc.kind) && onProxy) return issue("error", "Attached to the proxy network");
+    if (svc.domain && !onProxy) return issue("error", "Not on the proxy network: Traefik can't reach it");
+  }
+  const dns = svc.dns;
+  if (dns && (dns.state === "error" || dns.state === "conflict")) return { tone: "error", short: `DNS ${dns.state}`, text: dns.message ?? "" };
+  if (dns?.state === "warning") return { tone: "warn", short: "DNS warning", text: dns.message ?? "" };
+  if (svc.routePending) return issue("warn", "Domain changed: deploy to serve it");
+  return null;
 }
+
+const issue = (tone: ServiceIssue["tone"], text: string): ServiceIssue => ({ tone, short: text, text });
+
+export const issueRing = { error: "ring-destructive/60", warn: "ring-amber-500/60" } as const;
+export const issueText = { error: "text-destructive", warn: "text-amber-600 dark:text-amber-400" } as const;
 
 export const serviceState = (svc: TopoService) => liveState({ stopped: !!svc.stopped, containers: svc.containers });
 
 /** How many of the project's services are misconfigured or not running well. */
 export function projectProblems(p: TopoProject): number {
-  return p.services.filter((svc) => serviceWarning(svc) || troubled(serviceState(svc))).length;
+  return p.services.filter((svc) => serviceIssue(svc)?.tone === "error" || troubled(serviceState(svc))).length;
 }
 
 /** One pill per container; the tooltip lists its networks (by name for the ones created by hand) and addresses. */

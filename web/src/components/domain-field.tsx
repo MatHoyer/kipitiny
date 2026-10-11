@@ -19,6 +19,15 @@ function split(value: string, bases: string[]): { base: string; sub: string } {
   return { base, sub: value === base ? "" : value.slice(0, -(base.length + 1)) };
 }
 
+/** Cloudflare's free certificate covers a zone and *.zone: a deeper proxied name gets a TLS error at its edge. */
+function edgeCertGap(value: string, zones: string[]): string | undefined {
+  const zone = zones.filter((z) => value.endsWith(`.${z}`)).sort((a, b) => b.length - a.length)[0];
+  if (!zone || !value.slice(0, -(zone.length + 1)).includes(".")) return;
+  return zone;
+}
+
+const flat = (value: string, zone: string) => `${value.slice(0, -(zone.length + 1)).replaceAll(".", "-")}.${zone}`;
+
 /**
  * A service's public domain: a subdomain plus one of the domains listed in
  * Settings, like Cloudflare's hostname form. "Other domain" takes any full
@@ -38,6 +47,7 @@ export function DomainField({
 }) {
   const domains = useQuery({ queryKey: ["domains"], queryFn: api.domains });
   const bases = domains.data?.map((d) => d.name) ?? [];
+  const cloudflare = useQuery({ queryKey: ["cloudflare"], queryFn: api.cloudflare });
   const [base, setBase] = useState(NONE);
   const [sub, setSub] = useState("");
 
@@ -70,6 +80,8 @@ export function DomainField({
   };
 
   const noList = domains.isSuccess && bases.length === 0;
+  const listed = domains.data?.find((d) => d.name === base);
+  const gapZone = listed?.cloudflare && listed.proxied ? edgeCertGap(value, cloudflare.data?.zones ?? []) : undefined;
   if (noList || !ready) {
     return (
       <FloatingInput
@@ -119,6 +131,12 @@ export function DomainField({
           ]}
         />
       </div>
+      {gapZone && (
+        <p className="px-1 text-xs text-amber-600 dark:text-amber-400">
+          Cloudflare's free certificate only covers <span className="font-mono">*.{gapZone}</span>: through the proxy, this name gets a
+          TLS error. Prefer a single level like <span className="font-mono">{flat(value, gapZone)}</span>.
+        </p>
+      )}
       <p className="px-1 text-xs text-muted-foreground">
         {value && note ? (
           note

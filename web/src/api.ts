@@ -91,6 +91,8 @@ export type Service = {
   containers: Container[];
   /** Set when the manager manages the domain's Cloudflare DNS record. */
   dns?: DNSStatus;
+  /** The domain or port changed since the running deployment: Traefik routes the new one after a deploy. */
+  routePending?: boolean;
 };
 
 export type Volume = { name: string; path: string };
@@ -151,6 +153,8 @@ export type TopoService = {
   hostNetwork?: boolean;
   /** Host ports published straight to the service. */
   publishedPorts?: PublishedPort[];
+  routePending?: boolean;
+  dns?: DNSStatus;
   containers: TopoNode[];
 };
 
@@ -507,7 +511,7 @@ export type Notifications = {
 };
 
 /** State of a service domain's managed Cloudflare record. */
-export type DNSStatus = { state: "synced" | "conflict" | "error"; message?: string };
+export type DNSStatus = { state: "synced" | "warning" | "conflict" | "error"; message?: string };
 
 export type UpdateInfo = {
   current: string;
