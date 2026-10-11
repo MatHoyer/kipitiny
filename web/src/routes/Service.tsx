@@ -295,9 +295,7 @@ export function Service() {
           </TabsContent>
           <TabsContent value="environment" className="flex flex-col gap-6">
             {gitManaged && <GitManagedNote path={git.data!.path} />}
-            <fieldset disabled={gitManaged} className="contents">
-              <EnvironmentCard key={svc.id} svc={svc} />
-            </fieldset>
+            <EnvironmentCard key={svc.id} svc={svc} gitManaged={gitManaged} />
           </TabsContent>
           {canBackup(svc) && (
             <TabsContent value="backups">
@@ -381,10 +379,12 @@ function ContainerRow({ serviceId, container: c }: { serviceId: string; containe
   );
 }
 
-function EnvironmentCard({ svc }: { svc: ServiceT }) {
+function EnvironmentCard({ svc, gitManaged }: { svc: ServiceT; gitManaged: boolean }) {
   const qc = useQueryClient();
-  // A database's env is generated at creation: shown, never edited.
+  // A database's env is generated at creation: shown, never edited. A git
+  // project's env is its compose file's.
   const isDb = isDatabase(svc.kind);
+  const readOnly = isDb || gitManaged;
   const project = useQuery({ queryKey: ["project", svc.projectId], queryFn: () => api.project(svc.projectId), enabled: !isDb });
   const siblings = useQuery({ queryKey: ["services", svc.projectId], queryFn: () => api.services(svc.projectId), enabled: !isDb });
   const databases = siblings.data?.flatMap((s) => (isDatabase(s.kind) ? [{ name: s.name, kind: s.kind }] : []));
@@ -430,10 +430,10 @@ function EnvironmentCard({ svc }: { svc: ServiceT }) {
           secretVars={project.data?.secrets}
           databases={databases}
           passwordManagers
-          readOnly={isDb}
+          readOnly={readOnly}
         />
       </form>
-      {!isDb && <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setRows(envRows(svc.env, svc.secrets))} />}
+      {!readOnly && <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setRows(envRows(svc.env, svc.secrets))} />}
     </Section>
   );
 }
