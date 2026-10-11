@@ -32,6 +32,9 @@ import type {
   TopoNode,
   TopoService,
   Uptime,
+  UptimeCheck,
+  UptimeInput,
+  UptimeResult,
   Usage,
 } from "@/api";
 import { files } from "./files";
@@ -51,7 +54,7 @@ function load(): DemoDb {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const db = JSON.parse(raw) as DemoDb;
-      if (db.version === 2) return db;
+      if (db.version === 3) return db;
     }
   } catch {
     // Private mode or a broken value: start over.
@@ -518,6 +521,45 @@ const EVENTS: Notifications["events"] = [
 const backupKindOf = (kind: string) => (kind === "postgres" ? "postgres" : kind === "redis" || kind === "app" ? "volume" : "dump");
 
 /** A fresh backup of a service (or the manager), as if it just ran. */
+/**
+ * An uptime check's record, made up from the clock: a fast, steady response with the odd slow one, and a short
+ * outage around the api's last deploy so the bars show what a failure looks like.
+ */
+/** A pseudo-random number in [0, 1) that only depends on n. */
+const rand = (n: number) => {
+  const x = Math.sin(n * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+function uptime(s: DemoDb["services"][number]): Uptime {
+  const chk = db.uptime.find((c) => c.serviceId === s.id) ?? null;
+  if (!chk) return { check: null, recent: [], uptime24h: null, uptime7d: null, uptime30d: null, avgLatencyMs: null };
+  const url = s.domain ? `https://${s.domain}${chk.path}` : undefined;
+  const problem = s.stopped ? "the service is stopped" : !chk.enabled ? "paused" : undefined;
+  const step = chk.intervalSec * 1000;
+  const last = Math.floor(Date.now() / step) * step;
+  const base = s.id === "api" ? 42 : 18;
+  const recent: UptimeResult[] = Array.from({ length: 60 }, (_, i) => {
+    const t = last - (59 - i) * step;
+    // Same numbers for the same minute, whatever the refresh.
+    const r = rand(t / step + base);
+    if (s.id === "api" && (i === 37 || i === 38)) return { at: new Date(t).toISOString(), ok: false, status: 502, latencyMs: 12, error: "502 Bad Gateway" };
+    return { at: new Date(t).toISOString(), ok: true, status: 200, latencyMs: Math.round(base * (0.8 + 0.5 * r + (r > 0.94 ? 2.5 : 0))) };
+  });
+  const passed = recent.filter((r) => r.ok);
+  const fresh = s.id === "api";
+  return {
+    check: fresh ? { ...chk, changedAt: recent[39].at } : chk,
+    url,
+    problem,
+    recent,
+    uptime24h: fresh ? 99.86 : 100,
+    uptime7d: fresh ? 99.97 : 100,
+    uptime30d: fresh ? 99.99 : 99.98,
+    avgLatencyMs: Math.round(passed.reduce((n, r) => n + r.latencyMs, 0) / passed.length),
+  };
+}
+
 function newBackup(s: DemoDb["services"][number] | null, targetId = "local"): Backup {
   const p = s ? projectOf(s.projectId) : null;
   const kind = !s ? "manager" : backupKindOf(s.kind);
@@ -860,10 +902,28 @@ const routes: Route[] = [
         db.services.filter((s) => !s.stopped).map((s): [string, ServiceUsage] => [s.id, { ...usage(s, Date.now()), projectId: s.projectId, serverId: "local" }]),
       ),
   ],
+  ["GET", /^\/services\/([^/]+)\/uptime$/, ({ m }) => uptime(serviceOf(m[1]))],
   [
-    "GET",
+    "PUT",
     /^\/services\/([^/]+)\/uptime$/,
-    (): Uptime => ({ check: null, recent: [], uptime24h: null, uptime7d: null, uptime30d: null, avgLatencyMs: null }),
+    ({ m, body }) => {
+      const s = serviceOf(m[1]);
+      const input = body as UptimeInput;
+      const prev = db.uptime.find((c) => c.serviceId === s.id);
+      const now = new Date().toISOString();
+      const chk: UptimeCheck = { ...input, serviceId: s.id, down: false, changedAt: prev?.changedAt ?? now, createdAt: prev?.createdAt ?? now };
+      db.uptime = [...db.uptime.filter((c) => c.serviceId !== s.id), chk];
+      save();
+      return uptime(s);
+    },
+  ],
+  [
+    "DELETE",
+    /^\/services\/([^/]+)\/uptime$/,
+    ({ m }) => {
+      db.uptime = db.uptime.filter((c) => c.serviceId !== m[1]);
+      save();
+    },
   ],
   ["GET", /^\/services\/([^/]+)\/backups$/, ({ m }) => db.backups.filter((b) => b.serviceId === m[1])],
   [
