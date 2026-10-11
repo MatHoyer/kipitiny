@@ -166,3 +166,21 @@ func (a *API) dataConsole(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, res)
 }
+
+func (a *API) rowChanges(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Database string          `json:"database"`
+		Changes  core.RowChanges `json:"changes"`
+		// Apply runs the changes; without it, only their statements return.
+		Apply bool `json:"apply"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	res, err := a.core.ApplyRowChanges(r.Context(), r.PathValue("id"), body.Database, r.PathValue("schema"), r.PathValue("table"), body.Changes, body.Apply)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}

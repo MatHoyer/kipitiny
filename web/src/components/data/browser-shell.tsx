@@ -10,15 +10,18 @@ export function BrowserShell({
   toolbar,
   footer,
   children,
+  write,
 }: {
   sidebar: ReactNode;
   sidebarOpen: boolean;
   toolbar: ReactNode;
   footer?: ReactNode;
   children: ReactNode;
+  /** Writes are allowed: the frame turns red, as the console's does. */
+  write?: boolean;
 }) {
   return (
-    <div className="flex h-[72vh] min-h-96 overflow-hidden rounded-lg border bg-card">
+    <div className={cn("flex h-[72vh] min-h-96 overflow-hidden rounded-lg border bg-card transition-colors", write && "border-destructive")}>
       {sidebarOpen && <aside className="hidden w-56 shrink-0 flex-col border-r md:flex">{sidebar}</aside>}
       <section className="flex min-w-0 flex-1 flex-col">
         <div className="flex min-h-12 flex-wrap items-center gap-1.5 border-b px-2 py-1.5">{toolbar}</div>

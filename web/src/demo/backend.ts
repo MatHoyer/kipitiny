@@ -14,6 +14,8 @@ import type {
   Network,
   PgFilter,
   PgRows,
+  RowChanges,
+  ChangeResult,
   PgTable,
   Project,
   RedisKeys,
@@ -237,6 +239,52 @@ function serviceStats(s: DemoDb["services"][number]): ServiceStats {
   const history = s.stopped ? [] : Array.from({ length: 30 }, (_, i) => usage(s, t - (29 - i) * 10_000));
   const per = Object.fromEntries(containers(s).map((c) => [c.id.slice(0, 12), { current: history.at(-1) ?? null, history }]));
   return { current: history.at(-1) ?? null, history, containers: per };
+}
+
+/** Saves edits from the browser like the manager does: checked rows, statements as it writes them. */
+function tableChanges(t: DemoDb["tables"][number], ch: RowChanges, apply: boolean, postgres: boolean): ChangeResult {
+  const q = (s: string) => (postgres ? `"${s.replace(/"/g, '""')}"` : `\`${s.replace(/`/g, "``")}\``);
+  const lit = (v: string | null) => (v === null ? "NULL" : `'${v.replace(/'/g, "''")}'`);
+  const name = postgres ? `${q(t.schema)}.${q(t.name)}` : q(t.name);
+  const col = (c: string) => {
+    const i = t.columns.findIndex((x) => x.name === c);
+    if (i < 0) throw invalid(`unknown column "${c}"`);
+    return i;
+  };
+  const text = (c: string, v: string | null) => (v === null ? `${q(c)} IS NULL` : postgres ? `${q(c)}::text = ${lit(v)}` : `CAST(${q(c)} AS CHAR) COLLATE utf8mb4_bin = ${lit(v)}`);
+  const where = (key: Record<string, string>) => Object.entries(key).map(([c, v]) => `${q(c)} = ${lit(v)}`);
+  const find = (key: Record<string, string>, label: string, was: Record<string, string | null> = {}) => {
+    const r = rows.find((r) => Object.entries(key).every(([c, v]) => r[col(c)] === v) && Object.entries(was).every(([c, v]) => r[col(c)] === v));
+    if (!r) throw invalid(`${label} changed or was deleted since it was loaded; reload and make the change again`);
+    return r;
+  };
+  const label = (key: Record<string, string>) => "row " + Object.entries(key).map(([c, v]) => `${c} ${v}`).join(", ");
+  // Changed on a copy, kept only once every statement went through: one transaction.
+  const rows = t.rows.map((r) => [...r]);
+  const statements: string[] = [];
+  for (const d of ch.deletes ?? []) {
+    statements.push(`DELETE FROM ${name} WHERE ${where(d.key).join(" AND ")};`);
+    rows.splice(rows.indexOf(find(d.key, label(d.key))), 1);
+  }
+  for (const u of ch.updates ?? []) {
+    const set = Object.entries(u.set).map(([c, v]) => `${q(c)} = ${lit(v)}`);
+    const conds = [...where(u.key), ...Object.entries(u.was).map(([c, v]) => text(c, v))];
+    statements.push(`UPDATE ${name} SET ${set.join(", ")} WHERE ${conds.join(" AND ")};`);
+    const r = find(u.key, label(u.key), u.was);
+    for (const [c, v] of Object.entries(u.set)) r[col(c)] = v;
+  }
+  for (const ins of ch.inserts ?? []) {
+    const cs = Object.keys(ins);
+    statements.push(cs.length ? `INSERT INTO ${name} (${cs.map(q).join(", ")}) VALUES (${cs.map((c) => lit(ins[c])).join(", ")});` : postgres ? `INSERT INTO ${name} DEFAULT VALUES;` : `INSERT INTO ${name} () VALUES ();`);
+    const pk = t.columns.findIndex((c) => c.primaryKey);
+    rows.push(t.columns.map((c, i) => (c.name in ins ? ins[c.name] : i === pk ? String(Math.max(0, ...rows.map((r) => Number(r[pk]) || 0)) + 1) : null)));
+  }
+  if (!statements.length) throw invalid("no changes to save");
+  if (apply) {
+    t.rows = rows;
+    save();
+  }
+  return { statements, applied: apply };
 }
 
 function rows(table: DemoDb["tables"][number], q: URLSearchParams): PgRows {
@@ -982,6 +1030,16 @@ const routes: Route[] = [
       const t = db.tables.find((x) => (!postgres || x.schema === decodeURIComponent(m[2])) && x.name === decodeURIComponent(m[3]));
       if (!t) throw notFound();
       return rows(t, q);
+    },
+  ],
+  [
+    "POST",
+    /^\/services\/([^/]+)\/data\/tables\/([^/]+)\/([^/]+)\/changes$/,
+    ({ m, body }): ChangeResult => {
+      const postgres = serviceOf(m[1]).kind === "postgres";
+      const t = db.tables.find((x) => (!postgres || x.schema === decodeURIComponent(m[2])) && x.name === decodeURIComponent(m[3]));
+      if (!t) throw notFound();
+      return tableChanges(t, body.changes as RowChanges, !!body.apply, postgres);
     },
   ],
   [

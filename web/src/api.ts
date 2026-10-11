@@ -732,6 +732,18 @@ export type RowQuery = { limit?: number; offset?: number; orderBy?: string; desc
 export type MongoDocs = { documents: string[]; truncated: number[]; hasMore: boolean };
 export type DocQuery = { filter?: string; sort?: string; limit?: number; skip?: number };
 
+/**
+ * Edits to a table's rows, saved together. key holds the primary key as shown; was, each set column as loaded (null is NULL).
+ * An insert's columns left out take their default.
+ */
+export type RowChanges = {
+  deletes?: { key: Record<string, string> }[];
+  updates?: { key: Record<string, string>; set: Record<string, string | null>; was: Record<string, string | null> }[];
+  inserts?: Record<string, string | null>[];
+};
+/** The statements a save runs, in order; applied is false for a preview. */
+export type ChangeResult = { statements: string[]; applied: boolean };
+
 export type PgRows = { columns: PgColumn[]; rows: (string | null)[][]; truncated: [number, number][]; hasMore: boolean };
 /** ttl in ms, -1 when the key never expires. */
 export type RedisKey = { key: string; type: string; ttl: number; bytes: number };
@@ -975,6 +987,12 @@ export const api = {
     request<PgRows>(`/services/${serviceId}/data/tables/${encodeURIComponent(schema)}/${encodeURIComponent(table)}?${rowParams(q, database)}`),
   pgExportUrl: (serviceId: string, database: string, schema: string, table: string, q: RowQuery) =>
     `/api/services/${serviceId}/data/tables/${encodeURIComponent(schema)}/${encodeURIComponent(table)}/export?${rowParams({ ...q, limit: 0, offset: 0 }, database)}`,
+  /** Without apply, only returns the statements the save would run. */
+  rowChanges: (serviceId: string, database: string, schema: string, table: string, changes: RowChanges, apply: boolean) =>
+    request<ChangeResult>(
+      `/services/${serviceId}/data/tables/${encodeURIComponent(schema)}/${encodeURIComponent(table)}/changes`,
+      json("POST", { database, changes, apply }),
+    ),
   redisScan: (serviceId: string, cursor: string, pattern: string) =>
     request<RedisKeys>(`/services/${serviceId}/data/keys?${new URLSearchParams({ cursor, pattern })}`),
   redisGet: (serviceId: string, key: string, cursor = "0") =>

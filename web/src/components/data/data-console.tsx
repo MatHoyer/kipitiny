@@ -1,26 +1,15 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CircleCheck, History, Lock, LockOpen, Play, TriangleAlert } from "lucide-react";
+import { CircleCheck, History, Play } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { CopyButton, Loading } from "@/components/common";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogMedia,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { friendlyError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { api, ApiError, type ConsoleResult } from "../../api";
 import { DataTable } from "./data-table";
 import type { SqlDialect } from "./sql-editor";
+import { WriteMode } from "./write-mode";
 
 // The editor is its own chunk. Not React.lazy: lazy suspends on its first
 // render even when the chunk is already loaded, which flashes the fallback.
@@ -63,49 +52,8 @@ function useHistory(serviceId: string) {
   return { items, push };
 }
 
-/** Read only, or writes allowed after a confirmation. */
-function WriteMode({ write, onChange }: { write: boolean; onChange: (w: boolean) => void }) {
-  const [asking, setAsking] = useState(false);
-  return (
-    <>
-      <Segmented
-        size="sm"
-        value={write ? "write" : "read"}
-        onValueChange={(v) => (v === "write" ? setAsking(true) : v === "read" && onChange(false))}
-        aria-label="Write mode"
-      >
-        <SegmentedItem value="read">
-          <Lock /> Read only
-        </SegmentedItem>
-        <SegmentedItem value="write" className="aria-checked:bg-destructive/10 aria-checked:text-destructive dark:aria-checked:bg-destructive/15 dark:aria-checked:text-destructive">
-          <LockOpen /> Allow writes
-        </SegmentedItem>
-      </Segmented>
-      <AlertDialog open={asking} onOpenChange={setAsking}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogMedia className="bg-destructive/10 text-destructive">
-              <TriangleAlert />
-            </AlertDialogMedia>
-            <AlertDialogTitle>Allow writes?</AlertDialogTitle>
-            <AlertDialogDescription>
-              What you run then changes the database right away. Only a restore from a backup undoes it.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Stay read only</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => onChange(true)}>
-              Allow writes
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
-  );
-}
-
 /** A database's own error stays verbatim (psql points with LINE and ^); others read as sentences. */
-const consoleError = (err: unknown) => (err instanceof ApiError && err.status === 400 ? err.message : friendlyError(err));
+export const consoleError = (err: unknown) => (err instanceof ApiError && err.status === 400 ? err.message : friendlyError(err));
 
 const elapsed = (ms: number) => (ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);
 
@@ -195,7 +143,7 @@ function QueryHistory({ items, onPick }: { items: string[]; onPick: (q: string) 
 }
 
 /** A database error with its own layout kept: psql points at the spot with LINE and ^. */
-function ConsoleError({ message }: { message: string }) {
+export function ConsoleError({ message }: { message: string }) {
   return (
     <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
       <pre className="font-mono text-[0.8rem] whitespace-pre-wrap text-destructive">{message}</pre>
