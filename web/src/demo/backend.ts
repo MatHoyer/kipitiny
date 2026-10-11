@@ -5,6 +5,8 @@ import type {
   Notifications,
   Schedule,
   AuthState,
+  SecretItem,
+  SecretProvider,
   CanvasPoint,
   Connection,
   ConsoleResult,
@@ -521,6 +523,37 @@ const EVENTS: Notifications["events"] = [
 const backupKindOf = (kind: string) => (kind === "postgres" ? "postgres" : kind === "redis" || kind === "app" ? "volume" : "dump");
 
 /** A fresh backup of a service (or the manager), as if it just ran. */
+/** The demo's password manager: Proton Pass, whose CLI the real manager fetches on first use. */
+const passwordManager = (): SecretProvider => ({
+  id: "protonpass",
+  name: "Proton Pass",
+  scheme: "pass",
+  tokenLabel: "Personal access token",
+  example: "pass://Vault/Item/password",
+  help: "This is a demo: any token connects, to sample vaults. On a server, create one with `pass-cli personal-access-token create --name kipitiny --expiration 1y`.",
+  available: true,
+  connected: db.passwordManagers.includes("protonpass"),
+});
+
+const connectedManager = (id: string) => {
+  if (!db.passwordManagers.includes(id)) throw invalid("this password manager isn't connected");
+};
+
+/** The sample vaults: item titles and the fields a reference can name. */
+const vaults: Record<string, [string, string[]][]> = {
+  Production: [
+    ["Stripe", ["secret_key", "publishable_key", "webhook_secret"]],
+    ["Postmark", ["server_token"]],
+    ["Sentry", ["dsn", "auth_token"]],
+    ["S3 backups", ["access_key_id", "secret_access_key"]],
+    ["GitHub deploy bot", ["username", "password", "totp"]],
+  ],
+  Staging: [
+    ["Stripe test", ["secret_key", "publishable_key", "webhook_secret"]],
+    ["Postmark sandbox", ["server_token"]],
+  ],
+};
+
 /**
  * An uptime check's record, made up from the clock: a fast, steady response with the odd slow one, and a short
  * outage around the api's last deploy so the bars show what a failure looks like.
@@ -678,7 +711,37 @@ const routes: Route[] = [
 
   ["GET", /^\/servers$/, () => [{ ...SERVER, projects: db.projects.length }]],
   ["GET", /^\/domains$/, () => db.domains],
-  ["GET", /^\/secret-providers$/, () => []],
+  ["GET", /^\/secret-providers$/, () => [passwordManager()]],
+  [
+    "PUT",
+    /^\/secret-providers\/([^/]+)$/,
+    ({ m, body }) => {
+      if (m[1] !== "protonpass") throw notFound();
+      if (!String(body.token ?? "").trim()) throw invalid("a token is required");
+      db.passwordManagers = ["protonpass"];
+      save();
+      return passwordManager();
+    },
+  ],
+  [
+    "DELETE",
+    /^\/secret-providers\/([^/]+)$/,
+    ({ m }) => {
+      db.passwordManagers = db.passwordManagers.filter((id) => id !== m[1]);
+      save();
+    },
+  ],
+  ["POST", /^\/secret-providers\/([^/]+)\/test$/, ({ m }) => void connectedManager(m[1])],
+  ["GET", /^\/secret-providers\/([^/]+)\/vaults$/, ({ m }) => (connectedManager(m[1]), Object.keys(vaults))],
+  [
+    "GET",
+    /^\/secret-providers\/([^/]+)\/items$/,
+    ({ m, q }): SecretItem[] => {
+      connectedManager(m[1]);
+      const vault = q.get("vault") ?? "";
+      return (vaults[vault] ?? []).map(([title, fields]) => ({ title, fields: fields.map((name) => ({ name, ref: `pass://${vault}/${title}/${name}` })) }));
+    },
+  ],
   ["GET", /^\/topology$/, () => topology()],
   ["GET", /^\/projects\/([^/]+)\/topology$/, ({ m }) => topology(m[1])],
   ["GET", /^\/canvas$/, () => ({ positions: db.canvas })],
