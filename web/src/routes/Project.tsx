@@ -509,8 +509,8 @@ const choiceGroups: { label: string; choices: { id: Choice; icon: ReactNode; tit
 ];
 
 function dbChoice(id: keyof typeof databaseChoices, description: string) {
-  const { kind, title } = databaseChoices[id];
-  return [{ id, icon: <ServiceIcon service={{ kind }} />, title, description }];
+  const { kind, title, image, version } = databaseChoices[id];
+  return [{ id, icon: <ServiceIcon service={{ kind, image: image(version) }} />, title, description }];
 }
 
 const choiceTitle = (c: Choice) => (c === "image" ? "New app from a Docker image" : `New ${databaseChoices[c].title} database`);

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Box, type LucideIcon } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { api, type ServiceKind, type TemplateLogo } from "@/api";
-import { MariaDBIcon, MongoDBIcon, MySQLIcon, NginxIcon, NodeIcon, PostgresIcon, RedisIcon } from "@/components/brand-icons";
+import { MariaDBIcon, MongoDBIcon, MySQLIcon, NginxIcon, NodeIcon, PostGISIcon, PostgresIcon, RedisIcon } from "@/components/brand-icons";
 import { cn } from "@/lib/utils";
 
 type Logo = { label: string; color: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
@@ -10,6 +10,7 @@ type Logo = { label: string; color: string; Icon: ComponentType<SVGProps<SVGSVGE
 /** Logos drawn here, by icon name; templates bring the others (useServiceLogos). */
 export const serviceLogos: Record<string, Logo> = {
   postgres: { label: "PostgreSQL", color: "#4169E1", Icon: PostgresIcon },
+  postgis: { label: "PostGIS", color: "#1D8A99", Icon: PostGISIcon },
   redis: { label: "Redis", color: "#FF4438", Icon: RedisIcon },
   mysql: { label: "MySQL", color: "#4479A1", Icon: MySQLIcon },
   // The brand's sea lion brown: its navy disappears on dark backgrounds.
@@ -67,9 +68,9 @@ function imageBase(image: string) {
   return repo.slice(repo.lastIndexOf("/") + 1).toLowerCase();
 }
 
-/** The logo for a service: its icon, else its kind's, else its image's. */
+/** The logo for a service: its icon, else its image's (a PostGIS database isn't PostgreSQL's elephant), else its kind's. */
 export function serviceLogo(s: IconSource, { logos, aliases }: Logos = builtins): Logo | undefined {
-  for (const name of [s.icon, s.kind !== "app" ? s.kind : undefined, s.image && imageBase(s.image)]) {
+  for (const name of [s.icon, s.image && imageBase(s.image), s.kind !== "app" ? s.kind : undefined]) {
     const logo = name && logos[aliases[name] ?? name];
     if (logo) return logo;
   }
