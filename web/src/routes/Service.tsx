@@ -16,6 +16,7 @@ import {
   Square,
   SquareTerminal,
   Trash2,
+  TriangleAlert,
   Workflow,
 } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
@@ -41,6 +42,7 @@ import { FilesTab } from "@/components/files/files-tab";
 import { useTab } from "@/hooks/use-tab";
 import { byDay, envMap, envRows, envSecrets, formatBytes, formatCpu, formatDuration, sameEnv, serviceState, timeAgo, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { issueText, serviceIssue } from "@/components/topology";
 import { api, canBackup, databasePorts, databaseUrlKey, httpRouted, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type Service as ServiceT } from "../api";
 import { BackupList } from "./BackupList";
 import { Schedules } from "./Schedules";
@@ -123,6 +125,7 @@ export function Service() {
   const active = svc.containers.filter((c) => !c.retired);
   const state = deploying ? "deploying" : svc.stopped ? "stopped" : serviceState(active);
   const allStopped = active.length > 0 && active.every((c) => c.state !== "running");
+  const problem = serviceIssue(svc);
   const busy = deploying || deploy.isPending || action.isPending || remove.isPending;
   const isDb = isDatabase(svc.kind);
   const hasData = isDb || svc.volumes.length > 0;
@@ -165,10 +168,19 @@ export function Service() {
             </Link>
           </p>
         )}
-        {svc.dns && svc.dns.state !== "synced" && (
-          <p role="alert" className="text-sm text-destructive">
-            DNS {svc.dns.state}: {svc.dns.message}
-          </p>
+        {problem && (
+          <div role="alert" className={cn("flex flex-wrap items-center gap-x-2 gap-y-1 text-sm", issueText[problem.tone])}>
+            <p className="flex min-w-0 items-start gap-2">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+              <span>{problem.short === problem.text ? problem.text : `${problem.short}: ${problem.text}`}</span>
+            </p>
+            {svc.routePending && (
+              <Button size="xs" variant="outline" loading={deploying} disabled={busy} onClick={() => deploy.mutate()} className="shrink-0">
+                <Rocket data-icon="inline-start" />
+                Deploy now
+              </Button>
+            )}
+          </div>
         )}
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Card size="sm" className="gap-1.5 px-3">

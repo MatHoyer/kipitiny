@@ -198,6 +198,7 @@ function topology(projectId?: string): Topology {
                 networks: s.networks,
                 hostNetwork: s.hostNetwork || undefined,
                 publishedPorts: s.publishedPorts.length ? s.publishedPorts : undefined,
+                routePending: s.routePending || undefined,
                 containers: containers(s).map((c) =>
                   node(c, [
                     { network: projectNet(p), ip: `172.${20 + pi}.0.${ip++}`, aliases: [s.name] },
@@ -612,7 +613,9 @@ const routes: Route[] = [
       const patch = { ...body };
       if (patch.env) patch.env = Object.fromEntries(Object.entries(patch.env as Record<string, string>).map(([k, v]) => [k, v === MASK ? (s.env[k] ?? "") : v]));
       delete patch.middlewares;
+      const routed = `${s.domain}:${s.port}`;
       Object.assign(s, patch, { updatedAt: now() });
+      if (`${s.domain}:${s.port}` !== routed && s.currentDeploymentId && !s.stopped) s.routePending = true;
       save();
       return view(s);
     },
@@ -667,6 +670,7 @@ const routes: Route[] = [
       db.deployments.unshift(d);
       s.currentDeploymentId = d.id;
       s.stopped = false;
+      s.routePending = false;
       save();
       return d;
     },

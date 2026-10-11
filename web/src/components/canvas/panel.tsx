@@ -5,8 +5,9 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Mono, StateBadge } from "@/components/common";
 import { ServiceIcon } from "@/components/service-icon";
-import { Replicas, serviceState, serviceWarning } from "@/components/topology";
+import { issueText, Replicas, serviceIssue, serviceState } from "@/components/topology";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { api, type ServerTopology, type TopoService } from "@/api";
 import type { MapNode } from "./build";
 
@@ -21,7 +22,7 @@ export function NodePanel({ node, servers, onClose }: { node: MapNode; servers: 
   switch (d.kind) {
     case "service": {
       const { svc, project } = d;
-      const warning = serviceWarning(svc);
+      const problem = serviceIssue(svc);
       const joined = networks.filter((n) => n.customId && svc.networks.includes(n.customId));
       const uses = project.services.filter((s) => svc.uses.includes(s.id));
       title = (
@@ -38,7 +39,7 @@ export function NodePanel({ node, servers, onClose }: { node: MapNode; servers: 
             <StateBadge state={serviceState(svc)} />
             {svc.replicas > 1 && <span className="text-xs text-muted-foreground">{svc.replicas} replicas</span>}
           </div>
-          {warning && <p className="text-sm text-destructive">{warning}</p>}
+          {problem && <p className={cn("text-sm", issueText[problem.tone])}>{problem.text}</p>}
           <Field label="Image">
             <Mono>{svc.image}</Mono>
           </Field>

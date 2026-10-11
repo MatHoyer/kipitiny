@@ -34,7 +34,7 @@ var traefikOrigin = "https://" + traefikName + ":443"
 
 // DNSStatus is the state of one hostname's managed DNS record.
 type DNSStatus struct {
-	State   string `json:"state"` // synced, conflict, error
+	State   string `json:"state"` // synced, warning, conflict, error
 	Message string `json:"message,omitempty"`
 }
 
@@ -356,6 +356,7 @@ type want struct {
 	record  cloudflare.Record
 	tunnel  string // ID of the tunnel serving it, if any
 	problem string // why it can't be created
+	warning string // why it may not work once created
 }
 
 func (c *Core) syncDNS(ctx context.Context) error {
@@ -465,6 +466,11 @@ func (c *Core) wantedRecords(ctx context.Context, zones []cloudflare.Zone) (map[
 			}
 			w.record.Type, w.record.Content, w.record.Proxied = "A", ip, proxiedFor(domains, host) && !direct
 		}
+		if w.record.Proxied && !edgeCertCovers(z.Name, host) {
+			w.warning = fmt.Sprintf("%s is more than one level under %s: Cloudflare's free certificate only covers *.%s, "+
+				"so visitors get a TLS error through the proxy. Use a name like %s, turn off Proxied for its domain, "+
+				"or order an advanced certificate in Cloudflare", host, z.Name, z.Name, flatName(z.Name, host))
+		}
 		wants[host] = w
 	}
 	for _, svc := range svcs {
@@ -476,6 +482,19 @@ func (c *Core) wantedRecords(ctx context.Context, zones []cloudflare.Zone) (map[
 		add(c.cfg.Domain, store.LocalServerID, false)
 	}
 	return wants, nil
+}
+
+// edgeCertCovers reports whether Cloudflare's Universal SSL certificate for
+// zone (the apex and *.zone) covers host.
+func edgeCertCovers(zone, host string) bool {
+	sub := strings.TrimSuffix(strings.TrimSuffix(host, zone), ".")
+	return !strings.Contains(sub, ".")
+}
+
+// flatName suggests a one-level name for host: a.b.example.com → a-b.example.com.
+func flatName(zone, host string) string {
+	sub := strings.TrimSuffix(strings.TrimSuffix(host, zone), ".")
+	return strings.ReplaceAll(sub, ".", "-") + "." + zone
 }
 
 // proxiedFor is the proxy setting of the listed domain covering host.
@@ -541,6 +560,9 @@ func (c *Core) applyRecord(ctx context.Context, cf *cloudflare.Client, w want) D
 			return DNSStatus{State: "error", Message: "the Cloudflare token can't edit DNS here (it needs Zone › DNS › Edit)"}
 		}
 		return DNSStatus{State: "error", Message: err.Error()}
+	}
+	if w.warning != "" {
+		return DNSStatus{State: "warning", Message: w.warning}
 	}
 	return DNSStatus{State: "synced"}
 }

@@ -117,6 +117,7 @@ func TestWantedRecords(t *testing.T) {
 		{ProjectID: local.ID, ServerID: store.LocalServerID, Name: "web", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "tunnelled.example.com", Port: 80},
 		{ProjectID: far.ID, ServerID: remote.ID, Name: "web", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "direct.example.com", Port: 80},
 		{ProjectID: far.ID, ServerID: remote.ID, Name: "api", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "api.elsewhere.net", Port: 80},
+		{ProjectID: far.ID, ServerID: remote.ID, Name: "deep", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "a.b.example.com", Port: 80},
 	} {
 		if _, err := c.store.CreateService(ctx, s); err != nil {
 			t.Fatal(err)
@@ -127,7 +128,7 @@ func TestWantedRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(wants) != 2 {
+	if len(wants) != 3 {
 		t.Fatalf("wants = %+v (a domain outside the zones must be left alone)", wants)
 	}
 	if w := wants["tunnelled.example.com"]; w.tunnel != "tid" || w.record.Type != "CNAME" || w.record.Content != "tid.cfargotunnel.com" || !w.record.Proxied {
@@ -135,6 +136,20 @@ func TestWantedRecords(t *testing.T) {
 	}
 	if w := wants["direct.example.com"]; w.tunnel != "" || w.record.Type != "A" || w.record.Content != "203.0.113.9" || !w.record.Proxied {
 		t.Errorf("direct = %+v", w)
+	}
+	if w := wants["direct.example.com"]; w.warning != "" {
+		t.Errorf("one level under the zone is covered: %q", w.warning)
+	}
+	if w := wants["a.b.example.com"]; !strings.Contains(w.warning, "a-b.example.com") {
+		t.Errorf("a proxied second-level name needs a warning: %q", w.warning)
+	}
+}
+
+func TestEdgeCertCovers(t *testing.T) {
+	for host, want := range map[string]bool{"example.com": true, "app.example.com": true, "123.example.com": true, "a.b.example.com": false} {
+		if got := edgeCertCovers("example.com", host); got != want {
+			t.Errorf("edgeCertCovers(%s) = %v", host, got)
+		}
 	}
 }
 

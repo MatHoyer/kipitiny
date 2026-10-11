@@ -44,6 +44,8 @@ import { ComposeDialog } from "@/components/compose-dialog";
 import { TemplateDialog } from "@/components/template-dialog";
 import { ReachIcon, reachOf } from "@/components/reach";
 import { GitSource, useProjectGit } from "@/components/git-source";
+import { issueRing, issueText, serviceIssue } from "@/components/topology";
+import { cn } from "@/lib/utils";
 
 const MapCanvas = lazy(() => import("@/components/canvas/map-canvas"));
 
@@ -263,9 +265,15 @@ function ServiceCard({ svc: s }: { svc: ServiceT }) {
   const isDb = isDatabase(s.kind);
   const live = s.containers.filter((c) => !c.retired);
   const used = useUsage().data?.[s.id]?.memoryBytes;
+  const problem = serviceIssue(s);
   return (
     <Link to={`/services/${s.id}`} className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-      <Card className="h-full gap-3 px-4 transition-all group-hover:-translate-y-px group-hover:shadow-md group-hover:ring-foreground/20">
+      <Card
+        className={cn(
+          "h-full gap-3 px-4 transition-all group-hover:-translate-y-px group-hover:shadow-md group-hover:ring-foreground/20",
+          problem && issueRing[problem.tone],
+        )}
+      >
         <div className="flex items-start gap-3">
           <ServiceIconTile service={s} />
           <div className="min-w-0 flex-1">
@@ -276,6 +284,12 @@ function ServiceCard({ svc: s }: { svc: ServiceT }) {
           </div>
           <StateBadge state={liveState(s)} />
         </div>
+        {problem && (
+          <p title={problem.text} className={cn("flex items-center gap-1.5 text-xs", issueText[problem.tone])}>
+            <TriangleAlert className="size-3.5 shrink-0" />
+            <span className="truncate">{problem.short}</span>
+          </p>
+        )}
         <div className="mt-auto flex flex-wrap items-center gap-1.5">
           {isDb ? (
             <>

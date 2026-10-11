@@ -6,7 +6,7 @@ import { stateColors } from "@/components/common";
 import { LogoMark } from "@/components/logo";
 import { ReachIcon, reachOf } from "@/components/reach";
 import { ServiceIcon } from "@/components/service-icon";
-import { projectProblems, serviceState, serviceWarning } from "@/components/topology";
+import { issueRing, issueText, projectProblems, serviceIssue, serviceState } from "@/components/topology";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { NewServiceDialog } from "@/routes/Project";
@@ -34,11 +34,11 @@ function Card({ selected, className, children }: { selected?: boolean; className
 
 function ServiceNode({ data: { svc }, selected }: Props<ServiceData>) {
   const isDb = isDatabase(svc.kind);
-  const warning = serviceWarning(svc);
+  const problem = serviceIssue(svc);
   const state = serviceState(svc);
   const live = svc.containers.filter((c) => !c.retired);
   return (
-    <Card selected={selected} className={cn("space-y-2", svc.domain && "ring-sky-500/40", warning && "ring-destructive/60")}>
+    <Card selected={selected} className={cn("space-y-2", svc.domain && "ring-sky-500/40", problem && issueRing[problem.tone])}>
       <Handle type="target" position={Position.Top} className={handle} />
       <div className="flex items-start gap-2">
         <ServiceIcon service={svc} className="mt-0.5 size-4 shrink-0 text-primary" />
@@ -55,10 +55,10 @@ function ServiceNode({ data: { svc }, selected }: Props<ServiceData>) {
         <span className="truncate">{isDb ? `:${databasePorts[svc.kind as keyof typeof databasePorts]}` : reachOf(svc).label}</span>
         {!isDb && reachOf(svc).kind === "http" ? <span className="shrink-0">:{svc.port}</span> : null}
       </p>
-      {warning ? (
-        <p className="flex items-center gap-1 truncate text-[11px] text-destructive">
+      {problem ? (
+        <p title={problem.text} className={cn("flex items-center gap-1 truncate text-[11px]", issueText[problem.tone])}>
           <TriangleAlert className="size-3 shrink-0" />
-          {warning}
+          <span className="truncate">{problem.short}</span>
         </p>
       ) : (
         <div className="flex items-center gap-1">

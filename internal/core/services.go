@@ -120,6 +120,9 @@ type ServiceView struct {
 	Containers []ContainerView `json:"containers"`
 	// DNS is set when the manager manages the domain's Cloudflare record.
 	DNS *DNSStatus `json:"dns,omitempty"`
+	// RoutePending is set when the domain or port changed since the running
+	// deployment: Traefik only routes the new one after a deploy.
+	RoutePending bool `json:"routePending,omitempty"`
 }
 
 func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceInput) (ServiceView, error) {
@@ -526,7 +529,10 @@ func (c *Core) ListServices(ctx context.Context, projectID string) ([]ServiceVie
 	}
 	views := make([]ServiceView, len(svcs))
 	for i, s := range svcs {
-		views[i] = ServiceView{Service: masked(s), Containers: sortedContainers(byService[s.ID])}
+		views[i] = ServiceView{Service: masked(s), Containers: sortedContainers(byService[s.ID]), RoutePending: c.routePending(ctx, s)}
+		if s.Domain != "" {
+			views[i].DNS = c.dnsStatus(ctx, s.Domain)
+		}
 	}
 	return views, nil
 }
@@ -544,7 +550,21 @@ func (c *Core) view(ctx context.Context, svc store.Service) (ServiceView, error)
 	if svc.Domain != "" {
 		v.DNS = c.dnsStatus(ctx, svc.Domain)
 	}
+	v.RoutePending = c.routePending(ctx, svc)
 	return v, nil
+}
+
+// routePending reports whether svc's domain or port differ from what its
+// running deployment routes.
+func (c *Core) routePending(ctx context.Context, svc store.Service) bool {
+	if svc.Kind != store.ServiceKindApp || svc.Stopped || svc.CurrentDeploymentID == "" {
+		return false
+	}
+	d, err := c.store.GetDeployment(ctx, svc.CurrentDeploymentID)
+	if err != nil || d.Config.ID == "" { // older deployments didn't keep their config
+		return false
+	}
+	return d.Config.Domain != svc.Domain || d.Config.Port != svc.Port
 }
 
 func (c *Core) serviceContainers(ctx context.Context, svc store.Service) ([]container.Summary, error) {

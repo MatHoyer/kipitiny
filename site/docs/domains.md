@@ -92,6 +92,18 @@ work behind the proxy too; Traefik gets the token for that. Proxied domains
 need the zone's SSL/TLS mode on **Full (strict)**. Services deployed before
 connecting keep their certificate settings until their next deploy.
 
+Cloudflare's free certificate covers the zone and one level under it
+(`*.example.com`): a proxied name deeper than that, like `api.dev.example.com`,
+gets a TLS error at Cloudflare's edge (the browser shows a blank error page).
+The service shows a DNS warning then: pick a single-level name
+(`api-dev.example.com`), turn off **Proxied** for its domain, or order an
+advanced certificate in Cloudflare. Behind a tunnel, records are always
+proxied, so only the first and last options work.
+
+DNS follows a domain change right away, but Traefik routes the new domain
+after the service's next deploy: until then the service shows in yellow, with a
+**Deploy now** button.
+
 For local testing use a `*.localhost` domain and alternate ports, e.g.
 `KIPITINY_HTTP_PORT=8081 KIPITINY_HTTPS_PORT=8443`, then
 `curl -k https://app.localhost:8443` (Traefik serves its default self-signed cert).

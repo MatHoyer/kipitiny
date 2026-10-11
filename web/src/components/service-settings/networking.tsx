@@ -30,7 +30,23 @@ export function DomainCard({ svc }: { svc: ServiceT }) {
     onSuccess: (updated) => {
       qc.setQueryData(["service", svc.id], updated);
       setForm(domainForm(updated));
-      toast.success("Domain saved", { description: "Deploy to apply." });
+      if (!updated.routePending) {
+        toast.success("Domain saved");
+        return;
+      }
+      toast.success("Domain saved", {
+        description: "Traefik serves it after the next deploy.",
+        duration: 15_000,
+        action: { label: "Deploy now", onClick: () => deploy.mutate() },
+      });
+    },
+  });
+  const deploy = useMutation({
+    meta: { error: "Couldn't start the deployment" },
+    mutationFn: () => api.deploy(svc.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["deployments", svc.id] });
+      qc.invalidateQueries({ queryKey: ["service", svc.id] });
     },
   });
   const onSubmit = (e: FormEvent) => {
