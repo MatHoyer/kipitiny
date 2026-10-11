@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { friendlyError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { api, ApiError, type ConsoleResult } from "../../api";
@@ -68,22 +68,19 @@ function WriteMode({ write, onChange }: { write: boolean; onChange: (w: boolean)
   const [asking, setAsking] = useState(false);
   return (
     <>
-      <ToggleGroup
-        type="single"
+      <Segmented
         size="sm"
-        variant="outline"
-        spacing={0}
         value={write ? "write" : "read"}
         onValueChange={(v) => (v === "write" ? setAsking(true) : v === "read" && onChange(false))}
         aria-label="Write mode"
       >
-        <ToggleGroupItem value="read" className="text-muted-foreground data-[state=on]:text-foreground">
+        <SegmentedItem value="read">
           <Lock /> Read only
-        </ToggleGroupItem>
-        <ToggleGroupItem value="write" className="text-muted-foreground data-[state=on]:bg-destructive/10 data-[state=on]:text-destructive">
+        </SegmentedItem>
+        <SegmentedItem value="write" className="aria-checked:bg-destructive/10 aria-checked:text-destructive dark:aria-checked:bg-destructive/15 dark:aria-checked:text-destructive">
           <LockOpen /> Allow writes
-        </ToggleGroupItem>
-      </ToggleGroup>
+        </SegmentedItem>
+      </Segmented>
       <AlertDialog open={asking} onOpenChange={setAsking}>
         <AlertDialogContent>
           <AlertDialogHeader>

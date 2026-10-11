@@ -6,7 +6,7 @@ import { ManagerRefValue } from "@/components/template-value";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { managerRef } from "@/lib/format";
 
 /**
@@ -156,24 +156,21 @@ function UserForm({ user, taken, onDone }: { user: BasicAuthRow | null; taken: s
       </DialogHeader>
       <div className="space-y-4">
         {(ms.any || fromManager) && (
-          <ToggleGroup
-            type="single"
-            variant="outline"
+          <Segmented
             size="sm"
-            spacing={0}
             value={fromManager ? "manager" : "password"}
-            onValueChange={(v) => v && setFromManager(v === "manager")}
+            onValueChange={(v) => setFromManager(v === "manager")}
             aria-label="Password source"
           >
-            <ToggleGroupItem value="password" className="aria-checked:bg-muted">
+            <SegmentedItem value="password">
               <KeyRound />
               Password
-            </ToggleGroupItem>
-            <ToggleGroupItem value="manager" className="aria-checked:bg-muted">
+            </SegmentedItem>
+            <SegmentedItem value="manager">
               <Vault />
               Password manager
-            </ToggleGroupItem>
-          </ToggleGroup>
+            </SegmentedItem>
+          </Segmented>
         )}
         <FloatingInput
           label="User"

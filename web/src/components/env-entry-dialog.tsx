@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { dbFields, dbRef, dbRefValid, envRef, managerRef, refName, refsIn, type EnvReference, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, SECRET_MASK, type DatabaseKind, type DatabaseRef } from "../api";
@@ -232,30 +232,27 @@ function EntryForm({
       </DialogHeader>
       <div className="space-y-4">
         {entry && (
-          <ToggleGroup
-            type="single"
-            variant="outline"
+          <Segmented
             size="sm"
-            spacing={0}
             value={kind}
-            onValueChange={(v) => v && setKind(v as Kind)}
+            onValueChange={(v) => setKind(v as Kind)}
             aria-label="Kind"
           >
-            <ToggleGroupItem value="variable" className="aria-checked:bg-muted">
+            <SegmentedItem value="variable">
               <Variable />
               Variable
-            </ToggleGroupItem>
-            <ToggleGroupItem value="secret" className="aria-checked:bg-muted">
+            </SegmentedItem>
+            <SegmentedItem value="secret">
               <KeyRound />
               Secret
-            </ToggleGroupItem>
+            </SegmentedItem>
             {(ctx.passwordManagers || initialKind === "manager") && (
-              <ToggleGroupItem value="manager" className="aria-checked:bg-muted">
+              <SegmentedItem value="manager">
                 <Vault />
                 Password manager
-              </ToggleGroupItem>
+              </SegmentedItem>
             )}
-          </ToggleGroup>
+          </Segmented>
         )}
         <FloatingInput
           label="Name"
@@ -744,21 +741,18 @@ function DatabaseForm({
             options={databases.map((d) => ({ value: d.name, label: `${d.name} (${databaseLabels[d.kind]})` }))}
           />
         )}
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          spacing={0}
+        <Segmented
           value={shape}
-          onValueChange={(v) => v && setShape(v as "url" | "split")}
+          onValueChange={(v) => setShape(v as "url" | "split")}
           aria-label="Variables"
           className="w-full"
         >
           {Object.entries(shapes).map(([k, s]) => (
-            <ToggleGroupItem key={k} value={k} className="flex-1 font-mono text-xs aria-checked:bg-muted">
+            <SegmentedItem key={k} value={k} className="flex-1 font-mono text-xs">
               {s.label}
-            </ToggleGroupItem>
+            </SegmentedItem>
           ))}
-        </ToggleGroup>
+        </Segmented>
         <ul className="space-y-1 rounded-xl border p-3">
           {rows.map((r) => (
             <li key={r.key} className="flex items-center gap-3 text-sm">
