@@ -13,6 +13,7 @@ import type {
   Restore,
   Schedule,
   Service,
+  UptimeCheck,
 } from "@/api";
 
 /*
@@ -25,7 +26,7 @@ export type DemoTable = { schema: string; name: string; columns: { name: string;
 export type DemoRedisKey = { key: string; type: "string" | "hash" | "list" | "set" | "zset"; ttl: number; items: string[][] };
 
 export type DemoDb = {
-  version: 2;
+  version: 3;
   projects: Project[];
   services: Omit<Service, "containers">[];
   networks: Omit<Network, "services" | "dockerName">[];
@@ -35,6 +36,7 @@ export type DemoDb = {
   redis: DemoRedisKey[];
   backups: Backup[];
   schedules: Schedule[];
+  uptime: UptimeCheck[];
   restores: Restore[];
   domains: Domain[];
   registries: Registry[];
@@ -268,7 +270,7 @@ export function seed(): DemoDb {
     service({ id: "cache", name: "cache", kind: "redis", image: "redis:8-alpine", memoryMb: 256, env: { REDIS_PASSWORD: "demo-password" }, secrets: ["REDIS_PASSWORD"] }),
   ];
   return {
-    version: 2,
+    version: 3,
     projects: [{ id: "acme", name: "acme", serverId: "local", env: { APP_URL: "https://acme.example" }, secrets: [], createdAt: at(30), updatedAt: at(2) }],
     services,
     networks: [],
@@ -281,6 +283,10 @@ export function seed(): DemoDb {
       { id: "sch-db", kind: "postgres", serviceId: "db", targetId: "local", cron: "0 3 * * *", keepLast: 0, keepDaily: 7, keepWeekly: 4, keepMonthly: 6, enabled: true, verify: true, createdAt: at(30), nextRun: at(-1, 3) },
       { id: "sch-cache", kind: "volume", serviceId: "cache", targetId: "local", cron: "0 3 * * *", keepLast: 7, keepDaily: 0, keepWeekly: 0, keepMonthly: 0, enabled: true, verify: true, createdAt: at(30), nextRun: at(-1, 3) },
       { id: "sch-manager", kind: "manager", targetId: "local", cron: "0 4 * * *", keepLast: 14, keepDaily: 0, keepWeekly: 0, keepMonthly: 0, enabled: true, verify: false, createdAt: at(30), nextRun: at(-1, 4) },
+    ],
+    uptime: [
+      { serviceId: "web", path: "/", intervalSec: 60, timeoutSec: 10, expectedStatus: 0, enabled: true, down: false, changedAt: at(30), createdAt: at(30) },
+      { serviceId: "api", path: "/healthz", intervalSec: 60, timeoutSec: 10, expectedStatus: 200, enabled: true, down: false, changedAt: at(2, 14), createdAt: at(30) },
     ],
     restores: [{ id: "rs-1", backupId: "bk-db-3", serviceId: "db", status: "succeeded", createdAt: at(3, 11), finishedAt: at(3, 11) }],
     domains: [{ id: "dom-1", name: "acme.example", proxied: false, createdAt: at(30) }],
