@@ -122,7 +122,7 @@ services:
 
 | Field | Type | Applies to | Meaning |
 |---|---|---|---|
-| `kind` | `app` \| `postgres` \| `redis` \| `mysql` \| `mariadb` \| `mongodb` | all | What the service is. Default: `postgres` or `redis` when the image is the official one (`postgres:17-alpine`, `redis:8`), else `app`. Set `kind: app` to run those images as plain containers. MySQL, MariaDB and MongoDB images stay apps unless `kind` says otherwise, so existing files that run them with their own `environment` and `volumes` keep working. |
+| `kind` | `app` \| `postgres` \| `redis` \| `mysql` \| `mariadb` \| `mongodb` | all | What the service is. Default: `postgres` or `redis` when the image is the official one (`postgres:17-alpine`, `redis:8`), else `app`. Set `kind: app` to run those images as plain containers. MySQL, MariaDB, MongoDB and PostGIS (`postgis/postgis`) images stay apps unless `kind` says otherwise (`postgres` for PostGIS), so existing files that run them with their own `environment` and `volumes` keep working. |
 | `domain` | hostname | apps | Public hostname, served over HTTPS by Traefik. Needs `port` (unless the app only publishes ports and the domain is only for DNS). |
 | `port` | 1–65535 | apps | Container port Traefik routes the domain to. Usually written as `expose` instead. |
 | `health_path` | path | apps | HTTP path (e.g. `/healthz`) that must answer 2xx/3xx before a new replica takes traffic, checked by a probe kipitiny injects, so the image needs no `curl`. Needs the port. Without it or a `healthcheck`: the image's healthcheck, else a stability wait. Not with `healthcheck`. |
