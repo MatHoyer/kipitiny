@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Globe, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { Globe, Plus, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import { CloudflareIcon } from "@/components/brand-icons";
 import { CheckboxField, EmptyState, ErrorText, Mono, Tag, TestButton } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -180,6 +181,16 @@ function CloudflareCard() {
       qc.invalidateQueries({ queryKey: ["domains"] });
     },
   });
+  const sync = useMutation({
+    meta: { error: "Couldn't sync DNS" },
+    mutationFn: api.syncCloudflare,
+    onSuccess: (v) => {
+      qc.setQueryData(["cloudflare"], v);
+      qc.invalidateQueries({ queryKey: ["domains"] });
+      if (v.tunnelError) toast.warning("DNS synced, but some tunnel routes failed");
+      else toast.success("DNS synced");
+    },
+  });
   const status = cf.data;
   if (!status) return <ErrorText error={cf.error} />;
 
@@ -197,6 +208,9 @@ function CloudflareCard() {
         </div>
         {status.connected ? (
           <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon-sm" title="Sync DNS now" aria-label="Sync DNS now" loading={sync.isPending} onClick={() => sync.mutate()}>
+              <RefreshCw />
+            </Button>
             <TestButton name="Cloudflare" test={api.testCloudflare} />
             <ConfirmDialog
               trigger={

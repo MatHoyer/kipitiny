@@ -149,6 +149,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	mux.HandleFunc("PUT /api/cloudflare", a.connectCloudflare)
 	mux.HandleFunc("DELETE /api/cloudflare", a.disconnectCloudflare)
 	mux.HandleFunc("POST /api/cloudflare/test", a.testCloudflare)
+	mux.HandleFunc("POST /api/cloudflare/sync", a.syncCloudflare)
 	mux.HandleFunc("PUT /api/servers/{id}/network", a.setServerNetwork)
 	mux.HandleFunc("GET /api/networks", a.listNetworks)
 	mux.HandleFunc("GET /api/canvas", a.canvasLayout)

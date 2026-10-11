@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"reflect"
@@ -62,6 +63,7 @@ type DomainView struct {
 }
 
 type dnsState struct {
+	syncing   sync.Mutex // one sync at a time: the loop's or a manual one
 	mu        sync.Mutex
 	loaded    bool
 	token     string
@@ -329,7 +331,8 @@ func (c *Core) kickDNS() {
 }
 
 // StartDNSSync keeps Cloudflare DNS records and tunnel routes in line with
-// service domains: now, after changes, and every ten minutes.
+// service domains: now, after changes, every ten minutes, and on demand
+// (SyncDNS).
 func (c *Core) StartDNSSync() error {
 	return c.goLoop(func() {
 		timer := time.NewTimer(0)
@@ -350,6 +353,35 @@ func (c *Core) StartDNSSync() error {
 	})
 }
 
+// SyncDNS syncs DNS records and tunnel routes now instead of waiting for the
+// next round, detecting servers' public IPs again.
+func (c *Core) SyncDNS(ctx context.Context) (CloudflareView, error) {
+	if c.cfToken(ctx) == "" {
+		return CloudflareView{}, fmt.Errorf("%w: Cloudflare isn't connected", ErrInvalid)
+	}
+	s := c.cf(ctx)
+	s.mu.Lock()
+	s.ips = nil
+	s.mu.Unlock()
+	// Finish even if the caller goes away: a half-applied sync is redone
+	// only at the next round.
+	if err := c.syncDNS(context.WithoutCancel(ctx)); err != nil {
+		return CloudflareView{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	return c.CloudflareStatus(ctx), nil
+}
+
+// DNSRecords is the state of every hostname whose record the manager keeps,
+// as of the last sync.
+func (c *Core) DNSRecords(ctx context.Context) map[string]DNSStatus {
+	s := c.cf(ctx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]DNSStatus, len(s.status))
+	maps.Copy(out, s.status)
+	return out
+}
+
 // want is a DNS record the manager should hold.
 type want struct {
 	zone    cloudflare.Zone
@@ -364,10 +396,12 @@ func (c *Core) syncDNS(ctx context.Context) error {
 	if token == "" {
 		return nil
 	}
+	s := &c.dns
+	s.syncing.Lock()
+	defer s.syncing.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	cf := cloudflare.New(token)
-	s := &c.dns
 
 	zones, err := cf.Zones(ctx)
 	if err != nil {

@@ -100,3 +100,12 @@ func (a *API) testCloudflare(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (a *API) syncCloudflare(w http.ResponseWriter, r *http.Request) {
+	v, err := a.core.SyncDNS(r.Context())
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
