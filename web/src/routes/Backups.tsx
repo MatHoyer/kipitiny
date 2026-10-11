@@ -12,6 +12,7 @@ import { formatBytes, timeAgo } from "@/lib/format";
 import { api, type Backup, type BackupTarget } from "../api";
 import { BackupList } from "./BackupList";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
+import { storageIcon } from "@/components/storage";
 import { Schedules } from "./Schedules";
 
 
@@ -97,6 +98,7 @@ function FilteredBackups({ backups, targets }: { backups: Backup[]; targets: Bac
               <SelectItem value="all">All targets</SelectItem>
               {targets.map((t) => (
                 <SelectItem key={t.id} value={t.id}>
+                  {storageIcon(t)}
                   {t.name}
                 </SelectItem>
               ))}

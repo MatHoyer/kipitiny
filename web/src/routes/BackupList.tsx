@@ -7,6 +7,7 @@ import { byDay, formatBytes, formatDuration, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Backup, BackupTarget } from "../api";
 import { Tip } from "@/components/ui/tooltip";
+import { storageIcon } from "@/components/storage";
 
 /** Backups as rows grouped by day; each opens its page. */
 export function BackupList({
@@ -24,7 +25,6 @@ export function BackupList({
     return (
       empty ?? <EmptyState icon={DatabaseBackup} title="No backups yet" description="Back up a database or volumes, or let a schedule do it." />
     );
-  const targetName = (id: string) => targets.find((t) => t.id === id)?.name ?? "deleted target";
 
   return (
     <div className="space-y-6">
@@ -47,7 +47,8 @@ export function BackupList({
                       {b.status !== "succeeded" && <StateBadge state={b.status} />}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {new Date(b.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {targetName(b.targetId)}
+                      {new Date(b.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ·{" "}
+                      <StorageName target={targets.find((t) => t.id === b.targetId)} />
                       {b.finishedAt && b.status === "succeeded" && ` · ${formatDuration(b.durationMs)}`}
                       {b.error && <span className="text-destructive"> · {b.error}</span>}
                     </p>
@@ -68,6 +69,17 @@ export function BackupList({
         </section>
       ))}
     </div>
+  );
+}
+
+/** A backup's storage: its name behind a tiny mark of its provider. */
+export function StorageName({ target, className }: { target?: BackupTarget; className?: string }) {
+  if (!target) return <span className={className}>deleted target</span>;
+  return (
+    <span className={cn("inline-flex items-center gap-1 align-bottom [&>svg]:size-3 [&>svg]:shrink-0", className)}>
+      {storageIcon(target)}
+      {target.name}
+    </span>
   );
 }
 
