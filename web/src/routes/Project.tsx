@@ -400,6 +400,7 @@ const emptyForm = {
 };
 
 type DatabaseChoice = {
+  kind: DatabaseKind;
   title: string;
   /** Major versions offered, newest first. */
   versions: string[];
@@ -411,8 +412,12 @@ type DatabaseChoice = {
   placeholder: string;
 };
 
-const databaseChoices: Record<DatabaseKind, DatabaseChoice> = {
+// PostGIS's images are PostgreSQL's with the extension: the same kind, another image.
+const postgisTags: Record<string, string> = { "18": "18-3.6", "17": "17-3.6", "16": "16-3.5", "15": "15-3.5" };
+
+const databaseChoices: Record<DatabaseKind | "postgis", DatabaseChoice> = {
   postgres: {
+    kind: "postgres",
     title: "PostgreSQL",
     versions: ["18", "17", "16", "15"],
     version: "17",
@@ -422,7 +427,20 @@ const databaseChoices: Record<DatabaseKind, DatabaseChoice> = {
     memoryHint: "Container limit; shared_buffers is sized from it.",
     placeholder: "db",
   },
+  postgis: {
+    kind: "postgres",
+    title: "PostGIS",
+    versions: ["18", "17", "16", "15"],
+    version: "17",
+    // Alpine like postgres's own: an existing database can switch to it (same collations).
+    image: (v) => `postgis/postgis:${postgisTags[v]}-alpine`,
+    memory: 512,
+    minMemory: 128,
+    memoryHint: "Container limit; shared_buffers is sized from it.",
+    placeholder: "db",
+  },
   redis: {
+    kind: "redis",
     title: "Redis",
     versions: ["8", "7"],
     version: "8",
@@ -433,6 +451,7 @@ const databaseChoices: Record<DatabaseKind, DatabaseChoice> = {
     placeholder: "cache",
   },
   mysql: {
+    kind: "mysql",
     title: "MySQL",
     versions: ["9", "8.4"],
     version: "8.4",
@@ -443,6 +462,7 @@ const databaseChoices: Record<DatabaseKind, DatabaseChoice> = {
     placeholder: "mysql",
   },
   mariadb: {
+    kind: "mariadb",
     title: "MariaDB",
     versions: ["11.8", "11.4", "10.11"],
     version: "11.8",
@@ -453,6 +473,7 @@ const databaseChoices: Record<DatabaseKind, DatabaseChoice> = {
     placeholder: "mariadb",
   },
   mongodb: {
+    kind: "mongodb",
     title: "MongoDB",
     // 8.0 refuses to start on Linux 6.19 and later.
     versions: ["8.2", "7.0"],
@@ -465,7 +486,7 @@ const databaseChoices: Record<DatabaseKind, DatabaseChoice> = {
   },
 };
 
-type Choice = "image" | DatabaseKind;
+type Choice = "image" | keyof typeof databaseChoices;
 
 const choiceGroups: { label: string; choices: { id: Choice; icon: ReactNode; title: string; description: string }[] }[] = [
   {
@@ -478,6 +499,7 @@ const choiceGroups: { label: string; choices: { id: Choice; icon: ReactNode; tit
     label: "Databases",
     choices: [
       ...dbChoice("postgres", "Relational database, backed up on a schedule."),
+      ...dbChoice("postgis", "PostgreSQL with geographic types and queries."),
       ...dbChoice("mysql", "The most common relational database for web apps."),
       ...dbChoice("mariadb", "MySQL-compatible relational database."),
       ...dbChoice("mongodb", "Document database for JSON-shaped data."),
@@ -486,8 +508,9 @@ const choiceGroups: { label: string; choices: { id: Choice; icon: ReactNode; tit
   },
 ];
 
-function dbChoice(kind: DatabaseKind, description: string) {
-  return [{ id: kind, icon: <ServiceIcon service={{ kind }} />, title: databaseChoices[kind].title, description }];
+function dbChoice(id: keyof typeof databaseChoices, description: string) {
+  const { kind, title } = databaseChoices[id];
+  return [{ id, icon: <ServiceIcon service={{ kind }} />, title, description }];
 }
 
 const choiceTitle = (c: Choice) => (c === "image" ? "New app from a Docker image" : `New ${databaseChoices[c].title} database`);
@@ -504,7 +527,8 @@ export function NewServiceDialog({ projectId, trigger, stay }: { projectId: stri
   const [env, setEnv] = useState<EnvRow[]>([]);
   // First step: what to create; the form follows.
   const [choice, setChoice] = useState<Choice | null>(null);
-  const kind = !choice || choice === "image" ? "app" : choice;
+  const db = !choice || choice === "image" ? null : databaseChoices[choice];
+  const kind = db?.kind ?? "app";
   const [form, setForm] = useState(emptyForm);
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
@@ -512,12 +536,12 @@ export function NewServiceDialog({ projectId, trigger, stay }: { projectId: stri
     meta: { error: "Couldn't create the service" },
     mutationFn: async (deploy: boolean) => {
       const input: ServiceInput =
-        kind !== "app"
+        db
           ? {
               kind,
               name: form.name.trim(),
-              image: databaseChoices[kind].image(form.version || databaseChoices[kind].version),
-              memoryMb: Number(form.memory) || databaseChoices[kind].memory,
+              image: db.image(form.version || db.version),
+              memoryMb: Number(form.memory) || db.memory,
             }
           : {
               kind,
@@ -603,27 +627,27 @@ export function NewServiceDialog({ projectId, trigger, stay }: { projectId: stri
                 autoFocus
                 value={form.name}
                 onChange={set("name")}
-                placeholder={kind === "app" ? "web" : databaseChoices[kind].placeholder}
+                placeholder={db ? db.placeholder : "web"}
                 description={kind !== "app" ? "Also the hostname apps use to connect." : undefined}
               />
-              {kind !== "app" ? (
+              {db ? (
                 <>
                   <FloatingSelect
-                    key={`version-${kind}`}
+                    key={`version-${choice}`}
                     label="Version"
-                    value={form.version || databaseChoices[kind].version}
+                    value={form.version || db.version}
                     onValueChange={(v) => setForm({ ...form, version: v })}
-                    options={databaseChoices[kind].versions.map((v) => ({ value: v, label: `${databaseChoices[kind].title} ${v}` }))}
+                    options={db.versions.map((v) => ({ value: v, label: `${db.title} ${v}` }))}
                   />
                   <FloatingInput
                     label="Memory (MB)"
                     type="number"
-                    min={databaseChoices[kind].minMemory}
-                    step={databaseChoices[kind].minMemory < 128 ? 64 : 128}
+                    min={db.minMemory}
+                    step={db.minMemory < 128 ? 64 : 128}
                     value={form.memory}
                     onChange={set("memory")}
-                    placeholder={String(databaseChoices[kind].memory)}
-                    description={databaseChoices[kind].memoryHint}
+                    placeholder={String(db.memory)}
+                    description={db.memoryHint}
                   />
                 </>
               ) : (

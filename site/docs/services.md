@@ -19,6 +19,16 @@ order: 3
   more databases through env references, e.g. `DATABASE_URL={{ db.main.URL }}`
   (fields: `URL`, `HOST`, `PORT`, `USER`, `PASSWORD`, `DATABASE`). The
   [data browser](/docs/data) shows its tables and runs queries.
+- **PostGIS** is a PostgreSQL service whose image has the extension: pick
+  *PostGIS* when adding a database (`postgis/postgis:17-3.6-alpine`), or set an
+  existing PostgreSQL database's image to the PostGIS tag of the same major
+  version (`postgres:17-alpine` → `postgis/postgis:17-3.6-alpine`). On a new
+  data directory the image creates the `postgis`, `postgis_topology`,
+  `fuzzystrmatch` and `postgis_tiger_geocoder` extensions in the main database;
+  anywhere else (a database switched to PostGIS, another database of the
+  instance) run `CREATE EXTENSION postgis;`. In a compose file, set
+  `x-kipitiny.kind: postgres` on a `postgis/postgis` image. PostGIS publishes
+  amd64 images only.
 - **Redis, MySQL, MariaDB and MongoDB** services work the same way, each on its
   own port (`6379`, `3306`, `27017`). Their `URL` is `redis://:…@cache:6379`,
   `mysql://app:…@sql:3306/app` (MariaDB too) or
