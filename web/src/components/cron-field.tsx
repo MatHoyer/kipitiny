@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Mono } from "@/components/common";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
@@ -44,6 +44,16 @@ export function CronField({
   const isPreset = presets.some(([c]) => c === value);
   const [picked, setPicked] = useState(!isPreset);
   const custom = picked || !isPreset;
+  // A value set from outside (a reset) shows its preset again.
+  const emitted = useRef(value);
+  useEffect(() => {
+    if (value !== emitted.current) setPicked(!presets.some(([c]) => c === value));
+    emitted.current = value;
+  }, [value]);
+  const emit = (cron: string) => {
+    emitted.current = cron;
+    onChange(cron);
+  };
 
   return (
     <>
@@ -52,7 +62,7 @@ export function CronField({
         value={custom ? "custom" : value}
         onValueChange={(v) => {
           setPicked(v === "custom");
-          if (v !== "custom") onChange(v);
+          if (v !== "custom") emit(v);
         }}
         options={[...presets.map(([value, label]) => ({ value, label })), { value: "custom", label: "Custom cron…" }]}
       />
@@ -61,7 +71,7 @@ export function CronField({
           label="Cron expression"
           required
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => emit(e.target.value)}
           placeholder="30 2 * * 1-5"
           inputClassName="font-mono"
           className={inputClassName}

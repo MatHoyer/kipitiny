@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Code, List, Pencil, Plus, Trash2 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { EnvEntryDialog, envKeyRe, type EnvContext } from "@/components/env-entry-dialog";
 import { ManagerRefValue, TemplateValue } from "@/components/template-value";
 import { Button } from "@/components/ui/button";
@@ -72,7 +72,14 @@ export function EnvEditor({
   });
   const openDialog = (index: number | null) => setDialog((d) => ({ open: true, index, n: d.n + 1 }));
 
+  // Rows set from outside (a reset, a save) rewrite the text; typed ones don't.
+  const emitted = useRef(rows);
+  useEffect(() => {
+    if (rows !== emitted.current && mode === "raw") setText(formatEnvRows(rows));
+    emitted.current = rows;
+  }, [rows]);
   const change = (next: EnvRow[]) => {
+    emitted.current = next;
     onChange(next);
     if (mode === "raw") setText(formatEnvRows(next));
   };
@@ -224,8 +231,10 @@ export function EnvEditor({
           rows={Math.max(4, rows.length + 1)}
           value={text}
           onChange={(e) => {
+            const next = parseEnvRows(e.target.value);
             setText(e.target.value);
-            onChange(parseEnvRows(e.target.value));
+            emitted.current = next;
+            onChange(next);
           }}
           placeholder={`NODE_ENV=production${vars ? `\nAPI_URL=${envRef("API_URL")}` : ""}\n# secrets\nAPI_TOKEN=…`}
           disabled={readOnly}

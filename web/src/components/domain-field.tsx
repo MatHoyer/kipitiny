@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
@@ -51,24 +51,31 @@ export function DomainField({
   const [base, setBase] = useState(NONE);
   const [sub, setSub] = useState("");
 
-  // Split the initial value once the list is known; after that the fields
-  // are the source of truth (so "Other" doesn't snap back to a listed base).
+  // Split the value once the list is known, and again when it changes from
+  // outside (a reset); the fields' own edits don't re-split, so "Other"
+  // doesn't snap back to a listed base.
   const [ready, setReady] = useState(false);
+  const emitted = useRef<string | null>(null);
   useEffect(() => {
-    if (!domains.data || ready) return;
+    if (!domains.data || (ready && value === emitted.current)) return;
     const s = split(value, bases);
     setBase(s.base);
     setSub(s.sub);
+    emitted.current = value;
     setReady(true);
-  }, [domains.data]); // only when the list first arrives
+  }, [domains.data, value]);
 
+  const emit = (domain: string) => {
+    emitted.current = domain;
+    onChange(domain);
+  };
   const update = (nextBase: string, nextSub: string) => {
     setBase(nextBase);
     setSub(nextSub);
     const s = nextSub.trim().toLowerCase();
-    if (nextBase === NONE) onChange("");
-    else if (nextBase === OTHER) onChange(s);
-    else onChange(s ? `${s}.${nextBase}` : nextBase);
+    if (nextBase === NONE) emit("");
+    else if (nextBase === OTHER) emit(s);
+    else emit(s ? `${s}.${nextBase}` : nextBase);
   };
 
   // What the text field should hold after switching to base b.
