@@ -181,6 +181,12 @@ export function Backup() {
                 {target?.name ?? "deleted target"}
               </Link>
             </Detail>
+            {b.image && (
+              <Detail label="Image">
+                <Mono>{b.image}</Mono>
+              </Detail>
+            )}
+            {!!b.extensions?.length && <Detail label="Extensions">{b.extensions.join(", ")}</Detail>}
             <Detail label="Encryption">{b.encrypted ? "age (X25519), with the target's key" : "none"}</Detail>
             <Detail label="Started">{formatDateTime(b.createdAt)}</Detail>
             <Detail label="Finished">{b.finishedAt ? formatDateTime(b.finishedAt) : "—"}</Detail>

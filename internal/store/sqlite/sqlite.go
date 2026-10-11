@@ -654,7 +654,7 @@ func (s *Store) FinishBackup(ctx context.Context, b store.Backup) error {
 	t := now()
 	b.FinishedAt = &t
 	res, err := s.db.NewUpdate().Model(&b).
-		Column("status", "size_bytes", "sha256", "encrypted", "pg_version", "duration_ms", "error", "finished_at").
+		Column("status", "size_bytes", "sha256", "encrypted", "pg_version", "extensions", "duration_ms", "error", "finished_at").
 		WherePK().Exec(ctx)
 	if err != nil {
 		return mapErr(err)

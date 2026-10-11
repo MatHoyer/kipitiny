@@ -38,7 +38,16 @@ func dumpTestDB(t *testing.T, kind store.ServiceKind) (*Core, context.Context, s
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := c.serviceFromInput(p.ID, ServiceInput{Name: "db", Kind: kind})
+	svc, exec := startTestDB(t, c, ctx, p.ID, ServiceInput{Name: "db", Kind: kind})
+	return c, ctx, svc, exec
+}
+
+// startTestDB creates the database service in in project projectID and
+// runs it like a deploy would; exec runs a shell command in its container.
+func startTestDB(t *testing.T, c *Core, ctx context.Context, projectID string, in ServiceInput) (store.Service, func(string) string) {
+	t.Helper()
+	dk := c.dockerFor(store.LocalServerID)
+	svc, err := c.serviceFromInput(projectID, in)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +69,7 @@ func dumpTestDB(t *testing.T, kind store.ServiceKind) (*Core, context.Context, s
 	applyDatabaseSpec(cfg, host, svc)
 	// Not kipitiny.managed: a manager running on this daemon would remove
 	// it as an orphan.
-	cfg.Labels = map[string]string{docker.LabelProject: p.ID, docker.LabelService: svc.ID, docker.LabelDeploy: "D1"}
+	cfg.Labels = map[string]string{docker.LabelProject: projectID, docker.LabelService: svc.ID, docker.LabelDeploy: "D1"}
 	id, err := dk.Run(ctx, client.ContainerCreateOptions{Name: "kipitiny-test-" + strings.ToLower(svc.ID), Config: cfg, HostConfig: host})
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +89,7 @@ func dumpTestDB(t *testing.T, kind store.ServiceKind) (*Core, context.Context, s
 		}
 		return strings.TrimSpace(out.String())
 	}
-	return c, ctx, svc, exec
+	return svc, exec
 }
 
 // dumpRoundTrip backs up, verifies and restores svc: seed writes the data,

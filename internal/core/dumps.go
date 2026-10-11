@@ -226,6 +226,8 @@ func (c *Core) verifyDump(ctx context.Context, b store.Backup) (store.Verificati
 	if live, err := c.store.GetService(ctx, b.ServiceID); err == nil && live.Kind == svc.Kind {
 		// Its own image: the server that made the dump, or a later one.
 		svc.Image, svc.ServerID = live.Image, live.ServerID
+	} else if b.Image != "" {
+		svc.Image = b.Image
 	}
 	dk := c.dockerFor(svc.ServerID)
 	if err := dk.EnsureImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image)); err != nil {

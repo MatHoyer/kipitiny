@@ -15,7 +15,10 @@ order: 8
   history shows which database each backup holds, and a restore puts back that
   same database, creating it if the instance no longer has it.
 - A backup only counts once `pg_dump` exits 0; partial uploads are deleted. Each
-  backup records size, SHA-256, server version and duration.
+  backup records size, SHA-256, server version, the service's image and
+  duration, and a PostgreSQL one the extensions the database uses (`postgis`,
+  `vector`…). A restore into a server whose image lacks one of them is refused
+  before anything changes: restore a PostGIS backup into a PostGIS database.
 - Restores load the dump into a scratch database and swap it in by rename, so the
   result is exactly the backup and a failed restore leaves live data untouched.
   Apps referencing the database are stopped meanwhile. The checksum is verified.
@@ -47,11 +50,13 @@ order: 8
 ## Restore tests
 
 A backup nobody restored is a hope. *Verify* (or a schedule with restore tests on,
-the default) restores a backup into a throwaway PostgreSQL container with no
-network, matching the backup's major version, then runs `ANALYZE` and records
+the default) restores a backup into an empty database of a throwaway PostgreSQL
+container with no network: the service's image when it still runs the backup's
+major version, else the image that made the backup (PostGIS…), else the
+official one of that major. It then runs `ANALYZE` and records
 tables, estimated rows, database size and duration on the backup. A MySQL,
 MariaDB or MongoDB dump goes into a throwaway server of the service's image
-(the kind's default once the service is gone) and records tables (collections),
+(once the service is gone, the one that made the backup, or the kind's default for backups that don't record it) and records tables (collections),
 exact rows (documents) and size. The container
 and its volume are always removed; one test runs at a time. A volume backup's
 test reads the whole archive back (decrypt, gunzip, list) in a throwaway
