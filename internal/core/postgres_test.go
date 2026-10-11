@@ -70,6 +70,22 @@ func TestCheckDatabaseUpdate(t *testing.T) {
 		t.Errorf("major upgrade allowed: %v", err)
 	}
 
+	for image, ok := range map[string]bool{
+		"postgis/postgis:17-3.6-alpine":    true,
+		"postgres:17.6-alpine3.22":         true,
+		"postgres:17":                      false,
+		"postgres:17-bookworm":             false,
+		"postgis/postgis:17-3.6":           false,
+		"postgres:17-alpine@sha256:" + sha: true,
+		"ghcr.io/org/postgres:17-custom":   false,
+	} {
+		libc := old
+		libc.Image = image
+		if err := checkDatabaseUpdate(old, libc); (err == nil) != ok {
+			t.Errorf("%s → %s: %v", old.Image, image, err)
+		}
+	}
+
 	creds := old
 	creds.Env = map[string]string{pgUser: "app", pgPassword: "changed", pgDatabase: "app"}
 	if err := checkDatabaseUpdate(old, creds); !errors.Is(err, ErrInvalid) {

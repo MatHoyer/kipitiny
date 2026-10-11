@@ -185,7 +185,7 @@ export function GeneralCard({ svc }: { svc: ServiceT }) {
 
 /** What changing a database's image can and can't do. */
 const imageHints: Partial<Record<ServiceT["kind"], string>> = {
-  postgres: "Minor upgrades only; major versions need a dump and restore.",
+  postgres: "Minor upgrades only; a major version or a switch between Alpine and Debian images needs a dump and restore.",
   mysql: "Upgrades apply on start; going back to an older version needs a dump and restore.",
   mariadb: "Upgrades apply on start; going back to an older version needs a dump and restore.",
   mongodb: "One major version at a time, forward only; older versions can't read newer data.",

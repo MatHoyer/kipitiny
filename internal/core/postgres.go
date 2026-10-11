@@ -91,7 +91,24 @@ func checkPostgresUpdate(old, updated store.Service) error {
 	if postgresMajor(old.Image) != postgresMajor(updated.Image) {
 		return fmt.Errorf("%w: changing the postgres major version needs a dump and restore; create a new database service instead", ErrInvalid)
 	}
+	if alpineImage(old.Image) != alpineImage(updated.Image) {
+		// musl and glibc sort text differently: indexes on text built by
+		// one are silently wrong under the other.
+		return fmt.Errorf("%w: switching between Alpine and Debian images (%s → %s) corrupts text indexes; "+
+			"back up, create a new database service with the new image and restore into it", ErrInvalid, old.Image, updated.Image)
+	}
 	return nil
+}
+
+// alpineImage reports whether image's tag names an Alpine (musl) build:
+// "17-alpine", "17-3.6-alpine3.22". Other tags are taken as Debian (glibc).
+func alpineImage(image string) bool {
+	ref, err := reference.ParseNormalizedNamed(image)
+	if err != nil {
+		return false
+	}
+	tagged, ok := ref.(reference.Tagged)
+	return ok && strings.Contains(tagged.Tag(), "alpine")
 }
 
 func postgresURL(db store.Service) string {
