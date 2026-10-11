@@ -22,7 +22,11 @@ order: 3
 - **PostGIS** is a PostgreSQL service whose image has the extension: pick
   *PostGIS* when adding a database (`postgis/postgis:17-3.6-alpine`), or set an
   existing PostgreSQL database's image to the PostGIS tag of the same major
-  version (`postgres:17-alpine` → `postgis/postgis:17-3.6-alpine`). On a new
+  version (`postgres:17-alpine` → `postgis/postgis:17-3.6-alpine`). An image
+  change between Alpine and Debian builds (`postgres:17` → `postgis/postgis:17-3.6-alpine`)
+  is refused, like a major version change: they sort text differently, which
+  corrupts indexes. Back up, create a new database with the image and restore
+  into it. On a new
   data directory the image creates the `postgis`, `postgis_topology`,
   `fuzzystrmatch` and `postgis_tiger_geocoder` extensions in the main database;
   anywhere else (a database switched to PostGIS, another database of the
