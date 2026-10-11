@@ -763,6 +763,8 @@ export type KeyChanges = {
   deletes?: string[][];
   inserts?: string[][];
 };
+/** A column of a table being created: type is the database's own; default an SQL expression. */
+export type NewColumn = { name: string; type: string; nullable: boolean; primaryKey: boolean; default?: string };
 /** The statements a save runs, in order; applied is false for a preview. */
 export type ChangeResult = { statements: string[]; applied: boolean };
 
@@ -1019,6 +1021,15 @@ export const api = {
     request<ChangeResult>(`/services/${serviceId}/data/collections/${encodeURIComponent(collection)}/changes`, json("POST", { database, changes, apply })),
   keyChanges: (serviceId: string, key: string, changes: KeyChanges, apply: boolean) =>
     request<ChangeResult>(`/services/${serviceId}/data/key/changes`, json("POST", { key, changes, apply })),
+  /** Without apply, these only return the statement they would run. */
+  createTable: (serviceId: string, database: string, schema: string, name: string, columns: NewColumn[], apply: boolean) =>
+    request<ChangeResult>(`/services/${serviceId}/data/tables`, json("POST", { database, schema, name, columns, apply })),
+  dropTable: (serviceId: string, database: string, schema: string, table: string, apply: boolean) =>
+    request<ChangeResult>(`/services/${serviceId}/data/tables/${encodeURIComponent(schema)}/${encodeURIComponent(table)}/drop`, json("POST", { database, apply })),
+  createCollection: (serviceId: string, database: string, name: string, apply: boolean) =>
+    request<ChangeResult>(`/services/${serviceId}/data/collections`, json("POST", { database, name, apply })),
+  dropCollection: (serviceId: string, database: string, collection: string, apply: boolean) =>
+    request<ChangeResult>(`/services/${serviceId}/data/collections/${encodeURIComponent(collection)}/drop`, json("POST", { database, apply })),
   redisScan: (serviceId: string, cursor: string, pattern: string) =>
     request<RedisKeys>(`/services/${serviceId}/data/keys?${new URLSearchParams({ cursor, pattern })}`),
   redisGet: (serviceId: string, key: string, cursor = "0") =>

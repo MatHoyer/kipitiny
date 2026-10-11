@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { Check, ChevronLeft, ChevronRight, ChevronsLeft, Download, ListFilter, Plus, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Empty, ErrorText, Loading } from "@/components/common";
+import { ErrorText, Loading } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,6 +11,7 @@ import { api, type PgColumn, type PgFilter, type PgFilterOp, type PgTable, type 
 import { BrowserShell, SearchBox, SidebarHeader, SidebarItem, SidebarToggle } from "./browser-shell";
 import { ChangeBar, ReviewDialog, useUnsaved } from "./changes";
 import { CELL_MAX, DataTable, type Cell, type GridEdit } from "./data-table";
+import { DropButton, NewTableDialog } from "./schema-dialogs";
 import type { SqlDialect } from "./sql-editor";
 import { WriteMode } from "./write-mode";
 
@@ -50,13 +51,68 @@ export function PgBrowser({ serviceId, database, defaultSchema, dialect }: { ser
   const [sidebar, setSidebar] = useState(true);
   // Kept across tables: switching table doesn't lock it again.
   const [write, setWrite] = useState(false);
+  const [creating, setCreating] = useState(false);
   const { confirm } = useUnsaved();
+  const queryClient = useQueryClient();
   const pick = (key: string) => confirm(() => setPicked(key));
 
   if (tables.isPending) return <Loading />;
   if (tables.error) return <ErrorText error={tables.error} />;
   const list = tables.data ?? [];
-  if (list.length === 0) return <Empty>No tables in this database yet. Once your app runs its migrations, its tables show up here.</Empty>;
+  const writeSwitch = (
+    <WriteMode
+      className="ml-auto"
+      write={write}
+      onChange={(w) => (w ? setWrite(true) : confirm(() => setWrite(false)))}
+      description="You can then edit cells, add and delete rows, and create or drop tables. Nothing is written until you review the statements and confirm; only a restore from a backup undoes it."
+    />
+  );
+  const newTable = (
+    <NewTableDialog
+      open={creating}
+      onOpenChange={setCreating}
+      dialect={dialect}
+      defaultSchema={defaultSchema}
+      run={(schema, name, columns, apply) => api.createTable(serviceId, database, schema, name, columns, apply)}
+      onCreated={(schema, name) => {
+        queryClient.invalidateQueries({ queryKey: ["data", serviceId, "tables", database] });
+        setPicked(tableKey({ schema: dialect === "postgres" ? schema || "public" : database, name }));
+      }}
+    />
+  );
+  const newTableButton = write && (
+    <Button variant="ghost" size="icon-xs" title="New table" onClick={() => confirm(() => setCreating(true))}>
+      <Plus />
+    </Button>
+  );
+  if (list.length === 0)
+    return (
+      <BrowserShell
+        write={write}
+        sidebarOpen={false}
+        sidebar={null}
+        toolbar={
+          <>
+            {writeSwitch}
+            <Button variant="outline" size="icon-sm" title="Reload tables" onClick={() => tables.refetch()}>
+              <RefreshCw className={cn(tables.isFetching && "animate-spin")} />
+            </Button>
+            {newTable}
+          </>
+        }
+      >
+        <div className="flex flex-col items-center gap-3 p-10 text-center text-sm text-muted-foreground">
+          <p>No tables in this database yet. Once your app runs its migrations, its tables show up here.</p>
+          {write ? (
+            <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+              <Plus /> Table
+            </Button>
+          ) : (
+            <p>Or allow writes to create one.</p>
+          )}
+        </div>
+      </BrowserShell>
+    );
   const current = list.find((t) => tableKey(t) === picked) ?? list[0];
   const shown = list.filter((t) => tableKey(t).toLowerCase().includes(find.trim().toLowerCase()));
   const schemas = [...new Set(shown.map((t) => t.schema))];
@@ -68,11 +124,15 @@ export function PgBrowser({ serviceId, database, defaultSchema, dialect }: { ser
         search={find}
         onSearch={setFind}
         actions={
-          <Button variant="ghost" size="icon-xs" title="Reload tables" onClick={() => tables.refetch()}>
-            <RefreshCw className={cn(tables.isFetching && "animate-spin")} />
-          </Button>
+          <>
+            {newTableButton}
+            <Button variant="ghost" size="icon-xs" title="Reload tables" onClick={() => tables.refetch()}>
+              <RefreshCw className={cn(tables.isFetching && "animate-spin")} />
+            </Button>
+          </>
         }
       />
+      {newTable}
       <nav aria-label="Tables" className="flex-1 space-y-3 overflow-y-auto p-2">
         {shown.length === 0 && <p className="px-2 text-xs text-muted-foreground">No table matches.</p>}
         {schemas.map((schema) => (
@@ -106,7 +166,11 @@ export function PgBrowser({ serviceId, database, defaultSchema, dialect }: { ser
       onToggleSidebar={() => setSidebar(!sidebar)}
       dialect={dialect}
       write={write}
-      onWrite={setWrite}
+      writeSwitch={writeSwitch}
+      onDropped={() => {
+        setPicked(null);
+        queryClient.invalidateQueries({ queryKey: ["data", serviceId, "tables", database] });
+      }}
     />
   );
 }
@@ -135,7 +199,8 @@ function TableView({
   onToggleSidebar,
   dialect,
   write: writeAllowed,
-  onWrite,
+  writeSwitch,
+  onDropped,
 }: {
   serviceId: string;
   database: string;
@@ -147,7 +212,9 @@ function TableView({
   onToggleSidebar: () => void;
   dialect: SqlDialect;
   write: boolean;
-  onWrite: (w: boolean) => void;
+  /** Read only / Allow writes, just before Reload. */
+  writeSwitch: ReactNode;
+  onDropped: () => void;
 }) {
   const [size, setSize] = useState(25);
   const [page, setPage] = useState(0);
@@ -176,6 +243,10 @@ function TableView({
   const dirty = edited + deleted + pending.inserts.length;
   useEffect(() => setDirty(dirty), [dirty, setDirty]);
   useEffect(() => () => setDirty(0), [setDirty]);
+  // Turning writes off (once agreed to) drops what was pending.
+  useEffect(() => {
+    if (!writeAllowed) setPending(nothing);
+  }, [writeAllowed]);
   /** Runs a change of view once the pending edits are saved or dropped. */
   const guard = (fn: () => void) =>
     confirm(() => {
@@ -335,13 +406,16 @@ function TableView({
               <Plus /> Row
             </Button>
           )}
-          <WriteMode
-            className="ml-auto"
-            write={write}
-            onChange={(w) => (w ? onWrite(true) : guard(() => onWrite(false)))}
-            description="You can then edit cells, add rows and delete them. Nothing is written until you review the statements and save; only a restore from a backup undoes a save."
-            disabled={lockedWhy}
-          />
+          {writeAllowed && (
+            <DropButton
+              what={table.kind === "partitioned table" ? "table" : table.kind}
+              name={table.name}
+              run={(apply) => api.dropTable(serviceId, database, table.schema, table.name, apply)}
+              onDropped={onDropped}
+              note={`Its ${table.kind.endsWith("view") ? "definition" : "rows"} go with it, and only a restore from a backup brings them back. If a view or a foreign key depends on it, the database refuses.`}
+            />
+          )}
+          {writeSwitch}
           <Button variant="outline" size="icon-sm" title="Reload rows" onClick={() => rows.refetch()}>
             <RefreshCw className={cn(rows.isFetching && "animate-spin")} />
           </Button>
@@ -386,6 +460,7 @@ function TableView({
             </Button>
           </div>
           <ErrorText error={rows.error} />
+          {writeAllowed && lockedWhy && <span className="text-xs text-muted-foreground">{lockedWhy}</span>}
           {write && (
             <ChangeBar
               counts={[

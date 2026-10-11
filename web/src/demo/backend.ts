@@ -17,6 +17,7 @@ import type {
   RowChanges,
   DocChanges,
   KeyChanges,
+  NewColumn,
   ChangeResult,
   PgTable,
   Project,
@@ -1169,6 +1170,69 @@ const routes: Route[] = [
       const skip = Number(q.get("skip")) || 0;
       const limit = Number(q.get("limit")) || 25;
       return { documents: docs.slice(skip, skip + limit).map((d) => JSON.stringify(d)), truncated: [], hasMore: docs.length > skip + limit };
+    },
+  ],
+  [
+    "POST",
+    /^\/services\/([^/]+)\/data\/tables$/,
+    ({ m, body }): ChangeResult => {
+      const postgres = serviceOf(m[1]).kind === "postgres";
+      const name = String(body.name ?? "").trim();
+      const schema = postgres ? String(body.schema || "public") : "app";
+      const columns = (body.columns ?? []) as NewColumn[];
+      if (!name || !columns.length) throw invalid("a table needs a name and at least one column");
+      if (db.tables.some((t) => t.name === name && (!postgres || t.schema === schema))) throw invalid(`relation "${name}" already exists`);
+      const q = (x: string) => (postgres ? `"${x}"` : `\`${x}\``);
+      const pk = columns.filter((c) => c.primaryKey).map((c) => q(c.name));
+      const lines = columns.map((c) => `  ${q(c.name)} ${c.type}${!c.nullable && !c.primaryKey ? " NOT NULL" : ""}${c.default ? ` DEFAULT ${c.default}` : ""}`);
+      if (pk.length) lines.push(`  PRIMARY KEY (${pk.join(", ")})`);
+      const statement = `CREATE TABLE ${postgres ? `${q(schema)}.${q(name)}` : q(name)} (\n${lines.join(",\n")}\n);`;
+      if (body.apply) {
+        db.tables.push({ schema, name, columns: columns.map((c) => ({ name: c.name, type: c.type, primaryKey: c.primaryKey, nullable: c.nullable })), rows: [] });
+        save();
+      }
+      return { statements: [statement], applied: !!body.apply };
+    },
+  ],
+  [
+    "POST",
+    /^\/services\/([^/]+)\/data\/tables\/([^/]+)\/([^/]+)\/drop$/,
+    ({ m, body }): ChangeResult => {
+      const postgres = serviceOf(m[1]).kind === "postgres";
+      const t = db.tables.find((x) => (!postgres || x.schema === decodeURIComponent(m[2])) && x.name === decodeURIComponent(m[3]));
+      if (!t) throw notFound();
+      if (body.apply) {
+        db.tables = db.tables.filter((x) => x !== t);
+        save();
+      }
+      return { statements: [postgres ? `DROP TABLE "${t.schema}"."${t.name}";` : `DROP TABLE \`${t.name}\`;`], applied: !!body.apply };
+    },
+  ],
+  [
+    "POST",
+    /^\/services\/([^/]+)\/data\/collections$/,
+    ({ body }): ChangeResult => {
+      const name = String(body.name ?? "").trim();
+      if (!/^[A-Za-z_][A-Za-z0-9_.-]{0,119}$/.test(name)) throw invalid("a collection name has letters, digits, _ . and -, starting with a letter or _");
+      if (db.tables.some((t) => t.name === name)) throw invalid(`app already has a collection ${name}`);
+      if (body.apply) {
+        db.tables.push({ schema: "public", name, columns: [], rows: [] });
+        save();
+      }
+      return { statements: [`db.createCollection(${JSON.stringify(name)})`], applied: !!body.apply };
+    },
+  ],
+  [
+    "POST",
+    /^\/services\/([^/]+)\/data\/collections\/([^/]+)\/drop$/,
+    ({ m, body }): ChangeResult => {
+      const t = db.tables.find((x) => x.name === decodeURIComponent(m[2]));
+      if (!t) throw notFound();
+      if (body.apply) {
+        db.tables = db.tables.filter((x) => x !== t);
+        save();
+      }
+      return { statements: [`db.${t.name}.drop()`], applied: !!body.apply };
     },
   ],
   [

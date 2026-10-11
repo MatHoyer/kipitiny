@@ -97,6 +97,16 @@ browser, marked in the grid, until you save them:
   document's `_id`), and for an update with the edited columns' (fields') values
   unchanged. If someone changed or deleted it in the meantime, the save stops
   rather than overwrite their change; reload and edit it again.
+- **Tables and collections**: with writes allowed, **+** at the top of the list
+  (or **+ Table** / **+ Collection** in an empty database) creates one. A table
+  is designed column by column: a name, a type picked from the usual ones
+  (grouped as numbers, text, date and time, other; *Custom…* takes any type the
+  database knows), a default expression, primary key, NULL allowed. Its
+  `CREATE TABLE` is reviewed before it runs. The bin in the toolbar drops the open table, view or collection,
+  after reviewing the statement and typing its name. A drop never cascades: if
+  a view or a foreign key depends on the table, the database refuses.
+- Tables without a primary key, and views, can still be dropped with writes
+  allowed; their rows are left to the console.
 - Switching table, page, sort, filter, database or view, or leaving the page,
   asks before dropping pending changes. **Discard** drops them all.
 
@@ -128,9 +138,9 @@ queries are kept per database in this browser only (*History*).
 
 Browsing (and CSV export) needs a **read** token; editing and the console need
 **admin**, which the web UI always has. Every console run lands in the
-[audit log](/docs/api) as `data console` or `data console (write)`, every save as
-`data edit`, with the service but without the query or values, which may hold
-secrets.
+[audit log](/docs/api) as `data console` or `data console (write)`, every save
+as `data edit`, every create or drop as `data schema`, with the service but
+without the query or values, which may hold secrets.
 
 Endpoints, for scripts: `GET /api/services/{id}/data/tables`,
 `GET /api/services/{id}/data/tables/{schema}/{table}` (`limit`, `offset`, `order`,
@@ -139,7 +149,10 @@ Endpoints, for scripts: `GET /api/services/{id}/data/tables`,
 (`{database, changes: {deletes, updates, inserts}, apply}`; without `apply`, it
 only returns the statements),
 `POST /api/services/{id}/data/collections/{collection}/changes` (the same for
-documents), `POST /api/services/{id}/data/key/changes` (`{key, changes, apply}`; `create`
+documents), `POST /api/services/{id}/data/tables` (`{database, schema, name, columns, apply}`),
+`POST …/tables/{schema}/{table}/drop` and `POST …/collections/{collection}/drop`
+(`{database, apply}`), `POST /api/services/{id}/data/collections`
+(`{database, name, apply}`), `POST /api/services/{id}/data/key/changes` (`{key, changes, apply}`; `create`
 makes a new key),
 `GET /api/services/{id}/data/keys` (`cursor`, `pattern`),
 `GET /api/services/{id}/data/key` (`key`, `cursor`),

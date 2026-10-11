@@ -218,3 +218,71 @@ func (a *API) keyChanges(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, res)
 }
+
+func (a *API) createTable(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Database string           `json:"database"`
+		Schema   string           `json:"schema"`
+		Name     string           `json:"name"`
+		Columns  []core.NewColumn `json:"columns"`
+		Apply    bool             `json:"apply"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	res, err := a.core.CreateTable(r.Context(), r.PathValue("id"), body.Database, body.Schema, body.Name, body.Columns, body.Apply)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (a *API) dropTable(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Database string `json:"database"`
+		Apply    bool   `json:"apply"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	res, err := a.core.DropTable(r.Context(), r.PathValue("id"), body.Database, r.PathValue("schema"), r.PathValue("table"), body.Apply)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (a *API) createCollection(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Database string `json:"database"`
+		Name     string `json:"name"`
+		Apply    bool   `json:"apply"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	res, err := a.core.CreateCollection(r.Context(), r.PathValue("id"), body.Database, body.Name, body.Apply)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (a *API) dropCollection(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Database string `json:"database"`
+		Apply    bool   `json:"apply"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	res, err := a.core.DropCollection(r.Context(), r.PathValue("id"), body.Database, r.PathValue("collection"), body.Apply)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}

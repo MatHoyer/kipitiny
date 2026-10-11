@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { Save, Undo2 } from "lucide-react";
+import { Save, Trash2, Undo2 } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useBlocker } from "react-router";
 import { Loading } from "@/components/common";
@@ -129,9 +129,9 @@ export function ChangeBar({ counts, onDiscard, onSave }: { counts: ChangeCount[]
 
 /** Colors a statement's verb like the rows it touches: removed, changed, added. */
 const verbTone: [RegExp, string][] = [
-  [/^(DELETE|DEL|HDEL|SREM|ZREM|LREM|XDEL)\b|\.delete(One|Many)\(/, "text-destructive"],
+  [/^(DELETE|DROP|DEL|HDEL|SREM|ZREM|LREM|XDEL)\b|\.(delete(One|Many)|drop)\(/, "text-destructive"],
   [/^(UPDATE|SET|HSET|LSET|ZADD XX|RENAME)\b|\.(updateOne|replaceOne)\(/, "text-amber-600 dark:text-amber-400"],
-  [/^(INSERT|RPUSH|SADD|ZADD|XADD)\b|\.insertOne\(/, "text-emerald-600 dark:text-emerald-400"],
+  [/^(INSERT|CREATE|RPUSH|SADD|ZADD|XADD)\b|\.(insertOne|createCollection)\(/, "text-emerald-600 dark:text-emerald-400"],
 ];
 
 /**
@@ -144,6 +144,9 @@ export function ReviewDialog({
   run,
   onSaved,
   onFailed,
+  title = "Review changes",
+  action = "Save changes",
+  confirmName,
   atomic = "They run in one transaction: if one fails, or a row changed since you loaded it, nothing is saved.",
 }: {
   open: boolean;
@@ -152,6 +155,11 @@ export function ReviewDialog({
   onSaved: (res: ChangeResult) => void;
   /** A save failed: some changes may have been saved anyway when they don't run as one transaction. */
   onFailed?: () => void;
+  title?: string;
+  /** The confirm button's label. */
+  action?: string;
+  /** A name to type before confirming, for what can't be undone (dropping a table). */
+  confirmName?: string;
   /** How the statements run together. */
   atomic?: string;
 }) {
@@ -173,6 +181,8 @@ export function ReviewDialog({
     load();
     return resetPreview;
   }, [open, load, resetPreview, resetApply]);
+  const [typed, setTyped] = useState("");
+  useEffect(() => setTyped(""), [open]);
   const statements = preview.data?.statements ?? [];
   const error = preview.error ?? apply.error;
 
@@ -180,7 +190,7 @@ export function ReviewDialog({
     <Dialog open={open} onOpenChange={(o) => !apply.isPending && onOpenChange(o)}>
       <DialogContent className="flex max-h-[85vh] flex-col gap-0 p-0 sm:max-w-3xl">
         <DialogHeader className="border-b p-4">
-          <DialogTitle>Review changes</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
             {statements.length > 0 && `${statements.length === 1 ? "1 statement" : `${statements.length} statements`}. `}
             {atomic}
@@ -193,7 +203,7 @@ export function ReviewDialog({
               {statements.map((s, i) => {
                 const tone = verbTone.find(([re]) => re.test(s))?.[1];
                 // The verb: SQL's first word, or a mongosh call up to its parenthesis.
-                const [, verb, rest] = /^(db\..*?\.\w+(?=\()|\S+)([\s\S]*)$/.exec(s) ?? [, s, ""];
+                const [, verb, rest] = /^(db\.(?:.*?\.)?\w+(?=\()|\S+)([\s\S]*)$/.exec(s) ?? [, s, ""];
                 return (
                   <li key={i} className="flex gap-3 px-4 py-2">
                     <span className="w-5 shrink-0 text-right text-muted-foreground tabular-nums select-none">{i + 1}</span>
@@ -212,12 +222,32 @@ export function ReviewDialog({
             </div>
           )}
         </div>
+        {confirmName !== undefined && (
+          <label className="block space-y-1.5 border-t px-4 py-3 text-sm">
+            <span className="text-muted-foreground">
+              Type <span className="font-mono text-foreground">{confirmName}</span> to confirm.
+            </span>
+            <input
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              aria-label={`Type ${confirmName} to confirm`}
+              className="h-8 w-full rounded-md border bg-background px-2 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            />
+          </label>
+        )}
         <DialogFooter className="m-0">
           <Button variant="outline" disabled={apply.isPending} onClick={() => onOpenChange(false)}>
             Keep editing
           </Button>
-          <Button variant="destructive" loading={apply.isPending} disabled={!preview.isSuccess} onClick={() => apply.mutate()}>
-            <Save /> Save changes
+          <Button
+            variant="destructive"
+            loading={apply.isPending}
+            disabled={!preview.isSuccess || (confirmName !== undefined && typed !== confirmName)}
+            onClick={() => apply.mutate()}
+          >
+            {confirmName !== undefined ? <Trash2 /> : <Save />} {action}
           </Button>
         </DialogFooter>
       </DialogContent>
