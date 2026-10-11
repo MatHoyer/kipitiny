@@ -5,7 +5,7 @@ import { EnvEntryDialog, envKeyRe, type EnvContext } from "@/components/env-entr
 import { ManagerRefValue, TemplateValue } from "@/components/template-value";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import {
   dbRefValid,
   envRef,
@@ -195,24 +195,21 @@ export function EnvEditor({
     <div className={cn("space-y-2", className)}>
       {showLabel && <span className="block text-sm font-medium">{label}</span>}
       <div className="flex items-center justify-between gap-2">
-        <ToggleGroup
-          type="single"
-          variant="outline"
+        <Segmented
           size="sm"
-          spacing={0}
           value={mode}
           onValueChange={(v) => switchMode(v as Mode)}
           aria-label="Editor view"
         >
-          <ToggleGroupItem value="list" className="aria-checked:bg-muted">
+          <SegmentedItem value="list">
             <List />
             Fields
-          </ToggleGroupItem>
-          <ToggleGroupItem value="raw" className="aria-checked:bg-muted">
+          </SegmentedItem>
+          <SegmentedItem value="raw">
             <Code />
             Text
-          </ToggleGroupItem>
-        </ToggleGroup>
+          </SegmentedItem>
+        </Segmented>
         {!readOnly && (
           <Button type="button" size="sm" onClick={() => openDialog(null)}>
             <Plus data-icon="inline-start" />

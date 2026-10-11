@@ -6,7 +6,7 @@ import { CheckboxField, Mono, Section } from "@/components/common";
 import { SaveBar } from "@/components/save-bar";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingTextarea } from "@/components/ui/floating-textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Applies } from "@/components/service-settings/parts";
 import { api, type Maintenance, type Service } from "../api";
 
@@ -124,24 +124,21 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
         </div>
 
         <div className="space-y-3">
-          <ToggleGroup
-            type="single"
-            variant="outline"
+          <Segmented
             size="sm"
-            spacing={0}
             value={form.custom ? "html" : "default"}
-            onValueChange={(v) => v && pick(v === "html")}
+            onValueChange={(v) => pick(v === "html")}
             aria-label="Page"
           >
-            <ToggleGroupItem value="default" className="aria-checked:bg-muted">
+            <SegmentedItem value="default">
               <Type />
               Default page
-            </ToggleGroupItem>
-            <ToggleGroupItem value="html" className="aria-checked:bg-muted">
+            </SegmentedItem>
+            <SegmentedItem value="html">
               <Code />
               Custom HTML
-            </ToggleGroupItem>
-          </ToggleGroup>
+            </SegmentedItem>
+          </Segmented>
           {form.custom ? (
             <div className="space-y-1.5">
               <Suspense fallback={<div className="h-64 rounded-md border" />}>

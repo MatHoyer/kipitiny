@@ -43,7 +43,7 @@ import {
   SidebarProvider,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Tip, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/logo";
@@ -316,28 +316,24 @@ function NavUser({ username }: { username: string }) {
             <div className="flex items-center gap-2 px-2 py-1 text-sm">
               <SunMoon className="size-4 text-muted-foreground" />
               Theme
-              <ToggleGroup
-                type="single"
+              <Segmented
                 size="sm"
-                variant="outline"
-                spacing={0}
-                value={theme}
-                onValueChange={(v) => v && setTheme(v)}
+                value={theme ?? "system"}
+                onValueChange={setTheme}
                 aria-label="Theme"
                 className="ml-auto"
               >
                 {themes.map(({ value, label, icon: Icon }) => (
                   <Tooltip key={value}>
                     <TooltipTrigger asChild>
-                      {/* The tooltip trigger overwrites data-state, so selection is styled from aria-checked. */}
-                      <ToggleGroupItem value={value} aria-label={label} className="aria-checked:bg-muted">
+                      <SegmentedItem value={value} aria-label={label} className="px-1.5">
                         <Icon />
-                      </ToggleGroupItem>
+                      </SegmentedItem>
                     </TooltipTrigger>
                     <TooltipContent>{label}</TooltipContent>
                   </Tooltip>
                 ))}
-              </ToggleGroup>
+              </Segmented>
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" className="gap-2" onClick={() => logout.mutate()}>

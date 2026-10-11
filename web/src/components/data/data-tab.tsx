@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState, type CSSProperties } from "react";
 import { Empty } from "@/components/common";
 import { serviceLogos } from "@/components/service-icon";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { api, isDatabase, type Service } from "../../api";
 import { MongoConsole, PgConsole, preloadSqlEditor, RedisConsole } from "./data-console";
 import { DatabasePicker, NewDatabaseButton } from "./database-picker";
@@ -38,22 +38,19 @@ export function DataTab({ svc }: { svc: Service }) {
   return (
     <div className="space-y-5" style={hue}>
       <div className="flex flex-wrap items-center gap-2">
-        <ToggleGroup
-          type="single"
+        <Segmented
           size="sm"
-          variant="outline"
-          spacing={0}
           value={view}
-          onValueChange={(v) => v && setView(v as typeof view)}
+          onValueChange={(v) => setView(v as typeof view)}
           aria-label="View"
         >
-          <ToggleGroupItem value="browse" className="text-muted-foreground data-[state=on]:text-foreground">
+          <SegmentedItem value="browse">
             <Database /> Browse
-          </ToggleGroupItem>
-          <ToggleGroupItem value="console" className="text-muted-foreground data-[state=on]:text-foreground">
+          </SegmentedItem>
+          <SegmentedItem value="console">
             <SquareTerminal /> Console
-          </ToggleGroupItem>
-        </ToggleGroup>
+          </SegmentedItem>
+        </Segmented>
         {multi && (
           <div className="ml-auto flex items-center gap-1.5">
             <DatabasePicker databases={dbs} value={database} onChange={setPicked} />
