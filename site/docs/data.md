@@ -67,18 +67,28 @@ browser, marked in the grid, until you save them:
   deletion: it shows struck through until you save, and ↶ takes it back. The
   expand button opens the row whole, to edit long values or set a field to
   `NULL` (or back to `DEFAULT` on a new row).
+- **MongoDB**: the pencil opens a document as Extended JSON, as shown. Only the
+  top-level fields you change are saved (`$set`, and `$unset` for those you
+  remove), so the others keep their exact types (an `int64` stays one). **+
+  Document** adds one; without an `_id`, MongoDB gives it one. The `_id` itself
+  can't change: add a new document and delete the old one. Edited documents turn
+  amber, with the fields that changed; new ones green; deleted ones struck
+  through. Documents cut at 4 KiB, and views, are left to the console.
 - Only a table with a primary key can be edited: it is how a row is found again.
   Views, values cut at 4 KiB and, on MySQL and MariaDB, binary columns are left
   to the console.
 - **Save** (or *Ctrl+S*) first shows the statements the manager wrote for your
-  changes: deletes, then updates, then inserts. Nothing runs until you confirm.
-  They run as **one transaction**, as the service's own user (root on MySQL and
-  MariaDB): if one fails, nothing is saved and your changes stay pending, to fix
-  and save again.
-- An update or delete must find its row as you loaded it: by its primary key, and
-  for an update with the edited columns' values unchanged. If someone changed or
-  deleted the row in the meantime, the save stops rather than overwrite their
-  change; reload and edit it again.
+  changes (SQL, or `mongosh` calls): deletes, then updates, then inserts.
+  Nothing runs until you confirm. On PostgreSQL, MySQL and MariaDB they run as
+  **one transaction**, as the service's own user (root on MySQL and MariaDB): if
+  one fails, nothing is saved and your changes stay pending, to fix and save
+  again. MongoDB has no transactions on a single server: every update and delete
+  is checked first, then they run in order as root; if one still fails, the
+  error says how many were saved before it.
+- An update or delete must find its row as you loaded it: by its primary key (a
+  document's `_id`), and for an update with the edited columns' (fields') values
+  unchanged. If someone changed or deleted it in the meantime, the save stops
+  rather than overwrite their change; reload and edit it again.
 - Switching table, page, sort, filter, database or view, or leaving the page,
   asks before dropping pending changes. **Discard** drops them all.
 
@@ -120,6 +130,8 @@ Endpoints, for scripts: `GET /api/services/{id}/data/tables`,
 `POST /api/services/{id}/data/tables/{schema}/{table}/changes`
 (`{database, changes: {deletes, updates, inserts}, apply}`; without `apply`, it
 only returns the statements),
+`POST /api/services/{id}/data/collections/{collection}/changes` (the same for
+documents),
 `GET /api/services/{id}/data/keys` (`cursor`, `pattern`),
 `GET /api/services/{id}/data/key` (`key`, `cursor`),
 `GET /api/services/{id}/data/collections/{collection}/documents` (`database`,
