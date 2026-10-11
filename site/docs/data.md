@@ -66,7 +66,9 @@ browser, marked in the grid, until you save them:
   green, its cells on `DEFAULT` until you fill them. The bin marks a row for
   deletion: it shows struck through until you save, and ↶ takes it back. The
   expand button opens the row whole, to edit long values or set a field to
-  `NULL` (or back to `DEFAULT` on a new row).
+  `NULL` (or back to `DEFAULT` on a new row). Only a table with a primary key
+  can be edited: it is how a row is found again. Views, values cut at 4 KiB and,
+  on MySQL and MariaDB, binary columns are left to the console.
 - **MongoDB**: the pencil opens a document as Extended JSON, as shown. Only the
   top-level fields you change are saved (`$set`, and `$unset` for those you
   remove), so the others keep their exact types (an `int64` stays one). **+
@@ -74,17 +76,23 @@ browser, marked in the grid, until you save them:
   can't change: add a new document and delete the old one. Edited documents turn
   amber, with the fields that changed; new ones green; deleted ones struck
   through. Documents cut at 4 KiB, and views, are left to the console.
-- Only a table with a primary key can be edited: it is how a row is found again.
-  Views, values cut at 4 KiB and, on MySQL and MariaDB, binary columns are left
-  to the console.
+- **Redis**: a string's value is edited whole in place. A hash, list, set or
+  sorted set opens as a grid, edited like a table: values, members and scores
+  change in place, **+ Item** adds one (a list appends it), the bin deletes one.
+  A hash field can't be renamed, nor a list item moved: add the new one and
+  delete the old. A stream's entries can only be deleted. **Delete key** removes
+  the whole key; edits keep its expiry. **+ Key** creates one (string, hash,
+  list, set or sorted set) with its first items, without expiry; the save stops
+  if the name is taken.
 - **Save** (or *Ctrl+S*) first shows the statements the manager wrote for your
-  changes (SQL, or `mongosh` calls): deletes, then updates, then inserts.
-  Nothing runs until you confirm. On PostgreSQL, MySQL and MariaDB they run as
-  **one transaction**, as the service's own user (root on MySQL and MariaDB): if
-  one fails, nothing is saved and your changes stay pending, to fix and save
-  again. MongoDB has no transactions on a single server: every update and delete
-  is checked first, then they run in order as root; if one still fails, the
-  error says how many were saved before it.
+  changes (SQL, `mongosh` calls or Redis commands): deletes, then updates, then
+  inserts. Nothing runs until you confirm. On PostgreSQL, MySQL and MariaDB they
+  run as **one transaction**, as the service's own user (root on MySQL and
+  MariaDB): if one fails, nothing is saved and your changes stay pending, to fix
+  and save again. On Redis they run in one script, atomically, after checking
+  the values you changed. MongoDB has no transactions on a single server: every
+  update and delete is checked first, then they run in order as root; if one
+  still fails, the error says how many were saved before it.
 - An update or delete must find its row as you loaded it: by its primary key (a
   document's `_id`), and for an update with the edited columns' (fields') values
   unchanged. If someone changed or deleted it in the meantime, the save stops
@@ -131,7 +139,8 @@ Endpoints, for scripts: `GET /api/services/{id}/data/tables`,
 (`{database, changes: {deletes, updates, inserts}, apply}`; without `apply`, it
 only returns the statements),
 `POST /api/services/{id}/data/collections/{collection}/changes` (the same for
-documents),
+documents), `POST /api/services/{id}/data/key/changes` (`{key, changes, apply}`; `create`
+makes a new key),
 `GET /api/services/{id}/data/keys` (`cursor`, `pattern`),
 `GET /api/services/{id}/data/key` (`key`, `cursor`),
 `GET /api/services/{id}/data/collections/{collection}/documents` (`database`,
