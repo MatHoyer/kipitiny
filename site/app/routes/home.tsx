@@ -5,10 +5,10 @@ import { GITHUB, SITE_URL, VERSION, seo } from "~/lib/site";
 import type { Route } from "./+types/home";
 
 const DESCRIPTION =
-  "Self-hosted PaaS that leaves your server to your apps: deploy apps and databases with restore-tested backups, in about 15 MB of RAM.";
+  "Self-hosted PaaS on Docker: deploy apps and databases with restore-tested backups, and let AI agents run them over MCP, in about 15 MB of RAM.";
 
 export const meta: Route.MetaFunction = () => [
-  ...seo({ title: "kipitiny · a small self-hosted PaaS", description: DESCRIPTION, path: "/" }),
+  ...seo({ title: "kipitiny · lightweight self-hosted PaaS with an MCP server", description: DESCRIPTION, path: "/" }),
   {
     "script:ld+json": {
       "@context": "https://schema.org",
@@ -21,6 +21,15 @@ export const meta: Route.MetaFunction = () => [
       ...(VERSION && { softwareVersion: VERSION }),
       offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
       codeRepository: GITHUB,
+      featureList: [
+        "Deploy Docker apps with HTTPS through Traefik, health-gated deploys and rollback",
+        "PostgreSQL, MySQL, MariaDB, MongoDB and Redis databases",
+        "Restore-tested, encrypted backups to local disk or S3",
+        "Built-in MCP server for AI coding agents such as Claude Code and Cursor",
+        "Docker Compose import, export and git sync",
+        "Remote Docker hosts over SSH",
+        "Scoped API tokens and an audit log",
+      ],
     },
   },
 ];
@@ -101,7 +110,7 @@ export default function Home() {
       <main>
         <section className="hero">
           <h1>Your server is for your apps.</h1>
-          <p className="lede">Not for the platform that runs them. kipitiny is a self-hosted PaaS: it deploys your <strong>apps</strong> and <strong>databases</strong>, keeps them backed up, and stays out of the way: about 15&nbsp;MB of memory and no CPU at rest.</p>
+          <p className="lede">Not for the platform that runs them. kipitiny is a self-hosted PaaS: it deploys your <strong>apps</strong> and <strong>databases</strong>, keeps them backed up, lets your <strong>coding agent</strong> run them over MCP, and stays out of the way: about 15&nbsp;MB of memory and no CPU at rest.</p>
           <InstallCommand />
           <p className="hero-links">Then open <code>http://your-server:3000</code>. Setting up a fresh server? Use the <a href="https://github.com/MatHoyer/kipitiny/tree/main/deploy/ansible">Ansible playbook</a>.</p>
 
@@ -124,6 +133,32 @@ export default function Home() {
           <h2>Try it, right here</h2>
           <p className="intro">This is the real kipitiny interface, running a small SaaS: a front end served by nginx, a Node.js API on two replicas, PostgreSQL and Redis. Drag the map around, add services, draw a line from an app to a database, browse the tables and keys. It runs entirely in your browser and keeps your changes there; nothing reaches a server.</p>
           <LiveDemo />
+        </section>
+
+        <section className="block" id="agents">
+          <div className="agents">
+            <div>
+              <h2>Ask your coding agent</h2>
+              <p className="intro">kipitiny has a built-in MCP endpoint. Claude Code, Cursor or any MCP client can check on your apps, read logs, deploy, back up and query a database, with tools made for those tasks instead of a raw copy of the API.</p>
+              <pre className="connect">{`claude mcp add --transport http kipitiny \\
+  https://kipitiny.example.com/mcp \\
+  --header "Authorization: Bearer kpt_…"`}</pre>
+              <ul className="not">
+                <li><span>–</span><span>A <strong>read</strong>, <strong>deploy</strong> or <strong>admin</strong> token sets what the agent can do</span></li>
+                <li><span>–</span><span>Secrets stay masked; restores and deletes take the name as confirmation</span></li>
+                <li><span>–</span><span>Every call, refused ones included, lands in the audit log</span></li>
+                <li><span>–</span><span>The agent is pointed to these docs, matching your version</span></li>
+              </ul>
+            </div>
+            <div className="session" role="img" aria-label="An agent session: asked to back up the database and ship version 1.4.2 of the API, the agent backs up shop/db, verifies the backup, deploys the new tag and reads the logs before reporting back.">
+              <p className="you"><span>you</span>Back up the database, then ship api 1.4.2.</p>
+              <p className="call"><span>backup_database</span>shop/db<em>ok · 48 MB</em></p>
+              <p className="call"><span>verify_backup</span>shop/db<em>restored · 12 tables</em></p>
+              <p className="call"><span>deploy</span>shop/api tag=1.4.2<em>healthy · 2/2</em></p>
+              <p className="call"><span>get_logs</span>shop/api<em>no errors</em></p>
+              <p className="say">Done. The backup restores cleanly and api runs 1.4.2 on both replicas.</p>
+            </div>
+          </div>
         </section>
 
         <section className="block" id="backups">

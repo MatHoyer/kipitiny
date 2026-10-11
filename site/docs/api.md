@@ -1,6 +1,6 @@
 ---
-title: API tokens, MCP and audit
-description: Scoped tokens, the built-in MCP endpoint for agents, and the audit log
+title: MCP server, API tokens and audit
+description: Connect AI agents like Claude Code to kipitiny over MCP, with scoped API tokens and an audit log
 order: 13
 ---
 

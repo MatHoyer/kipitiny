@@ -174,6 +174,22 @@ section.block { padding: clamp(64px, 10vw, 120px) 0 0; }
 .diagram text.s { fill: var(--ink-soft); font-size: 12px; }
 .diagram .hi + text, .diagram text.on-hi { fill: #0f1e3a; }
 
+/* Agents: MCP */
+.agents { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: clamp(32px, 6vw, 80px); align-items: center; }
+.agents .intro { margin-bottom: 24px; }
+.agents .not strong { color: var(--ink); font-weight: 600; }
+.connect { margin: 0 0 24px; background: var(--code-bg); color: var(--code-ink); padding: 14px 18px; border-radius: 8px; overflow-x: auto; }
+.session { background: var(--code-bg); color: var(--code-ink); border-radius: 10px; padding: 22px 24px; font: 0.875rem/1.5 var(--mono); box-shadow: 0 12px 40px rgb(15 30 58 / 0.12); min-width: 0; }
+.session p { margin: 0; }
+.session .you, .session .say { font-family: var(--body); font-size: 0.9375rem; }
+.session .you { padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid #2c3c63; }
+.session .you span { display: block; font: 600 0.75rem var(--mono); color: #9aa8c2; margin-bottom: 2px; }
+.session .call { display: flex; flex-wrap: wrap; gap: 0 10px; padding: 4px 0; }
+.session .call span { color: var(--signal); }
+.session .call span::before { content: "● "; }
+.session .call em { font-style: normal; color: #9aa8c2; margin-left: auto; }
+.session .say { margin-top: 14px; padding-top: 14px; border-top: 1px solid #2c3c63; }
+
 /* Live demo: the manager's UI in a browser window */
 .demo { border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; background: var(--panel); box-shadow: 0 12px 40px rgb(15 30 58 / 0.12); }
 .demo-bar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--rule); background: color-mix(in srgb, var(--ink) 4%, var(--panel)); }
@@ -207,6 +223,7 @@ footer nav { display: flex; gap: 20px; flex-wrap: wrap; }
   .targets > div + div { border-left: 0; border-top: 1px solid var(--rule); }
   .runs { grid-template-columns: 1fr; }
   .one { grid-template-columns: 1fr; }
+  .agents { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 560px) {
   .top nav a.hide-sm { display: none; }

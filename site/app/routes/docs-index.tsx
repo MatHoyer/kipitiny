@@ -6,7 +6,7 @@ import type { Route } from "./+types/docs-index";
 export const meta: Route.MetaFunction = ({ loaderData: d }) =>
   seo({
     title: d?.version ? `Documentation ${d.version} · kipitiny` : "Documentation · kipitiny",
-    description: "How to install kipitiny, deploy apps and databases, and back them up.",
+    description: "How to install kipitiny, deploy apps and databases, back them up, and connect AI agents over MCP.",
     path: "/docs",
   });
 
