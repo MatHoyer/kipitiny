@@ -562,7 +562,13 @@ type Backup struct {
 	// the service's own.
 	Database string `bun:"db_name" json:"database,omitempty"`
 	// Volumes names the volumes in a volume backup's archive.
-	Volumes    []string   `bun:"volumes" json:"volumes,omitempty"`
+	Volumes []string `bun:"volumes" json:"volumes,omitempty"`
+	// Image is the backed-up service's image: a restore test falls back to
+	// it when the service is gone or runs another major version.
+	Image string `bun:"image" json:"image,omitempty"`
+	// Extensions are the PostgreSQL extensions the dumped database uses
+	// (plpgsql aside): restoring needs a server that has them (PostGIS…).
+	Extensions []string   `bun:"extensions" json:"extensions,omitempty"`
 	DurationMS int64      `bun:"duration_ms" json:"durationMs"`
 	Error      string     `bun:"error" json:"error,omitempty"`
 	CreatedAt  time.Time  `bun:"created_at" json:"createdAt"`

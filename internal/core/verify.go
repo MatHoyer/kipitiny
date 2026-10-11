@@ -157,13 +157,21 @@ func (c *Core) verify(ctx context.Context, b store.Backup) (store.VerificationDe
 	if err := dk.WaitHealthy(ctx, id, postgresReadyTimeout); err != nil {
 		return d, fmt.Errorf("throwaway server: %w", err)
 	}
+	// The image's init scripts may have filled db (PostGIS creates its
+	// extensions there): restore into an empty database, as a restore does.
+	const restored = "restore_test"
+	if err := dk.Exec(ctx, id, docker.ExecOptions{
+		Cmd: []string{"psql", "-U", user, "-d", db, "-v", "ON_ERROR_STOP=1", "-qc", "CREATE DATABASE " + restored + " TEMPLATE template0"},
+	}); err != nil {
+		return d, fmt.Errorf("create database: %w", err)
+	}
 
 	rc, err := st.Get(ctx, b.ObjectKey)
 	if err != nil {
 		return d, fmt.Errorf("open backup: %w", err)
 	}
 	defer rc.Close()
-	if err := c.pgRestore(ctx, dk, id, user, db, rc, target, b); err != nil {
+	if err := c.pgRestore(ctx, dk, id, user, restored, rc, target, b); err != nil {
 		return d, err
 	}
 
@@ -174,7 +182,7 @@ SELECT (SELECT count(*) FROM pg_stat_user_tables),
        pg_database_size(current_database());`
 	var out strings.Builder
 	if err := dk.Exec(ctx, id, docker.ExecOptions{
-		Cmd:    []string{"psql", "-U", user, "-d", db, "-v", "ON_ERROR_STOP=1", "-tAq", "-c", query},
+		Cmd:    []string{"psql", "-U", user, "-d", restored, "-v", "ON_ERROR_STOP=1", "-tAq", "-c", query},
 		Stdout: &out,
 	}); err != nil {
 		return d, fmt.Errorf("sanity query: %w", err)
@@ -204,7 +212,8 @@ func parseVerifyOutput(s string) (store.VerificationDetails, error) {
 
 // verifyImage picks where and with what a restore test runs: on the
 // database's server with its own image when it still exists and runs the
-// backup's major version, otherwise here with the official image of that major.
+// backup's major version, otherwise with the image that made the backup, or
+// the official image of that major for backups that don't record it.
 func (c *Core) verifyImage(ctx context.Context, b store.Backup) (image, serverID string) {
 	major := pgMajorFromVersion(b.PGVersion)
 	svc, err := c.store.GetService(ctx, b.ServiceID)
@@ -214,6 +223,10 @@ func (c *Core) verifyImage(ctx context.Context, b store.Backup) (image, serverID
 	serverID = store.LocalServerID
 	if err == nil {
 		serverID = svc.ServerID
+	}
+	// The image that made it (PostGIS…), when the service is gone or moved on.
+	if b.Image != "" && postgresMajor(b.Image) == major {
+		return b.Image, serverID
 	}
 	if major == 0 {
 		return DefaultPostgresImage, serverID

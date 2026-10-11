@@ -291,6 +291,10 @@ export type Backup = {
   pgVersion: string;
   /** The volumes in a volume backup's archive. */
   volumes?: string[];
+  /** The backed-up service's image; absent on older backups. */
+  image?: string;
+  /** PostgreSQL extensions the dump uses (plpgsql aside): a restore needs a server that has them. */
+  extensions?: string[];
   durationMs: number;
   error?: string;
   createdAt: string;

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"slices"
 	"strings"
 	"time"
 
@@ -101,6 +102,7 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, database, s
 	b, err := c.store.CreateBackup(ctx, store.Backup{
 		Kind:        kind,
 		Volumes:     volumeNames(svc),
+		Image:       svc.Image,
 		ServiceID:   svc.ID,
 		ProjectID:   project.ID,
 		ServiceName: svc.Name,
@@ -222,6 +224,9 @@ func (c *Core) dump(ctx context.Context, svc store.Service, containerID string, 
 		return fmt.Errorf("server version: %w", err)
 	}
 	b.PGVersion = version
+	if b.Extensions, err = c.pgExtensions(ctx, svc, containerID, backupDatabase(svc, *b)); err != nil {
+		return fmt.Errorf("extensions: %w", err)
+	}
 	return c.upload(ctx, st, target, b, func(w io.Writer) error {
 		err := c.dockerFor(svc.ServerID).Exec(ctx, containerID, docker.ExecOptions{
 			// Custom format: compressed, and pg_restore can restore selectively.
@@ -295,6 +300,41 @@ func (c *Core) serverVersion(ctx context.Context, svc store.Service, containerID
 	return strings.TrimSpace(out.String()), err
 }
 
+// pgExtensions lists the extensions database db uses, plpgsql aside (every
+// server has it).
+func (c *Core) pgExtensions(ctx context.Context, svc store.Service, containerID, db string) ([]string, error) {
+	return c.pgList(ctx, svc, containerID, db, "SELECT extname FROM pg_extension WHERE extname <> 'plpgsql' ORDER BY 1")
+}
+
+// missingExtensions returns those of exts the server in containerID can't
+// create.
+func (c *Core) missingExtensions(ctx context.Context, svc store.Service, containerID string, exts []string) ([]string, error) {
+	available, err := c.pgList(ctx, svc, containerID, svc.Env[pgDatabase], "SELECT name FROM pg_available_extensions")
+	if err != nil {
+		return nil, err
+	}
+	var missing []string
+	for _, e := range exts {
+		if !slices.Contains(available, e) {
+			missing = append(missing, e)
+		}
+	}
+	return missing, nil
+}
+
+// pgList runs a one-column query and returns its rows.
+func (c *Core) pgList(ctx context.Context, svc store.Service, containerID, db, query string) ([]string, error) {
+	var out strings.Builder
+	err := c.dockerFor(svc.ServerID).Exec(ctx, containerID, docker.ExecOptions{
+		Cmd:    []string{"psql", "-U", svc.Env[pgUser], "-d", db, "-v", "ON_ERROR_STOP=1", "-tAc", query},
+		Stdout: &out,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return strings.Fields(out.String()), nil
+}
+
 type hashCounter struct {
 	h hash.Hash
 	n int64
@@ -362,6 +402,18 @@ func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, con
 	if err != nil {
 		unlock()
 		return store.Restore{}, err
+	}
+	if b.Kind == store.BackupKindPostgres && len(b.Extensions) > 0 {
+		// Checked up front: pg_restore would fail on the first CREATE EXTENSION.
+		missing, err := c.missingExtensions(ctx, svc, ct, b.Extensions)
+		if err == nil && len(missing) > 0 {
+			err = fmt.Errorf("%w: the backup uses the %s extension, which %s's image (%s) doesn't have; switch it to an image that does",
+				ErrInvalid, strings.Join(missing, ", "), svc.Name, svc.Image)
+		}
+		if err != nil {
+			unlock()
+			return store.Restore{}, err
+		}
 	}
 	r, err := c.store.CreateRestore(ctx, store.Restore{BackupID: b.ID, ServiceID: svc.ID, Status: store.OpRunning})
 	if err != nil {
