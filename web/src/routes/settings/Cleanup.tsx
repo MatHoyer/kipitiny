@@ -7,6 +7,7 @@ import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
+import { Switch } from "@/components/ui/switch";
 import { formatBytes, formatDateTime, timeAgo } from "@/lib/format";
 import { api, type Cleanup as CleanupState, type CleanupResult, type CleanupSettings } from "@/api";
 import { SettingsPage } from "./page";
@@ -40,6 +41,15 @@ export function Cleanup() {
     setForm(v.settings);
   };
   const save = useMutation({ meta: { error: "Couldn't save the cleanup settings" }, mutationFn: (s: CleanupSettings) => api.setCleanup(s), onSuccess: onSaved });
+  // The switch on the stats saves at once; other unsaved edits stay in the form.
+  const toggle = useMutation({
+    meta: { error: "Couldn't change the cleanup schedule" },
+    mutationFn: (enabled: boolean) => api.setCleanup({ ...cleanup.data!.settings, enabled }),
+    onSuccess: (v) => {
+      qc.setQueryData(["cleanup"], v);
+      setForm((f) => f && { ...f, enabled: v.settings.enabled });
+    },
+  });
   const run = useMutation({ meta: { error: "Couldn't run the cleanup" }, mutationFn: api.runCleanup, onSuccess: (v) => qc.setQueryData(["cleanup"], v) });
 
   const formId = useId();
@@ -67,15 +77,9 @@ export function Cleanup() {
 
   return (
     <SettingsPage actions={actions}>
-      <CleanupStats state={cleanup.data!} />
+      <CleanupStats state={cleanup.data!} toggling={toggle.isPending} onToggle={(on) => toggle.mutate(on)} />
       <form id={formId} onSubmit={onSubmit} className="space-y-6">
-        <Section title="Schedule" description="When the cleanup runs on its own, on every server.">
-          <CheckboxField
-            label="Run on a schedule"
-            description={cleanup.data?.nextRun && `Next run ${formatDateTime(cleanup.data.nextRun)}.`}
-            checked={form.enabled}
-            onCheckedChange={(v) => set("enabled", v)}
-          />
+        <Section title="Schedule" description="When the cleanup runs on its own, on every server, while the schedule is on.">
           <div className="grid gap-4 sm:grid-cols-2">
             <CronField value={form.cron} onChange={(v) => set("cron", v)} presets={cleanupPresets} inputClassName="sm:order-last" />
             <FloatingInput
@@ -153,7 +157,7 @@ export function Cleanup() {
   );
 }
 
-function CleanupStats({ state }: { state: CleanupState }) {
+function CleanupStats({ state, toggling, onToggle }: { state: CleanupState; toggling: boolean; onToggle: (on: boolean) => void }) {
   const run = state.lastRun;
   const freed = run?.servers.reduce((n, s) => n + s.reclaimed, 0) ?? 0;
   const removed = run?.servers.reduce((n, s) => n + s.images + s.volumes + s.containers + s.networks + s.buildCache, 0) ?? 0;
@@ -163,7 +167,12 @@ function CleanupStats({ state }: { state: CleanupState }) {
       <StatCard
         icon={CalendarClock}
         label="Schedule"
-        value={state.settings.enabled ? "On" : "Off"}
+        value={
+          <span className="flex items-center justify-between gap-2">
+            {state.settings.enabled ? "On" : "Off"}
+            <Switch checked={state.settings.enabled} disabled={toggling} onCheckedChange={onToggle} aria-label="Run on a schedule" />
+          </span>
+        }
         hint={state.settings.enabled && state.nextRun ? `Next ${formatDateTime(state.nextRun)}` : "Runs only on demand"}
       />
       <StatCard
