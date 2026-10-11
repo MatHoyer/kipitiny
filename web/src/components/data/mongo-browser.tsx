@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { ArrowDownUp, ChevronLeft, ChevronRight, ChevronsLeft, ListFilter, Pencil, Plus, RefreshCw, Trash2, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { CopyButton, Empty, ErrorText, Loading } from "@/components/common";
+import { CopyButton, ErrorText, Loading } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { api, type DocChanges, type PgTable } from "../../api";
 import { BrowserShell, SidebarHeader, SidebarItem, SidebarToggle } from "./browser-shell";
 import { ChangeBar, ReviewDialog, useUnsaved } from "./changes";
+import { DropButton, NewCollectionDialog } from "./schema-dialogs";
 import { WriteMode } from "./write-mode";
 
 const PAGE_SIZES = [10, 25, 50, 100];
@@ -22,13 +23,61 @@ export function MongoBrowser({ serviceId, database }: { serviceId: string; datab
   const [sidebar, setSidebar] = useState(true);
   // Kept across collections: switching doesn't lock it again.
   const [write, setWrite] = useState(false);
+  const [creating, setCreating] = useState(false);
   const { confirm } = useUnsaved();
+  const queryClient = useQueryClient();
   const pick = (name: string) => confirm(() => setPicked(name));
 
   if (collections.isPending) return <Loading />;
   if (collections.error) return <ErrorText error={collections.error} />;
   const list = collections.data ?? [];
-  if (list.length === 0) return <Empty>No collections in this database yet. They show up here once your app writes to them.</Empty>;
+  const writeSwitch = (
+    <WriteMode
+      className="ml-auto"
+      write={write}
+      onChange={(w) => (w ? setWrite(true) : confirm(() => setWrite(false)))}
+      description="You can then edit, add and delete documents, and create or drop collections. Nothing is written until you review the calls and confirm; only a restore from a backup undoes it."
+    />
+  );
+  const newCollection = (
+    <NewCollectionDialog
+      open={creating}
+      onOpenChange={setCreating}
+      run={(name, apply) => api.createCollection(serviceId, database, name, apply)}
+      onCreated={(name) => {
+        queryClient.invalidateQueries({ queryKey: ["data", serviceId, "tables", database] });
+        setPicked(name);
+      }}
+    />
+  );
+  if (list.length === 0)
+    return (
+      <BrowserShell
+        write={write}
+        sidebarOpen={false}
+        sidebar={null}
+        toolbar={
+          <>
+            {writeSwitch}
+            <Button variant="outline" size="icon-sm" title="Reload collections" onClick={() => collections.refetch()}>
+              <RefreshCw className={cn(collections.isFetching && "animate-spin")} />
+            </Button>
+            {newCollection}
+          </>
+        }
+      >
+        <div className="flex flex-col items-center gap-3 p-10 text-center text-sm text-muted-foreground">
+          <p>No collections in this database yet. They show up here once your app writes to them.</p>
+          {write ? (
+            <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+              <Plus /> Collection
+            </Button>
+          ) : (
+            <p>Or allow writes to create one.</p>
+          )}
+        </div>
+      </BrowserShell>
+    );
   const current = list.find((c) => c.name === picked) ?? list[0];
   const shown = list.filter((c) => c.name.toLowerCase().includes(find.trim().toLowerCase()));
 
@@ -39,11 +88,19 @@ export function MongoBrowser({ serviceId, database }: { serviceId: string; datab
         search={find}
         onSearch={setFind}
         actions={
-          <Button variant="ghost" size="icon-xs" title="Reload collections" onClick={() => collections.refetch()}>
-            <RefreshCw className={cn(collections.isFetching && "animate-spin")} />
-          </Button>
+          <>
+            {write && (
+              <Button variant="ghost" size="icon-xs" title="New collection" onClick={() => confirm(() => setCreating(true))}>
+                <Plus />
+              </Button>
+            )}
+            <Button variant="ghost" size="icon-xs" title="Reload collections" onClick={() => collections.refetch()}>
+              <RefreshCw className={cn(collections.isFetching && "animate-spin")} />
+            </Button>
+          </>
         }
       />
+      {newCollection}
       <nav aria-label="Collections" className="flex-1 space-y-px overflow-y-auto p-2">
         {shown.length === 0 && <p className="px-2 text-xs text-muted-foreground">No collection matches.</p>}
         {shown.map((c) => (
@@ -68,7 +125,11 @@ export function MongoBrowser({ serviceId, database }: { serviceId: string; datab
       sidebarOpen={sidebar}
       onToggleSidebar={() => setSidebar(!sidebar)}
       write={write}
-      onWrite={setWrite}
+      writeSwitch={writeSwitch}
+      onDropped={() => {
+        setPicked(null);
+        queryClient.invalidateQueries({ queryKey: ["data", serviceId, "tables", database] });
+      }}
     />
   );
 }
@@ -128,7 +189,8 @@ function CollectionView({
   sidebarOpen,
   onToggleSidebar,
   write: writeAllowed,
-  onWrite,
+  writeSwitch,
+  onDropped,
 }: {
   serviceId: string;
   database: string;
@@ -139,7 +201,9 @@ function CollectionView({
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
   write: boolean;
-  onWrite: (w: boolean) => void;
+  /** Read only / Allow writes, just before Reload. */
+  writeSwitch: ReactNode;
+  onDropped: () => void;
 }) {
   const [size, setSize] = useState(25);
   const [page, setPage] = useState(0);
@@ -166,6 +230,10 @@ function CollectionView({
   const dirty = edited + deleted + pending.inserts.length;
   useEffect(() => setDirty(dirty), [dirty, setDirty]);
   useEffect(() => () => setDirty(0), [setDirty]);
+  // Turning writes off (once agreed to) drops what was pending.
+  useEffect(() => {
+    if (!writeAllowed) setPending(nothing);
+  }, [writeAllowed]);
   const guard = (fn: () => void) =>
     confirm(() => {
       setPending(nothing);
@@ -236,7 +304,7 @@ function CollectionView({
                 setFilter(v);
               })
             }
-            className="min-w-48 flex-1"
+            className="min-w-40 flex-1"
           />
           <JsonField
             icon={<ArrowDownUp />}
@@ -249,20 +317,27 @@ function CollectionView({
                 setSort(v);
               })
             }
-            className="w-40 sm:w-48"
+            className="w-36 sm:w-40"
           />
           {write && (
             <Button variant="outline" size="sm" onClick={() => setEditing({ text: "{\n  \n}" })}>
               <Plus /> Document
             </Button>
           )}
-          <WriteMode
-            className="ml-auto"
-            write={write}
-            onChange={(w) => (w ? onWrite(true) : guard(() => onWrite(false)))}
-            description="You can then edit, add and delete documents. Nothing is written until you review the calls and save; only a restore from a backup undoes a save."
-            disabled={lockedWhy}
-          />
+          {writeAllowed && (
+            <DropButton
+              what={collection.kind}
+              name={collection.name}
+              run={(apply) => api.dropCollection(serviceId, database, collection.name, apply)}
+              onDropped={onDropped}
+              note={
+                collection.kind === "collection"
+                  ? "Its documents and indexes go with it, and only a restore from a backup brings them back."
+                  : "Only its definition goes: the documents it shows stay where they are."
+              }
+            />
+          )}
+          {writeSwitch}
           <Button variant="outline" size="icon-sm" title="Reload documents" onClick={() => docs.refetch()}>
             <RefreshCw className={cn(docs.isFetching && "animate-spin")} />
           </Button>
@@ -306,6 +381,7 @@ function CollectionView({
             </Button>
           </div>
           <ErrorText error={docs.error} />
+          {writeAllowed && lockedWhy && <span className="text-xs text-muted-foreground">{lockedWhy}</span>}
           {write && (
             <ChangeBar
               counts={[
