@@ -28,7 +28,7 @@ export function Stepper({
   failed?: boolean;
   accent?: string;
   orientation?: "horizontal" | "vertical";
-  /** Lets done steps be clicked to go back to them. */
+  /** Lets steps be clicked: done ones when horizontal (to go back to them), any when vertical. */
   onStepClick?: (index: number) => void;
   className?: string;
 }) {
@@ -43,7 +43,18 @@ export function Stepper({
           return (
             <li key={i} aria-current={state === "active" ? "step" : undefined} className="relative flex gap-3 pb-3.5 last:pb-0">
               {i < steps.length - 1 && <Rail filled={i < current} vertical />}
-              <StepNode n={i + 1} state={state} busy={busy && state === "active"} />
+              {onStepClick ? (
+                <button
+                  type="button"
+                  title={state === "done" ? "Mark as not done" : "Mark as done"}
+                  onClick={() => onStepClick(i)}
+                  className="h-fit rounded-full outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                  <StepNode n={i + 1} state={state} busy={busy && state === "active"} />
+                </button>
+              ) : (
+                <StepNode n={i + 1} state={state} busy={busy && state === "active"} />
+              )}
               <div className="min-w-0 flex-1 pt-1.5">
                 <p className={cn("text-sm font-medium transition-colors", state === "todo" ? "text-muted-foreground" : "text-foreground")}>
                   {s.title}
