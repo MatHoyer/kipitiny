@@ -35,6 +35,7 @@ func dumpExt(k store.ServiceKind) string {
 // dumpDatabase streams a dump of svc to storage, filling in size, checksum
 // and server version on b.
 func (c *Core) dumpDatabase(ctx context.Context, svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b *store.Backup) error {
+	c.steps.set(backupKey(b.ID), BackupPrepare)
 	dk := c.dockerFor(svc.ServerID)
 	version, err := dumpServerVersion(ctx, dk, containerID, svc)
 	if err != nil {
@@ -107,12 +108,15 @@ func dumpServerVersion(ctx context.Context, dk *docker.Client, containerID strin
 // that succeeded into the emptied live one; a MongoDB archive replaces each
 // collection it holds (mongorestore --drop), and collections created since
 // the backup stay.
-func (c *Core) restoreDump(ctx context.Context, svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b store.Backup) error {
+// key names the restore, for its steps.
+func (c *Core) restoreDump(ctx context.Context, svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b store.Backup, key string) error {
+	c.steps.set(key, RestoreCheck)
 	if err := checkDump(ctx, st, target, b); err != nil {
 		return err
 	}
 	dk := c.dockerFor(svc.ServerID)
 	if svc.Kind == store.ServiceKindMongoDB {
+		c.steps.set(key, RestoreLoad)
 		return c.loadDump(ctx, dk, containerID, svc, "", st, target, b)
 	}
 
@@ -128,6 +132,7 @@ func (c *Core) restoreDump(ctx context.Context, svc store.Service, containerID s
 	if err := dropScratch(); err != nil {
 		return fmt.Errorf("clean scratch database: %w", err)
 	}
+	c.steps.set(key, RestoreScratch)
 	if err := admin("CREATE DATABASE " + mysqlIdent(scratch)); err != nil {
 		return fmt.Errorf("create scratch database: %w", err)
 	}
@@ -139,6 +144,7 @@ func (c *Core) restoreDump(ctx context.Context, svc store.Service, containerID s
 		return err
 	}
 	// Grants on the database outlive it: the app user keeps its access.
+	c.steps.set(key, RestoreLoad)
 	if err := admin(fmt.Sprintf("DROP DATABASE IF EXISTS %[1]s; CREATE DATABASE %[1]s", mysqlIdent(db))); err != nil {
 		return fmt.Errorf("recreate %s: %w", db, err)
 	}
@@ -230,11 +236,11 @@ func (c *Core) verifyDump(ctx context.Context, b store.Backup) (store.Verificati
 		svc.Image = b.Image
 	}
 	dk := c.dockerFor(svc.ServerID)
-	c.verifySteps.set(b.ID, VerifyImage)
+	c.steps.set(verifyKey(b.ID), VerifyImage)
 	if err := dk.EnsureImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image)); err != nil {
 		return d, fmt.Errorf("pull %s: %w", svc.Image, err)
 	}
-	c.verifySteps.set(b.ID, VerifyServer)
+	c.steps.set(verifyKey(b.ID), VerifyServer)
 	cfg := &container.Config{
 		Image:  svc.Image,
 		Labels: map[string]string{docker.LabelManaged: "true", docker.LabelComponent: verifyComponent},
@@ -266,12 +272,12 @@ func (c *Core) verifyDump(ctx context.Context, b store.Backup) (store.Verificati
 	if err := dk.WaitHealthy(ctx, id, databaseReadyTimeout); err != nil {
 		return d, fmt.Errorf("throwaway server: %w", err)
 	}
-	c.verifySteps.set(b.ID, VerifyRestore)
+	c.steps.set(verifyKey(b.ID), VerifyRestore)
 	if err := c.loadDump(ctx, dk, id, svc, svc.Env[mysqlDatabase], st, target, b); err != nil {
 		return d, err
 	}
 
-	c.verifySteps.set(b.ID, VerifyCheck)
+	c.steps.set(verifyKey(b.ID), VerifyCheck)
 	var out strings.Builder
 	if svc.Kind == store.ServiceKindMongoDB {
 		err = dk.Exec(ctx, id, docker.ExecOptions{

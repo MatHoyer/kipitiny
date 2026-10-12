@@ -88,6 +88,7 @@ func (c *Core) startManagerBackup(ctx context.Context, targetID, scheduleID stri
 func (c *Core) runManagerBackup(st storage.Storage, target store.BackupTarget, b store.Backup) bool {
 	ctx, cancel := context.WithTimeout(c.bg, time.Hour)
 	defer cancel()
+	defer c.steps.done(backupKey(b.ID))
 	start := time.Now()
 
 	err := c.snapshotTo(ctx, st, target, &b)
@@ -112,6 +113,7 @@ func (c *Core) snapshotTo(ctx context.Context, st storage.Storage, target store.
 	}
 	path := filepath.Join(dir, "snapshot-"+b.ID+".db")
 	defer os.Remove(path)
+	c.steps.set(backupKey(b.ID), BackupSnapshot)
 	if err := c.store.Snapshot(ctx, path); err != nil {
 		return fmt.Errorf("snapshot: %w", err)
 	}

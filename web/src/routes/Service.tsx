@@ -460,8 +460,9 @@ function BackupsCard({ serviceId, name, kind }: { serviceId: string; name: strin
     refetchInterval: (q) => (q.state.data?.some((r) => r.status === "running") ? 1_000 : 15_000),
   });
   const backup = async (targetId: string, database: string) => {
-    await api.backup(serviceId, targetId, database);
+    const b = await api.backup(serviceId, targetId, database);
     qc.invalidateQueries({ queryKey: ["backups"] });
+    return b;
   };
   const lastRestore = restores.data?.[0];
   const busy = backups.data?.some((b) => b.status === "running") || lastRestore?.status === "running";

@@ -573,6 +573,10 @@ type Backup struct {
 	Error      string     `bun:"error" json:"error,omitempty"`
 	CreatedAt  time.Time  `bun:"created_at" json:"createdAt"`
 	FinishedAt *time.Time `bun:"finished_at" json:"finishedAt,omitempty"`
+	// Step is where a running backup is at, and StepBytes how much it has
+	// uploaded so far; core fills them, they aren't stored.
+	Step      string `bun:"-" json:"step,omitempty"`
+	StepBytes int64  `bun:"-" json:"stepBytes,omitempty"`
 	Verification
 }
 
@@ -624,6 +628,8 @@ type Restore struct {
 	Error      string     `bun:"error" json:"error,omitempty"`
 	CreatedAt  time.Time  `bun:"created_at" json:"createdAt"`
 	FinishedAt *time.Time `bun:"finished_at" json:"finishedAt,omitempty"`
+	// Step is where a running restore is at; core fills it, it isn't stored.
+	Step string `bun:"-" json:"step,omitempty"`
 }
 
 // BackupSchedule backs up a database on a cron schedule and prunes older

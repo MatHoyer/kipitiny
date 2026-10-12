@@ -180,6 +180,7 @@ func (c *Core) BackupProject(ctx context.Context, projectID, targetID string) ([
 func (c *Core) runBackup(svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b store.Backup) bool {
 	ctx, cancel := context.WithTimeout(c.bg, backupTimeout)
 	defer cancel()
+	defer c.steps.done(backupKey(b.ID))
 	log := c.log.With("backup", b.ID, "service", svc.Name)
 	start := time.Now()
 
@@ -219,6 +220,7 @@ func (c *Core) runBackup(svc store.Service, containerID string, st storage.Stora
 // dump streams pg_dump output to storage, filling in size, checksum and
 // server version on b.
 func (c *Core) dump(ctx context.Context, svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b *store.Backup) error {
+	c.steps.set(backupKey(b.ID), BackupPrepare)
 	version, err := c.serverVersion(ctx, svc, containerID)
 	if err != nil {
 		return fmt.Errorf("server version: %w", err)
@@ -269,7 +271,8 @@ func (c *Core) upload(ctx context.Context, st storage.Storage, target store.Back
 	}()
 
 	sum := &hashCounter{h: sha256.New()}
-	putErr := st.Put(ctx, b.ObjectKey, io.TeeReader(pr, sum))
+	step := c.steps.set(backupKey(b.ID), BackupUpload)
+	putErr := st.Put(ctx, b.ObjectKey, io.TeeReader(pr, io.MultiWriter(sum, step)))
 	pr.CloseWithError(errors.New("upload stopped")) // unblock the producer if the upload failed
 	err := <-prodErr
 
@@ -435,14 +438,20 @@ func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, con
 func (c *Core) runRestore(svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b store.Backup, r store.Restore) {
 	ctx, cancel := context.WithTimeout(c.bg, restoreTimeout)
 	defer cancel()
+	key := restoreKey(r.ID)
+	defer c.steps.done(key)
 
+	c.steps.set(key, RestoreStopApps)
 	stopped, err := c.stopLinkedApps(ctx, svc)
 	if err == nil && b.Kind == store.BackupKindDump {
-		err = c.restoreDump(ctx, svc, containerID, st, target, b)
+		err = c.restoreDump(ctx, svc, containerID, st, target, b, key)
 	} else if err == nil {
-		err = c.restore(ctx, svc, containerID, st, target, b)
+		err = c.restore(ctx, svc, containerID, st, target, b, key)
 	}
 	// Bring apps back even if the restore failed: the transaction rolled back.
+	if len(stopped) > 0 {
+		c.steps.set(key, RestoreStart)
+	}
 	for _, id := range stopped {
 		if _, serr := c.dockerFor(svc.ServerID).ContainerStart(context.WithoutCancel(ctx), id, client.ContainerStartOptions{}); serr != nil {
 			c.log.Error("cannot restart app using the database", "container", id, "err", serr)
@@ -538,7 +547,9 @@ func humanSize(n int64) string {
 // restore loads the dump into a scratch database and swaps it in by rename,
 // so the result is exactly the backup (objects created since are gone) and
 // a failure leaves the live database untouched.
-func (c *Core) restore(ctx context.Context, svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b store.Backup) error {
+// key names the restore, for its steps.
+func (c *Core) restore(ctx context.Context, svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b store.Backup, key string) error {
+	c.steps.set(key, RestoreLoad)
 	rc, err := st.Get(ctx, b.ObjectKey)
 	if err != nil {
 		return fmt.Errorf("open backup: %w", err)
@@ -576,6 +587,7 @@ func (c *Core) restore(ctx context.Context, svc store.Service, containerID strin
 	}
 
 	// A database restored into an instance that lacks it is just renamed in.
+	c.steps.set(key, RestoreSwap)
 	var exists strings.Builder
 	err = dk.Exec(ctx, containerID, docker.ExecOptions{
 		Cmd:    []string{"psql", "-U", user, "-d", maintenance, "-tAc", "SELECT 1 FROM pg_database WHERE datname = " + pgLiteral(db)},
@@ -765,19 +777,39 @@ func (c *Core) ListBackups(ctx context.Context, f store.BackupFilter) ([]store.B
 	if f.Limit == 0 {
 		f.Limit = 100
 	}
-	return c.store.ListBackups(ctx, f)
+	bs, err := c.store.ListBackups(ctx, f)
+	for i := range bs {
+		c.fillSteps(&bs[i])
+	}
+	return bs, err
 }
 
 func (c *Core) GetBackup(ctx context.Context, id string) (store.Backup, error) {
 	b, err := c.store.GetBackup(ctx, id)
-	if err == nil && b.VerifyStatus == store.OpRunning {
-		b.VerifyStep = c.verifySteps.get(id)
+	if err == nil {
+		c.fillSteps(&b)
 	}
 	return b, err
 }
 
 func (c *Core) ListRestores(ctx context.Context, serviceID string) ([]store.Restore, error) {
-	return c.store.ListRestores(ctx, serviceID, 20)
+	rs, err := c.store.ListRestores(ctx, serviceID, 20)
+	for i := range rs {
+		if rs[i].Status == store.OpRunning {
+			rs[i].Step, _ = c.steps.get(restoreKey(rs[i].ID))
+		}
+	}
+	return rs, err
+}
+
+// fillSteps adds where b's running backup or restore test is at.
+func (c *Core) fillSteps(b *store.Backup) {
+	if b.Status == store.OpRunning {
+		b.Step, b.StepBytes = c.steps.get(backupKey(b.ID))
+	}
+	if b.VerifyStatus == store.OpRunning {
+		b.VerifyStep, _ = c.steps.get(verifyKey(b.ID))
+	}
 }
 
 // OpenBackup streams a backup's content (for download).
