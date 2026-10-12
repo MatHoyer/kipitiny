@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { CloudflareIcon } from "@/components/brand-icons";
 import { CheckboxField, EmptyState, ErrorText, Mono, Tag } from "@/components/common";
+import { HowTo, type HowToStep } from "@/components/how-to";
 import { TestDialog } from "@/components/test-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -312,6 +313,7 @@ function ConnectCloudflareDialog() {
               </>
             }
           />
+          <HowTo label="How do I get a token?" accent="#F38020" steps={cloudflareGuide} />
           <DialogFooter>
             <Button type="submit" loading={connect.isPending}>
               Connect
@@ -322,3 +324,25 @@ function ConnectCloudflareDialog() {
     </Dialog>
   );
 }
+
+const cloudflareGuide: HowToStep[] = [
+  {
+    title: "Start from the DNS template",
+    text: (
+      <>
+        In your profile's API tokens, Create Token › <Mono>Edit zone DNS</Mono>.
+      </>
+    ),
+    link: { href: "https://dash.cloudflare.com/profile/api-tokens", label: "Open API tokens" },
+  },
+  {
+    title: "Add the permissions it lacks",
+    text: (
+      <>
+        Add <Mono>Zone › Zone › Read</Mono>, and <Mono>Account › Cloudflare Tunnel › Edit</Mono> if the server is reached through a tunnel. Under
+        Zone Resources, include the zones kipitiny may manage.
+      </>
+    ),
+  },
+  { title: "Create it and copy it", text: "Cloudflare shows the token once: paste it above." },
+];

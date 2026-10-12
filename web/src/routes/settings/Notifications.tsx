@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { DiscordIcon } from "@/components/brand-icons";
 import { CheckboxField, ChoiceTile, EmptyState, ErrorText, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { HowTo, type HowToStep } from "@/components/how-to";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -227,6 +228,7 @@ function ChannelForm({
             : "Pick the events this channel receives."}
         </DialogDescription>
       </DialogHeader>
+      {!channel && form.kind === "discord" && <HowTo label="How do I get a webhook URL?" accent="#5865F2" steps={discordGuide} />}
       <div className="space-y-4">
         <FloatingInput
           label="Name"
@@ -287,3 +289,9 @@ function ChannelForm({
     </form>
   );
 }
+
+const discordGuide: HowToStep[] = [
+  { title: "Open the channel's settings", text: "The gear next to the channel kipitiny should post in. You need Manage Webhooks on the server." },
+  { title: "Create a webhook", text: "Integrations › Webhooks › New Webhook. Its name and avatar are what the messages show." },
+  { title: "Copy its URL", text: "Copy Webhook URL, then paste it below." },
+];

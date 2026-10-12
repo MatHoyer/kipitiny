@@ -16,7 +16,6 @@ import { Link, Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import {
   CheckboxField,
-  CopyField,
   DangerZone,
   ErrorText,
   IconTile,
@@ -28,6 +27,7 @@ import {
   Loading,
 } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { HowTo } from "@/components/how-to";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { SaveBar } from "@/components/save-bar";
 import { memoryOf, useUsage } from "@/components/usage";
@@ -303,22 +303,42 @@ function useServerForm(server: Server | null, onSaved: (s: Server) => void) {
   return { form, setForm, resetHostKey, setResetHostKey, save, dirty, reset };
 }
 
-/** What the server needs before the manager can reach it. */
+/** What the server needs before the manager can reach it, step by step. */
 function SshSetup() {
   const key = useQuery({ queryKey: ["ssh-key"], queryFn: api.sshKey });
   return (
-    <div className="space-y-2">
-      <p className="text-sm text-muted-foreground">
-        On the server, add the manager's key to <Mono>~/.ssh/authorized_keys</Mono> of the SSH user (who needs access to
-        the Docker socket).
-      </p>
-      {key.data ? <CopyField value={key.data.publicKey} /> : <Loading className="py-2" />}
-      <p className="text-xs text-muted-foreground">
-        sshd must allow <Mono>AllowTcpForwarding yes</Mono> (or <Mono>local</Mono>) and{" "}
-        <Mono>AllowStreamLocalForwarding yes</Mono>: the Docker API is reached through the socket, never over TCP. The
-        server's host key is pinned on first connection.
-      </p>
-    </div>
+    <HowTo
+      label="How do I prepare the server?"
+      accent="#2496ED"
+      steps={[
+        {
+          title: "Install Docker",
+          text: "Skip it if Docker already runs there.",
+          copy: "curl -fsSL https://get.docker.com | sh",
+        },
+        {
+          title: "Authorize the manager's key",
+          text: "As the SSH user. The server's host key is pinned on first connection.",
+          extra: !key.data && <Loading className="py-2" />,
+          copy: key.data && `mkdir -p ~/.ssh && echo '${key.data.publicKey}' >> ~/.ssh/authorized_keys`,
+        },
+        {
+          title: "Let it use Docker",
+          text: "Unless it's root: the SSH user needs the Docker socket. Log in again for it to apply.",
+          copy: "sudo usermod -aG docker $USER",
+        },
+        {
+          title: "Allow socket forwarding",
+          text: (
+            <>
+              The Docker API is reached through its socket over SSH, never over TCP. <Mono>sshd</Mono> must allow it (the service is{" "}
+              <Mono>sshd</Mono> on some distributions).
+            </>
+          ),
+          copy: "printf 'AllowTcpForwarding local\\nAllowStreamLocalForwarding yes\\n' | sudo tee /etc/ssh/sshd_config.d/kipitiny.conf && sudo systemctl reload ssh",
+        },
+      ]}
+    />
   );
 }
 
