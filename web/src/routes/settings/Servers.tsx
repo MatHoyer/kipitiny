@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
+  ArrowRight,
   ChevronRight,
   Cloud,
   FolderKanban,
@@ -414,17 +415,23 @@ function ConnectionSection({ server }: { server: Server }) {
 function NewServerDialog() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const f = useServerForm(null, (s) => {
-    setOpen(false);
-    navigate(`/servers/${s.id}`);
-  });
+  // Stays open on its finished steps: the server is opened from there.
+  const f = useServerForm(null, () => {});
+  const added = f.save.isSuccess ? f.save.data : null;
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     f.save.mutate();
   };
-  const started = f.save.isPending || !!f.save.error;
+  const onOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next && added) {
+      f.reset();
+      f.save.reset();
+    }
+  };
+  const started = f.save.isPending || !!f.save.error || !!added;
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button size="sm">
           <Plus data-icon="inline-start" />
@@ -441,14 +448,27 @@ function NewServerDialog() {
           <ServerFields f={f} autoFocus />
           {started && (
             <div className="grid gap-2.5 rounded-lg border bg-muted/30 p-3 animate-in fade-in slide-in-from-top-1">
-              <p className="text-xs font-medium text-muted-foreground">{f.save.isPending ? "Connecting…" : "Couldn't add it."}</p>
-              <StepsProgress plan={serverPlan} seen={f.seen} running={f.save.isPending} done={false} error={f.save.error} accent="#2496ED" />
+              <p className="text-xs font-medium text-muted-foreground">{f.save.isPending ? "Connecting…" : added ? "Added." : "Couldn't add it."}</p>
+              <StepsProgress plan={serverPlan} seen={f.seen} running={f.save.isPending} done={!!added} error={f.save.error} accent="#2496ED" />
             </div>
           )}
           <DialogFooter>
-            <Button type="submit" loading={f.save.isPending}>
-              Add server
-            </Button>
+            {added ? (
+              <Button
+                type="button"
+                onClick={() => {
+                  onOpenChange(false);
+                  navigate(`/servers/${added.id}`);
+                }}
+              >
+                Open {added.name}
+                <ArrowRight data-icon="inline-end" />
+              </Button>
+            ) : (
+              <Button type="submit" loading={f.save.isPending}>
+                Add server
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

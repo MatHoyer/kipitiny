@@ -9,10 +9,9 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Stepper } from "@/components/ui/stepper";
-import { BackupSteps, RestoreSteps } from "@/components/op-steps";
+import { BackupSteps, RestoreSteps, VerifySteps, useLastStep } from "@/components/op-steps";
 import { formatBytes, formatDateTime, formatDuration, timeAgo } from "@/lib/format";
-import { api, type Backup as BackupT, type DatabaseKind } from "../api";
+import { api, type Backup as BackupT, type DatabaseKind, type Restore } from "../api";
 import { BackupIcon, StorageName, backupTitle } from "./BackupList";
 
 /** One backup: what it holds, where it is, whether it restores, and its restores. */
@@ -204,11 +203,7 @@ export function Backup() {
           </dl>
         </Section>
 
-        {b.status === "running" && (
-          <Section title="In progress" description="Nothing is kept unless it finishes: a failed backup is deleted from its target.">
-            <BackupSteps backup={b} />
-          </Section>
-        )}
+        <BackupProgress backup={b} />
 
         {isService && done && <RestoreTest backup={b} onRun={() => verify.mutate()} busy={verify.isPending} />}
 
@@ -217,21 +212,7 @@ export function Backup() {
             {ownRestores.length > 0 && (
               <ul className="-my-2 divide-y">
                 {ownRestores.map((r) => (
-                  <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-sm">
-                    <StateBadge state={r.status} />
-                    <span title={formatDateTime(r.createdAt)}>{timeAgo(r.createdAt)}</span>
-                    {r.finishedAt && (
-                      <span className="text-muted-foreground">
-                        took {formatDuration(new Date(r.finishedAt).getTime() - new Date(r.createdAt).getTime())}
-                      </span>
-                    )}
-                    {r.error && <span className="w-full text-xs text-destructive">{r.error}</span>}
-                    {r.status === "running" && (
-                      <div className="w-full pt-2">
-                        <RestoreSteps restore={r} backup={b} />
-                      </div>
-                    )}
-                  </li>
+                  <RestoreRow key={r.id} restore={r} backup={b} />
                 ))}
               </ul>
             )}
@@ -261,12 +242,10 @@ export function Backup() {
 /** The latest restore test: a throwaway server of the database's kind loads
  * the dump, or a throwaway container reads the whole volume archive. */
 function RestoreTest({ backup: b, onRun, busy }: { backup: BackupT; onRun: () => void; busy: boolean }) {
-  const d = b.verifyDetails;
   const running = b.verifyStatus === "running";
+  const seen = useLastStep(running, b.verifyStep);
   const volume = b.kind === "volume";
   const server = databaseLabels[b.serviceKind as DatabaseKind] ?? "PostgreSQL";
-  // Dumps other than PostgreSQL's count rows exactly; MongoDB holds collections of documents.
-  const mongo = b.serviceKind === "mongodb";
   return (
     <Section
       title="Restore test"
@@ -284,30 +263,80 @@ function RestoreTest({ backup: b, onRun, busy }: { backup: BackupT; onRun: () =>
     >
       {!b.verifyStatus ? (
         <p className="text-sm text-muted-foreground">Not tested yet. A backup nobody restored is a hope.</p>
-      ) : running ? (
-        <VerifySteps backup={b} server={server} />
+      ) : running || seen ? (
+        // Seen running here: its steps stay, with the outcome under them.
+        <div className="grid gap-4">
+          <VerifySteps backup={b} server={server} step={seen?.step} />
+          {b.verifyStatus === "failed" && <p className="text-sm text-destructive animate-in fade-in">{b.verifyError}</p>}
+          {b.verifyStatus === "succeeded" && <VerifyDetails backup={b} />}
+        </div>
       ) : b.verifyStatus === "failed" ? (
         <p className="text-sm text-destructive">{b.verifyError}</p>
-      ) : volume ? (
-        <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-          <Detail label="Files and folders">{(d.files ?? 0).toLocaleString()}</Detail>
-          <Detail label="Read in">{formatDuration(d.durationMs)}</Detail>
-          {b.verifiedAt && (
-            <p className="col-span-full text-xs text-muted-foreground">Tested {formatDateTime(b.verifiedAt)}</p>
-          )}
-        </dl>
       ) : (
-        <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-          <Detail label={mongo ? "Collections" : "Tables"}>{d.tables}</Detail>
-          <Detail label={mongo ? "Documents" : b.kind === "dump" ? "Rows" : "Rows (estimated)"}>{d.rows.toLocaleString()}</Detail>
-          <Detail label="Database size">{formatBytes(d.dbBytes)}</Detail>
-          <Detail label="Restored in">{formatDuration(d.durationMs)}</Detail>
-          {b.verifiedAt && (
-            <p className="col-span-full text-xs text-muted-foreground">Tested {formatDateTime(b.verifiedAt)}</p>
-          )}
-        </dl>
+        <VerifyDetails backup={b} />
       )}
     </Section>
+  );
+}
+
+/** What a passed restore test measured. */
+function VerifyDetails({ backup: b }: { backup: BackupT }) {
+  const d = b.verifyDetails;
+  const volume = b.kind === "volume";
+  // Dumps other than PostgreSQL's count rows exactly; MongoDB holds collections of documents.
+  const mongo = b.serviceKind === "mongodb";
+  return volume ? (
+    <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+      <Detail label="Files and folders">{(d.files ?? 0).toLocaleString()}</Detail>
+      <Detail label="Read in">{formatDuration(d.durationMs)}</Detail>
+      {b.verifiedAt && <p className="col-span-full text-xs text-muted-foreground">Tested {formatDateTime(b.verifiedAt)}</p>}
+    </dl>
+  ) : (
+    <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+      <Detail label={mongo ? "Collections" : "Tables"}>{d.tables}</Detail>
+      <Detail label={mongo ? "Documents" : b.kind === "dump" ? "Rows" : "Rows (estimated)"}>{d.rows.toLocaleString()}</Detail>
+      <Detail label="Database size">{formatBytes(d.dbBytes)}</Detail>
+      <Detail label="Restored in">{formatDuration(d.durationMs)}</Detail>
+      {b.verifiedAt && <p className="col-span-full text-xs text-muted-foreground">Tested {formatDateTime(b.verifiedAt)}</p>}
+    </dl>
+  );
+}
+
+/** A running backup's steps, kept with the outcome once it ends here. */
+function BackupProgress({ backup: b }: { backup: BackupT }) {
+  const running = b.status === "running";
+  const seen = useLastStep(running, b.step);
+  if (!running && !seen) return null;
+  return (
+    <Section
+      title={running ? "In progress" : b.status === "succeeded" ? "Done" : "Failed"}
+      description={running ? "Nothing is kept unless it finishes: a failed backup is deleted from its target." : undefined}
+    >
+      <div className="grid gap-3">
+        <BackupSteps backup={b} step={seen?.step} />
+        {b.status === "failed" && <p className="text-sm text-destructive animate-in fade-in">{b.error}</p>}
+      </div>
+    </Section>
+  );
+}
+
+/** A restore of this backup; one running here keeps its steps once it ends. */
+function RestoreRow({ restore: r, backup: b }: { restore: Restore; backup: BackupT }) {
+  const seen = useLastStep(r.status === "running", r.step);
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-sm">
+      <StateBadge state={r.status} />
+      <span title={formatDateTime(r.createdAt)}>{timeAgo(r.createdAt)}</span>
+      {r.finishedAt && (
+        <span className="text-muted-foreground">took {formatDuration(new Date(r.finishedAt).getTime() - new Date(r.createdAt).getTime())}</span>
+      )}
+      {r.error && <span className="w-full text-xs text-destructive">{r.error}</span>}
+      {(r.status === "running" || seen) && (
+        <div className="w-full pt-2">
+          <RestoreSteps restore={r} backup={b} step={seen?.step} />
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -331,30 +360,3 @@ function CopyValue({ value }: { value: string }) {
   );
 }
 
-/** A running restore test, step by step, as the manager reports it. */
-function VerifySteps({ backup: b, server }: { backup: BackupT; server: string }) {
-  const steps: { id: NonNullable<BackupT["verifyStep"]>; title: string; hint: string }[] =
-    b.kind === "volume"
-      ? [
-          { id: "server", title: "Start a throwaway container", hint: "No network, removed after the test" },
-          { id: "read", title: "Download and read the archive", hint: "Decrypt, decompress and list every file" },
-        ]
-      : [
-          { id: "image", title: `Get the ${server} image`, hint: "The one the database runs, or that made the backup" },
-          { id: "server", title: `Start a throwaway ${server}`, hint: "No network, 512MB, removed after the test" },
-          { id: "restore", title: "Download and load the backup", hint: "Decrypted if needed, then restored as a real restore would" },
-          { id: "check", title: "Measure what came back", hint: b.serviceKind === "mongodb" ? "Collections, documents and size" : "Tables, rows and size" },
-        ];
-  const current = steps.findIndex((s) => s.id === b.verifyStep);
-  return (
-    <div className="grid gap-3">
-      {b.verifyStep === "queued" && (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Spinner />
-          Waiting for another restore test to finish: they run one at a time.
-        </p>
-      )}
-      <Stepper orientation="vertical" steps={steps} current={current === -1 && b.verifyStep !== "queued" ? 0 : current} busy />
-    </div>
-  );
-}

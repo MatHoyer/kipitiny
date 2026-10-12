@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { ChoiceTile, Tag } from "@/components/common";
-import { BackupSteps } from "@/components/op-steps";
+import { BackupSteps, useLastStep } from "@/components/op-steps";
 import { storageIcon, storageLocation } from "@/components/storage";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -174,6 +174,7 @@ function BackupProgress({ id, what, onClose }: { id: string; what: ReactNode; on
   });
   const b = q.data;
   const running = !b || b.status === "running";
+  const seen = useLastStep(b?.status === "running", b?.step);
   return (
     <>
       <DialogHeader>
@@ -182,7 +183,7 @@ function BackupProgress({ id, what, onClose }: { id: string; what: ReactNode; on
           {running ? "You can close this: it keeps running and shows up in the history." : "It's in the history with the others."}
         </DialogDescription>
       </DialogHeader>
-      {b && running && <BackupSteps backup={b} />}
+      {b && <BackupSteps backup={b} step={seen?.step} />}
       {b?.status === "succeeded" && (
         <p className="flex items-center gap-2 text-sm animate-in fade-in">
           <CircleCheck className="size-4 text-emerald-600" />

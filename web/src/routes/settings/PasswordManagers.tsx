@@ -104,6 +104,8 @@ function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
   const onOpenChange = (next: boolean) => {
     setOpen(next);
     if (!next) {
+      // Refetched only now: the first connection swaps the empty state, which holds this dialog.
+      if (connect.isSuccess) qc.invalidateQueries({ queryKey: ["secret-providers"] });
       setPicked(null);
       setToken("");
       setSeen([]);
@@ -117,15 +119,8 @@ function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
       setSeen([]);
       return api.connectSecretProvider(picked!.id, token.trim(), stepped ? (s) => setSeen((prev) => [...prev, s]) : undefined);
     },
-    onSuccess: () => {
-      const done = () => {
-        qc.invalidateQueries({ queryKey: ["secret-providers"] });
-        onOpenChange(false);
-      };
-      // Let the stepper play its finish first: the refetch swaps the empty state, which unmounts this dialog.
-      if (stepped) setTimeout(done, 900);
-      else done();
-    },
+    // A stepped connection stays open on its finished steps until closed.
+    onSuccess: () => !stepped && onOpenChange(false),
   });
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -172,6 +167,7 @@ function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
             error={connect.error}
             onConnect={() => connect.mutate()}
             onBack={() => setPicked(null)}
+            onClose={() => onOpenChange(false)}
           />
         ) : (
           <form onSubmit={onSubmit} className="contents">
@@ -230,6 +226,7 @@ function ProtonPassConnect({
   error,
   onConnect,
   onBack,
+  onClose,
 }: {
   provider: SecretProvider;
   token: string;
@@ -240,6 +237,7 @@ function ProtonPassConnect({
   error: Error | null;
   onConnect: () => void;
   onBack: () => void;
+  onClose: () => void;
 }) {
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -279,13 +277,21 @@ function ProtonPassConnect({
         </div>
       )}
       <DialogFooter>
-        <Button type="button" variant="ghost" disabled={connecting || connected} onClick={onBack}>
-          <ChevronLeft data-icon="inline-start" />
-          Back
-        </Button>
-        <Button type="submit" loading={connecting} disabled={connected}>
-          {error ? "Try again" : "Connect"}
-        </Button>
+        {connected ? (
+          <Button type="button" onClick={onClose}>
+            Done
+          </Button>
+        ) : (
+          <>
+            <Button type="button" variant="ghost" disabled={connecting} onClick={onBack}>
+              <ChevronLeft data-icon="inline-start" />
+              Back
+            </Button>
+            <Button type="submit" loading={connecting}>
+              {error ? "Try again" : "Connect"}
+            </Button>
+          </>
+        )}
       </DialogFooter>
     </form>
   );
