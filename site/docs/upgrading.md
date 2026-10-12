@@ -5,7 +5,17 @@ order: 2
 ---
 
 The sidebar shows **Update available** when a newer version is published
-(checked every 6 hours); **Update now** installs it. Or from the shell:
+(checked every 6 hours); **Update now** checks first that it's a good time,
+then installs it:
+
+- **Nothing in progress**: no deploy, backup, restore, restore test or cleanup
+  running, since the restart would cut it short. The button stays off until
+  they end, and the check refreshes on its own.
+- **Docker** answers.
+- **A recent manager backup** (within a day): only a warning, with a link to
+  back it up first.
+
+Or from the shell:
 
 ```sh
 docker compose pull && docker compose up -d

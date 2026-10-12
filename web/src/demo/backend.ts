@@ -868,6 +868,25 @@ const routes: Route[] = [
       return progressed(["connect"], refused);
     },
   ],
+  [
+    "GET",
+    /^\/update\/preflight$/,
+    () => {
+      cleanupView(); // moves a running cleanup along
+      const busy = cleanupStart !== null;
+      return {
+        ready: !busy,
+        checks: [
+          { id: "version", state: "ok", detail: "demo → 0.27.0" },
+          busy
+            ? { id: "tasks", state: "block", detail: "in progress: the cleanup. The restart would cut it short" }
+            : { id: "tasks", state: "ok", detail: "no deploy, backup, restore or cleanup running" },
+          { id: "docker", state: "ok", detail: "Docker 27.3.1 answers" },
+          { id: "backup", state: "warn", detail: "the last manager backup is 4 days old: back it up first to have a way back" },
+        ],
+      };
+    },
+  ],
   ["GET", /^\/ssh-key$/, () => ({ publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDemoDemoDemoDemoDemoDemoDemoDemoDemoDemo kipitiny" })],
   ["GET", /^\/domains$/, () => db.domains],
   ["GET", /^\/secret-providers$/, () => [passwordManager()]],
