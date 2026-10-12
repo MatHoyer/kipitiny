@@ -3,7 +3,8 @@ import type { CSSProperties, ReactNode } from "react";
 
 export type Step = { title: ReactNode; hint?: ReactNode };
 
-type State = "done" | "active" | "failed" | "todo";
+export type StepState = "done" | "active" | "failed" | "todo";
+type State = StepState;
 
 /**
  * A stepper. The current step's number is circled by an orbiting arc (faster while `busy`), done steps pop
@@ -120,9 +121,13 @@ function Rail({ filled, vertical }: { filled: boolean; vertical?: boolean }) {
   );
 }
 
-function StepNode({ n, state, busy }: { n: number; state: State; busy?: boolean }) {
+/**
+ * One step's mark, on its own: e.g. a service in a step whose services run in parallel. Inside an element with the
+ * `stepper` class (it sets the accent).
+ */
+export function StepNode({ n, state, busy, size }: { n?: ReactNode; state: State; busy?: boolean; size?: "sm" }) {
   return (
-    <span className="relative flex size-8 shrink-0 items-center justify-center">
+    <span className={cn("relative flex shrink-0 items-center justify-center", size === "sm" ? "size-5" : "size-8")}>
       {state === "active" && <span aria-hidden className="stepper-halo absolute inset-0 rounded-full bg-(--step)" />}
       <svg aria-hidden viewBox="0 0 32 32" className="absolute inset-0 size-full">
         <circle
@@ -175,7 +180,8 @@ function StepNode({ n, state, busy }: { n: number; state: State; busy?: boolean 
         <span
           key={state}
           className={cn(
-            "relative font-mono text-xs tabular-nums",
+            "relative font-mono tabular-nums",
+            size === "sm" ? "text-[0.6rem]" : "text-xs",
             state === "active" ? "stepper-bump font-semibold text-(--step)" : "text-muted-foreground",
           )}
         >
