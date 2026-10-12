@@ -99,7 +99,7 @@ func (a *API) serviceStats(w http.ResponseWriter, r *http.Request) {
 
 // usage returns the current resource use of every running service.
 func (a *API) usage(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, a.core.CurrentUsage())
+	writeJSON(w, http.StatusOK, a.core.CurrentUsage(r.Context()))
 }
 
 func (a *API) uptime(w http.ResponseWriter, r *http.Request) {

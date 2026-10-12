@@ -22,7 +22,7 @@ func (t *tools) listBackupSchedules(ctx context.Context, _ *mcp.CallToolRequest,
 	if err := core.Require(ctx, store.ScopeRead); err != nil {
 		return nil, listSchedulesOut{}, err
 	}
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, listSchedulesOut{}, friendly(err)
 	}
@@ -47,7 +47,7 @@ type setScheduleIn struct {
 
 func (t *tools) setBackupSchedule(ctx context.Context, _ *mcp.CallToolRequest, in setScheduleIn) (*mcp.CallToolResult, core.ScheduleView, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "set_backup_schedule", in.Service, func() (core.ScheduleView, error) {
-		svc, err := t.c.ResolveService(ctx, in.Service)
+		svc, err := t.service(ctx, in.Service, core.PermBackups)
 		if err != nil {
 			return core.ScheduleView{}, err
 		}
@@ -106,7 +106,7 @@ type deleteScheduleIn struct {
 
 func (t *tools) deleteBackupSchedule(ctx context.Context, _ *mcp.CallToolRequest, in deleteScheduleIn) (*mcp.CallToolResult, deleted, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "delete_backup_schedule", in.Service, func() (deleted, error) {
-		svc, err := t.c.ResolveService(ctx, in.Service)
+		svc, err := t.service(ctx, in.Service, core.PermBackups)
 		if err != nil {
 			return deleted{}, err
 		}
@@ -129,7 +129,7 @@ type setUptimeIn struct {
 
 func (t *tools) setUptimeCheck(ctx context.Context, _ *mcp.CallToolRequest, in setUptimeIn) (*mcp.CallToolResult, core.UptimeView, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "set_uptime_check", in.Service, func() (core.UptimeView, error) {
-		svc, err := t.c.ResolveService(ctx, in.Service)
+		svc, err := t.service(ctx, in.Service, core.PermSettings)
 		if err != nil {
 			return core.UptimeView{}, err
 		}
@@ -141,7 +141,7 @@ func (t *tools) setUptimeCheck(ctx context.Context, _ *mcp.CallToolRequest, in s
 
 func (t *tools) deleteUptimeCheck(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, deleted, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "delete_uptime_check", in.Service, func() (deleted, error) {
-		svc, err := t.c.ResolveService(ctx, in.Service)
+		svc, err := t.service(ctx, in.Service, core.PermSettings)
 		if err != nil {
 			return deleted{}, err
 		}

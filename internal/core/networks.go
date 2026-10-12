@@ -72,6 +72,9 @@ func (c *Core) ListNetworks(ctx context.Context) ([]NetworkView, error) {
 			if !slices.Contains(s.Networks, n.ID) {
 				continue
 			}
+			if !visible(ctx, s.ProjectID) {
+				continue
+			}
 			p := byID[s.ProjectID]
 			v.Services = append(v.Services, NetworkMember{
 				ID: s.ID, Name: s.Name, Kind: s.Kind, ProjectID: p.ID, ProjectName: p.Name, Alias: networkAlias(p, s),

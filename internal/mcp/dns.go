@@ -17,6 +17,9 @@ type syncDNSOut struct {
 
 func (t *tools) syncDNS(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, syncDNSOut, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "sync_dns", "cloudflare", func() (syncDNSOut, error) {
+		if err := core.RequireAdmin(ctx); err != nil {
+			return syncDNSOut{}, err
+		}
 		v, err := t.c.SyncDNS(ctx)
 		if err != nil {
 			return syncDNSOut{}, err

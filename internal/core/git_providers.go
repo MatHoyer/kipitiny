@@ -76,6 +76,9 @@ func (c *Core) ListGitProviders(ctx context.Context) ([]GitProviderView, error) 
 	out := make([]GitProviderView, len(ps))
 	for i, p := range ps {
 		out[i] = gitProviderView(p)
+		if isMember(ctx) { // enough to pick one
+			out[i].GitProvider = store.GitProvider{ID: p.ID, Kind: p.Kind, Name: p.Name, BaseURL: p.BaseURL, Account: p.Account}
+		}
 	}
 	return out, err
 }

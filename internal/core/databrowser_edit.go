@@ -64,7 +64,7 @@ func rowChanged(label string) string {
 // database, or with apply unset only returns the statements it would run.
 // Admin only.
 func (c *Core) ApplyRowChanges(ctx context.Context, id, database, schema, table string, ch RowChanges, apply bool) (res ChangeResult, err error) {
-	if err := Require(ctx, store.ScopeAdmin); err != nil {
+	if err := c.requireOn(ctx, id, store.ScopeAdmin, PermDataEdit); err != nil {
 		return ChangeResult{}, err
 	}
 	if apply {

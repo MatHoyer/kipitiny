@@ -26,7 +26,7 @@ type volumePathIn struct {
 }
 
 func (t *tools) listVolumeFiles(ctx context.Context, _ *mcp.CallToolRequest, in volumePathIn) (*mcp.CallToolResult, core.VolumeListing, error) {
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, core.VolumeListing{}, friendly(err)
 	}
@@ -35,7 +35,7 @@ func (t *tools) listVolumeFiles(ctx context.Context, _ *mcp.CallToolRequest, in 
 }
 
 func (t *tools) readVolumeFile(ctx context.Context, _ *mcp.CallToolRequest, in volumePathIn) (*mcp.CallToolResult, core.VolumeFile, error) {
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, core.VolumeFile{}, friendly(err)
 	}
@@ -53,7 +53,7 @@ type writeVolumeFileIn struct {
 }
 
 func (t *tools) writeVolumeFile(ctx context.Context, _ *mcp.CallToolRequest, in writeVolumeFileIn) (*mcp.CallToolResult, core.VolumeEntry, error) {
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, core.VolumeEntry{}, friendly(err)
 	}
@@ -92,7 +92,7 @@ type makeVolumeDirIn struct {
 }
 
 func (t *tools) makeVolumeDir(ctx context.Context, _ *mcp.CallToolRequest, in makeVolumeDirIn) (*mcp.CallToolResult, volumeDone, error) {
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, volumeDone{}, friendly(err)
 	}
@@ -110,7 +110,7 @@ type moveVolumePathIn struct {
 }
 
 func (t *tools) moveVolumePath(ctx context.Context, _ *mcp.CallToolRequest, in moveVolumePathIn) (*mcp.CallToolResult, volumeDone, error) {
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, volumeDone{}, friendly(err)
 	}
@@ -130,7 +130,7 @@ type deleteVolumePathsIn struct {
 }
 
 func (t *tools) deleteVolumePaths(ctx context.Context, _ *mcp.CallToolRequest, in deleteVolumePathsIn) (*mcp.CallToolResult, volumeDone, error) {
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, volumeDone{}, friendly(err)
 	}

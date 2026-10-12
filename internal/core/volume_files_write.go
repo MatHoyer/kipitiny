@@ -72,7 +72,7 @@ func volumeEntry(svc store.Service, p string) (vol fileVolume, abs string, rel [
 
 // writableService loads a service whose volumes may be written.
 func (c *Core) writableService(ctx context.Context, id string) (store.Service, error) {
-	if err := Require(ctx, store.ScopeAdmin); err != nil {
+	if err := c.requireOn(ctx, id, store.ScopeAdmin, PermFilesEdit); err != nil {
 		return store.Service{}, err
 	}
 	svc, err := c.store.GetService(ctx, id)

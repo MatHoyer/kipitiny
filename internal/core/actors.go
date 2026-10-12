@@ -13,14 +13,19 @@ import (
 // ErrForbidden means the caller is authenticated but its scope is too small.
 var ErrForbidden = errors.New("forbidden")
 
-// Actor is who performs a request: a signed-in user (full access) or an API
-// token (limited to its scope).
+// Actor is who performs a request: a signed-in user or an API token acting
+// for its owner. A token's scope caps what its owner may do.
 type Actor struct {
 	Kind  string      `json:"kind"` // "user" or "token"
 	Name  string      `json:"name"`
 	Scope store.Scope `json:"scope"`
-	// UserID is the signed-in user's; empty for a token.
+	// UserID is the signed-in user's, or the token owner's.
 	UserID string `json:"-"`
+	// Role, Features and Grants are the user's (the token owner's).
+	Role     store.Role `json:"role"`
+	Features []string   `json:"-"`
+	// Grants maps project IDs to a member's permissions; nil for admins.
+	Grants map[string][]string `json:"-"`
 }
 
 func (a Actor) String() string { return a.Kind + ":" + a.Name }
@@ -65,8 +70,12 @@ func (c *Core) CreateAPIToken(ctx context.Context, name string, scope store.Scop
 	if !scope.Allows(store.ScopeRead) {
 		return NewToken{}, fmt.Errorf("%w: scope must be read, deploy or admin", ErrInvalid)
 	}
+	a, ok := ActorFrom(ctx)
+	if !ok || a.Kind != "user" {
+		return NewToken{}, ErrUnauthorized
+	}
 	token := tokenPrefix + randomToken(32)
-	t, err := c.store.CreateAPIToken(ctx, store.APIToken{Name: name, Scope: scope, TokenHash: hashToken(token)})
+	t, err := c.store.CreateAPIToken(ctx, store.APIToken{Name: name, Scope: scope, TokenHash: hashToken(token), UserID: a.UserID})
 	if err != nil {
 		return NewToken{}, err
 	}
@@ -93,7 +102,16 @@ func (c *Core) AuthenticateToken(ctx context.Context, token string) (Actor, erro
 	if err != nil {
 		return Actor{}, err
 	}
-	return Actor{Kind: "token", Name: t.Name, Scope: t.Scope}, nil
+	a := Actor{Kind: "token", Name: t.Name, Scope: t.Scope, Role: store.RoleAdmin}
+	if t.UserID == "" {
+		return a, nil // made before tokens had owners, when only admins existed
+	}
+	u, err := c.store.GetUser(ctx, t.UserID)
+	if err != nil {
+		return Actor{}, err
+	}
+	a.UserID, a.Role, a.Features = u.ID, u.Role, u.Features
+	return c.withGrants(ctx, a)
 }
 
 const auditRetention = 90 * 24 * time.Hour

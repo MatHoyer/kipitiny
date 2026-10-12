@@ -352,6 +352,8 @@ func (c *Core) ServiceStats(ctx context.Context, id string) (ServiceStats, error
 
 // CurrentUsage returns the current resource use of every running service,
 // by service ID.
-func (c *Core) CurrentUsage() map[string]ServiceUsage {
-	return c.stats.current(time.Now())
+func (c *Core) CurrentUsage(ctx context.Context) map[string]ServiceUsage {
+	out := c.stats.current(time.Now())
+	maps.DeleteFunc(out, func(_ string, u ServiceUsage) bool { return !visible(ctx, u.ProjectID) })
+	return out
 }

@@ -59,7 +59,7 @@ func (c *Core) openTerminal(ctx context.Context, target string, tty *docker.TTY,
 // OpenServiceTerminal starts a shell in one of the service's running
 // containers (by ID prefix or name; the first replica when empty). Admin only.
 func (c *Core) OpenServiceTerminal(ctx context.Context, serviceID, containerRef, shell string, cols, rows uint) (*Terminal, error) {
-	if err := Require(ctx, store.ScopeAdmin); err != nil {
+	if err := c.requireOn(ctx, serviceID, store.ScopeAdmin, PermTerminal); err != nil {
 		return nil, err
 	}
 	if shell == "" {
@@ -132,6 +132,9 @@ var hostShell = []string{"nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--
 // root on the host anyway). Admin only.
 func (c *Core) OpenServerTerminal(ctx context.Context, serverID string, cols, rows uint) (*Terminal, error) {
 	if err := Require(ctx, store.ScopeAdmin); err != nil {
+		return nil, err
+	}
+	if err := RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 	sv, err := c.store.GetServer(ctx, serverID)

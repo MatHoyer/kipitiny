@@ -50,7 +50,11 @@ var pgTagRe = regexp.MustCompile(`^[A-Z]+( [A-Z]+)*( [0-9]+){0,2}$`)
 // mariadb, mongodb) or commands that write are refused (redis). Every run is audited, without its text, which
 // may hold secrets.
 func (c *Core) DataConsole(ctx context.Context, id, database, query string, write bool) (res ConsoleResult, err error) {
-	if err := Require(ctx, store.ScopeAdmin); err != nil {
+	perm := PermData
+	if write {
+		perm = PermDataEdit
+	}
+	if err := c.requireOn(ctx, id, store.ScopeAdmin, perm); err != nil {
 		return ConsoleResult{}, err
 	}
 	action := "data console"

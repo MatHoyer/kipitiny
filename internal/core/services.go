@@ -139,6 +139,9 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 	if err != nil {
 		return ServiceView{}, err
 	}
+	if err := checkServiceChange(ctx, store.Service{ProjectID: projectID, Env: map[string]string{}, Secrets: []string{}}, svc); err != nil {
+		return ServiceView{}, err
+	}
 	if err := c.validate(ctx, svc); err != nil {
 		return ServiceView{}, err
 	}
@@ -272,6 +275,9 @@ func (c *Core) updateService(ctx context.Context, id string, p ServicePatch) (st
 	}
 	svc, err := c.patched(old, p)
 	if err != nil {
+		return store.Service{}, err
+	}
+	if err := checkServiceChange(ctx, old, svc); err != nil {
 		return store.Service{}, err
 	}
 	if err := c.validate(ctx, svc); err != nil {

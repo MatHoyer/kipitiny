@@ -34,8 +34,11 @@ func (c *Core) openStorage(t store.BackupTarget) (storage.Storage, error) {
 
 func (c *Core) ListBackupTargets(ctx context.Context) ([]store.BackupTarget, error) {
 	ts, err := c.store.ListBackupTargets(ctx)
-	for i := range ts {
-		ts[i] = maskedTarget(ts[i])
+	for i, t := range ts {
+		ts[i] = maskedTarget(t)
+		if isMember(ctx) { // enough to pick one
+			ts[i] = store.BackupTarget{ID: t.ID, Name: t.Name, Kind: t.Kind, AgeRecipient: t.AgeRecipient, CreatedAt: t.CreatedAt}
+		}
 	}
 	return ts, err
 }
