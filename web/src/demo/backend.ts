@@ -609,6 +609,30 @@ function restoring(r: Restore): Restore {
   return r;
 }
 
+/** Deployments an install started, as the manager runs them: each starts at `start` and ends at `end` (ms). */
+const scheduled: { serviceId: string; start: number; end: number; id?: string }[] = [];
+
+/** Starts the scheduled deployments whose time came and finishes those whose time is up. */
+function tickDeploys() {
+  const t = Date.now();
+  for (const x of scheduled) {
+    const s = db.services.find((s) => s.id === x.serviceId);
+    if (!s) continue;
+    if (!x.id && t >= x.start) {
+      const d: Deployment = { id: newId("dep"), serviceId: s.id, status: "running", image: s.image, triggeredBy: "user:demo", createdAt: now() };
+      db.deployments.unshift(d);
+      x.id = d.id;
+    }
+    const d = x.id && db.deployments.find((d) => d.id === x.id);
+    if (d && d.status === "running" && t >= x.end) {
+      Object.assign(d, { status: "succeeded", finishedAt: now() });
+      s.currentDeploymentId = d.id;
+    }
+  }
+  scheduled.splice(0, scheduled.length, ...scheduled.filter((x) => !x.id || db.deployments.find((d) => d.id === x.id)?.status === "running"));
+  save();
+}
+
 /** Restore tests the demo is running, by backup: when each started. */
 const verifyStarts = new Map<string, number>();
 
@@ -912,20 +936,23 @@ const routes: Route[] = [
         db.projects.push(p);
         projectId = p.id;
       }
+      // Databases deploy first, then the apps once they're up, as the manager does.
+      const dbsFor = t.services.some(isDb) ? 2600 : 0;
       for (const { domainInput, ...svc } of t.services) {
-        db.services.push(
-          newService({
-            ...svc,
-            id: newId("s"),
-            projectId,
-            domain: domainInput ? (values[domainInput] ?? "") : "",
-            currentDeploymentId: "",
-            createdAt: now(),
-            updatedAt: now(),
-          }),
-        );
+        const s = newService({
+          ...svc,
+          id: newId("s"),
+          projectId,
+          domain: domainInput ? (values[domainInput] ?? "") : "",
+          currentDeploymentId: "",
+          createdAt: now(),
+          updatedAt: now(),
+        });
+        db.services.push(s);
+        const start = Date.now() + (isDb(s) ? 0 : dbsFor);
+        scheduled.push({ serviceId: s.id, start, end: start + (isDb(s) ? 2400 : 3000) });
       }
-      save();
+      tickDeploys();
       return { projectId, plan };
     },
   ],
@@ -1065,7 +1092,7 @@ const routes: Route[] = [
   ["POST", /^\/services\/([^/]+)\/files\/move$/, ({ m, body }) => viaFiles(() => files.transfer(serviceOf(m[1]), body.from, body.to, false))],
   ["POST", /^\/services\/([^/]+)\/files\/copy$/, ({ m, body }) => viaFiles(() => files.transfer(serviceOf(m[1]), body.from, body.to, true))],
   ["POST", /^\/services\/([^/]+)\/files\/delete$/, ({ m, body }) => viaFiles(() => files.remove(serviceOf(m[1]), body.paths ?? []))],
-  ["GET", /^\/services\/([^/]+)\/deployments$/, ({ m }) => db.deployments.filter((d) => d.serviceId === m[1])],
+  ["GET", /^\/services\/([^/]+)\/deployments$/, ({ m }) => (tickDeploys(), db.deployments.filter((d) => d.serviceId === m[1]))],
   ["GET", /^\/deployments\/([^/]+)\/log$/, () => "Pulling image…\nStarting replicas…\nHealthy.\nDeployment succeeded (this is a demo: nothing really ran)."],
   ["GET", /^\/services\/([^/]+)\/stats$/, ({ m }) => serviceStats(serviceOf(m[1]))],
   [
