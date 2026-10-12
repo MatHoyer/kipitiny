@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HardDrive, Pause, Pencil, Play, Plus, Trash2 } from "lucide-react";
+import { Archive, CalendarClock, HardDrive, Pause, Pencil, Play, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { CheckboxField, Empty } from "@/components/common";
+import { CheckboxField, Empty, Meta, MetaItem } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CronField, describeCron } from "@/components/cron-field";
 import { Button } from "@/components/ui/button";
@@ -68,11 +68,11 @@ export function Schedules({ serviceId, targets, databases = [] }: { serviceId?: 
                   <span className="font-medium">{describeCron(s.cron)}</span>
                   <span className="text-muted-foreground"> → {target?.name ?? s.targetId}</span>
                   {s.database && <span className="ml-2 font-mono text-xs text-muted-foreground">{s.database}</span>}
-                  <p className="text-xs text-muted-foreground">
-                    {describeRetention(s)}
-                    {s.verify && " · restore-tested"}
-                    {s.enabled && s.nextRun && ` · next ${formatDateTime(s.nextRun)}`}
-                  </p>
+                  <Meta className="mt-0.5">
+                    <MetaItem icon={Archive}>{describeRetention(s)}</MetaItem>
+                    {s.verify && <MetaItem icon={ShieldCheck}>restore-tested</MetaItem>}
+                    {s.enabled && s.nextRun && <MetaItem icon={CalendarClock}>next {formatDateTime(s.nextRun)}</MetaItem>}
+                  </Meta>
                 </div>
               </div>
               <div className="flex gap-0.5">

@@ -1,8 +1,8 @@
-import { ChevronRight, DatabaseBackup, HardDrive, ShieldAlert, ShieldCheck } from "lucide-react";
+import { ChevronRight, Clock, DatabaseBackup, HardDrive, ShieldAlert, ShieldCheck, Timer } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { ServiceIcon } from "@/components/service-icon";
-import { EmptyState, StateBadge, Tag } from "@/components/common";
+import { EmptyState, Meta, MetaItem, StateBadge, Tag } from "@/components/common";
 import { byDay, formatBytes, formatDuration, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Backup, BackupTarget } from "../api";
@@ -46,12 +46,12 @@ export function BackupList({
                       <span className="truncate">{backupTitle(b, showService)}</span>
                       {b.status !== "succeeded" && <StateBadge state={b.status} />}
                     </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {new Date(b.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ·{" "}
+                    <Meta className="mt-0.5">
+                      <MetaItem icon={Clock}>{new Date(b.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</MetaItem>
                       <StorageName target={targets.find((t) => t.id === b.targetId)} />
-                      {b.finishedAt && b.status === "succeeded" && ` · ${formatDuration(b.durationMs)}`}
-                      {b.error && <span className="text-destructive"> · {b.error}</span>}
-                    </p>
+                      {b.finishedAt && b.status === "succeeded" && <MetaItem icon={Timer}>{formatDuration(b.durationMs)}</MetaItem>}
+                    </Meta>
+                    {b.error && <p className="mt-0.5 truncate text-xs text-destructive">{b.error}</p>}
                   </div>
                   <div className="flex shrink-0 items-center gap-2 max-sm:hidden">
                     {b.database && <Tag className="font-mono">{b.database}</Tag>}

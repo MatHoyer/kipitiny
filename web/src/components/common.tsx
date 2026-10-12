@@ -96,6 +96,22 @@ export function Tag({ children, className }: { children: ReactNode; className?: 
   );
 }
 
+/** A row of small facts, each led by its icon instead of a separator. */
+export function Meta({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <span className={cn("flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground", className)}>{children}</span>
+  );
+}
+
+export function MetaItem({ icon: Icon, children, className }: { icon?: LucideIcon; children: ReactNode; className?: string }) {
+  return (
+    <span className={cn("inline-flex min-w-0 items-center gap-1 [&>svg]:size-3 [&>svg]:shrink-0", className)}>
+      {Icon && <Icon />}
+      {children}
+    </span>
+  );
+}
+
 export function ErrorText({ error }: { error: Error | null | undefined }) {
   return error ? (
     <p role="alert" className="text-sm wrap-break-word text-destructive">

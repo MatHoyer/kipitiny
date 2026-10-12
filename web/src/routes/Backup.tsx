@@ -125,7 +125,8 @@ export function Backup() {
               {b.encrypted && <Tag>encrypted (age)</Tag>}
             </h2>
             <p className="text-sm text-muted-foreground" title={formatDateTime(b.createdAt)}>
-              {new Date(b.createdAt).toLocaleString([], { dateStyle: "full", timeStyle: "short" })} · {timeAgo(b.createdAt)}
+              {new Date(b.createdAt).toLocaleString([], { dateStyle: "full", timeStyle: "short" })}
+              {timeAgo(b.createdAt).endsWith("ago") && <span className="opacity-70"> ({timeAgo(b.createdAt)})</span>}
             </p>
           </div>
         </div>
