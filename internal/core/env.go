@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -264,6 +265,14 @@ func (c *Core) SetProjectEnv(ctx context.Context, id string, env map[string]stri
 	env, secrets, err = mergeEnv(env, secrets, p.Env, p.Secrets)
 	if err != nil {
 		return store.Project{}, err
+	}
+	if !maps.Equal(env, p.Env) || !slices.Equal(secrets, p.Secrets) {
+		if err := check(ctx, id, PermEnv); err != nil {
+			return store.Project{}, err
+		}
+		if err := checkSecretRefs(ctx, p.Env, env); err != nil {
+			return store.Project{}, err
+		}
 	}
 	for k := range env {
 		if !envKeyRe.MatchString(k) {

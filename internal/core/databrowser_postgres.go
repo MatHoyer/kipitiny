@@ -91,7 +91,7 @@ type PgDatabase struct {
 // MongoDB service's instance: for postgres those that accept connections,
 // the server's own, templates and restore leftovers aside.
 func (c *Core) PgDatabases(ctx context.Context, id string) ([]PgDatabase, error) {
-	if err := Require(ctx, store.ScopeRead); err != nil {
+	if err := c.requireOn(ctx, id, store.ScopeRead, PermData); err != nil {
 		return nil, err
 	}
 	t, err := c.databaseTarget(ctx, id, "")
@@ -127,7 +127,7 @@ var pgDatabaseNameRe = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
 // its first collection (a database without one doesn't exist there).
 // Admin only.
 func (c *Core) CreatePgDatabase(ctx context.Context, id, name, collection string) (PgDatabase, error) {
-	if err := Require(ctx, store.ScopeAdmin); err != nil {
+	if err := c.requireOn(ctx, id, store.ScopeAdmin, PermDataEdit); err != nil {
 		return PgDatabase{}, err
 	}
 	if !pgDatabaseNameRe.MatchString(name) {
@@ -173,7 +173,7 @@ func (c *Core) CreatePgDatabase(ctx context.Context, id, name, collection string
 // own when database is empty), system schemas aside: PostgreSQL, MySQL and
 // MariaDB (whose schema is the database), MongoDB collections (no columns).
 func (c *Core) PgTables(ctx context.Context, id, database string) ([]PgTable, error) {
-	if err := Require(ctx, store.ScopeRead); err != nil {
+	if err := c.requireOn(ctx, id, store.ScopeRead, PermData); err != nil {
 		return nil, err
 	}
 	t, err := c.databaseTarget(ctx, id, database)
@@ -220,7 +220,7 @@ ORDER BY n.nspname, c.relname;`, func(row []json.RawMessage) error {
 // PgRows returns one page of a table's rows with its columns (PostgreSQL,
 // MySQL, MariaDB; MongoDB has MongoDocuments).
 func (c *Core) PgRows(ctx context.Context, id, database, schema, table string, q RowQuery) (PgRows, error) {
-	if err := Require(ctx, store.ScopeRead); err != nil {
+	if err := c.requireOn(ctx, id, store.ScopeRead, PermData); err != nil {
 		return PgRows{}, err
 	}
 	t, err := c.sqlTarget(ctx, id, database)
@@ -271,7 +271,7 @@ func (c *Core) PgRows(ctx context.Context, id, database, schema, table string, q
 // PgExport streams a table's rows matching q (all of them: no paging) to w
 // as CSV with a header.
 func (c *Core) PgExport(ctx context.Context, id, database, schema, table string, q RowQuery, w io.Writer) error {
-	if err := Require(ctx, store.ScopeRead); err != nil {
+	if err := c.requireOn(ctx, id, store.ScopeRead, PermData); err != nil {
 		return err
 	}
 	t, err := c.sqlTarget(ctx, id, database)

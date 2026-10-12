@@ -137,7 +137,7 @@ func (c *Core) Topology(ctx context.Context, projectID string) (Topology, error)
 		if err != nil {
 			return Topology{}, err
 		}
-		projects = ps
+		projects = slices.DeleteFunc(ps, func(p store.Project) bool { return !visible(ctx, p.ID) })
 	}
 	servers, err := c.store.ListServers(ctx)
 	if err != nil {

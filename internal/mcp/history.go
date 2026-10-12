@@ -17,6 +17,9 @@ type backupArg struct {
 
 func (t *tools) verifyBackup(ctx context.Context, _ *mcp.CallToolRequest, in backupArg) (*mcp.CallToolResult, store.Backup, error) {
 	b, err := mutate(ctx, t.c, store.ScopeDeploy, "verify_backup", in.BackupID, func() (store.Backup, error) {
+		if err := t.backup(ctx, in.BackupID, core.PermBackups); err != nil {
+			return store.Backup{}, err
+		}
 		return t.c.VerifyBackup(ctx, in.BackupID)
 	})
 	return nil, b, err
@@ -24,6 +27,9 @@ func (t *tools) verifyBackup(ctx context.Context, _ *mcp.CallToolRequest, in bac
 
 func (t *tools) deleteBackup(ctx context.Context, _ *mcp.CallToolRequest, in backupArg) (*mcp.CallToolResult, deleted, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "delete_backup", in.BackupID, func() (deleted, error) {
+		if err := t.backup(ctx, in.BackupID, core.PermBackups); err != nil {
+			return deleted{}, err
+		}
 		return deleted{Deleted: in.BackupID}, t.c.DeleteBackup(ctx, in.BackupID)
 	})
 	return nil, out, err
@@ -44,7 +50,7 @@ type backupProjectOut struct {
 // as the REST route does.
 func (t *tools) backupProject(ctx context.Context, _ *mcp.CallToolRequest, in backupProjectIn) (*mcp.CallToolResult, backupProjectOut, error) {
 	out, err := mutate(ctx, t.c, store.ScopeDeploy, "backup_project", in.Project, func() (backupProjectOut, error) {
-		p, err := t.findProject(ctx, in.Project)
+		p, err := t.project(ctx, in.Project, core.PermBackups)
 		if err != nil {
 			return backupProjectOut{}, err
 		}
@@ -69,7 +75,7 @@ func (t *tools) listRestores(ctx context.Context, _ *mcp.CallToolRequest, in ser
 	if err := core.Require(ctx, store.ScopeRead); err != nil {
 		return nil, listRestoresOut{}, err
 	}
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, listRestoresOut{}, friendly(err)
 	}
@@ -90,7 +96,7 @@ func (t *tools) listDeployments(ctx context.Context, _ *mcp.CallToolRequest, in 
 	if err := core.Require(ctx, store.ScopeRead); err != nil {
 		return nil, listDeploymentsOut{}, err
 	}
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, listDeploymentsOut{}, friendly(err)
 	}

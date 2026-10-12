@@ -49,8 +49,9 @@ func TestProjectTools(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	owner, _ := asUser(t, c, st, "admin", store.RoleAdmin)
 	session := func(scope store.Scope) *mcp.ClientSession {
-		tok, _ := c.CreateAPIToken(ctx, string(scope), scope)
+		tok, _ := c.CreateAPIToken(owner, string(scope), scope)
 		cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(ctx, &mcp.StreamableClientTransport{
 			Endpoint: srv.URL, HTTPClient: &http.Client{Transport: bearer{tok.Token}},
 		}, nil)

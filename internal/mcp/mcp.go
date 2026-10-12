@@ -42,7 +42,7 @@ func Handler(c *core.Core, version string) http.Handler {
 		Instructions: "Manage apps and databases (PostgreSQL, Redis, MySQL, MariaDB, MongoDB) on this kipitiny server. " +
 			"Refer to services as project/service. Read tools need a read token; " +
 			"deploy, rollback, service_action, backup_database, backup_project and verify_backup need deploy (with deploy, deploy_image only changes the tag of an existing app); " +
-			"the other tools need admin (each says so), and deleting a service or project or restoring a backup takes its name as an explicit confirmation. " +
+			"the other tools need admin (each says so). A member's token also needs the matching permission on the project (the refusal names it). Deleting a service or project or restoring a backup takes its name as an explicit confirmation. " +
 			"Documentation of this version, as markdown: " + docsIndex + " lists every page; read the relevant one before guessing how a feature works. " +
 			"If the site is unreachable, the same pages are in " + docsSources + ".",
 	})
@@ -303,7 +303,7 @@ func (t *tools) getAppStatus(ctx context.Context, _ *mcp.CallToolRequest, in ser
 	if err := core.Require(ctx, store.ScopeRead); err != nil {
 		return nil, appStatusOut{}, err
 	}
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, appStatusOut{}, friendly(err)
 	}
@@ -344,7 +344,7 @@ func (t *tools) getLogs(ctx context.Context, _ *mcp.CallToolRequest, in getLogsI
 	if err := core.Require(ctx, store.ScopeRead); err != nil {
 		return nil, getLogsOut{}, err
 	}
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, getLogsOut{}, friendly(err)
 	}
@@ -373,7 +373,7 @@ type deployIn struct {
 
 func (t *tools) deploy(ctx context.Context, _ *mcp.CallToolRequest, in deployIn) (*mcp.CallToolResult, store.Deployment, error) {
 	dep, err := mutate(ctx, t.c, store.ScopeDeploy, "deploy", in.Service, func() (store.Deployment, error) {
-		svc, err := t.c.ResolveService(ctx, in.Service)
+		svc, err := t.service(ctx, in.Service, core.PermDeploy)
 		if err != nil {
 			return store.Deployment{}, err
 		}
@@ -424,6 +424,9 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 		if err != nil {
 			return store.Deployment{}, err
 		}
+		if err := core.Authorize(ctx, project.ID, core.PermSettings); err != nil {
+			return store.Deployment{}, err
+		}
 		svc, err := t.c.ResolveService(ctx, project.Name+"/"+in.Name)
 		switch {
 		case errors.Is(err, store.ErrNotFound):
@@ -464,7 +467,7 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 // retag is deploy_image for a deploy token: the app must exist and only its
 // image tag or digest may change.
 func (t *tools) retag(ctx context.Context, in deployImageIn) (store.Deployment, error) {
-	svc, err := t.c.ResolveService(ctx, in.Project+"/"+in.Name)
+	svc, err := t.service(ctx, in.Project+"/"+in.Name, core.PermDeploy)
 	if errors.Is(err, store.ErrNotFound) {
 		return store.Deployment{}, fmt.Errorf("%w: needs the admin scope to create an app", core.ErrForbidden)
 	}
@@ -500,7 +503,7 @@ type setProjectEnvOut struct {
 
 func (t *tools) setProjectEnv(ctx context.Context, _ *mcp.CallToolRequest, in setProjectEnvIn) (*mcp.CallToolResult, setProjectEnvOut, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "set_project_env", in.Project, func() (setProjectEnvOut, error) {
-		project, err := t.findProject(ctx, in.Project)
+		project, err := t.project(ctx, in.Project, core.PermEnv)
 		if err != nil {
 			return setProjectEnvOut{}, err
 		}
@@ -540,7 +543,7 @@ func (t *tools) getProjectCompose(ctx context.Context, _ *mcp.CallToolRequest, i
 	if err := core.Require(ctx, store.ScopeRead); err != nil {
 		return nil, getProjectComposeOut{}, err
 	}
-	project, err := t.findProject(ctx, in.Project)
+	project, err := t.project(ctx, in.Project, core.PermView)
 	if err != nil {
 		return nil, getProjectComposeOut{}, friendly(err)
 	}
@@ -561,7 +564,7 @@ type applyProjectComposeIn struct {
 
 func (t *tools) applyProjectCompose(ctx context.Context, _ *mcp.CallToolRequest, in applyProjectComposeIn) (*mcp.CallToolResult, core.ComposePlan, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "apply_project_compose", in.Project, func() (core.ComposePlan, error) {
-		project, err := t.findProject(ctx, in.Project)
+		project, err := t.project(ctx, in.Project, core.PermSettings)
 		if err != nil {
 			return core.ComposePlan{}, err
 		}
@@ -586,6 +589,33 @@ func (t *tools) findProject(ctx context.Context, name string) (store.Project, er
 	return store.Project{}, fmt.Errorf("%w: project %s", store.ErrNotFound, name)
 }
 
+// project finds a project by name and checks p on it.
+func (t *tools) project(ctx context.Context, name string, p core.Perm) (store.Project, error) {
+	pr, err := t.findProject(ctx, name)
+	if err != nil {
+		return store.Project{}, err
+	}
+	return pr, core.Authorize(ctx, pr.ID, p)
+}
+
+// service resolves a service (project/service or ID) and checks p on its
+// project.
+func (t *tools) service(ctx context.Context, ref string, p core.Perm) (store.Service, error) {
+	return t.c.AuthorizeService(ctx, ref, p)
+}
+
+// backup checks p on a backup's project; the manager's own are admin only.
+func (t *tools) backup(ctx context.Context, id string, p core.Perm) error {
+	projectID, err := t.c.ProjectOf(ctx, core.IDBackup, id)
+	if err != nil {
+		return err
+	}
+	if projectID == "" {
+		return core.RequireAdmin(ctx)
+	}
+	return core.Authorize(ctx, projectID, p)
+}
+
 func (t *tools) findOrCreateProject(ctx context.Context, name string) (store.Project, error) {
 	p, err := t.findProject(ctx, name)
 	if errors.Is(err, store.ErrNotFound) {
@@ -601,7 +631,7 @@ type rollbackIn struct {
 
 func (t *tools) rollback(ctx context.Context, _ *mcp.CallToolRequest, in rollbackIn) (*mcp.CallToolResult, store.Deployment, error) {
 	dep, err := mutate(ctx, t.c, store.ScopeDeploy, "rollback", in.Service, func() (store.Deployment, error) {
-		svc, err := t.c.ResolveService(ctx, in.Service)
+		svc, err := t.service(ctx, in.Service, core.PermDeploy)
 		if err != nil {
 			return store.Deployment{}, err
 		}
@@ -619,7 +649,7 @@ type backupIn struct {
 
 func (t *tools) backupDatabase(ctx context.Context, _ *mcp.CallToolRequest, in backupIn) (*mcp.CallToolResult, store.Backup, error) {
 	b, err := mutate(ctx, t.c, store.ScopeDeploy, "backup_database", in.Database, func() (store.Backup, error) {
-		svc, err := t.c.ResolveService(ctx, in.Database)
+		svc, err := t.service(ctx, in.Database, core.PermBackups)
 		if err != nil {
 			return store.Backup{}, err
 		}
@@ -642,6 +672,9 @@ type listStorageOut struct {
 
 func (t *tools) listStorage(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listStorageOut, error) {
 	if err := core.Require(ctx, store.ScopeRead); err != nil {
+		return nil, listStorageOut{}, err
+	}
+	if err := core.RequireFeature(ctx, core.FeatureStorage); err != nil {
 		return nil, listStorageOut{}, err
 	}
 	ts, err := t.c.ListBackupTargets(ctx)
@@ -667,7 +700,7 @@ func (t *tools) listBackups(ctx context.Context, _ *mcp.CallToolRequest, in list
 	if err := core.Require(ctx, store.ScopeRead); err != nil {
 		return nil, listBackupsOut{}, err
 	}
-	svc, err := t.c.ResolveService(ctx, in.Database)
+	svc, err := t.service(ctx, in.Database, core.PermView)
 	if err != nil {
 		return nil, listBackupsOut{}, friendly(err)
 	}
@@ -683,7 +716,7 @@ type restoreIn struct {
 
 func (t *tools) restoreDatabase(ctx context.Context, _ *mcp.CallToolRequest, in restoreIn) (*mcp.CallToolResult, store.Restore, error) {
 	r, err := mutate(ctx, t.c, store.ScopeAdmin, "restore_database", in.Database, func() (store.Restore, error) {
-		svc, err := t.c.ResolveService(ctx, in.Database)
+		svc, err := t.service(ctx, in.Database, core.PermRestore)
 		if err != nil {
 			return store.Restore{}, err
 		}

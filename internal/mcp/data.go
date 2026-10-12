@@ -17,7 +17,7 @@ type listDatabasesOut struct {
 }
 
 func (t *tools) listDatabases(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, listDatabasesOut, error) {
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, listDatabasesOut{}, friendly(err)
 	}
@@ -33,7 +33,7 @@ type createDatabaseIn struct {
 
 func (t *tools) createDatabase(ctx context.Context, _ *mcp.CallToolRequest, in createDatabaseIn) (*mcp.CallToolResult, core.PgDatabase, error) {
 	db, err := mutate(ctx, t.c, store.ScopeAdmin, "create_database", in.Service+"/"+in.Name, func() (core.PgDatabase, error) {
-		svc, err := t.c.ResolveService(ctx, in.Service)
+		svc, err := t.service(ctx, in.Service, core.PermView)
 		if err != nil {
 			return core.PgDatabase{}, err
 		}
@@ -52,7 +52,7 @@ type listTablesOut struct {
 }
 
 func (t *tools) listTables(ctx context.Context, _ *mcp.CallToolRequest, in listTablesIn) (*mcp.CallToolResult, listTablesOut, error) {
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, listTablesOut{}, friendly(err)
 	}
@@ -74,7 +74,7 @@ type readTableIn struct {
 }
 
 func (t *tools) readTable(ctx context.Context, _ *mcp.CallToolRequest, in readTableIn) (*mcp.CallToolResult, core.PgRows, error) {
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, core.PgRows{}, friendly(err)
 	}
@@ -104,7 +104,7 @@ type findDocumentsIn struct {
 }
 
 func (t *tools) findDocuments(ctx context.Context, _ *mcp.CallToolRequest, in findDocumentsIn) (*mcp.CallToolResult, core.MongoDocs, error) {
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, core.MongoDocs{}, friendly(err)
 	}
@@ -126,7 +126,7 @@ type scanRedisKeysIn struct {
 }
 
 func (t *tools) scanRedisKeys(ctx context.Context, _ *mcp.CallToolRequest, in scanRedisKeysIn) (*mcp.CallToolResult, core.RedisKeys, error) {
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, core.RedisKeys{}, friendly(err)
 	}
@@ -142,7 +142,7 @@ type getRedisKeyIn struct {
 }
 
 func (t *tools) getRedisKey(ctx context.Context, _ *mcp.CallToolRequest, in getRedisKeyIn) (*mcp.CallToolResult, core.RedisValue, error) {
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, core.RedisValue{}, friendly(err)
 	}
@@ -162,7 +162,7 @@ func (t *tools) queryDatabase(ctx context.Context, _ *mcp.CallToolRequest, in qu
 	if err := core.Require(ctx, store.ScopeAdmin); err != nil {
 		return nil, core.ConsoleResult{}, err
 	}
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, core.ConsoleResult{}, friendly(err)
 	}
@@ -175,7 +175,7 @@ func (t *tools) getConnection(ctx context.Context, _ *mcp.CallToolRequest, in se
 	if err := core.Require(ctx, store.ScopeAdmin); err != nil {
 		return nil, core.Connection{}, err
 	}
-	svc, err := t.c.ResolveService(ctx, in.Service)
+	svc, err := t.service(ctx, in.Service, core.PermEnv)
 	if err != nil {
 		return nil, core.Connection{}, friendly(err)
 	}

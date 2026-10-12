@@ -158,7 +158,8 @@ func (a *API) authenticate(r *http.Request) (core.Actor, bool, error) {
 	if err != nil {
 		return core.Actor{}, false, err
 	}
-	return core.Actor{Kind: "user", Name: u.Username, Scope: store.ScopeAdmin, UserID: u.ID}, false, nil
+	actor, err := a.core.UserActor(r.Context(), u)
+	return actor, false, err
 }
 
 type statusRecorder struct {

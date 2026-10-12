@@ -24,6 +24,9 @@ func (c *Core) ListRegistries(ctx context.Context) ([]store.Registry, error) {
 	rs, err := c.store.ListRegistries(ctx)
 	for i := range rs {
 		rs[i].Password = SecretMask
+		if isMember(ctx) {
+			rs[i].Username = ""
+		}
 	}
 	return rs, err
 }

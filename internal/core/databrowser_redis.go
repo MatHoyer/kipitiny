@@ -113,7 +113,7 @@ var redisCursorRe = regexp.MustCompile(`^[0-9]+(-[0-9]+)?$`)
 // RedisScan returns one SCAN step over the keys matching pattern (glob).
 // A step may return fewer keys than count, or none, before the cursor ends.
 func (c *Core) RedisScan(ctx context.Context, id, cursor, pattern string, count int) (RedisKeys, error) {
-	if err := Require(ctx, store.ScopeRead); err != nil {
+	if err := c.requireOn(ctx, id, store.ScopeRead, PermData); err != nil {
 		return RedisKeys{}, err
 	}
 	t, err := c.dataTarget(ctx, id, store.ServiceKindRedis)
@@ -150,7 +150,7 @@ func (c *Core) RedisScan(ctx context.Context, id, cursor, pattern string, count 
 
 // RedisGet returns one page of a key's value.
 func (c *Core) RedisGet(ctx context.Context, id, key, cursor string, count int) (RedisValue, error) {
-	if err := Require(ctx, store.ScopeRead); err != nil {
+	if err := c.requireOn(ctx, id, store.ScopeRead, PermData); err != nil {
 		return RedisValue{}, err
 	}
 	t, err := c.dataTarget(ctx, id, store.ServiceKindRedis)

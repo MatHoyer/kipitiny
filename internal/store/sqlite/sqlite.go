@@ -757,6 +757,12 @@ func (s *Store) ListBackups(ctx context.Context, f store.BackupFilter) ([]store.
 	if f.ProjectID != "" {
 		q = q.Where("project_id = ?", f.ProjectID)
 	}
+	if f.ProjectIn != nil {
+		if len(f.ProjectIn) == 0 {
+			return bs, nil
+		}
+		q = q.Where("project_id IN (?)", bun.In(f.ProjectIn))
+	}
 	if f.Kind != "" {
 		q = q.Where("kind = ?", f.Kind)
 	}
@@ -1037,6 +1043,7 @@ func (s *Store) SaveProjectGit(ctx context.Context, g store.ProjectGit) (store.P
 		Set("provider_id = EXCLUDED.provider_id").
 		Set("auto_sync = EXCLUDED.auto_sync").
 		Set("poll_seconds = EXCLUDED.poll_seconds").
+		Set("linked_by = EXCLUDED.linked_by").
 		Exec(ctx)
 	if err != nil {
 		return store.ProjectGit{}, mapErr(err)

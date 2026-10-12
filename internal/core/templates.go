@@ -49,6 +49,13 @@ func (c *Core) InstallTemplate(ctx context.Context, id string, in TemplateInstal
 	if (in.ProjectID == "") == (in.NewProject == nil) {
 		return TemplateResult{}, fmt.Errorf("%w: give either a project or a new project", ErrInvalid)
 	}
+	if in.ProjectID != "" {
+		if err := check(ctx, in.ProjectID, PermSettings); err != nil {
+			return TemplateResult{}, err
+		}
+	} else if err := checkFeature(ctx, FeatureCreateProjects); err != nil {
+		return TemplateResult{}, err
+	}
 	env, err := t.Render(in.Values, randomToken)
 	if err != nil {
 		return TemplateResult{}, fmt.Errorf("%w: %v", ErrInvalid, err)

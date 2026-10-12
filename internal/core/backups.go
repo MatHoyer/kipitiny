@@ -374,6 +374,13 @@ func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, con
 	if err != nil {
 		return store.Restore{}, err
 	}
+	// Restoring reads the backup's project and overwrites the target's.
+	if err := check(ctx, b.ProjectID, PermRestore); err != nil {
+		return store.Restore{}, err
+	}
+	if err := check(ctx, svc.ProjectID, PermRestore); err != nil {
+		return store.Restore{}, err
+	}
 	if b.Kind == store.BackupKindVolume {
 		return c.restoreVolumeBackup(ctx, b, svc, confirm)
 	}
@@ -777,6 +784,10 @@ func (c *Core) ListBackups(ctx context.Context, f store.BackupFilter) ([]store.B
 	if f.Limit == 0 {
 		f.Limit = 100
 	}
+	if f.ProjectID != "" && !visible(ctx, f.ProjectID) {
+		return []store.Backup{}, nil
+	}
+	f.ProjectIn = visibleProjects(ctx)
 	bs, err := c.store.ListBackups(ctx, f)
 	for i := range bs {
 		c.fillSteps(&bs[i])

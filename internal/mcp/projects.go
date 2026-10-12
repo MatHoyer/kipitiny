@@ -102,7 +102,7 @@ type renamed struct {
 
 func (t *tools) renameProject(ctx context.Context, _ *mcp.CallToolRequest, in renameProjectIn) (*mcp.CallToolResult, renamed, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "rename_project", in.Project, func() (renamed, error) {
-		p, err := t.findProject(ctx, in.Project)
+		p, err := t.project(ctx, in.Project, core.PermSettings)
 		if err != nil {
 			return renamed{}, err
 		}
@@ -119,7 +119,7 @@ type renameServiceIn struct {
 
 func (t *tools) renameService(ctx context.Context, _ *mcp.CallToolRequest, in renameServiceIn) (*mcp.CallToolResult, renamed, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "rename_service", in.Service, func() (renamed, error) {
-		svc, err := t.c.ResolveService(ctx, in.Service)
+		svc, err := t.service(ctx, in.Service, core.PermSettings)
 		if err != nil {
 			return renamed{}, err
 		}
@@ -169,7 +169,7 @@ func (t *tools) getProjectGit(ctx context.Context, _ *mcp.CallToolRequest, in pr
 	if err := core.Require(ctx, store.ScopeRead); err != nil {
 		return nil, GitLink{}, err
 	}
-	p, err := t.findProject(ctx, in.Project)
+	p, err := t.project(ctx, in.Project, core.PermGit)
 	if err != nil {
 		return nil, GitLink{}, friendly(err)
 	}
@@ -202,7 +202,7 @@ type linkProjectGitOut struct {
 
 func (t *tools) linkProjectGit(ctx context.Context, _ *mcp.CallToolRequest, in linkProjectGitIn) (*mcp.CallToolResult, linkProjectGitOut, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "link_project_git", in.Project, func() (linkProjectGitOut, error) {
-		p, err := t.findProject(ctx, in.Project)
+		p, err := t.project(ctx, in.Project, core.PermGit)
 		if err != nil {
 			return linkProjectGitOut{}, err
 		}
@@ -239,7 +239,7 @@ type syncProjectGitIn struct {
 
 func (t *tools) syncProjectGit(ctx context.Context, _ *mcp.CallToolRequest, in syncProjectGitIn) (*mcp.CallToolResult, core.ComposePlan, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "sync_project_git", in.Project, func() (core.ComposePlan, error) {
-		p, err := t.findProject(ctx, in.Project)
+		p, err := t.project(ctx, in.Project, core.PermGit)
 		if err != nil {
 			return core.ComposePlan{}, err
 		}
@@ -263,7 +263,7 @@ func (t *tools) serviceAction(ctx context.Context, _ *mcp.CallToolRequest, in se
 		if !slices.Contains([]core.Action{core.ActionStart, core.ActionStop, core.ActionRestart}, action) {
 			return serviceActionOut{}, fmt.Errorf("action must be start, stop or restart")
 		}
-		svc, err := t.c.ResolveService(ctx, in.Service)
+		svc, err := t.service(ctx, in.Service, core.PermDeploy)
 		if err != nil {
 			return serviceActionOut{}, err
 		}
@@ -293,7 +293,7 @@ func (t *tools) getDeploymentLog(ctx context.Context, _ *mcp.CallToolRequest, in
 		if in.Service == "" {
 			return nil, getDeploymentLogOut{}, errors.New("give a service or a deployment_id")
 		}
-		svc, err := t.c.ResolveService(ctx, in.Service)
+		svc, err := t.service(ctx, in.Service, core.PermView)
 		if err != nil {
 			return nil, getDeploymentLogOut{}, friendly(err)
 		}
@@ -305,6 +305,13 @@ func (t *tools) getDeploymentLog(ctx context.Context, _ *mcp.CallToolRequest, in
 			return nil, getDeploymentLogOut{}, fmt.Errorf("%s has no deployments", in.Service)
 		}
 		id = deps[0].ID
+	}
+	projectID, err := t.c.ProjectOf(ctx, core.IDDeployment, id)
+	if err != nil {
+		return nil, getDeploymentLogOut{}, friendly(err)
+	}
+	if err := core.Authorize(ctx, projectID, core.PermView); err != nil {
+		return nil, getDeploymentLogOut{}, friendly(err)
 	}
 	dep, err := t.c.GetDeployment(ctx, id)
 	if err != nil {
@@ -345,7 +352,7 @@ type deleted struct {
 // data: an agent deleting the wrong service is costly either way.
 func (t *tools) deleteService(ctx context.Context, _ *mcp.CallToolRequest, in deleteServiceIn) (*mcp.CallToolResult, deleted, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "delete_service", in.Service, func() (deleted, error) {
-		svc, err := t.c.ResolveService(ctx, in.Service)
+		svc, err := t.service(ctx, in.Service, core.PermDelete)
 		if err != nil {
 			return deleted{}, err
 		}
@@ -364,7 +371,7 @@ type deleteProjectIn struct {
 
 func (t *tools) deleteProject(ctx context.Context, _ *mcp.CallToolRequest, in deleteProjectIn) (*mcp.CallToolResult, deleted, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "delete_project", in.Project, func() (deleted, error) {
-		p, err := t.findProject(ctx, in.Project)
+		p, err := t.project(ctx, in.Project, core.PermDelete)
 		if err != nil {
 			return deleted{}, err
 		}

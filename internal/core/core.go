@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -292,6 +293,9 @@ func (c *Core) databaseSize() *DatabaseSize {
 }
 
 func (c *Core) Status(ctx context.Context) Status {
+	if a, ok := ActorFrom(ctx); ok && !a.Admin() {
+		return Status{Version: c.cfg.Version} // the rest is about the server
+	}
 	st := Status{Version: c.cfg.Version, Update: c.Update(), Database: c.databaseSize()}
 	info, err := c.dockerFor(store.LocalServerID).Info(ctx)
 	if err != nil {
@@ -304,6 +308,7 @@ func (c *Core) Status(ctx context.Context) Status {
 
 func (c *Core) ListProjects(ctx context.Context) ([]store.Project, error) {
 	ps, err := c.store.ListProjects(ctx)
+	ps = slices.DeleteFunc(ps, func(p store.Project) bool { return !visible(ctx, p.ID) })
 	for i := range ps {
 		ps[i] = maskedProject(ps[i])
 	}
@@ -312,6 +317,9 @@ func (c *Core) ListProjects(ctx context.Context) ([]store.Project, error) {
 
 // CreateProject creates a project on a server (this one when serverID is empty).
 func (c *Core) CreateProject(ctx context.Context, name, serverID string) (store.Project, error) {
+	if err := checkFeature(ctx, FeatureCreateProjects); err != nil {
+		return store.Project{}, err
+	}
 	if !nameRe.MatchString(name) {
 		return store.Project{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
@@ -326,6 +334,9 @@ func (c *Core) CreateProject(ctx context.Context, name, serverID string) (store.
 	p, err := c.store.CreateProject(ctx, store.Project{Name: name, ServerID: serverID})
 	if err != nil {
 		return store.Project{}, err
+	}
+	if err := c.grantCreator(ctx, p.ID); err != nil {
+		return p, err
 	}
 	if err := c.dockerFor(p.ServerID).EnsureNetwork(ctx, docker.ProjectNetwork(p.ID)); err != nil {
 		return p, fmt.Errorf("project created but network setup failed: %w", err)

@@ -83,8 +83,12 @@ func (c *Core) CanvasLayout(ctx context.Context) (map[string]Point, error) {
 		return nil, err
 	}
 	out := make(map[string]Point, len(ps))
+	hidden, err := c.hiddenCanvasNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
 	for _, p := range ps {
-		if knownNode(known, p.Node) {
+		if knownNode(known, p.Node) && !hidden[p.Node] {
 			out[p.Node] = Point{X: p.X, Y: p.Y}
 		}
 	}
@@ -147,3 +151,27 @@ func (c *Core) staleCanvasNodes(ctx context.Context, known map[string]bool) ([]s
 }
 
 func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
+
+// hiddenCanvasNodes are the project and service nodes the context's actor
+// can't see.
+func (c *Core) hiddenCanvasNodes(ctx context.Context) (map[string]bool, error) {
+	hidden := map[string]bool{}
+	if visibleProjects(ctx) == nil {
+		return hidden, nil
+	}
+	projects, err := c.store.ListProjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range projects {
+		hidden["project:"+p.ID] = !visible(ctx, p.ID)
+	}
+	svcs, err := c.store.ListAllServices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range svcs {
+		hidden["svc:"+s.ID] = !visible(ctx, s.ProjectID)
+	}
+	return hidden, nil
+}

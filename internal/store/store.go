@@ -440,8 +440,11 @@ type ProjectGit struct {
 	LastError    string     `bun:"last_error" json:"lastError"`
 	Warnings     []string   `bun:"warnings" json:"warnings"`
 	// Applied maps each service name to the image the last sync set.
-	Applied   map[string]string `bun:"applied" json:"applied"`
-	CreatedAt time.Time         `bun:"created_at" json:"createdAt"`
+	Applied map[string]string `bun:"applied" json:"applied"`
+	// LinkedBy is the user whose permissions syncs run with; empty for links
+	// made before there were members.
+	LinkedBy  string    `bun:"linked_by" json:"linkedBy,omitempty"`
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 }
 
 // Volume is a named volume mounted at Path in every replica of an app.
@@ -672,8 +675,10 @@ type BackupFilter struct {
 	ServiceID  string
 	ScheduleID string
 	ProjectID  string
-	Status     OpStatus
-	Limit      int
+	// ProjectIn, when not nil, keeps the backups of these projects only.
+	ProjectIn []string
+	Status    OpStatus
+	Limit     int
 }
 
 type Restore struct {

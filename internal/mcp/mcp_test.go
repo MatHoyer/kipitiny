@@ -29,6 +29,21 @@ func (b bearer) RoundTrip(r *http.Request) (*http.Response, error) {
 	return http.DefaultTransport.RoundTrip(r)
 }
 
+// asUser creates a user and returns a context acting as them.
+func asUser(t *testing.T, c *core.Core, st store.Store, name string, role store.Role) (context.Context, store.User) {
+	t.Helper()
+	ctx := context.Background()
+	u, err := st.CreateUser(ctx, store.User{Username: name, PasswordHash: "x", Role: role})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := c.UserActor(ctx, u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return core.WithActor(ctx, a), u
+}
+
 func TestTools(t *testing.T) {
 	ctx := context.Background()
 	st, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "t.db"))
@@ -50,7 +65,8 @@ func TestTools(t *testing.T) {
 		Secrets: []string{"POSTGRES_PASSWORD"}}); err != nil {
 		t.Fatal(err)
 	}
-	readTok, _ := c.CreateAPIToken(ctx, "agent", store.ScopeRead)
+	admin, _ := asUser(t, c, st, "admin", store.RoleAdmin)
+	readTok, _ := c.CreateAPIToken(admin, "agent", store.ScopeRead)
 
 	connect := func(tok string) *mcp.ClientSession {
 		client := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil)
@@ -120,7 +136,7 @@ func TestTools(t *testing.T) {
 		Image: "ghcr.io/org/web:v1", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
-	deployTok, _ := c.CreateAPIToken(ctx, "ci", store.ScopeDeploy)
+	deployTok, _ := c.CreateAPIToken(admin, "ci", store.ScopeDeploy)
 	ds := connect(deployTok.Token)
 	defer ds.Close()
 	for name, args := range map[string]map[string]any{

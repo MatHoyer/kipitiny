@@ -28,6 +28,9 @@ func (t *tools) listNetworks(ctx context.Context, _ *mcp.CallToolRequest, _ stru
 	if err := core.Require(ctx, store.ScopeRead); err != nil {
 		return nil, listNetworksOut{}, err
 	}
+	if err := core.RequireFeature(ctx, core.FeatureNetworks); err != nil {
+		return nil, listNetworksOut{}, err
+	}
 	nets, err := t.c.ListNetworks(ctx)
 	if err != nil {
 		return nil, listNetworksOut{}, err
@@ -54,6 +57,9 @@ type createNetworkIn struct {
 
 func (t *tools) createNetwork(ctx context.Context, _ *mcp.CallToolRequest, in createNetworkIn) (*mcp.CallToolResult, NetworkSummary, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "create_network", in.Name, func() (NetworkSummary, error) {
+		if err := core.RequireAdmin(ctx); err != nil {
+			return NetworkSummary{}, err
+		}
 		serverID, err := t.serverID(ctx, in.Server)
 		if err != nil {
 			return NetworkSummary{}, err
@@ -71,6 +77,9 @@ type deleteNetworkIn struct {
 
 func (t *tools) deleteNetwork(ctx context.Context, _ *mcp.CallToolRequest, in deleteNetworkIn) (*mcp.CallToolResult, deleted, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "delete_network", in.Network, func() (deleted, error) {
+		if err := core.RequireAdmin(ctx); err != nil {
+			return deleted{}, err
+		}
 		n, err := t.findNetwork(ctx, in.Network, in.Server)
 		if err != nil {
 			return deleted{}, err
@@ -92,7 +101,7 @@ type serviceNetworksOut struct {
 
 func (t *tools) setServiceNetworks(ctx context.Context, _ *mcp.CallToolRequest, in setServiceNetworksIn) (*mcp.CallToolResult, serviceNetworksOut, error) {
 	out, err := mutate(ctx, t.c, store.ScopeAdmin, "set_service_networks", in.Service, func() (serviceNetworksOut, error) {
-		svc, err := t.c.ResolveService(ctx, in.Service)
+		svc, err := t.service(ctx, in.Service, core.PermSettings)
 		if err != nil {
 			return serviceNetworksOut{}, err
 		}

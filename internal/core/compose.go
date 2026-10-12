@@ -290,6 +290,11 @@ func (c *Core) applyCompose(ctx context.Context, projectID string, data []byte, 
 	if err != nil || opts.DryRun {
 		return a, err
 	}
+	if len(a.deletes) > 0 { // pruning deletes apps with their data
+		if err := check(ctx, projectID, PermDelete); err != nil {
+			return a, err
+		}
+	}
 	return a, a.apply(ctx)
 }
 

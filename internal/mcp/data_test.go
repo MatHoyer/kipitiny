@@ -27,6 +27,8 @@ type env struct {
 	st      store.Store
 	c       *core.Core
 	session func(store.Scope) *mcp.ClientSession
+	// sessionOf is a session with a token of the context's user.
+	sessionOf func(owner context.Context, scope store.Scope) *mcp.ClientSession
 	// call returns the structured output, or the error text and true.
 	call func(cs *mcp.ClientSession, name string, args map[string]any) (string, bool)
 }
@@ -45,8 +47,12 @@ func newEnv(t *testing.T) env {
 	srv := httptest.NewServer(api.New(c, log).Authenticated(Handler(c, "test")))
 	t.Cleanup(srv.Close)
 	e := env{st: st, c: c}
-	e.session = func(scope store.Scope) *mcp.ClientSession {
-		tok, _ := c.CreateAPIToken(ctx, string(scope), scope)
+	admin, _ := asUser(t, c, st, "admin", store.RoleAdmin)
+	e.sessionOf = func(owner context.Context, scope store.Scope) *mcp.ClientSession {
+		tok, err := c.CreateAPIToken(owner, string(scope), scope)
+		if err != nil {
+			t.Fatal(err)
+		}
 		cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(ctx, &mcp.StreamableClientTransport{
 			Endpoint: srv.URL, HTTPClient: &http.Client{Transport: bearer{tok.Token}},
 		}, nil)
@@ -56,6 +62,7 @@ func newEnv(t *testing.T) env {
 		t.Cleanup(func() { cs.Close() })
 		return cs
 	}
+	e.session = func(scope store.Scope) *mcp.ClientSession { return e.sessionOf(admin, scope) }
 	e.call = func(cs *mcp.ClientSession, name string, args map[string]any) (string, bool) {
 		t.Helper()
 		res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})

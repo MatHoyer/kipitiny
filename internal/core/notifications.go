@@ -75,6 +75,9 @@ func (c *Core) Notifications(ctx context.Context) (NotificationsView, error) {
 	chs, err := c.store.ListNotificationChannels(ctx)
 	for i := range chs {
 		chs[i] = maskedChannel(chs[i])
+		if isMember(ctx) { // where alerts go is the admins'
+			chs[i].Config = map[string]string{}
+		}
 	}
 	return NotificationsView{Channels: chs, Kinds: notify.Kinds(), Events: eventTypes}, err
 }

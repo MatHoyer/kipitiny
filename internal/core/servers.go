@@ -138,6 +138,12 @@ func (c *Core) ListServers(ctx context.Context) ([]ServerView, error) {
 	for range servers {
 		<-done
 	}
+	if isMember(ctx) { // how to reach a server is the admins'
+		for i, v := range views {
+			views[i] = ServerView{Server: store.Server{ID: v.ID, Name: v.Name, Kind: v.Kind, PublicIP: v.PublicIP, CreatedAt: v.CreatedAt},
+				DetectedIP: v.DetectedIP, Projects: v.Projects}
+		}
+	}
 	return views, nil
 }
 

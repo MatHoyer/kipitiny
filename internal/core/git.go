@@ -171,6 +171,9 @@ func (c *Core) gitFromInput(ctx context.Context, projectID string, in GitInput) 
 		PollSeconds:   in.PollSeconds,
 		WebhookSecret: old.WebhookSecret,
 	}
+	if a, ok := ActorFrom(ctx); ok {
+		g.LinkedBy = a.UserID
+	}
 	if g.Branch == "" {
 		g.Branch = "main"
 	}
@@ -257,6 +260,10 @@ func (c *Core) syncGit(ctx context.Context, g store.ProjectGit, force, dryRun bo
 		}
 		return ComposePlan{}, c.gitSynced(g, "", ComposePlan{}, nil, err)
 	}
+	ctx, err = c.asLinker(ctx, g)
+	if err != nil {
+		return ComposePlan{}, c.gitSynced(g, "", ComposePlan{}, nil, err)
+	}
 	a, err := c.applyCompose(fromGitSync(ctx), g.ProjectID, data, ApplyOptions{Prune: true, Deploy: true, DryRun: dryRun, Commit: commit}, true)
 	if dryRun {
 		if err != nil {
@@ -270,6 +277,25 @@ func (c *Core) syncGit(ctx context.Context, g store.ProjectGit, force, dryRun bo
 		plan, images = a.plan, a.images
 	}
 	return plan, c.gitSynced(g, commit, plan, images, err)
+}
+
+// asLinker runs a sync without an actor (the poll loop, a webhook) as the
+// user who linked the repository.
+func (c *Core) asLinker(ctx context.Context, g store.ProjectGit) (context.Context, error) {
+	if _, ok := ActorFrom(ctx); ok || g.LinkedBy == "" {
+		return ctx, nil
+	}
+	u, err := c.store.GetUser(ctx, g.LinkedBy)
+	if errors.Is(err, store.ErrNotFound) {
+		return ctx, fmt.Errorf("%w: the user who linked this repository was removed; link it again", ErrForbidden)
+	} else if err != nil {
+		return ctx, err
+	}
+	a, err := c.UserActor(ctx, u)
+	if err != nil {
+		return ctx, err
+	}
+	return WithActor(ctx, a), nil
 }
 
 // gitSynced records a sync's outcome and notifies changes of state; it
