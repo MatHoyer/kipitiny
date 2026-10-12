@@ -137,7 +137,7 @@ export function Mono({ children }: { children: ReactNode }) {
   return <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">{children}</code>;
 }
 
-export function CopyButton({ value, label = "Copy" }: { value: string; label?: string }) {
+export function CopyButton({ value, label = "Copy", onCopy }: { value: string; label?: string; onCopy?: () => void }) {
   const [copied, setCopied] = useState(false);
   return (
     <Button
@@ -149,6 +149,7 @@ export function CopyButton({ value, label = "Copy" }: { value: string; label?: s
       onClick={() => {
         navigator.clipboard.writeText(value);
         setCopied(true);
+        onCopy?.();
         setTimeout(() => setCopied(false), 1500);
       }}
     >
@@ -172,11 +173,11 @@ export function TestButton({ name, test }: { name: string; test: () => Promise<u
 }
 
 /** A value in a bordered box with a copy button, e.g. a token or a URL. */
-export function CopyField({ value }: { value: string }) {
+export function CopyField({ value, onCopy }: { value: string; onCopy?: () => void }) {
   return (
     <div className="flex items-center gap-1 rounded-lg border bg-muted/40 py-1 pr-1 pl-2.5">
       <code className="flex-1 font-mono text-xs break-all">{value}</code>
-      <CopyButton value={value} />
+      <CopyButton value={value} onCopy={onCopy} />
     </div>
   );
 }

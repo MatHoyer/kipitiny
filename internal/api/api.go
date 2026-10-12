@@ -300,26 +300,32 @@ func (a *API) deleteProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) fail(w http.ResponseWriter, err error) {
+	code, msg := a.failure(err)
+	writeError(w, code, msg)
+}
+
+// failure maps err to the status and message the API answers with.
+func (a *API) failure(err error) (int, string) {
 	switch {
 	case errors.Is(err, core.ErrUnauthorized):
-		writeError(w, http.StatusUnauthorized, reason(err, core.ErrUnauthorized))
+		return http.StatusUnauthorized, reason(err, core.ErrUnauthorized)
 	case errors.Is(err, core.ErrForbidden):
-		writeError(w, http.StatusForbidden, reason(err, core.ErrForbidden))
+		return http.StatusForbidden, reason(err, core.ErrForbidden)
 	case errors.Is(err, core.ErrInvalid):
-		writeError(w, http.StatusBadRequest, reason(err, core.ErrInvalid))
+		return http.StatusBadRequest, reason(err, core.ErrInvalid)
 	case errors.Is(err, store.ErrNotFound):
-		writeError(w, http.StatusNotFound, "not found")
+		return http.StatusNotFound, "not found"
 	case errors.Is(err, store.ErrConflict):
 		msg := "already exists (name or domain taken)"
 		if strings.Contains(err.Error(), store.ErrConflict.Error()+": ") {
 			msg = reason(err, store.ErrConflict) // core's own explanation
 		}
-		writeError(w, http.StatusConflict, msg)
+		return http.StatusConflict, msg
 	case errors.Is(err, core.ErrBusy):
-		writeError(w, http.StatusConflict, "another operation is in progress for this service")
+		return http.StatusConflict, "another operation is in progress for this service"
 	default:
 		a.log.Error("request failed", "err", err)
-		writeError(w, http.StatusInternalServerError, "internal error")
+		return http.StatusInternalServerError, "internal error"
 	}
 }
 

@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/MatHoyer/kipitiny/internal/secrets"
 )
 
 // fakeRunner stands in for pass-cli: run prefixes each reference with
@@ -95,8 +97,12 @@ func TestConnect(t *testing.T) {
 	if err := c.Connect(ctx, "pst_bad::k"); err == nil || err.Error() != "Invalid token" {
 		t.Errorf("err = %v", err)
 	}
-	if err := c.Connect(ctx, "pst_ok::k"); err != nil {
+	var steps []secrets.Step
+	if err := c.Connect(secrets.WithProgress(ctx, func(s secrets.Step) { steps = append(steps, s) }), "pst_ok::k"); err != nil {
 		t.Fatal(err)
+	}
+	if want := []secrets.Step{secrets.StepLogin, secrets.StepVerify}; !slices.Equal(steps, want) {
+		t.Errorf("steps = %q, want %q", steps, want)
 	}
 	if want := []string{"logout --force", "login", "logout --force", "login", "info"}; !slices.Equal(f.calls, want) {
 		t.Errorf("calls = %q, want %q", f.calls, want)

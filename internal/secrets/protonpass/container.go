@@ -15,6 +15,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/secrets"
 )
 
 const (
@@ -122,6 +123,16 @@ func (r *ContainerRunner) release() {
 	}
 }
 
+// Warm starts the helper if it isn't running, so the next call doesn't wait
+// for it.
+func (r *ContainerRunner) Warm(ctx context.Context) error {
+	if _, err := r.acquire(ctx); err != nil {
+		return err
+	}
+	r.release()
+	return nil
+}
+
 // restart replaces the helper id with a new one, unless another call already
 // did.
 func (r *ContainerRunner) restart(ctx context.Context, id string) (string, error) {
@@ -157,6 +168,9 @@ func (r *ContainerRunner) start(ctx context.Context) (string, error) {
 	if err := r.remove(ctx); err != nil {
 		return "", err
 	}
+	if _, err := r.dk.ImageInspect(ctx, r.image); cerrdefs.IsNotFound(err) {
+		secrets.Report(ctx, secrets.StepImage)
+	}
 	if err := r.dk.EnsureImage(ctx, r.image, ""); err != nil {
 		return "", fmt.Errorf("pull %s: %w", r.image, err)
 	}
@@ -165,6 +179,7 @@ func (r *ContainerRunner) start(ctx context.Context) (string, error) {
 	if _, err := r.dk.VolumeCreate(ctx, client.VolumeCreateOptions{Name: r.volume, Labels: labels}); err != nil {
 		return "", fmt.Errorf("session volume: %w", err)
 	}
+	secrets.Report(ctx, secrets.StepHelper)
 	id, err := r.dk.Run(ctx, client.ContainerCreateOptions{
 		Name: r.name,
 		Config: &container.Config{

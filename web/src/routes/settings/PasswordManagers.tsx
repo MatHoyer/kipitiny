@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, KeyRound, Plus } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { ChevronDown, ChevronLeft, CircleHelp, KeyRound, PlugZap, Plus, RotateCw } from "lucide-react";
+import { cn } from "cn";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { passwordManagerIcon as iconFor } from "@/components/brand-icons";
-import { ChoiceTile, EmptyState, ErrorText, Mono, Tag, TestButton, withCode } from "@/components/common";
+import { ChoiceTile, CopyField, EmptyState, ErrorText, Mono, Tag, withCode } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,8 +16,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FloatingInput } from "@/components/ui/floating-input";
-import { api, type SecretProvider } from "@/api";
+import { Stepper, type Step } from "@/components/ui/stepper";
+import { api, type SecretProvider, type SecretStep } from "@/api";
 import { SettingsPage } from "./page";
 
 /** Password managers that service env can reference (e.g. pass://Vault/Item/field). */
@@ -73,7 +76,7 @@ function ProviderCard({ provider: p }: { provider: SecretProvider }) {
         Use in env as <Mono>{`{{ ${p.example} }}`}</Mono>
       </p>
       <div className="mt-auto flex items-center justify-end gap-1">
-        <TestButton name={p.name} test={() => api.testSecretProvider(p.id)} />
+        <TestDialog provider={p} />
         <ConfirmDialog
           trigger={
             <Button variant="outline" size="sm" disabled={disconnect.isPending}>
@@ -96,20 +99,33 @@ function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<SecretProvider | null>(null);
   const [token, setToken] = useState("");
+  // Steps the manager reported while connecting, for the providers that show them.
+  const [seen, setSeen] = useState<SecretStep[]>([]);
+  const stepped = picked?.id === "protonpass";
   const onOpenChange = (next: boolean) => {
     setOpen(next);
     if (!next) {
       setPicked(null);
       setToken("");
+      setSeen([]);
       connect.reset();
     }
   };
   const connect = useMutation({
-    meta: { error: "Couldn't connect the password manager" },
-    mutationFn: () => api.connectSecretProvider(picked!.id, token.trim()),
+    // The steps show where it failed instead.
+    meta: { error: stepped ? false : "Couldn't connect the password manager" },
+    mutationFn: () => {
+      setSeen([]);
+      return api.connectSecretProvider(picked!.id, token.trim(), stepped ? (s) => setSeen((prev) => [...prev, s]) : undefined);
+    },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["secret-providers"] });
-      onOpenChange(false);
+      const done = () => {
+        qc.invalidateQueries({ queryKey: ["secret-providers"] });
+        onOpenChange(false);
+      };
+      // Let the stepper play its finish first: the refetch swaps the empty state, which unmounts this dialog.
+      if (stepped) setTimeout(done, 900);
+      else done();
     },
   });
   const onSubmit = (e: FormEvent) => {
@@ -146,6 +162,18 @@ function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
               ))}
             </div>
           </>
+        ) : stepped ? (
+          <ProtonPassConnect
+            provider={picked}
+            token={token}
+            setToken={setToken}
+            seen={seen}
+            connecting={connect.isPending}
+            connected={connect.isSuccess}
+            error={connect.error}
+            onConnect={() => connect.mutate()}
+            onBack={() => setPicked(null)}
+          />
         ) : (
           <form onSubmit={onSubmit} className="contents">
             <DialogHeader>
@@ -180,6 +208,260 @@ function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
             </DialogFooter>
           </form>
         )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const proton = {
+  accent: "#6D4AFF",
+  login: "pass-cli login",
+  create: "pass-cli personal-access-token create --name kipitiny --expiration 1y",
+  grant: (vault: string) => `pass-cli personal-access-token access grant --personal-access-token-name kipitiny --vault-name ${vault || "<vault>"}`,
+};
+
+/** Proton Pass takes its token; how to get one opens on demand, step by step. */
+function ProtonPassConnect({
+  provider: p,
+  token,
+  setToken,
+  seen,
+  connecting,
+  connected,
+  error,
+  onConnect,
+  onBack,
+}: {
+  provider: SecretProvider;
+  token: string;
+  setToken: (t: string) => void;
+  seen: SecretStep[];
+  connecting: boolean;
+  connected: boolean;
+  error: Error | null;
+  onConnect: () => void;
+  onBack: () => void;
+}) {
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    onConnect();
+  };
+  const started = connecting || connected || !!error;
+
+  return (
+    <form onSubmit={onSubmit} className="contents">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2 [&>svg]:size-5">
+          {iconFor(p.id)}
+          Connect {p.name}
+        </DialogTitle>
+        <DialogDescription>kipitiny only sees the vaults the token is granted.</DialogDescription>
+      </DialogHeader>
+      <FloatingInput
+        label={p.tokenLabel}
+        type="password"
+        required
+        autoFocus
+        autoComplete="off"
+        disabled={connecting || connected}
+        value={token}
+        onChange={(e) => setToken(e.target.value)}
+        description={
+          <>
+            Then reference secrets as <Mono>{`{{ ${p.example} }}`}</Mono>.
+          </>
+        }
+      />
+      {!started && <TokenGuide />}
+      {started && (
+        <div className="grid gap-2.5 rounded-lg border bg-muted/30 p-3 animate-in fade-in slide-in-from-top-1">
+          <p className="text-xs font-medium text-muted-foreground">{connected ? "Connected." : connecting ? "Connecting…" : "Connecting failed."}</p>
+          <SecretProgress provider={p} plan={connectPlan} seen={seen} running={connecting} done={connected} error={error} />
+        </div>
+      )}
+      <DialogFooter>
+        <Button type="button" variant="ghost" disabled={connecting || connected} onClick={onBack}>
+          <ChevronLeft data-icon="inline-start" />
+          Back
+        </Button>
+        <Button type="submit" loading={connecting} disabled={connected}>
+          {error ? "Try again" : "Connect"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+/** How to get a Proton Pass token, folded away: copying a step's command moves on to the next. */
+function TokenGuide() {
+  const [open, setOpen] = useState(false);
+  const [done, setDone] = useState(0);
+  const [vault, setVault] = useState("");
+  const copied = (i: number) => setDone((d) => Math.max(d, i + 1));
+  const steps: Step[] = [
+    {
+      title: "Sign in to the Proton Pass CLI",
+      hint: (
+        <Guide text="On your computer, with your Proton account. Your password stays there.">
+          <CopyField value={proton.login} onCopy={() => copied(0)} />
+        </Guide>
+      ),
+    },
+    {
+      title: "Create a token for kipitiny",
+      hint: (
+        <Guide text={<>It prints a token starting with <Mono>pst_</Mono>: paste it above.</>}>
+          <CopyField value={proton.create} onCopy={() => copied(1)} />
+        </Guide>
+      ),
+    },
+    {
+      title: "Grant it your vaults",
+      hint: (
+        <Guide text="Once per vault it may read. Without it, the token sees nothing.">
+          <FloatingInput label="Vault name" autoComplete="off" value={vault} onChange={(e) => setVault(e.target.value)} />
+          <CopyField value={proton.grant(vault.trim())} onCopy={() => copied(2)} />
+        </Guide>
+      ),
+    },
+  ];
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <Button type="button" variant="link" size="sm" className="h-auto px-0 text-muted-foreground">
+          <CircleHelp data-icon="inline-start" />
+          How do I get a token?
+          <ChevronDown data-icon="inline-end" className={cn("transition-transform", open && "rotate-180")} />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <Stepper orientation="vertical" steps={steps} current={done} accent={proton.accent} className="pt-3" />
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function Guide({ text, children }: { text: ReactNode; children: ReactNode }) {
+  return (
+    <div className="grid gap-2 pt-0.5">
+      <p>{text}</p>
+      {children}
+    </div>
+  );
+}
+
+/** What each step the manager reports does, said for the user. */
+const stages = (name: string): Record<SecretStep, { title: string; hint: string; skipped?: string }> => ({
+  image: { title: `Download the ${name} CLI`, hint: "About 60MB, the first time only", skipped: "Already downloaded" },
+  helper: { title: "Start its container", hint: "It runs only while used and is removed after 5 idle minutes", skipped: "Already running" },
+  login: { title: "Sign in with the token", hint: "Passed on stdin: it never shows in the container's config" },
+  verify: { title: "Check the account", hint: `Asks ${name} who the token belongs to` },
+  session: { title: "Check the saved session", hint: "Lists your vaults with it, as a deploy would" },
+  vaults: { title: "List the vaults again", hint: "With the new session" },
+});
+
+const connectPlan: SecretStep[] = ["image", "helper", "login", "verify"];
+const testPlan: SecretStep[] = ["image", "helper", "session"];
+/** When the saved session expired, a test signs in again with the saved token. */
+const retestPlan: SecretStep[] = [...testPlan, "login", "verify", "vaults"];
+
+/**
+ * The steps of connecting or testing, as the manager reports them. Steps it skips (the CLI is already there,
+ * the helper already runs) are marked done with why. Before it runs, the list says what will happen.
+ */
+function SecretProgress({
+  provider: p,
+  plan,
+  seen,
+  running,
+  done,
+  error,
+}: {
+  provider: SecretProvider;
+  plan: SecretStep[];
+  seen: SecretStep[];
+  running: boolean;
+  done: boolean;
+  error: Error | null;
+}) {
+  const info = stages(p.name);
+  const last = seen.at(-1);
+  // Nothing reported yet: it's checking for the CLI. An error before any step (a malformed token) marks none.
+  const current = done ? plan.length : last ? plan.indexOf(last) : running ? 0 : -1;
+  const steps = plan.map((id, i) => {
+    const s = info[id];
+    const skipped = i < current && !seen.includes(id);
+    const expired = id === "session" && seen.includes("login");
+    // A test signs in again with the token saved at connection.
+    const title = id === "login" && plan.includes("session") ? "Sign in again with the saved token" : s.title;
+    return { title, hint: skipped ? (s.skipped ?? s.hint) : expired ? "It had expired" : s.hint };
+  });
+  return (
+    <>
+      <Stepper
+        orientation="vertical"
+        steps={steps}
+        current={current}
+        busy={running}
+        failed={!!error && !!last}
+        accent={p.id === "protonpass" ? proton.accent : undefined}
+      />
+      {error && <p className="text-sm text-destructive animate-in fade-in">{error.message}</p>}
+    </>
+  );
+}
+
+/** Tests a connected provider in a dialog that shows each step, as a deploy would run them. */
+function TestDialog({ provider: p }: { provider: SecretProvider }) {
+  const [open, setOpen] = useState(false);
+  const [seen, setSeen] = useState<SecretStep[]>([]);
+  const test = useMutation({
+    meta: { error: false },
+    mutationFn: () => {
+      setSeen([]);
+      return api.testSecretProvider(p.id, (s) => setSeen((prev) => [...prev, s]));
+    },
+  });
+  const onOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (next) test.mutate();
+    else {
+      test.reset();
+      setSeen([]);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon-sm" title="Test connection" aria-label="Test connection">
+          <PlugZap />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 [&>svg]:size-5">
+            {iconFor(p.id)}
+            Test {p.name}
+          </DialogTitle>
+          <DialogDescription>Checks the manager can still read your vaults, as a deploy would.</DialogDescription>
+        </DialogHeader>
+        <SecretProgress
+          provider={p}
+          plan={seen.includes("login") ? retestPlan : testPlan}
+          seen={seen}
+          running={test.isPending}
+          done={test.isSuccess}
+          error={test.error}
+        />
+        {test.isSuccess && <p className="text-sm font-medium animate-in fade-in">{p.name} works.</p>}
+        <DialogFooter>
+          <Button variant="outline" loading={test.isPending} onClick={() => test.mutate()}>
+            <RotateCw data-icon="inline-start" />
+            Test again
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

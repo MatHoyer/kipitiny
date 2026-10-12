@@ -535,6 +535,34 @@ const passwordManager = (): SecretProvider => ({
   connected: db.passwordManagers.includes("protonpass"),
 });
 
+/** The demo's Proton Pass helper: pulled once per page load, running for 5 minutes after each use. */
+const helper = { pulled: false, until: 0 };
+
+/** What the manager would do first: pull the CLI if missing, start its helper if idle. */
+const helperSteps = () => {
+  const steps = [...(helper.pulled ? [] : ["image"]), ...(Date.now() < helper.until ? [] : ["helper"])];
+  helper.pulled = true;
+  helper.until = Date.now() + 5 * 60_000;
+  return steps;
+};
+
+/** A ?progress answer: each step after a beat of work, as NDJSON, then the result. */
+const progressed = (steps: string[], result: unknown) =>
+  new Response(
+    new ReadableStream({
+      async start(c) {
+        const line = (v: unknown) => c.enqueue(new TextEncoder().encode(JSON.stringify(v) + "\n"));
+        for (const step of steps) {
+          line({ step });
+          await new Promise((r) => setTimeout(r, step === "image" ? 1800 : 700 + Math.random() * 400));
+        }
+        line({ result: result ?? null });
+        c.close();
+      },
+    }),
+    { headers: { "Content-Type": "application/x-ndjson" } },
+  );
+
 const connectedManager = (id: string) => {
   if (!db.passwordManagers.includes(id)) throw invalid("this password manager isn't connected");
 };
@@ -715,12 +743,12 @@ const routes: Route[] = [
   [
     "PUT",
     /^\/secret-providers\/([^/]+)$/,
-    ({ m, body }) => {
+    ({ m, q, body }) => {
       if (m[1] !== "protonpass") throw notFound();
       if (!String(body.token ?? "").trim()) throw invalid("a token is required");
       db.passwordManagers = ["protonpass"];
       save();
-      return passwordManager();
+      return q.has("progress") ? progressed([...helperSteps(), "login", "verify"], passwordManager()) : passwordManager();
     },
   ],
   [
@@ -731,7 +759,11 @@ const routes: Route[] = [
       save();
     },
   ],
-  ["POST", /^\/secret-providers\/([^/]+)\/test$/, ({ m }) => void connectedManager(m[1])],
+  [
+    "POST",
+    /^\/secret-providers\/([^/]+)\/test$/,
+    ({ m, q }) => (connectedManager(m[1]), q.has("progress") ? progressed([...helperSteps(), "session"], undefined) : undefined),
+  ],
   ["GET", /^\/secret-providers\/([^/]+)\/vaults$/, ({ m }) => (connectedManager(m[1]), Object.keys(vaults))],
   [
     "GET",
@@ -1505,7 +1537,7 @@ export async function handle(method: string, url: URL, body: unknown): Promise<R
     try {
       const out = await handler({ m: match, q: url.searchParams, body });
       if (method !== "GET") audit(method, path, 200, ids, named);
-      return json(200, out);
+      return out instanceof Response ? out : json(200, out);
     } catch (e) {
       if (e instanceof HttpError) {
         if (method !== "GET") audit(method, path, e.status, ids, named, e.message);

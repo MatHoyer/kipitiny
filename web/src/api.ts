@@ -446,6 +446,9 @@ export type SecretProvider = {
   connected: boolean;
 };
 
+/** A stage of connecting or testing a password manager, streamed as it starts. */
+export type SecretStep = "image" | "helper" | "login" | "verify" | "session" | "vaults";
+
 /** An item of a password manager vault, with the fields env can reference. */
 export type SecretItem = { title: string; fields: { name: string; ref: string }[] };
 
@@ -880,6 +883,38 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.headers.get("Content-Type")?.includes("json") ? res.json() : (res.text() as T);
 }
 
+/**
+ * Runs a call that streams its steps as NDJSON (`?progress`): onStep gets each step as it starts, the promise
+ * resolves to the result, or rejects with the error the stream ends with.
+ */
+async function progress<T>(path: string, init: RequestInit, onStep: (step: string) => void): Promise<T> {
+  const res = await fetch(`/api${path}${path.includes("?") ? "&" : "?"}progress`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...init.headers },
+  });
+  if (!res.ok || !res.body) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.error ?? res.statusText);
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += value;
+    const lines = buf.split("\n");
+    buf = lines.pop()!;
+    for (const line of lines) {
+      if (!line) continue;
+      const msg = JSON.parse(line) as { step?: string; result?: T; error?: string };
+      if (msg.step) onStep(msg.step);
+      else if (msg.error !== undefined) throw new ApiError(400, msg.error);
+      else return msg.result as T;
+    }
+  }
+  throw new ApiError(0, "the connection closed before it finished");
+}
+
 const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
 
 const composePath = (id: string, service?: string) =>
@@ -1120,15 +1155,20 @@ export const api = {
   testCloudflare: () => request<void>("/cloudflare/test", { method: "POST" }),
   syncCloudflare: () => request<Cloudflare>("/cloudflare/sync", { method: "POST" }),
   secretProviders: () => request<SecretProvider[]>("/secret-providers"),
-  connectSecretProvider: (id: string, token: string) =>
-    request<SecretProvider>(`/secret-providers/${id}`, json("PUT", { token })),
+  connectSecretProvider: (id: string, token: string, onStep?: (step: SecretStep) => void) =>
+    onStep
+      ? progress<SecretProvider>(`/secret-providers/${id}`, json("PUT", { token }), onStep as (s: string) => void)
+      : request<SecretProvider>(`/secret-providers/${id}`, json("PUT", { token })),
   /** Listings are cached by the manager for a few minutes, unless refresh. */
   secretVaults: (id: string, refresh = false) =>
     request<string[]>(`/secret-providers/${id}/vaults${refresh ? "?refresh" : ""}`),
   secretItems: (id: string, vault: string, refresh = false) =>
     request<SecretItem[]>(`/secret-providers/${id}/items?vault=${encodeURIComponent(vault)}${refresh ? "&refresh" : ""}`),
   disconnectSecretProvider: (id: string) => request<void>(`/secret-providers/${id}`, { method: "DELETE" }),
-  testSecretProvider: (id: string) => request<void>(`/secret-providers/${id}/test`, { method: "POST" }),
+  testSecretProvider: (id: string, onStep?: (step: SecretStep) => void) =>
+    onStep
+      ? progress<void>(`/secret-providers/${id}/test`, { method: "POST" }, onStep as (s: string) => void)
+      : request<void>(`/secret-providers/${id}/test`, { method: "POST" }),
   setServerNetwork: (id: string, n: ServerNetwork) => request<Server>(`/servers/${id}/network`, json("PUT", n)),
   cleanup: () => request<Cleanup>("/cleanup"),
   setCleanup: (s: CleanupSettings) => request<Cleanup>("/cleanup", json("PUT", s)),
