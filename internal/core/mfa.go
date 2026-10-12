@@ -106,6 +106,10 @@ type Account struct {
 	// RecoveryCodes is how many unused recovery codes are left.
 	RecoveryCodes int             `json:"recoveryCodes"`
 	Passkeys      []store.Passkey `json:"passkeys"`
+	// Role, Features and Grants say what the user may do, for the UI.
+	Role     store.Role          `json:"role"`
+	Features []string            `json:"features"`
+	Grants   map[string][]string `json:"grants"`
 }
 
 // currentUser is the signed-in user making the request; API tokens have none.
@@ -143,7 +147,16 @@ func (c *Core) Account(ctx context.Context) (Account, error) {
 	if err != nil {
 		return Account{}, err
 	}
-	return Account{Username: u.Username, TOTPEnabled: u.TOTPSecret != "", RecoveryCodes: n, Passkeys: ps}, nil
+	acc := Account{Username: u.Username, TOTPEnabled: u.TOTPSecret != "", RecoveryCodes: n, Passkeys: ps,
+		Role: u.Role, Features: u.Features, Grants: map[string][]string{}}
+	if u.Role != store.RoleAdmin {
+		v, err := c.userView(ctx, u)
+		if err != nil {
+			return Account{}, err
+		}
+		acc.Grants = v.Grants
+	}
+	return acc, nil
 }
 
 // ChangePassword signs the user out everywhere and returns a new session

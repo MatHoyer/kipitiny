@@ -35,6 +35,8 @@ func main() {
 			run = resetPassword
 		case "disable-2fa":
 			run = disable2FA
+		case "make-admin":
+			run = makeAdmin
 		case "probe":
 			// Healthcheck injected into app containers: keep it dependency-free.
 			if len(os.Args) != 3 || probe.Check(os.Args[2]) != nil {
@@ -54,7 +56,7 @@ func main() {
 			}
 			os.Exit(0)
 		default:
-			fmt.Fprintf(os.Stderr, "usage: %s [reset-password <username> | disable-2fa <username> | deploy --service <project/service> [--tag <tag>] | healthcheck]\n", os.Args[0])
+			fmt.Fprintf(os.Stderr, "usage: %s [reset-password <username> | disable-2fa <username> | make-admin <username> | deploy --service <project/service> [--tag <tag>] | healthcheck]\n", os.Args[0])
 			os.Exit(2)
 		}
 	}
@@ -219,6 +221,27 @@ func resetPassword() error {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "Password updated; existing sessions were signed out.")
+	return nil
+}
+
+// makeAdmin makes a user an admin, e.g. when the only admin left can't
+// sign in.
+func makeAdmin() error {
+	if len(os.Args) != 3 {
+		return errors.New("usage: make-admin <username>")
+	}
+	cfg := config.Load()
+	ctx := context.Background()
+	st, err := sqlite.Open(ctx, cfg.DBPath())
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	if err := core.New(cfg, st, nil, slog.Default()).MakeAdmin(ctx, os.Args[2]); err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stderr, os.Args[2]+" is an admin; their sessions were signed out.")
 	return nil
 }
 
