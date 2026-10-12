@@ -1,6 +1,7 @@
 import type {
   Account,
   Backup,
+  Restore,
   Cleanup,
   Notifications,
   Schedule,
@@ -563,6 +564,51 @@ const progressed = (steps: string[], result: unknown) =>
     { headers: { "Content-Type": "application/x-ndjson" } },
   );
 
+/** Backups and restores the demo is running, by ID: when each started and the steps it walks through. */
+const runs = new Map<string, { start: number; steps: [string, number][] }>();
+
+/** Where a run is: its current step and how far into it (0–1), or null once it's over (and forgotten). */
+function runStep(id: string): { step: string; progress: number } | null {
+  const run = runs.get(id);
+  if (!run) return null;
+  let t = Date.now() - run.start;
+  for (const [step, ms] of run.steps) {
+    if (t < ms) return { step, progress: t / ms };
+    t -= ms;
+  }
+  runs.delete(id);
+  return null;
+}
+
+/** Starts b as a running backup the demo walks through its steps. */
+function startBackup(b: Backup): Backup {
+  const upload = b.kind === "postgres" ? 3200 : 2200;
+  const steps: [string, number][] =
+    b.kind === "manager" ? [["snapshot", 900], ["upload", upload]] : b.kind === "volume" ? [["helper", 1100], ["upload", upload]] : [["prepare", 900], ["upload", upload]];
+  runs.set(b.id, { start: Date.now(), steps });
+  return Object.assign(b, { status: "running" as const, finishedAt: undefined });
+}
+
+/** A backup as it stands: its step and bytes while running, done once its steps are. */
+function backingUp(b: Backup): Backup {
+  if (b.status !== "running") return b;
+  const at = runStep(b.id);
+  if (at) return { ...b, step: at.step as Backup["step"], stepBytes: at.step === "upload" ? Math.round(b.sizeBytes * at.progress) : undefined };
+  Object.assign(b, { status: "succeeded", finishedAt: now() });
+  save();
+  return b;
+}
+
+/** A restore as it stands, like backingUp. */
+function restoring(r: Restore): Restore {
+  if (r.status !== "running") return r;
+  const at = runStep(r.id);
+  if (at) return { ...r, step: at.step as Restore["step"] };
+  Object.assign(r, { status: "succeeded", finishedAt: now() });
+  save();
+  return r;
+}
+
 /** Restore tests the demo is running, by backup: when each started. */
 const verifyStarts = new Map<string, number>();
 
@@ -1044,15 +1090,15 @@ const routes: Route[] = [
       save();
     },
   ],
-  ["GET", /^\/services\/([^/]+)\/backups$/, ({ m }) => db.backups.filter((b) => b.serviceId === m[1])],
+  ["GET", /^\/services\/([^/]+)\/backups$/, ({ m }) => db.backups.filter((b) => b.serviceId === m[1]).map(backingUp)],
   [
     "POST",
     /^\/services\/([^/]+)\/backups$/,
     ({ m, body }) => {
-      const b = newBackup(serviceOf(m[1]), body.targetId);
+      const b = startBackup(newBackup(serviceOf(m[1]), body.targetId));
       db.backups.unshift(b);
       save();
-      return b;
+      return backingUp(b);
     },
   ],
   [
@@ -1069,14 +1115,14 @@ const routes: Route[] = [
     "POST",
     /^\/manager\/backups$/,
     ({ body }) => {
-      const b = newBackup(null, body.targetId);
+      const b = startBackup(newBackup(null, body.targetId));
       db.backups.unshift(b);
       save();
-      return b;
+      return backingUp(b);
     },
   ],
-  ["GET", /^\/backups$/, ({ q }) => (q.get("projectId") ? db.backups.filter((b) => b.projectId === q.get("projectId")) : db.backups)],
-  ["GET", /^\/backups\/([^/]+)$/, ({ m }) => verifying(db.backups.find((b) => b.id === m[1]) ?? (() => { throw notFound(); })())],
+  ["GET", /^\/backups$/, ({ q }) => (q.get("projectId") ? db.backups.filter((b) => b.projectId === q.get("projectId")) : db.backups).map(backingUp)],
+  ["GET", /^\/backups\/([^/]+)$/, ({ m }) => verifying(backingUp(db.backups.find((b) => b.id === m[1]) ?? (() => { throw notFound(); })()))],
   [
     "DELETE",
     /^\/backups\/([^/]+)$/,
@@ -1103,13 +1149,20 @@ const routes: Route[] = [
       const b = db.backups.find((x) => x.id === m[1]) ?? (() => { throw notFound(); })();
       const svc = serviceOf(body.serviceId || b.serviceId);
       if (body.confirm !== svc.name) throw invalid(`type ${svc.name} to confirm`);
-      const r = { id: newId("rs"), backupId: b.id, serviceId: svc.id, status: "succeeded" as const, createdAt: now(), finishedAt: now() };
+      const r: Restore = { id: newId("rs"), backupId: b.id, serviceId: svc.id, status: "running", createdAt: now() };
+      const steps: [string, number][] =
+        b.kind === "volume"
+          ? [["extract", 1500], ["stopservice", 700], ["replace", 1200], ["start", 800]]
+          : b.kind === "dump"
+            ? [["stop", 700], ["check", 1000], ["scratch", 1500], ["load", 1500], ["start", 700]]
+            : [["stop", 700], ["load", 2200], ["swap", 900], ["start", 700]];
+      runs.set(r.id, { start: Date.now(), steps });
       db.restores.unshift(r);
       save();
-      return r;
+      return restoring(r);
     },
   ],
-  ["GET", /^\/services\/([^/]+)\/restores$/, ({ m }) => db.restores.filter((r) => r.serviceId === m[1])],
+  ["GET", /^\/services\/([^/]+)\/restores$/, ({ m }) => db.restores.filter((r) => r.serviceId === m[1]).map(restoring)],
   ["GET", /^\/services\/([^/]+)\/schedules$/, ({ m }) => db.schedules.filter((s) => s.serviceId === m[1])],
   [
     "POST",

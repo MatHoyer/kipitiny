@@ -106,11 +106,13 @@ func startVolumeHelper(ctx context.Context, dk *docker.Client, name string, moun
 // command to flush them first).
 func (c *Core) dumpVolumes(ctx context.Context, svc store.Service, st storage.Storage, target store.BackupTarget, b *store.Backup) error {
 	if svc.PreBackup != "" {
+		c.steps.set(backupKey(b.ID), BackupPreBackup)
 		if err := c.preBackup(ctx, svc); err != nil {
 			return err
 		}
 	}
 	dk := c.dockerFor(svc.ServerID)
+	c.steps.set(backupKey(b.ID), BackupHelper)
 	id, err := startVolumeHelper(ctx, dk, "kipitiny-backup-"+strings.ToLower(b.ID), helperMounts(svc, b.Volumes, helperVolumeRoot, true))
 	if err != nil {
 		return err
@@ -191,6 +193,7 @@ func (c *Core) restoreVolumeBackup(ctx context.Context, b store.Backup, svc stor
 		defer unlock()
 		ctx, cancel := context.WithTimeout(c.bg, restoreTimeout)
 		defer cancel()
+		defer c.steps.done(restoreKey(r.ID))
 		swapped, err := c.restoreVolumes(ctx, svc, st, target, b, r)
 		after := "The live volumes were left unchanged."
 		if swapped {
@@ -210,6 +213,8 @@ func (c *Core) restoreVolumeBackup(ctx context.Context, b store.Backup, svc stor
 // staged copy and starts the service again. It reports whether the live
 // volumes were touched.
 func (c *Core) restoreVolumes(ctx context.Context, svc store.Service, st storage.Storage, target store.BackupTarget, b store.Backup, r store.Restore) (bool, error) {
+	key := restoreKey(r.ID)
+	c.steps.set(key, RestoreExtract)
 	rc, err := st.Get(ctx, b.ObjectKey)
 	if err != nil {
 		return false, fmt.Errorf("open backup: %w", err)
@@ -254,8 +259,12 @@ func (c *Core) restoreVolumes(ctx context.Context, svc store.Service, st storage
 		return false, err
 	}
 
+	c.steps.set(key, RestoreStopService)
 	stopped, err := c.stopServiceContainers(ctx, svc)
 	defer func() {
+		if len(stopped) > 0 {
+			c.steps.set(key, RestoreStart)
+		}
 		for _, ct := range stopped {
 			if _, err := dk.ContainerStart(context.WithoutCancel(ctx), ct, client.ContainerStartOptions{}); err != nil {
 				c.log.Error("cannot restart container after restore", "container", ct, "err", err)
@@ -270,6 +279,7 @@ for n; do
   find "` + helperVolumeRoot + `/$n" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
   cp -a "` + helperStageRoot + `/$n/." "` + helperVolumeRoot + `/$n/"
 done`
+	c.steps.set(key, RestoreReplace)
 	if err := dk.Exec(context.WithoutCancel(ctx), id, docker.ExecOptions{Cmd: append([]string{"sh", "-c", swap, "sh"}, b.Volumes...)}); err != nil {
 		return true, fmt.Errorf("replace volume content: %w", err)
 	}
@@ -314,14 +324,14 @@ func (c *Core) verifyVolumes(ctx context.Context, b store.Backup) (store.Verific
 		serverID = svc.ServerID
 	}
 	dk := c.dockerFor(serverID)
-	c.verifySteps.set(b.ID, VerifyServer)
+	c.steps.set(verifyKey(b.ID), VerifyServer)
 	id, err := startVolumeHelper(ctx, dk, "kipitiny-verify-"+strings.ToLower(b.ID), nil)
 	if err != nil {
 		return d, err
 	}
 	defer c.removeHelper(ctx, dk, id)
 
-	c.verifySteps.set(b.ID, VerifyRead)
+	c.steps.set(verifyKey(b.ID), VerifyRead)
 	rc, err := st.Get(ctx, b.ObjectKey)
 	if err != nil {
 		return d, fmt.Errorf("open backup: %w", err)

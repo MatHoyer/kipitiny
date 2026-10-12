@@ -10,6 +10,7 @@ import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Stepper } from "@/components/ui/stepper";
+import { BackupSteps, RestoreSteps } from "@/components/op-steps";
 import { formatBytes, formatDateTime, formatDuration, timeAgo } from "@/lib/format";
 import { api, type Backup as BackupT, type DatabaseKind } from "../api";
 import { BackupIcon, StorageName, backupTitle } from "./BackupList";
@@ -203,6 +204,12 @@ export function Backup() {
           </dl>
         </Section>
 
+        {b.status === "running" && (
+          <Section title="In progress" description="Nothing is kept unless it finishes: a failed backup is deleted from its target.">
+            <BackupSteps backup={b} />
+          </Section>
+        )}
+
         {isService && done && <RestoreTest backup={b} onRun={() => verify.mutate()} busy={verify.isPending} />}
 
         {isService && service.data && (
@@ -219,6 +226,11 @@ export function Backup() {
                       </span>
                     )}
                     {r.error && <span className="w-full text-xs text-destructive">{r.error}</span>}
+                    {r.status === "running" && (
+                      <div className="w-full pt-2">
+                        <RestoreSteps restore={r} backup={b} />
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

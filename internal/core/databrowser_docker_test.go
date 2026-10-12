@@ -397,7 +397,7 @@ func TestRestoreDockerPostgresDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	exec(`psql -U app -d postgres -c "UPDATE t SET v = 'after'"`)
-	if err := c.restore(ctx, svc, ct, st, target, b); err != nil {
+	if err := c.restore(ctx, svc, ct, st, target, b, restoreKey("test")); err != nil {
 		t.Fatal(err)
 	}
 	if got := exec(`psql -U app -d postgres -tAc "SELECT v FROM t"`); got != "before" {
@@ -441,14 +441,14 @@ func TestBackupDockerOtherDatabase(t *testing.T) {
 	}
 	ct, _ := c.runningContainer(ctx, svc)
 	exec(`psql -U app -d other -c "UPDATE t SET v = 'changed'"`)
-	if err := c.restore(ctx, svc, ct, st, target, b); err != nil {
+	if err := c.restore(ctx, svc, ct, st, target, b, restoreKey("test")); err != nil {
 		t.Fatal(err)
 	}
 	if got := exec(`psql -U app -d other -tAc "SELECT v FROM t"`); got != "kept" {
 		t.Errorf("after restore: %q", got)
 	}
 	exec(`psql -U app -d postgres -c "DROP DATABASE other"`)
-	if err := c.restore(ctx, svc, ct, st, target, b); err != nil {
+	if err := c.restore(ctx, svc, ct, st, target, b, restoreKey("test")); err != nil {
 		t.Fatal(err)
 	}
 	if got := exec(`psql -U app -d other -tAc "SELECT v FROM t"`); got != "kept" {

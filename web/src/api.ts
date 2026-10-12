@@ -301,6 +301,9 @@ export type Backup = {
   finishedAt?: string;
   verifyStatus?: OpStatus;
   verifyError?: string;
+  /** Where a running backup is at, and how much it uploaded so far. */
+  step?: "prebackup" | "prepare" | "snapshot" | "helper" | "upload";
+  stepBytes?: number;
   /** Where a running restore test is at. */
   verifyStep?: "queued" | "image" | "server" | "restore" | "read" | "check";
   verifyDetails: { tables: number; rows: number; dbBytes: number; files?: number; durationMs: number };
@@ -336,6 +339,8 @@ export type Restore = {
   error?: string;
   createdAt: string;
   finishedAt?: string;
+  /** Where a running restore is at. */
+  step?: "stop" | "check" | "scratch" | "load" | "swap" | "extract" | "stopservice" | "replace" | "start";
 };
 
 export type Server = {

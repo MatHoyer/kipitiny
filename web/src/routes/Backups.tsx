@@ -138,8 +138,9 @@ function BackupStats({ backups, targets }: { backups?: Backup[]; targets?: numbe
 function ManagerBackup({ targets }: { targets: BackupTarget[] }) {
   const qc = useQueryClient();
   const backup = async (targetId: string) => {
-    await api.backupManager(targetId);
+    const b = await api.backupManager(targetId);
     qc.invalidateQueries({ queryKey: ["backups"] });
+    return b;
   };
   return (
     <Section

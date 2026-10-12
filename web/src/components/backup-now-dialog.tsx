@@ -1,17 +1,21 @@
-import { useMutation } from "@tanstack/react-query";
-import { ChevronLeft, DatabaseBackup, Lock, TriangleAlert } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, ChevronLeft, CircleCheck, DatabaseBackup, Lock, TriangleAlert } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { ChoiceTile, Tag } from "@/components/common";
+import { BackupSteps } from "@/components/op-steps";
 import { storageIcon, storageLocation } from "@/components/storage";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { FloatingSelect } from "@/components/ui/floating-select";
-import type { BackupTarget, PgDatabase } from "@/api";
+import { formatBytes, formatDuration } from "@/lib/format";
+import { api, type Backup, type BackupTarget, type PgDatabase } from "@/api";
 
 /**
  * "Back up now" in two steps: pick a storage, then review and start. With a
- * single storage the picker is skipped.
+ * single storage the picker is skipped. A single backup is then followed
+ * step by step; several (a project's) run in the background.
  */
 export function BackupNowDialog({
   what,
@@ -39,12 +43,17 @@ export function BackupNowDialog({
   const db = database || databases.find((d) => d.main)?.name || "";
   const single = targets.length === 1 ? targets[0] : null;
   const target = picked ?? single;
+  const qc = useQueryClient();
+  const [started, setStarted] = useState<string | null>(null);
   const backup = useMutation({
     meta: { error: "Couldn't start the backup" },
     mutationFn: () => onBackup(target!.id, db),
-    onSuccess: () => {
-      toast.success("Backup started");
-      onOpenChange(false);
+    onSuccess: (b) => {
+      if (b && typeof b === "object" && !Array.isArray(b) && "id" in b) setStarted((b as Backup).id);
+      else {
+        toast.success("Backup started");
+        onOpenChange(false);
+      }
     },
   });
   const onOpenChange = (next: boolean) => {
@@ -52,7 +61,9 @@ export function BackupNowDialog({
     if (!next) {
       setPicked(null);
       setDatabase("");
+      setStarted(null);
       backup.reset();
+      qc.invalidateQueries({ queryKey: ["backups"] });
     }
   };
 
@@ -65,7 +76,9 @@ export function BackupNowDialog({
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
-        {!target ? (
+        {started ? (
+          <BackupProgress id={started} what={what} onClose={() => onOpenChange(false)} />
+        ) : !target ? (
           <>
             <DialogHeader>
               <DialogTitle>Back up {what}</DialogTitle>
@@ -149,5 +162,46 @@ export function BackupNowDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** A backup just started, followed until it ends. */
+function BackupProgress({ id, what, onClose }: { id: string; what: ReactNode; onClose: () => void }) {
+  const q = useQuery({
+    queryKey: ["backups", "one", id],
+    queryFn: () => api.getBackup(id),
+    refetchInterval: (q) => (q.state.data?.status === "succeeded" || q.state.data?.status === "failed" ? false : 1_000),
+  });
+  const b = q.data;
+  const running = !b || b.status === "running";
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>{running ? <>Backing up {what}</> : b.status === "succeeded" ? <>Backed up {what}</> : <>Backup of {what} failed</>}</DialogTitle>
+        <DialogDescription>
+          {running ? "You can close this: it keeps running and shows up in the history." : "It's in the history with the others."}
+        </DialogDescription>
+      </DialogHeader>
+      {b && running && <BackupSteps backup={b} />}
+      {b?.status === "succeeded" && (
+        <p className="flex items-center gap-2 text-sm animate-in fade-in">
+          <CircleCheck className="size-4 text-emerald-600" />
+          {formatBytes(b.sizeBytes)} in {formatDuration(b.durationMs)}
+          {b.encrypted && <Tag className="bg-emerald-500/10 text-emerald-600">encrypted</Tag>}
+        </p>
+      )}
+      {b?.status === "failed" && <p className="text-sm text-destructive animate-in fade-in">{b.error}</p>}
+      <DialogFooter>
+        <Button variant="ghost" onClick={onClose}>
+          Close
+        </Button>
+        <Button asChild variant="outline">
+          <Link to={`/backups/${id}`} onClick={onClose}>
+            Open backup
+            <ArrowRight data-icon="inline-end" />
+          </Link>
+        </Button>
+      </DialogFooter>
+    </>
   );
 }
