@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
-import { Stepper } from "@/components/ui/stepper";
+import { StepNode, Stepper, type StepState } from "@/components/ui/stepper";
 import { useDocsUrl } from "@/lib/docs";
 import { api, isDatabase, type AppTemplate, type Deployment, type Service, type TemplateInstall, type TemplateResult } from "../api";
 
@@ -351,40 +351,75 @@ function Notes({ markdown }: { markdown: string }) {
   );
 }
 
-/** The deployments an install started, one step per service: databases first, then the apps waiting on them. */
+/**
+ * The deployments an install started, in the waves the manager runs them: the databases together, then the apps
+ * together once those are up. Each service has its own mark inside its wave.
+ */
 function DeployProgress({ projectId, deploying }: { projectId: string; deploying: string[] }) {
   const q = useQuery({
     queryKey: ["template-deploys", projectId],
     queryFn: async () => {
       const services = (await api.services(projectId)).filter((s) => deploying.includes(s.name));
       const rows = await Promise.all(services.map(async (s) => ({ s, d: (await api.deployments(s.id))[0] as Deployment | undefined })));
-      return rows.sort((a, b) => Number(isDatabase(b.s.kind)) - Number(isDatabase(a.s.kind)) || a.s.name.localeCompare(b.s.name));
+      return rows.sort((a, b) => a.s.name.localeCompare(b.s.name));
     },
     refetchInterval: (q) => (q.state.data?.every((r) => r.d && r.d.status !== "running") ? false : 1_500),
   });
   const rows = q.data ?? [];
-  const hint = ({ s, d }: { s: Service; d?: Deployment }) =>
-    !d
-      ? isDatabase(s.kind)
-        ? "Queued"
-        : "Waits for the databases to be ready"
-      : d.status === "running"
-        ? `Pulling ${d.image} and starting it`
-        : d.status === "failed"
-          ? d.error || "Failed: see its deployment log"
-          : `Running ${d.image}`;
-  const pending = rows.findIndex((r) => r.d?.status !== "succeeded");
-  const current = rows.length === 0 ? 1 : pending === -1 ? rows.length + 1 : pending + 1;
+  const waves = [
+    { title: "Databases", hint: "Deployed together", rows: rows.filter((r) => isDatabase(r.s.kind)) },
+    { title: "Apps", hint: "Deployed together once the databases are up", rows: rows.filter((r) => !isDatabase(r.s.kind)) },
+  ].filter((w) => w.rows.length > 0);
+  const stateOf = (r: DeployRow): StepState => (r.d?.status === "succeeded" ? "done" : r.d?.status === "failed" ? "failed" : r.d ? "active" : "todo");
+  // The first wave not fully up is the current one; a failure in it stops there.
+  const pending = waves.findIndex((w) => w.rows.some((r) => stateOf(r) !== "done"));
+  const wave = waves[pending];
+  const current = rows.length === 0 ? 1 : pending === -1 ? waves.length + 1 : pending + 1;
   return (
-    <Stepper
-      orientation="vertical"
-      current={current}
-      busy={rows[pending]?.d?.status === "running"}
-      failed={rows[pending]?.d?.status === "failed"}
-      steps={[
-        { title: "Create the services", hint: `${deploying.length} of them, with their volumes and networks` },
-        ...rows.map((r) => ({ title: `Deploy ${r.s.name}`, hint: hint(r) })),
-      ]}
-    />
+    <>
+      <Stepper
+        orientation="vertical"
+        current={current}
+        busy={!!wave?.rows.some((r) => stateOf(r) === "active")}
+        failed={!!wave?.rows.some((r) => stateOf(r) === "failed")}
+        steps={[
+          { title: "Create the services", hint: `${deploying.length} of them, with their volumes and networks` },
+          ...waves.map((w) => ({
+            title: w.title,
+            hint: (
+              <div className="grid gap-2 pt-0.5">
+                <p>{w.hint}</p>
+                <ul className="flex flex-wrap gap-1.5">
+                  {w.rows.map((r) => (
+                    <DeployChip key={r.s.id} row={r} state={stateOf(r)} />
+                  ))}
+                </ul>
+                {w.rows
+                  .filter((r) => r.d?.status === "failed")
+                  .map((r) => (
+                    <p key={r.s.id} className="text-destructive animate-in fade-in">
+                      {r.s.name}: {r.d!.error || "failed, see its deployment log"}
+                    </p>
+                  ))}
+              </div>
+            ),
+          })),
+        ]}
+      />
+      {pending === -1 && rows.length > 0 && <p className="text-sm font-medium animate-in fade-in">Everything is up.</p>}
+    </>
+  );
+}
+
+type DeployRow = { s: Service; d?: Deployment };
+
+/** A service in its wave, with its own mark; what it's doing shows on hover. */
+function DeployChip({ row: { s, d }, state }: { row: DeployRow; state: StepState }) {
+  const doing = !d ? "Waiting" : d.status === "running" ? `Pulling ${d.image} and starting it` : d.status === "failed" ? "Failed" : `Running ${d.image}`;
+  return (
+    <li title={doing} className="flex items-center gap-1.5 rounded-full border bg-background py-0.5 pr-2.5 pl-0.5 text-foreground">
+      <StepNode state={state} busy={state === "active"} size="sm" />
+      <span className="font-medium">{s.name}</span>
+    </li>
   );
 }
