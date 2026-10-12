@@ -15,6 +15,7 @@ import (
 
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/progress"
 	"github.com/MatHoyer/kipitiny/internal/secrets"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -126,6 +127,7 @@ func (c *Core) Bootstrap(ctx context.Context) error {
 // cleanup of terminals left by a crash.
 func (c *Core) bootstrapServer(ctx context.Context, sv store.Server) error {
 	dk := c.dockerFor(sv.ID)
+	progress.Report(ctx, ServerStepNetwork)
 	if err := dk.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil {
 		return err
 	}
@@ -139,9 +141,11 @@ func (c *Core) bootstrapServer(ctx context.Context, sv store.Server) error {
 		}
 	}
 	if c.cfg.Traefik.Enabled {
+		progress.Report(ctx, ServerStepTraefik)
 		if err := c.ensureTraefik(ctx, sv); err != nil {
 			return fmt.Errorf("traefik: %w", err)
 		}
+		progress.Report(ctx, ServerStepTunnel)
 		if err := c.ensureTunnel(ctx, sv); err != nil {
 			return fmt.Errorf("cloudflared: %w", err)
 		}

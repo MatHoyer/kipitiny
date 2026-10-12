@@ -547,7 +547,7 @@ const helperSteps = () => {
   return steps;
 };
 
-/** A ?progress answer: each step after a beat of work, as NDJSON, then the result. */
+/** A ?progress answer: each step after a beat of work, as NDJSON, then the result (an Error ends it failed). */
 const progressed = (steps: string[], result: unknown) =>
   new Response(
     new ReadableStream({
@@ -557,7 +557,7 @@ const progressed = (steps: string[], result: unknown) =>
           line({ step });
           await new Promise((r) => setTimeout(r, step === "image" ? 1800 : 700 + Math.random() * 400));
         }
-        line({ result: result ?? null });
+        line(result instanceof Error ? { error: result.message } : { result: result ?? null });
         c.close();
       },
     }),
@@ -807,6 +807,15 @@ const routes: Route[] = [
   ["POST", /^\/auth\/logout$/, () => undefined],
 
   ["GET", /^\/servers$/, () => [{ ...SERVER, projects: db.projects.length }]],
+  [
+    "POST",
+    /^\/servers$/,
+    ({ q }) => {
+      const refused = new Error("this is a demo: it can't reach other servers (ssh: connect to host: connection refused)");
+      if (!q.has("progress")) throw invalid(refused.message);
+      return progressed(["connect"], refused);
+    },
+  ],
   ["GET", /^\/ssh-key$/, () => ({ publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDemoDemoDemoDemoDemoDemoDemoDemoDemoDemo kipitiny" })],
   ["GET", /^\/domains$/, () => db.domains],
   ["GET", /^\/secret-providers$/, () => [passwordManager()]],

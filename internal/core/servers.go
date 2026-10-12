@@ -15,6 +15,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/progress"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -214,9 +215,23 @@ func (c *Core) DeleteServer(ctx context.Context, id string) error {
 	return nil
 }
 
+// Steps of saving a server, reported with progress.Report.
+const (
+	// ServerStepConnect: connecting over SSH (pinning the host key the
+	// first time) and asking Docker for its version.
+	ServerStepConnect = "connect"
+	// ServerStepNetwork: creating the network apps and the proxy share.
+	ServerStepNetwork = "network"
+	// ServerStepTraefik: starting the reverse proxy.
+	ServerStepTraefik = "traefik"
+	// ServerStepTunnel: starting the Cloudflare tunnel, when one is set.
+	ServerStepTunnel = "tunnel"
+)
+
 func (c *Core) checkServer(ctx context.Context, sv store.Server) (ServerView, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
+	progress.Report(ctx, ServerStepConnect)
 	info, err := c.dockerFor(sv.ID).Info(ctx)
 	if err != nil {
 		return ServerView{}, fmt.Errorf("%w: cannot reach Docker on %s: %v", ErrInvalid, sv.Name, err)
