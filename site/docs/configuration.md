@@ -1,7 +1,7 @@
 ---
 title: Configuration
 description: Every environment variable the manager reads
-order: 14
+order: 15
 ---
 
 | Env var              | Default | |
