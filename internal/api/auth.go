@@ -26,6 +26,9 @@ var publicRoutes = map[string]bool{
 	"POST /api/auth/login/mfa":      true,
 	"POST /api/auth/passkey/begin":  true,
 	"POST /api/auth/passkey/finish": true,
+	// An invite link's token is its credential.
+	"POST /api/auth/invite":        true,
+	"POST /api/auth/invite/accept": true,
 	// Push webhooks authenticate with the project's webhook secret.
 	"POST /api/hooks/projects/{id}": true,
 	// A GitHub App's webhooks, signed with its secret.
