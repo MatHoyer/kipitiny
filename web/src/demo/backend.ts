@@ -852,7 +852,8 @@ const routes: Route[] = [
     /^\/status$/,
     (): Status => ({
       version: "demo",
-      update: { current: "demo", available: false, canApply: false, reason: "This is a demo running in your browser.", updating: false },
+      // An update is always on offer, to show its checks; installing it is refused.
+      update: { current: "demo", latest: "demo-next", available: true, canApply: true, updating: false },
       docker: { version: "27.3.1", apiVersion: "1.47", os: "linux", arch: "amd64" },
     }),
   ],
@@ -868,6 +869,8 @@ const routes: Route[] = [
       return progressed(["connect"], refused);
     },
   ],
+  ["POST", /^\/update$/, () => { throw invalid("this is a demo running in your browser: there's nothing to install"); }],
+  ["POST", /^\/update\/check$/, () => ({ current: "demo", latest: "demo-next", available: true, canApply: true, updating: false, checkedAt: now() })],
   [
     "GET",
     /^\/update\/preflight$/,
@@ -877,7 +880,7 @@ const routes: Route[] = [
       return {
         ready: !busy,
         checks: [
-          { id: "version", state: "ok", detail: "demo → 0.27.0" },
+          { id: "version", state: "ok", detail: "demo → demo-next" },
           busy
             ? { id: "tasks", state: "block", detail: "in progress: the cleanup. The restart would cut it short" }
             : { id: "tasks", state: "ok", detail: "no deploy, backup, restore or cleanup running" },
