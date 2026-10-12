@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
+import { Stepper, type Step } from "@/components/ui/stepper";
 import { api, type GitProvider, type GitProviderInput, type GitProviderKind } from "@/api";
 import { SettingsPage } from "./page";
 
@@ -68,13 +69,15 @@ export function GitProviders() {
   const providers = useQuery({ queryKey: ["git-providers"], queryFn: api.gitProviders });
   const [editing, setEditing] = useState<Editing | null>(null);
   const [params, setParams] = useSearchParams();
+  const [connectedId, setConnectedId] = useState<string | null>(null);
+  const connected = providers.data?.find((p) => p.id === connectedId);
 
   // The forge sent the browser back here.
   useEffect(() => {
     const error = params.get("error");
     if (!error && !params.get("connected")) return;
     if (error) toast.error("Couldn't connect the git provider", { description: error });
-    else toast.success("Git provider connected");
+    else setConnectedId(params.get("connected"));
     qc.invalidateQueries({ queryKey: ["git-providers"] });
     setParams({}, { replace: true });
   }, [params, setParams, qc]);
@@ -125,6 +128,28 @@ export function GitProviders() {
           {editing?.step === "edit" && editing.provider.kind === "github" && <RenameForm provider={editing.provider} onDone={() => setEditing(null)} />}
           {editing?.step === "edit" && editing.provider.kind !== "github" && (
             <OAuthForm key={editing.provider.id} kind={kindOf(editing.provider.kind)} provider={editing.provider} onDone={() => setEditing(null)} />
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!connected} onOpenChange={(o) => !o && setConnectedId(null)}>
+        <DialogContent className="sm:max-w-lg">
+          {connected && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 [&>svg]:size-5">
+                  {kindOf(connected.kind).icon}
+                  {connected.name} connected
+                </DialogTitle>
+                <DialogDescription>
+                  {connected.kind === "github" ? `Installed on ${connected.account}` : `Authorized by ${connected.account}`}. Projects can now
+                  follow a compose file from its repositories.
+                </DialogDescription>
+              </DialogHeader>
+              <Stepper steps={connected.kind === "github" ? githubSteps : oauthSteps} current={(connected.kind === "github" ? githubSteps : oauthSteps).length} className="py-2" />
+              <DialogFooter>
+                <Button onClick={() => setConnectedId(null)}>Done</Button>
+              </DialogFooter>
+            </>
           )}
         </DialogContent>
       </Dialog>
@@ -218,6 +243,11 @@ function ProviderCard({ provider: p, onEdit }: { provider: GitProvider; onEdit: 
   );
 }
 
+/** Connecting GitHub: named here, created and installed on GitHub, then back here. */
+const githubSteps: Step[] = [{ title: "Name it" }, { title: "Create the app" }, { title: "Pick repositories" }, { title: "Connected" }];
+/** Connecting GitLab or Gitea: its OAuth app is registered, then authorized on the forge. */
+const oauthSteps: Step[] = [{ title: "Register the app" }, { title: "Authorize kipitiny" }, { title: "Connected" }];
+
 /** Creates a GitHub App from a manifest: the browser posts it to GitHub, which sends it back to install the app. */
 function GitHubAppForm({ onBack }: { onBack: () => void }) {
   const [form, setForm] = useState({ name: "GitHub", org: "", baseUrl: "" });
@@ -249,6 +279,7 @@ function GitHubAppForm({ onBack }: { onBack: () => void }) {
           it may read.
         </DialogDescription>
       </DialogHeader>
+      <Stepper steps={githubSteps} current={start.isPending || start.isSuccess ? 1 : 0} busy={start.isPending || start.isSuccess} className="py-2" />
       <div className="space-y-4">
         <FloatingInput label="Name in kipitiny" required autoFocus value={form.name} onChange={set("name")} />
         <FloatingInput
@@ -367,6 +398,7 @@ function OAuthForm({ kind, provider, onBack, onDone }: { kind: Kind; provider: G
           Create an OAuth application in {where}, redirecting to the URI below. Paste its ID and secret: you then authorize it on {kind.label}.
         </DialogDescription>
       </DialogHeader>
+      {!provider && <Stepper steps={oauthSteps} current={save.isPending ? 1 : 0} busy={save.isPending} className="py-2" />}
       <div className="space-y-4">
         <CopyField value={oauthCallback()} />
         <FloatingInput label="Name in kipitiny" required value={form.name} onChange={set("name")} />
