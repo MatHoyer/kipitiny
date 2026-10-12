@@ -93,6 +93,8 @@ export type Service = {
   dns?: DNSStatus;
   /** The domain or port changed since the running deployment: Traefik routes the new one after a deploy. */
   routePending?: boolean;
+  /** The networks its running containers miss, e.g. one removed outside kipitiny; the reconciler attaches them again. */
+  networkIssues?: string[];
 };
 
 export type Volume = { name: string; path: string };
@@ -154,6 +156,8 @@ export type TopoService = {
   /** Host ports published straight to the service. */
   publishedPorts?: PublishedPort[];
   routePending?: boolean;
+  /** The networks its running containers miss, e.g. one removed outside kipitiny. */
+  networkIssues?: string[];
   dns?: DNSStatus;
   containers: TopoNode[];
 };

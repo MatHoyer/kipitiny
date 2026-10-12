@@ -123,6 +123,9 @@ type ServiceView struct {
 	// RoutePending is set when the domain or port changed since the running
 	// deployment: Traefik only routes the new one after a deploy.
 	RoutePending bool `json:"routePending,omitempty"`
+	// NetworkIssues are the networks its running containers miss, e.g. one
+	// removed outside kipitiny; the reconciler attaches them again.
+	NetworkIssues []string `json:"networkIssues,omitempty"`
 }
 
 func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceInput) (ServiceView, error) {
@@ -551,6 +554,9 @@ func (c *Core) view(ctx context.Context, svc store.Service) (ServiceView, error)
 		v.DNS = c.dnsStatus(ctx, svc.Domain)
 	}
 	v.RoutePending = c.routePending(ctx, svc)
+	if p, err := c.store.GetProject(ctx, svc.ProjectID); err == nil {
+		v.NetworkIssues = networkIssues(p, svc, cts)
+	}
 	return v, nil
 }
 

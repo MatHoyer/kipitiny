@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/store"
@@ -226,8 +227,9 @@ func (c *Core) syncNetworks(ctx context.Context, project store.Project, svc stor
 				errs = append(errs, dk.SetAliases(ctx, name, ct.ID, []string{alias}))
 			}
 		}
-		for _, id := range svc.Networks {
-			name := docker.CustomNetwork(id)
+		// Every network it should be on, the project's and the proxy's too:
+		// one removed and recreated outside kipitiny comes back empty.
+		for name, aliases := range wantNetworks(project, svc, ct) {
 			if onNetwork(ct, name) {
 				continue
 			}
@@ -235,10 +237,68 @@ func (c *Core) syncNetworks(ctx context.Context, project store.Project, svc stor
 				errs = append(errs, err)
 				continue
 			}
-			errs = append(errs, dk.ConnectNetwork(ctx, name, ct.ID, alias))
+			errs = append(errs, dk.ConnectNetwork(ctx, name, ct.ID, aliases...))
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// wantNetworks maps the networks a service's container should be on to its
+// aliases there, as containerSpec attaches them: the project's, the ones
+// created by hand it joins, and the proxy's when Traefik routes it.
+func wantNetworks(project store.Project, svc store.Service, ct container.Summary) map[string][]string {
+	if svc.HostNetwork {
+		return nil
+	}
+	want := map[string][]string{docker.ProjectNetwork(project.ID): {svc.Name}}
+	for _, id := range svc.Networks {
+		want[docker.CustomNetwork(id)] = []string{networkAlias(project, svc)}
+	}
+	if ct.Labels["traefik.enable"] == "true" {
+		want[docker.ProxyNetwork] = nil
+	}
+	return want
+}
+
+// networkIssues says which networks the service's running containers miss,
+// e.g. after one was removed outside kipitiny (the reconciler puts them back).
+func networkIssues(project store.Project, svc store.Service, cts []container.Summary) []string {
+	var out []string
+	for _, ct := range cts {
+		if !isActive(ct, svc) || ct.State != container.StateRunning {
+			continue
+		}
+		for name := range wantNetworks(project, svc, ct) {
+			if onNetwork(ct, name) {
+				continue
+			}
+			issue := "not on a network it joins"
+			switch {
+			case name == docker.ProxyNetwork:
+				issue = "not on the proxy network: its domain can't reach it"
+			case name == docker.ProjectNetwork(project.ID):
+				issue = "not on the project network: other services can't reach it"
+			}
+			if !slices.Contains(out, issue) {
+				out = append(out, issue)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// runContainer creates and starts spec after creating the networks it joins:
+// one removed outside kipitiny would fail the create.
+func (c *Core) runContainer(ctx context.Context, dk *docker.Client, spec client.ContainerCreateOptions) (string, error) {
+	if spec.NetworkingConfig != nil {
+		for name := range spec.NetworkingConfig.EndpointsConfig {
+			if err := dk.EnsureNetwork(ctx, name); err != nil {
+				return "", err
+			}
+		}
+	}
+	return dk.Run(ctx, spec)
 }
 
 // ensureNetworks creates a server's networks that are missing, e.g. after

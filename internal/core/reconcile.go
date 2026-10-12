@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	cerrdefs "github.com/containerd/errdefs"
 	"slices"
 	"strconv"
 	"time"
@@ -276,7 +277,18 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 			}
 			log.Info("reconcile: recreated missing replica", "replica", i)
 		case ct.State == container.StateExited || ct.State == container.StateCreated:
-			if _, err := dk.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{}); err != nil {
+			if _, err := dk.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{}); cerrdefs.IsNotFound(err) {
+				// A network it was on was removed outside kipitiny: Docker
+				// can't start it any more, even once the network is back.
+				if err := dk.RemoveContainer(ctx, ct.ID, 0); err != nil {
+					return err
+				}
+				if err := c.recreateReplica(ctx, project, want, dep.ID, i); err != nil {
+					return err
+				}
+				log.Info("reconcile: recreated replica whose network was removed", "replica", i)
+				continue
+			} else if err != nil {
 				return fmt.Errorf("start %s: %w", ct.Names[0][1:], err)
 			}
 			log.Info("reconcile: started stopped replica", "container", ct.Names[0][1:])
@@ -321,6 +333,6 @@ func (c *Core) recreateReplica(ctx context.Context, project store.Project, svc s
 	if err != nil {
 		return err
 	}
-	_, err = dk.Run(ctx, replicaSpec(project, svc, src, deployID, replica, probe, c.routeFor(ctx, svc)))
+	_, err = c.runContainer(ctx, dk, replicaSpec(project, svc, src, deployID, replica, probe, c.routeFor(ctx, svc)))
 	return err
 }

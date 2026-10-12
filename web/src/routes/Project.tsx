@@ -103,6 +103,8 @@ export function Project() {
   const apps = list.filter((s) => !isDatabase(s.kind));
   const dbs = list.flatMap((s) => (isDatabase(s.kind) ? [{ ...s, kind: s.kind }] : []));
   const states = list.map(liveState);
+  // Not running well, or misconfigured: as the map counts a project's problems.
+  const attention = list.filter((s) => troubled(liveState(s)) || serviceIssue(s)?.tone === "error").length;
 
   return (
     <>
@@ -139,8 +141,8 @@ export function Project() {
             <StatCard
               icon={TriangleAlert}
               label="Need attention"
-              value={states.filter(troubled).length}
-              tone={states.some(troubled) ? "bad" : undefined}
+              value={attention}
+              tone={attention > 0 ? "bad" : undefined}
             />
           </div>
         )}

@@ -13,13 +13,18 @@ export type ServiceIssue = {
   text: string;
 };
 
-type IssueSource = Pick<TopoService, "kind" | "domain" | "dns" | "routePending"> & {
+type IssueSource = Pick<TopoService, "kind" | "domain" | "dns" | "routePending" | "networkIssues"> & {
   containers: (Container & { endpoints?: TopoNode["endpoints"] })[];
 };
 
 /** What's wrong with a service, worst first: the map and the service cards show the same. */
 export function serviceIssue(svc: IssueSource): ServiceIssue | null {
   const live = svc.containers.filter((c) => !c.retired);
+  // The networks its running containers miss, from the manager (cards and map alike), e.g. one removed by hand.
+  const missing = svc.networkIssues ?? [];
+  if (missing.length > 0) {
+    return { tone: "error", short: capitalize(missing[0]), text: `${missing.map(capitalize).join(". ")}. kipitiny attaches it again within a minute.` };
+  }
   // Only the topology knows the containers' networks.
   if (live.length > 0 && live.every((c) => c.endpoints)) {
     const onProxy = live.some((c) => c.endpoints!.some((e) => e.network === PROXY_NETWORK));
@@ -34,6 +39,7 @@ export function serviceIssue(svc: IssueSource): ServiceIssue | null {
 }
 
 const issue = (tone: ServiceIssue["tone"], text: string): ServiceIssue => ({ tone, short: text, text });
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export const issueRing = { error: "ring-destructive/60", warn: "ring-amber-500/60" } as const;
 export const issueText = { error: "text-destructive", warn: "text-amber-600 dark:text-amber-400" } as const;

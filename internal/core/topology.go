@@ -115,6 +115,9 @@ type TopoService struct {
 	PublishedPorts []store.PublishedPort `json:"publishedPorts,omitempty"`
 	// RoutePending: the domain or port changed since the running deployment.
 	RoutePending bool `json:"routePending,omitempty"`
+	// NetworkIssues are the networks its running containers miss, as the
+	// service view reports them.
+	NetworkIssues []string `json:"networkIssues,omitempty"`
 	// DNS is set when the manager manages the domain's Cloudflare record.
 	DNS        *DNSStatus `json:"dns,omitempty"`
 	Containers []TopoNode `json:"containers"`
@@ -245,6 +248,7 @@ func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []s
 				ID: s.ID, Name: s.Name, Kind: s.Kind, Image: s.Image, Icon: s.Icon, Domain: s.Domain, Port: s.Port,
 				Replicas: s.Replicas, Stopped: s.Stopped, Uses: usedDatabases(s, p, dbs), Networks: s.Networks, HostNetwork: s.HostNetwork,
 				PublishedPorts: s.PublishedPorts, RoutePending: c.routePending(ctx, s), Containers: []TopoNode{},
+				NetworkIssues: networkIssues(p, s, byService[s.ID]),
 			}
 			if s.Domain != "" {
 				ts.DNS = c.dnsStatus(ctx, s.Domain)
