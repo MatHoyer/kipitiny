@@ -51,6 +51,7 @@ type Core struct {
 
 	sched          scheduler
 	verifySem      chan struct{}
+	verifySteps    verifySteps
 	reconcileKick  chan struct{}
 	probes         sync.Map // server ID -> *mount.Mount (nil: no probe there)
 	readUsers      sync.Map // container ID -> struct{}: the data browser's read-only user exists in that database

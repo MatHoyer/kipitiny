@@ -563,6 +563,29 @@ const progressed = (steps: string[], result: unknown) =>
     { headers: { "Content-Type": "application/x-ndjson" } },
   );
 
+/** Restore tests the demo is running, by backup: when each started. */
+const verifyStarts = new Map<string, number>();
+
+/** A backup as its restore test stands: walks through the steps a real one takes, then passes. */
+function verifying(b: Backup): Backup {
+  const start = verifyStarts.get(b.id);
+  if (start === undefined) return b;
+  const steps: [NonNullable<Backup["verifyStep"]>, number][] = b.kind === "volume" ? [["server", 1000], ["read", 2200]] : [["image", 1200], ["server", 2200], ["restore", 2400], ["check", 900]];
+  let t = Date.now() - start;
+  for (const [step, ms] of steps) {
+    if (t < ms) return { ...b, verifyStep: step };
+    t -= ms;
+  }
+  verifyStarts.delete(b.id);
+  Object.assign(b, {
+    verifyStatus: "succeeded",
+    verifiedAt: now(),
+    verifyDetails: b.kind !== "volume" ? { tables: db.tables.length, rows: db.tables.reduce((n, t) => n + t.rows.length, 0), dbBytes: b.sizeBytes * 3, durationMs: 6700 } : { tables: 0, rows: 0, dbBytes: 0, files: 3, durationMs: 3200 },
+  });
+  save();
+  return b;
+}
+
 const connectedManager = (id: string) => {
   if (!db.passwordManagers.includes(id)) throw invalid("this password manager isn't connected");
 };
@@ -1052,7 +1075,7 @@ const routes: Route[] = [
     },
   ],
   ["GET", /^\/backups$/, ({ q }) => (q.get("projectId") ? db.backups.filter((b) => b.projectId === q.get("projectId")) : db.backups)],
-  ["GET", /^\/backups\/([^/]+)$/, ({ m }) => db.backups.find((b) => b.id === m[1]) ?? (() => { throw notFound(); })()],
+  ["GET", /^\/backups\/([^/]+)$/, ({ m }) => verifying(db.backups.find((b) => b.id === m[1]) ?? (() => { throw notFound(); })())],
   [
     "DELETE",
     /^\/backups\/([^/]+)$/,
@@ -1066,13 +1089,10 @@ const routes: Route[] = [
     /^\/backups\/([^/]+)\/verify$/,
     ({ m }) => {
       const b = db.backups.find((x) => x.id === m[1]) ?? (() => { throw notFound(); })();
-      Object.assign(b, {
-        verifyStatus: "succeeded",
-        verifiedAt: now(),
-        verifyDetails: b.kind !== "volume" ? { tables: db.tables.length, rows: db.tables.reduce((n, t) => n + t.rows.length, 0), dbBytes: b.sizeBytes * 3, durationMs: 4600 } : { tables: 0, rows: 0, dbBytes: 0, files: 3, durationMs: 900 },
-      });
+      verifyStarts.set(b.id, Date.now());
+      Object.assign(b, { verifyStatus: "running", verifyError: undefined });
       save();
-      return b;
+      return verifying(b);
     },
   ],
   [

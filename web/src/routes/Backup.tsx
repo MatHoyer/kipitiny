@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { Stepper } from "@/components/ui/stepper";
 import { formatBytes, formatDateTime, formatDuration, timeAgo } from "@/lib/format";
 import { api, type Backup as BackupT, type DatabaseKind } from "../api";
 import { BackupIcon, StorageName, backupTitle } from "./BackupList";
@@ -272,10 +273,7 @@ function RestoreTest({ backup: b, onRun, busy }: { backup: BackupT; onRun: () =>
       {!b.verifyStatus ? (
         <p className="text-sm text-muted-foreground">Not tested yet. A backup nobody restored is a hope.</p>
       ) : running ? (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Spinner />
-          {volume ? "Reading the archive in" : "Restoring into"} a scratch container
-        </p>
+        <VerifySteps backup={b} server={server} />
       ) : b.verifyStatus === "failed" ? (
         <p className="text-sm text-destructive">{b.verifyError}</p>
       ) : volume ? (
@@ -318,5 +316,33 @@ function CopyValue({ value }: { value: string }) {
       </Mono>
       <CopyButton value={value} />
     </span>
+  );
+}
+
+/** A running restore test, step by step, as the manager reports it. */
+function VerifySteps({ backup: b, server }: { backup: BackupT; server: string }) {
+  const steps: { id: NonNullable<BackupT["verifyStep"]>; title: string; hint: string }[] =
+    b.kind === "volume"
+      ? [
+          { id: "server", title: "Start a throwaway container", hint: "No network, removed after the test" },
+          { id: "read", title: "Download and read the archive", hint: "Decrypt, decompress and list every file" },
+        ]
+      : [
+          { id: "image", title: `Get the ${server} image`, hint: "The one the database runs, or that made the backup" },
+          { id: "server", title: `Start a throwaway ${server}`, hint: "No network, 512MB, removed after the test" },
+          { id: "restore", title: "Download and load the backup", hint: "Decrypted if needed, then restored as a real restore would" },
+          { id: "check", title: "Measure what came back", hint: b.serviceKind === "mongodb" ? "Collections, documents and size" : "Tables, rows and size" },
+        ];
+  const current = steps.findIndex((s) => s.id === b.verifyStep);
+  return (
+    <div className="grid gap-3">
+      {b.verifyStep === "queued" && (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner />
+          Waiting for another restore test to finish: they run one at a time.
+        </p>
+      )}
+      <Stepper orientation="vertical" steps={steps} current={current === -1 && b.verifyStep !== "queued" ? 0 : current} busy />
+    </div>
   );
 }

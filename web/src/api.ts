@@ -301,6 +301,8 @@ export type Backup = {
   finishedAt?: string;
   verifyStatus?: OpStatus;
   verifyError?: string;
+  /** Where a running restore test is at. */
+  verifyStep?: "queued" | "image" | "server" | "restore" | "read" | "check";
   verifyDetails: { tables: number; rows: number; dbBytes: number; files?: number; durationMs: number };
   verifiedAt?: string;
 };
