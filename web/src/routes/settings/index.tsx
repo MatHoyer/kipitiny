@@ -1,5 +1,8 @@
-import { Bell, BookOpen, Brush, GitFork, HardDrive, Globe, Info, KeyRound, KeySquare, Network, Package, ScrollText, Server, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, Brush, GitFork, HardDrive, Globe, Info, KeyRound, KeySquare, Network, Package, ScrollText, Server, Users, type LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
+import type { Feature } from "@/api";
+import { EmptyState } from "@/components/common";
+import { useAccess } from "@/lib/access";
 import { docsUrl } from "@/lib/docs";
 import { Version } from "./About";
 import { Audit } from "./Audit";
@@ -8,12 +11,13 @@ import { DomainsPage } from "./Domains";
 import { GitProviders } from "./GitProviders";
 import { Networks } from "./Networks";
 import { Notifications } from "./Notifications";
-import { SettingsLabel } from "./page";
+import { SettingsLabel, SettingsPage, SettingsReadOnly } from "./page";
 import { PasswordManagers } from "./PasswordManagers";
 import { Registries } from "./Registries";
 import { Servers } from "./Servers";
 import { Storage } from "./Storage";
 import { TokensPage } from "./Tokens";
+import { UsersPage } from "./Users";
 
 export const settingsGroups = ["Infrastructure", "Integrations", "Access", "System"] as const;
 type SettingsGroup = (typeof settingsGroups)[number];
@@ -24,11 +28,14 @@ type SettingsPage = {
   group: SettingsGroup;
   label: string;
   icon: LucideIcon;
+  /** Who sees it besides admins: members with this feature, or every user; nobody else when absent. */
+  access?: Feature | "everyone";
 } & ({ page: ComponentType; href?: never } | { href: (version?: string) => string; page?: never });
 
 export const settingsPages: SettingsPage[] = [
   {
     slug: "servers",
+    access: "servers",
     group: "Infrastructure",
     label: "Servers",
     icon: Server,
@@ -36,6 +43,7 @@ export const settingsPages: SettingsPage[] = [
   },
   {
     slug: "networks",
+    access: "networks",
     group: "Infrastructure",
     label: "Networks",
     icon: Network,
@@ -43,6 +51,7 @@ export const settingsPages: SettingsPage[] = [
   },
   {
     slug: "domains",
+    access: "domains",
     group: "Infrastructure",
     label: "Domains & DNS",
     icon: Globe,
@@ -50,6 +59,7 @@ export const settingsPages: SettingsPage[] = [
   },
   {
     slug: "storage",
+    access: "storage",
     group: "Integrations",
     label: "Storage",
     icon: HardDrive,
@@ -57,6 +67,7 @@ export const settingsPages: SettingsPage[] = [
   },
   {
     slug: "git-providers",
+    access: "git-providers",
     group: "Integrations",
     label: "Git providers",
     icon: GitFork,
@@ -64,6 +75,7 @@ export const settingsPages: SettingsPage[] = [
   },
   {
     slug: "registries",
+    access: "registries",
     group: "Integrations",
     label: "Registries",
     icon: Package,
@@ -71,6 +83,7 @@ export const settingsPages: SettingsPage[] = [
   },
   {
     slug: "password-managers",
+    access: "secret-providers",
     group: "Integrations",
     label: "Password managers",
     icon: KeyRound,
@@ -78,6 +91,7 @@ export const settingsPages: SettingsPage[] = [
   },
   {
     slug: "tokens",
+    access: "everyone",
     group: "Access",
     label: "API tokens & MCP",
     icon: KeySquare,
@@ -85,6 +99,7 @@ export const settingsPages: SettingsPage[] = [
   },
   {
     slug: "notifications",
+    access: "notifications",
     group: "Integrations",
     label: "Notifications",
     icon: Bell,
@@ -99,10 +114,18 @@ export const settingsPages: SettingsPage[] = [
   },
   {
     slug: "docs",
+    access: "everyone",
     group: "System",
     label: "Docs",
     icon: BookOpen,
     href: docsUrl,
+  },
+  {
+    slug: "users",
+    group: "Access",
+    label: "Users",
+    icon: Users,
+    page: UsersPage,
   },
   {
     slug: "audit",
@@ -113,6 +136,7 @@ export const settingsPages: SettingsPage[] = [
   },
   {
     slug: "about",
+    access: "everyone",
     group: "System",
     label: "About",
     icon: Info,
@@ -120,14 +144,31 @@ export const settingsPages: SettingsPage[] = [
   },
 ];
 
+/** Whether the signed-in user sees a settings page. */
+export function useSettingsAccess() {
+  const { admin, has } = useAccess();
+  return (p: SettingsPage) => admin || p.access === "everyone" || (!!p.access && has(p.access));
+}
+
 /** One settings page; the sidebar lists the others. Each page renders its own header. */
 export function SettingsShell({ slug }: { slug: string }) {
   const current = settingsPages.find((p) => p.slug === slug)!;
   const Page = current.page!;
+  const { admin } = useAccess();
+  const allowed = useSettingsAccess()(current);
 
   return (
     <SettingsLabel.Provider value={current.label}>
-      <Page key={current.slug} />
+      {/* Members see the pages they were given read-only: an admin changes them. */}
+      <SettingsReadOnly.Provider value={!admin && current.access !== "everyone"}>
+        {allowed ? (
+          <Page key={current.slug} />
+        ) : (
+          <SettingsPage>
+            <EmptyState icon={current.icon} title="Admins only" description="Ask an admin if you need access to this page." />
+          </SettingsPage>
+        )}
+      </SettingsReadOnly.Provider>
     </SettingsLabel.Provider>
   );
 }

@@ -24,11 +24,13 @@ import { issueRing, issueText, needsAttention, serviceIssue } from "@/components
 import { memoryOf, useUsage } from "@/components/usage";
 import { formatBytes, liveState, timeAgo, troubled } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useAccess } from "@/lib/access";
 import { api, isDatabase, type Project as ProjectT, type Service } from "../api";
 
 export function Projects() {
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.servers });
+  const canCreate = useAccess().has("create-projects");
   // Same key as the project page, so the cache is shared.
   const services = useQueries({
     queries: (projects.data ?? []).map((p) => ({
@@ -47,10 +49,12 @@ export function Projects() {
       <PageHeader
         crumbs={[{ label: "Projects" }]}
         actions={
-          <>
-            <TemplateDialog />
-            <NewProjectDialog />
-          </>
+          canCreate && (
+            <>
+              <TemplateDialog />
+              <NewProjectDialog />
+            </>
+          )
         }
       />
       <PageBody>
@@ -64,10 +68,12 @@ export function Projects() {
             title="No projects yet"
             description="A project groups apps and databases on one private network."
             action={
-              <div className="flex gap-2">
-                <TemplateDialog />
-                <NewProjectDialog />
-              </div>
+              canCreate && (
+                <div className="flex gap-2">
+                  <TemplateDialog />
+                  <NewProjectDialog />
+                </div>
+              )
             }
           />
         ) : (

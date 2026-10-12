@@ -1,6 +1,7 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fingerprint, Loader2 } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
+import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { FloatingInput } from "@/components/ui/floating-input";
@@ -244,6 +245,99 @@ export function Setup() {
             onChange={set("confirm")}
           />
           <Submit pending={setup.isPending}>Create account</Submit>
+        </CardContent>
+      </form>
+    </Shell>
+  );
+}
+
+/** Where an invite link lands: the token is the URL's fragment. */
+export function AcceptInvite({ signedIn }: { signedIn: boolean }) {
+  const qc = useQueryClient();
+  const token = window.location.hash.slice(1);
+  const info = useQuery({ queryKey: ["invite", token], queryFn: () => api.invite(token), enabled: !!token, retry: false });
+  const [form, setForm] = useState({ username: "", password: "", confirm: "" });
+  const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
+  const navigate = useNavigate();
+  const leave = () => {
+    navigate("/projects", { replace: true });
+    qc.resetQueries();
+  };
+  const accept = useMutation({
+    meta: { error: "Couldn't create the account" },
+    mutationFn: () => {
+      if (form.password !== form.confirm) throw new Error("Passwords don't match.");
+      return api.acceptInvite(token, form.username.trim(), form.password);
+    },
+    onSuccess: leave,
+  });
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    accept.mutate();
+  };
+
+  if (signedIn)
+    return (
+      <Shell title="You're already signed in" subtitle="Sign out first to create another account with this invite.">
+        <CardFooter>
+          <Button variant="outline" className="w-full" onClick={leave}>
+            Back to kipitiny
+          </Button>
+        </CardFooter>
+      </Shell>
+    );
+  if (!token || info.error)
+    return (
+      <Shell title="This invite doesn't work" subtitle="It may be used or expired: ask an admin for a new link.">
+        <CardFooter>
+          <Button variant="outline" className="w-full" onClick={leave}>
+            Sign in instead
+          </Button>
+        </CardFooter>
+      </Shell>
+    );
+  if (!info.data) return null;
+  const { role, projects } = info.data;
+  return (
+    <Shell
+      title="Create your account"
+      subtitle={
+        role === "admin"
+          ? "You're invited as an admin."
+          : projects.length
+            ? `You're invited to ${projects.join(", ")}.`
+            : "You're invited as a member."
+      }
+    >
+      <form onSubmit={onSubmit}>
+        <CardContent className="space-y-4">
+          <FloatingInput
+            label="Username"
+            autoFocus
+            required
+            autoComplete="username"
+            value={form.username}
+            onChange={set("username")}
+            description="Lowercase letters, digits and dashes."
+          />
+          <FloatingInput
+            label="Password"
+            type="password"
+            required
+            autoComplete="new-password"
+            value={form.password}
+            onChange={set("password")}
+            description="At least 10 characters."
+          />
+          <FloatingInput
+            label="Confirm password"
+            type="password"
+            required
+            autoComplete="new-password"
+            value={form.confirm}
+            onChange={set("confirm")}
+          />
+          <Submit pending={accept.isPending}>Create account</Submit>
         </CardContent>
       </form>
     </Shell>

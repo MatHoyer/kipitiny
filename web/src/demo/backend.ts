@@ -41,7 +41,7 @@ import type {
   Usage,
 } from "@/api";
 import { files } from "./files";
-import { seed, service as newService, type DemoDb } from "./seed";
+import { demoUsers, seed, service as newService, type DemoDb } from "./seed";
 import { demoLogos, demoTemplates } from "./templates";
 
 /*
@@ -95,6 +95,8 @@ const notFound = () => new HttpError(404, "not found");
 const invalid = (m: string) => new HttpError(400, m);
 
 const now = () => new Date().toISOString();
+const users = () => (db.users ??= demoUsers());
+
 const newId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 const nameRe = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/;
 const MASK = "********";
@@ -845,8 +847,16 @@ function viaFiles<T>(f: () => T): T {
 }
 
 const routes: Route[] = [
-  ["GET", /^\/auth\/state$/, (): AuthState => ({ setupRequired: false, user: { id: "demo", username: "demo", createdAt: now() } })],
-  ["GET", /^\/account$/, (): Account => ({ username: "demo", totpEnabled: false, recoveryCodes: 0, passkeys: [] })],
+  [
+    "GET",
+    /^\/auth\/state$/,
+    (): AuthState => ({ setupRequired: false, user: { id: "demo", username: "demo", role: "admin", features: [], createdAt: now() } }),
+  ],
+  [
+    "GET",
+    /^\/account$/,
+    (): Account => ({ username: "demo", totpEnabled: false, recoveryCodes: 0, passkeys: [], role: "admin", features: [], grants: {} }),
+  ],
   [
     "GET",
     /^\/status$/,
@@ -1405,6 +1415,56 @@ const routes: Route[] = [
     },
   ],
   ["GET", /^\/audit$/, () => db.audit],
+  ["GET", /^\/users$/, () => users()],
+  [
+    "PUT",
+    /^\/users\/([^/]+)$/,
+    ({ m, body }) => {
+      const u = users().find((u) => u.id === m[1]);
+      if (!u) throw new HttpError(404, "not found");
+      if (u.id === "demo" && body.role !== "admin") throw invalid("this is the last admin; make another user admin first");
+      Object.assign(u, body.role === "admin" ? { role: "admin", features: [], grants: {} } : { role: "member", features: body.features ?? [], grants: body.grants ?? {} });
+      save();
+      return u;
+    },
+  ],
+  [
+    "DELETE",
+    /^\/users\/([^/]+)$/,
+    ({ m }) => {
+      if (m[1] === "demo") throw invalid("you can't delete your own account");
+      db.users = users().filter((u) => u.id !== m[1]);
+      save();
+    },
+  ],
+  ["GET", /^\/invites$/, () => (db.invites ??= [])],
+  [
+    "POST",
+    /^\/invites$/,
+    ({ body }) => {
+      const admin = body.role === "admin";
+      const i = {
+        id: newId("inv"),
+        role: admin ? ("admin" as const) : ("member" as const),
+        features: admin ? [] : (body.features ?? []),
+        grants: admin ? {} : (body.grants ?? {}),
+        createdBy: "demo",
+        createdAt: now(),
+        expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+      };
+      (db.invites ??= []).push(i);
+      save();
+      return { ...i, token: `demo${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}` };
+    },
+  ],
+  [
+    "DELETE",
+    /^\/invites\/([^/]+)$/,
+    ({ m }) => {
+      db.invites = (db.invites ?? []).filter((i) => i.id !== m[1]);
+      save();
+    },
+  ],
   ["GET", /^\/cleanup$/, () => cleanupView()],
   [
     "PUT",
