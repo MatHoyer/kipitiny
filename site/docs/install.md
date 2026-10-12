@@ -23,6 +23,9 @@ the admin account. Forgot the password?
 docker compose exec -it manager /kipitiny reset-password admin
 ```
 
+Invite other admins, or members limited to some projects, from
+*Settings › Users* ([Users and permissions](/docs/users)).
+
 Two-factor authentication (authenticator app) and passkeys are set up from
 **Account** in the user menu. Lost the authenticator and the recovery codes?
 

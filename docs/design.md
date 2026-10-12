@@ -48,6 +48,9 @@ The manager runs as a container and controls the **host** Docker daemon via the 
 - Consider a socket proxy (`tecnativa/docker-socket-proxy`) limiting API endpoints.
 - Strong authentication on the UI and API. Optional TOTP two-factor (own RFC 6238, codes single-use per time step, 10 hashed recovery codes) and passkeys (`go-webauthn`, discoverable + user verification, so a passkey sign-in skips TOTP). Passkeys bind to the host the UI is opened at. Pending second-factor tickets and WebAuthn ceremonies live in memory. Changing how the account signs in requires the password again; `kipitiny disable-2fa <user>` is the lockout escape hatch.
 - Never expose the Docker API over TCP without TLS.
+- Users: **admins** do everything; **members** get per-project permissions (`project_grants`: view, deploy, settings, env, domains, backups, restore, download, data, data-write, files, files-write, terminal, git, delete) and read-only server **features** (`users.features`). Defined in `internal/core/permissions.go`. A project a member can't see is reported as not found. Host network and the Docker socket stay admin-only (root on the host).
+- Enforcement: every REST route maps to what it needs in `internal/api/access.go` (checked after the mux sets `{id}`; `TestRouteAccess` fails on an unmapped route); core checks what depends on the body (env, domains and password-manager refs in a service change, compose prunes, restores across projects); MCP tools check the same permissions. Tokens belong to a user and never exceed them. Git syncs run as the user who linked the repo. Lists are filtered, and server-level views drop hosts, accounts and URLs for members.
+- Accounts come from single-use invite links (SHA-256 of the token stored, 7 days). The last admin can't be demoted or removed; `kipitiny make-admin <user>` is the escape hatch.
 - Mask secrets (env vars, DB passwords, keys) in API read responses by default.
 
 ### Password managers
@@ -374,6 +377,7 @@ Deferred until there is a concrete need. Planned approach:
 11. Multi-server over SSH.
 12. Optional: Postgres backend for manager state, PITR, centralized logs.
 13. Built-in data browser for every database kind, also as MCP tools (`read_table`, `find_documents`, `query_database` read-only unless `write`).
+14. Several users: admins and members with per-project permissions, invite links, member-owned tokens.
 
 ## 17. Reference projects
 
