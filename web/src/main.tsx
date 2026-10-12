@@ -63,6 +63,8 @@ const router = createBrowserRouter([
       { path: "backups/:id", element: <Backup /> },
       ...settingsPages.filter((p) => p.page).map((p) => ({ path: p.slug, element: <SettingsShell slug={p.slug} /> })),
       { path: "servers/:id", element: <ServerPage /> },
+      // Layout renders the invite page itself, signed in or not.
+      { path: "invite", element: null },
     ],
   },
 ], {

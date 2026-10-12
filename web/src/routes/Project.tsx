@@ -27,6 +27,7 @@ import {
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAccess } from "@/lib/access";
 import { useTab } from "@/hooks/use-tab";
 import { dbFields, dbRef, envMap, envRows, envSecrets, formatBytes, liveState, sameEnv, type EnvRow } from "@/lib/format";
 import {
@@ -35,6 +36,7 @@ import {
   isDatabase,
   type DatabaseKind,
   type DatabaseRef,
+  type Perm,
   type Project as ProjectT,
   type Service as ServiceT,
   type ServiceInput,
@@ -57,6 +59,9 @@ export function Project() {
   const [tab, setTab] = useTab(["services", "map", "environment", "git", "settings"], "services");
   const git = useProjectGit(id);
   const gitManaged = !!git.data;
+  const { can } = useAccess();
+  const may = (p: Perm) => can(id, p);
+  const editable = !gitManaged && may("settings");
   const services = useQuery({
     queryKey: ["services", id],
     queryFn: () => api.services(id),
@@ -119,8 +124,8 @@ export function Project() {
                 </Tag>
               )}
               <ComposeDialog projectId={id} canImport={!gitManaged} />
-              {!gitManaged && <TemplateDialog projectId={id} />}
-              {!gitManaged && <NewServiceDialog projectId={id} />}
+              {editable && <TemplateDialog projectId={id} />}
+              {editable && <NewServiceDialog projectId={id} />}
             </>
           )
         }
@@ -150,8 +155,8 @@ export function Project() {
             <TabsTrigger value="services">Services</TabsTrigger>
             <TabsTrigger value="map">Map</TabsTrigger>
             <TabsTrigger value="environment">Environment</TabsTrigger>
-            <TabsTrigger value="git">Git</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
+            {may("git") && <TabsTrigger value="git">Git</TabsTrigger>}
+            {(may("settings") || may("backups") || may("delete")) && <TabsTrigger value="settings">Settings</TabsTrigger>}
           </TabsList>
           <TabsContent value="services" className="space-y-6">
             {services.error ? (
@@ -165,9 +170,11 @@ export function Project() {
                 description={
                   gitManaged
                     ? "The compose file lists none yet, or the first sync is running."
-                    : "Add an app from a Docker image, or a PostgreSQL database."
+                    : editable
+                      ? "Add an app from a Docker image, or a PostgreSQL database."
+                      : undefined
                 }
-                action={!gitManaged && <NewServiceDialog projectId={id} />}
+                action={editable && <NewServiceDialog projectId={id} />}
               />
             ) : (
               <>
@@ -180,14 +187,14 @@ export function Project() {
             {tab === "map" && <ProjectMap projectId={id} />}
           </TabsContent>
           <TabsContent value="environment" className="space-y-6">
-            {project.data && <SharedVariables key={project.data.id} project={project.data} />}
+            {project.data && <SharedVariables key={project.data.id} project={project.data} canEdit={may("env")} />}
             <DatabaseReferences dbs={dbs} />
           </TabsContent>
           <TabsContent value="git" className="space-y-6">
-            {tab === "git" && <GitSource projectId={id} />}
+            {tab === "git" && may("git") && <GitSource projectId={id} />}
           </TabsContent>
           <TabsContent value="settings" className="space-y-6">
-            {project.data && (
+            {project.data && may("settings") && (
               <RenameCard
                 key={project.data.name}
                 name={project.data.name}
@@ -196,7 +203,7 @@ export function Project() {
                 onRename={(name) => rename.mutate(name)}
               />
             )}
-            {hasBackups && (
+            {hasBackups && may("backups") && (
               <Section
                 title="Back up data"
                 description="Back up every database and app volume of the project now, to one storage."
@@ -210,7 +217,7 @@ export function Project() {
                 }
               />
             )}
-            {project.data && (
+            {project.data && may("delete") && (
               <DangerZone description="Deleting the project destroys all its containers, databases and volumes.">
                 <ConfirmDialog
                   trigger={
@@ -318,7 +325,7 @@ function ServiceCard({ svc: s }: { svc: ServiceT }) {
   );
 }
 
-function SharedVariables({ project }: { project: ProjectT }) {
+function SharedVariables({ project, canEdit }: { project: ProjectT; canEdit: boolean }) {
   const qc = useQueryClient();
   const [rows, setRows] = useState<EnvRow[]>(() => envRows(project.env, project.secrets));
   const dirty = !sameEnv(rows, project.env, project.secrets);
@@ -354,9 +361,12 @@ function SharedVariables({ project }: { project: ProjectT }) {
           onChange={setRows}
           passwordManagers
           description="An entry used by a service can't be removed."
+          readOnly={!canEdit}
         />
       </form>
-      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setRows(envRows(project.env, project.secrets))} />
+      {canEdit && (
+        <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setRows(envRows(project.env, project.secrets))} />
+      )}
     </Section>
   );
 }

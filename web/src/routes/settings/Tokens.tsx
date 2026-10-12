@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
+import { useAccess } from "@/lib/access";
 import { timeAgo } from "@/lib/format";
 import { api, type Scope } from "@/api";
 import { SettingsPage } from "./page";
@@ -24,6 +25,10 @@ const mcpCommand = (token: string) =>
 export function TokensPage() {
   const qc = useQueryClient();
   const tokens = useQuery({ queryKey: ["tokens"], queryFn: api.tokens });
+  const { admin } = useAccess();
+  // Admins see every user's tokens: name their owner.
+  const users = useQuery({ queryKey: ["users"], queryFn: api.users, enabled: admin });
+  const owner = (userId?: string) => users.data?.find((u) => u.id === userId)?.username;
   // The dialog lives here, not in the empty state: creating the first token
   // replaces the empty state, and the new token must stay on screen.
   const [creating, setCreating] = useState(false);
@@ -42,7 +47,14 @@ export function TokensPage() {
   return (
     <SettingsPage actions={!!tokens.data?.length && add}>
       <ErrorText error={tokens.error} />
-      <Section title="MCP endpoint" description="Where AI agents connect, with a token of the scope they need.">
+      <Section
+        title="MCP endpoint"
+        description={
+          admin
+            ? "Where AI agents connect, with a token of the scope they need."
+            : "Where AI agents connect. A token never does more than you may, whatever its scope."
+        }
+      >
         <CopyField value={`${window.location.origin}/mcp`} />
         <CopyField value={mcpCommand("<token>")} />
       </Section>
@@ -64,7 +76,10 @@ export function TokensPage() {
                     <s.icon />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{t.name}</p>
+                    <p className="truncate font-medium">
+                      {t.name}
+                      {admin && owner(t.userId) && <span className="font-normal text-muted-foreground"> · {owner(t.userId)}</span>}
+                    </p>
                     <p className="truncate text-xs text-muted-foreground">{s.description}</p>
                   </div>
                   <Tag>{s.label}</Tag>

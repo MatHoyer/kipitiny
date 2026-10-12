@@ -49,14 +49,18 @@ import { cn } from "@/lib/utils";
 import { Logo } from "@/components/logo";
 import { DemoBanner } from "@/demo/banner";
 import { api } from "../api";
-import { Login, Setup } from "./Auth";
-import { settingsGroups, settingsPages } from "./settings";
+import { useAccess } from "@/lib/access";
+import { AcceptInvite, Login, Setup } from "./Auth";
+import { settingsGroups, settingsPages, useSettingsAccess } from "./settings";
+import { invitePath } from "./settings/Users";
 
 export function Layout() {
   const auth = useQuery({ queryKey: ["auth"], queryFn: api.authState, staleTime: Infinity });
+  const { pathname } = useLocation();
 
   if (auth.isPending) return null;
   if (auth.error) return <p className="p-8 text-sm text-destructive">{auth.error.message}</p>;
+  if (pathname === invitePath) return <AcceptInvite signedIn={!!auth.data.user} />;
   if (auth.data.setupRequired) return <Setup />;
   if (!auth.data.user) return <Login />;
   return <App username={auth.data.user.username} />;
@@ -124,14 +128,16 @@ function SettingsNav() {
   const { pathname } = useLocation();
   const { setOpenMobile } = useSidebar();
   const status = useQuery({ queryKey: ["status"], queryFn: api.status });
-  return settingsGroups.map((group) => (
-    <SidebarGroup key={group}>
-      <SidebarGroupLabel>{group}</SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {settingsPages
-            .filter((p) => p.group === group)
-            .map(({ slug, label, icon: Icon, href }) => (
+  const allowed = useSettingsAccess();
+  return settingsGroups.map((group) => {
+    const pages = settingsPages.filter((p) => p.group === group && allowed(p));
+    if (!pages.length) return null;
+    return (
+      <SidebarGroup key={group}>
+        <SidebarGroupLabel>{group}</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {pages.map(({ slug, label, icon: Icon, href }) => (
               <SidebarMenuItem key={slug}>
                 {href ? (
                   <SidebarMenuButton asChild>
@@ -151,10 +157,11 @@ function SettingsNav() {
                 )}
               </SidebarMenuItem>
             ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
-  ));
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    );
+  });
 }
 
 const UPDATE_GIVE_UP_MS = 10 * 60_000;
@@ -246,6 +253,10 @@ function UpdateNotice() {
 function DockerStatus() {
   const status = useQuery({ queryKey: ["status"], queryFn: api.status, refetchInterval: 15_000 });
   const docker = status.data?.docker;
+  const { admin } = useAccess();
+  // Members get the version only: the server's state is the admins'.
+  if (!admin)
+    return <div className="truncate px-2 text-xs text-muted-foreground">{status.data && `kipitiny ${status.data.version}`}</div>;
   return (
     <Tip content={status.data?.dockerError}>
       <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground">

@@ -38,12 +38,13 @@ import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAccess } from "@/lib/access";
 import { FilesTab } from "@/components/files/files-tab";
 import { useTab } from "@/hooks/use-tab";
 import { byDay, envMap, envRows, envSecrets, formatBytes, formatCpu, formatDuration, sameEnv, serviceState, timeAgo, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { issueText, serviceIssue } from "@/components/topology";
-import { api, canBackup, databasePorts, databaseUrlKey, httpRouted, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type Service as ServiceT } from "../api";
+import { api, canBackup, databasePorts, databaseUrlKey, httpRouted, isDatabase, type Connection, type Container as ContainerT, type DatabaseKind, type Deployment, type Perm, type Service as ServiceT } from "../api";
 import { BackupList } from "./BackupList";
 import { Schedules } from "./Schedules";
 import { BackupNowDialog } from "@/components/backup-now-dialog";
@@ -76,6 +77,8 @@ export function Service() {
   const [tab, setTab] = useTab(["overview", "deployments", "logs", "terminal", "data", "files", "environment", "backups", "settings"], "overview");
   const git = useProjectGit(service.data?.projectId ?? "");
   const gitManaged = !!git.data;
+  const { can } = useAccess();
+  const may = (p: Perm) => can(service.data?.projectId, p);
 
   // Refresh containers as soon as a deploy finishes.
   const wasDeploying = useRef(false);
@@ -139,7 +142,7 @@ export function Service() {
         actions={
           <>
             <ComposeDialog projectId={svc.projectId} service={svc.name} />
-            {svc.containers.length > 0 && (
+            {svc.containers.length > 0 && may("deploy") && (
               <>
                 <Button variant="outline" size="sm" disabled={busy} onClick={() => action.mutate("restart")}>
                   <RotateCcw data-icon="inline-start" />
@@ -151,10 +154,12 @@ export function Service() {
                 </Button>
               </>
             )}
-            <Button size="sm" loading={deploying} disabled={busy} onClick={() => deploy.mutate()}>
-              <Rocket data-icon="inline-start" />
-              {deploying ? "Deploying" : "Deploy"}
-            </Button>
+            {may("deploy") && (
+              <Button size="sm" loading={deploying} disabled={busy} onClick={() => deploy.mutate()}>
+                <Rocket data-icon="inline-start" />
+                {deploying ? "Deploying" : "Deploy"}
+              </Button>
+            )}
           </>
         }
       />
@@ -174,7 +179,7 @@ export function Service() {
               <TriangleAlert className="mt-0.5 size-4 shrink-0" />
               <span>{problem.short === problem.text ? problem.text : `${problem.short}: ${problem.text}`}</span>
             </p>
-            {svc.routePending && (
+            {svc.routePending && may("deploy") && (
               <Button size="xs" variant="outline" loading={deploying} disabled={busy} onClick={() => deploy.mutate()} className="shrink-0">
                 <Rocket data-icon="inline-start" />
                 Deploy now
@@ -244,12 +249,12 @@ export function Service() {
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="deployments">Deployments</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
-            <TabsTrigger value="terminal">Terminal</TabsTrigger>
-            {isDb && <TabsTrigger value="data">Data</TabsTrigger>}
-            <TabsTrigger value="files">Files</TabsTrigger>
+            {may("terminal") && <TabsTrigger value="terminal">Terminal</TabsTrigger>}
+            {isDb && may("data") && <TabsTrigger value="data">Data</TabsTrigger>}
+            {may("files") && <TabsTrigger value="files">Files</TabsTrigger>}
             <TabsTrigger value="environment">Environment</TabsTrigger>
             {canBackup(svc) && <TabsTrigger value="backups">Backups</TabsTrigger>}
-            <TabsTrigger value="settings">Settings</TabsTrigger>
+            {(may("settings") || may("delete")) && <TabsTrigger value="settings">Settings</TabsTrigger>}
           </TabsList>
           <TabsContent value="overview" className="space-y-6">
             {svc.containers.length > 0 && <ServiceUsageSection serviceId={svc.id} />}
@@ -265,7 +270,7 @@ export function Service() {
                 </ul>
               )}
             </Section>
-            {isDatabase(svc.kind) && <ConnectionCard serviceId={svc.id} host={svc.name} kind={svc.kind} />}
+            {isDatabase(svc.kind) && may("env") && <ConnectionCard serviceId={svc.id} host={svc.name} kind={svc.kind} />}
           </TabsContent>
           <TabsContent value="deployments">
             {deployments.isPending ? (
@@ -282,24 +287,33 @@ export function Service() {
               <LiveLogs key={active.map((c) => c.id).join()} serviceId={id} name={svc.name} />
             )}
           </TabsContent>
-          <TabsContent value="terminal">
-            <ServiceTerminal svc={svc} />
-          </TabsContent>
-          {isDb && (
+          {may("terminal") && (
+            <TabsContent value="terminal">
+              <ServiceTerminal svc={svc} />
+            </TabsContent>
+          )}
+          {isDb && may("data") && (
             <TabsContent value="data">
               <DataTab svc={svc} />
             </TabsContent>
           )}
-          <TabsContent value="files">
-            <FilesTab svc={svc} onBackups={() => setTab("backups")} />
-          </TabsContent>
+          {may("files") && (
+            <TabsContent value="files">
+              <FilesTab svc={svc} onBackups={() => setTab("backups")} />
+            </TabsContent>
+          )}
           <TabsContent value="environment" className="flex flex-col gap-6">
             {gitManaged && <GitManagedNote path={git.data!.path} />}
-            <EnvironmentCard key={svc.id} svc={svc} gitManaged={gitManaged} />
+            <EnvironmentCard key={svc.id} svc={svc} gitManaged={gitManaged} canEdit={may("env")} />
           </TabsContent>
           {canBackup(svc) && (
             <TabsContent value="backups">
-              <BackupsCard serviceId={svc.id} kind={svc.kind} name={project.data ? `${project.data.name}/${svc.name}` : svc.name} />
+              <BackupsCard
+                serviceId={svc.id}
+                kind={svc.kind}
+                name={project.data ? `${project.data.name}/${svc.name}` : svc.name}
+                canBackUp={may("backups")}
+              />
             </TabsContent>
           )}
           <TabsContent value="settings">
@@ -308,34 +322,36 @@ export function Service() {
               projectName={project.data?.name}
               gitPath={git.data?.path}
               danger={
-                <DangerZone
-                  description={
-                    isDb
-                      ? "Deleting the database destroys its data volume."
-                      : hasData
-                        ? "Deleting the service removes its containers and destroys its volumes."
-                        : "Deleting the service removes its containers."
-                  }
-                >
-                  <ConfirmDialog
-                    trigger={
-                      <Button variant="destructive" size="sm" disabled={busy || (gitManaged && !svc.orphaned)}>
-                        <Trash2 data-icon="inline-start" />
-                        {isDb ? "Delete database" : "Delete service"}
-                      </Button>
-                    }
-                    title={isDb ? `Delete database ${svc.name}?` : `Delete service ${svc.name}?`}
+                may("delete") && (
+                  <DangerZone
                     description={
                       isDb
-                        ? "Its data volume will be destroyed."
+                        ? "Deleting the database destroys its data volume."
                         : hasData
-                          ? "Its containers are removed and its volumes destroyed."
-                          : "Its containers are removed."
+                          ? "Deleting the service removes its containers and destroys its volumes."
+                          : "Deleting the service removes its containers."
                     }
-                    typeToConfirm={hasData ? svc.name : undefined}
-                    onConfirm={(name) => remove.mutate(name)}
-                  />
-                </DangerZone>
+                  >
+                    <ConfirmDialog
+                      trigger={
+                        <Button variant="destructive" size="sm" disabled={busy || (gitManaged && !svc.orphaned)}>
+                          <Trash2 data-icon="inline-start" />
+                          {isDb ? "Delete database" : "Delete service"}
+                        </Button>
+                      }
+                      title={isDb ? `Delete database ${svc.name}?` : `Delete service ${svc.name}?`}
+                      description={
+                        isDb
+                          ? "Its data volume will be destroyed."
+                          : hasData
+                            ? "Its containers are removed and its volumes destroyed."
+                            : "Its containers are removed."
+                      }
+                      typeToConfirm={hasData ? svc.name : undefined}
+                      onConfirm={(name) => remove.mutate(name)}
+                    />
+                  </DangerZone>
+                )
               }
             />
           </TabsContent>
@@ -379,12 +395,12 @@ function ContainerRow({ serviceId, container: c }: { serviceId: string; containe
   );
 }
 
-function EnvironmentCard({ svc, gitManaged }: { svc: ServiceT; gitManaged: boolean }) {
+function EnvironmentCard({ svc, gitManaged, canEdit }: { svc: ServiceT; gitManaged: boolean; canEdit: boolean }) {
   const qc = useQueryClient();
   // A database's env is generated at creation: shown, never edited. A git
   // project's env is its compose file's.
   const isDb = isDatabase(svc.kind);
-  const readOnly = isDb || gitManaged;
+  const readOnly = isDb || gitManaged || !canEdit;
   const project = useQuery({ queryKey: ["project", svc.projectId], queryFn: () => api.project(svc.projectId), enabled: !isDb });
   const siblings = useQuery({ queryKey: ["services", svc.projectId], queryFn: () => api.services(svc.projectId), enabled: !isDb });
   const databases = siblings.data?.flatMap((s) => (isDatabase(s.kind) ? [{ name: s.name, kind: s.kind }] : []));
@@ -438,7 +454,17 @@ function EnvironmentCard({ svc, gitManaged }: { svc: ServiceT; gitManaged: boole
   );
 }
 
-function BackupsCard({ serviceId, name, kind }: { serviceId: string; name: string; kind: ServiceT["kind"] }) {
+function BackupsCard({
+  serviceId,
+  name,
+  kind,
+  canBackUp,
+}: {
+  serviceId: string;
+  name: string;
+  kind: ServiceT["kind"];
+  canBackUp: boolean;
+}) {
   const qc = useQueryClient();
   const targets = useQuery({ queryKey: ["storage"], queryFn: api.backupTargets });
   // A PostgreSQL instance may hold several databases; a backup picks one. Stopped: no list, the main one.
@@ -470,7 +496,9 @@ function BackupsCard({ serviceId, name, kind }: { serviceId: string; name: strin
   return (
     <Section
       plain
-      actions={<BackupNowDialog what={name} targets={targets.data ?? []} disabled={busy} onBackup={backup} databases={databases.data} />}
+      actions={
+        canBackUp && <BackupNowDialog what={name} targets={targets.data ?? []} disabled={busy} onBackup={backup} databases={databases.data} />
+      }
     >
       {lastRestore && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

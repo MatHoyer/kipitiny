@@ -379,7 +379,8 @@ export type ServerInput = {
 
 export type Scope = "read" | "deploy" | "admin";
 
-export type ApiToken = { id: string; name: string; scope: Scope; createdAt: string; lastUsedAt?: string };
+/** userId owns the token, which never does more than its owner may. */
+export type ApiToken = { id: string; name: string; scope: Scope; userId?: string; createdAt: string; lastUsedAt?: string };
 
 /** Credentials pulls from one registry host use; password reads back masked. */
 export type Registry = { id: string; host: string; username: string; password: string; createdAt: string };
@@ -407,14 +408,50 @@ export type AuditEntry = {
 
 export type LogLine = { container: string; time: string; text: string };
 
-export type User = { id: string; username: string; createdAt: string };
+export type Role = "admin" | "member";
+
+/** What a member may do in a project they were granted. Any of them implies view. */
+export const perms = [
+  "view", "deploy", "settings", "env", "domains", "backups", "restore", "download",
+  "data", "data-write", "files", "files-write", "terminal", "git", "delete",
+] as const;
+export type Perm = (typeof perms)[number];
+
+/** Server-level resources a member may see, read-only and without secrets. */
+export const features = [
+  "storage", "registries", "git-providers", "secret-providers", "servers", "networks", "notifications", "domains", "create-projects",
+] as const;
+export type Feature = (typeof features)[number];
+
+/** Project ID to a member's permissions there. */
+export type Grants = Record<string, Perm[]>;
+
+export type User = { id: string; username: string; role: Role; features: Feature[]; createdAt: string };
+
+export type UserView = User & { grants: Grants; totpEnabled: boolean };
+
+/** A role, and for a member their features and permissions per project. */
+export type UserAccess = { role: Role; features: Feature[]; grants: Grants };
+
+/** A single-use link that creates an account with this access. */
+export type Invite = UserAccess & { id: string; createdBy: string; createdAt: string; expiresAt: string };
+
+export type InviteInfo = { role: Role; expiresAt: string; projects: string[] };
 
 /** A password sign-in that still needs a TOTP or recovery code. */
 export type MfaChallenge = { mfaRequired: true; ticket: string };
 
 export type Passkey = { id: string; name: string; createdAt: string; lastUsedAt?: string };
 
-export type Account = { username: string; totpEnabled: boolean; recoveryCodes: number; passkeys: Passkey[] };
+export type Account = {
+  username: string;
+  totpEnabled: boolean;
+  recoveryCodes: number;
+  passkeys: Passkey[];
+  role: Role;
+  features: Feature[];
+  grants: Grants;
+};
 
 export type TotpSetup = { secret: string; uri: string };
 
@@ -959,6 +996,9 @@ export const api = {
     return request<User>("/auth/passkey/finish", json("POST", { ceremony, credential }));
   },
   logout: () => request<void>("/auth/logout", { method: "POST" }),
+  invite: (token: string) => request<InviteInfo>("/auth/invite", json("POST", { token })),
+  acceptInvite: (token: string, username: string, password: string) =>
+    request<User>("/auth/invite/accept", json("POST", { token, username, password })),
 
   account: () => request<Account>("/account"),
   changePassword: (current: string, password: string) => request<void>("/account/password", json("PUT", { current, password })),
@@ -1212,6 +1252,12 @@ export const api = {
     request<ApiToken & { token: string }>("/tokens", json("POST", { name, scope })),
   deleteToken: (id: string) => request<void>(`/tokens/${id}`, { method: "DELETE" }),
   audit: () => request<AuditEntry[]>("/audit?limit=200"),
+  users: () => request<UserView[]>("/users"),
+  setUserAccess: (id: string, a: UserAccess) => request<UserView>(`/users/${id}`, json("PUT", a)),
+  deleteUser: (id: string) => request<void>(`/users/${id}`, { method: "DELETE" }),
+  invites: () => request<Invite[]>("/invites"),
+  createInvite: (a: UserAccess) => request<Invite & { token: string }>("/invites", json("POST", a)),
+  deleteInvite: (id: string) => request<void>(`/invites/${id}`, { method: "DELETE" }),
 
   logsUrl: (serviceId: string, tail = 200) => `/api/services/${serviceId}/logs?tail=${tail}`,
   terminalUrl: (serviceId: string, container: string, shell: string) =>

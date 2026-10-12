@@ -6,6 +6,7 @@ import type {
   CleanupSettings,
   Deployment,
   Domain,
+  Invite,
   Network,
   NotificationChannel,
   Project,
@@ -14,6 +15,7 @@ import type {
   Schedule,
   Service,
   UptimeCheck,
+  UserView,
 } from "@/api";
 
 /*
@@ -44,6 +46,9 @@ export type DemoDb = {
   registries: Registry[];
   channels: NotificationChannel[];
   tokens: ApiToken[];
+  /** Added after version 3: seeded on first use (demoUsers). */
+  users?: UserView[];
+  invites?: Invite[];
   audit: AuditEntry[];
   cleanup: CleanupSettings;
 };
@@ -317,4 +322,20 @@ export function seed(): DemoDb {
     ],
     cleanup: { enabled: true, cron: "0 5 * * 0", minAgeHours: 24, images: "unused", volumes: "anonymous", buildCache: true, containers: true, networks: true, keepDeployments: 20 },
   };
+}
+
+/** The demo's users: you, an admin, and a member who may deploy acme. */
+export function demoUsers(): UserView[] {
+  return [
+    { id: "demo", username: "demo", role: "admin", features: [], grants: {}, totpEnabled: false, createdAt: at(30) },
+    {
+      id: "alice",
+      username: "alice",
+      role: "member",
+      features: ["storage"],
+      grants: { acme: ["view", "deploy", "backups"] },
+      totpEnabled: true,
+      createdAt: at(12),
+    },
+  ];
 }
