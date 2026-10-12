@@ -55,7 +55,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "list_projects", Annotations: readOnly,
 		Description: "List every project, including empty ones, with its server, service names and the git compose file it follows, if any."}, t.listProjects)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_manager_status", Annotations: readOnly,
-		Description: "The manager's version and available update, its Docker engine, and the current CPU, memory and network use of every running service."}, t.getManagerStatus)
+		Description: "The manager's version and available update, its Docker engine, its database size, and the current CPU, memory and network use of every running service."}, t.getManagerStatus)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_topology", Annotations: readOnly,
 		Description: "The network map of each server: entrypoints and the reverse proxy, Docker networks with subnets, and each project's containers with their IPs and aliases."}, t.getTopology)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_audit_log", Annotations: readOnly,

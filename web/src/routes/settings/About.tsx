@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpCircle, Container, ExternalLink, Package, RefreshCw } from "lucide-react";
+import { ArrowUpCircle, Container, Database, ExternalLink, Package, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ErrorText, IconTile, Loading, StatCard } from "@/components/common";
 import { Card } from "@/components/ui/card";
-import { timeAgo } from "@/lib/format";
+import { formatBytes, timeAgo } from "@/lib/format";
 import { api, type Status } from "@/api";
 import { SettingsPage } from "./page";
 
-/** The running version and Docker engine, with an on-demand check for a newer release. */
+/** The running version, Docker engine and database size, with an on-demand check for a newer release. */
 export function Version() {
   const qc = useQueryClient();
   const status = useQuery({ queryKey: ["status"], queryFn: api.status, refetchInterval: 15_000 });
@@ -33,7 +33,7 @@ export function Version() {
         !status.error && <Loading />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatCard
               icon={Package}
               label="kipitiny"
@@ -47,6 +47,12 @@ export function Version() {
               value={s.docker ? <span className="font-mono">{s.docker.version}</span> : "Unreachable"}
               hint={s.docker ? `API ${s.docker.apiVersion} · ${s.docker.os}/${s.docker.arch}` : s.dockerError}
               tone={s.docker ? undefined : "bad"}
+            />
+            <StatCard
+              icon={Database}
+              label="Database"
+              value={s.database ? formatBytes(s.database.sizeBytes + s.database.walBytes) : "—"}
+              hint={s.database && `SQLite, ${formatBytes(s.database.walBytes)} in the write-ahead log`}
             />
             <StatCard
               icon={RefreshCw}

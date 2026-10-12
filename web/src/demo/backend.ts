@@ -855,6 +855,7 @@ const routes: Route[] = [
       // An update is always on offer, to show its checks; installing it is refused.
       update: { current: "demo", latest: "demo-next", available: true, canApply: true, updating: false },
       docker: { version: "27.3.1", apiVersion: "1.47", os: "linux", arch: "amd64" },
+      database: { sizeBytes: 3_457_024, walBytes: 129_832 },
     }),
   ],
   ["POST", /^\/auth\/logout$/, () => undefined],
