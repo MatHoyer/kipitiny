@@ -487,6 +487,9 @@ export type CleanupResult = {
 export type Cleanup = {
   settings: CleanupSettings;
   running: boolean;
+  /** Where a running cleanup is at, on stepServer. */
+  step?: "connect" | "containers" | "images" | "buildcache" | "volumes" | "networks" | "deployments";
+  stepServer?: string;
   nextRun?: string;
   lastRun?: {
     trigger: "schedule" | "manual";

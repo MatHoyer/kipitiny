@@ -3,10 +3,12 @@ import { CalendarClock, HardDrive, History, Play, Server, Trash2 } from "lucide-
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { CheckboxField, ErrorText, Loading, Section, StatCard } from "@/components/common";
 import { CronField, cleanupPresets } from "@/components/cron-field";
+import { useLastStep } from "@/components/op-steps";
 import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
+import { Stepper, type Step } from "@/components/ui/stepper";
 import { Switch } from "@/components/ui/switch";
 import { formatBytes, formatDateTime, timeAgo } from "@/lib/format";
 import { api, type Cleanup as CleanupState, type CleanupResult, type CleanupSettings } from "@/api";
@@ -29,7 +31,7 @@ export function Cleanup() {
   const cleanup = useQuery({
     queryKey: ["cleanup"],
     queryFn: api.cleanup,
-    refetchInterval: (q) => (q.state.data?.running ? 2000 : false),
+    refetchInterval: (q) => (q.state.data?.running ? 1000 : false),
   });
   const [form, setForm] = useState<CleanupSettings | null>(null);
   useEffect(() => {
@@ -78,6 +80,7 @@ export function Cleanup() {
   return (
     <SettingsPage actions={actions}>
       <CleanupStats state={cleanup.data!} toggling={toggle.isPending} onToggle={(on) => toggle.mutate(on)} />
+      <CleanupProgress state={cleanup.data!} />
       <form id={formId} onSubmit={onSubmit} className="space-y-6">
         <Section title="Schedule" description="When the cleanup runs on its own, on every server, while the schedule is on.">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -231,4 +234,37 @@ function describe(s: CleanupResult): string {
   ];
   const parts = counts.filter(([n]) => n > 0).map(([n, one, many]) => `${n} ${n === 1 ? one : many}`);
   return parts.length ? parts.join(", ") : "nothing to remove";
+}
+
+/** A running cleanup step by step, kept checked off once it ends here (its results are under it). */
+function CleanupProgress({ state }: { state: CleanupState }) {
+  const seen = useLastStep(state.running, state.step);
+  const server = useLastStep(state.running, state.stepServer);
+  if (!state.running && !seen) return null;
+  const s = state.settings;
+  const on = server?.step ? ` on ${server.step}` : "";
+  const plan: (Step & { id: NonNullable<CleanupState["step"]>; when: boolean })[] = [
+    { id: "connect", title: "Reach Docker", hint: "Through SSH for remote servers", when: true },
+    { id: "containers", title: "Remove stopped containers", hint: "Only ones kipitiny didn't create", when: s.containers },
+    { id: "images", title: s.images === "unused" ? "Remove unused images" : "Remove dangling images", hint: "Your services' and their rollback images stay", when: s.images !== "off" },
+    { id: "buildcache", title: "Prune the build cache", hint: "Layers cached by Git builds", when: s.buildCache },
+    { id: "volumes", title: "Remove unmounted volumes", hint: "Database volumes always stay", when: true },
+    { id: "networks", title: "Remove unused networks", hint: "Only ones kipitiny didn't create", when: s.networks },
+    { id: "deployments", title: "Trim old deployments", hint: `Keeping the last ${s.keepDeployments} of each service`, when: s.keepDeployments > 0 },
+  ];
+  const steps = plan.filter((p) => p.when);
+  const step = state.step ?? seen?.step;
+  const failed = !state.running && !!state.lastRun?.error;
+  const current = state.running || failed ? Math.max(steps.findIndex((p) => p.id === step), 0) : steps.length;
+  return (
+    <Section title={state.running ? "Cleaning" : failed ? "Failed" : "Done"} description={state.running ? `On each server in turn${on ? `: now${on}` : ""}.` : "Its results are under Last run."}>
+      <Stepper
+        orientation="vertical"
+        steps={steps}
+        current={current}
+        busy={state.running}
+        failed={failed}
+      />
+    </Section>
+  );
 }

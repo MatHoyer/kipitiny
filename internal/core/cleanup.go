@@ -108,8 +108,11 @@ type CleanupResult struct {
 type CleanupView struct {
 	Settings CleanupSettings `json:"settings"`
 	Running  bool            `json:"running"`
-	NextRun  *time.Time      `json:"nextRun,omitempty"`
-	LastRun  *CleanupRun     `json:"lastRun,omitempty"`
+	// Step is where a running cleanup is at, on StepServer.
+	Step       string      `json:"step,omitempty"`
+	StepServer string      `json:"stepServer,omitempty"`
+	NextRun    *time.Time  `json:"nextRun,omitempty"`
+	LastRun    *CleanupRun `json:"lastRun,omitempty"`
 }
 
 func (c *Core) cleanupSettings(ctx context.Context) CleanupSettings {
@@ -122,6 +125,10 @@ func (c *Core) cleanupSettings(ctx context.Context) CleanupSettings {
 
 func (c *Core) Cleanup(ctx context.Context) CleanupView {
 	v := CleanupView{Settings: c.cleanupSettings(ctx), Running: c.cleaning.Load()}
+	if v.Running {
+		v.Step, _ = c.steps.get(cleanupKey)
+		v.StepServer = c.steps.detailOf(cleanupKey)
+	}
 	c.sched.mu.Lock()
 	if c.sched.cron != nil && c.sched.cleanup != 0 {
 		if next := c.sched.cron.Entry(c.sched.cleanup).Next; !next.IsZero() {
@@ -238,6 +245,7 @@ func (c *Core) startCleanup(ctx context.Context, trigger string, done chan<- str
 func (c *Core) runCleanup(s CleanupSettings, trigger string) {
 	ctx, cancel := context.WithTimeout(c.bg, time.Hour)
 	defer cancel()
+	defer c.steps.done(cleanupKey)
 	run := CleanupRun{Trigger: trigger, StartedAt: time.Now().UTC(), Servers: []CleanupResult{}}
 
 	servers, err := c.store.ListServers(ctx)
@@ -249,6 +257,7 @@ func (c *Core) runCleanup(s CleanupSettings, trigger string) {
 			run.Servers = append(run.Servers, c.cleanServer(ctx, sv, svcs, s))
 		}
 		if s.KeepDeployments > 0 {
+			c.steps.set(cleanupKey, CleanupDeployments)
 			run.Deployments = c.trimDeployments(ctx, svcs, s.KeepDeployments)
 		}
 	}
@@ -281,6 +290,8 @@ func (c *Core) cleanServer(ctx context.Context, sv store.Server, svcs []store.Se
 			r.Errors = append(r.Errors, fmt.Sprintf("%s: %v", what, err))
 		}
 	}
+	step := func(name string) { c.steps.setOn(cleanupKey, name, sv.Name) }
+	step(CleanupConnect)
 	if _, err := dk.Ping(ctx, client.PingOptions{}); err != nil {
 		fail("docker", err)
 		return r
@@ -288,11 +299,15 @@ func (c *Core) cleanServer(ctx context.Context, sv store.Server, svcs []store.Se
 
 	// Containers first: what they held becomes unused for the next steps.
 	if s.Containers {
+		step(CleanupContainers)
 		f := make(client.Filters).Add("until", until).Add("label!", docker.LabelManaged)
 		res, err := dk.ContainerPrune(ctx, client.ContainerPruneOptions{Filters: f})
 		fail("containers", err)
 		r.Containers += len(res.Report.ContainersDeleted)
 		r.Reclaimed += res.Report.SpaceReclaimed
+	}
+	if s.Images != CleanOff {
+		step(CleanupImages)
 	}
 	switch s.Images {
 	case CleanDangling:
@@ -308,12 +323,14 @@ func (c *Core) cleanServer(ctx context.Context, sv store.Server, svcs []store.Se
 		r.Reclaimed += size
 	}
 	if s.BuildCache {
+		step(CleanupBuildCache)
 		f := make(client.Filters).Add("until", until)
 		res, err := dk.BuildCachePrune(ctx, client.BuildCachePruneOptions{All: true, Filters: f})
 		fail("build cache", err)
 		r.BuildCache += len(res.Report.CachesDeleted)
 		r.Reclaimed += res.Report.SpaceReclaimed
 	}
+	step(CleanupVolumes) // stale probe volumes go even when volumes are off
 	if s.Volumes != CleanOff {
 		n, size, err := c.removeUnusedVolumes(ctx, dk, svcs, s.Volumes == CleanUnused, time.Duration(s.MinAgeHours)*time.Hour)
 		fail("volumes", err)
@@ -325,6 +342,7 @@ func (c *Core) cleanServer(ctx context.Context, sv store.Server, svcs []store.Se
 	fail("probe volumes", err)
 	r.Volumes += n
 	if s.Networks {
+		step(CleanupNetworks)
 		f := make(client.Filters).Add("until", until).Add("label!", docker.LabelManaged)
 		res, err := dk.NetworkPrune(ctx, client.NetworkPruneOptions{Filters: f})
 		fail("networks", err)
