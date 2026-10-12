@@ -230,34 +230,52 @@ func (c *Core) providerFor(scheme string) secrets.Provider {
 	return nil
 }
 
-func (c *Core) secretBrowser(ctx context.Context, id string) (secrets.Browser, error) {
+func (c *Core) secretBrowser(ctx context.Context, id string) (secrets.Provider, secrets.Browser, error) {
 	p, err := c.secretProvider(id)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	b, ok := p.(secrets.Browser)
 	if !ok {
-		return nil, fmt.Errorf("%w: %s can't list its items", ErrInvalid, p.Info().Name)
+		return nil, nil, fmt.Errorf("%w: %s can't list its items", ErrInvalid, p.Info().Name)
 	}
 	if !c.secretProviderView(ctx, p).Connected {
-		return nil, fmt.Errorf("%w: %s isn't connected", ErrInvalid, p.Info().Name)
+		return nil, nil, fmt.Errorf("%w: %s isn't connected", ErrInvalid, p.Info().Name)
 	}
-	return b, nil
+	return p, b, nil
+}
+
+// browseSecrets runs list, logging in again with the stored token and
+// retrying once if it fails, as resolveSecrets does: the session may have
+// expired since the last call.
+func browseSecrets[T any](ctx context.Context, c *Core, p secrets.Provider, list func() (T, error)) (T, error) {
+	v, err := list()
+	if err == nil {
+		return v, nil
+	}
+	token, _ := c.store.GetSetting(ctx, secretTokenSetting(p.Info().ID))
+	if lerr := p.Connect(ctx, token); lerr != nil {
+		return v, fmt.Errorf("%w: %v (logging in again: %v)", ErrInvalid, err, lerr)
+	}
+	if v, err = list(); err != nil {
+		return v, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	return v, nil
 }
 
 // SecretVaults lists the vaults the provider's token can read, from a
 // listing of the last few minutes unless refresh.
 func (c *Core) SecretVaults(ctx context.Context, id string, refresh bool) ([]string, error) {
-	b, err := c.secretBrowser(ctx, id)
+	p, b, err := c.secretBrowser(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if v, ok := c.secretListings.get(id, ""); ok && !refresh {
 		return v.([]string), nil
 	}
-	vs, err := b.Vaults(ctx)
+	vs, err := browseSecrets(ctx, c, p, func() ([]string, error) { return b.Vaults(ctx) })
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+		return nil, err
 	}
 	c.secretListings.put(id, "", vs)
 	return vs, nil
@@ -269,16 +287,16 @@ func (c *Core) SecretItems(ctx context.Context, id, vault string, refresh bool) 
 	if vault == "" {
 		return nil, fmt.Errorf("%w: vault is required", ErrInvalid)
 	}
-	b, err := c.secretBrowser(ctx, id)
+	p, b, err := c.secretBrowser(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if v, ok := c.secretListings.get(id, vault); ok && !refresh {
 		return v.([]secrets.Item), nil
 	}
-	items, err := b.Items(ctx, vault)
+	items, err := browseSecrets(ctx, c, p, func() ([]secrets.Item, error) { return b.Items(ctx, vault) })
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+		return nil, err
 	}
 	c.secretListings.put(id, vault, items)
 	return items, nil

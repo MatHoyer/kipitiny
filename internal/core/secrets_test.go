@@ -101,7 +101,7 @@ func TestResolveSecrets(t *testing.T) {
 	}
 }
 
-// fakeBrowser lists one vault, counting the calls.
+// fakeBrowser lists one vault once logged in, counting the calls.
 type fakeBrowser struct {
 	fakeProvider
 	lists int
@@ -109,11 +109,17 @@ type fakeBrowser struct {
 
 func (f *fakeBrowser) Vaults(context.Context) ([]string, error) {
 	f.lists++
+	if f.session == "" {
+		return nil, errors.New("not logged in")
+	}
 	return []string{"Work"}, nil
 }
 
 func (f *fakeBrowser) Items(_ context.Context, vault string) ([]secrets.Item, error) {
 	f.lists++
+	if f.session == "" {
+		return nil, errors.New("not logged in")
+	}
 	return []secrets.Item{{Title: vault + "-item"}}, nil
 }
 
@@ -148,5 +154,11 @@ func TestSecretListingsCache(t *testing.T) {
 	}
 	if _, err := c.SecretVaults(ctx, "fake", false); err != nil || fake.lists != 4 {
 		t.Errorf("after login: %v, %d lists", err, fake.lists)
+	}
+	// An expired session logs in again with the stored token.
+	fake.session = ""
+	logins := fake.logins
+	if items, err := c.SecretItems(ctx, "fake", "Work", true); err != nil || len(items) != 1 || fake.logins != logins+1 {
+		t.Errorf("expired session: %v, %v, %d logins", items, err, fake.logins-logins)
 	}
 }
