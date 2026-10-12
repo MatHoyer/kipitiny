@@ -1128,8 +1128,11 @@ export const api = {
   restores: (serviceId: string) => request<Restore[]>(`/services/${serviceId}/restores`),
 
   servers: () => request<Server[]>("/servers"),
-  createServer: (s: ServerInput) => request<Server>("/servers", json("POST", s)),
-  updateServer: (id: string, s: ServerInput) => request<Server>(`/servers/${id}`, json("PUT", s)),
+  /** With onStep, reports each step of reaching and preparing the server as it starts. */
+  createServer: (s: ServerInput, onStep?: (step: string) => void) =>
+    onStep ? progress<Server>("/servers", json("POST", s), onStep) : request<Server>("/servers", json("POST", s)),
+  updateServer: (id: string, s: ServerInput, onStep?: (step: string) => void) =>
+    onStep ? progress<Server>(`/servers/${id}`, json("PUT", s), onStep) : request<Server>(`/servers/${id}`, json("PUT", s)),
   deleteServer: (id: string) => request<void>(`/servers/${id}`, { method: "DELETE" }),
   networks: () => request<Network[]>("/networks"),
   createNetwork: (n: { serverId: string; name: string }) => request<Network>("/networks", json("POST", n)),

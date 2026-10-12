@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/MatHoyer/kipitiny/internal/core"
@@ -20,6 +21,10 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
+	if r.URL.Query().Has("progress") {
+		a.progress(w, r, func(ctx context.Context) (any, error) { return a.core.CreateServer(ctx, in) })
+		return
+	}
 	sv, err := a.core.CreateServer(r.Context(), in)
 	if err != nil {
 		a.fail(w, err)
@@ -31,6 +36,10 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 func (a *API) updateServer(w http.ResponseWriter, r *http.Request) {
 	var in core.ServerInput
 	if !decode(w, r, &in) {
+		return
+	}
+	if r.URL.Query().Has("progress") {
+		a.progress(w, r, func(ctx context.Context) (any, error) { return a.core.UpdateServer(ctx, r.PathValue("id"), in) })
 		return
 	}
 	sv, err := a.core.UpdateServer(r.Context(), r.PathValue("id"), in)

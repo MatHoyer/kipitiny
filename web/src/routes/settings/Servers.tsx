@@ -28,6 +28,7 @@ import {
 } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { HowTo } from "@/components/how-to";
+import { StepsProgress, type PlannedStep } from "@/components/test-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { SaveBar } from "@/components/save-bar";
 import { memoryOf, useUsage } from "@/components/usage";
@@ -283,11 +284,16 @@ function useServerForm(server: Server | null, onSaved: (s: Server) => void) {
   };
   const [form, setForm] = useState(initial);
   const [resetHostKey, setResetHostKey] = useState(false);
+  // Steps the manager reported while reaching and preparing the server.
+  const [seen, setSeen] = useState<string[]>([]);
   const save = useMutation({
-    meta: { error: "Couldn't save the server" },
+    // A new server's dialog shows where it failed instead.
+    meta: { error: server ? "Couldn't save the server" : false },
     mutationFn: () => {
       const input: ServerInput = { ...form, port: Number(form.port) || 22, resetHostKey };
-      return server ? api.updateServer(server.id, input) : api.createServer(input);
+      const onStep = (s: string) => setSeen((prev) => [...prev, s]);
+      setSeen([]);
+      return server ? api.updateServer(server.id, input, onStep) : api.createServer(input, onStep);
     },
     onSuccess: (s) => {
       qc.invalidateQueries({ queryKey: ["servers"] });
@@ -300,8 +306,16 @@ function useServerForm(server: Server | null, onSaved: (s: Server) => void) {
     setForm(initial);
     setResetHostKey(false);
   };
-  return { form, setForm, resetHostKey, setResetHostKey, save, dirty, reset };
+  return { form, setForm, resetHostKey, setResetHostKey, save, seen, dirty, reset };
 }
+
+/** What adding or saving a server does, as the manager reports it. */
+const serverPlan: PlannedStep[] = [
+  { id: "connect", title: "Connect over SSH", hint: "Pins the server's host key the first time, then asks Docker for its version" },
+  { id: "network", title: "Create the proxy network", hint: "Shared by the apps and the reverse proxy" },
+  { id: "traefik", title: "Start Traefik", hint: "The reverse proxy serving the apps' domains" },
+  { id: "tunnel", title: "Start the Cloudflare tunnel", hint: "Only when the server is reached through one" },
+];
 
 /** What the server needs before the manager can reach it, step by step. */
 function SshSetup() {
@@ -408,6 +422,7 @@ function NewServerDialog() {
     e.preventDefault();
     f.save.mutate();
   };
+  const started = f.save.isPending || !!f.save.error;
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -422,8 +437,14 @@ function NewServerDialog() {
             <DialogTitle>New server</DialogTitle>
             <DialogDescription>A Docker host reached over SSH.</DialogDescription>
           </DialogHeader>
-          <SshSetup />
+          {(!started || f.save.error) && <SshSetup />}
           <ServerFields f={f} autoFocus />
+          {started && (
+            <div className="grid gap-2.5 rounded-lg border bg-muted/30 p-3 animate-in fade-in slide-in-from-top-1">
+              <p className="text-xs font-medium text-muted-foreground">{f.save.isPending ? "Connecting…" : "Couldn't add it."}</p>
+              <StepsProgress plan={serverPlan} seen={f.seen} running={f.save.isPending} done={false} error={f.save.error} accent="#2496ED" />
+            </div>
+          )}
           <DialogFooter>
             <Button type="submit" loading={f.save.isPending}>
               Add server
