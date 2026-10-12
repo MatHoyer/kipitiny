@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronLeft, CircleHelp, KeyRound, PlugZap, Plus, RotateCw } from "lucide-react";
-import { cn } from "cn";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { ChevronLeft, KeyRound, PlugZap, Plus, RotateCw } from "lucide-react";
+import { useState, type FormEvent } from "react";
 import { passwordManagerIcon as iconFor } from "@/components/brand-icons";
-import { ChoiceTile, CopyField, EmptyState, ErrorText, Mono, Tag, withCode } from "@/components/common";
+import { ChoiceTile, EmptyState, ErrorText, Mono, Tag, withCode } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { HowTo } from "@/components/how-to";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -16,9 +16,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FloatingInput } from "@/components/ui/floating-input";
-import { Stepper, type Step } from "@/components/ui/stepper";
+import { Stepper } from "@/components/ui/stepper";
 import { api, type SecretProvider, type SecretStep } from "@/api";
 import { SettingsPage } from "./page";
 
@@ -292,62 +291,32 @@ function ProtonPassConnect({
   );
 }
 
-/** How to get a Proton Pass token, folded away: copying a step's command moves on to the next. */
+/** How to get a Proton Pass token: commands to run on your computer. */
 function TokenGuide() {
-  const [open, setOpen] = useState(false);
-  const [done, setDone] = useState(0);
   const [vault, setVault] = useState("");
-  const copied = (i: number) => setDone((d) => Math.max(d, i + 1));
-  const steps: Step[] = [
-    {
-      title: "Sign in to the Proton Pass CLI",
-      hint: (
-        <Guide text="On your computer, with your Proton account. Your password stays there.">
-          <CopyField value={proton.login} onCopy={() => copied(0)} />
-        </Guide>
-      ),
-    },
-    {
-      title: "Create a token for kipitiny",
-      hint: (
-        <Guide text={<>It prints a token starting with <Mono>pst_</Mono>: paste it above.</>}>
-          <CopyField value={proton.create} onCopy={() => copied(1)} />
-        </Guide>
-      ),
-    },
-    {
-      title: "Grant it your vaults",
-      hint: (
-        <Guide text="Once per vault it may read. Without it, the token sees nothing.">
-          <FloatingInput label="Vault name" autoComplete="off" value={vault} onChange={(e) => setVault(e.target.value)} />
-          <CopyField value={proton.grant(vault.trim())} onCopy={() => copied(2)} />
-        </Guide>
-      ),
-    },
-  ];
-
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger asChild>
-        <Button type="button" variant="link" size="sm" className="h-auto px-0 text-muted-foreground">
-          <CircleHelp data-icon="inline-start" />
-          How do I get a token?
-          <ChevronDown data-icon="inline-end" className={cn("transition-transform", open && "rotate-180")} />
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <Stepper orientation="vertical" steps={steps} current={done} accent={proton.accent} className="pt-3" />
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-function Guide({ text, children }: { text: ReactNode; children: ReactNode }) {
-  return (
-    <div className="grid gap-2 pt-0.5">
-      <p>{text}</p>
-      {children}
-    </div>
+    <HowTo
+      label="How do I get a token?"
+      accent={proton.accent}
+      steps={[
+        { title: "Sign in to the Proton Pass CLI", text: "On your computer, with your Proton account. Your password stays there.", copy: proton.login },
+        {
+          title: "Create a token for kipitiny",
+          text: (
+            <>
+              It prints a token starting with <Mono>pst_</Mono>: paste it above.
+            </>
+          ),
+          copy: proton.create,
+        },
+        {
+          title: "Grant it your vaults",
+          text: "Once per vault it may read. Without it, the token sees nothing.",
+          extra: <FloatingInput label="Vault name" autoComplete="off" value={vault} onChange={(e) => setVault(e.target.value)} />,
+          copy: proton.grant(vault.trim()),
+        },
+      ]}
+    />
   );
 }
 

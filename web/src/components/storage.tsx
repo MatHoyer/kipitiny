@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { BackupTarget } from "@/api";
 import { AmazonS3Icon, BackblazeIcon, CloudflareIcon, HetznerIcon } from "@/components/brand-icons";
 import { Mono } from "@/components/common";
+import type { HowToStep } from "@/components/how-to";
 
 /**
  * A well-known S3 provider: the form asks for its location (account,
@@ -37,6 +38,10 @@ export type StorageProvider = {
   };
   accessKey: string;
   secretKey: string;
+  /** Brand color, tinting the guide. */
+  accent?: string;
+  /** How to set up the bucket and its keys, for a given bucket name. */
+  guide?: (bucket: string) => HowToStep[];
 };
 
 const parser = (re: RegExp) => (endpoint: string) => {
@@ -47,6 +52,7 @@ const parser = (re: RegExp) => (endpoint: string) => {
 export const storageProviders: StorageProvider[] = [
   {
     id: "r2",
+    accent: "#F38020",
     label: "Cloudflare R2",
     icon: <CloudflareIcon className="text-[#F38020]" />,
     description: "Cloudflare's object storage, no egress fees.",
@@ -76,9 +82,34 @@ export const storageProviders: StorageProvider[] = [
     },
     accessKey: "Access Key ID",
     secretKey: "Secret Access Key",
+    guide: () => [
+      {
+        title: "Create the bucket",
+        text: "In R2 Object Storage, create a bucket. Its jurisdiction (default, EU, FedRAMP) is the one to pick below.",
+        link: { href: "https://dash.cloudflare.com/?to=/:account/r2/overview", label: "Open R2" },
+      },
+      {
+        title: "Create an API token",
+        text: (
+          <>
+            R2 › Manage API tokens › Create API token, with the <Mono>Object Read & Write</Mono> permission, applied to this bucket only.
+          </>
+        ),
+      },
+      {
+        title: "Copy its keys",
+        text: (
+          <>
+            Cloudflare shows the Access Key ID and Secret Access Key once. The Account ID is the first part of the S3 endpoint it shows,{" "}
+            <Mono>https://ACCOUNT_ID.r2.cloudflarestorage.com</Mono>.
+          </>
+        ),
+      },
+    ],
   },
   {
     id: "aws",
+    accent: "#569A31",
     label: "AWS S3",
     icon: <AmazonS3Icon className="text-[#569A31]" />,
     description: "Amazon S3, in any region.",
@@ -100,9 +131,31 @@ export const storageProviders: StorageProvider[] = [
     },
     accessKey: "Access key ID",
     secretKey: "Secret access key",
+    guide: (bucket) => [
+      {
+        title: "Create the bucket",
+        text: "In the S3 console, create a bucket with public access blocked. Its region goes below.",
+        link: { href: "https://console.aws.amazon.com/s3/bucket/create", label: "Create a bucket" },
+      },
+      {
+        title: "Create a user for kipitiny",
+        text: (
+          <>
+            In IAM › Users, create a user without console access and add this inline policy{bucket ? "" : <> (type the bucket below to fill it in)</>}.
+          </>
+        ),
+        link: { href: "https://console.aws.amazon.com/iam/home#/users/create", label: "Create a user" },
+        copy: awsPolicy(bucket || "BUCKET"),
+      },
+      {
+        title: "Create an access key",
+        text: "On the user, Security credentials › Create access key, for an application running outside AWS. The secret shows once.",
+      },
+    ],
   },
   {
     id: "b2",
+    accent: "#E21E29",
     label: "Backblaze B2",
     icon: <BackblazeIcon className="text-[#E21E29]" />,
     description: "Low-cost storage, S3-compatible API.",
@@ -123,9 +176,27 @@ export const storageProviders: StorageProvider[] = [
     },
     accessKey: "keyID",
     secretKey: "applicationKey",
+    guide: () => [
+      {
+        title: "Create the bucket",
+        text: (
+          <>
+            A private bucket. Its card shows the endpoint, <Mono>s3.REGION.backblazeb2.com</Mono>: the region goes below.
+          </>
+        ),
+        link: { href: "https://secure.backblaze.com/b2_buckets.htm", label: "Open Buckets" },
+      },
+      {
+        title: "Add an application key",
+        text: "In Application Keys, add one allowed access to this bucket only, with Read and Write.",
+        link: { href: "https://secure.backblaze.com/app_keys.htm", label: "Open Application Keys" },
+      },
+      { title: "Copy its keys", text: "Backblaze shows the keyID and applicationKey once." },
+    ],
   },
   {
     id: "hetzner",
+    accent: "#D50C2D",
     label: "Hetzner",
     icon: <HetznerIcon className="text-[#D50C2D]" />,
     description: "Hetzner Object Storage, in Europe.",
@@ -141,6 +212,15 @@ export const storageProviders: StorageProvider[] = [
     },
     accessKey: "Access key",
     secretKey: "Secret key",
+    guide: () => [
+      {
+        title: "Create the bucket",
+        text: "In your project's Object Storage, create a bucket. Its location goes below.",
+        link: { href: "https://console.hetzner.com/", label: "Open the Console" },
+      },
+      { title: "Generate S3 credentials", text: "Security › S3 credentials › Generate credentials." },
+      { title: "Copy its keys", text: "The Console shows the secret key once." },
+    ],
   },
   {
     id: "other",
@@ -192,4 +272,15 @@ export function storageLocation(t: BackupTarget) {
     case "s3":
       return `${t.useSsl ? "https" : "http"}://${t.endpoint}/${t.bucket}/${t.prefix}`;
   }
+}
+
+/** The least an IAM user needs on bucket: list it, read, write and delete its objects. */
+function awsPolicy(bucket: string) {
+  return JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      { Effect: "Allow", Action: "s3:ListBucket", Resource: `arn:aws:s3:::${bucket}` },
+      { Effect: "Allow", Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], Resource: `arn:aws:s3:::${bucket}/*` },
+    ],
+  });
 }

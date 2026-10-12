@@ -3,6 +3,7 @@ import { ChevronLeft, KeyRound, Lock, Pencil, Plus, Trash2 } from "lucide-react"
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { CheckboxField, ChoiceTile, CopyField, ErrorText, Mono, Tag, TestButton } from "@/components/common";
+import { HowTo } from "@/components/how-to";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -246,6 +247,7 @@ function TargetForm({
         </DialogTitle>
         <DialogDescription>{p.help} A test file is written and deleted before saving.</DialogDescription>
       </DialogHeader>
+      {!target && p.guide && <HowTo label="How do I set it up?" accent={p.accent} steps={p.guide(form.bucket.trim())} />}
       <div className="grid gap-4 sm:grid-cols-2">
         <FloatingInput label="Name" required autoFocus value={form.name} onChange={set("name")} placeholder="offsite" />
         {loc?.options ? (
