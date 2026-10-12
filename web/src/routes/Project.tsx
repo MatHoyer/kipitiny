@@ -54,7 +54,7 @@ export function Project() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const project = useQuery({ queryKey: ["project", id], queryFn: () => api.project(id) });
-  const [tab, setTab] = useTab(["map", "services", "environment", "git", "settings"], "map");
+  const [tab, setTab] = useTab(["services", "map", "environment", "git", "settings"], "services");
   const git = useProjectGit(id);
   const gitManaged = !!git.data;
   const services = useQuery({
@@ -146,8 +146,8 @@ export function Project() {
         )}
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList variant="line">
-            <TabsTrigger value="map">Map</TabsTrigger>
             <TabsTrigger value="services">Services</TabsTrigger>
+            <TabsTrigger value="map">Map</TabsTrigger>
             <TabsTrigger value="environment">Environment</TabsTrigger>
             <TabsTrigger value="git">Git</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
