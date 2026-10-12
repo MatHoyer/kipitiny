@@ -380,11 +380,134 @@ func (s *Store) CountUsers(ctx context.Context) (int, error) {
 }
 
 func (s *Store) CreateUser(ctx context.Context, u store.User) (store.User, error) {
+	return createUser(ctx, s.db, u)
+}
+
+func createUser(ctx context.Context, db bun.IDB, u store.User) (store.User, error) {
 	u.ID, u.CreatedAt = ids.New(), now()
-	if _, err := s.db.NewInsert().Model(&u).Exec(ctx); err != nil {
+	if u.Role == "" {
+		u.Role = store.RoleMember
+	}
+	if u.Features == nil {
+		u.Features = []string{}
+	}
+	if _, err := db.NewInsert().Model(&u).Exec(ctx); err != nil {
 		return store.User{}, mapErr(err)
 	}
 	return u, nil
+}
+
+func (s *Store) ListUsers(ctx context.Context) ([]store.User, error) {
+	us := []store.User{}
+	err := s.db.NewSelect().Model(&us).Order("created_at", "id").Scan(ctx)
+	return us, mapErr(err)
+}
+
+func (s *Store) UpdateUserAccess(ctx context.Context, id string, role store.Role, features []string) (store.User, error) {
+	if features == nil {
+		features = []string{}
+	}
+	u := store.User{ID: id, Role: role, Features: features}
+	res, err := s.db.NewUpdate().Model(&u).Column("role", "features").WherePK().Exec(ctx)
+	if err != nil {
+		return store.User{}, mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.User{}, store.ErrNotFound
+	}
+	return s.GetUser(ctx, id)
+}
+
+func (s *Store) DeleteUser(ctx context.Context, id string) error {
+	return deleteByID(ctx, s.db, "users", id)
+}
+
+func (s *Store) DeleteUserSessions(ctx context.Context, userID string) error {
+	_, err := s.db.NewDelete().Model((*store.Session)(nil)).Where("user_id = ?", userID).Exec(ctx)
+	return mapErr(err)
+}
+
+func (s *Store) ListGrants(ctx context.Context, userID string) ([]store.ProjectGrant, error) {
+	gs := []store.ProjectGrant{}
+	err := s.db.NewSelect().Model(&gs).Where("user_id = ?", userID).Order("created_at").Scan(ctx)
+	return gs, mapErr(err)
+}
+
+func (s *Store) SetGrant(ctx context.Context, g store.ProjectGrant) error {
+	return setGrant(ctx, s.db, g)
+}
+
+func setGrant(ctx context.Context, db bun.IDB, g store.ProjectGrant) error {
+	if len(g.Perms) == 0 {
+		_, err := db.NewDelete().Model((*store.ProjectGrant)(nil)).
+			Where("user_id = ? AND project_id = ?", g.UserID, g.ProjectID).Exec(ctx)
+		return mapErr(err)
+	}
+	g.CreatedAt = now()
+	_, err := db.NewInsert().Model(&g).On("CONFLICT (user_id, project_id) DO UPDATE").Set("perms = EXCLUDED.perms").Exec(ctx)
+	return mapErr(err)
+}
+
+func (s *Store) CreateInvite(ctx context.Context, i store.Invite) (store.Invite, error) {
+	i.ID, i.CreatedAt, i.UsedAt = ids.New(), now(), nil
+	if i.Features == nil {
+		i.Features = []string{}
+	}
+	if i.Grants == nil {
+		i.Grants = map[string][]string{}
+	}
+	if _, err := s.db.NewInsert().Model(&i).Exec(ctx); err != nil {
+		return store.Invite{}, mapErr(err)
+	}
+	return i, nil
+}
+
+func (s *Store) ListInvites(ctx context.Context) ([]store.Invite, error) {
+	is := []store.Invite{}
+	err := s.db.NewSelect().Model(&is).Where("used_at IS NULL AND expires_at > ?", now()).Order("created_at DESC").Scan(ctx)
+	return is, mapErr(err)
+}
+
+func (s *Store) GetInviteByHash(ctx context.Context, hash string) (store.Invite, error) {
+	var i store.Invite
+	err := s.db.NewSelect().Model(&i).Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", hash, now()).Scan(ctx)
+	return i, mapErr(err)
+}
+
+func (s *Store) AcceptInvite(ctx context.Context, inviteID string, u store.User) (store.User, error) {
+	var created store.User
+	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		var i store.Invite
+		res, err := tx.NewUpdate().Model(&i).Set("used_at = ?", now()).
+			Where("id = ? AND used_at IS NULL AND expires_at > ?", inviteID, now()).Returning("*").Exec(ctx)
+		if err != nil {
+			return mapErr(err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return store.ErrNotFound
+		}
+		u.Role, u.Features = i.Role, i.Features
+		if created, err = createUser(ctx, tx, u); err != nil {
+			return err
+		}
+		for projectID, perms := range i.Grants {
+			// A project deleted since the invite was made is skipped.
+			if exists, err := tx.NewSelect().Table("projects").Where("id = ?", projectID).Exists(ctx); err != nil {
+				return mapErr(err)
+			} else if !exists {
+				continue
+			}
+			if err := setGrant(ctx, tx, store.ProjectGrant{UserID: created.ID, ProjectID: projectID, Perms: perms}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return created, err
+}
+
+func (s *Store) DeleteInvite(ctx context.Context, id string) error {
+	return deleteByID(ctx, s.db, "invites", id)
 }
 
 func (s *Store) GetUser(ctx context.Context, id string) (store.User, error) {
@@ -779,9 +902,13 @@ func (s *Store) CreateAPIToken(ctx context.Context, t store.APIToken) (store.API
 	return t, nil
 }
 
-func (s *Store) ListAPITokens(ctx context.Context) ([]store.APIToken, error) {
+func (s *Store) ListAPITokens(ctx context.Context, userID string) ([]store.APIToken, error) {
 	ts := []store.APIToken{}
-	err := s.db.NewSelect().Model(&ts).Order("created_at DESC").Scan(ctx)
+	q := s.db.NewSelect().Model(&ts).Order("created_at DESC")
+	if userID != "" {
+		q = q.Where("user_id = ?", userID)
+	}
+	err := q.Scan(ctx)
 	return ts, mapErr(err)
 }
 

@@ -95,7 +95,7 @@ func (c *Core) Setup(ctx context.Context, setupToken, username, password string)
 	if err != nil {
 		return store.User{}, "", err
 	}
-	u, err := c.store.CreateUser(ctx, store.User{Username: username, PasswordHash: string(hash)})
+	u, err := c.store.CreateUser(ctx, store.User{Username: username, PasswordHash: string(hash), Role: store.RoleAdmin})
 	if err != nil {
 		return store.User{}, "", err
 	}

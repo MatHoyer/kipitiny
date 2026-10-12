@@ -74,7 +74,7 @@ func (c *Core) CreateAPIToken(ctx context.Context, name string, scope store.Scop
 }
 
 func (c *Core) ListAPITokens(ctx context.Context) ([]store.APIToken, error) {
-	return c.store.ListAPITokens(ctx)
+	return c.store.ListAPITokens(ctx, "")
 }
 
 func (c *Core) DeleteAPIToken(ctx context.Context, id string) error {

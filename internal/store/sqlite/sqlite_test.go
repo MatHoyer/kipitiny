@@ -209,6 +209,99 @@ func TestUsersAndSessions(t *testing.T) {
 	}
 }
 
+func TestUserAccessAndInvites(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+
+	admin, err := s.CreateUser(ctx, store.User{Username: "admin", PasswordHash: "x", Role: store.RoleAdmin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.CreateProject(ctx, store.Project{Name: "shop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv, err := s.CreateInvite(ctx, store.Invite{
+		TokenHash: "inv", Role: store.RoleMember, Features: []string{"storage"},
+		Grants:    map[string][]string{p.ID: {"view", "deploy"}, "gone": {"view"}},
+		CreatedBy: admin.ID, ExpiresAt: time.Now().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateInvite(ctx, store.Invite{TokenHash: "old", Role: store.RoleMember, ExpiresAt: time.Now().Add(-time.Second)}); err != nil {
+		t.Fatal(err)
+	}
+	if is, err := s.ListInvites(ctx); err != nil || len(is) != 1 || is[0].ID != inv.ID {
+		t.Fatalf("invites: %+v %v", is, err)
+	}
+	if _, err := s.GetInviteByHash(ctx, "old"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("expired invite: %v", err)
+	}
+	got, err := s.GetInviteByHash(ctx, "inv")
+	if err != nil || got.Grants[p.ID][1] != "deploy" {
+		t.Fatalf("invite by hash: %+v %v", got, err)
+	}
+
+	m, err := s.AcceptInvite(ctx, inv.ID, store.User{Username: "alice", PasswordHash: "y"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Role != store.RoleMember || len(m.Features) != 1 {
+		t.Fatalf("member: %+v", m)
+	}
+	if _, err := s.AcceptInvite(ctx, inv.ID, store.User{Username: "bob", PasswordHash: "y"}); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("invite reused: %v", err)
+	}
+	gs, err := s.ListGrants(ctx, m.ID)
+	if err != nil || len(gs) != 1 || gs[0].ProjectID != p.ID || len(gs[0].Perms) != 2 {
+		t.Fatalf("grants: %+v %v", gs, err)
+	}
+
+	if err := s.SetGrant(ctx, store.ProjectGrant{UserID: m.ID, ProjectID: p.ID, Perms: []string{"view"}}); err != nil {
+		t.Fatal(err)
+	}
+	if gs, _ := s.ListGrants(ctx, m.ID); len(gs) != 1 || len(gs[0].Perms) != 1 {
+		t.Fatalf("replaced grant: %+v", gs)
+	}
+	if err := s.SetGrant(ctx, store.ProjectGrant{UserID: m.ID, ProjectID: p.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if gs, _ := s.ListGrants(ctx, m.ID); len(gs) != 0 {
+		t.Fatalf("grant without permissions should be gone: %+v", gs)
+	}
+
+	u, err := s.UpdateUserAccess(ctx, m.ID, store.RoleAdmin, nil)
+	if err != nil || u.Role != store.RoleAdmin || u.Features == nil {
+		t.Fatalf("update access: %+v %v", u, err)
+	}
+	if us, err := s.ListUsers(ctx); err != nil || len(us) != 2 || us[0].ID != admin.ID {
+		t.Fatalf("users: %+v %v", us, err)
+	}
+
+	if _, err := s.CreateAPIToken(ctx, store.APIToken{Name: "a", TokenHash: "t1", Scope: store.ScopeRead, UserID: admin.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateAPIToken(ctx, store.APIToken{Name: "m", TokenHash: "t2", Scope: store.ScopeRead, UserID: m.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if ts, _ := s.ListAPITokens(ctx, m.ID); len(ts) != 1 || ts[0].Name != "m" {
+		t.Fatalf("member tokens: %+v", ts)
+	}
+	if err := s.CreateSession(ctx, store.Session{TokenHash: "sess", UserID: m.ID, ExpiresAt: time.Now().Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteUser(ctx, m.ID); err != nil {
+		t.Fatal(err)
+	}
+	if ts, _ := s.ListAPITokens(ctx, ""); len(ts) != 1 {
+		t.Fatalf("deleting a user deletes their tokens: %+v", ts)
+	}
+	if _, err := s.GetSession(ctx, "sess"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("deleting a user deletes their sessions: %v", err)
+	}
+}
+
 func TestBackups(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
