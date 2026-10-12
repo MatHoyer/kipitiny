@@ -36,8 +36,12 @@ func feature(f core.Feature) access   { return access{feature: f} }
 // Core checks what depends on the request body (env and domains in a
 // service change, write mode in the data console, template installs).
 var routeAccess = map[string]access{
-	"POST /api/auth/logout":                 anyone,
-	"GET /api/account":                      anyone,
+	"POST /api/auth/logout": anyone,
+	"GET /api/account":      anyone,
+	// Tokens act for their owner: members manage their own.
+	"GET /api/tokens":                       anyone,
+	"POST /api/tokens":                      anyone,
+	"DELETE /api/tokens/{id}":               anyone,
 	"PUT /api/account/password":             anyone,
 	"POST /api/account/totp":                anyone,
 	"POST /api/account/totp/enable":         anyone,
@@ -172,9 +176,6 @@ var routeAccess = map[string]access{
 	"PUT /api/notifications/channels/{id}":       admin,
 	"DELETE /api/notifications/channels/{id}":    admin,
 	"POST /api/notifications/channels/{id}/test": admin,
-	"GET /api/tokens":                            admin,
-	"POST /api/tokens":                           admin,
-	"DELETE /api/tokens/{id}":                    admin,
 	"GET /api/audit":                             admin,
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -82,11 +83,27 @@ func (c *Core) CreateAPIToken(ctx context.Context, name string, scope store.Scop
 	return NewToken{APIToken: t, Token: token}, nil
 }
 
+// ListAPITokens returns every token to an admin, a member's own to them.
 func (c *Core) ListAPITokens(ctx context.Context) ([]store.APIToken, error) {
-	return c.store.ListAPITokens(ctx, "")
+	a, ok := ActorFrom(ctx)
+	if !ok {
+		return nil, ErrUnauthorized
+	}
+	if a.Admin() {
+		return c.store.ListAPITokens(ctx, "")
+	}
+	return c.store.ListAPITokens(ctx, a.UserID)
 }
 
+// DeleteAPIToken revokes a token; a member only their own.
 func (c *Core) DeleteAPIToken(ctx context.Context, id string) error {
+	ts, err := c.ListAPITokens(ctx)
+	if err != nil {
+		return err
+	}
+	if !slices.ContainsFunc(ts, func(t store.APIToken) bool { return t.ID == id }) {
+		return fmt.Errorf("%w: token", store.ErrNotFound)
+	}
 	return c.store.DeleteAPIToken(ctx, id)
 }
 

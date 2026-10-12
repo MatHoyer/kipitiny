@@ -260,3 +260,45 @@ func TestMemberRequests(t *testing.T) {
 		t.Errorf("storage for a member: %d %s", code, body)
 	}
 }
+
+func TestMemberTokens(t *testing.T) {
+	m := newMembers(t)
+	ctx := context.Background()
+	admin, err := m.st.GetUserByUsername(ctx, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminActor, err := m.c.UserActor(ctx, admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminCtx, memberCtx := core.WithActor(ctx, adminActor), m.as(t, []core.Perm{core.PermView})
+	adminTok, err := m.c.CreateAPIToken(adminCtx, "admin's", store.ScopeAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine, err := m.c.CreateAPIToken(memberCtx, "mine", store.ScopeAdmin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ts, err := m.c.ListAPITokens(memberCtx); err != nil || len(ts) != 1 || ts[0].ID != mine.ID {
+		t.Fatalf("a member lists their own tokens: %+v %v", ts, err)
+	}
+	if ts, err := m.c.ListAPITokens(adminCtx); err != nil || len(ts) != 2 {
+		t.Fatalf("an admin lists every token: %+v %v", ts, err)
+	}
+	if err := m.c.DeleteAPIToken(memberCtx, adminTok.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("a member deleting another's token: %v", err)
+	}
+	// An admin-scoped token of a member still has only their permissions.
+	a, err := m.c.AuthenticateToken(ctx, mine.Token)
+	if err != nil || a.Admin() || !a.Can(m.shop[core.IDProject], core.PermView) || a.Can(m.shop[core.IDProject], core.PermDeploy) {
+		t.Fatalf("member's token: %+v %v", a, err)
+	}
+	if err := m.c.DeleteAPIToken(memberCtx, mine.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.c.DeleteAPIToken(adminCtx, adminTok.ID); err != nil {
+		t.Fatal(err)
+	}
+}
