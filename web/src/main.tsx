@@ -52,12 +52,11 @@ const router = createBrowserRouter([
     path: "/",
     element: <Layout />,
     children: [
-      { index: true, element: <MapPage /> },
+      { index: true, element: <Navigate to="/projects" replace /> },
       { path: "projects", element: <Projects /> },
       { path: "projects/:id", element: <Project /> },
       { path: "services/:id", element: <Service /> },
-      // The map was here before it became the home page.
-      { path: "map", element: <Navigate to="/" replace /> },
+      { path: "map", element: <MapPage /> },
       { path: "docs/*", element: <DocsRedirect /> },
       { path: "account", element: <AccountPage /> },
       { path: "backups", element: <Backups /> },

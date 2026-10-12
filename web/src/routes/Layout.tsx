@@ -63,8 +63,8 @@ export function Layout() {
 }
 
 const nav = [
-  { to: "/", label: "Map", icon: Waypoints },
   { to: "/projects", label: "Projects", icon: FolderKanban },
+  { to: "/map", label: "Map", icon: Waypoints },
   { to: "/backups", label: "Backups", icon: DatabaseBackup },
 ];
 
@@ -107,7 +107,7 @@ function MainNav() {
     <SidebarMenu>
       {nav.map(({ to, label, icon: Icon }) => (
         <SidebarMenuItem key={to}>
-          <SidebarMenuButton asChild isActive={to === "/" ? pathname === "/" : pathname.startsWith(to)}>
+          <SidebarMenuButton asChild isActive={pathname.startsWith(to)}>
             <NavLink to={to} onClick={() => setOpenMobile(false)}>
               <Icon />
               {label}
