@@ -13,11 +13,12 @@ type opSteps struct {
 	m  map[string]*opStep
 }
 
-// opStep is an operation's current step, and the bytes it has moved so far
-// when it streams.
+// opStep is an operation's current step, what it applies to (e.g. the
+// server a cleanup is on), and the bytes it has moved so far when it streams.
 type opStep struct {
-	name  string
-	bytes atomic.Int64
+	name   string
+	detail string
+	bytes  atomic.Int64
 }
 
 // Write counts p, so an opStep can tee a stream.
@@ -31,13 +32,16 @@ func backupKey(backupID string) string   { return "backup/" + backupID }
 func restoreKey(restoreID string) string { return "restore/" + restoreID }
 
 // set moves the operation key to step, returning it to count bytes on.
-func (o *opSteps) set(key, step string) *opStep {
+func (o *opSteps) set(key, step string) *opStep { return o.setOn(key, step, "") }
+
+// setOn moves the operation key to step, on detail.
+func (o *opSteps) setOn(key, step, detail string) *opStep {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.m == nil {
 		o.m = map[string]*opStep{}
 	}
-	s := &opStep{name: step}
+	s := &opStep{name: step, detail: detail}
 	o.m[key] = s
 	return s
 }
@@ -57,6 +61,38 @@ func (o *opSteps) get(key string) (string, int64) {
 	}
 	return "", 0
 }
+
+// detailOf returns what the operation's step applies to.
+func (o *opSteps) detailOf(key string) string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if s, ok := o.m[key]; ok {
+		return s.detail
+	}
+	return ""
+}
+
+// cleanupKey names the running cleanup: one at a time.
+const cleanupKey = "cleanup"
+
+// Steps of a cleanup, as CleanupView.Step reports them. All but
+// CleanupDeployments run on each server in turn (CleanupView.StepServer).
+const (
+	// CleanupConnect: reaching the server's Docker.
+	CleanupConnect = "connect"
+	// CleanupContainers: removing stopped containers kipitiny didn't create.
+	CleanupContainers = "containers"
+	// CleanupImages: removing dangling or unused images.
+	CleanupImages = "images"
+	// CleanupBuildCache: pruning the build cache.
+	CleanupBuildCache = "buildcache"
+	// CleanupVolumes: removing volumes no container mounts.
+	CleanupVolumes = "volumes"
+	// CleanupNetworks: removing unused networks kipitiny didn't create.
+	CleanupNetworks = "networks"
+	// CleanupDeployments: trimming old deployment records and their logs.
+	CleanupDeployments = "deployments"
+)
 
 // Steps of a backup, as Backup.Step reports them.
 const (

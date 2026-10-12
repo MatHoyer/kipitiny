@@ -746,19 +746,47 @@ function newBackup(s: DemoDb["services"][number] | null, targetId = "local"): Ba
   };
 }
 
+/** The demo's cleanup run by hand: when it started, while it walks through its steps. */
+let cleanupStart: number | null = null;
+let cleanupLast: Cleanup["lastRun"] = {
+  trigger: "schedule",
+  startedAt: new Date(Date.now() - 4 * 86_400_000).toISOString(),
+  finishedAt: new Date(Date.now() - 4 * 86_400_000 + 9000).toISOString(),
+  servers: [{ server: "This server", containers: 3, images: 7, volumes: 2, networks: 1, buildCache: 0, reclaimed: 1_850_000_000 }],
+  deployments: 12,
+};
+
 function cleanupView(): Cleanup {
-  return {
-    settings: db.cleanup,
+  const c = db.cleanup;
+  const view: Cleanup = {
+    settings: c,
     running: false,
-    nextRun: db.cleanup.enabled ? new Date(Date.now() + 3 * 86_400_000).toISOString() : undefined,
-    lastRun: {
-      trigger: "schedule",
-      startedAt: new Date(Date.now() - 4 * 86_400_000).toISOString(),
-      finishedAt: new Date(Date.now() - 4 * 86_400_000 + 9000).toISOString(),
-      servers: [{ server: "This server", containers: 3, images: 7, volumes: 2, networks: 1, buildCache: 0, reclaimed: 1_850_000_000 }],
-      deployments: 12,
-    },
+    nextRun: c.enabled ? new Date(Date.now() + 3 * 86_400_000).toISOString() : undefined,
+    lastRun: cleanupLast,
   };
+  if (cleanupStart === null) return view;
+  const steps = (
+    [
+      ["connect", true],
+      ["containers", c.containers],
+      ["images", c.images !== "off"],
+      ["buildcache", c.buildCache],
+      ["volumes", true],
+      ["networks", c.networks],
+      ["deployments", c.keepDeployments > 0],
+    ] as const
+  ).filter(([, on]) => on);
+  const at = Math.floor((Date.now() - cleanupStart) / 900);
+  if (at < steps.length) return { ...view, running: true, step: steps[at][0], stepServer: steps[at][0] === "deployments" ? undefined : "This server" };
+  cleanupLast = {
+    trigger: "manual",
+    startedAt: new Date(cleanupStart).toISOString(),
+    finishedAt: now(),
+    servers: [{ server: "This server", containers: c.containers ? 1 : 0, images: c.images !== "off" ? 2 : 0, volumes: 0, networks: 0, buildCache: 0, reclaimed: 412_000_000 }],
+    deployments: c.keepDeployments > 0 ? 3 : 0,
+  };
+  cleanupStart = null;
+  return { ...view, lastRun: cleanupLast };
 }
 
 const scheduleFrom = (body: any, base: Partial<Schedule>): Schedule => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -1364,7 +1392,7 @@ const routes: Route[] = [
       return cleanupView();
     },
   ],
-  ["POST", /^\/cleanup\/run$/, () => cleanupView()],
+  ["POST", /^\/cleanup\/run$/, () => ((cleanupStart ??= Date.now()), cleanupView())],
   ["GET", /^\/storage$/, () => [{ id: "local", name: "Local disk", kind: "local", config: {}, createdAt: now() }]],
   ["POST", /^\/storage\/([^/]+)\/test$/, ({ q }) => (q.has("progress") ? progressed(["write", "delete"], undefined) : undefined)],
   [
