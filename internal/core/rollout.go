@@ -46,7 +46,7 @@ func (c *Core) preDeploy(ctx context.Context, project store.Project, svc store.S
 
 	logf("Running pre-deploy command: %s", svc.PreDeploy)
 	dk := c.dockerFor(svc.ServerID)
-	id, err := dk.Run(ctx, spec)
+	id, err := c.runContainer(ctx, dk, spec)
 	if err != nil {
 		return fmt.Errorf("pre-deploy: %w", err)
 	}
