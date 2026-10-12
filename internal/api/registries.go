@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/MatHoyer/kipitiny/internal/core"
@@ -50,9 +51,5 @@ func (a *API) deleteRegistry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) testRegistry(w http.ResponseWriter, r *http.Request) {
-	if err := a.core.TestRegistry(r.Context(), r.PathValue("id")); err != nil {
-		a.fail(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+	a.test(w, r, func(ctx context.Context) error { return a.core.TestRegistry(ctx, r.PathValue("id")) })
 }

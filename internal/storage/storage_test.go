@@ -6,8 +6,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/MatHoyer/kipitiny/internal/progress"
 )
 
 type failingReader struct{ n int }
@@ -66,5 +69,16 @@ func TestLocal(t *testing.T) {
 	}
 	if err := l.Check(ctx); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestLocalCheckSteps(t *testing.T) {
+	l := &Local{Root: t.TempDir()}
+	var steps []string
+	if err := l.Check(progress.With(context.Background(), func(s string) { steps = append(steps, s) })); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{StepWrite, StepDelete}; !slices.Equal(steps, want) {
+		t.Errorf("steps = %q, want %q", steps, want)
 	}
 }

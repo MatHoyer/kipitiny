@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { DockerIcon, GitHubIcon, GitLabIcon } from "@/components/brand-icons";
-import { ChoiceTile, EmptyState, ErrorText, Mono, TestButton } from "@/components/common";
+import { ChoiceTile, EmptyState, ErrorText, Mono } from "@/components/common";
+import { TestDialog } from "@/components/test-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -129,7 +130,13 @@ export function Registries() {
                   Used for <Mono>{r.host === "docker.io" ? "org/image" : `${r.host}/…`}</Mono>
                 </p>
                 <div className="mt-auto flex justify-end gap-0.5">
-                  <TestButton name={r.host} test={() => api.testRegistry(r.id)} />
+                  <TestDialog
+                    name={r.host}
+                    icon={p.icon}
+                    description="Signs in again with the saved credentials, as a deploy pulling an image would."
+                    plan={[{ id: "login", title: `Sign in to ${r.host}`, hint: `As ${r.username}, through the server's Docker` }]}
+                    run={(onStep) => api.testRegistry(r.id, onStep)}
+                  />
                   <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={() => setEditing({ step: "edit", registry: r })}>
                     <Pencil />
                   </Button>

@@ -3,7 +3,8 @@ import { Globe, Plus, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { CloudflareIcon } from "@/components/brand-icons";
-import { CheckboxField, EmptyState, ErrorText, Mono, Tag, TestButton } from "@/components/common";
+import { CheckboxField, EmptyState, ErrorText, Mono, Tag } from "@/components/common";
+import { TestDialog } from "@/components/test-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -211,7 +212,14 @@ function CloudflareCard() {
             <Button variant="ghost" size="icon-sm" title="Sync DNS now" aria-label="Sync DNS now" loading={sync.isPending} onClick={() => sync.mutate()}>
               <RefreshCw />
             </Button>
-            <TestButton name="Cloudflare" test={api.testCloudflare} />
+            <TestDialog
+              name="Cloudflare"
+              icon={cloudflareIcon}
+              description="Lists your zones with the saved token, as syncing DNS records would."
+              accent="#F38020"
+              plan={[{ id: "zones", title: "List your zones", hint: "The token needs Zone › Zone › Read" }]}
+              run={(onStep) => api.testCloudflare(onStep)}
+            />
             <ConfirmDialog
               trigger={
                 <Button variant="outline" size="sm" loading={disconnect.isPending}>

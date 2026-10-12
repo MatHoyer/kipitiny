@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"html/template"
@@ -60,11 +61,7 @@ func (a *API) deleteGitProvider(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) testGitProvider(w http.ResponseWriter, r *http.Request) {
-	if err := a.core.TestGitProvider(r.Context(), r.PathValue("id")); err != nil {
-		a.fail(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+	a.test(w, r, func(ctx context.Context) error { return a.core.TestGitProvider(ctx, r.PathValue("id")) })
 }
 
 func (a *API) gitProviderRepos(w http.ResponseWriter, r *http.Request) {

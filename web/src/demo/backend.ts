@@ -1183,7 +1183,9 @@ const routes: Route[] = [
       save();
     },
   ],
-  ["POST", /^\/registries\/([^/]+)\/test$/, () => undefined],
+  ["POST", /^\/registries\/([^/]+)\/test$/, ({ q }) => (q.has("progress") ? progressed(["login"], undefined) : undefined)],
+  ["POST", /^\/git-providers\/([^/]+)\/test$/, ({ q }) => (q.has("progress") ? progressed(["token", "repos"], undefined) : undefined)],
+  ["POST", /^\/cloudflare\/test$/, ({ q }) => (q.has("progress") ? progressed(["zones"], undefined) : undefined)],
   [
     "POST",
     /^\/domains$/,
@@ -1274,6 +1276,7 @@ const routes: Route[] = [
   ],
   ["POST", /^\/cleanup\/run$/, () => cleanupView()],
   ["GET", /^\/storage$/, () => [{ id: "local", name: "Local disk", kind: "local", config: {}, createdAt: now() }]],
+  ["POST", /^\/storage\/([^/]+)\/test$/, ({ q }) => (q.has("progress") ? progressed(["write", "delete"], undefined) : undefined)],
   [
     "GET",
     /^\/services\/([^/]+)\/connection$/,

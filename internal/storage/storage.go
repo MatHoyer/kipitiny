@@ -15,6 +15,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
+	"github.com/MatHoyer/kipitiny/internal/progress"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -115,10 +116,23 @@ func (l *Local) Delete(_ context.Context, key string) error {
 	return nil
 }
 
+// Steps of Check, reported with progress.Report.
+const (
+	// StepBucket: checking the bucket exists.
+	StepBucket = "bucket"
+	// StepWrite: writing a test object.
+	StepWrite = "write"
+	// StepDelete: deleting it.
+	StepDelete = "delete"
+)
+
+// Check writes and deletes a test file, reporting StepWrite and StepDelete.
 func (l *Local) Check(ctx context.Context) error {
+	progress.Report(ctx, StepWrite)
 	if err := l.Put(ctx, ".check", strings.NewReader("ok")); err != nil {
 		return err
 	}
+	progress.Report(ctx, StepDelete)
 	return l.Delete(ctx, ".check")
 }
 
@@ -163,7 +177,10 @@ func (s *S3) Delete(ctx context.Context, key string) error {
 	return s.client.RemoveObject(ctx, s.bucket, s.key(key), minio.RemoveObjectOptions{})
 }
 
+// Check writes and deletes a test object in the bucket, reporting
+// StepBucket, StepWrite and StepDelete.
 func (s *S3) Check(ctx context.Context) error {
+	progress.Report(ctx, StepBucket)
 	ok, err := s.client.BucketExists(ctx, s.bucket)
 	if err != nil {
 		return err
@@ -171,9 +188,11 @@ func (s *S3) Check(ctx context.Context) error {
 	if !ok {
 		return fmt.Errorf("bucket %q does not exist", s.bucket)
 	}
+	progress.Report(ctx, StepWrite)
 	if err := s.Put(ctx, ".kipitiny-check", strings.NewReader("ok")); err != nil {
 		return fmt.Errorf("write test object: %w", err)
 	}
+	progress.Report(ctx, StepDelete)
 	return s.Delete(ctx, ".kipitiny-check")
 }
 

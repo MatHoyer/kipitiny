@@ -917,6 +917,10 @@ async function progress<T>(path: string, init: RequestInit, onStep: (step: strin
   throw new ApiError(0, "the connection closed before it finished");
 }
 
+/** Checks a saved integration still works; with onStep, reports each step as it starts. */
+const test = (path: string, onStep?: (step: string) => void) =>
+  onStep ? progress<void>(path, { method: "POST" }, onStep) : request<void>(path, { method: "POST" });
+
 const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
 
 const composePath = (id: string, service?: string) =>
@@ -1028,7 +1032,7 @@ export const api = {
   backupManager: (targetId: string) => request<Backup>("/manager/backups", json("POST", { targetId })),
   deleteBackupTarget: (id: string) => request<void>(`/storage/${id}`, { method: "DELETE" }),
   encryptBackupTarget: (id: string) => request<BackupTarget>(`/storage/${id}/encrypt`, { method: "POST" }),
-  testBackupTarget: (id: string) => request<void>(`/storage/${id}/test`, { method: "POST" }),
+  testBackupTarget: (id: string, onStep?: (step: string) => void) => test(`/storage/${id}/test`, onStep),
 
   backups: (projectId?: string) => request<Backup[]>(`/backups${projectId ? `?projectId=${projectId}` : ""}`),
   serviceBackups: (serviceId: string) => request<Backup[]>(`/services/${serviceId}/backups`),
@@ -1132,7 +1136,7 @@ export const api = {
   createGitProvider: (p: GitProviderInput) => request<GitProvider>("/git-providers", json("POST", p)),
   updateGitProvider: (id: string, p: GitProviderInput) => request<GitProvider>(`/git-providers/${id}`, json("PUT", p)),
   deleteGitProvider: (id: string) => request<void>(`/git-providers/${id}`, { method: "DELETE" }),
-  testGitProvider: (id: string) => request<void>(`/git-providers/${id}/test`, { method: "POST" }),
+  testGitProvider: (id: string, onStep?: (step: string) => void) => test(`/git-providers/${id}/test`, onStep),
   /** The forge page that connects the provider (OAuth consent, or the GitHub App's installation). */
   authorizeGitProvider: (id: string) => request<{ url: string }>(`/git-providers/${id}/authorize`, { method: "POST" }),
   /** The manager page that posts the GitHub App manifest to GitHub. */
@@ -1145,7 +1149,7 @@ export const api = {
   createRegistry: (r: RegistryInput) => request<Registry>("/registries", json("POST", r)),
   updateRegistry: (id: string, r: RegistryInput) => request<Registry>(`/registries/${id}`, json("PUT", r)),
   deleteRegistry: (id: string) => request<void>(`/registries/${id}`, { method: "DELETE" }),
-  testRegistry: (id: string) => request<void>(`/registries/${id}/test`, { method: "POST" }),
+  testRegistry: (id: string, onStep?: (step: string) => void) => test(`/registries/${id}/test`, onStep),
   sshKey: () => request<{ publicKey: string }>("/ssh-key"),
   domains: () => request<Domain[]>("/domains"),
   createDomain: (name: string) => request<Domain>("/domains", json("POST", { name })),
@@ -1154,7 +1158,7 @@ export const api = {
   cloudflare: () => request<Cloudflare>("/cloudflare"),
   connectCloudflare: (token: string) => request<Cloudflare>("/cloudflare", json("PUT", { token })),
   disconnectCloudflare: () => request<void>("/cloudflare", { method: "DELETE" }),
-  testCloudflare: () => request<void>("/cloudflare/test", { method: "POST" }),
+  testCloudflare: (onStep?: (step: string) => void) => test("/cloudflare/test", onStep),
   syncCloudflare: () => request<Cloudflare>("/cloudflare/sync", { method: "POST" }),
   secretProviders: () => request<SecretProvider[]>("/secret-providers"),
   connectSecretProvider: (id: string, token: string, onStep?: (step: SecretStep) => void) =>
@@ -1168,9 +1172,7 @@ export const api = {
     request<SecretItem[]>(`/secret-providers/${id}/items?vault=${encodeURIComponent(vault)}${refresh ? "&refresh" : ""}`),
   disconnectSecretProvider: (id: string) => request<void>(`/secret-providers/${id}`, { method: "DELETE" }),
   testSecretProvider: (id: string, onStep?: (step: SecretStep) => void) =>
-    onStep
-      ? progress<void>(`/secret-providers/${id}/test`, { method: "POST" }, onStep as (s: string) => void)
-      : request<void>(`/secret-providers/${id}/test`, { method: "POST" }),
+    test(`/secret-providers/${id}/test`, onStep as ((s: string) => void) | undefined),
   setServerNetwork: (id: string, n: ServerNetwork) => request<Server>(`/servers/${id}/network`, json("PUT", n)),
   cleanup: () => request<Cleanup>("/cleanup"),
   setCleanup: (s: CleanupSettings) => request<Cleanup>("/cleanup", json("PUT", s)),

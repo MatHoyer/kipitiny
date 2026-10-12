@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/MatHoyer/kipitiny/internal/core"
@@ -94,11 +95,7 @@ func (a *API) deleteDomain(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) testCloudflare(w http.ResponseWriter, r *http.Request) {
-	if err := a.core.TestCloudflare(r.Context()); err != nil {
-		a.fail(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+	a.test(w, r, func(ctx context.Context) error { return a.core.TestCloudflare(ctx) })
 }
 
 func (a *API) syncCloudflare(w http.ResponseWriter, r *http.Request) {

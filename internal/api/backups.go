@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -283,9 +284,5 @@ func (a *API) verifyBackup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) testStorage(w http.ResponseWriter, r *http.Request) {
-	if err := a.core.TestBackupTarget(r.Context(), r.PathValue("id")); err != nil {
-		a.fail(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+	a.test(w, r, func(ctx context.Context) error { return a.core.TestBackupTarget(ctx, r.PathValue("id")) })
 }
