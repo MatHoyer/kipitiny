@@ -18,7 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { toast } from "sonner";
 import { SaveBarHost } from "@/components/save-bar";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { UpdateDialog } from "@/components/update-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -224,17 +224,14 @@ function UpdateNotice() {
             </a>
           </div>
           {update.canApply ? (
-            <ConfirmDialog
+            <UpdateDialog
               trigger={
                 <Button size="sm" className="mt-2 w-full" disabled={apply.isPending}>
                   Update now
                 </Button>
               }
-              title={`Update to ${update.latest}?`}
-              description="The manager restarts on the new version. Apps, databases and Traefik keep running, and running deploys finish first. If the new version doesn't start, the previous one is restored."
-              confirmLabel="Update"
-              destructive={false}
-              onConfirm={() => apply.mutate()}
+              latest={update.latest!}
+              onUpdate={() => apply.mutate()}
             />
           ) : (
             <div className="mt-1 text-muted-foreground">{update.reason}</div>

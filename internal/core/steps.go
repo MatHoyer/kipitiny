@@ -1,6 +1,7 @@
 package core
 
 import (
+	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -60,6 +61,19 @@ func (o *opSteps) get(key string) (string, int64) {
 		return s.name, s.bytes.Load()
 	}
 	return "", 0
+}
+
+// running returns the keys of the running operations starting with prefix.
+func (o *opSteps) running(prefix string) []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	var keys []string
+	for k := range o.m {
+		if strings.HasPrefix(k, prefix) {
+			keys = append(keys, k)
+		}
+	}
+	return keys
 }
 
 // detailOf returns what the operation's step applies to.

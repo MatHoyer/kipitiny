@@ -534,6 +534,12 @@ export type Notifications = {
 /** State of a service domain's managed Cloudflare record. */
 export type DNSStatus = { state: "synced" | "warning" | "conflict" | "error"; message?: string };
 
+/** Whether now is a good time to update the manager: a blocking check disables the update. */
+export type UpdatePreflight = {
+  checks: { id: "version" | "tasks" | "docker" | "backup"; state: "ok" | "warn" | "block"; detail: string }[];
+  ready: boolean;
+};
+
 export type UpdateInfo = {
   current: string;
   latest?: string;
@@ -970,6 +976,7 @@ export const api = {
   status: () => request<Status>("/status"),
   applyUpdate: () => request<UpdateInfo>("/update", { method: "POST" }),
   checkUpdate: () => request<UpdateInfo>("/update/check", { method: "POST" }),
+  updatePreflight: () => request<UpdatePreflight>("/update/preflight"),
 
   projects: () => request<Project[]>("/projects"),
   project: (id: string) => request<Project>(`/projects/${id}`),

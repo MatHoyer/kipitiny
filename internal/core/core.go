@@ -43,9 +43,12 @@ type Core struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup // all background work
 	ops    sync.WaitGroup // operations only
-	bgMu   sync.Mutex
-	closed bool
-	locks  sync.Map // service ID -> *sync.Mutex
+	// running counts the operations in flight, for the update's preflight.
+	running atomic.Int64
+	bgMu    sync.Mutex
+	closed  bool
+	locks   sync.Map // service ID -> *sync.Mutex
+	busy    sync.Map // service ID -> struct{}: its lock is held
 
 	setupMu    sync.Mutex
 	setupToken string // set while no admin exists
@@ -231,11 +234,13 @@ func (c *Core) track(f func(), op bool) error {
 	c.wg.Add(1)
 	if op {
 		c.ops.Add(1)
+		c.running.Add(1)
 	}
 	go func() {
 		defer c.wg.Done()
 		if op {
 			defer c.ops.Done()
+			defer c.running.Add(-1)
 		}
 		f()
 	}()
@@ -250,7 +255,11 @@ func (c *Core) lockService(id string) (unlock func(), err error) {
 	if !mu.TryLock() {
 		return nil, ErrBusy
 	}
-	return mu.Unlock, nil
+	c.busy.Store(id, struct{}{})
+	return func() {
+		c.busy.Delete(id)
+		mu.Unlock()
+	}, nil
 }
 
 type Status struct {

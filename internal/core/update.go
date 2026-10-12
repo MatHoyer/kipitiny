@@ -261,6 +261,11 @@ func (c *Core) ApplyUpdate(ctx context.Context) (UpdateInfo, error) {
 		u.mu.Unlock()
 		return UpdateInfo{}, fmt.Errorf("%w: already up to date", ErrInvalid)
 	}
+	// The restart would cut short what runs longer than the drain.
+	if tasks := c.runningTasks(ctx); len(tasks) > 0 {
+		u.mu.Unlock()
+		return UpdateInfo{}, fmt.Errorf("%w: wait for %s to finish", ErrInvalid, strings.Join(tasks, ", "))
+	}
 	u.updating, u.applyErr = true, ""
 	u.mu.Unlock()
 
