@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/MatHoyer/kipitiny/internal/core"
-	"github.com/MatHoyer/kipitiny/internal/secrets"
+	"github.com/MatHoyer/kipitiny/internal/progress"
 )
 
 func TestProgress(t *testing.T) {
@@ -22,7 +22,7 @@ func TestProgress(t *testing.T) {
 	}
 
 	body, status := run(func(ctx context.Context) (any, error) {
-		secrets.Report(ctx, secrets.StepLogin)
+		progress.Report(ctx, "login")
 		return map[string]bool{"connected": true}, nil
 	})
 	if want := "{\"step\":\"login\"}\n{\"result\":{\"connected\":true}}\n"; body != want || status != http.StatusOK {

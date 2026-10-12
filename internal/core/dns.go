@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/MatHoyer/kipitiny/internal/cloudflare"
+	"github.com/MatHoyer/kipitiny/internal/progress"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -199,6 +200,7 @@ func (c *Core) TestCloudflare(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
+	progress.Report(ctx, "zones")
 	zones, err := cloudflare.New(token).Zones(ctx)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalid, err)

@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, KeyRound, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { CheckboxField, ChoiceTile, CopyField, ErrorText, Mono, Tag, TestButton } from "@/components/common";
+import { CheckboxField, ChoiceTile, CopyField, ErrorText, Mono, Tag } from "@/components/common";
+import { TestDialog, type PlannedStep } from "@/components/test-dialog";
 import { HowTo } from "@/components/how-to";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ import {
   storageIcon,
   storageKind,
   storageLocation,
+  storageProvider,
   storageProviders,
   type StorageProvider,
 } from "@/components/storage";
@@ -77,7 +79,14 @@ export function Storage() {
               {storageLocation(t)}
             </p>
             <div className="mt-auto flex justify-end gap-0.5">
-              <TestButton name={t.name} test={() => api.testBackupTarget(t.id)} />
+              <TestDialog
+                name={t.name}
+                icon={storageIcon(t)}
+                description="Writes a small file where backups go, then deletes it."
+                accent={t.kind === "s3" ? storageProvider(t).accent : undefined}
+                plan={storageTestPlan(t)}
+                run={(onStep) => api.testBackupTarget(t.id, onStep)}
+              />
               {t.ageRecipient ? (
                 <KeyButton targetId={t.id} name={t.name} />
               ) : (
@@ -343,4 +352,14 @@ function TargetForm({
       </DialogFooter>
     </form>
   );
+}
+
+/** What testing a target does: the bucket must exist, then a test file is written and deleted. */
+function storageTestPlan(t: BackupTarget): PlannedStep[] {
+  const write: PlannedStep[] = [
+    { id: "write", title: "Write a test file", hint: "A few bytes, next to the backups" },
+    { id: "delete", title: "Delete it", hint: "Nothing is left behind" },
+  ];
+  if (t.kind !== "s3") return write;
+  return [{ id: "bucket", title: "Find the bucket", hint: <>With the saved keys, at {t.endpoint}</> }, ...write];
 }

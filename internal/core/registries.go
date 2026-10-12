@@ -9,6 +9,7 @@ import (
 	"github.com/distribution/reference"
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/progress"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -63,6 +64,7 @@ func (c *Core) TestRegistry(ctx context.Context, id string) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
+	progress.Report(ctx, "login")
 	if err := c.pool.Local().Login(ctx, loginAddress(r.Host), r.Username, r.Password); err != nil {
 		return fmt.Errorf("%w: %s refused the credentials: %v", ErrInvalid, r.Host, err)
 	}

@@ -4,7 +4,8 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { GitHubIcon, GitLabIcon } from "@/components/brand-icons";
-import { ChoiceTile, CopyField, EmptyState, ErrorText, Mono, Tag, TestButton } from "@/components/common";
+import { ChoiceTile, CopyField, EmptyState, ErrorText, Mono, Tag } from "@/components/common";
+import { TestDialog } from "@/components/test-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -160,7 +161,20 @@ function ProviderCard({ provider: p, onEdit }: { provider: GitProvider; onEdit: 
       {p.baseUrl !== kind.baseUrl && <p className="truncate text-xs text-muted-foreground">{p.baseUrl}</p>}
       <div className="mt-auto flex items-center justify-end gap-0.5">
         {p.connected ? (
-          <TestButton name={p.name} test={() => api.testGitProvider(p.id)} />
+          <TestDialog
+            name={p.name}
+            icon={kind.icon}
+            description="Lists the repositories kipitiny may read, as following a compose file would."
+            plan={[
+              {
+                id: "token",
+                title: "Get an access token",
+                hint: p.kind === "github" ? "Minted for the GitHub App's installation" : "Refreshed when it expired",
+              },
+              { id: "repos", title: "List the repositories", hint: "The ones it was given access to" },
+            ]}
+            run={(onStep) => api.testGitProvider(p.id, onStep)}
+          />
         ) : (
           <Button size="sm" variant="outline" loading={reconnect.isPending} onClick={() => reconnect.mutate()}>
             Connect

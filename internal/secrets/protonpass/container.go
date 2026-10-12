@@ -15,6 +15,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/progress"
 	"github.com/MatHoyer/kipitiny/internal/secrets"
 )
 
@@ -169,7 +170,7 @@ func (r *ContainerRunner) start(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if _, err := r.dk.ImageInspect(ctx, r.image); cerrdefs.IsNotFound(err) {
-		secrets.Report(ctx, secrets.StepImage)
+		progress.Report(ctx, secrets.StepImage)
 	}
 	if err := r.dk.EnsureImage(ctx, r.image, ""); err != nil {
 		return "", fmt.Errorf("pull %s: %w", r.image, err)
@@ -179,7 +180,7 @@ func (r *ContainerRunner) start(ctx context.Context) (string, error) {
 	if _, err := r.dk.VolumeCreate(ctx, client.VolumeCreateOptions{Name: r.volume, Labels: labels}); err != nil {
 		return "", fmt.Errorf("session volume: %w", err)
 	}
-	secrets.Report(ctx, secrets.StepHelper)
+	progress.Report(ctx, secrets.StepHelper)
 	id, err := r.dk.Run(ctx, client.ContainerCreateOptions{
 		Name: r.name,
 		Config: &container.Config{

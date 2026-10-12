@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/MatHoyer/kipitiny/internal/config"
+	"github.com/MatHoyer/kipitiny/internal/progress"
 	"github.com/MatHoyer/kipitiny/internal/secrets"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -169,7 +170,7 @@ func TestSecretListingsCache(t *testing.T) {
 type browsingProvider struct{ fakeProvider }
 
 func (b *browsingProvider) Warm(ctx context.Context) error {
-	secrets.Report(ctx, secrets.StepHelper)
+	progress.Report(ctx, secrets.StepHelper)
 	return nil
 }
 func (b *browsingProvider) Vaults(context.Context) ([]string, error) {
@@ -190,7 +191,7 @@ func TestTestSecretProviderProgress(t *testing.T) {
 	}
 	test := func() ([]string, error) {
 		var steps []string
-		err := c.TestSecretProvider(WithSecretProgress(ctx, func(s string) { steps = append(steps, s) }), "fake")
+		err := c.TestSecretProvider(WithProgress(ctx, func(s string) { steps = append(steps, s) }), "fake")
 		return steps, err
 	}
 

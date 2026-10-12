@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, KeyRound, PlugZap, Plus, RotateCw } from "lucide-react";
+import { ChevronLeft, KeyRound, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { passwordManagerIcon as iconFor } from "@/components/brand-icons";
 import { ChoiceTile, EmptyState, ErrorText, Mono, Tag, withCode } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { HowTo } from "@/components/how-to";
+import { StepsProgress, TestDialog, type PlannedStep } from "@/components/test-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -17,7 +18,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
-import { Stepper } from "@/components/ui/stepper";
 import { api, type SecretProvider, type SecretStep } from "@/api";
 import { SettingsPage } from "./page";
 
@@ -75,7 +75,7 @@ function ProviderCard({ provider: p }: { provider: SecretProvider }) {
         Use in env as <Mono>{`{{ ${p.example} }}`}</Mono>
       </p>
       <div className="mt-auto flex items-center justify-end gap-1">
-        <TestDialog provider={p} />
+        <ProviderTestDialog provider={p} />
         <ConfirmDialog
           trigger={
             <Button variant="outline" size="sm" disabled={disconnect.isPending}>
@@ -275,7 +275,7 @@ function ProtonPassConnect({
       {started && (
         <div className="grid gap-2.5 rounded-lg border bg-muted/30 p-3 animate-in fade-in slide-in-from-top-1">
           <p className="text-xs font-medium text-muted-foreground">{connected ? "Connected." : connecting ? "Connecting…" : "Connecting failed."}</p>
-          <SecretProgress provider={p} plan={connectPlan} seen={seen} running={connecting} done={connected} error={error} />
+          <StepsProgress plan={connectPlan(p.name)} seen={seen} running={connecting} done={connected} error={error} accent={proton.accent} />
         </div>
       )}
       <DialogFooter>
@@ -321,7 +321,7 @@ function TokenGuide() {
 }
 
 /** What each step the manager reports does, said for the user. */
-const stages = (name: string): Record<SecretStep, { title: string; hint: string; skipped?: string }> => ({
+const stages = (name: string): Record<SecretStep, Omit<PlannedStep, "id">> => ({
   image: { title: `Download the ${name} CLI`, hint: "About 60MB, the first time only", skipped: "Already downloaded" },
   helper: { title: "Start its container", hint: "It runs only while used and is removed after 5 idle minutes", skipped: "Already running" },
   login: { title: "Sign in with the token", hint: "Passed on stdin: it never shows in the container's config" },
@@ -330,108 +330,29 @@ const stages = (name: string): Record<SecretStep, { title: string; hint: string;
   vaults: { title: "List the vaults again", hint: "With the new session" },
 });
 
-const connectPlan: SecretStep[] = ["image", "helper", "login", "verify"];
-const testPlan: SecretStep[] = ["image", "helper", "session"];
-/** When the saved session expired, a test signs in again with the saved token. */
-const retestPlan: SecretStep[] = [...testPlan, "login", "verify", "vaults"];
+const planOf = (name: string, ids: SecretStep[]): PlannedStep[] => ids.map((id) => ({ id, ...stages(name)[id] }));
 
-/**
- * The steps of connecting or testing, as the manager reports them. Steps it skips (the CLI is already there,
- * the helper already runs) are marked done with why. Before it runs, the list says what will happen.
- */
-function SecretProgress({
-  provider: p,
-  plan,
-  seen,
-  running,
-  done,
-  error,
-}: {
-  provider: SecretProvider;
-  plan: SecretStep[];
-  seen: SecretStep[];
-  running: boolean;
-  done: boolean;
-  error: Error | null;
-}) {
-  const info = stages(p.name);
-  const last = seen.at(-1);
-  // Nothing reported yet: it's checking for the CLI. An error before any step (a malformed token) marks none.
-  const current = done ? plan.length : last ? plan.indexOf(last) : running ? 0 : -1;
-  const steps = plan.map((id, i) => {
-    const s = info[id];
-    const skipped = i < current && !seen.includes(id);
-    const expired = id === "session" && seen.includes("login");
-    // A test signs in again with the token saved at connection.
-    const title = id === "login" && plan.includes("session") ? "Sign in again with the saved token" : s.title;
-    return { title, hint: skipped ? (s.skipped ?? s.hint) : expired ? "It had expired" : s.hint };
-  });
-  return (
-    <>
-      <Stepper
-        orientation="vertical"
-        steps={steps}
-        current={current}
-        busy={running}
-        failed={!!error && !!last}
-        accent={p.id === "protonpass" ? proton.accent : undefined}
-      />
-      {error && <p className="text-sm text-destructive animate-in fade-in">{error.message}</p>}
-    </>
+/** Connecting: get the CLI running, then sign in. */
+const connectPlan = (name: string) => planOf(name, ["image", "helper", "login", "verify"]);
+
+/** Testing: check the saved session; when it expired, sign in again with the saved token. */
+const testPlan = (name: string) => (seen: string[]) => {
+  if (!seen.includes("login")) return planOf(name, ["image", "helper", "session"]);
+  return planOf(name, ["image", "helper", "session", "login", "verify", "vaults"]).map((s) =>
+    s.id === "session" ? { ...s, hint: "It had expired" } : s.id === "login" ? { ...s, title: "Sign in again with the saved token" } : s,
   );
-}
+};
 
-/** Tests a connected provider in a dialog that shows each step, as a deploy would run them. */
-function TestDialog({ provider: p }: { provider: SecretProvider }) {
-  const [open, setOpen] = useState(false);
-  const [seen, setSeen] = useState<SecretStep[]>([]);
-  const test = useMutation({
-    meta: { error: false },
-    mutationFn: () => {
-      setSeen([]);
-      return api.testSecretProvider(p.id, (s) => setSeen((prev) => [...prev, s]));
-    },
-  });
-  const onOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (next) test.mutate();
-    else {
-      test.reset();
-      setSeen([]);
-    }
-  };
-
+/** Tests a connected provider, step by step, as a deploy would run them. */
+function ProviderTestDialog({ provider: p }: { provider: SecretProvider }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon-sm" title="Test connection" aria-label="Test connection">
-          <PlugZap />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 [&>svg]:size-5">
-            {iconFor(p.id)}
-            Test {p.name}
-          </DialogTitle>
-          <DialogDescription>Checks the manager can still read your vaults, as a deploy would.</DialogDescription>
-        </DialogHeader>
-        <SecretProgress
-          provider={p}
-          plan={seen.includes("login") ? retestPlan : testPlan}
-          seen={seen}
-          running={test.isPending}
-          done={test.isSuccess}
-          error={test.error}
-        />
-        {test.isSuccess && <p className="text-sm font-medium animate-in fade-in">{p.name} works.</p>}
-        <DialogFooter>
-          <Button variant="outline" loading={test.isPending} onClick={() => test.mutate()}>
-            <RotateCw data-icon="inline-start" />
-            Test again
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <TestDialog
+      name={p.name}
+      icon={iconFor(p.id)}
+      description="Checks the manager can still read your vaults, as a deploy would."
+      accent={p.id === "protonpass" ? proton.accent : undefined}
+      plan={testPlan(p.name)}
+      run={(onStep) => api.testSecretProvider(p.id, onStep)}
+    />
   );
 }

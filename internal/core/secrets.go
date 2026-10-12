@@ -10,6 +10,7 @@ import (
 
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/MatHoyer/kipitiny/internal/progress"
 	"github.com/MatHoyer/kipitiny/internal/secrets"
 	"github.com/MatHoyer/kipitiny/internal/secrets/protonpass"
 	"github.com/MatHoyer/kipitiny/internal/store"
@@ -93,12 +94,6 @@ func (l *secretListings) forget(id string) {
 	}
 }
 
-// WithSecretProgress has connecting or testing a password manager under ctx
-// call f with each step as it starts ("image", "helper", "login", …).
-func WithSecretProgress(ctx context.Context, f func(step string)) context.Context {
-	return secrets.WithProgress(ctx, func(s secrets.Step) { f(string(s)) })
-}
-
 // secretTokenSetting keeps a provider's token, to log in again when its
 // session is lost or expires.
 func secretTokenSetting(id string) string { return "secrets_" + id + "_token" }
@@ -167,7 +162,7 @@ func (c *Core) TestSecretProvider(ctx context.Context, id string) error {
 	}
 	b, ok := p.(secrets.Browser)
 	if ok {
-		secrets.Report(ctx, secrets.StepSession)
+		progress.Report(ctx, secrets.StepSession)
 		if _, err := b.Vaults(ctx); err == nil {
 			return nil
 		}
@@ -176,7 +171,7 @@ func (c *Core) TestSecretProvider(ctx context.Context, id string) error {
 		return fmt.Errorf("%w: %s refused the saved token: %v", ErrInvalid, name, err)
 	}
 	if ok {
-		secrets.Report(ctx, secrets.StepVaults)
+		progress.Report(ctx, secrets.StepVaults)
 		if _, err := b.Vaults(ctx); err != nil {
 			return fmt.Errorf("%w: %s: %v", ErrInvalid, name, err)
 		}

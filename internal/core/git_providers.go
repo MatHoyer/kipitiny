@@ -18,6 +18,7 @@ import (
 
 	"github.com/MatHoyer/kipitiny/internal/gitprovider"
 	"github.com/MatHoyer/kipitiny/internal/ids"
+	"github.com/MatHoyer/kipitiny/internal/progress"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -184,10 +185,19 @@ func (c *Core) DeleteGitProvider(ctx context.Context, id string) error {
 	return err
 }
 
-// TestGitProvider checks the provider can still list repositories.
+// TestGitProvider checks the provider can still list repositories,
+// reporting its steps: getting a token ("token"), then listing ("repos").
 func (c *Core) TestGitProvider(ctx context.Context, id string) error {
-	_, err := c.GitProviderRepos(ctx, id)
-	return err
+	progress.Report(ctx, "token")
+	p, token, err := c.gitProviderToken(ctx, id)
+	if err != nil {
+		return err
+	}
+	progress.Report(ctx, "repos")
+	if _, err := gitprovider.Repos(ctx, p.Kind, p.BaseURL, token); err != nil {
+		return fmt.Errorf("%w: %s: %v", ErrInvalid, p.Name, err)
+	}
+	return nil
 }
 
 // GitHubAppInput starts creating a GitHub provider.

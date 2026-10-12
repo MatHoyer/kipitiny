@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/MatHoyer/kipitiny/internal/progress"
 	"github.com/MatHoyer/kipitiny/internal/secrets"
 )
 
@@ -67,11 +68,11 @@ func (c *Client) Connect(ctx context.Context, token string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	_, _ = c.run(ctx, nil, "logout", "--force")
-	secrets.Report(ctx, secrets.StepLogin)
+	progress.Report(ctx, secrets.StepLogin)
 	if _, err := c.exec(ctx, loginCmd, nil, strings.NewReader(token+"\n")); err != nil {
 		return err
 	}
-	secrets.Report(ctx, secrets.StepVerify)
+	progress.Report(ctx, secrets.StepVerify)
 	_, err := c.run(ctx, nil, "info")
 	return err
 }
