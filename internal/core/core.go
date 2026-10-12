@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"regexp"
 	"sync"
 	"sync/atomic"
@@ -267,10 +268,31 @@ type Status struct {
 	Update      UpdateInfo   `json:"update"`
 	Docker      *docker.Info `json:"docker"`
 	DockerError string       `json:"dockerError,omitempty"`
+	// Database is the size of the manager's SQLite files, absent when they
+	// can't be read.
+	Database *DatabaseSize `json:"database,omitempty"`
+}
+
+type DatabaseSize struct {
+	SizeBytes int64 `json:"sizeBytes"`
+	// WALBytes is the write-ahead log not yet checkpointed into the file.
+	WALBytes int64 `json:"walBytes"`
+}
+
+func (c *Core) databaseSize() *DatabaseSize {
+	fi, err := os.Stat(c.cfg.DBPath())
+	if err != nil {
+		return nil
+	}
+	d := &DatabaseSize{SizeBytes: fi.Size()}
+	if wal, err := os.Stat(c.cfg.DBPath() + "-wal"); err == nil {
+		d.WALBytes = wal.Size()
+	}
+	return d
 }
 
 func (c *Core) Status(ctx context.Context) Status {
-	st := Status{Version: c.cfg.Version, Update: c.Update()}
+	st := Status{Version: c.cfg.Version, Update: c.Update(), Database: c.databaseSize()}
 	info, err := c.dockerFor(store.LocalServerID).Info(ctx)
 	if err != nil {
 		st.DockerError = err.Error()

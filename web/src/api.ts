@@ -615,6 +615,8 @@ export type Status = {
   update: UpdateInfo;
   docker?: { version: string; apiVersion: string; os: string; arch: string };
   dockerError?: string;
+  /** The manager's SQLite file and its write-ahead log not yet merged into it. */
+  database?: { sizeBytes: number; walBytes: number };
 };
 
 /** Secret values come back masked; sending the mask keeps the stored value. */
