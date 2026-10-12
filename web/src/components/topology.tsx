@@ -41,6 +41,10 @@ export function serviceIssue(svc: IssueSource): ServiceIssue | null {
 const issue = (tone: ServiceIssue["tone"], text: string): ServiceIssue => ({ tone, short: text, text });
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+/** Not running well, or misconfigured (a missing network…): what the "need attention" counts and marks count. */
+export const needsAttention = (svc: IssueSource & { stopped: boolean }) =>
+  troubled(liveState({ stopped: svc.stopped, containers: svc.containers })) || serviceIssue(svc)?.tone === "error";
+
 export const issueRing = { error: "ring-destructive/60", warn: "ring-amber-500/60" } as const;
 export const issueText = { error: "text-destructive", warn: "text-amber-600 dark:text-amber-400" } as const;
 

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
+import { issueRing, issueText, needsAttention, serviceIssue } from "@/components/topology";
 import { memoryOf, useUsage } from "@/components/usage";
 import { formatBytes, liveState, timeAgo, troubled } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -78,8 +79,8 @@ export function Projects() {
               <StatCard
                 icon={TriangleAlert}
                 label="Need attention"
-                value={states.filter(troubled).length}
-                tone={states.some(troubled) ? "bad" : undefined}
+                value={all.filter(needsAttention).length}
+                tone={all.some(needsAttention) ? "bad" : undefined}
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -97,12 +98,19 @@ export function Projects() {
 function ProjectCard({ project: p, services, server }: { project: ProjectT; services?: Service[]; server?: string }) {
   const domains = services?.filter((s) => s.domain).map((s) => s.domain) ?? [];
   const states = services?.map(liveState) ?? [];
-  const bad = states.filter(troubled).length;
+  const bad = services?.filter(needsAttention).length ?? 0;
+  // The first misconfiguration (a missing network…), as the service's own card shows it.
+  const issue = services?.map((s) => ({ s, i: serviceIssue(s) })).find((x) => x.i?.tone === "error");
   const memory = memoryOf(useUsage().data, (u) => u.projectId === p.id);
 
   return (
     <Link to={`/projects/${p.id}`} className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-      <Card className="h-full gap-3 px-4 transition-all group-hover:-translate-y-px group-hover:shadow-md group-hover:ring-foreground/20">
+      <Card
+        className={cn(
+          "h-full gap-3 px-4 transition-all group-hover:-translate-y-px group-hover:shadow-md group-hover:ring-foreground/20",
+          issue && issueRing.error,
+        )}
+      >
         <div className="flex items-start gap-3">
           <IconTile icon={FolderKanban} />
           <div className="min-w-0 flex-1">
@@ -125,13 +133,23 @@ function ProjectCard({ project: p, services, server }: { project: ProjectT; serv
                 className="relative flex size-6 items-center justify-center rounded-md bg-muted"
               >
                 <ServiceIcon service={s} className="size-3.5 text-muted-foreground" />
-                <span className={cn("absolute -right-0.5 -bottom-0.5 size-2 rounded-full ring-2 ring-card", stateDot(states[i]))} />
+                <span
+                  className={cn("absolute -right-0.5 -bottom-0.5 size-2 rounded-full ring-2 ring-card", needsAttention(s) ? "bg-red-500" : stateDot(states[i]))}
+                />
               </span>
             ))}
             <span className="ml-1 text-xs text-muted-foreground">
               {bad ? `${bad} need${bad === 1 ? "s" : ""} attention` : states.every((s) => s === "running") ? "all running" : ""}
             </span>
           </div>
+        )}
+        {issue && (
+          <p title={issue.i!.text} className={cn("flex items-center gap-1.5 text-xs", issueText.error)}>
+            <TriangleAlert className="size-3.5 shrink-0" />
+            <span className="truncate">
+              {issue.s.name}: {issue.i!.short}
+            </span>
+          </p>
         )}
         {domains.length > 0 && (
           <div className="flex flex-wrap gap-1">

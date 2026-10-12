@@ -28,7 +28,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
-import { dbFields, dbRef, envMap, envRows, envSecrets, formatBytes, liveState, sameEnv, troubled, type EnvRow } from "@/lib/format";
+import { dbFields, dbRef, envMap, envRows, envSecrets, formatBytes, liveState, sameEnv, type EnvRow } from "@/lib/format";
 import {
   api,
   canBackup,
@@ -44,7 +44,7 @@ import { ComposeDialog } from "@/components/compose-dialog";
 import { TemplateDialog } from "@/components/template-dialog";
 import { ReachIcon, reachOf } from "@/components/reach";
 import { GitSource, useProjectGit } from "@/components/git-source";
-import { issueRing, issueText, serviceIssue } from "@/components/topology";
+import { issueRing, issueText, needsAttention, serviceIssue } from "@/components/topology";
 import { cn } from "@/lib/utils";
 
 const MapCanvas = lazy(() => import("@/components/canvas/map-canvas"));
@@ -103,8 +103,7 @@ export function Project() {
   const apps = list.filter((s) => !isDatabase(s.kind));
   const dbs = list.flatMap((s) => (isDatabase(s.kind) ? [{ ...s, kind: s.kind }] : []));
   const states = list.map(liveState);
-  // Not running well, or misconfigured: as the map counts a project's problems.
-  const attention = list.filter((s) => troubled(liveState(s)) || serviceIssue(s)?.tone === "error").length;
+  const attention = list.filter(needsAttention).length;
 
   return (
     <>
