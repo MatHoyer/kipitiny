@@ -93,6 +93,12 @@ func (l *secretListings) forget(id string) {
 	}
 }
 
+// WithSecretProgress has connecting or testing a password manager under ctx
+// call f with each step as it starts ("image", "helper", "login", …).
+func WithSecretProgress(ctx context.Context, f func(step string)) context.Context {
+	return secrets.WithProgress(ctx, func(s secrets.Step) { f(string(s)) })
+}
+
 // secretTokenSetting keeps a provider's token, to log in again when its
 // session is lost or expires.
 func secretTokenSetting(id string) string { return "secrets_" + id + "_token" }
@@ -154,8 +160,14 @@ func (c *Core) TestSecretProvider(ctx context.Context, id string) error {
 	// Long enough to pull a helper image on first use.
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
+	if w, ok := p.(interface{ Warm(context.Context) error }); ok {
+		if err := w.Warm(ctx); err != nil {
+			return fmt.Errorf("%w: %s: %v", ErrInvalid, name, err)
+		}
+	}
 	b, ok := p.(secrets.Browser)
 	if ok {
+		secrets.Report(ctx, secrets.StepSession)
 		if _, err := b.Vaults(ctx); err == nil {
 			return nil
 		}
@@ -164,6 +176,7 @@ func (c *Core) TestSecretProvider(ctx context.Context, id string) error {
 		return fmt.Errorf("%w: %s refused the saved token: %v", ErrInvalid, name, err)
 	}
 	if ok {
+		secrets.Report(ctx, secrets.StepVaults)
 		if _, err := b.Vaults(ctx); err != nil {
 			return fmt.Errorf("%w: %s: %v", ErrInvalid, name, err)
 		}

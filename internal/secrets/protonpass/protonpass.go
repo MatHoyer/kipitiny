@@ -67,11 +67,22 @@ func (c *Client) Connect(ctx context.Context, token string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	_, _ = c.run(ctx, nil, "logout", "--force")
+	secrets.Report(ctx, secrets.StepLogin)
 	if _, err := c.exec(ctx, loginCmd, nil, strings.NewReader(token+"\n")); err != nil {
 		return err
 	}
+	secrets.Report(ctx, secrets.StepVerify)
 	_, err := c.run(ctx, nil, "info")
 	return err
+}
+
+// Warm starts what the runner keeps between calls (the helper container),
+// pulling the CLI on first use.
+func (c *Client) Warm(ctx context.Context) error {
+	if r, ok := c.runner.(interface{ Warm(context.Context) error }); ok {
+		return r.Warm(ctx)
+	}
+	return nil
 }
 
 // Close stops whatever the runner keeps running between calls.

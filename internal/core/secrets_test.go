@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/MatHoyer/kipitiny/internal/config"
@@ -160,5 +161,50 @@ func TestSecretListingsCache(t *testing.T) {
 	logins := fake.logins
 	if items, err := c.SecretItems(ctx, "fake", "Work", true); err != nil || len(items) != 1 || fake.logins != logins+1 {
 		t.Errorf("expired session: %v, %v, %d logins", items, err, fake.logins-logins)
+	}
+}
+
+// browsingProvider is a fakeProvider that lists vaults while logged in and
+// reports starting its helper when warmed.
+type browsingProvider struct{ fakeProvider }
+
+func (b *browsingProvider) Warm(ctx context.Context) error {
+	secrets.Report(ctx, secrets.StepHelper)
+	return nil
+}
+func (b *browsingProvider) Vaults(context.Context) ([]string, error) {
+	if b.session == "" {
+		return nil, errors.New("not logged in")
+	}
+	return []string{"Vault"}, nil
+}
+func (b *browsingProvider) Items(context.Context, string) ([]secrets.Item, error) { return nil, nil }
+
+func TestTestSecretProviderProgress(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	b := &browsingProvider{}
+	c.secrets = []secrets.Provider{b}
+	if _, err := c.ConnectSecretProvider(ctx, "fake", "good"); err != nil {
+		t.Fatal(err)
+	}
+	test := func() ([]string, error) {
+		var steps []string
+		err := c.TestSecretProvider(WithSecretProgress(ctx, func(s string) { steps = append(steps, s) }), "fake")
+		return steps, err
+	}
+
+	steps, err := test()
+	if want := []string{"helper", "session"}; err != nil || !slices.Equal(steps, want) {
+		t.Errorf("live session: steps = %q, %v; want %q", steps, err, want)
+	}
+	// An expired session signs in again with the saved token.
+	b.session = ""
+	steps, err = test()
+	if want := []string{"helper", "session", "vaults"}; err != nil || !slices.Equal(steps, want) {
+		t.Errorf("expired session: steps = %q, %v; want %q", steps, err, want)
+	}
+	if b.session != "good" {
+		t.Error("didn't sign in again")
 	}
 }
