@@ -230,9 +230,11 @@ func (c *Core) verifyDump(ctx context.Context, b store.Backup) (store.Verificati
 		svc.Image = b.Image
 	}
 	dk := c.dockerFor(svc.ServerID)
+	c.verifySteps.set(b.ID, VerifyImage)
 	if err := dk.EnsureImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image)); err != nil {
 		return d, fmt.Errorf("pull %s: %w", svc.Image, err)
 	}
+	c.verifySteps.set(b.ID, VerifyServer)
 	cfg := &container.Config{
 		Image:  svc.Image,
 		Labels: map[string]string{docker.LabelManaged: "true", docker.LabelComponent: verifyComponent},
@@ -264,10 +266,12 @@ func (c *Core) verifyDump(ctx context.Context, b store.Backup) (store.Verificati
 	if err := dk.WaitHealthy(ctx, id, databaseReadyTimeout); err != nil {
 		return d, fmt.Errorf("throwaway server: %w", err)
 	}
+	c.verifySteps.set(b.ID, VerifyRestore)
 	if err := c.loadDump(ctx, dk, id, svc, svc.Env[mysqlDatabase], st, target, b); err != nil {
 		return d, err
 	}
 
+	c.verifySteps.set(b.ID, VerifyCheck)
 	var out strings.Builder
 	if svc.Kind == store.ServiceKindMongoDB {
 		err = dk.Exec(ctx, id, docker.ExecOptions{

@@ -314,12 +314,14 @@ func (c *Core) verifyVolumes(ctx context.Context, b store.Backup) (store.Verific
 		serverID = svc.ServerID
 	}
 	dk := c.dockerFor(serverID)
+	c.verifySteps.set(b.ID, VerifyServer)
 	id, err := startVolumeHelper(ctx, dk, "kipitiny-verify-"+strings.ToLower(b.ID), nil)
 	if err != nil {
 		return d, err
 	}
 	defer c.removeHelper(ctx, dk, id)
 
+	c.verifySteps.set(b.ID, VerifyRead)
 	rc, err := st.Get(ctx, b.ObjectKey)
 	if err != nil {
 		return d, fmt.Errorf("open backup: %w", err)

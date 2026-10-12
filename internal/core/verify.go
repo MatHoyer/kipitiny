@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/moby/moby/api/types/container"
@@ -41,7 +42,9 @@ func (c *Core) VerifyBackup(ctx context.Context, backupID string) (store.Backup,
 	if err := c.store.SetBackupVerification(ctx, b.ID, b.Verification); err != nil {
 		return store.Backup{}, err
 	}
+	c.verifySteps.set(b.ID, VerifyQueued)
 	if err := c.goBackground(func() { c.runVerify(b) }); err != nil {
+		c.verifySteps.done(b.ID)
 		now := time.Now()
 		_ = c.store.SetBackupVerification(ctx, b.ID, store.Verification{VerifyStatus: store.OpFailed, VerifyError: err.Error(), VerifiedAt: &now})
 		return store.Backup{}, err
@@ -49,7 +52,36 @@ func (c *Core) VerifyBackup(ctx context.Context, backupID string) (store.Backup,
 	return b, nil
 }
 
+// Steps of a restore test, as Backup.VerifyStep reports them.
+const (
+	// VerifyQueued: waiting for another restore test to finish.
+	VerifyQueued = "queued"
+	// VerifyImage: getting the database server's image.
+	VerifyImage = "image"
+	// VerifyServer: starting the throwaway server (or helper) and waiting
+	// until it's ready.
+	VerifyServer = "server"
+	// VerifyRestore: downloading the backup and loading it.
+	VerifyRestore = "restore"
+	// VerifyRead: downloading a volume archive and reading it through.
+	VerifyRead = "read"
+	// VerifyCheck: measuring what came back.
+	VerifyCheck = "check"
+)
+
+// verifySteps holds the step each running restore test is at, by backup ID.
+type verifySteps struct{ m sync.Map }
+
+func (v *verifySteps) set(id, step string) { v.m.Store(id, step) }
+func (v *verifySteps) done(id string)      { v.m.Delete(id) }
+func (v *verifySteps) get(id string) string {
+	s, _ := v.m.Load(id)
+	step, _ := s.(string)
+	return step
+}
+
 func (c *Core) runVerify(b store.Backup) {
+	defer c.verifySteps.done(b.ID)
 	// One restore test at a time: they can be memory- and disk-hungry.
 	select {
 	case c.verifySem <- struct{}{}:
@@ -121,9 +153,11 @@ func (c *Core) verify(ctx context.Context, b store.Backup) (store.VerificationDe
 	}
 	image, serverID := c.verifyImage(ctx, b)
 	dk := c.dockerFor(serverID)
+	c.verifySteps.set(b.ID, VerifyImage)
 	if err := dk.EnsureImage(ctx, image, c.registryAuth(ctx, image)); err != nil {
 		return d, fmt.Errorf("pull %s: %w", image, err)
 	}
+	c.verifySteps.set(b.ID, VerifyServer)
 
 	const user, db = "app", "app"
 	id, err := dk.Run(ctx, client.ContainerCreateOptions{
@@ -166,6 +200,7 @@ func (c *Core) verify(ctx context.Context, b store.Backup) (store.VerificationDe
 		return d, fmt.Errorf("create database: %w", err)
 	}
 
+	c.verifySteps.set(b.ID, VerifyRestore)
 	rc, err := st.Get(ctx, b.ObjectKey)
 	if err != nil {
 		return d, fmt.Errorf("open backup: %w", err)
@@ -176,6 +211,7 @@ func (c *Core) verify(ctx context.Context, b store.Backup) (store.VerificationDe
 	}
 
 	// Sanity check: statistics on what came back.
+	c.verifySteps.set(b.ID, VerifyCheck)
 	query := `ANALYZE;
 SELECT (SELECT count(*) FROM pg_stat_user_tables),
        (SELECT coalesce(sum(n_live_tup), 0) FROM pg_stat_user_tables),

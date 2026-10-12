@@ -582,6 +582,9 @@ type Verification struct {
 	VerifyError   string              `bun:"verify_error" json:"verifyError,omitempty"`
 	VerifyDetails VerificationDetails `bun:"verify_details" json:"verifyDetails"`
 	VerifiedAt    *time.Time          `bun:"verified_at" json:"verifiedAt,omitempty"`
+	// VerifyStep is where a running restore test is at; core fills it, it
+	// isn't stored.
+	VerifyStep string `bun:"-" json:"verifyStep,omitempty"`
 }
 
 type VerificationDetails struct {
