@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, LayoutGrid, Rocket, ScanSearch, Search } from "lucide-react";
+import { ArrowLeft, ArrowRight, ExternalLink, LayoutGrid, Rocket, ScanSearch, Search } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -10,8 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
+import { Stepper } from "@/components/ui/stepper";
 import { useDocsUrl } from "@/lib/docs";
-import { api, type AppTemplate, type TemplateInstall, type TemplateResult } from "../api";
+import { api, isDatabase, type AppTemplate, type Deployment, type Service, type TemplateInstall, type TemplateResult } from "../api";
 
 /**
  * Installs a one-click app: into projectId when given, else into a new
@@ -129,6 +130,7 @@ function InstallForm({
   const [name, setName] = useState(t.project);
   const [serverId, setServerId] = useState("local");
   const [plan, setPlan] = useState<TemplateResult["plan"] | null>(null);
+  const [installed, setInstalled] = useState<TemplateResult | null>(null);
   const changed = () => setPlan(null);
 
   const body = (dryRun: boolean): TemplateInstall => ({
@@ -150,19 +152,43 @@ function InstallForm({
         qc.invalidateQueries({ queryKey: ["services", res.projectId] });
         qc.invalidateQueries({ queryKey: ["project", res.projectId] });
       }
-      toast.success(`${t.title} installed`, {
-        description: res.plan.deploying.length ? `Deploying ${res.plan.deploying.join(", ")}` : undefined,
-      });
+      // Deploys run in the background: follow them here.
+      if (res.projectId && res.plan.deploying.length) return setInstalled(res);
+      toast.success(`${t.title} installed`);
       onDone();
       if (!projectId && res.projectId) navigate(`/projects/${res.projectId}`);
     },
   });
+  const open = () => {
+    onDone();
+    if (!projectId && installed) navigate(`/projects/${installed.projectId}`);
+  };
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (plan) install.mutate();
     else preview.mutate();
   };
   const generated = t.inputs.filter((i) => i.generate);
+
+  if (installed)
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-3">
+            <ServiceIconTile service={{ icon: t.icon }} className="size-8" />
+            Installing {t.title}
+          </DialogTitle>
+          <DialogDescription>Databases deploy first, then the apps once they're ready. You can close this: it keeps going.</DialogDescription>
+        </DialogHeader>
+        <DeployProgress projectId={installed.projectId!} deploying={installed.plan.deploying} />
+        <DialogFooter>
+          <Button onClick={open}>
+            {projectId ? "Close" : "Open the project"}
+            {!projectId && <ArrowRight data-icon="inline-end" />}
+          </Button>
+        </DialogFooter>
+      </>
+    );
 
   return (
     <form onSubmit={onSubmit} className="contents">
@@ -322,5 +348,43 @@ function Notes({ markdown }: { markdown: string }) {
         return <p key={i}>{inline(lines.join(" "))}</p>;
       })}
     </div>
+  );
+}
+
+/** The deployments an install started, one step per service: databases first, then the apps waiting on them. */
+function DeployProgress({ projectId, deploying }: { projectId: string; deploying: string[] }) {
+  const q = useQuery({
+    queryKey: ["template-deploys", projectId],
+    queryFn: async () => {
+      const services = (await api.services(projectId)).filter((s) => deploying.includes(s.name));
+      const rows = await Promise.all(services.map(async (s) => ({ s, d: (await api.deployments(s.id))[0] as Deployment | undefined })));
+      return rows.sort((a, b) => Number(isDatabase(b.s.kind)) - Number(isDatabase(a.s.kind)) || a.s.name.localeCompare(b.s.name));
+    },
+    refetchInterval: (q) => (q.state.data?.every((r) => r.d && r.d.status !== "running") ? false : 1_500),
+  });
+  const rows = q.data ?? [];
+  const hint = ({ s, d }: { s: Service; d?: Deployment }) =>
+    !d
+      ? isDatabase(s.kind)
+        ? "Queued"
+        : "Waits for the databases to be ready"
+      : d.status === "running"
+        ? `Pulling ${d.image} and starting it`
+        : d.status === "failed"
+          ? d.error || "Failed: see its deployment log"
+          : `Running ${d.image}`;
+  const pending = rows.findIndex((r) => r.d?.status !== "succeeded");
+  const current = rows.length === 0 ? 1 : pending === -1 ? rows.length + 1 : pending + 1;
+  return (
+    <Stepper
+      orientation="vertical"
+      current={current}
+      busy={rows[pending]?.d?.status === "running"}
+      failed={rows[pending]?.d?.status === "failed"}
+      steps={[
+        { title: "Create the services", hint: `${deploying.length} of them, with their volumes and networks` },
+        ...rows.map((r) => ({ title: `Deploy ${r.s.name}`, hint: hint(r) })),
+      ]}
+    />
   );
 }
