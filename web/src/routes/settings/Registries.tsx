@@ -3,6 +3,7 @@ import { ChevronLeft, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { DockerIcon, GitHubIcon, GitLabIcon } from "@/components/brand-icons";
 import { ChoiceTile, EmptyState, ErrorText, Mono } from "@/components/common";
+import { HowTo, type HowToStep } from "@/components/how-to";
 import { TestDialog } from "@/components/test-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ type Provider = {
   username: string;
   password: string;
   help: ReactNode;
+  guide?: HowToStep[];
 };
 
 const providers: Provider[] = [
@@ -41,6 +43,15 @@ const providers: Provider[] = [
     username: "Docker ID",
     password: "Access token",
     help: "Create a read-only personal access token in Docker Hub › Account settings › Personal access tokens.",
+    guide: [
+      {
+        title: "Generate a token",
+        text: "In your account settings, Personal access tokens › Generate new token.",
+        link: { href: "https://app.docker.com/settings/personal-access-tokens", label: "Open access tokens" },
+      },
+      { title: "Make it read-only", text: "Access permissions: Read-only is all pulling needs." },
+      { title: "Copy it", text: "Docker Hub shows it once. The Docker ID is your username." },
+    ],
   },
   {
     id: "ghcr",
@@ -55,6 +66,19 @@ const providers: Provider[] = [
         A personal access token (classic) with the <Mono>read:packages</Mono> scope.
       </>
     ),
+    guide: [
+      {
+        title: "Create a classic token",
+        text: (
+          <>
+            This link prefills the <Mono>read:packages</Mono> scope; fine-grained tokens can't read packages yet.
+          </>
+        ),
+        link: { href: "https://github.com/settings/tokens/new?scopes=read:packages&description=kipitiny", label: "Create a token" },
+      },
+      { title: "Pick an expiration", text: "When it expires, pulls fail until you paste a new one here." },
+      { title: "Copy it", text: "GitHub shows it once. The username is your GitHub login." },
+    ],
   },
   {
     id: "gitlab",
@@ -69,6 +93,27 @@ const providers: Provider[] = [
         A deploy token or personal access token with <Mono>read_registry</Mono>. Self-hosted GitLab: use Other.
       </>
     ),
+    guide: [
+      {
+        title: "Create a deploy token",
+        text: (
+          <>
+            In the project (or group): Settings › Repository › Deploy tokens, with the <Mono>read_registry</Mono> scope. It only reaches that
+            project's images.
+          </>
+        ),
+      },
+      {
+        title: "Or a personal token",
+        text: (
+          <>
+            To pull from several projects: a personal access token with <Mono>read_registry</Mono>.
+          </>
+        ),
+        link: { href: "https://gitlab.com/-/user_settings/personal_access_tokens?name=kipitiny&scopes=read_registry", label: "Create a personal token" },
+      },
+      { title: "Copy the username and token", text: "A deploy token comes with its own username, like gitlab+deploy-token-1." },
+    ],
   },
   {
     id: "other",
@@ -240,6 +285,7 @@ function RegistryForm({
         </DialogTitle>
         <DialogDescription>{p.help} The registry checks them before they're saved.</DialogDescription>
       </DialogHeader>
+      {!registry && p.guide && <HowTo label="How do I get a token?" steps={p.guide} />}
       <div className="space-y-4">
         {p.id === "other" && (
           <FloatingInput

@@ -761,6 +761,7 @@ const routes: Route[] = [
   ["POST", /^\/auth\/logout$/, () => undefined],
 
   ["GET", /^\/servers$/, () => [{ ...SERVER, projects: db.projects.length }]],
+  ["GET", /^\/ssh-key$/, () => ({ publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDemoDemoDemoDemoDemoDemoDemoDemoDemoDemo kipitiny" })],
   ["GET", /^\/domains$/, () => db.domains],
   ["GET", /^\/secret-providers$/, () => [passwordManager()]],
   [
