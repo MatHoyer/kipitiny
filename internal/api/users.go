@@ -46,7 +46,7 @@ func (a *API) listInvites(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createInvite(w http.ResponseWriter, r *http.Request) {
-	var body core.UserAccess
+	var body core.InviteInput
 	if !decode(w, r, &body) {
 		return
 	}

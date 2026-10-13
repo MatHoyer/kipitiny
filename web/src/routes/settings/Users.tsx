@@ -33,10 +33,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router";
 import { CopyField, ErrorText, Section, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FloatingInput } from "@/components/ui/floating-input";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
 import { Tip } from "@/components/ui/tooltip";
@@ -183,7 +185,7 @@ export function UsersPage() {
                     {i.role === "admin" ? "Admin" : `Member of ${plural(Object.keys(i.grants).length, "project")}`}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    Created {timeAgo(i.createdAt)}, expires {timeAgo(i.expiresAt)}
+                    {i.email ? `Sent to ${i.email} ${timeAgo(i.createdAt)}` : `Created ${timeAgo(i.createdAt)}`}, expires {timeAgo(i.expiresAt)}
                   </span>
                 </span>
                 <Button variant="ghost" size="icon-sm" title="Revoke" aria-label="Revoke" onClick={() => revoke.mutate(i.id)}>
@@ -268,23 +270,39 @@ export const invitePath = "/invite";
 function InviteForm({ onDone }: { onDone: () => void }) {
   const qc = useQueryClient();
   const [access, setAccess] = useState<UserAccess>(memberDefault);
+  const [email, setEmail] = useState("");
+  const smtp = useQuery({ queryKey: ["email"], queryFn: api.email });
+  const page = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}${invitePath}`;
   const create = useMutation({
     meta: { error: "Couldn't create the invite" },
-    mutationFn: () => api.createInvite(access),
+    mutationFn: () => api.createInvite({ ...access, ...(email.trim() && { email: email.trim(), link: page }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["invites"] }),
   });
   if (create.data) {
     // The token stays in the fragment: it never reaches a server log.
-    const link = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}${invitePath}#${create.data.token}`;
+    const link = `${page}#${create.data.token}`;
+    const sent = !!create.data.email && !create.data.emailError;
     return (
       <>
         <DialogHeader>
-          <DialogTitle>Invite link created</DialogTitle>
+          <DialogTitle>{sent ? "Invite sent" : "Invite link created"}</DialogTitle>
           <DialogDescription className="flex items-center gap-1.5">
-            <TriangleAlert className="size-4 shrink-0 text-amber-500" />
-            Copy it now: it won't be shown again. Whoever opens it first gets the account.
+            {sent ? (
+              <>
+                <Mail className="size-4 shrink-0" />
+                Emailed to {create.data.email}. The link also works copied from here, once, and won't be shown again.
+              </>
+            ) : (
+              <>
+                <TriangleAlert className="size-4 shrink-0 text-amber-500" />
+                Copy it now: it won't be shown again. Whoever opens it first gets the account.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
+        {create.data.emailError && (
+          <p className="text-sm text-destructive">Couldn't email it: {create.data.emailError}. Send the link yourself.</p>
+        )}
         <CopyField value={link} />
         <DialogFooter>
           <Button onClick={onDone}>Done</Button>
@@ -292,6 +310,7 @@ function InviteForm({ onDone }: { onDone: () => void }) {
       </>
     );
   }
+  const noSmtp = smtp.data && !smtp.data.configured;
   return (
     <>
       <DialogHeader>
@@ -299,9 +318,31 @@ function InviteForm({ onDone }: { onDone: () => void }) {
         <DialogDescription>They pick their username and password from the link, valid 7 days.</DialogDescription>
       </DialogHeader>
       <AccessEditor value={access} onChange={setAccess} />
+      <FloatingInput
+        label="Email (optional)"
+        type="email"
+        autoComplete="off"
+        value={email}
+        disabled={noSmtp}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="new.user@example.com"
+        description={
+          noSmtp ? (
+            <>
+              Set an SMTP server in{" "}
+              <Link to="/email" className="underline">
+                Settings › Email
+              </Link>{" "}
+              to email invites. You can still copy the link.
+            </>
+          ) : (
+            "Sends them the link. Leave empty to copy it yourself."
+          )
+        }
+      />
       <DialogFooter>
         <Button loading={create.isPending} onClick={() => create.mutate()}>
-          Create link
+          {email.trim() ? "Send invite" : "Create link"}
         </Button>
       </DialogFooter>
     </>

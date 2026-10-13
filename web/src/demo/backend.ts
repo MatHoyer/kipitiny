@@ -1576,9 +1576,11 @@ const routes: Route[] = [
         features: admin ? [] : (body.features ?? []),
         grants: admin ? {} : (body.grants ?? {}),
         createdBy: "demo",
+        ...(body.email ? { email: String(body.email) } : {}),
         createdAt: now(),
         expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
       };
+      if (body.email && !db.email) throw invalid("email isn't set up; configure an SMTP server in Settings › Email");
       (db.invites ??= []).push(i);
       save();
       return { ...i, token: `demo${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}` };

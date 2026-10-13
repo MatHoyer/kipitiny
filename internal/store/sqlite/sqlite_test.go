@@ -224,7 +224,7 @@ func TestUserAccessAndInvites(t *testing.T) {
 	inv, err := s.CreateInvite(ctx, store.Invite{
 		TokenHash: "inv", Role: store.RoleMember, Features: []string{"storage"},
 		Grants:    map[string][]string{p.ID: {"view", "deploy"}, "gone": {"view"}},
-		CreatedBy: admin.ID, ExpiresAt: time.Now().Add(time.Hour),
+		CreatedBy: admin.ID, Email: "alice@example.com", ExpiresAt: time.Now().Add(time.Hour),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -232,7 +232,7 @@ func TestUserAccessAndInvites(t *testing.T) {
 	if _, err := s.CreateInvite(ctx, store.Invite{TokenHash: "old", Role: store.RoleMember, ExpiresAt: time.Now().Add(-time.Second)}); err != nil {
 		t.Fatal(err)
 	}
-	if is, err := s.ListInvites(ctx); err != nil || len(is) != 1 || is[0].ID != inv.ID {
+	if is, err := s.ListInvites(ctx); err != nil || len(is) != 1 || is[0].ID != inv.ID || is[0].Email != "alice@example.com" {
 		t.Fatalf("invites: %+v %v", is, err)
 	}
 	if _, err := s.GetInviteByHash(ctx, "old"); !errors.Is(err, store.ErrNotFound) {

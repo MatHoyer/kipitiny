@@ -50,7 +50,7 @@ The manager runs as a container and controls the **host** Docker daemon via the 
 - Never expose the Docker API over TCP without TLS.
 - Users: **admins** do everything; **members** get per-project permissions (`project_grants`: view, deploy, settings, env, domains, backups, restore, download, data, data-write, files, files-write, terminal, git, delete) and read-only server **features** (`users.features`). Defined in `internal/core/permissions.go`. A project a member can't see is reported as not found. Host network and the Docker socket stay admin-only (root on the host).
 - Enforcement: every REST route maps to what it needs in `internal/api/access.go` (checked after the mux sets `{id}`; `TestRouteAccess` fails on an unmapped route); core checks what depends on the body (env, domains and password-manager refs in a service change, compose prunes, restores across projects); MCP tools check the same permissions. Tokens belong to a user and never exceed them. Git syncs run as the user who linked the repo. Lists are filtered, and server-level views drop hosts, accounts and URLs for members.
-- Accounts come from single-use invite links (SHA-256 of the token stored, 7 days). The last admin can't be demoted or removed; `kipitiny make-admin <user>` is the escape hatch.
+- Accounts come from single-use invite links (SHA-256 of the token stored, 7 days), optionally emailed through the SMTP server (the browser sends the invite page's URL; the token goes in its fragment). The last admin can't be demoted or removed; `kipitiny make-admin <user>` is the escape hatch.
 - Mask secrets (env vars, DB passwords, keys) in API read responses by default.
 
 ### Password managers
