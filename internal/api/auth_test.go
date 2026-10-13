@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/core"
@@ -148,5 +150,22 @@ func TestClientIP(t *testing.T) {
 				t.Errorf("clientIP = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestFailLimiterBounded(t *testing.T) {
+	l := newFailLimiter(3, time.Minute)
+	for i := range maxTrackedIPs + 500 {
+		l.fail(fmt.Sprintf("2001:db8::%x", i))
+	}
+	if n := len(l.fails); n > maxTrackedIPs {
+		t.Errorf("tracks %d addresses, max %d", n, maxTrackedIPs)
+	}
+	ip := "203.0.113.7"
+	for range 3 {
+		l.fail(ip)
+	}
+	if l.allow(ip) {
+		t.Error("allowed after 3 failures with a full map")
 	}
 }
