@@ -1,13 +1,17 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"testing"
 )
 
 func TestSecureHeaders(t *testing.T) {
-	h := SecureHeaders(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	proxy := netip.MustParseAddr("10.0.0.2")
+	trusted := func(_ context.Context, ip netip.Addr) bool { return ip == proxy }
+	h := SecureHeaders(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), trusted)
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -22,9 +26,18 @@ func TestSecureHeaders(t *testing.T) {
 
 	w = httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.RemoteAddr = "10.0.0.2:4321"
 	r.Header.Set("X-Forwarded-Proto", "https")
 	h.ServeHTTP(w, r)
 	if w.Header().Get("Strict-Transport-Security") == "" {
 		t.Error("HSTS missing behind the HTTPS proxy")
+	}
+
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("X-Forwarded-Proto", "https")
+	h.ServeHTTP(w, r)
+	if w.Header().Get("Strict-Transport-Security") != "" || r.Header.Get("X-Forwarded-Proto") != "" {
+		t.Error("X-Forwarded-Proto trusted from a client that isn't a proxy")
 	}
 }
