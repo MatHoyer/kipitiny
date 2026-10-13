@@ -220,6 +220,19 @@ func (c *Core) withGrants(ctx context.Context, a Actor) (Actor, error) {
 	for _, g := range gs {
 		a.Grants[g.ProjectID] = g.Perms
 	}
+	if len(gs) == 0 {
+		return a, nil
+	}
+	// A project's previews come with it.
+	ps, err := c.store.ListProjects(ctx)
+	if err != nil {
+		return Actor{}, err
+	}
+	for _, p := range ps {
+		if perms, ok := a.Grants[p.ParentID]; ok && p.ParentID != "" {
+			a.Grants[p.ID] = perms
+		}
+	}
 	return a, nil
 }
 

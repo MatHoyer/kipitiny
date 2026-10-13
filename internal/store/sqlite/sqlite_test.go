@@ -846,11 +846,12 @@ func TestImageOnlyMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := &Store{db: bun.NewDB(db, sqlitedialect.New())}
-	pr, err := old.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
-	if err != nil {
+	// Raw inserts: the current models have columns this schema lacks.
+	pr := store.Project{ID: "p1", ServerID: store.LocalServerID}
+	if _, err := db.ExecContext(ctx, `INSERT INTO projects (id, name, server_id, created_at, updated_at)
+		VALUES ('p1', 'shop', ?, '2026-01-01 00:00:00+00:00', '2026-01-01 00:00:00+00:00')`, pr.ServerID); err != nil {
 		t.Fatal(err)
 	}
-	// Raw inserts: the current model has columns this schema lacks.
 	newService := func(name string) store.Service {
 		svc := store.Service{ID: ids.New(), ProjectID: pr.ID, Name: name}
 		if _, err := db.ExecContext(ctx, `INSERT INTO services (id, project_id, server_id, name, kind, image, created_at, updated_at)
@@ -926,11 +927,12 @@ func TestRedisMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := &Store{db: bun.NewDB(db, sqlitedialect.New())}
-	pr, err := old.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
-	if err != nil {
+	// Raw SQL: the current models have columns added after this version.
+	pr := store.Project{ID: "p1"}
+	if _, err := db.ExecContext(ctx, `INSERT INTO projects (id, name, server_id, created_at, updated_at)
+		VALUES ('p1', 'shop', ?, '2026-01-01 00:00:00+00:00', '2026-01-01 00:00:00+00:00')`, store.LocalServerID); err != nil {
 		t.Fatal(err)
 	}
-	// Raw SQL: the current model has columns added after this version.
 	pg := store.Service{ID: "pg1"}
 	if _, err := db.ExecContext(ctx, `INSERT INTO services (id, project_id, name, kind, image, replicas, created_at, updated_at, env, memory_mb, secrets, cpus)
 		VALUES ('pg1', ?, 'db', 'postgres', 'postgres:17', 1, '2026-01-01 00:00:00+00:00', '2026-01-01 00:00:00+00:00', '{"A":"1"}', 512, '["A"]', 0.5)`, pr.ID); err != nil {
