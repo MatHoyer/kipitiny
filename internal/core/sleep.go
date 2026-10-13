@@ -37,6 +37,7 @@ type sleepState struct {
 	mu         sync.Mutex
 	lastActive map[string]time.Time // service ID ->
 	requests   map[string]float64   // service ID -> last counter sum
+	waking     map[string]time.Time // service ID -> when a request woke it
 }
 
 // markActive records activity now (a request, a deploy, a start).
@@ -102,6 +103,22 @@ func validateSleep(s store.Service) error {
 		return fmt.Errorf("%w: only an app with a domain and a container port can sleep: a request wakes it", ErrInvalid)
 	case len(s.PublishedPorts) > 0:
 		return fmt.Errorf("%w: an app with published ports can't sleep: their traffic can't wake it", ErrInvalid)
+	}
+	return nil
+}
+
+// checkSleepServer refuses sleep mode where nothing can wake the app: a
+// remote server reaches the manager's pages through KIPITINY_DOMAIN.
+func (c *Core) checkSleepServer(ctx context.Context, s store.Service, project store.Project) error {
+	if s.SleepAfterSeconds == 0 {
+		return nil
+	}
+	sv, err := c.store.GetServer(ctx, project.ServerID)
+	if err != nil {
+		return err
+	}
+	if sv.Kind != store.ServerLocal && (c.cfg.Domain == "" || isLocalDomain(c.cfg.Domain)) {
+		return fmt.Errorf("%w: on a remote server, sleep mode needs the manager's domain (KIPITINY_DOMAIN): requests wake the app through its pages", ErrInvalid)
 	}
 	return nil
 }
@@ -199,6 +216,36 @@ func (c *Core) putToSleep(ctx context.Context, id string) error {
 	}
 	c.log.Info("service asleep", "service", svc.Name, "idle", time.Duration(svc.SleepAfterSeconds)*time.Second)
 	return nil
+}
+
+// coldStart is how long the starting page waits for a woken app before it
+// gives up and shows the usual "unavailable" page.
+const coldStart = 2 * time.Minute
+
+// starting reports whether svc is asleep or was woken less than coldStart
+// ago, waking it in the background when it sleeps: a visitor gets the
+// starting page.
+func (c *Core) starting(svc store.Service) bool {
+	if svc.Stopped || svc.Maintenance.Enabled {
+		return false
+	}
+	now := time.Now()
+	c.sleep.mu.Lock()
+	woken, ok := c.sleep.waking[svc.ID]
+	if svc.Sleeping && (!ok || now.Sub(woken) >= coldStart) {
+		if c.sleep.waking == nil {
+			c.sleep.waking = map[string]time.Time{}
+		}
+		woken, ok = now, true
+		c.sleep.waking[svc.ID] = now
+		_ = c.goBackground(func() {
+			if err := c.Wake(c.bg, svc.ID); err != nil {
+				c.log.Warn("wake failed", "service", svc.Name, "err", err)
+			}
+		})
+	}
+	c.sleep.mu.Unlock()
+	return ok && now.Sub(woken) < coldStart
 }
 
 // Wake starts a sleeping service's replicas again; the reconciler takes it
