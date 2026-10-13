@@ -15,8 +15,10 @@ import (
 // envRefRe matches a reference in a service env value, spaces optional:
 // {{ project.NAME }} for a project variable or secret, {{ db.SERVICE.FIELD }}
 // for a credential of a database service of the project (see dbFields),
-// {{ scheme://… }} for a secret in a password manager (internal/secrets).
-var envRefRe = regexp.MustCompile(`\{\{\s*(?:project\.([A-Za-z_][A-Za-z0-9_]*)|db\.([a-z0-9-]+)\.([A-Z]+)|([a-z][a-z0-9+.-]*://[^{}]+?))\s*\}\}`)
+// {{ scheme://… }} for a secret in a password manager (internal/secrets),
+// {{ app.SERVICE.URL }} or {{ app.SERVICE.DOMAIN }} for where an app of the
+// project is public (so a copy of the project points at its own apps).
+var envRefRe = regexp.MustCompile(`\{\{\s*(?:project\.([A-Za-z_][A-Za-z0-9_]*)|db\.([a-z0-9-]+)\.([A-Z]+)|([a-z][a-z0-9+.-]*://[^{}]+?)|app\.([a-z0-9-]+)\.(URL|DOMAIN))\s*\}\}`)
 
 // soleRefRe matches a value that is exactly one reference.
 var soleRefRe = regexp.MustCompile(`^\s*` + envRefRe.String() + `\s*$`)
@@ -32,6 +34,9 @@ type envSources struct {
 	// secrets are password manager values by reference, fetched for a
 	// deploy (resolveSecrets); nil when only checking references.
 	secrets map[string]string
+	// apps are the public URLs of the project's apps by name; nil when only
+	// checking references before the apps exist (a compose file).
+	apps map[string]string
 }
 
 // projectDatabases returns the project's database services by name.
@@ -53,11 +58,39 @@ func databasesOf(svcs []store.Service) map[string]store.Service {
 	return dbs
 }
 
+// appURLs returns the public URLs of the apps among svcs by name, with
+// the HTTPS port when it isn't 443 (dev setups).
+func (c *Core) appURLs(svcs []store.Service) map[string]string {
+	urls := map[string]string{}
+	for _, s := range svcs {
+		if s.Kind == store.ServiceKindApp && httpRouted(s) {
+			u := "https://" + s.Domain
+			if p := c.cfg.Traefik.HTTPSPort; p != "" && p != "443" {
+				u += ":" + p
+			}
+			urls[s.Name] = u
+		}
+	}
+	return urls
+}
+
 // lookup resolves one envRefRe match (its submatches).
 func (src envSources) lookup(m []string) (string, bool) {
+	if m[5] != "" {
+		if src.apps == nil {
+			return "", true
+		}
+		u, ok := src.apps[m[5]]
+		if m[6] == "DOMAIN" {
+			u = strings.TrimPrefix(u, "https://")
+			u, _, _ = strings.Cut(u, ":")
+		}
+		return u, ok
+	}
 	if m[1] != "" {
 		v, ok := src.project[m[1]]
-		// A project entry may itself hold password manager references.
+		// A project entry may itself hold password manager and app
+		// references.
 		return src.expandSecrets(v), ok
 	}
 	if m[4] != "" {
@@ -71,18 +104,19 @@ func (src envSources) lookup(m []string) (string, bool) {
 	return databaseField(db, m[3])
 }
 
-// expandSecrets substitutes the password manager references in v, leaving
-// the others as they are.
+// expandSecrets substitutes the password manager and app references in
+// v, leaving the others as they are.
 func (src envSources) expandSecrets(v string) string {
-	if src.secrets == nil {
-		return v
-	}
 	return envRefRe.ReplaceAllStringFunc(v, func(ref string) string {
 		m := envRefRe.FindStringSubmatch(ref)
-		if m[4] == "" {
-			return ref
+		switch {
+		case m[4] != "" && src.secrets != nil:
+			return src.secrets[m[4]]
+		case m[5] != "" && src.apps != nil:
+			v, _ := src.lookup(m)
+			return v
 		}
-		return src.secrets[m[4]]
+		return ref
 	})
 }
 
@@ -124,11 +158,11 @@ func (c *Core) checkSecretSchemes(env map[string]string) error {
 // envSources gathers what svc's env resolves against, fetching password
 // manager values.
 func (c *Core) envSources(ctx context.Context, project store.Project, svc store.Service) (envSources, error) {
-	dbs, err := c.projectDatabases(ctx, svc.ProjectID)
+	svcs, err := c.store.ListServices(ctx, svc.ProjectID)
 	if err != nil {
 		return envSources{}, err
 	}
-	src := envSources{project: project.Env, dbs: dbs, secrets: map[string]string{}}
+	src := envSources{project: project.Env, dbs: databasesOf(svcs), apps: c.appURLs(svcs), secrets: map[string]string{}}
 	if refs := secretRefs(svc.Env, project.Env); len(refs) > 0 {
 		if src.secrets, err = c.resolveSecrets(ctx, refs); err != nil {
 			return envSources{}, err
@@ -137,8 +171,12 @@ func (c *Core) envSources(ctx context.Context, project store.Project, svc store.
 	return src, nil
 }
 
-// refName is how a reference is named in messages: project.NAME, db.SERVICE.FIELD.
+// refName is how a reference is named in messages: project.NAME,
+// db.SERVICE.FIELD, app.SERVICE.FIELD.
 func refName(m []string) string {
+	if m[5] != "" {
+		return "app." + m[5] + "." + m[6]
+	}
 	if m[1] != "" {
 		return "project." + m[1]
 	}
@@ -286,7 +324,7 @@ func (c *Core) SetProjectEnv(ctx context.Context, id string, env map[string]stri
 	if err != nil {
 		return store.Project{}, err
 	}
-	src := envSources{project: env, dbs: databasesOf(svcs)}
+	src := envSources{project: env, dbs: databasesOf(svcs), apps: c.appURLs(svcs)}
 	for _, s := range svcs {
 		if missing := unresolved(s.Env, src); len(missing) > 0 {
 			return store.Project{}, fmt.Errorf("%w: %s is used by service %s", ErrInvalid, strings.Join(missing, ", "), s.Name)

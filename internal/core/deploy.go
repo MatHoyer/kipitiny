@@ -169,12 +169,12 @@ func (c *Core) startDeploy(ctx context.Context, serviceID string, req deployRequ
 		unlock()
 		return store.Deployment{}, err
 	}
-	dbs, err := c.projectDatabases(ctx, svc.ProjectID)
+	others, err := c.store.ListServices(ctx, svc.ProjectID)
 	if err != nil {
 		unlock()
 		return store.Deployment{}, err
 	}
-	if err := checkRefs(svc.Env, envSources{project: project.Env, dbs: dbs}); err != nil {
+	if err := checkRefs(svc.Env, envSources{project: project.Env, dbs: databasesOf(others), apps: c.appURLs(others)}); err != nil {
 		unlock()
 		return store.Deployment{}, err
 	}
