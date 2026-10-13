@@ -403,6 +403,11 @@ func clientIP(r *http.Request, trusted func(netip.Addr) bool, tunnel bool) strin
 	return host
 }
 
+// maxTrackedIPs caps how many addresses a limiter remembers: entries only
+// expire when their IP comes back, so a caller rotating addresses (IPv6)
+// would otherwise grow the map forever.
+const maxTrackedIPs = 10_000
+
 // failLimiter blocks an IP after too many failed attempts within a window.
 type failLimiter struct {
 	mu     sync.Mutex
@@ -424,7 +429,24 @@ func (l *failLimiter) allow(ip string) bool {
 func (l *failLimiter) fail(ip string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if _, ok := l.fails[ip]; !ok && len(l.fails) >= maxTrackedIPs {
+		l.evict()
+	}
 	l.fails[ip] = append(l.recent(ip), time.Now())
+}
+
+// evict drops every expired entry, then arbitrary ones if the map is still
+// full; callers hold mu.
+func (l *failLimiter) evict() {
+	for ip := range l.fails {
+		l.recent(ip)
+	}
+	for ip := range l.fails {
+		if len(l.fails) < maxTrackedIPs {
+			break
+		}
+		delete(l.fails, ip)
+	}
 }
 
 func (l *failLimiter) reset(ip string) {
