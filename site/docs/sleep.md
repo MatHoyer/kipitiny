@@ -1,53 +1,63 @@
 ---
 title: Sleep mode
-description: Stop rarely used apps when nobody uses them and start them on the next request
+description: Stop rarely used projects when nobody uses them and start them on the next request
 order: 17
 ---
 
-A small server can host many apps that are rarely used: staging, demos,
-previews, side projects. Sleep mode stops an app's containers after a while
-without traffic and starts them again on the next request, so idle apps cost
-no memory.
+A small server can host many projects that are rarely used: staging, demos,
+previews, side projects. Sleep mode stops every service of a project after a
+while without traffic, databases and workers too, and starts them again on
+the next request, so an idle project costs no memory.
 
 ## Turning it on
 
-In the app's *Settings › Image & runtime*, set **Sleep after idle** (in
-minutes, 5 minutes to 30 days). Empty never sleeps. It applies right away,
-without a deploy. In a compose file it is `x-kipitiny.sleep_after` (`30m`,
-`2h`, see [Compose files](/docs/compose)); agents use the `set_sleep` MCP
-tool, and the API takes `sleepAfterSeconds` on `PATCH /api/services/{id}`.
+In the project's *Settings*, set **Sleep mode** (in minutes, 5 minutes to 30
+days). Empty never sleeps. It applies right away, without a deploy, and isn't
+part of compose files, so a git-linked project keeps it across syncs. Agents
+use the `set_sleep` MCP tool, the API `PUT /api/projects/{id}/sleep` with
+`sleepAfterSeconds`.
 
-Only apps with a domain and a container port can sleep: a request through
-Traefik is what wakes them. Not:
+A request through Traefik is what wakes a project, so it needs at least one
+app with a domain and a container port, and no service whose traffic goes
+around Traefik:
 
-- databases;
-- apps with [published ports](/docs/services) (their traffic doesn't go
-  through Traefik);
-- apps that other services call on the project network only: those calls
-  don't go through Traefik either, so they neither keep the app awake nor
-  wake it.
+- apps with [published ports](/docs/services);
+- apps on the host network.
+
+Calls between services on the project network don't go through Traefik
+either: they neither keep the project awake nor wake it. Since the whole
+project sleeps and wakes together, that's only a concern for traffic from
+outside the project.
 
 ## How it works
 
-- Every minute the manager reads each server's Traefik request counters. An
-  app whose counters didn't move for its idle time is put to sleep: its
-  containers are stopped (kept, so waking is a plain start).
-- The next visitor gets a **Starting…** page while the containers start. It
-  reloads to the app as soon as a replica is ready, or says the app couldn't
-  start after two minutes. API calls (requests that don't accept HTML) get
-  `503 Service Unavailable` with `Retry-After` instead, so clients retry.
-- A deploy, a rollback or a start wakes the app. A stop wins: a stopped app
-  stays stopped, requests don't wake it.
-- A sleeping app raises no "down" alert, and its [uptime
+- Every minute the manager reads each server's Traefik request counters. A
+  project whose apps' counters didn't move for its idle time is put to
+  sleep: its apps stop, then its databases (containers are kept, so waking
+  is a plain start). A stopped service stays as it is.
+- The next visitor of any of its apps gets a **Starting…** page while the
+  project starts: databases first, then the apps once their databases are
+  ready. It reloads to the app as soon as a replica is ready, or says the
+  app couldn't start after two minutes. API calls (requests that don't
+  accept HTML) get `503 Service Unavailable` with `Retry-After` instead, so
+  clients retry.
+- Background workers and scheduled jobs inside the project don't run while
+  it sleeps. Keep sleep for projects where that's fine.
+- A deploy, a rollback, a start, a database backup or restore, a data query
+  and a terminal wake the project. It falls asleep again after its idle
+  time. A stop wins: a stopped service stays stopped, requests don't wake
+  it.
+- A sleeping service raises no "down" alert, and its [uptime
   check](/docs/monitoring#uptime-checks) pauses (a check would keep it awake).
-- After a manager restart, every app counts as just used: none falls asleep
-  before its full idle time.
+- After a manager restart, every project counts as just used: none falls
+  asleep before its full idle time.
 
-The app's page and the project canvas show it as **asleep**;
+The project's settings, its services and the canvas show it as **asleep**;
 `get_app_status` reports `sleeping`.
 
-The first request after a sleep waits for the app to start: a few seconds
-for most apps, longer for heavy ones. Keep sleep for apps where that's fine.
+The first request after a sleep waits for the project to start: a few
+seconds for most, longer for heavy apps or databases. Keep sleep for projects
+where that's fine.
 
 ## The starting page
 

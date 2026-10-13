@@ -73,6 +73,9 @@ func (c *Core) OpenServiceTerminal(ctx context.Context, serviceID, containerRef,
 	if err != nil {
 		return nil, err
 	}
+	if err := c.wakeFor(ctx, svc); err != nil {
+		return nil, err
+	}
 	cts, err := c.activeContainers(ctx, svc)
 	if err != nil {
 		return nil, err

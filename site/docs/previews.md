@@ -29,7 +29,7 @@ In the project's **Previews** tab, under *Preview settings*:
   key, a sandbox SMTP server…
 - **Inherit**: production secrets previews may still use as they are, e.g. an
   error tracker's DSN. Every other secret is left out.
-- How long an unused preview lives (default 7 days), when its apps sleep
+- How long an unused preview lives (default 7 days), when it sleeps
   (default 30 minutes), and whether CI may **seed** it with production data.
 
 ### What a preview gets

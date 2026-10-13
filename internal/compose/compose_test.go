@@ -289,3 +289,14 @@ services:
 		t.Errorf("several exposed ports without x-kipitiny.port: warnings %v", warns)
 	}
 }
+
+func TestSleepAfterMoved(t *testing.T) {
+	data := []byte("services:\n  web:\n    image: nginx\n    x-kipitiny:\n      domain: shop.example.com\n      port: 80\n      sleep_after: 30m\n")
+	f, warns, err := Parse(data, Vars{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warns) != 1 || !strings.Contains(warns[0], "sleep_after is ignored") || f.Services["web"].X.Domain != "shop.example.com" {
+		t.Fatalf("warnings %v, web %+v", warns, f.Services["web"].X)
+	}
+}

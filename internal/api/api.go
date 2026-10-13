@@ -55,6 +55,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("DELETE /api/projects/{id}", a.deleteProject)
 	handle("PUT /api/projects/{id}/env", a.setProjectEnv)
 	handle("PUT /api/projects/{id}/name", a.renameProject)
+	handle("PUT /api/projects/{id}/sleep", a.setProjectSleep)
 	handle("GET /api/projects/{id}/compose", a.exportCompose)
 	handle("POST /api/projects/{id}/compose", a.applyCompose)
 	handle("POST /api/projects/{id}/export", a.exportBundle)
@@ -305,6 +306,21 @@ func (a *API) renameProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, err := a.core.RenameProject(r.Context(), r.PathValue("id"), body.Name)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
+}
+
+func (a *API) setProjectSleep(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		SleepAfterSeconds int `json:"sleepAfterSeconds"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	p, err := a.core.SetProjectSleep(r.Context(), r.PathValue("id"), body.SleepAfterSeconds)
 	if err != nil {
 		a.fail(w, err)
 		return

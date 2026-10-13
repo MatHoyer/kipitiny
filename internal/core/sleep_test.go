@@ -54,28 +54,66 @@ func TestSleepObserve(t *testing.T) {
 	}
 }
 
-func TestValidateSleep(t *testing.T) {
-	app := store.Service{Kind: store.ServiceKindApp, Domain: "a.example.com", Port: 80}
+// Turning sleep on marks the project active before its first observation.
+func TestSleepObserveAfterMarkActive(t *testing.T) {
+	c := &Core{}
+	c.markActive("p")
+	if last := c.sleep.observe("p", 3, time.Now()); last.IsZero() {
+		t.Fatal("no activity recorded")
+	}
+}
+
+func TestSleepBlocker(t *testing.T) {
+	web := store.Service{Name: "web", Kind: store.ServiceKindApp, Domain: "a.example.com", Port: 80}
+	worker := store.Service{Name: "worker", Kind: store.ServiceKindApp}
+	db := store.Service{Name: "db", Kind: store.ServiceKindPostgres}
+	game := store.Service{Name: "game", Kind: store.ServiceKindApp, PublishedPorts: []store.PublishedPort{{HostPort: 25565, ContainerPort: 25565}}}
+	agent := store.Service{Name: "agent", Kind: store.ServiceKindApp, HostNetwork: true}
 	for _, tc := range []struct {
 		name string
-		edit func(*store.Service)
+		svcs []store.Service
 		ok   bool
 	}{
-		{"off", func(s *store.Service) {}, true},
-		{"public app", func(s *store.Service) { s.SleepAfterSeconds = 1800 }, true},
-		{"too short", func(s *store.Service) { s.SleepAfterSeconds = 60 }, false},
-		{"too long", func(s *store.Service) { s.SleepAfterSeconds = 31 * 86400 }, false},
-		{"no domain", func(s *store.Service) { s.SleepAfterSeconds, s.Domain = 1800, "" }, false},
-		{"published ports", func(s *store.Service) {
-			s.SleepAfterSeconds, s.PublishedPorts = 1800, []store.PublishedPort{{HostPort: 25565, ContainerPort: 25565}}
-		}, false},
+		{"app, worker and database", []store.Service{web, worker, db}, true},
+		{"nothing on a domain", []store.Service{worker, db}, false},
+		{"published ports", []store.Service{web, game}, false},
+		{"host network", []store.Service{web, agent}, false},
 	} {
-		s := app
-		tc.edit(&s)
-		err := validateSleep(s)
+		err := sleepBlocker(tc.svcs)
 		if (err == nil) != tc.ok || (err != nil && !errors.Is(err, ErrInvalid)) {
 			t.Errorf("%s: got %v", tc.name, err)
 		}
+	}
+}
+
+func TestSetProjectSleep(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.SetProjectSleep(ctx, p.ID, 1800); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a project without an app on a domain slept: %v", err)
+	}
+	if _, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1,
+		Domain: "shop.example.com", Port: 80}); err != nil {
+		t.Fatal(err)
+	}
+	for _, secs := range []int{60, 31 * 86400} {
+		if _, err := c.SetProjectSleep(ctx, p.ID, secs); !errors.Is(err, ErrInvalid) {
+			t.Errorf("sleep after %ds: %v", secs, err)
+		}
+	}
+	got, err := c.SetProjectSleep(ctx, p.ID, 1800)
+	if err != nil || got.SleepAfterSeconds != 1800 {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+	// A sleeping project takes no service whose traffic can't wake it.
+	_, err = c.CreateService(ctx, p.ID, ServiceInput{Name: "game", Kind: store.ServiceKindApp, Image: "itzg/minecraft-server",
+		PublishedPorts: []store.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}}})
+	if !errors.Is(err, ErrInvalid) {
+		t.Errorf("published ports in a sleeping project: %v", err)
 	}
 }
 
@@ -87,18 +125,25 @@ func TestStartingPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1,
-		Domain: "shop.example.com", Port: 80, SleepAfterSeconds: 1800})
+		Domain: "shop.example.com", Port: 80})
 	if err != nil {
+		t.Fatal(err)
+	}
+	dep, err := c.store.CreateDeployment(ctx, store.Deployment{ServiceID: svc.ID, Status: store.DeploymentSucceeded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.store.SetCurrentDeployment(ctx, svc.ID, dep.ID); err != nil {
 		t.Fatal(err)
 	}
 	if page := c.MaintenancePage(ctx, svc.ID, ""); page.Starting {
 		t.Fatal("an awake app gets the usual page")
 	}
-	if err := c.store.SetServiceSleeping(ctx, svc.ID, true); err != nil {
+	if err := c.store.SetProjectSleeping(ctx, p.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	// Woken just now (the test has no Docker to start containers with).
-	c.sleep.waking = map[string]time.Time{svc.ID: time.Now()}
+	c.sleep.waking = map[string]time.Time{p.ID: time.Now()}
 	page := c.MaintenancePage(ctx, "", "https://shop.example.com/cart")
 	if body := string(page.Body); !page.Starting || !strings.Contains(body, `http-equiv="refresh"`) || !strings.Contains(body, "shop is starting") {
 		t.Fatalf("a sleeping app gets the starting page, got %+v", page)
@@ -123,14 +168,14 @@ func TestStartingPage(t *testing.T) {
 
 	// Woken, not ready yet: still starting; past the cold start, the usual page.
 	c.sleep.mu.Lock()
-	c.sleep.waking[svc.ID] = time.Now().Add(-coldStart / 2)
+	c.sleep.waking[p.ID] = time.Now().Add(-coldStart / 2)
 	c.sleep.mu.Unlock()
 	svc.Sleeping = false
 	if !c.starting(svc) {
 		t.Fatal("an app woken a minute ago is still starting")
 	}
 	c.sleep.mu.Lock()
-	c.sleep.waking[svc.ID] = time.Now().Add(-coldStart)
+	c.sleep.waking[p.ID] = time.Now().Add(-coldStart)
 	c.sleep.mu.Unlock()
 	if c.starting(svc) {
 		t.Fatal("past the cold start, the app is down, not starting")

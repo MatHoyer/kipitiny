@@ -84,7 +84,6 @@ export function service(p: Partial<Service> & Pick<Service, "id" | "name" | "kin
     preBackup: "",
     publishedPorts: [],
     stopGraceSeconds: 0,
-    sleepAfterSeconds: 0,
     hostNetwork: false,
     dockerSocket: "",
     networks: [],
@@ -286,7 +285,7 @@ export function seed(): DemoDb {
   ];
   return {
     version: 3,
-    projects: [{ id: "acme", name: "acme", serverId: "local", env: { APP_URL: "https://acme.example" }, secrets: [], createdAt: at(30), updatedAt: at(2) }],
+    projects: [{ id: "acme", name: "acme", serverId: "local", env: { APP_URL: "https://acme.example" }, secrets: [], sleepAfterSeconds: 0, createdAt: at(30), updatedAt: at(2) }],
     services,
     networks: [],
     deployments: services.map((s) => ({ id: `dep-${s.id}`, serviceId: s.id, status: "succeeded", image: s.image, triggeredBy: "user:demo", createdAt: at(2, 14), finishedAt: at(2, 14) })),

@@ -65,12 +65,12 @@ func TestPreviewFile(t *testing.T) {
 		t.Errorf("file: %s %v", f.Name, f.X.Variables)
 	case web.X.Domain != "pr-12.preview.example.com" || web.Replicas != 0 || web.Image != "ghcr.io/acme/web:sha-abc":
 		t.Errorf("web: %s ×%d %s", web.X.Domain, web.Replicas, web.Image)
-	case int(web.X.SleepAfter) != int(defaultPreviewSleep.Seconds()) || web.X.Middlewares.Headers["X-Robots-Tag"] != "noindex":
-		t.Errorf("web sleeps %d, middlewares %+v", web.X.SleepAfter, web.X.Middlewares)
+	case web.X.Middlewares.Headers["X-Robots-Tag"] != "noindex":
+		t.Errorf("web middlewares %+v", web.X.Middlewares)
 	case web.Environment["API_TOKEN"] != "{{ project.API_TOKEN }}" || web.Environment["APP_URL"] != "{{ app.web.URL }}":
 		t.Errorf("web env: %v", web.Environment)
-	case !strings.HasSuffix(worker.Image, "@sha256:"+strings.Repeat("a", 64)) || worker.X.SleepAfter != 0:
-		t.Errorf("worker: %s sleeps %d", worker.Image, worker.X.SleepAfter)
+	case !strings.HasSuffix(worker.Image, "@sha256:"+strings.Repeat("a", 64)):
+		t.Errorf("worker: %s", worker.Image)
 	case len(game.Ports) != 0 || len(warnings) != 1:
 		t.Errorf("game ports %v, warnings %v", game.Ports, warnings)
 	case db.X.Password != "":

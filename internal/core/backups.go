@@ -756,7 +756,11 @@ func (c *Core) stopLinkedApps(ctx context.Context, db store.Service) ([]string, 
 }
 
 // runningContainer returns the ID of the service's running container.
+// A sleeping project wakes first.
 func (c *Core) runningContainer(ctx context.Context, svc store.Service) (string, error) {
+	if err := c.wakeFor(ctx, svc); err != nil {
+		return "", err
+	}
 	cts, err := c.serviceContainers(ctx, svc)
 	if err != nil {
 		return "", err

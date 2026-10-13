@@ -260,14 +260,10 @@ export function StartingCard({ svc, projectName }: { svc: Service; projectName: 
     <Section
       title={<Applies title="Starting page" when="now" />}
       description={
-        svc.sleepAfterSeconds ? (
-          <>
-            Visitors get this page while the app wakes from sleep. It reloads every 3 seconds until the app answers; API calls get a 503
-            with <Mono>Retry-After</Mono> instead.
-          </>
-        ) : (
-          <>Shown while the app wakes from sleep. Sleep is off for this app: turn it on under General › Sleep after idle.</>
-        )
+        <>
+          Visitors get this page while the project wakes from sleep (project settings › Sleep mode). It reloads every 3 seconds until the
+          app answers; API calls get a 503 with <Mono>Retry-After</Mono> instead.
+        </>
       }
     >
       <form id={formId} onSubmit={onSubmit} className="space-y-3">

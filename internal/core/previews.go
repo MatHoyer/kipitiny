@@ -275,6 +275,15 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 	if p, err = c.store.SetProjectEnv(ctx, p.ID, env, secrets); err != nil {
 		return PreviewView{}, err
 	}
+	if sleep, warning := c.previewSleep(ctx, p, file, settings); sleep != p.SleepAfterSeconds {
+		if err := c.store.SetProjectSleep(ctx, p.ID, sleep); err != nil {
+			return PreviewView{}, err
+		}
+		p.SleepAfterSeconds = sleep
+		if warning != "" {
+			warnings = append(warnings, warning)
+		}
+	}
 	apply := ApplyOptions{Env: secretVars, Prune: true, Deploy: true, Commit: opts.Commit}
 	if len(seeds) > 0 {
 		apply.afterDatabases = func(ctx context.Context, created map[string]string) { c.seedPreview(ctx, p, seeds, created) }
@@ -431,6 +440,22 @@ func (c *Core) previewSource(ctx context.Context, parent store.Project, branch s
 	return f, keep, branch, nil
 }
 
+// previewSleep is how long a preview stays up unused: its settings' idle
+// time, or none when nothing would wake it.
+func (c *Core) previewSleep(ctx context.Context, p store.Project, f compose.File, settings store.PreviewSettings) (int, string) {
+	routed := slices.ContainsFunc(slices.Collect(maps.Values(f.Services)), func(s compose.Service) bool { return s.X.Domain != "" })
+	if !routed {
+		return 0, ""
+	}
+	if err := c.checkSleepServer(ctx, p); err != nil {
+		return 0, "the preview doesn't sleep: on a remote server, sleep mode needs the manager's domain (KIPITINY_DOMAIN)"
+	}
+	if settings.SleepAfterSeconds != 0 {
+		return settings.SleepAfterSeconds, ""
+	}
+	return int(defaultPreviewSleep.Seconds()), ""
+}
+
 // previewFile turns the parent's file into the preview's: apps on the base
 // domain, asleep when unused, no published ports, host access, uptime
 // checks or several replicas, fresh databases, and CI's images. It returns
@@ -438,10 +463,6 @@ func (c *Core) previewSource(ctx context.Context, parent store.Project, branch s
 func previewFile(f *compose.File, parent store.Project, name string, settings store.PreviewSettings, tags map[string]string) ([]string, error) {
 	f.Name, f.X = parent.Name+"-"+name, compose.FileExt{}
 	var warnings []string
-	sleep := settings.SleepAfterSeconds
-	if sleep == 0 {
-		sleep = int(defaultPreviewSleep.Seconds())
-	}
 	routed := 0
 	for _, s := range f.Services {
 		if s.X.Domain != "" && s.X.Port > 0 {
@@ -474,7 +495,6 @@ func previewFile(f *compose.File, parent store.Project, name string, settings st
 				return nil, fmt.Errorf("%w: %s.%s is too long for a hostname", ErrInvalid, label, settings.BaseDomain)
 			}
 			s.X.Domain = label + "." + settings.BaseDomain
-			s.X.SleepAfter = compose.Seconds(sleep)
 			m := s.X.Middlewares
 			if m == nil {
 				m = &compose.Middlewares{}
@@ -485,8 +505,6 @@ func previewFile(f *compose.File, parent store.Project, name string, settings st
 			}
 			m.Headers["X-Robots-Tag"] = "noindex"
 			s.X.Middlewares = m
-		} else {
-			s.X.SleepAfter = 0
 		}
 		if tag, ok := tags[svcName]; ok {
 			t, d := tag, ""
@@ -632,15 +650,11 @@ func (c *Core) expirePreviews(ctx context.Context) {
 			continue
 		}
 		last := p.Preview.DeployedAt
-		if svcs, err := c.store.ListServices(ctx, p.ID); err == nil {
-			c.sleep.mu.Lock()
-			for _, s := range svcs {
-				if t := c.sleep.lastActive[s.ID]; t.After(last) {
-					last = t
-				}
-			}
-			c.sleep.mu.Unlock()
+		c.sleep.mu.Lock()
+		if t := c.sleep.lastActive[p.ID]; t.After(last) {
+			last = t
 		}
+		c.sleep.mu.Unlock()
 		if now.Sub(last) < time.Duration(p.Preview.TTLSeconds)*time.Second {
 			continue
 		}

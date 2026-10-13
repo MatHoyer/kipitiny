@@ -45,11 +45,8 @@ export function Projects() {
   });
   const previewsOf = (id: string) => {
     const mine = (previews.data ?? []).flatMap((p, i) => (p.parentId === id ? [previewServices[i]?.data] : []));
-    // Asleep: every app with a domain sleeps (its databases keep running).
-    const asleep = mine.filter((svcs) => {
-      const apps = svcs?.filter((s) => s.domain) ?? [];
-      return apps.length > 0 && apps.every((s) => s.sleeping);
-    }).length;
+    // A project sleeps whole: any service asleep means all of them are.
+    const asleep = mine.filter((svcs) => svcs?.some((s) => s.sleeping)).length;
     return { count: mine.length, asleep };
   };
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.servers });

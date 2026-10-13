@@ -47,6 +47,7 @@ import { TemplateDialog } from "@/components/template-dialog";
 import { ReachIcon, reachOf } from "@/components/reach";
 import { GitSource, useProjectGit } from "@/components/git-source";
 import { Previews } from "@/components/previews";
+import { SleepCard } from "@/components/project-sleep";
 import { issueRing, issueText, needsAttention, serviceIssue } from "@/components/topology";
 import { cn } from "@/lib/utils";
 
@@ -221,6 +222,9 @@ export function Project() {
                 pending={rename.isPending}
                 onRename={(name) => rename.mutate(name)}
               />
+            )}
+            {project.data && services.data && may("settings") && (
+              <SleepCard key={project.data.sleepAfterSeconds} project={project.data} services={services.data} />
             )}
             {hasBackups && may("backups") && (
               <Section
