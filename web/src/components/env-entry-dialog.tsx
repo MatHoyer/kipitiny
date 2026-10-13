@@ -26,7 +26,7 @@ import {
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
-import { dbFields, dbRef, dbRefValid, envRef, managerRef, refName, refsIn, type EnvReference, type EnvRow } from "@/lib/format";
+import { connectionLabel, dbFields, dbRef, dbRefValid, envRef, managerRef, refName, refsIn, type EnvReference, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, SECRET_MASK, type DatabaseKind, type DatabaseRef } from "../api";
 
@@ -337,28 +337,28 @@ const kindActions: Record<Kind, string> = { variable: "Add variable", secret: "A
 export type ManagerSource = ReturnType<typeof useManagerSource>;
 
 /**
- * The connected password managers on offer, plus scheme's own when its
- * manager isn't connected (anymore), with the one picked (the first by
+ * The password manager connections on offer, plus scheme's own when its
+ * connection doesn't exist (anymore), with the one picked (the first by
  * default). scheme is the edited reference's, or "".
  */
 export function useManagerSource(scheme: string, enabled: boolean) {
-  const providers = useQuery({ queryKey: ["secret-providers"], queryFn: api.secretProviders, enabled });
-  const connected = providers.data?.filter((p) => p.connected) ?? [];
+  const connections = useQuery({ queryKey: ["secret-connections"], queryFn: api.secretConnections, enabled });
+  const connected = connections.data ?? [];
   const sources = [
-    ...connected.map((p) => ({ value: p.scheme, label: p.name, icon: passwordManagerIcon(p.id) })),
-    ...(scheme && !connected.some((p) => p.scheme === scheme)
+    ...connected.map((c) => ({ value: c.scheme, label: connectionLabel(c), icon: passwordManagerIcon(c.kind) })),
+    ...(scheme && !connected.some((c) => c.scheme === scheme)
       ? [{ value: scheme, label: `${scheme}://`, icon: <KeyRound /> }]
       : []),
   ];
   const [picked, setSource] = useState(scheme);
   const source = picked || sources[0]?.value || "";
   return {
-    providers,
+    connections,
     sources,
     source,
     setSource,
-    /** Unset when the source's manager isn't connected: no browsing. */
-    providerId: connected.find((p) => p.scheme === source)?.id,
+    /** Unset when the source's connection doesn't exist: no browsing. */
+    connectionId: connected.find((c) => c.scheme === source)?.id,
     /** Whether any password manager is connected. */
     any: connected.length > 0,
   };
@@ -378,7 +378,7 @@ export function ManagerSourceFields({
 }) {
   return (
     <>
-      {ms.providers.isSuccess && ms.sources.length === 0 && (
+      {ms.connections.isSuccess && ms.sources.length === 0 && (
         <p className="rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
           No password manager is connected.{" "}
           <Link to="/password-managers" className="font-medium text-foreground underline-offset-4 hover:underline">
@@ -392,7 +392,7 @@ export function ManagerSourceFields({
           label="Password manager"
           value={ms.source}
           onValueChange={ms.setSource}
-          loading={ms.providers.isLoading}
+          loading={ms.connections.isLoading}
           options={ms.sources.map((s) => ({
             value: s.value,
             label: (
@@ -407,7 +407,7 @@ export function ManagerSourceFields({
       {ms.source && (
         <ProviderPath
           scheme={ms.source}
-          providerId={ms.providerId}
+          connectionId={ms.connectionId}
           path={path}
           onChange={onPathChange}
           onPickField={onPickField ?? (() => {})}
@@ -525,14 +525,14 @@ function TemplateInput({
  */
 function ProviderPath({
   scheme,
-  providerId,
+  connectionId,
   path,
   onChange,
   onPickField,
 }: {
   scheme: string;
-  /** Unset when the scheme's provider isn't connected: no browsing. */
-  providerId?: string;
+  /** Unset when the scheme's connection doesn't exist: no browsing. */
+  connectionId?: string;
   path: string;
   onChange: (path: string) => void;
   onPickField: (item: string, field: string) => void;
@@ -543,14 +543,14 @@ function ProviderPath({
   // Set while Refresh refetches past the manager's cache.
   const fresh = useRef(false);
   const vaults = useQuery({
-    queryKey: ["secret-vaults", providerId],
-    queryFn: () => api.secretVaults(providerId!, fresh.current),
-    enabled: browsing && !!providerId,
+    queryKey: ["secret-vaults", connectionId],
+    queryFn: () => api.secretVaults(connectionId!, fresh.current),
+    enabled: browsing && !!connectionId,
   });
   const items = useQuery({
-    queryKey: ["secret-items", providerId, vault],
-    queryFn: () => api.secretItems(providerId!, vault, fresh.current),
-    enabled: browsing && !!providerId && !!vault,
+    queryKey: ["secret-items", connectionId, vault],
+    queryFn: () => api.secretItems(connectionId!, vault, fresh.current),
+    enabled: browsing && !!connectionId && !!vault,
   });
   const refresh = async () => {
     fresh.current = true;
@@ -582,7 +582,7 @@ function ProviderPath({
           className="min-w-0 flex-1"
           inputClassName="font-mono text-sm"
         />
-        {providerId && (
+        {connectionId && (
           <Button
             type="button"
             variant={browsing ? "secondary" : "outline"}
@@ -597,7 +597,7 @@ function ProviderPath({
           </Button>
         )}
       </div>
-      {browsing && providerId && (
+      {browsing && connectionId && (
         <div className="space-y-3 rounded-xl border border-dashed p-3">
           <FloatingSelect
             label="Vault"

@@ -174,7 +174,7 @@ Two syntaxes, resolved at different times:
 | `{{ project.NAME }}` | At every deploy | The project's shared variable `NAME`. |
 | `{{ db.SERVICE.FIELD }}` | At every deploy | A database's connection detail (see above). |
 | `{{ app.SERVICE.URL }}`, `{{ app.SERVICE.DOMAIN }}` | At every deploy | Where an app of the project is public: `https://shop.example.com`, or just the host. Write `APP_URL`, OAuth callbacks or CORS origins with it rather than the domain itself, so a copy of the project (a [preview](/docs/previews)) points at its own apps. A deploy fails if the app has no domain. |
-| `{{ pass://Vault/Item/field }}` | At every deploy | A secret read from a connected password manager; never stored by kipitiny. |
+| `{{ pass://Vault/Item/field }}` | At every deploy | A secret read from a connected password manager; never stored by kipitiny. `pass+work://` reads it through the connection named `work`. |
 
 Compose variables work in every value except inside `x-kipitiny` blocks (bcrypt hashes are full of `$`). There, a value that is exactly `${NAME}` (`domain`, `password`, a basic auth `hash`, a project variable) is taken from the `.env`.
 

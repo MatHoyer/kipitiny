@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, KeyRound, Plus } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { passwordManagerIcon as iconFor } from "@/components/brand-icons";
 import { ChoiceTile, EmptyState, ErrorText, Mono, Tag, withCode } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -18,34 +18,40 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
-import { api, type SecretProvider, type SecretStep } from "@/api";
+import { api, type SecretConnection, type SecretProvider, type SecretStep } from "@/api";
+import { connectionLabel } from "@/lib/format";
 import { SettingsPage } from "./page";
 
-/** Password managers that service env can reference (e.g. pass://Vault/Item/field). */
+/** The provider's example reference, through the connection with scheme (pass+work://Vault/Item/password). */
+const exampleFor = (p: SecretProvider, scheme: string) => scheme + p.example.slice(p.scheme.length);
+
+/** Password managers that service env can reference (e.g. pass://Vault/Item/field), one card per connection. */
 export function PasswordManagers() {
   const providers = useQuery({ queryKey: ["secret-providers"], queryFn: api.secretProviders });
-  const connected = providers.data?.filter((p) => p.connected) ?? [];
+  const connections = useQuery({ queryKey: ["secret-connections"], queryFn: api.secretConnections });
+  const connected = connections.data ?? [];
+  const dialog = <ConnectDialog providers={providers.data ?? []} connections={connected} />;
 
   return (
-    <SettingsPage actions={connected.length > 0 && <ConnectDialog providers={providers.data ?? []} />}>
-      <ErrorText error={providers.error} />
+    <SettingsPage actions={connected.length > 0 && dialog}>
+      <ErrorText error={providers.error ?? connections.error} />
       {providers.data?.length === 0 ? (
         <EmptyState
           icon={KeyRound}
           title="No password manager available"
           description="None ships with this version yet. Use secret entries in the env meanwhile."
         />
-      ) : providers.data && connected.length === 0 ? (
+      ) : providers.data && connections.data && connected.length === 0 ? (
         <EmptyState
           icon={KeyRound}
           title="No password manager connected"
           description="Reference secrets in a service's env instead of pasting them. kipitiny fetches them on each deploy and never stores them."
-          action={<ConnectDialog providers={providers.data} />}
+          action={dialog}
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {connected.map((p) => (
-            <ProviderCard key={p.id} provider={p} />
+          {connected.map((c) => (
+            <ConnectionCard key={c.id} connection={c} provider={providers.data?.find((p) => p.id === c.kind)} />
           ))}
         </div>
       )}
@@ -53,37 +59,40 @@ export function PasswordManagers() {
   );
 }
 
-function ProviderCard({ provider: p }: { provider: SecretProvider }) {
+function ConnectionCard({ connection: c, provider: p }: { connection: SecretConnection; provider?: SecretProvider }) {
   const qc = useQueryClient();
+  const label = connectionLabel(c);
   const disconnect = useMutation({
-    meta: { error: `Couldn't disconnect ${p.name}` },
-    mutationFn: () => api.disconnectSecretProvider(p.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["secret-providers"] }),
+    meta: { error: `Couldn't disconnect ${label}` },
+    mutationFn: () => api.deleteSecretConnection(c.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["secret-connections"] }),
   });
 
   return (
     <Card className="gap-3 px-4">
       <div className="flex items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted [&>svg]:size-5">{iconFor(p.id)}</span>
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted [&>svg]:size-5">{iconFor(c.kind)}</span>
         <div className="min-w-0 flex-1">
-          <p className="font-medium">{p.name}</p>
-          <p className="text-xs text-muted-foreground">Connected</p>
+          <p className="truncate font-medium">{c.name || c.providerName}</p>
+          <p className="text-xs text-muted-foreground">{c.name ? c.providerName : "Default connection"}</p>
         </div>
-        <Tag className="font-mono">{p.scheme}://</Tag>
+        <Tag className="font-mono">{c.scheme}://</Tag>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Use in env as <Mono>{`{{ ${p.example} }}`}</Mono>
-      </p>
+      {p && (
+        <p className="text-xs text-muted-foreground">
+          Use in env as <Mono>{`{{ ${exampleFor(p, c.scheme)} }}`}</Mono>
+        </p>
+      )}
       <div className="mt-auto flex items-center justify-end gap-1">
-        <ProviderTestDialog provider={p} />
+        <ConnectionTestDialog connection={c} />
         <ConfirmDialog
           trigger={
             <Button variant="outline" size="sm" disabled={disconnect.isPending}>
               Disconnect
             </Button>
           }
-          title={`Disconnect ${p.name}?`}
-          description={`Services referencing ${p.scheme}:// can't deploy until it's connected again. Running containers keep their values.`}
+          title={`Disconnect ${label}?`}
+          description={`Services referencing ${c.scheme}:// can't deploy until it's connected again. Running containers keep their values.`}
           confirmLabel="Disconnect"
           onConfirm={() => disconnect.mutate()}
         />
@@ -92,11 +101,12 @@ function ProviderCard({ provider: p }: { provider: SecretProvider }) {
   );
 }
 
-/** Pick a provider, then give it a token. */
-function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
+/** Pick a provider, then give the connection a name (unless it's the first) and a token. */
+function ConnectDialog({ providers, connections }: { providers: SecretProvider[]; connections: SecretConnection[] }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<SecretProvider | null>(null);
+  const [name, setName] = useState("");
   const [token, setToken] = useState("");
   // Steps the manager reported while connecting, for the providers that show them.
   const [seen, setSeen] = useState<SecretStep[]>([]);
@@ -105,8 +115,9 @@ function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
     setOpen(next);
     if (!next) {
       // Refetched only now: the first connection swaps the empty state, which holds this dialog.
-      if (connect.isSuccess) qc.invalidateQueries({ queryKey: ["secret-providers"] });
+      if (connect.isSuccess) qc.invalidateQueries({ queryKey: ["secret-connections"] });
       setPicked(null);
+      setName("");
       setToken("");
       setSeen([]);
       connect.reset();
@@ -117,7 +128,7 @@ function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
     meta: { error: stepped ? false : "Couldn't connect the password manager" },
     mutationFn: () => {
       setSeen([]);
-      return api.connectSecretProvider(picked!.id, token.trim(), stepped ? (s) => setSeen((prev) => [...prev, s]) : undefined);
+      return api.createSecretConnection(picked!.id, name.trim(), token.trim(), stepped ? (s) => setSeen((prev) => [...prev, s]) : undefined);
     },
     // A stepped connection stays open on its finished steps until closed.
     onSuccess: () => !stepped && onOpenChange(false),
@@ -126,6 +137,35 @@ function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
     e.preventDefault();
     connect.mutate();
   };
+  // The first connection of a provider is its default, referenced by the plain scheme; the next ones need a name.
+  const hasDefault = !!picked && connections.some((c) => c.kind === picked.id && c.name === "");
+  const scheme = picked ? (name.trim() ? `${picked.scheme}+${name.trim()}` : picked.scheme) : "";
+  const nameInput = picked && (
+    <FloatingInput
+      label={hasDefault ? "Name" : "Name (optional)"}
+      required={hasDefault}
+      autoComplete="off"
+      spellCheck={false}
+      pattern="[a-z][a-z0-9\-]{0,30}"
+      title="Lowercase letters, digits and dashes, starting with a letter"
+      disabled={connect.isPending || connect.isSuccess}
+      value={name}
+      onChange={(e) => setName(e.target.value.toLowerCase())}
+      inputClassName="font-mono"
+      description={
+        hasDefault ? (
+          <>
+            {picked.name} already has a default connection: name this one, like work for a second account. Its references start with{" "}
+            <Mono>{scheme}://</Mono>.
+          </>
+        ) : (
+          <>
+            Leave empty for the default connection, referenced as <Mono>{picked.scheme}://</Mono>. Name it to connect a second account later.
+          </>
+        )
+      }
+    />
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -149,8 +189,7 @@ function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
                   icon={iconFor(p.id)}
                   title={p.name}
                   description={p.available ? <Mono>{p.scheme}://</Mono> : "Its CLI isn't installed on the manager."}
-                  badge={p.connected && <Tag>connected</Tag>}
-                  disabled={p.connected || !p.available}
+                  disabled={!p.available}
                   onClick={() => setPicked(p)}
                 />
               ))}
@@ -159,6 +198,8 @@ function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
         ) : stepped ? (
           <ProtonPassConnect
             provider={picked}
+            nameInput={nameInput}
+            scheme={scheme}
             token={token}
             setToken={setToken}
             seen={seen}
@@ -178,6 +219,7 @@ function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
               </DialogTitle>
               {picked.help && <DialogDescription>{withCode(picked.help)}</DialogDescription>}
             </DialogHeader>
+            {nameInput}
             <FloatingInput
               label={picked.tokenLabel}
               type="password"
@@ -188,7 +230,7 @@ function ConnectDialog({ providers }: { providers: SecretProvider[] }) {
               onChange={(e) => setToken(e.target.value)}
               description={
                 <>
-                  Then reference secrets as <Mono>{`{{ ${picked.example} }}`}</Mono>.
+                  Then reference secrets as <Mono>{`{{ ${exampleFor(picked, scheme)} }}`}</Mono>.
                 </>
               }
             />
@@ -218,6 +260,8 @@ const proton = {
 /** Proton Pass takes its token; how to get one opens on demand, step by step. */
 function ProtonPassConnect({
   provider: p,
+  nameInput,
+  scheme,
   token,
   setToken,
   seen,
@@ -229,6 +273,9 @@ function ProtonPassConnect({
   onClose,
 }: {
   provider: SecretProvider;
+  nameInput: ReactNode;
+  /** The connection's scheme, for the example reference. */
+  scheme: string;
   token: string;
   setToken: (t: string) => void;
   seen: SecretStep[];
@@ -254,6 +301,7 @@ function ProtonPassConnect({
         </DialogTitle>
         <DialogDescription>kipitiny only sees the vaults the token is granted.</DialogDescription>
       </DialogHeader>
+      {nameInput}
       <FloatingInput
         label={p.tokenLabel}
         type="password"
@@ -265,7 +313,7 @@ function ProtonPassConnect({
         onChange={(e) => setToken(e.target.value)}
         description={
           <>
-            Then reference secrets as <Mono>{`{{ ${p.example} }}`}</Mono>.
+            Then reference secrets as <Mono>{`{{ ${exampleFor(p, scheme)} }}`}</Mono>.
           </>
         }
       />
@@ -349,16 +397,16 @@ const testPlan = (name: string) => (seen: string[]) => {
   );
 };
 
-/** Tests a connected provider, step by step, as a deploy would run them. */
-function ProviderTestDialog({ provider: p }: { provider: SecretProvider }) {
+/** Tests a connection, step by step, as a deploy would run them. */
+function ConnectionTestDialog({ connection: c }: { connection: SecretConnection }) {
   return (
     <TestDialog
-      name={p.name}
-      icon={iconFor(p.id)}
+      name={connectionLabel(c)}
+      icon={iconFor(c.kind)}
       description="Checks the manager can still read your vaults, as a deploy would."
-      accent={p.id === "protonpass" ? proton.accent : undefined}
-      plan={testPlan(p.name)}
-      run={(onStep) => api.testSecretProvider(p.id, onStep)}
+      accent={c.kind === "protonpass" ? proton.accent : undefined}
+      plan={testPlan(c.providerName)}
+      run={(onStep) => api.testSecretConnection(c.id, onStep)}
     />
   );
 }

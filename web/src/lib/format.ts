@@ -99,6 +99,9 @@ export function soleRef(value: string): EnvReference | null {
   return m ? toRef(m) : null;
 }
 
+/** How a password manager connection is named: the manager, with the connection's name unless it's the default one. */
+export const connectionLabel = (c: { providerName: string; name: string }) => (c.name ? `${c.providerName} (${c.name})` : c.providerName);
+
 /** A value that is exactly one password manager reference: its scheme and path (vault, item, field). */
 export function managerRef(value: string): { scheme: string; path: string[] } | null {
   const r = soleRef(value);

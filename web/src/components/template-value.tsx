@@ -61,8 +61,9 @@ function RefChip({ r, invalid }: { r: EnvReference; invalid?: boolean }) {
 }
 
 /**
- * Where a password manager reference points: the manager's mark, then its
- * vault › item › field. invalid marks one no connected manager resolves.
+ * Where a password manager reference points: the manager's mark, its
+ * connection unless the default one, then its vault › item › field. invalid
+ * marks one no connection resolves.
  */
 export function ManagerRefValue({
   scheme,
@@ -77,12 +78,14 @@ export function ManagerRefValue({
 }) {
   const field = path.length > 2 ? path[path.length - 1] : null;
   const where = field ? path.slice(0, -1) : path;
+  const conn = scheme.split("+")[1];
   return (
     <span
       className={cn("flex min-w-0 items-center gap-1.5 text-xs", invalid && "text-destructive", className)}
       title={`${scheme}://${path.join("/")}`}
     >
       <span className="flex shrink-0 [&>svg]:size-3.5">{schemeIcon(scheme)}</span>
+      {conn && <span className="shrink-0 text-muted-foreground">{conn}:</span>}
       {where.map((p, i) => (
         <span key={i} className="flex min-w-0 items-center gap-1.5">
           {i > 0 && <ChevronRight className="size-3 shrink-0 text-muted-foreground" />}

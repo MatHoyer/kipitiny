@@ -115,11 +115,20 @@ project entry) then reference its fields as `{{ pass://Vault/Item/field }}`, or
 pick them in the env editor. They're read at each deploy and replica
 recreation and never stored by kipitiny; a database's env can't use them.
 
+Connect several accounts of the same password manager (personal and work)
+by naming each one after the first: the first is the default connection,
+referenced as `pass://`, and the one named `work` as
+`{{ pass+work://Vault/Item/field }}`. The env editor asks which connection
+a reference comes from. A reference to a named connection that doesn't exist
+is refused when saving; one to a default connection that isn't connected
+fails at deploy.
+
 The Proton Pass CLI isn't part of the manager's image. The first connection
 pulls `ghcr.io/mathoyer/kipitiny-protonpass` (about 60 MB) on the manager's
 server and runs it as a container named `kipitiny-protonpass` while it's used
 (a deploy, browsing in the env editor); it's removed after 5 minutes idle. Its
 session lives in the `kipitiny-protonpass` volume, deleted on disconnect, and
 is recreated from the saved token when lost (e.g. after restoring a manager
-backup). Mirror the image and set `KIPITINY_PROTONPASS_IMAGE` if the server
+backup). A named connection has its own: `kipitiny-protonpass-work` for the
+one named `work`. Mirror the image and set `KIPITINY_PROTONPASS_IMAGE` if the server
 can't reach ghcr.io.

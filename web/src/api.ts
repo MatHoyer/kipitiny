@@ -532,7 +532,19 @@ export type SecretProvider = {
   help: string;
   /** False when it can't run on the manager (its CLI is missing). */
   available: boolean;
-  connected: boolean;
+};
+
+/** An account a password manager is logged into; a manager can have several. */
+export type SecretConnection = {
+  id: string;
+  /** The SecretProvider's id. */
+  kind: string;
+  /** "" for the provider's default connection, referenced by its plain scheme. */
+  name: string;
+  /** What its references start with: pass for the default connection, pass+work for the one named work. */
+  scheme: string;
+  providerName: string;
+  createdAt: string;
 };
 
 /** A stage of connecting or testing a password manager, streamed as it starts. */
@@ -1277,18 +1289,20 @@ export const api = {
   testCloudflare: (onStep?: (step: string) => void) => test("/cloudflare/test", onStep),
   syncCloudflare: () => request<Cloudflare>("/cloudflare/sync", { method: "POST" }),
   secretProviders: () => request<SecretProvider[]>("/secret-providers"),
-  connectSecretProvider: (id: string, token: string, onStep?: (step: SecretStep) => void) =>
+  secretConnections: () => request<SecretConnection[]>("/secret-connections"),
+  /** name is "" for the provider's default connection. */
+  createSecretConnection: (kind: string, name: string, token: string, onStep?: (step: SecretStep) => void) =>
     onStep
-      ? progress<SecretProvider>(`/secret-providers/${id}`, json("PUT", { token }), onStep as (s: string) => void)
-      : request<SecretProvider>(`/secret-providers/${id}`, json("PUT", { token })),
+      ? progress<SecretConnection>("/secret-connections", json("POST", { kind, name, token }), onStep as (s: string) => void)
+      : request<SecretConnection>("/secret-connections", json("POST", { kind, name, token })),
   /** Listings are cached by the manager for a few minutes, unless refresh. */
   secretVaults: (id: string, refresh = false) =>
-    request<string[]>(`/secret-providers/${id}/vaults${refresh ? "?refresh" : ""}`),
+    request<string[]>(`/secret-connections/${id}/vaults${refresh ? "?refresh" : ""}`),
   secretItems: (id: string, vault: string, refresh = false) =>
-    request<SecretItem[]>(`/secret-providers/${id}/items?vault=${encodeURIComponent(vault)}${refresh ? "&refresh" : ""}`),
-  disconnectSecretProvider: (id: string) => request<void>(`/secret-providers/${id}`, { method: "DELETE" }),
-  testSecretProvider: (id: string, onStep?: (step: SecretStep) => void) =>
-    test(`/secret-providers/${id}/test`, onStep as ((s: string) => void) | undefined),
+    request<SecretItem[]>(`/secret-connections/${id}/items?vault=${encodeURIComponent(vault)}${refresh ? "&refresh" : ""}`),
+  deleteSecretConnection: (id: string) => request<void>(`/secret-connections/${id}`, { method: "DELETE" }),
+  testSecretConnection: (id: string, onStep?: (step: SecretStep) => void) =>
+    test(`/secret-connections/${id}/test`, onStep as ((s: string) => void) | undefined),
   setServerNetwork: (id: string, n: ServerNetwork) => request<Server>(`/servers/${id}/network`, json("PUT", n)),
   cleanup: () => request<Cleanup>("/cleanup"),
   setCleanup: (s: CleanupSettings) => request<Cleanup>("/cleanup", json("PUT", s)),
