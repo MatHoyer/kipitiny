@@ -5,6 +5,7 @@ import { Link } from "react-router";
 import { toast } from "sonner";
 import { CheckboxField, EmptyState, ErrorText, Loading, Mono, Section, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
@@ -129,6 +130,13 @@ function PreviewCard({ parent, preview: p, canDeploy }: { parent: Project; previ
   );
 }
 
+const baseDomainNote = (example: string) => (
+  <>
+    Apps answer at <Mono>{`pr-12-web.${example}`}</Mono> (<Mono>{`pr-12.${example}`}</Mono> with one app): point{" "}
+    <Mono>{`*.${example}`}</Mono> at the server. A domain of its own keeps production's cookies away.
+  </>
+);
+
 /** The settings form's fields, as saved. */
 const settingsForm = (s: PreviewSettings) => ({
   baseDomain: s.baseDomain,
@@ -184,21 +192,20 @@ function PreviewSettingsForm({ project, saved, canEdit }: { project: Project; sa
       description="What previews get instead of production: their own domain and values. Production's secrets never reach a preview unless listed under Inherit."
     >
       <form id={formId} onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-3">
-        <FloatingInput
-          label="Base domain"
-          required
-          value={form.baseDomain}
-          onChange={(e) => setForm({ ...form, baseDomain: e.target.value })}
-          placeholder="preview.example.com"
-          className="col-span-full"
-          disabled={!canEdit}
-          description={
-            <>
-              Apps answer at <Mono>{`pr-12-web.${example}`}</Mono> (<Mono>{`pr-12.${example}`}</Mono> with one app): point{" "}
-              <Mono>{`*.${example}`}</Mono> at the server. A domain of its own keeps production's cookies away.
-            </>
-          }
-        />
+        {canEdit ? (
+          <DomainField
+            label="Base domain"
+            emptyLabel="Choose a domain…"
+            emptyText="Previews need a base domain."
+            value={form.baseDomain}
+            onChange={(baseDomain) => setForm({ ...form, baseDomain })}
+            host={(d) => `pr-12-web.${d}`}
+            className="col-span-full"
+            note={baseDomainNote(example)}
+          />
+        ) : (
+          <FloatingInput label="Base domain" value={form.baseDomain} disabled className="col-span-full" description={baseDomainNote(example)} />
+        )}
         <FloatingInput
           label="Close after unused (days)"
           type="number"

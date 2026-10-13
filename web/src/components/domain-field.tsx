@@ -37,12 +37,22 @@ export function DomainField({
   value,
   onChange,
   note,
+  label = "Domain",
+  emptyLabel = "Private (no domain)",
+  emptyText,
+  host = (domain) => domain,
   className,
 }: {
   value: string;
   onChange: (domain: string) => void;
   /** Replaces "Served at …" once a domain is set, e.g. for a DNS-only one. */
   note?: ReactNode;
+  label?: string;
+  /** The choice for no domain, and what no domain means. */
+  emptyLabel?: string;
+  emptyText?: string;
+  /** A hostname served under the value, checked against Cloudflare's certificate (a base domain's apps). */
+  host?: (domain: string) => string;
   className?: string;
 }) {
   const domains = useQuery({ queryKey: ["domains"], queryFn: api.domains });
@@ -88,18 +98,18 @@ export function DomainField({
 
   const noList = domains.isSuccess && bases.length === 0;
   const listed = domains.data?.find((d) => d.name === base);
-  const gapZone = listed?.cloudflare && listed.proxied ? edgeCertGap(value, cloudflare.data?.zones ?? []) : undefined;
+  const gapZone = listed?.cloudflare && listed.proxied ? edgeCertGap(host(value), cloudflare.data?.zones ?? []) : undefined;
   if (noList || !ready) {
     return (
       <FloatingInput
-        label="Domain"
+        label={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="app.example.com"
         className={className}
         description={
           <>
-            {value && note ? note : "Empty for a private service, reachable only inside the project."}{" "}
+            {value && note ? note : (emptyText ?? "Empty for a private service, reachable only inside the project.")}{" "}
             {noList && (
               <>
                 List your domains in{" "}
@@ -127,12 +137,12 @@ export function DomainField({
           />
         )}
         <FloatingSelect
-          label="Domain"
+          label={label}
           value={base}
           onValueChange={(b) => update(b, subFor(b))}
           className={base === NONE ? "sm:col-span-2" : undefined}
           options={[
-            { value: NONE, label: "Private (no domain)" },
+            { value: NONE, label: emptyLabel },
             ...bases.map((b) => ({ value: b, label: b })),
             { value: OTHER, label: "Other domain…" },
           ]}
@@ -140,8 +150,9 @@ export function DomainField({
       </div>
       {gapZone && (
         <p className="px-1 text-xs text-amber-600 dark:text-amber-400">
-          Cloudflare's free certificate only covers <span className="font-mono">*.{gapZone}</span>: through the proxy, this name gets a
-          TLS error. Prefer a single level like <span className="font-mono">{flat(value, gapZone)}</span>.
+          Cloudflare's free certificate only covers <span className="font-mono">*.{gapZone}</span>: through the proxy,{" "}
+          <span className="font-mono">{host(value)}</span> gets a TLS error. Prefer a single level like{" "}
+          <span className="font-mono">{flat(host(value), gapZone)}</span>.
         </p>
       )}
       <p className="px-1 text-xs text-muted-foreground">
@@ -152,7 +163,7 @@ export function DomainField({
             Served at <span className="font-mono">https://{value}</span>
           </>
         ) : (
-          "Private: reachable only inside the project."
+          (emptyText ?? "Private: reachable only inside the project.")
         )}
       </p>
     </div>
