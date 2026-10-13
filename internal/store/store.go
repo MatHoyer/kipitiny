@@ -185,6 +185,12 @@ type Store interface {
 	UpdateRegistry(ctx context.Context, r Registry) (Registry, error)
 	DeleteRegistry(ctx context.Context, id string) error
 
+	ListSecretConnections(ctx context.Context) ([]SecretConnection, error)
+	GetSecretConnection(ctx context.Context, id string) (SecretConnection, error)
+	CreateSecretConnection(ctx context.Context, c SecretConnection) (SecretConnection, error)
+	SetSecretConnectionToken(ctx context.Context, id, token string) error
+	DeleteSecretConnection(ctx context.Context, id string) error
+
 	ListNetworks(ctx context.Context) ([]Network, error)
 	GetNetwork(ctx context.Context, id string) (Network, error)
 	CreateNetwork(ctx context.Context, n Network) (Network, error)
@@ -909,6 +915,22 @@ type Registry struct {
 	Username string `bun:"username" json:"username"`
 	// Password is a password or access token; it reads back masked.
 	Password  string    `bun:"password" json:"password"`
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+}
+
+// SecretConnection is a password manager account the manager is logged
+// into. Kind is the provider (internal/secrets); Name is "" for the default
+// connection of its kind, which the plain scheme references (pass://), else
+// the suffix of its scheme (pass+work://).
+type SecretConnection struct {
+	bun.BaseModel `bun:"table:secret_connections,alias:secret_connection" json:"-"`
+
+	ID   string `bun:"id,pk" json:"id"`
+	Kind string `bun:"kind" json:"kind"`
+	Name string `bun:"name" json:"name"`
+	// Token logs in again when the session is lost or expires; never sent
+	// to clients.
+	Token     string    `bun:"token" json:"-"`
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 }
 

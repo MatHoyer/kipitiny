@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/MatHoyer/kipitiny/internal/secrets"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -144,11 +143,14 @@ func secretRefs(env map[string]string, project map[string]string) []string {
 }
 
 // checkSecretSchemes refuses references no password manager handles.
-func (c *Core) checkSecretSchemes(env map[string]string) error {
+func (c *Core) checkSecretSchemes(ctx context.Context, env map[string]string) error {
 	for k, v := range env {
 		for _, m := range envRefRe.FindAllStringSubmatch(v, -1) {
-			if m[4] != "" && c.providerFor(secrets.SchemeOf(m[4])) == nil {
-				return fmt.Errorf("%w: %s: no password manager handles %s", ErrInvalid, k, m[4])
+			if m[4] == "" {
+				continue
+			}
+			if err := c.checkSecretScheme(ctx, m[4]); err != nil {
+				return fmt.Errorf("%w: %s: %v", ErrInvalid, k, err)
 			}
 		}
 	}
@@ -317,7 +319,7 @@ func (c *Core) SetProjectEnv(ctx context.Context, id string, env map[string]stri
 			return store.Project{}, fmt.Errorf("%w: invalid env var name %q", ErrInvalid, k)
 		}
 	}
-	if err := c.checkSecretSchemes(env); err != nil {
+	if err := c.checkSecretSchemes(ctx, env); err != nil {
 		return store.Project{}, err
 	}
 	svcs, err := c.store.ListServices(ctx, id)

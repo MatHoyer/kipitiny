@@ -402,10 +402,10 @@ func (c *Core) validateIn(ctx context.Context, s store.Service, project store.Pr
 		// Each deploy resets it: a preview is a cheap copy, not a load test.
 		return fmt.Errorf("%w: previews run one replica of each service", ErrInvalid)
 	}
-	if err := c.checkSecretSchemes(s.Env); err != nil {
+	if err := c.checkSecretSchemes(ctx, s.Env); err != nil {
 		return err
 	}
-	if err := c.checkBasicAuthSchemes(s.Middlewares); err != nil {
+	if err := c.checkBasicAuthSchemes(ctx, s.Middlewares); err != nil {
 		return err
 	}
 	if err := c.checkPortsFree(ctx, s); err != nil {

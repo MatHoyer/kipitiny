@@ -17,7 +17,7 @@ func TestProgress(t *testing.T) {
 	a := &API{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	run := func(op func(context.Context) (any, error)) (string, int) {
 		rec := &statusRecorder{ResponseWriter: httptest.NewRecorder(), status: http.StatusOK}
-		a.progress(rec, httptest.NewRequest("PUT", "/api/secret-providers/x?progress", nil), op)
+		a.progress(rec, httptest.NewRequest("PUT", "/api/secret-connections/x?progress", nil), op)
 		return rec.ResponseWriter.(*httptest.ResponseRecorder).Body.String(), rec.status
 	}
 
