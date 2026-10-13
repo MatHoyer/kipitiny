@@ -55,7 +55,7 @@ func TestTemplatesDocker(t *testing.T) {
 	// up for a few seconds.
 	c.probes.Store(store.LocalServerID, (*mount.Mount)(nil))
 	t.Cleanup(c.cancel)
-	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Scope: store.ScopeAdmin})
+	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin, Scope: store.ScopeAdmin})
 
 	for _, tpl := range templates.List() {
 		t.Run(tpl.ID, func(t *testing.T) {
