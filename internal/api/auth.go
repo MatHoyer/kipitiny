@@ -54,6 +54,10 @@ var deployRoutes = map[string]bool{
 	"POST /api/services/{id}/backups":  true,
 	"POST /api/projects/{id}/backups":  true,
 	"POST /api/backups/{id}/verify":    true,
+	// A preview runs the parent's images with other tags (never another
+	// repository) and no secret the preview settings don't give.
+	"PUT /api/projects/{id}/previews/{name}":    true,
+	"DELETE /api/projects/{id}/previews/{name}": true,
 }
 
 // secretReads reveal credentials or backup contents: admin only.

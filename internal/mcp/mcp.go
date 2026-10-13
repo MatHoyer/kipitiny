@@ -139,6 +139,12 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "Remove a service's uptime check and its history. Not for a git project: remove x-kipitiny.uptime from its file. Needs admin."}, t.deleteUptimeCheck)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_maintenance",
 		Description: "Set an app's maintenance page, shown (503 with Retry-After) while it has no replica to answer, and maintenance mode, which shows it to every visitor except allowed IPs while the replicas keep running (migrations, manual work). Applied within seconds, nothing restarts; works on git-linked projects too. Needs admin."}, t.setMaintenance)
+	mcp.AddTool(server, &mcp.Tool{Name: "list_previews", Annotations: readOnly,
+		Description: "A project's preview environments: name, branch, commit, last deploy, time to live and the URLs of their apps."}, t.listPreviews)
+	mcp.AddTool(server, &mcp.Tool{Name: "deploy_preview",
+		Description: "Create or update a preview environment of a project: a copy with fresh databases, its apps on the preview base domain (asleep when unused), the project variables of its preview settings instead of production's secrets, and the given image tags. Changed services deploy in the background; list_previews and get_app_status show the outcome. Refused when a value it needs is missing or points at production. Needs deploy."}, t.deployPreview)
+	mcp.AddTool(server, &mcp.Tool{Name: "close_preview", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+		Description: "Close a preview environment: delete its containers, volumes and databases. Needs deploy."}, t.closePreview)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_sleep",
 		Description: "Set an app's sleep mode: after this long without a request its containers stop, and the next request starts them again behind a \"starting\" page (503 with Retry-After for API calls). Only for apps with a domain and no published ports; get_app_status reports sleeping. A git project's setting is in its compose file (x-kipitiny.sleep_after) instead. Needs admin."}, t.setSleep)
 	mcp.AddTool(server, &mcp.Tool{Name: "sync_dns", Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
