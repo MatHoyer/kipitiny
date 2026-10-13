@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"html/template"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -194,12 +193,7 @@ func (a *API) gitProviderRedirect(w http.ResponseWriter, r *http.Request, id, ne
 
 // gitProviderHook receives a GitHub App's push webhooks.
 func (a *API) gitProviderHook(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 25<<20))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "payload too large")
-		return
-	}
-	err = a.core.HandleGitProviderWebhook(r.Context(), r.PathValue("id"), r.Header.Get, body)
+	err := a.core.HandleGitProviderWebhook(r.Context(), r.PathValue("id"), r.Header.Get, webhookBody(w, r, 25<<20))
 	switch {
 	case errors.Is(err, core.ErrIgnored):
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
