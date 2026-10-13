@@ -34,6 +34,7 @@ func previewCmd() error {
 	fs.StringVar(&opts.Branch, "branch", "", "source branch: a git-linked project's compose file is read there")
 	fs.StringVar(&opts.Commit, "commit", "", "source commit SHA, recorded on the deployments")
 	ttl := fs.Duration("ttl", 0, "close the preview after this long unused (default: the project's preview settings, else 7 days)")
+	fs.BoolVar(&opts.Seed, "seed", false, "fill the databases a new preview gets with the project's latest backups (the preview settings must allow it)")
 	closing := fs.Bool("close", false, "close the preview: delete its containers, volumes and databases")
 	timeout := fs.Duration("timeout", 20*time.Minute, "how long to wait for the outcome")
 	noWait := fs.Bool("no-wait", false, "return once the deploys started")
@@ -77,6 +78,7 @@ type previewOptions struct {
 	Commit     string            `json:"commit,omitempty"`
 	Env        map[string]string `json:"env,omitempty"`
 	TTLSeconds int               `json:"ttlSeconds,omitempty"`
+	Seed       bool              `json:"seed,omitempty"`
 }
 
 type previewView struct {

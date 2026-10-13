@@ -127,6 +127,10 @@ type PreviewOptions struct {
 	Env map[string]string `json:"env"`
 	// TTLSeconds overrides the settings' time to live; 0 keeps it.
 	TTLSeconds int `json:"ttlSeconds"`
+	// Seed fills the databases a deploy creates with the latest backup of
+	// the parent's database of the same name, before the apps deploy. The
+	// preview settings must allow it: it copies production's data.
+	Seed bool `json:"seed"`
 }
 
 // PreviewView is a preview with where its apps are.
@@ -244,6 +248,15 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 	if err := checkPreviewEnv(file, env, settings, parentSvcs); err != nil {
 		return PreviewView{}, err
 	}
+	var seeds map[string]string // database name -> parent's backup ID
+	if opts.Seed {
+		if !settings.AllowSeed {
+			return PreviewView{}, fmt.Errorf("%w: %s's preview settings don't allow seeding previews with its data", ErrInvalid, parent.Name)
+		}
+		if seeds, err = c.seedBackups(ctx, file, parentSvcs); err != nil {
+			return PreviewView{}, err
+		}
+	}
 	data, err := compose.Marshal(file)
 	if err != nil {
 		return PreviewView{}, err
@@ -262,7 +275,11 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 	if p, err = c.store.SetProjectEnv(ctx, p.ID, env, secrets); err != nil {
 		return PreviewView{}, err
 	}
-	a, err := c.applyCompose(ctx, p.ID, data, ApplyOptions{Env: secretVars, Prune: true, Deploy: true, Commit: opts.Commit}, false)
+	apply := ApplyOptions{Env: secretVars, Prune: true, Deploy: true, Commit: opts.Commit}
+	if len(seeds) > 0 {
+		apply.afterDatabases = func(ctx context.Context, created map[string]string) { c.seedPreview(ctx, p, seeds, created) }
+	}
+	a, err := c.applyCompose(ctx, p.ID, data, apply, false)
 	if a == nil {
 		return PreviewView{}, err
 	}
@@ -284,6 +301,78 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 	v, err := c.previewView(ctx, p)
 	v.Plan = &a.plan
 	return v, err
+}
+
+// seedBackups picks the latest successful backup of each parent database
+// the preview has, refusing when one has none.
+func (c *Core) seedBackups(ctx context.Context, f compose.File, parentSvcs []store.Service) (map[string]string, error) {
+	out := map[string]string{}
+	var none []string
+	for _, s := range parentSvcs {
+		if _, listed := f.Services[s.Name]; !listed || !s.Kind.IsDatabase() {
+			continue
+		}
+		bs, err := c.store.ListBackups(ctx, store.BackupFilter{ServiceID: s.ID, Status: store.OpSucceeded, Limit: 20})
+		if err != nil {
+			return nil, err
+		}
+		i := slices.IndexFunc(bs, func(b store.Backup) bool { return b.Kind == store.BackupKindPostgres || b.Kind == store.BackupKindDump })
+		if i < 0 {
+			none = append(none, s.Name)
+			continue
+		}
+		out[s.Name] = bs[i].ID
+	}
+	if len(none) > 0 {
+		return nil, fmt.Errorf("%w: no backup of %s to seed the preview with", ErrInvalid, strings.Join(none, ", "))
+	}
+	return out, nil
+}
+
+// seedPreview restores the parent's backups into the databases this
+// deploy created (a later deploy keeps the preview's data), waiting for
+// each before the apps deploy.
+func (c *Core) seedPreview(ctx context.Context, p store.Project, seeds, created map[string]string) {
+	for name, backupID := range seeds {
+		id, ok := created[name]
+		if !ok {
+			continue
+		}
+		r, err := c.RestoreBackup(ctx, backupID, id, name)
+		if err == nil {
+			err = c.waitRestore(ctx, id, r.ID)
+		}
+		c.Audit(ctx, "preview.seed", p.Name+"/"+name, 0, err)
+		if err != nil {
+			c.log.Warn("seed preview", "preview", p.Name, "database", name, "err", err)
+		}
+	}
+}
+
+// waitRestore waits for a restore of service id to finish.
+func (c *Core) waitRestore(ctx context.Context, id, restoreID string) error {
+	deadline := time.Now().Add(restoreTimeout)
+	for time.Now().Before(deadline) {
+		rs, err := c.store.ListRestores(ctx, id, 5)
+		if err != nil {
+			return err
+		}
+		for _, r := range rs {
+			if r.ID != restoreID || r.Status == store.OpRunning {
+				continue
+			}
+			if r.Status != store.OpSucceeded {
+				return errors.New(r.Error)
+			}
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
+	return errors.New("the restore is still running")
 }
 
 // previewSource is the parent as a compose file: its git file at branch

@@ -227,6 +227,9 @@ type ApplyOptions struct {
 	Deploy bool `json:"deploy"`
 	// Commit is the source revision, recorded on the deployments.
 	Commit string `json:"commit,omitempty"`
+	// afterDatabases runs once the databases deployed, before the apps,
+	// with the services created by name (a preview's seed).
+	afterDatabases func(ctx context.Context, created map[string]string)
 }
 
 // ComposePlan is what applying a compose file changes.
@@ -831,8 +834,12 @@ func (a *applier) apply(ctx context.Context) error {
 		a.plan.Deploying = append(a.plan.Deploying, in.Name)
 	}
 	slices.Sort(a.plan.Deploying)
-	commit := a.opts.Commit
-	return c.goBackground(func() { c.deployInOrder(dbs, apps, commit) })
+	commit, created := a.opts.Commit, maps.Clone(a.created)
+	var between func()
+	if hook := a.opts.afterDatabases; hook != nil {
+		between = func() { hook(c.bg, created) }
+	}
+	return c.goBackground(func() { c.deployInOrder(dbs, apps, commit, between) })
 }
 
 // recordGitState stores each listed service's compose hash, and flags the
@@ -868,7 +875,7 @@ func boolCmp(x, y bool) int {
 
 // deployInOrder deploys the databases, waits for them, then the apps, so a
 // new app's pre-deploy (migrations) finds its database up.
-func (c *Core) deployInOrder(dbs, apps []string, commit string) {
+func (c *Core) deployInOrder(dbs, apps []string, commit string, between func()) {
 	ctx := c.bg
 	var started []string
 	for _, id := range dbs {
@@ -892,6 +899,9 @@ func (c *Core) deployInOrder(dbs, apps []string, commit string) {
 			case <-time.After(2 * time.Second):
 			}
 		}
+	}
+	if between != nil {
+		between()
 	}
 	for _, id := range apps {
 		if _, err := c.Deploy(ctx, id, DeployOptions{Commit: commit}); err != nil {
