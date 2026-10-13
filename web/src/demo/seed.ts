@@ -10,6 +10,7 @@ import type {
   Network,
   NotificationChannel,
   Project,
+  EmailSettings,
   Registry,
   Restore,
   Schedule,
@@ -47,6 +48,8 @@ export type DemoDb = {
   restores: Restore[];
   domains: Domain[];
   registries: Registry[];
+  /** The SMTP server, once set in Settings › Email. */
+  email?: EmailSettings;
   channels: NotificationChannel[];
   tokens: ApiToken[];
   /** Added after version 3: seeded on first use (demoUsers). */

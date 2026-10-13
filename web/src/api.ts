@@ -521,6 +521,21 @@ export type Cloudflare = {
   syncedAt?: string;
 };
 
+export type EmailSecurity = "starttls" | "tls" | "none";
+
+/** The SMTP server email goes through; the password comes back masked. */
+export type EmailSettings = {
+  host: string;
+  port: number;
+  security: EmailSecurity;
+  username: string;
+  password: string;
+  /** The sender, with an optional name: "kipitiny <ops@example.com>". */
+  from: string;
+};
+
+export type Email = { configured: boolean; settings: EmailSettings };
+
 /** A password manager whose references (scheme://…) service env can use. */
 export type SecretProvider = {
   id: string;
@@ -1309,6 +1324,10 @@ export const api = {
   cleanup: () => request<Cleanup>("/cleanup"),
   setCleanup: (s: CleanupSettings) => request<Cleanup>("/cleanup", json("PUT", s)),
   runCleanup: () => request<Cleanup>("/cleanup/run", { method: "POST" }),
+  email: () => request<Email>("/email"),
+  setEmail: (s: EmailSettings) => request<Email>("/email", json("PUT", s)),
+  deleteEmail: () => request<void>("/email", { method: "DELETE" }),
+  testEmail: (to: string) => request<void>("/email/test", json("POST", { to })),
   notifications: () => request<Notifications>("/notifications"),
   createChannel: (c: ChannelInput) => request<NotificationChannel>("/notifications/channels", json("POST", c)),
   updateChannel: (id: string, c: ChannelInput) =>
