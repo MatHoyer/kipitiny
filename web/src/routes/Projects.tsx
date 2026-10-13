@@ -2,7 +2,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { Activity, ChevronRight, FolderKanban, GitPullRequestArrow, Globe, Layers, Plus, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
-import { ServiceIcon } from "@/components/service-icon";
+import { ServiceStates } from "@/components/service-states";
 import { TemplateDialog } from "@/components/template-dialog";
 import { EmptyState, ErrorText, IconTile, StatCard, Tag, Loading } from "@/components/common";
 import { PageBody, PageHeader } from "@/components/page-header";
@@ -22,7 +22,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { issueRing, issueText, needsAttention, serviceIssue } from "@/components/topology";
 import { memoryOf, useUsage } from "@/components/usage";
-import { formatBytes, liveState, timeAgo, troubled } from "@/lib/format";
+import { formatBytes, liveState, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAccess } from "@/lib/access";
 import { api, isDatabase, type Project as ProjectT, type Service } from "../api";
@@ -47,7 +47,8 @@ export function Projects() {
     const mine = (previews.data ?? []).flatMap((p, i) => (p.parentId === id ? [previewServices[i]?.data] : []));
     // A project sleeps whole: any service asleep means all of them are.
     const asleep = mine.filter((svcs) => svcs?.some((s) => s.sleeping)).length;
-    return { count: mine.length, asleep };
+    const failing = mine.filter((svcs) => svcs?.some(needsAttention)).length;
+    return { count: mine.length, asleep, failing };
   };
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.servers });
   const canCreate = useAccess().has("create-projects");
@@ -135,12 +136,10 @@ function ProjectCard({
 }: {
   project: ProjectT;
   services?: Service[];
-  previews: { count: number; asleep: number };
+  previews: { count: number; asleep: number; failing: number };
   server?: string;
 }) {
   const domains = services?.filter((s) => s.domain).map((s) => s.domain) ?? [];
-  const states = services?.map(liveState) ?? [];
-  const bad = services?.filter(needsAttention).length ?? 0;
   // The first misconfiguration (a missing network…), as the service's own card shows it.
   const issue = services?.map((s) => ({ s, i: serviceIssue(s) })).find((x) => x.i?.tone === "error");
   const memory = memoryOf(useUsage().data, (u) => u.projectId === p.id);
@@ -166,32 +165,13 @@ function ProjectCard({
                 <GitPullRequestArrow className="size-3 shrink-0" />
                 {previews.count} preview{previews.count === 1 ? "" : "s"}
                 {previews.asleep > 0 && ` · ${previews.count === previews.asleep ? "all" : previews.asleep} asleep`}
+                {previews.failing > 0 && <span className={issueText.error}>· {previews.failing} failing</span>}
               </p>
             )}
           </div>
           <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </div>
-        {services && services.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5" aria-label="Service states">
-            {services.map((s, i) => (
-              <span
-                key={s.id}
-                role="img"
-                aria-label={`${s.name}: ${states[i]}`}
-                title={`${s.name}: ${states[i]}`}
-                className="relative flex size-6 items-center justify-center rounded-md bg-muted"
-              >
-                <ServiceIcon service={s} className="size-3.5 text-muted-foreground" />
-                <span
-                  className={cn("absolute -right-0.5 -bottom-0.5 size-2 rounded-full ring-2 ring-card", needsAttention(s) ? "bg-red-500" : stateDot(states[i]))}
-                />
-              </span>
-            ))}
-            <span className="ml-1 text-xs text-muted-foreground">
-              {bad ? `${bad} need${bad === 1 ? "s" : ""} attention` : states.every((s) => s === "running") ? "all running" : ""}
-            </span>
-          </div>
-        )}
+        {services && <ServiceStates services={services} />}
         {issue && (
           <p title={issue.i!.text} className={cn("flex items-center gap-1.5 text-xs", issueText.error)}>
             <TriangleAlert className="size-3.5 shrink-0" />
@@ -218,9 +198,6 @@ function ProjectCard({
     </Link>
   );
 }
-
-const stateDot = (state: string) =>
-  state === "running" ? "bg-emerald-500" : troubled(state) ? "bg-red-500" : state === "starting" ? "animate-pulse bg-amber-500" : "bg-muted-foreground/40";
 
 /**
  * Creates a project. With open and onOpenChange, the caller opens it (no

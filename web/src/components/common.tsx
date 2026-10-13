@@ -62,6 +62,8 @@ export const stateColors: Record<string, string> = {
   succeeded: "bg-emerald-500",
   passed: "bg-emerald-500",
   deploying: "animate-pulse bg-sky-500",
+  // Blue, not grey: asleep wakes on the next request, stopped stays down.
+  asleep: "bg-blue-500",
   degraded: "bg-amber-500",
   restarting: "bg-amber-500",
   created: "bg-amber-500",

@@ -44,7 +44,7 @@ export function SleepCard({ project, services, disabled }: { project: Project; s
           Sleep mode
           {asleep && (
             <Tag className="flex items-center gap-1">
-              <Moon className="size-3" />
+              <Moon className="size-3 text-blue-500" />
               Asleep
             </Tag>
           )}
