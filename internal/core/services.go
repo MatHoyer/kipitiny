@@ -65,9 +65,6 @@ type ServiceInput struct {
 	PublishedPorts []store.PublishedPort `json:"publishedPorts"`
 	// StopGraceSeconds is the app's time to exit on stop; 0 means 10 s.
 	StopGraceSeconds int `json:"stopGraceSeconds"`
-	// SleepAfterSeconds stops the app after that long without a request;
-	// 0 never does (public apps only).
-	SleepAfterSeconds int `json:"sleepAfterSeconds"`
 	// HostNetwork runs the app in the host's network (apps only).
 	HostNetwork bool `json:"hostNetwork"`
 	// DockerSocket mounts the host's Docker socket: "", "ro" or "rw".
@@ -100,11 +97,10 @@ type ServicePatch struct {
 	Middlewares *MiddlewaresInput `json:"middlewares"`
 	PreBackup   *string           `json:"preBackup"`
 	// PublishedPorts replaces the app's published ports; nil keeps them.
-	PublishedPorts    []store.PublishedPort `json:"publishedPorts"`
-	StopGraceSeconds  *int                  `json:"stopGraceSeconds"`
-	SleepAfterSeconds *int                  `json:"sleepAfterSeconds"`
-	HostNetwork       *bool                 `json:"hostNetwork"`
-	DockerSocket      *string               `json:"dockerSocket"`
+	PublishedPorts   []store.PublishedPort `json:"publishedPorts"`
+	StopGraceSeconds *int                  `json:"stopGraceSeconds"`
+	HostNetwork      *bool                 `json:"hostNetwork"`
+	DockerSocket     *string               `json:"dockerSocket"`
 }
 
 type ContainerView struct {
@@ -172,27 +168,26 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		in.Replicas = 1
 	}
 	svc := store.Service{
-		ProjectID:         projectID,
-		Name:              in.Name,
-		Kind:              in.Kind,
-		Image:             strings.TrimSpace(in.Image),
-		Icon:              strings.TrimSpace(in.Icon),
-		Replicas:          in.Replicas,
-		Port:              in.Port,
-		Domain:            strings.ToLower(strings.TrimSpace(in.Domain)),
-		Env:               in.Env,
-		MemoryMB:          in.MemoryMB,
-		CPUs:              in.CPUs,
-		HealthPath:        strings.TrimSpace(in.HealthPath),
-		Healthcheck:       in.Healthcheck,
-		PreDeploy:         strings.TrimSpace(in.PreDeploy),
-		Volumes:           normalizeVolumes(in.Volumes),
-		PreBackup:         strings.TrimSpace(in.PreBackup),
-		PublishedPorts:    normalizePorts(in.PublishedPorts),
-		StopGraceSeconds:  in.StopGraceSeconds,
-		SleepAfterSeconds: in.SleepAfterSeconds,
-		HostNetwork:       in.HostNetwork,
-		DockerSocket:      in.DockerSocket,
+		ProjectID:        projectID,
+		Name:             in.Name,
+		Kind:             in.Kind,
+		Image:            strings.TrimSpace(in.Image),
+		Icon:             strings.TrimSpace(in.Icon),
+		Replicas:         in.Replicas,
+		Port:             in.Port,
+		Domain:           strings.ToLower(strings.TrimSpace(in.Domain)),
+		Env:              in.Env,
+		MemoryMB:         in.MemoryMB,
+		CPUs:             in.CPUs,
+		HealthPath:       strings.TrimSpace(in.HealthPath),
+		Healthcheck:      in.Healthcheck,
+		PreDeploy:        strings.TrimSpace(in.PreDeploy),
+		Volumes:          normalizeVolumes(in.Volumes),
+		PreBackup:        strings.TrimSpace(in.PreBackup),
+		PublishedPorts:   normalizePorts(in.PublishedPorts),
+		StopGraceSeconds: in.StopGraceSeconds,
+		HostNetwork:      in.HostNetwork,
+		DockerSocket:     in.DockerSocket,
 	}
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
@@ -359,9 +354,6 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 	if p.StopGraceSeconds != nil {
 		svc.StopGraceSeconds = *p.StopGraceSeconds
 	}
-	if p.SleepAfterSeconds != nil {
-		svc.SleepAfterSeconds = *p.SleepAfterSeconds
-	}
 	if p.HostNetwork != nil {
 		svc.HostNetwork = *p.HostNetwork
 	}
@@ -403,8 +395,8 @@ func (c *Core) validateIn(ctx context.Context, s store.Service, project store.Pr
 	if s.Domain != "" && s.Domain == c.cfg.Domain {
 		return fmt.Errorf("%w: domain %q is the manager's own", ErrInvalid, s.Domain)
 	}
-	if err := c.checkSleepServer(ctx, s, project); err != nil {
-		return err
+	if project.SleepAfterSeconds != 0 && (len(s.PublishedPorts) > 0 || s.HostNetwork) {
+		return fmt.Errorf("%w: %s sleeps, and traffic that goes around Traefik can't wake it: turn sleep mode off first", ErrInvalid, project.Name)
 	}
 	if err := c.checkSecretSchemes(s.Env); err != nil {
 		return err
@@ -467,9 +459,6 @@ func validateService(s store.Service) error {
 		if s.StopGraceSeconds != 0 {
 			return fmt.Errorf("%w: databases have their own stop timeout", ErrInvalid)
 		}
-		if s.SleepAfterSeconds != 0 {
-			return fmt.Errorf("%w: databases never sleep", ErrInvalid)
-		}
 		if s.HostNetwork || s.DockerSocket != "" {
 			return fmt.Errorf("%w: databases can't use the host network or the Docker socket", ErrInvalid)
 		}
@@ -489,9 +478,6 @@ func validateService(s store.Service) error {
 	}
 	if s.StopGraceSeconds < 0 || s.StopGraceSeconds > maxStopGraceSeconds {
 		return fmt.Errorf("%w: stop grace period must be between 0 and %d seconds", ErrInvalid, maxStopGraceSeconds)
-	}
-	if err := validateSleep(s); err != nil {
-		return err
 	}
 	if s.HealthPath != "" {
 		if !strings.HasPrefix(s.HealthPath, "/") || strings.ContainsAny(s.HealthPath, " \t\n") {
@@ -757,6 +743,12 @@ func (c *Core) ServiceAction(ctx context.Context, id string, action Action) (Ser
 	if err != nil {
 		return ServiceView{}, err
 	}
+	if action != ActionStop {
+		// Its project wakes with it: the service may need the others.
+		if err := c.wakeFor(ctx, svc); err != nil {
+			return ServiceView{}, err
+		}
+	}
 	cts, err := c.activeContainers(ctx, svc)
 	if err != nil {
 		return ServiceView{}, err
@@ -770,7 +762,7 @@ func (c *Core) ServiceAction(ctx context.Context, id string, action Action) (Ser
 	}
 	svc.Stopped, svc.Sleeping = action == ActionStop, false
 	if !svc.Stopped {
-		c.markActive(svc.ID)
+		c.markActive(svc.ProjectID)
 	}
 	secs := int(stopTimeoutFor(svc).Seconds())
 	dk := c.dockerFor(svc.ServerID)

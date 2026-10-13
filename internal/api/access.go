@@ -64,6 +64,7 @@ var routeAccess = map[string]access{
 	"DELETE /api/projects/{id}":           onProject(core.PermDelete),
 	"PUT /api/projects/{id}/env":          onProject(core.PermEnv),
 	"PUT /api/projects/{id}/name":         onProject(core.PermSettings),
+	"PUT /api/projects/{id}/sleep":        onProject(core.PermSettings),
 	"GET /api/projects/{id}/compose":      onProject(core.PermView),
 	"POST /api/projects/{id}/compose":     onProject(core.PermSettings),
 	"POST /api/projects/{id}/export":      onProject(core.PermDownload),

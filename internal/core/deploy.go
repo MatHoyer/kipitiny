@@ -271,6 +271,14 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 	out io.Writer, logf func(string, ...any)) error {
 
 	dk := c.dockerFor(svc.ServerID)
+	// A deploy wakes a sleeping project: the pre-deploy command and the new
+	// replicas need its databases.
+	if svc.Sleeping {
+		logf("Waking %s", project.Name)
+	}
+	if err := c.wakeFor(ctx, svc); err != nil {
+		return fmt.Errorf("wake %s: %w", project.Name, err)
+	}
 	if n := len(secretRefs(svc.Env, project.Env)); n > 0 {
 		logf("Fetching %d secret(s) from password managers", n)
 	}
@@ -392,7 +400,7 @@ func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Se
 	if err := dk.WaitHealthy(ctx, id, databaseReadyTimeout); err != nil {
 		return fmt.Errorf("%s did not become ready: %w", svc.Kind, err)
 	}
-	if err := c.setRunning(ctx, svc.ID); err != nil {
+	if err := c.setRunning(ctx, svc); err != nil {
 		return err
 	}
 	return c.store.SetCurrentDeployment(ctx, svc.ID, dep.ID)
@@ -456,7 +464,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 		return fmt.Errorf("new version not ready: %w", readyErr)
 	}
 
-	if err := c.setRunning(ctx, svc.ID); err != nil {
+	if err := c.setRunning(ctx, svc); err != nil {
 		cleanup()
 		return err
 	}
@@ -558,7 +566,7 @@ func (c *Core) swap(ctx context.Context, project store.Project, svc store.Servic
 		}
 	}
 	if err == nil {
-		if err = c.setRunning(ctx, svc.ID); err == nil {
+		if err = c.setRunning(ctx, svc); err == nil {
 			err = c.store.SetCurrentDeployment(ctx, svc.ID, dep.ID)
 		}
 	}

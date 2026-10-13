@@ -990,7 +990,7 @@ const routes: Route[] = [
       const name = String(body.name ?? "").trim();
       if (!nameRe.test(name)) throw invalid("name must be lowercase letters, digits and dashes (max 40)");
       if (db.projects.some((p) => p.name === name)) throw new HttpError(409, "already exists (name or domain taken)");
-      const p: Project = { id: newId("p"), name, serverId: "local", env: {}, secrets: [], createdAt: now(), updatedAt: now() };
+      const p: Project = { id: newId("p"), name, serverId: "local", env: {}, secrets: [], sleepAfterSeconds: 0, createdAt: now(), updatedAt: now() };
       db.projects.push(p);
       save();
       return p;
@@ -1017,7 +1017,7 @@ const routes: Route[] = [
       if (body.dryRun) return { projectId: body.projectId, plan };
       let projectId = body.projectId;
       if (!projectId) {
-        const p: Project = { id: newId("p"), name, serverId: "local", env: {}, secrets: [], createdAt: now(), updatedAt: now() };
+        const p: Project = { id: newId("p"), name, serverId: "local", env: {}, secrets: [], sleepAfterSeconds: 0, createdAt: now(), updatedAt: now() };
         db.projects.push(p);
         projectId = p.id;
       }
@@ -1107,6 +1107,21 @@ const routes: Route[] = [
       const p = projectOf(m[1]);
       p.env = body.env ?? {};
       p.secrets = body.secrets ?? [];
+      save();
+      return p;
+    },
+  ],
+  [
+    "PUT",
+    /^\/projects\/([^/]+)\/sleep$/,
+    ({ m, body }) => {
+      const p = projectOf(m[1]);
+      const secs = Number(body.sleepAfterSeconds) || 0;
+      if (secs && (secs < 300 || secs > 30 * 86400)) throw invalid("sleep after must be between 5 minutes and 30 days");
+      const svcs = db.services.filter((s) => s.projectId === p.id);
+      if (secs && !svcs.some((s) => s.domain && s.port)) throw invalid("only a project with an app on a domain can sleep");
+      p.sleepAfterSeconds = secs;
+      if (!secs) for (const s of svcs) s.sleeping = false;
       save();
       return p;
     },

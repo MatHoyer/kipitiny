@@ -146,7 +146,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "close_preview", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Close a preview environment: delete its containers, volumes and databases. Needs deploy."}, t.closePreview)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_sleep",
-		Description: "Set an app's sleep mode: after this long without a request its containers stop, and the next request starts them again behind a \"starting\" page (503 with Retry-After for API calls). Only for apps with a domain and no published ports; get_app_status reports sleeping. A git project's setting is in its compose file (x-kipitiny.sleep_after) instead. Needs admin."}, t.setSleep)
+		Description: "Set a project's sleep mode: after this long without a request to any of its apps, every service stops, databases too, and the next request starts them again behind a \"starting\" page (503 with Retry-After for API calls). Background workers don't run while it sleeps; a deploy, a start, a backup or a data query wakes it. Needs an app with a domain, and no service with published ports or the host network; get_app_status reports sleeping services. Needs admin."}, t.setSleep)
 	mcp.AddTool(server, &mcp.Tool{Name: "sync_dns", Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
 		Description: "Sync the Cloudflare DNS records and tunnel routes of service domains now instead of waiting for the next round (every ten minutes, and seconds after a domain changes); public IPs are detected again. Returns each managed hostname's state. Needs admin and a connected Cloudflare token."}, t.syncDNS)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_networks", Annotations: readOnly,

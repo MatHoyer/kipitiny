@@ -11,18 +11,17 @@ import (
 )
 
 type setSleepIn struct {
-	Service string `json:"service" jsonschema:"the app as project/service, or its ID"`
-	After   string `json:"after" jsonschema:"idle time before the app sleeps, as a duration (30m, 2h; 5 minutes to 30 days); 0 turns sleep mode off"`
+	Project string `json:"project" jsonschema:"the project's name or ID"`
+	After   string `json:"after" jsonschema:"idle time before the project sleeps, as a duration (30m, 2h; 5 minutes to 30 days); 0 turns sleep mode off"`
 }
 
 type setSleepOut struct {
-	SleepAfterSeconds int  `json:"sleepAfterSeconds"`
-	Sleeping          bool `json:"sleeping"`
+	SleepAfterSeconds int `json:"sleepAfterSeconds"`
 }
 
 func (t *tools) setSleep(ctx context.Context, _ *mcp.CallToolRequest, in setSleepIn) (*mcp.CallToolResult, setSleepOut, error) {
-	out, err := mutate(ctx, t.c, store.ScopeAdmin, "set_sleep", in.Service, func() (setSleepOut, error) {
-		svc, err := t.service(ctx, in.Service, core.PermSettings)
+	out, err := mutate(ctx, t.c, store.ScopeAdmin, "set_sleep", in.Project, func() (setSleepOut, error) {
+		p, err := t.project(ctx, in.Project, core.PermSettings)
 		if err != nil {
 			return setSleepOut{}, err
 		}
@@ -34,8 +33,8 @@ func (t *tools) setSleep(ctx context.Context, _ *mcp.CallToolRequest, in setSlee
 			}
 			secs = int(d.Seconds())
 		}
-		v, err := t.c.UpdateService(ctx, svc.ID, core.ServicePatch{SleepAfterSeconds: &secs})
-		return setSleepOut{SleepAfterSeconds: v.SleepAfterSeconds, Sleeping: v.Sleeping}, err
+		v, err := t.c.SetProjectSleep(ctx, p.ID, secs)
+		return setSleepOut{SleepAfterSeconds: v.SleepAfterSeconds}, err
 	})
 	return nil, out, err
 }

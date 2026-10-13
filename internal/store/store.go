@@ -24,6 +24,10 @@ type Store interface {
 	SetProjectEnv(ctx context.Context, id string, env map[string]string, secrets []string) (Project, error)
 	RenameProject(ctx context.Context, id, name string) error
 	SetProjectPreview(ctx context.Context, id string, p Preview) error
+	SetProjectSleep(ctx context.Context, id string, sleepAfterSeconds int) error
+	// SetProjectSleeping flags the project's deployed, running services as
+	// asleep, or clears the flag on all of them.
+	SetProjectSleeping(ctx context.Context, id string, sleeping bool) error
 	// GetPreviewSettings returns ErrNotFound for a project without any.
 	GetPreviewSettings(ctx context.Context, projectID string) (PreviewSettings, error)
 	SavePreviewSettings(ctx context.Context, s PreviewSettings) (PreviewSettings, error)
@@ -39,7 +43,6 @@ type Store interface {
 	SetDeploymentImage(ctx context.Context, id, image string, config Service) error
 	// SetServiceStopped also clears Sleeping: the user's choice wins.
 	SetServiceStopped(ctx context.Context, serviceID string, stopped bool) error
-	SetServiceSleeping(ctx context.Context, serviceID string, sleeping bool) error
 	// SetServiceImage records the image a service now deploys.
 	SetServiceImage(ctx context.Context, serviceID, image string) error
 	// ListAllServices returns every service of every project.
@@ -317,9 +320,13 @@ type Project struct {
 	// ParentID is set on a preview environment: the project it copies.
 	ParentID string `bun:"parent_id" json:"parentId,omitempty"`
 	// Preview describes a preview environment; zero for other projects.
-	Preview   Preview   `bun:"preview,type:text" json:"preview"`
-	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
-	UpdatedAt time.Time `bun:"updated_at" json:"updatedAt"`
+	Preview Preview `bun:"preview,type:text" json:"preview"`
+	// SleepAfterSeconds stops every service after that long without a
+	// request to its apps, and starts them again on the next one; 0 never
+	// does.
+	SleepAfterSeconds int       `bun:"sleep_after_seconds" json:"sleepAfterSeconds"`
+	CreatedAt         time.Time `bun:"created_at" json:"createdAt"`
+	UpdatedAt         time.Time `bun:"updated_at" json:"updatedAt"`
 }
 
 // Preview is what a preview environment was last deployed from.
@@ -452,11 +459,8 @@ type Service struct {
 	CurrentDeploymentID string      `bun:"current_deployment_id" json:"currentDeploymentId"`
 	// Stopped is the desired run state after the user stopped the service.
 	Stopped bool `bun:"stopped" json:"stopped"`
-	// SleepAfterSeconds stops an app after that long without a request and
-	// starts it again on the next one; 0 never does.
-	SleepAfterSeconds int `bun:"sleep_after_seconds" json:"sleepAfterSeconds"`
-	// Sleeping is set while the manager keeps the app stopped for being
-	// idle. A start, stop or deploy clears it.
+	// Sleeping is set while the manager keeps the service stopped for its
+	// project being idle. Waking the project, a stop or a deploy clears it.
 	Sleeping bool `bun:"sleeping" json:"sleeping"`
 	// GitSpecHash is the hash of the compose block a git sync last applied.
 	GitSpecHash string `bun:"git_spec_hash" json:"-"`

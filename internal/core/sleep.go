@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,43 +31,64 @@ const (
 	routerRequests = "traefik_router_requests_total{"
 )
 
-// sleepState knows when each sleep-enabled app last got a request. Memory
-// only: after a restart every app counts as just active, so nothing falls
-// asleep at once.
+// sleepState knows when each sleep-enabled project last got a request.
+// Memory only: after a restart every project counts as just active, so
+// nothing falls asleep at once.
 type sleepState struct {
 	mu         sync.Mutex
-	lastActive map[string]time.Time // service ID ->
-	requests   map[string]float64   // service ID -> last counter sum
-	waking     map[string]time.Time // service ID -> when a request woke it
+	lastActive map[string]time.Time   // project ID ->
+	requests   map[string]float64     // project ID -> last counter sum
+	waking     map[string]time.Time   // project ID -> when a request woke it
+	projects   map[string]*sync.Mutex // project ID -> held to fall asleep or wake
+}
+
+// lock serializes falling asleep and waking for a project.
+func (s *sleepState) lock(projectID string) (unlock func()) {
+	s.mu.Lock()
+	if s.projects == nil {
+		s.projects = map[string]*sync.Mutex{}
+	}
+	m, ok := s.projects[projectID]
+	if !ok {
+		m = &sync.Mutex{}
+		s.projects[projectID] = m
+	}
+	s.mu.Unlock()
+	m.Lock()
+	return m.Unlock
 }
 
 // markActive records activity now (a request, a deploy, a start).
-func (c *Core) markActive(id string) {
+func (c *Core) markActive(projectID string) {
 	c.sleep.mu.Lock()
 	defer c.sleep.mu.Unlock()
 	if c.sleep.lastActive == nil {
 		c.sleep.lastActive = map[string]time.Time{}
 	}
-	c.sleep.lastActive[id] = time.Now()
+	c.sleep.lastActive[projectID] = time.Now()
 }
 
 // setRunning records that a deployed service runs: neither stopped nor
-// asleep, and active as of now.
-func (c *Core) setRunning(ctx context.Context, id string) error {
-	if err := c.store.SetServiceStopped(ctx, id, false); err != nil {
+// asleep, and its project active as of now.
+func (c *Core) setRunning(ctx context.Context, svc store.Service) error {
+	if err := c.store.SetServiceStopped(ctx, svc.ID, false); err != nil {
 		return err
 	}
-	c.markActive(id)
+	c.markActive(svc.ProjectID)
 	return nil
 }
 
-// observe takes a service's request counter: any change (Traefik restarted
-// counts too) is activity. It returns when the service was last active.
+// observe takes a project's request counter: any change (Traefik restarted
+// counts too) is activity. It returns when the project was last active.
 func (s *sleepState) observe(id string, requests float64, now time.Time) time.Time {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Each map on its own: markActive may have made lastActive alone.
 	if s.lastActive == nil {
-		s.lastActive, s.requests = map[string]time.Time{}, map[string]float64{}
+		s.lastActive = map[string]time.Time{}
+	}
+	if s.requests == nil {
+		s.requests = map[string]float64{}
 	}
 	prev, seen := s.requests[id]
 	s.requests[id] = requests
@@ -78,7 +100,7 @@ func (s *sleepState) observe(id string, requests float64, now time.Time) time.Ti
 	return last
 }
 
-// forget drops services that no longer sleep.
+// forget drops projects that no longer sleep.
 func (s *sleepState) forget(keep map[string]bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -90,41 +112,83 @@ func (s *sleepState) forget(keep map[string]bool) {
 	}
 }
 
-// validateSleep checks an app's sleep mode: only an app Traefik routes can
-// be woken by a request.
-func validateSleep(s store.Service) error {
-	if s.SleepAfterSeconds == 0 {
-		return nil
+// sleepBlocker says why a project's services keep it from sleeping: only a
+// request through Traefik wakes it, so it needs an app with a domain, and
+// no traffic may go around Traefik.
+func sleepBlocker(svcs []store.Service) error {
+	routed := false
+	for _, s := range svcs {
+		switch {
+		case len(s.PublishedPorts) > 0:
+			return fmt.Errorf("%w: %s has published ports: their traffic can't wake the project", ErrInvalid, s.Name)
+		case s.HostNetwork:
+			return fmt.Errorf("%w: %s uses the host network: its traffic can't wake the project", ErrInvalid, s.Name)
+		case httpRouted(s):
+			routed = true
+		}
 	}
-	switch {
-	case s.SleepAfterSeconds < minSleepAfterSeconds || s.SleepAfterSeconds > maxSleepAfterSeconds:
-		return fmt.Errorf("%w: sleep after must be between %d minutes and %d days", ErrInvalid, minSleepAfterSeconds/60, maxSleepAfterSeconds/86400)
-	case !httpRouted(s):
-		return fmt.Errorf("%w: only an app with a domain and a container port can sleep: a request wakes it", ErrInvalid)
-	case len(s.PublishedPorts) > 0:
-		return fmt.Errorf("%w: an app with published ports can't sleep: their traffic can't wake it", ErrInvalid)
+	if !routed {
+		return fmt.Errorf("%w: only a project with an app on a domain can sleep: a request to it wakes the project", ErrInvalid)
 	}
 	return nil
 }
 
-// checkSleepServer refuses sleep mode where nothing can wake the app: a
+// checkSleepServer refuses sleep mode where nothing can wake the project: a
 // remote server reaches the manager's pages through KIPITINY_DOMAIN.
-func (c *Core) checkSleepServer(ctx context.Context, s store.Service, project store.Project) error {
-	if s.SleepAfterSeconds == 0 {
-		return nil
-	}
+func (c *Core) checkSleepServer(ctx context.Context, project store.Project) error {
 	sv, err := c.store.GetServer(ctx, project.ServerID)
 	if err != nil {
 		return err
 	}
 	if sv.Kind != store.ServerLocal && (c.cfg.Domain == "" || isLocalDomain(c.cfg.Domain)) {
-		return fmt.Errorf("%w: on a remote server, sleep mode needs the manager's domain (KIPITINY_DOMAIN): requests wake the app through its pages", ErrInvalid)
+		return fmt.Errorf("%w: on a remote server, sleep mode needs the manager's domain (KIPITINY_DOMAIN): requests wake the project through its pages", ErrInvalid)
 	}
 	return nil
 }
 
-// StartSleep puts apps with sleep mode to sleep once they got no request for
-// their idle time.
+// checkProjectSleep checks that a project may sleep with these services.
+func (c *Core) checkProjectSleep(ctx context.Context, project store.Project, svcs []store.Service) error {
+	if s := project.SleepAfterSeconds; s < minSleepAfterSeconds || s > maxSleepAfterSeconds {
+		return fmt.Errorf("%w: sleep after must be between %d minutes and %d days", ErrInvalid, minSleepAfterSeconds/60, maxSleepAfterSeconds/86400)
+	}
+	if err := sleepBlocker(svcs); err != nil {
+		return err
+	}
+	return c.checkSleepServer(ctx, project)
+}
+
+// SetProjectSleep sets a project's sleep mode: after sleepAfterSeconds
+// without a request to its apps, every service stops, databases too, until
+// the next request. 0 turns it off, waking the project.
+func (c *Core) SetProjectSleep(ctx context.Context, projectID string, sleepAfterSeconds int) (store.Project, error) {
+	p, err := c.store.GetProject(ctx, projectID)
+	if err != nil {
+		return store.Project{}, err
+	}
+	p.SleepAfterSeconds = sleepAfterSeconds
+	if sleepAfterSeconds != 0 {
+		svcs, err := c.store.ListServices(ctx, projectID)
+		if err != nil {
+			return store.Project{}, err
+		}
+		if err := c.checkProjectSleep(ctx, p, svcs); err != nil {
+			return store.Project{}, err
+		}
+	}
+	if err := c.store.SetProjectSleep(ctx, projectID, sleepAfterSeconds); err != nil {
+		return store.Project{}, err
+	}
+	c.markActive(projectID) // the idle time counts from now
+	if sleepAfterSeconds == 0 {
+		if err := c.wakeProject(ctx, projectID); err != nil {
+			return store.Project{}, err
+		}
+	}
+	return c.GetProject(ctx, projectID)
+}
+
+// StartSleep puts projects with sleep mode to sleep once their apps got no
+// request for their idle time.
 func (c *Core) StartSleep() error {
 	return c.goLoop(func() {
 		tick := time.NewTicker(sleepEvery)
@@ -142,21 +206,36 @@ func (c *Core) StartSleep() error {
 	})
 }
 
-// sleepIdle reads each server's request counters once and puts idle apps to
-// sleep. A server whose counters can't be read keeps its apps awake.
+// sleepIdle reads each server's request counters once and puts idle
+// projects to sleep. A server whose counters can't be read keeps its
+// projects awake.
 func (c *Core) sleepIdle(ctx context.Context) error {
-	svcs, err := c.store.ListAllServices(ctx)
+	projects, err := c.store.ListProjects(ctx)
 	if err != nil {
 		return err
 	}
-	byServer := map[string][]store.Service{}
+	all, err := c.store.ListAllServices(ctx)
+	if err != nil {
+		return err
+	}
+	svcs := map[string][]store.Service{}
+	for _, s := range all {
+		svcs[s.ProjectID] = append(svcs[s.ProjectID], s)
+	}
+	byServer := map[string][]store.Project{}
 	keep := map[string]bool{}
-	for _, s := range svcs {
-		if s.SleepAfterSeconds > 0 && !s.Stopped && s.CurrentDeploymentID != "" {
-			keep[s.ID] = true
-			if !s.Sleeping {
-				byServer[s.ServerID] = append(byServer[s.ServerID], s)
-			}
+	for _, p := range projects {
+		if p.SleepAfterSeconds == 0 || sleepBlocker(svcs[p.ID]) != nil {
+			continue
+		}
+		keep[p.ID] = true
+		awake, asleep := false, false
+		for _, s := range svcs[p.ID] {
+			asleep = asleep || s.Sleeping
+			awake = awake || (!s.Sleeping && !s.Stopped && s.CurrentDeploymentID != "")
+		}
+		if awake && !asleep {
+			byServer[p.ServerID] = append(byServer[p.ServerID], p)
 		}
 	}
 	c.sleep.forget(keep)
@@ -168,78 +247,112 @@ func (c *Core) sleepIdle(ctx context.Context) error {
 			continue
 		}
 		now := time.Now()
-		for _, s := range here {
-			last := c.sleep.observe(s.ID, counts[strings.ToLower(s.ID)], now)
-			if now.Sub(last) < time.Duration(s.SleepAfterSeconds)*time.Second {
+		for _, p := range here {
+			var requests float64
+			for _, s := range svcs[p.ID] {
+				requests += counts[strings.ToLower(s.ID)]
+			}
+			last := c.sleep.observe(p.ID, requests, now)
+			if now.Sub(last) < time.Duration(p.SleepAfterSeconds)*time.Second {
 				continue
 			}
-			if err := c.putToSleep(ctx, s.ID); err != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", s.Name, err))
+			if err := c.putToSleep(ctx, p.ID); err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", p.Name, err))
 			}
 		}
 	}
 	return errors.Join(errs...)
 }
 
-// putToSleep marks the service sleeping, then stops its replicas (kept, so
-// waking is a plain start). A service being deployed is left for next time.
-func (c *Core) putToSleep(ctx context.Context, id string) error {
-	unlock, err := c.lockService(id)
-	if errors.Is(err, ErrBusy) {
-		return nil
-	}
+// putToSleep marks the project's running services sleeping, then stops
+// them, apps first so none loses its database while answering (containers
+// are kept, so waking is a plain start). A project with a service being
+// deployed or backed up is left for next time.
+func (c *Core) putToSleep(ctx context.Context, projectID string) error {
+	defer c.sleep.lock(projectID)()
+	svcs, err := c.store.ListServices(ctx, projectID)
 	if err != nil {
 		return err
 	}
-	defer unlock()
-	svc, err := c.store.GetService(ctx, id)
-	if err != nil || svc.Stopped || svc.Sleeping || svc.SleepAfterSeconds == 0 {
+	for _, s := range svcs {
+		unlock, err := c.lockService(s.ID)
+		if errors.Is(err, ErrBusy) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		defer unlock()
+	}
+	p, err := c.store.GetProject(ctx, projectID)
+	if err != nil || p.SleepAfterSeconds == 0 {
 		return err
 	}
-	cts, err := c.activeContainers(ctx, svc)
-	if err != nil {
+	// Read again under the locks: a deploy may have just finished.
+	if svcs, err = c.store.ListServices(ctx, projectID); err != nil || sleepBlocker(svcs) != nil {
 		return err
 	}
 	// Record the desired state first: the reconciler must not undo it.
-	if err := c.store.SetServiceSleeping(ctx, svc.ID, true); err != nil {
+	if err := c.store.SetProjectSleeping(ctx, projectID, true); err != nil {
 		return err
 	}
-	secs := int(stopTimeoutFor(svc).Seconds())
-	dk := c.dockerFor(svc.ServerID)
-	for _, ct := range cts {
-		if ct.State != container.StateRunning {
+	slices.SortStableFunc(svcs, func(a, b store.Service) int { return cmpBool(a.Kind.IsDatabase(), b.Kind.IsDatabase()) })
+	for _, svc := range svcs {
+		if svc.Stopped || svc.CurrentDeploymentID == "" {
 			continue
 		}
-		if _, err := dk.ContainerStop(ctx, ct.ID, client.ContainerStopOptions{Timeout: &secs}); err != nil {
-			return fmt.Errorf("stop %s: %w", ct.Names[0], err)
+		cts, err := c.activeContainers(ctx, svc)
+		if err != nil {
+			return err
+		}
+		secs := int(stopTimeoutFor(svc).Seconds())
+		dk := c.dockerFor(svc.ServerID)
+		for _, ct := range cts {
+			if ct.State != container.StateRunning {
+				continue
+			}
+			if _, err := dk.ContainerStop(ctx, ct.ID, client.ContainerStopOptions{Timeout: &secs}); err != nil {
+				return fmt.Errorf("stop %s: %w", ct.Names[0], err)
+			}
 		}
 	}
-	c.log.Info("service asleep", "service", svc.Name, "idle", time.Duration(svc.SleepAfterSeconds)*time.Second)
+	c.log.Info("project asleep", "project", p.Name, "idle", time.Duration(p.SleepAfterSeconds)*time.Second)
 	return nil
+}
+
+// cmpBool orders false before true.
+func cmpBool(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return 1
+	}
+	return -1
 }
 
 // coldStart is how long the starting page waits for a woken app before it
 // gives up and shows the usual "unavailable" page.
 const coldStart = 2 * time.Minute
 
-// starting reports whether svc is asleep or was woken less than coldStart
-// ago, waking it in the background when it sleeps: a visitor gets the
-// starting page.
+// starting reports whether svc's project is asleep or was woken less than
+// coldStart ago, waking it in the background when it sleeps: a visitor gets
+// the starting page.
 func (c *Core) starting(svc store.Service) bool {
 	if svc.Stopped || svc.Maintenance.Enabled {
 		return false
 	}
 	now := time.Now()
 	c.sleep.mu.Lock()
-	woken, ok := c.sleep.waking[svc.ID]
+	woken, ok := c.sleep.waking[svc.ProjectID]
 	if svc.Sleeping && (!ok || now.Sub(woken) >= coldStart) {
 		if c.sleep.waking == nil {
 			c.sleep.waking = map[string]time.Time{}
 		}
 		woken, ok = now, true
-		c.sleep.waking[svc.ID] = now
+		c.sleep.waking[svc.ProjectID] = now
 		_ = c.goBackground(func() {
-			if err := c.Wake(c.bg, svc.ID); err != nil {
+			if err := c.wakeProject(c.bg, svc.ProjectID); err != nil {
 				c.log.Warn("wake failed", "service", svc.Name, "err", err)
 			}
 		})
@@ -248,45 +361,59 @@ func (c *Core) starting(svc store.Service) bool {
 	return ok && now.Sub(woken) < coldStart
 }
 
-// Wake starts a sleeping service's replicas again; the reconciler takes it
-// from there. Waking an awake service does nothing.
-func (c *Core) Wake(ctx context.Context, id string) error {
-	svc, err := c.store.GetService(ctx, id)
-	if err != nil || !svc.Sleeping {
-		return err
-	}
-	unlock, err := c.lockService(id)
-	if errors.Is(err, ErrBusy) {
-		return nil // being deployed or woken already
-	}
+// wakeProject starts a sleeping project's services again, databases first
+// and ready before the apps start, so they find them; the reconciler takes
+// it from there. Waking an awake project does nothing. It takes no service
+// lock: a deploy or a backup holding one wakes the project it needs.
+func (c *Core) wakeProject(ctx context.Context, projectID string) error {
+	defer c.sleep.lock(projectID)()
+	svcs, err := c.store.ListServices(ctx, projectID)
 	if err != nil {
 		return err
 	}
-	defer unlock()
-	if svc, err = c.store.GetService(ctx, id); err != nil || !svc.Sleeping {
+	svcs = slices.DeleteFunc(svcs, func(s store.Service) bool { return !s.Sleeping })
+	if len(svcs) == 0 {
+		return nil
+	}
+	c.markActive(projectID)
+	if err := c.store.SetProjectSleeping(ctx, projectID, false); err != nil {
 		return err
 	}
-	c.markActive(svc.ID)
-	if err := c.store.SetServiceSleeping(ctx, svc.ID, false); err != nil {
-		return err
-	}
-	cts, err := c.activeContainers(ctx, svc)
-	if err != nil {
-		return err
-	}
-	dk := c.dockerFor(svc.ServerID)
-	for _, ct := range cts {
-		if ct.State == container.StateRunning {
-			continue
+	slices.SortStableFunc(svcs, func(a, b store.Service) int { return cmpBool(!a.Kind.IsDatabase(), !b.Kind.IsDatabase()) })
+	for _, svc := range svcs {
+		cts, err := c.activeContainers(ctx, svc)
+		if err != nil {
+			return err
 		}
-		if _, err := dk.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{}); err != nil {
-			c.kick() // the reconciler recreates what can't start
-			c.log.Warn("wake: start failed", "container", ct.Names[0], "err", err)
+		dk := c.dockerFor(svc.ServerID)
+		for _, ct := range cts {
+			if ct.State == container.StateRunning {
+				continue
+			}
+			if _, err := dk.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{}); err != nil {
+				c.kick() // the reconciler recreates what can't start
+				c.log.Warn("wake: start failed", "container", ct.Names[0], "err", err)
+				continue
+			}
+			if svc.Kind.IsDatabase() {
+				if err := c.waitReady(ctx, dk, ct.ID); err != nil {
+					c.log.Warn("wake: database not ready", "service", svc.Name, "err", err)
+				}
+			}
 		}
 	}
 	c.kick()
-	c.log.Info("service woken", "service", svc.Name)
+	c.log.Info("project woken", "project", projectID)
 	return nil
+}
+
+// wakeFor wakes svc's project when svc sleeps, so its containers run.
+func (c *Core) wakeFor(ctx context.Context, svc store.Service) error {
+	cur, err := c.store.GetService(ctx, svc.ID)
+	if err != nil || !cur.Sleeping {
+		return err
+	}
+	return c.wakeProject(ctx, svc.ProjectID)
 }
 
 // routerRequests sums Traefik's request counters per service (lower-case

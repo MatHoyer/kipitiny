@@ -31,6 +31,8 @@ export type Project = {
   parentId?: string;
   /** What a preview was last deployed from; empty for other projects. */
   preview?: PreviewInfo;
+  /** Seconds without a request to its apps before every service stops; 0 never. */
+  sleepAfterSeconds: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -107,9 +109,7 @@ export type Service = {
   publishedPorts: PublishedPort[];
   /** Seconds an app gets to exit after SIGTERM; 0 means 10. */
   stopGraceSeconds: number;
-  /** Seconds without a request before the app sleeps; 0 never (public apps only). */
-  sleepAfterSeconds: number;
-  /** Stopped by the manager for being idle; the next request starts it. */
+  /** Stopped by the manager for its project being idle; the next request starts it. */
   sleeping: boolean;
   /** Runs in the host's network: one replica, no domain (apps only). */
   hostNetwork: boolean;
@@ -257,7 +257,6 @@ export type ServiceInput = {
   preBackup?: string;
   publishedPorts?: PublishedPort[];
   stopGraceSeconds?: number;
-  sleepAfterSeconds?: number;
   hostNetwork?: boolean;
   dockerSocket?: "" | "ro" | "rw";
 };
@@ -1108,6 +1107,8 @@ export const api = {
     return res.blob();
   },
   renameProject: (id: string, name: string) => request<Project>(`/projects/${id}/name`, json("PUT", { name })),
+  setProjectSleep: (id: string, sleepAfterSeconds: number) =>
+    request<Project>(`/projects/${id}/sleep`, json("PUT", { sleepAfterSeconds })),
   deleteProject: (id: string, confirm: string) =>
     request<void>(`/projects/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),
 
