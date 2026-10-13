@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -62,5 +63,40 @@ func TestSplit(t *testing.T) {
 		if h, r := split(ref); h != want[0] || r != want[1] {
 			t.Errorf("split(%q) = %q, %q", ref, h, r)
 		}
+	}
+}
+
+func TestLabels(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/token":
+			fmt.Fprint(w, `{"token":"anon"}`)
+		case r.Header.Get("Authorization") != "Bearer anon":
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="%s/token",scope="repository:owner/app:pull"`, srv.URL))
+			w.WriteHeader(http.StatusUnauthorized)
+		case r.URL.Path == "/v2/owner/app/manifests/1.2.0":
+			if !strings.Contains(r.Header.Get("Accept"), "image.index") {
+				t.Errorf("accept = %q", r.Header.Get("Accept"))
+			}
+			fmt.Fprint(w, `{"manifests":[
+				{"digest":"sha256:other","platform":{"os":"linux","architecture":"s390x"}},
+				{"digest":"sha256:mine","platform":{"os":"linux","architecture":"`+runtime.GOARCH+`"}}]}`)
+		case r.URL.Path == "/v2/owner/app/manifests/sha256:mine":
+			fmt.Fprint(w, `{"config":{"digest":"sha256:cfg"}}`)
+		case r.URL.Path == "/v2/owner/app/blobs/sha256:cfg":
+			fmt.Fprint(w, `{"config":{"Labels":{"io.kipitiny.upgrade-notices":"{}"}}}`)
+		default:
+			t.Errorf("unexpected %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	labels, err := Labels(context.Background(), srv.Client(), strings.TrimPrefix(srv.URL, "https://")+"/owner/app", "1.2.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if labels["io.kipitiny.upgrade-notices"] != "{}" {
+		t.Errorf("labels = %v", labels)
 	}
 }

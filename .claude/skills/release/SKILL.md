@@ -37,13 +37,20 @@ matches `[0-9]+.[0-9]+.[0-9]+`).
    New version must be greater than the last tag and not already exist.
 
 3. **Confirm with the user** before touching anything: show last tag → new
-   version and the commit subjects included. Wait for a yes.
+   version and the commit subjects included, and the upgrade notices under
+   `## Unreleased` in `UPGRADE.md` (none is fine). Flag every `warning:` one:
+   managers show it next to the update and the release notes open with it.
+   If a commit clearly disrupts running servers (Traefik recreated, a
+   manual step) and has no notice, propose one first. Wait for a yes.
 
 4. **Commit and tag:**
    ```sh
    printf 'X.Y.Z\n' > VERSION
    sed -i -E 's#(kipitiny-homepage:)[0-9]+\.[0-9]+\.[0-9]+#\1X.Y.Z#' site/compose.yaml
-   git add VERSION site/compose.yaml
+   # The next release's notices become this one's (no-op without any).
+   sed -i 's/^## Unreleased$/## X.Y.Z/' UPGRADE.md
+   go run ./internal/upgrade/notes release X.Y.Z   # must succeed: the workflow runs it
+   git add VERSION site/compose.yaml UPGRADE.md
    git commit -m "chore(release): X.Y.Z"
    git tag X.Y.Z
    ```
