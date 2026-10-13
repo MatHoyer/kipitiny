@@ -1,4 +1,4 @@
-import { Bell, BookOpen, Brush, GitFork, HardDrive, Globe, Info, KeyRound, KeySquare, Network, Package, ScrollText, Server, Users, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, Brush, GitFork, HardDrive, Globe, Info, KeyRound, KeySquare, Mail, Network, Package, ScrollText, Server, Users, type LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 import type { Feature } from "@/api";
 import { EmptyState } from "@/components/common";
@@ -8,6 +8,7 @@ import { Version } from "./About";
 import { Audit } from "./Audit";
 import { Cleanup } from "./Cleanup";
 import { DomainsPage } from "./Domains";
+import { Email } from "./Email";
 import { GitProviders } from "./GitProviders";
 import { Networks } from "./Networks";
 import { Notifications } from "./Notifications";
@@ -104,6 +105,13 @@ export const settingsPages: SettingsPage[] = [
     label: "Notifications",
     icon: Bell,
     page: Notifications,
+  },
+  {
+    slug: "email",
+    group: "Integrations",
+    label: "Email",
+    icon: Mail,
+    page: Email,
   },
   {
     slug: "cleanup",

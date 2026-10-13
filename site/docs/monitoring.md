@@ -1,6 +1,6 @@
 ---
 title: Monitoring
-description: Service health, uptime checks from outside, notifications and the events they carry
+description: Service health, uptime checks from outside, email, notifications and the events they carry
 order: 5
 ---
 
@@ -55,6 +55,23 @@ a project synced from git can only set it there.
 - The last 60 results are shown with their response time; hourly availability
   is kept for 30 days.
 - A check pauses while the service is stopped or not deployed yet.
+
+## Email
+
+*Settings › Email* sets the SMTP server kipitiny sends email through: your
+provider's relay (Amazon SES, Postmark, Resend, Gmail, Office 365…), not a mail
+server of its own. Saving checks that kipitiny can connect and sign in;
+**Send a test** mails an address you type.
+
+- **Security**: STARTTLS (port 587), TLS (port 465), or none, for a relay on
+  the same host or network only. Signing in needs TLS or STARTTLS, so the
+  password never travels in clear text.
+- **Sender**: an address your provider lets you send from, with an optional
+  name (`kipitiny <ops@example.com>`). If test emails land in spam, set up SPF
+  and DKIM for its domain at your provider.
+
+The password is stored in the manager's database like other integration
+credentials and is never shown again.
 
 ## Notifications
 

@@ -3,6 +3,7 @@ import type {
   Backup,
   Restore,
   Cleanup,
+  EmailSettings,
   Notifications,
   Schedule,
   AuthState,
@@ -103,6 +104,7 @@ const users = () => (db.users ??= demoUsers());
 const newId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 const nameRe = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/;
 const MASK = "********";
+const defaultEmail: EmailSettings = { host: "", port: 587, security: "starttls", username: "", password: "", from: "" };
 
 const SERVER: Server = {
   id: "local",
@@ -1401,6 +1403,27 @@ const routes: Route[] = [
     },
   ],
 
+  ["GET", /^\/email$/, () => ({ configured: !!db.email, settings: db.email ? { ...db.email, password: db.email.password && MASK } : defaultEmail })],
+  [
+    "PUT",
+    /^\/email$/,
+    ({ body }) => {
+      const s = body as unknown as EmailSettings;
+      if (!s.host || !s.from.includes("@")) throw invalid("host and sender are required");
+      db.email = { ...s, password: s.password === MASK ? (db.email?.password ?? "") : s.password };
+      save();
+      return { configured: true, settings: { ...db.email, password: db.email.password && MASK } };
+    },
+  ],
+  [
+    "DELETE",
+    /^\/email$/,
+    () => {
+      delete db.email;
+      save();
+    },
+  ],
+  ["POST", /^\/email\/test$/, () => undefined],
   ["GET", /^\/cloudflare$/, () => ({ connected: false, zones: [], tunnels: [] })],
   ["GET", /^\/git-providers$/, () => []],
   ["GET", /^\/registries$/, () => db.registries],
