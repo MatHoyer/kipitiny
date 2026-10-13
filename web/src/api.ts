@@ -629,7 +629,11 @@ export type UpdateInfo = {
   updating: boolean;
   checkedAt?: string;
   error?: string;
+  /** What the versions up to latest do to running servers (UPGRADE.md), to read before updating. */
+  notices?: UpgradeNotice[];
 };
+
+export type UpgradeNotice = { version: string; level: "info" | "warning"; text: string };
 
 /** A service's resource use at one moment, summed over its running replicas. */
 export type Usage = {

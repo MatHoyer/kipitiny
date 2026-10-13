@@ -20,6 +20,7 @@ import (
 	"github.com/MatHoyer/kipitiny/internal/notify"
 	"github.com/MatHoyer/kipitiny/internal/registry"
 	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/MatHoyer/kipitiny/internal/upgrade"
 )
 
 const (
@@ -47,6 +48,9 @@ type UpdateInfo struct {
 	Updating  bool       `json:"updating"`
 	CheckedAt *time.Time `json:"checkedAt,omitempty"`
 	Error     string     `json:"error,omitempty"`
+	// Notices are what the versions up to Latest do to running servers
+	// (UPGRADE.md), to read before updating.
+	Notices []upgrade.Notice `json:"notices,omitempty"`
 }
 
 type updateState struct {
@@ -62,6 +66,9 @@ type updateState struct {
 	inspected bool
 	// notified is the latest version already announced to channels.
 	notified string
+	// notices are the upgrade notices between the running version and
+	// latest.
+	notices []upgrade.Notice
 }
 
 var versionRe = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)$`)
@@ -140,6 +147,15 @@ func (c *Core) checkUpdate(ctx context.Context) {
 	defer cancel()
 	c.inspectPin(ctx)
 	tags, err := registry.Tags(ctx, http.DefaultClient, c.cfg.Update.Image)
+	var notices []upgrade.Notice
+	if latest := latestVersion(tags); err == nil && newer(latest, c.cfg.Version) {
+		// Without them the update is still offered: they are a courtesy.
+		labels, lerr := registry.Labels(ctx, http.DefaultClient, c.cfg.Update.Image, latest)
+		if lerr != nil {
+			c.log.Warn("cannot read the new version's upgrade notices", "version", latest, "err", lerr)
+		}
+		notices = upgrade.Between(upgrade.FromLabel(labels[upgrade.Label]), c.cfg.Version, latest)
+	}
 
 	u := &c.update
 	u.mu.Lock()
@@ -152,18 +168,36 @@ func (c *Core) checkUpdate(ctx context.Context) {
 	}
 	u.checkErr = ""
 	u.latest = latestVersion(tags)
+	u.notices = notices
 	if newer(u.latest, c.cfg.Version) {
 		c.log.Info("a new version is available", "current", c.cfg.Version, "latest", u.latest)
 		if u.notified != u.latest {
 			u.notified = u.latest
-			c.notify(notify.Event{
-				Type:    EventUpdateAvailable,
-				Level:   notify.Info,
-				Title:   "kipitiny " + u.latest + " is available",
-				Message: "Running " + c.cfg.Version + ". Update from the sidebar or System › About.",
-			}, "/about", "")
+			c.notify(updateEvent(c.cfg.Version, u.latest, notices), "/about", "")
 		}
 	}
+}
+
+// updateEvent announces a new version, with what to know before upgrading:
+// a warning when one of its notices is.
+func updateEvent(current, latest string, notices []upgrade.Notice) notify.Event {
+	e := notify.Event{
+		Type:    EventUpdateAvailable,
+		Level:   notify.Info,
+		Title:   "kipitiny " + latest + " is available",
+		Message: "Running " + current + ". Update from the sidebar or System › About.",
+	}
+	if len(notices) == 0 {
+		return e
+	}
+	e.Message += "\n\nBefore upgrading:"
+	for _, n := range notices {
+		if n.Level == upgrade.Warning {
+			e.Level = notify.Warning
+		}
+		e.Message += "\n- " + n.Text + " (" + n.Version + ")"
+	}
+	return e
 }
 
 // inspectPin records once whether compose pins the manager's version: the
@@ -217,6 +251,7 @@ func (c *Core) Update() UpdateInfo {
 		Available: newer(u.latest, c.cfg.Version),
 		Updating:  u.updating,
 		Error:     u.applyErr,
+		Notices:   u.notices,
 	}
 	if info.Error == "" {
 		info.Error = u.checkErr

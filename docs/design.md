@@ -285,6 +285,10 @@ Now: all data access behind `store.Store`; Bun; portable SQL (TEXT ULIDs generat
 
 Later: `pgstore` + `migrations/postgres/`, CI against both, `kipitiny migrate-db --to postgres://...`. The real reason for Postgres would be manager HA, not performance.
 
+### Upgrade notices
+
+A release that disrupts running servers on upgrade (Traefik recreated, a manual step) says so in `UPGRADE.md` (`## Unreleased` → `## X.Y.Z` at release; `- warning:` / `- info:` items, `internal/upgrade`). The release workflow prepends the version's notices to the GitHub release notes and puts all of them, as JSON, in the image label `io.kipitiny.upgrade-notices`. The update check reads the latest image's labels from the registry (manifest index → this platform → config) and keeps the notices of the versions after the running one up to latest; they go in the update-available notification (warning level when one is) and the UI, whose update dialog wants a confirmation when one is a warning.
+
 ## 12. Logs
 
 ### Container logs: kept by Docker

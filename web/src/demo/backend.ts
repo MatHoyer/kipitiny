@@ -25,6 +25,7 @@ import type {
   PgTable,
   PreviewSettings,
   Project,
+  UpgradeNotice,
   RedisKeys,
   RedisValue,
   Server,
@@ -848,6 +849,11 @@ function viaFiles<T>(f: () => T): T {
   }
 }
 
+/** What the fake new version would do to running servers. */
+const demoNotices: UpgradeNotice[] = [
+  { version: "demo-next", level: "warning", text: "Traefik restarts once on every server: apps are unreachable for a few seconds. Upgrade at a quiet time." },
+];
+
 /** Preview settings per project, in memory only. */
 const demoPreviewSettings = new Map<string, PreviewSettings>();
 
@@ -881,7 +887,7 @@ const routes: Route[] = [
     (): Status => ({
       version: "demo",
       // An update is always on offer, to show its checks; installing it is refused.
-      update: { current: "demo", latest: "demo-next", available: true, canApply: true, updating: false },
+      update: { current: "demo", latest: "demo-next", available: true, canApply: true, notices: demoNotices, updating: false },
       docker: { version: "27.3.1", apiVersion: "1.47", os: "linux", arch: "amd64" },
       database: { sizeBytes: 3_457_024, walBytes: 129_832 },
     }),
@@ -899,7 +905,7 @@ const routes: Route[] = [
     },
   ],
   ["POST", /^\/update$/, () => { throw invalid("this is a demo running in your browser: there's nothing to install"); }],
-  ["POST", /^\/update\/check$/, () => ({ current: "demo", latest: "demo-next", available: true, canApply: true, updating: false, checkedAt: now() })],
+  ["POST", /^\/update\/check$/, () => ({ current: "demo", latest: "demo-next", available: true, canApply: true, notices: demoNotices, updating: false, checkedAt: now() })],
   [
     "GET",
     /^\/update\/preflight$/,

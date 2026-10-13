@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { CircleCheck, CircleX, TriangleAlert } from "lucide-react";
+import { CircleCheck, CircleX, Info, TriangleAlert } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import { api, type UpdatePreflight } from "@/api";
+import { CheckboxField } from "@/components/common";
+import { api, type UpdatePreflight, type UpgradeNotice } from "@/api";
 
 const titles: Record<UpdatePreflight["checks"][number]["id"], string> = {
   version: "New version",
@@ -25,8 +26,21 @@ const marks = {
  * Updating the manager, after checking now is a good time: nothing in progress that its restart would cut short,
  * Docker answering, and a recent backup of it. The checks refresh while it's open, so a deploy finishing unblocks it.
  */
-export function UpdateDialog({ trigger, latest, onUpdate }: { trigger: ReactNode; latest: string; onUpdate: () => void }) {
+export function UpdateDialog({
+  trigger,
+  latest,
+  notices = [],
+  onUpdate,
+}: {
+  trigger: ReactNode;
+  latest: string;
+  /** What the new versions do to running servers; a warning must be acknowledged. */
+  notices?: UpgradeNotice[];
+  onUpdate: () => void;
+}) {
   const [open, setOpen] = useState(false);
+  const warned = notices.some((n) => n.level === "warning");
+  const [ack, setAck] = useState(false);
   const preflight = useQuery({ queryKey: ["update-preflight"], queryFn: api.updatePreflight, enabled: open, refetchInterval: 2_000 });
   const p = preflight.data;
   const backupWarn = p?.checks.some((c) => c.id === "backup" && c.state === "warn");
@@ -38,10 +52,30 @@ export function UpdateDialog({ trigger, latest, onUpdate }: { trigger: ReactNode
         <DialogHeader>
           <DialogTitle>Update to {latest}?</DialogTitle>
           <DialogDescription>
-            The manager restarts on the new version. Apps, databases and Traefik keep running. If the new version doesn't start, the previous one
-            is restored.
+            The manager restarts on the new version. Apps, databases and Traefik keep running{notices.length > 0 && ", unless noted below"}. If the
+            new version doesn't start, the previous one is restored.
           </DialogDescription>
         </DialogHeader>
+        {notices.length > 0 && (
+          <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
+            <p className="text-sm font-medium">Before upgrading</p>
+            <ul className="space-y-1.5">
+              {notices.map((n, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs">
+                  {n.level === "warning" ? (
+                    <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
+                  ) : (
+                    <Info className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                  )}
+                  <span>
+                    {n.text} <span className="text-muted-foreground">({n.version})</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {warned && <CheckboxField label="Now is a good time for this" checked={ack} onCheckedChange={setAck} />}
+          </div>
+        )}
         <ul className="grid gap-3">
           {p
             ? p.checks.map((c) => (
@@ -70,7 +104,7 @@ export function UpdateDialog({ trigger, latest, onUpdate }: { trigger: ReactNode
             </Button>
           )}
           <Button
-            disabled={!p?.ready}
+            disabled={!p?.ready || (warned && !ack)}
             onClick={() => {
               setOpen(false);
               onUpdate();

@@ -12,6 +12,7 @@ import {
   SunMoon,
   UserRound,
   Waypoints,
+  TriangleAlert,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
@@ -230,6 +231,17 @@ function UpdateNotice() {
               notes
             </a>
           </div>
+          {update.notices?.some((n) => n.level === "warning") && (
+            <div className="mt-1 flex items-start gap-1 text-amber-600 dark:text-amber-400">
+              <TriangleAlert className="mt-px size-3.5 shrink-0" />
+              <span>
+                {update.notices.filter((n) => n.level === "warning").length === 1
+                  ? "1 warning"
+                  : `${update.notices.filter((n) => n.level === "warning").length} warnings`}
+                : read them before updating
+              </span>
+            </div>
+          )}
           {update.canApply ? (
             <UpdateDialog
               trigger={
@@ -238,6 +250,7 @@ function UpdateNotice() {
                 </Button>
               }
               latest={update.latest!}
+              notices={update.notices}
               onUpdate={() => apply.mutate()}
             />
           ) : (
