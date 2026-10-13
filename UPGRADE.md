@@ -9,7 +9,7 @@ Add a notice under `## Unreleased` in the change that causes it, as
 `- warning: …` (disruptive) or `- info: …`; continue on indented lines. The
 release renames the section to its version.
 
-## Unreleased
+## 0.28.0
 - warning: Traefik restarts once on every server (it gets a metrics
   entrypoint for sleep mode): apps are unreachable for a few seconds. Upgrade
   at a quiet time.
