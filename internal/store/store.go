@@ -570,6 +570,16 @@ type Maintenance struct {
 	Message string `json:"message,omitempty"`
 	// HTML, when set, is served instead of the default page.
 	HTML string `json:"html,omitempty"`
+	// Starting is the page visitors get while the app wakes from sleep.
+	Starting StartingPage `json:"starting,omitzero"`
+}
+
+// StartingPage replaces the default "Starting…" page's text, or the whole
+// page with HTML; zero keeps the default.
+type StartingPage struct {
+	Title   string `json:"title,omitempty"`
+	Message string `json:"message,omitempty"`
+	HTML    string `json:"html,omitempty"`
 }
 
 // IsZero reports whether no middleware is configured.

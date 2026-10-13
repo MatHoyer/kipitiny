@@ -44,6 +44,17 @@ const toInput = (f: Form, d: Defaults): Required<Maintenance> => ({
   message: [d.on, d.off].includes(f.message.trim()) ? "" : f.message,
   // The default page is the one without HTML.
   html: f.custom ? f.html : "",
+  starting: {},
+});
+
+/** The maintenance settings as saved, to change one part of them. */
+const saved = (m: Maintenance | undefined): Required<Maintenance> => ({
+  enabled: !!m?.enabled,
+  allowIps: m?.allowIps ?? [],
+  title: m?.title ?? "",
+  message: m?.message ?? "",
+  html: m?.html ?? "",
+  starting: m?.starting ?? {},
 });
 
 const htmlStarter = `<!doctype html>
@@ -67,7 +78,8 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
   const formId = useId();
   const save = useMutation({
     meta: { error: "Couldn't save the maintenance page" },
-    mutationFn: () => api.setMaintenance(svc.id, toInput(form, d)),
+    // The starting page is saved by its own card.
+    mutationFn: () => api.setMaintenance(svc.id, { ...toInput(form, d), starting: svc.maintenance?.starting ?? {} }),
     onSuccess: (updated) => {
       qc.setQueryData(["service", svc.id], updated);
       setForm(toForm(updated.maintenance, d));
@@ -177,6 +189,140 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
         </div>
       </form>
       <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setForm(toForm(svc.maintenance, d))} label="Save maintenance" />
+    </Section>
+  );
+}
+
+const startingStarter = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Starting…</title>
+</head>
+<body>
+  <h1>Starting…</h1>
+  <p>This page reloads by itself in a few seconds.</p>
+</body>
+</html>`;
+
+type StartingForm = { custom: boolean; title: string; message: string; html: string };
+
+/** The default starting page's text, as the manager renders it (renderStarting). */
+const startingDefaults = (name: string) => ({
+  title: "Starting…",
+  message: `${name} is starting. This page reloads by itself in a few seconds.`,
+});
+
+// The fields show the default text; left as is, it is saved empty.
+const toStartingForm = (m: Maintenance | undefined, d: ReturnType<typeof startingDefaults>): StartingForm => ({
+  custom: !!m?.starting?.html,
+  title: m?.starting?.title || d.title,
+  message: m?.starting?.message || d.message,
+  html: m?.starting?.html ?? "",
+});
+
+/** The page visitors get while a sleeping app starts again. */
+export function StartingCard({ svc, projectName }: { svc: Service; projectName: string }) {
+  const qc = useQueryClient();
+  const d = startingDefaults(projectName || svc.name);
+  const [form, setForm] = useState(() => toStartingForm(svc.maintenance, d));
+  const input = (f: StartingForm) => {
+    if (f.custom) return { html: f.html };
+    const title = f.title.trim(), message = f.message.trim();
+    return { title: title === d.title ? "" : title, message: message === d.message ? "" : message };
+  };
+  const dirty = JSON.stringify(input(form)) !== JSON.stringify(input(toStartingForm(svc.maintenance, d)));
+  const formId = useId();
+  const save = useMutation({
+    meta: { error: "Couldn't save the starting page" },
+    mutationFn: () => api.setMaintenance(svc.id, { ...saved(svc.maintenance), starting: input(form) }),
+    onSuccess: (updated) => {
+      qc.setQueryData(["service", svc.id], updated);
+      setForm(toStartingForm(updated.maintenance, d));
+      toast.success("Starting page saved");
+    },
+  });
+  // Custom HTML starts from the page visitors get now.
+  const pick = (custom: boolean) => {
+    setForm((f) => ({ ...f, custom }));
+    if (!custom || form.html) return;
+    fetch(`/api/pages/${svc.id}?page=starting`)
+      .then((r) => (r.headers.get("Content-Type")?.startsWith("text/html") ? r.text() : startingStarter))
+      .catch(() => startingStarter)
+      .then((html) => setForm((f) => (f.custom && !f.html ? { ...f, html } : f)));
+  };
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    save.mutate();
+  };
+  return (
+    <Section
+      title={<Applies title="Starting page" when="now" />}
+      description={
+        svc.sleepAfterSeconds ? (
+          <>
+            Visitors get this page while the app wakes from sleep. It reloads every 3 seconds until the app answers; API calls get a 503
+            with <Mono>Retry-After</Mono> instead.
+          </>
+        ) : (
+          <>Shown while the app wakes from sleep. Sleep is off for this app: turn it on under General › Sleep after idle.</>
+        )
+      }
+    >
+      <form id={formId} onSubmit={onSubmit} className="space-y-3">
+        <Segmented size="sm" value={form.custom ? "html" : "default"} onValueChange={(v) => pick(v === "html")} aria-label="Page">
+          <SegmentedItem value="default">
+            <Type />
+            Default page
+          </SegmentedItem>
+          <SegmentedItem value="html">
+            <Code />
+            Custom HTML
+          </SegmentedItem>
+        </Segmented>
+        {form.custom ? (
+          <div className="space-y-1.5">
+            <Suspense fallback={<div className="h-64 rounded-md border" />}>
+              <HtmlEditor label="Starting page HTML" value={form.html} onChange={(html) => setForm((f) => ({ ...f, html }))} />
+            </Suspense>
+            <p className="text-xs text-muted-foreground">
+              A whole document, up to 64 KiB. The manager reloads it every 3 seconds (a <Mono>Refresh</Mono> header): no script needed.
+            </p>
+          </div>
+        ) : (
+          <>
+            <FloatingInput
+              label="Title"
+              value={form.title}
+              maxLength={200}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+            />
+            <FloatingTextarea
+              label="Message"
+              value={form.message}
+              maxLength={2000}
+              onChange={(e) => setForm({ ...form, message: e.target.value })}
+            />
+          </>
+        )}
+        <a
+          href={`/api/pages/${svc.id}?page=starting`}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          Open the saved page
+          <ExternalLink className="size-3.5" />
+        </a>
+      </form>
+      <SaveBar
+        form={formId}
+        dirty={dirty}
+        saving={save.isPending}
+        onReset={() => setForm(toStartingForm(svc.maintenance, d))}
+        label="Save starting page"
+      />
     </Section>
   );
 }

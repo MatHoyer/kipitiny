@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, type ReactNode } from "react";
-import { MaintenanceCard } from "@/components/maintenance";
+import { MaintenanceCard, StartingCard } from "@/components/maintenance";
 import { RenameCard } from "@/components/rename-card";
 import { DirtyContext } from "@/components/save-bar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -123,7 +123,12 @@ export function ServiceSettings({
         <VolumesCard key={`volumes-${svc.id}`} svc={svc} />
       </GitOwned>
     ),
-    maintenance: projectName && <MaintenanceCard key={`maintenance-${svc.id}`} svc={svc} projectName={projectName} />,
+    maintenance: projectName && (
+      <>
+        <MaintenanceCard key={`maintenance-${svc.id}`} svc={svc} projectName={projectName} />
+        <StartingCard key={`starting-${svc.id}`} svc={svc} projectName={projectName} />
+      </>
+    ),
     advanced: (
       <>
         {app && (

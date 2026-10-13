@@ -54,6 +54,8 @@ type MaintenanceInput struct {
 	Title    string   `json:"title"`
 	Message  string   `json:"message"`
 	HTML     string   `json:"html"`
+	// Starting is the page of the app waking from sleep.
+	Starting store.StartingPage `json:"starting"`
 }
 
 // SetMaintenance replaces an app's maintenance page and mode. Traefik picks
@@ -72,6 +74,11 @@ func (c *Core) SetMaintenance(ctx context.Context, serviceID string, in Maintena
 		Title:   strings.TrimSpace(in.Title),
 		Message: strings.TrimSpace(in.Message),
 		HTML:    strings.TrimSpace(in.HTML),
+		Starting: store.StartingPage{
+			Title:   strings.TrimSpace(in.Starting.Title),
+			Message: strings.TrimSpace(in.Starting.Message),
+			HTML:    strings.TrimSpace(in.Starting.HTML),
+		},
 	}
 	for _, r := range in.AllowIPs {
 		if r = strings.TrimSpace(r); r != "" {
@@ -92,6 +99,13 @@ func (c *Core) SetMaintenance(ctx context.Context, serviceID string, in Maintena
 }
 
 func validateMaintenance(m store.Maintenance) error {
+	s := m.Starting
+	switch {
+	case utf8.RuneCountInString(s.Title) > maxPageTitle, utf8.RuneCountInString(s.Message) > maxPageMessage:
+		return fmt.Errorf("%w: the starting page's title is at most %d characters, its message %d", ErrInvalid, maxPageTitle, maxPageMessage)
+	case len(s.HTML) > maxPageHTML || !utf8.ValidString(s.HTML):
+		return fmt.Errorf("%w: the starting page's HTML is UTF-8 text of at most %d KiB", ErrInvalid, maxPageHTML>>10)
+	}
 	switch {
 	case utf8.RuneCountInString(m.Title) > maxPageTitle:
 		return fmt.Errorf("%w: the title is at most %d characters", ErrInvalid, maxPageTitle)
@@ -129,7 +143,7 @@ func (c *Core) MaintenancePage(ctx context.Context, id, rawURL string) Page {
 		name = p.Name // what visitors know the app as, more than "web"
 	}
 	if c.starting(svc) {
-		return renderStarting(name)
+		return renderStarting(name, m.Starting)
 	}
 	if m.HTML != "" {
 		return Page{Custom: true, Body: []byte(m.HTML)}
@@ -266,16 +280,39 @@ func renderPage(d pageData) Page {
 	return Page{Body: b.Bytes()}
 }
 
+// StartingPage is the page of the app with the given ID while it wakes from
+// sleep, without waking it (to see it from the settings).
+func (c *Core) StartingPage(ctx context.Context, id string) Page {
+	svc, ok := c.pageService(ctx, id, "")
+	if !ok {
+		return renderStarting("", store.StartingPage{})
+	}
+	name := svc.Name
+	if p, err := c.store.GetProject(ctx, svc.ProjectID); err == nil {
+		name = p.Name
+	}
+	return renderStarting(name, svc.Maintenance.Starting)
+}
+
 // renderStarting is the page of an app waking from sleep: it reloads every
-// few seconds until the app's own router answers instead (no script: pages
-// are sandboxed). After coldStart the usual page replaces it.
-func renderStarting(name string) Page {
-	text := "This site is starting. This page reloads by itself in a few seconds."
-	if name != "" {
+// few seconds (a Refresh header, so custom HTML does too; no script: pages
+// are sandboxed) until the app's own router answers instead. After
+// coldStart the usual page replaces it.
+func renderStarting(name string, s store.StartingPage) Page {
+	if s.HTML != "" {
+		return Page{Custom: true, Starting: true, Body: []byte(s.HTML)}
+	}
+	heading, text := s.Title, s.Message
+	if heading == "" {
+		heading = "Starting…"
+	}
+	if text == "" && name != "" {
 		text = name + " is starting. This page reloads by itself in a few seconds."
+	} else if text == "" {
+		text = "This site is starting. This page reloads by itself in a few seconds."
 	}
 	var b bytes.Buffer
-	_ = pageTmpl.Execute(&b, map[string]any{"Heading": "Starting…", "Text": text, "Starting": true})
+	_ = pageTmpl.Execute(&b, map[string]any{"Heading": heading, "Text": text, "Starting": true})
 	return Page{Starting: true, Body: b.Bytes()}
 }
 

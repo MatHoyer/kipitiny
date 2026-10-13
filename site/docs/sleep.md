@@ -48,3 +48,15 @@ The app's page and the project canvas show it as **asleep**;
 
 The first request after a sleep waits for the app to start: a few seconds
 for most apps, longer for heavy ones. Keep sleep for apps where that's fine.
+
+## The starting page
+
+Change it in the app's *Settings › Maintenance*, under **Starting page**, like
+the [maintenance page](/docs/domains#maintenance-page): a title and a message,
+or a whole HTML document of your own (up to 64 KiB). The manager adds a
+`Refresh: 3` header, so a custom page reloads too without any script.
+**Open the saved page** shows it without waking the app. Agents set it with
+the `set_maintenance` MCP tool (`starting_title`, `starting_message`,
+`starting_html`), the API with `starting` in
+`PUT /api/services/{id}/maintenance`. Like the maintenance page, it isn't part
+of compose files.
