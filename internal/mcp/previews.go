@@ -38,6 +38,7 @@ type deployPreviewIn struct {
 	Commit  string            `json:"commit,omitempty" jsonschema:"source commit, recorded on the deployments"`
 	Env     map[string]string `json:"env,omitempty" jsonschema:"project variables for this preview only, plain text (no references)"`
 	TTL     string            `json:"ttl,omitempty" jsonschema:"close the preview after this long unused, as a duration (168h); default from the project's preview settings, else 7 days"`
+	Seed    bool              `json:"seed,omitempty" jsonschema:"fill the databases a new preview gets with the project's latest backups (production data; the preview settings must allow it)"`
 }
 
 func (t *tools) deployPreview(ctx context.Context, _ *mcp.CallToolRequest, in deployPreviewIn) (*mcp.CallToolResult, core.PreviewView, error) {
@@ -46,7 +47,7 @@ func (t *tools) deployPreview(ctx context.Context, _ *mcp.CallToolRequest, in de
 		if err != nil {
 			return core.PreviewView{}, err
 		}
-		opts := core.PreviewOptions{Tags: in.Tags, Branch: in.Branch, Commit: in.Commit, Env: in.Env}
+		opts := core.PreviewOptions{Tags: in.Tags, Branch: in.Branch, Commit: in.Commit, Env: in.Env, Seed: in.Seed}
 		if in.TTL != "" {
 			d, err := time.ParseDuration(in.TTL)
 			if err != nil {

@@ -139,7 +139,7 @@ func (c *Core) RenameService(ctx context.Context, id, name string) (ServiceView,
 	// The apps' running containers still reach the database by its old
 	// alias, which its next deploy drops: move them to the new name now.
 	if len(dependents) > 0 {
-		if err := c.goBackground(func() { c.deployInOrder(nil, dependents, "") }); err != nil {
+		if err := c.goBackground(func() { c.deployInOrder(nil, dependents, "", nil) }); err != nil {
 			return ServiceView{}, err
 		}
 	}

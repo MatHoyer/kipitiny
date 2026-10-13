@@ -177,3 +177,34 @@ func TestPreviewSettings(t *testing.T) {
 		t.Errorf("bad preview name: %v", err)
 	}
 }
+
+func TestPreviewSeedBackups(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	parent := previewParent(t, c)
+	svcs, _ := c.store.ListServices(ctx, parent.ID)
+	f, _, _, err := c.previewSource(ctx, parent, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.seedBackups(ctx, f, svcs); err == nil || !strings.Contains(err.Error(), "no backup of db") {
+		t.Fatalf("no backup: %v", err)
+	}
+	i := slices.IndexFunc(svcs, func(s store.Service) bool { return s.Name == "db" })
+	for _, b := range []store.Backup{
+		{Kind: store.BackupKindPostgres, Status: store.OpSucceeded},
+		{Kind: store.BackupKindPostgres, Status: store.OpFailed},
+	} {
+		b.ServiceID, b.ProjectID, b.TargetID = svcs[i].ID, parent.ID, "local"
+		if _, err := c.store.CreateBackup(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seeds, err := c.seedBackups(ctx, f, svcs)
+	if err != nil || len(seeds) != 1 || seeds["db"] == "" {
+		t.Fatalf("seeds %v, %v", seeds, err)
+	}
+	if b, _ := c.store.GetBackup(ctx, seeds["db"]); b.Status != store.OpSucceeded {
+		t.Errorf("seeds from a failed backup")
+	}
+}
