@@ -13,7 +13,7 @@ func TestDataBrowserDockerMySQL(t *testing.T) {
 	for _, kind := range []store.ServiceKind{store.ServiceKindMySQL, store.ServiceKindMariaDB} {
 		t.Run(string(kind), func(t *testing.T) {
 			c, ctx, svc, exec := dumpTestDB(t, kind)
-			ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Scope: store.ScopeAdmin})
+			ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin, Scope: store.ScopeAdmin})
 			client := mysqlBin(kind, "mysql")
 			exec(`MYSQL_PWD="$MYSQL_PASSWORD" ` + client + ` -h 127.0.0.1 -u"$MYSQL_USER" "$MYSQL_DATABASE" -e "
 CREATE TABLE items (id INT PRIMARY KEY, name TEXT, b BLOB, n INT NULL);
@@ -95,7 +95,7 @@ CREATE VIEW v AS SELECT id FROM items;"`)
 
 func TestDataBrowserDockerMongo(t *testing.T) {
 	c, ctx, svc, exec := dumpTestDB(t, store.ServiceKindMongoDB)
-	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Scope: store.ScopeAdmin})
+	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin, Scope: store.ScopeAdmin})
 	exec(`mongosh --quiet "mongodb://$MONGO_INITDB_ROOT_USERNAME:$MONGO_INITDB_ROOT_PASSWORD@127.0.0.1/app?authSource=admin" --eval '
 db.items.insertMany([{ n: 1, name: "one", at: new Date(0) }, { n: 2, name: "x".repeat(5000) }, { n: 3, name: "three" }]);
 db.createView("v", "items", []);

@@ -77,7 +77,7 @@ func dataTestDB(t *testing.T, kind store.ServiceKind, cfg *container.Config) (*C
 		t.Fatalf("%s: %v", cmd, err)
 		return ""
 	}
-	return c, WithActor(ctx, Actor{Kind: "user", Name: "test", Scope: store.ScopeAdmin}), svc, exec
+	return c, WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin, Scope: store.ScopeAdmin}), svc, exec
 }
 
 func TestDataBrowserDockerPostgres(t *testing.T) {
@@ -179,7 +179,7 @@ CREATE VIEW s.v AS SELECT id FROM s.items;"`)
 			t.Errorf("create %q: %v", name, err)
 		}
 	}
-	if _, err := c.CreatePgDatabase(WithActor(context.Background(), Actor{Scope: store.ScopeRead}), svc.ID, "nope", ""); !errors.Is(err, ErrForbidden) {
+	if _, err := c.CreatePgDatabase(WithActor(context.Background(), Actor{Role: store.RoleAdmin, Scope: store.ScopeRead}), svc.ID, "nope", ""); !errors.Is(err, ErrForbidden) {
 		t.Errorf("read scope create: %v", err)
 	}
 	for _, db := range []string{"missing", "host=example.com dbname=app", "template0"} {
@@ -188,7 +188,7 @@ CREATE VIEW s.v AS SELECT id FROM s.items;"`)
 		}
 	}
 
-	if _, err := c.PgTables(WithActor(context.Background(), Actor{Scope: store.ScopeRead}), svc.ID, ""); err != nil {
+	if _, err := c.PgTables(WithActor(context.Background(), Actor{Role: store.RoleAdmin, Scope: store.ScopeRead}), svc.ID, ""); err != nil {
 		t.Errorf("read scope: %v", err)
 	}
 	if _, err := c.PgTables(context.Background(), svc.ID, ""); !errors.Is(err, ErrUnauthorized) {
@@ -329,7 +329,7 @@ func TestDataConsoleDockerPostgres(t *testing.T) {
 	if len(audit) != 7 || audit[0].Action != "data console (write)" || audit[0].Target != svc.ID {
 		t.Errorf("audit: %+v", audit)
 	}
-	if _, err := c.DataConsole(WithActor(context.Background(), Actor{Scope: store.ScopeRead}), svc.ID, "", "SELECT 1", false); !errors.Is(err, ErrForbidden) {
+	if _, err := c.DataConsole(WithActor(context.Background(), Actor{Role: store.RoleAdmin, Scope: store.ScopeRead}), svc.ID, "", "SELECT 1", false); !errors.Is(err, ErrForbidden) {
 		t.Errorf("read scope: %v", err)
 	}
 }

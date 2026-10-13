@@ -71,7 +71,7 @@ func filesTestService(t *testing.T, svc store.Service, vol, seed string) (*Core,
 	if err != nil || code != 0 {
 		t.Fatalf("seed: %d %v %s", code, err, out.String())
 	}
-	return c, WithActor(ctx, Actor{Kind: "token", Name: "test", Scope: store.ScopeRead}), svc
+	return c, WithActor(ctx, Actor{Kind: "token", Name: "test", Role: store.RoleAdmin, Scope: store.ScopeRead}), svc
 }
 
 func TestVolumeFilesDockerApp(t *testing.T) {
@@ -138,7 +138,7 @@ ln -s mods/a.jar ok-link`)
 	if err := c.ArchiveVolumeFiles(ctx, svc.ID, "data", nil, io.Discard); !errors.Is(err, ErrForbidden) {
 		t.Errorf("archive with a read token: %v", err)
 	}
-	ctx = WithActor(ctx, Actor{Kind: "user", Name: "admin", Scope: store.ScopeAdmin})
+	ctx = WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin, Scope: store.ScopeAdmin})
 
 	f, err := c.ReadVolumeFile(ctx, svc.ID, "data/server.properties")
 	if err != nil || f.Content != "motd=hi\n" || f.Type != "file" || f.Path != "data/server.properties" {
@@ -256,7 +256,7 @@ chown 1000:1000 ops.json
 chmod 600 ops.json
 ln -s /etc etc-link
 ln -s .. up`)
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Scope: store.ScopeAdmin})
+	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin, Scope: store.ScopeAdmin})
 
 	if err := c.MakeVolumeDir(readCtx, svc.ID, "data/x"); !errors.Is(err, ErrForbidden) {
 		t.Errorf("mkdir with a read token: %v", err)
@@ -387,7 +387,7 @@ ln -s .. up`)
 
 func TestVolumeFilesDockerDatabaseWrite(t *testing.T) {
 	c, _, svc := filesTestService(t, store.Service{Name: "db", Kind: store.ServiceKindRedis}, "", `printf x > /seed/dump.rdb`)
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Scope: store.ScopeAdmin})
+	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin, Scope: store.ScopeAdmin})
 	if err := c.DeleteVolumePaths(ctx, svc.ID, []string{"data/dump.rdb"}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("delete in a database: %v", err)
 	}
@@ -425,7 +425,7 @@ func containerFilesTest(t *testing.T, kind store.ServiceKind, image string, cmd 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = dk.RemoveContainerAndVolumes(context.Background(), id) })
-	return c, WithActor(ctx, Actor{Kind: "user", Name: "admin", Scope: store.ScopeAdmin}), svc, id
+	return c, WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin, Scope: store.ScopeAdmin}), svc, id
 }
 
 func TestVolumeFilesDockerContainer(t *testing.T) {
