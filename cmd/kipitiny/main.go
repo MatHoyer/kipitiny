@@ -49,6 +49,9 @@ func main() {
 		case "deploy":
 			// Run from CI against a manager's API (deployCmd).
 			run = deployCmd
+		case "preview":
+			// Run from CI against a manager's API (previewCmd).
+			run = previewCmd
 		case "healthcheck":
 			// Docker HEALTHCHECK for the manager image, which has no curl.
 			if probe.Check(healthURL(config.Load().Addr)) != nil {
@@ -56,7 +59,7 @@ func main() {
 			}
 			os.Exit(0)
 		default:
-			fmt.Fprintf(os.Stderr, "usage: %s [reset-password <username> | disable-2fa <username> | make-admin <username> | deploy --service <project/service> [--tag <tag>] | healthcheck]\n", os.Args[0])
+			fmt.Fprintf(os.Stderr, "usage: %s [reset-password <username> | disable-2fa <username> | make-admin <username> | deploy --service <project/service> [--tag <tag>] | preview --project <project> --name <name> [--tag <service>=<tag>] [--close] | healthcheck]\n", os.Args[0])
 			os.Exit(2)
 		}
 	}

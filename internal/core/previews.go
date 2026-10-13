@@ -205,6 +205,15 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 	if !nameRe.MatchString(name) || !nameRe.MatchString(projectName) {
 		return PreviewView{}, fmt.Errorf("%w: the preview name must be lowercase letters, digits and dashes, and fit in %s-<name> (max 40)", ErrInvalid, parent.Name)
 	}
+	for k, v := range opts.Env {
+		if !envKeyRe.MatchString(k) {
+			return PreviewView{}, fmt.Errorf("%w: invalid env var name %q", ErrInvalid, k)
+		}
+		if envRefRe.MatchString(v) {
+			// A deploy token must not reach secrets through a reference.
+			return PreviewView{}, fmt.Errorf("%w: %s: CI's values are plain text, references go in the preview settings", ErrInvalid, k)
+		}
+	}
 	settings, err := c.previewSettings(ctx, parentID)
 	if err != nil {
 		return PreviewView{}, err
