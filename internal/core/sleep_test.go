@@ -1,11 +1,13 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -74,5 +76,54 @@ func TestValidateSleep(t *testing.T) {
 		if (err == nil) != tc.ok || (err != nil && !errors.Is(err, ErrInvalid)) {
 			t.Errorf("%s: got %v", tc.name, err)
 		}
+	}
+}
+
+func TestStartingPage(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1,
+		Domain: "shop.example.com", Port: 80, SleepAfterSeconds: 1800})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page := c.MaintenancePage(ctx, svc.ID, ""); page.Starting {
+		t.Fatal("an awake app gets the usual page")
+	}
+	if err := c.store.SetServiceSleeping(ctx, svc.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	page := c.MaintenancePage(ctx, "", "https://shop.example.com/cart")
+	if body := string(page.Body); !page.Starting || !strings.Contains(body, `http-equiv="refresh"`) || !strings.Contains(body, "shop is starting") {
+		t.Fatalf("a sleeping app gets the starting page, got %+v", page)
+	}
+
+	// Woken, not ready yet: still starting; past the cold start, the usual page.
+	c.sleep.mu.Lock()
+	c.sleep.waking[svc.ID] = time.Now().Add(-coldStart / 2)
+	c.sleep.mu.Unlock()
+	svc.Sleeping = false
+	if !c.starting(svc) {
+		t.Fatal("an app woken a minute ago is still starting")
+	}
+	c.sleep.mu.Lock()
+	c.sleep.waking[svc.ID] = time.Now().Add(-coldStart)
+	c.sleep.mu.Unlock()
+	if c.starting(svc) {
+		t.Fatal("past the cold start, the app is down, not starting")
+	}
+
+	// A stop or maintenance mode wins over sleep.
+	svc.Sleeping, svc.Stopped = true, true
+	if c.starting(svc) {
+		t.Fatal("a stopped app isn't woken")
+	}
+	svc.Stopped, svc.Maintenance.Enabled = false, true
+	if c.starting(svc) {
+		t.Fatal("an app in maintenance mode isn't woken")
 	}
 }

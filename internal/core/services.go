@@ -403,6 +403,9 @@ func (c *Core) validateIn(ctx context.Context, s store.Service, project store.Pr
 	if s.Domain != "" && s.Domain == c.cfg.Domain {
 		return fmt.Errorf("%w: domain %q is the manager's own", ErrInvalid, s.Domain)
 	}
+	if err := c.checkSleepServer(ctx, s, project); err != nil {
+		return err
+	}
 	if err := c.checkSecretSchemes(s.Env); err != nil {
 		return err
 	}

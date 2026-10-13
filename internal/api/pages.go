@@ -51,13 +51,27 @@ func Pages(c *core.Core, log *slog.Logger) http.Handler {
 }
 
 // writePage answers 503 with Retry-After, so crawlers come back later
-// instead of indexing the page, and uptime checks see the app down.
+// instead of indexing the page, and uptime checks see the app down. An app
+// waking from sleep asks to retry in seconds, and clients that don't take
+// HTML (API calls) get only that, no page.
 func writePage(w http.ResponseWriter, r *http.Request, p core.Page) {
 	h := w.Header()
-	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("Cache-Control", "no-store")
-	h.Set("Retry-After", "300")
 	h.Set("X-Robots-Tag", "noindex")
+	if p.Starting {
+		h.Set("Retry-After", "5")
+		if !acceptsHTML(r) {
+			h.Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			if r.Method != http.MethodHead {
+				_, _ = w.Write([]byte(`{"error":"starting","message":"the app is starting, retry in a few seconds"}` + "\n"))
+			}
+			return
+		}
+	} else {
+		h.Set("Retry-After", "300")
+	}
+	h.Set("Content-Type", "text/html; charset=utf-8")
 	if p.Custom {
 		h.Set("Content-Security-Policy", customPageCSP)
 	} else {
@@ -67,4 +81,10 @@ func writePage(w http.ResponseWriter, r *http.Request, p core.Page) {
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(p.Body)
 	}
+}
+
+// acceptsHTML reports whether the client takes an HTML page: browsers say
+// so; fetch() and API clients usually send */* or JSON.
+func acceptsHTML(r *http.Request) bool {
+	return strings.Contains(r.Header.Get("Accept"), "text/html")
 }

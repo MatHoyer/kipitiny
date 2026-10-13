@@ -110,7 +110,9 @@ func validateMaintenance(m store.Maintenance) error {
 type Page struct {
 	// Custom: HTML the user wrote, which may need scripts and other origins.
 	Custom bool
-	Body   []byte
+	// Starting: the app is waking from sleep; the page reloads itself.
+	Starting bool
+	Body     []byte
 }
 
 // MaintenancePage is the page of the app with the given ID, or, when id is
@@ -122,14 +124,17 @@ func (c *Core) MaintenancePage(ctx context.Context, id, rawURL string) Page {
 		return renderPage(pageData{})
 	}
 	m := svc.Maintenance
+	name := svc.Name
+	if p, err := c.store.GetProject(ctx, svc.ProjectID); err == nil {
+		name = p.Name // what visitors know the app as, more than "web"
+	}
+	if c.starting(svc) {
+		return renderStarting(name)
+	}
 	if m.HTML != "" {
 		return Page{Custom: true, Body: []byte(m.HTML)}
 	}
-	d := pageData{Name: svc.Name, Title: m.Title, Message: m.Message, Maintenance: m.Enabled}
-	if p, err := c.store.GetProject(ctx, svc.ProjectID); err == nil {
-		d.Name = p.Name // what visitors know the app as, more than "web"
-	}
-	return renderPage(d)
+	return renderPage(pageData{Name: name, Title: m.Title, Message: m.Message, Maintenance: m.Enabled})
 }
 
 func (c *Core) pageService(ctx context.Context, id, rawURL string) (store.Service, bool) {
@@ -165,7 +170,8 @@ var pageTmpl = template.Must(template.New("page").Parse(`<!doctype html>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
-    <title>{{.Heading}}</title>
+    <title>{{.Heading}}</title>{{if .Starting}}
+    <meta http-equiv="refresh" content="3">{{end}}
     <style>
       :root {
         color-scheme: light dark;
@@ -209,10 +215,30 @@ var pageTmpl = template.Must(template.New("page").Parse(`<!doctype html>
         color: var(--muted);
         white-space: pre-line;
       }
+      .spinner {
+        width: 28px;
+        height: 28px;
+        margin: 0 auto 20px;
+        border: 3px solid color-mix(in srgb, var(--muted) 30%, transparent);
+        border-top-color: var(--fg);
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .spinner {
+          animation-duration: 3s;
+        }
+      }
     </style>
   </head>
   <body>
-    <main>
+    <main>{{if .Starting}}
+      <div class="spinner" role="status" aria-label="Loading"></div>{{end}}
       <h1>{{.Heading}}</h1>
       <p>{{.Text}}</p>
     </main>
@@ -236,8 +262,21 @@ func renderPage(d pageData) Page {
 		text = "This site is unavailable right now. Please try again in a few minutes."
 	}
 	var b bytes.Buffer
-	_ = pageTmpl.Execute(&b, map[string]string{"Heading": heading, "Text": text})
+	_ = pageTmpl.Execute(&b, map[string]any{"Heading": heading, "Text": text})
 	return Page{Body: b.Bytes()}
+}
+
+// renderStarting is the page of an app waking from sleep: it reloads every
+// few seconds until the app's own router answers instead (no script: pages
+// are sandboxed). After coldStart the usual page replaces it.
+func renderStarting(name string) Page {
+	text := "This site is starting. This page reloads by itself in a few seconds."
+	if name != "" {
+		text = name + " is starting. This page reloads by itself in a few seconds."
+	}
+	var b bytes.Buffer
+	_ = pageTmpl.Execute(&b, map[string]any{"Heading": "Starting…", "Text": text, "Starting": true})
+	return Page{Starting: true, Body: b.Bytes()}
 }
 
 // pagesUpstream is the URL a server's Traefik reaches the manager's pages
@@ -288,8 +327,9 @@ func pagesFileConfig(upstream string) map[string]any {
 			"statusRewrites": map[string]int{"502-504": 503},
 			"service":        pagesService,
 			"query":          PagesPath + "down?url={url}",
-			// Not the app's cookies or credentials.
-			"errorRequestHeaders": []string{"Accept-Language"},
+			// Not the app's cookies or credentials. Accept tells a page
+			// from an API call (an app waking from sleep).
+			"errorRequestHeaders": []string{"Accept", "Accept-Language"},
 		}}},
 		"services": map[string]any{pagesService: map[string]any{"loadBalancer": map[string]any{
 			"servers":        []map[string]string{{"url": upstream}},
