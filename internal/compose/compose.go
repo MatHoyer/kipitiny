@@ -85,6 +85,9 @@ type Ext struct {
 	// Uptime is an app's uptime check; nil has none. Tagged so the hash of a
 	// service without one stays the same.
 	Uptime *Uptime `yaml:"uptime,omitempty" json:",omitempty"`
+	// SleepAfter stops an app after that long without a request; 0 never
+	// does.
+	SleepAfter Seconds `yaml:"sleep_after,omitempty" json:",omitempty"`
 }
 
 // Uptime is an uptime check: zero values take kipitiny's defaults.
@@ -253,7 +256,7 @@ func Escape(s string) string {
 func isZeroExt(x Ext) bool {
 	return x.Kind == "" && x.Domain == "" && x.Port == 0 && x.HealthPath == "" && x.PreDeploy == "" &&
 		x.PreBackup == "" && x.Icon == "" && len(x.Secrets) == 0 && x.Password == "" && x.Middlewares == nil &&
-		x.Uptime == nil
+		x.Uptime == nil && x.SleepAfter == 0
 }
 
 type outFile struct {

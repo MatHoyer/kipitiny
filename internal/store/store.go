@@ -33,7 +33,9 @@ type Store interface {
 	// SetDeploymentImage records the image a deployment runs, pinned to the
 	// digest it was pulled at.
 	SetDeploymentImage(ctx context.Context, id, image string, config Service) error
+	// SetServiceStopped also clears Sleeping: the user's choice wins.
 	SetServiceStopped(ctx context.Context, serviceID string, stopped bool) error
+	SetServiceSleeping(ctx context.Context, serviceID string, sleeping bool) error
 	// SetServiceImage records the image a service now deploys.
 	SetServiceImage(ctx context.Context, serviceID, image string) error
 	// ListAllServices returns every service of every project.
@@ -407,6 +409,12 @@ type Service struct {
 	CurrentDeploymentID string      `bun:"current_deployment_id" json:"currentDeploymentId"`
 	// Stopped is the desired run state after the user stopped the service.
 	Stopped bool `bun:"stopped" json:"stopped"`
+	// SleepAfterSeconds stops an app after that long without a request and
+	// starts it again on the next one; 0 never does.
+	SleepAfterSeconds int `bun:"sleep_after_seconds" json:"sleepAfterSeconds"`
+	// Sleeping is set while the manager keeps the app stopped for being
+	// idle. A start, stop or deploy clears it.
+	Sleeping bool `bun:"sleeping" json:"sleeping"`
 	// GitSpecHash is the hash of the compose block a git sync last applied.
 	GitSpecHash string `bun:"git_spec_hash" json:"-"`
 	// Orphaned marks a database of a git project that the compose file no

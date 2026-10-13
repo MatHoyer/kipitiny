@@ -139,6 +139,8 @@ func Handler(c *core.Core, version string) http.Handler {
 		Description: "Remove a service's uptime check and its history. Not for a git project: remove x-kipitiny.uptime from its file. Needs admin."}, t.deleteUptimeCheck)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_maintenance",
 		Description: "Set an app's maintenance page, shown (503 with Retry-After) while it has no replica to answer, and maintenance mode, which shows it to every visitor except allowed IPs while the replicas keep running (migrations, manual work). Applied within seconds, nothing restarts; works on git-linked projects too. Needs admin."}, t.setMaintenance)
+	mcp.AddTool(server, &mcp.Tool{Name: "set_sleep",
+		Description: "Set an app's sleep mode: after this long without a request its containers stop, and the next request starts them again behind a \"starting\" page (503 with Retry-After for API calls). Only for apps with a domain and no published ports; get_app_status reports sleeping. A git project's setting is in its compose file (x-kipitiny.sleep_after) instead. Needs admin."}, t.setSleep)
 	mcp.AddTool(server, &mcp.Tool{Name: "sync_dns", Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
 		Description: "Sync the Cloudflare DNS records and tunnel routes of service domains now instead of waiting for the next round (every ten minutes, and seconds after a domain changes); public IPs are detected again. Returns each managed hostname's state. Needs admin and a connected Cloudflare token."}, t.syncDNS)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_networks", Annotations: readOnly,

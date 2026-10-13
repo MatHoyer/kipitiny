@@ -20,6 +20,7 @@ const settingsForm = (s: ServiceT) => ({
   healthPath: s.healthPath,
   preDeploy: s.preDeploy,
   stopGrace: s.stopGraceSeconds ? String(s.stopGraceSeconds) : "",
+  sleepAfter: s.sleepAfterSeconds ? String(s.sleepAfterSeconds / 60) : "",
 });
 
 /** Radix selects can't hold "": this stands for an empty icon. */
@@ -70,13 +71,14 @@ export function GeneralCard({ svc }: { svc: ServiceT }) {
               healthPath: form.healthPath.trim(),
               preDeploy: form.preDeploy.trim(),
               stopGraceSeconds: Number(form.stopGrace) || 0,
+              sleepAfterSeconds: Math.round((Number(form.sleepAfter) || 0) * 60),
             },
       ),
     onSuccess: (updated) => {
       qc.setQueryData(["service", svc.id], updated);
       setForm(settingsForm(updated));
       toast.success("Settings saved", {
-        description: isDb ? "Deploy to apply." : "Replica count applies now; deploy to apply other changes.",
+        description: isDb ? "Deploy to apply." : "Replica count and sleep apply now; deploy to apply other changes.",
       });
     },
   });
@@ -89,7 +91,7 @@ export function GeneralCard({ svc }: { svc: ServiceT }) {
   return (
     <Section
       title={<Applies title="Image & runtime" when="deploy" />}
-      description={isDb ? undefined : "Except the icon and the replica count, which apply right away."}
+      description={isDb ? undefined : "Except the icon, the replica count and sleep, which apply right away."}
     >
       <form id={formId} onSubmit={onSubmit} className={cn("grid gap-4", isDb ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
         <FloatingInput
@@ -174,6 +176,22 @@ export function GeneralCard({ svc }: { svc: ServiceT }) {
               onChange={set("stopGrace")}
               placeholder="10"
               description="Time to exit after SIGTERM before being killed, e.g. to save a game world. Empty: 10 s."
+            />
+            <FloatingInput
+              label="Sleep after idle (min)"
+              type="number"
+              min={5}
+              max={43200}
+              value={form.sleepAfter}
+              onChange={set("sleepAfter")}
+              placeholder="Never"
+              className="sm:col-span-2"
+              disabled={!svc.domain || !svc.port || svc.publishedPorts.length > 0}
+              description={
+                !svc.domain || !svc.port || svc.publishedPorts.length > 0
+                  ? "Only for apps with a domain and no published ports: a request wakes them."
+                  : "Stop the containers after this long without a request; the next one starts them behind a short \"starting\" page. Empty: never."
+              }
             />
           </>
         )}

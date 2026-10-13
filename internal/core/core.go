@@ -77,6 +77,7 @@ type Core struct {
 	totpSetups     pending[string] // user ID -> secret awaiting its first code
 	ceremonies     pending[ceremony]
 	stats          statsState
+	sleep          sleepState
 	uptime         uptimeState
 	health         healthState
 	uptimeHTTP     *http.Client // nil: probe's default; tests redirect it

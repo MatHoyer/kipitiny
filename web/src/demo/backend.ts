@@ -206,6 +206,7 @@ function topology(projectId?: string): Topology {
                 port: s.port || undefined,
                 replicas: s.replicas,
                 stopped: s.stopped || undefined,
+                sleeping: s.sleeping || undefined,
                 volume: isDb(s) ? `kipitiny-${s.id}-data` : undefined,
                 uses: used(s, p),
                 networks: s.networks,

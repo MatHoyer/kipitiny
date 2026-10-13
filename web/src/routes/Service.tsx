@@ -126,7 +126,7 @@ export function Service() {
     );
 
   const active = svc.containers.filter((c) => !c.retired);
-  const state = deploying ? "deploying" : svc.stopped ? "stopped" : serviceState(active);
+  const state = deploying ? "deploying" : svc.stopped ? "stopped" : svc.sleeping ? "asleep" : serviceState(active);
   const allStopped = active.length > 0 && active.every((c) => c.state !== "running");
   const problem = serviceIssue(svc);
   const busy = deploying || deploy.isPending || action.isPending || remove.isPending;

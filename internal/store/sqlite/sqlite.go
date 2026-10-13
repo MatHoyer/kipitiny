@@ -244,7 +244,7 @@ func (s *Store) ListServices(ctx context.Context, projectID string) ([]store.Ser
 func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Service, error) {
 	svc.UpdatedAt = now()
 	res, err := s.db.NewUpdate().Model(&svc).
-		Column("image", "icon", "replicas", "port", "domain", "env", "secrets", "memory_mb", "cpus", "health_path", "healthcheck", "pre_deploy", "volumes", "middlewares", "pre_backup", "published_ports", "stop_grace_seconds", "host_network", "docker_socket", "updated_at").
+		Column("image", "icon", "replicas", "port", "domain", "env", "secrets", "memory_mb", "cpus", "health_path", "healthcheck", "pre_deploy", "volumes", "middlewares", "pre_backup", "published_ports", "stop_grace_seconds", "sleep_after_seconds", "host_network", "docker_socket", "updated_at").
 		WherePK().Exec(ctx)
 	if err != nil {
 		return store.Service{}, mapErr(err)
@@ -293,7 +293,19 @@ func (s *Store) SetDeploymentImage(ctx context.Context, id, image string, config
 
 func (s *Store) SetServiceStopped(ctx context.Context, serviceID string, stopped bool) error {
 	res, err := s.db.NewUpdate().Model((*store.Service)(nil)).
-		Set("stopped = ?", stopped).Where("id = ?", serviceID).Exec(ctx)
+		Set("stopped = ?", stopped).Set("sleeping = ?", false).Where("id = ?", serviceID).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) SetServiceSleeping(ctx context.Context, serviceID string, sleeping bool) error {
+	res, err := s.db.NewUpdate().Model((*store.Service)(nil)).
+		Set("sleeping = ?", sleeping).Where("id = ?", serviceID).Exec(ctx)
 	if err != nil {
 		return mapErr(err)
 	}

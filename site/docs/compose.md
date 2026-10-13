@@ -133,6 +133,7 @@ services:
 | `password` | string, usually `${NAME}` | databases | The database's password at creation, to keep the credentials of a moved database. Empty generates one. It can't change afterwards. |
 | `middlewares` | mapping | public apps | Applied by Traefik to every request, below. |
 | `uptime` | mapping | public apps | An [uptime check](/docs/monitoring#uptime-checks) of the domain, below. `uptime: {}` checks `/` with the defaults. Without it, the app has no check: applying the file removes one set in the UI. |
+| `sleep_after` | duration | public apps | [Sleep mode](/docs/sleep): stop the app after this long without a request (`30m`, `2h`; 5 minutes to 30 days), start it again on the next one. Not with published ports. Changing it needs no deploy. |
 
 `middlewares`:
 
