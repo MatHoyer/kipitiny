@@ -115,7 +115,7 @@ services:
 
 - **`network_mode: host`:** the app shares the server's network and listens on its ports directly (open them in the firewall if needed). It has no domain or published ports, isn't on the project network (other services can't reach it by name), runs one replica, and deploys stop the old container before starting the new one.
 - **The Docker socket** is mounted at `/var/run/docker.sock`, from the server's own socket. `:ro` only stops the app from replacing the socket file, not from using it: the app can still create, change and remove containers, so read-only gives no protection.
-- Either one gives the app control of the server: only use images you trust. Databases can't have them.
+- Either one gives the app control of the server: only use images you trust. Databases can't have them. Only admins can turn them on.
 - A service runs on its project's server: to monitor several servers, make one project per server. The Beszel hub itself is a normal app (`henrygd/beszel`, port 8090, a volume at `/beszel_data`). Both are also [one-click templates](/docs/templates).
 
 ### `x-kipitiny` (per service)
@@ -224,6 +224,7 @@ Project › **Git**: the repository, a branch (default `main`) and the file's pa
 - The file owns the services and their uptime checks. Creating, editing or deleting them any other way (UI, API, MCP) is refused; edit the file. A database the file dropped can still be deleted by hand. Project variables, backups and schedules stay editable: they are not in the file.
 - CI can still deploy another tag of an app's image (`kipitiny deploy --tag`). The service keeps it until a commit changes that service's block in the file; the Git tab lists the services that run another image than the file's.
 - A failed sync is notified (`git.sync.failed`) and retried; a sync that changed something can be notified too (`git.sync.succeeded`).
+- A sync acts with the permissions of the user who linked the repository. When an admin linked it, **anyone who can push to the branch can do what that admin can**, including giving an app [host access](#host-access), which is control of the server. Link as an admin only repositories whose push access you'd trust with the server, or protect the branch.
 - Unlinking keeps the services as they are and makes them editable again.
 - A sync downloads only the branch's last commit and unpacks it, so the manager briefly uses memory in proportion to that commit's files; it returns it right after. Keep large files (build outputs, binaries) out of the repository. Polling between commits only asks for the branch's commit, which costs next to nothing. The manager's memory may still read a few MB higher for a while after a sync: Linux keeps the files it just wrote in its cache and counts them, and drops them as soon as something else needs the memory.
 
