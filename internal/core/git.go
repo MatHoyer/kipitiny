@@ -154,8 +154,13 @@ func (c *Core) PreviewProjectGit(ctx context.Context, projectID string, in GitIn
 
 // gitFromInput is the link in describes, checked.
 func (c *Core) gitFromInput(ctx context.Context, projectID string, in GitInput) (store.ProjectGit, error) {
-	if _, err := c.store.GetProject(ctx, projectID); err != nil {
+	p, err := c.store.GetProject(ctx, projectID)
+	if err != nil {
 		return store.ProjectGit{}, err
+	}
+	if p.ParentID != "" {
+		// Its compose file is the parent's, read at the preview's branch.
+		return store.ProjectGit{}, fmt.Errorf("%w: a preview follows its parent's repository; link the parent instead", ErrInvalid)
 	}
 	old, err := c.store.GetProjectGit(ctx, projectID)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
