@@ -32,11 +32,16 @@ function Card({ selected, className, children }: { selected?: boolean; className
   );
 }
 
+const dotColor = (state: string) => stateColors[state] ?? "bg-muted-foreground/50";
+
 function ServiceNode({ data: { svc }, selected }: Props<ServiceData>) {
   const isDb = isDatabase(svc.kind);
   const problem = serviceIssue(svc);
   const state = serviceState(svc);
   const live = svc.containers.filter((c) => !c.retired);
+  // One replica in the service's own state repeats the dot by the name: per-replica dots only tell something with several.
+  const replicasLikeService =
+    !svc.stopped && !svc.sleeping && live.length === 1 && dotColor(live[0].health || live[0].state) === dotColor(state);
   return (
     <Card selected={selected} className={cn("space-y-2", svc.domain && "ring-sky-500/40", problem && issueRing[problem.tone])}>
       <Handle type="target" position={Position.Top} className={handle} />
@@ -48,7 +53,7 @@ function ServiceNode({ data: { svc }, selected }: Props<ServiceData>) {
             {svc.image}
           </p>
         </div>
-        <span title={state} className={cn("mt-1.5 size-2 shrink-0 rounded-full", stateColors[state] ?? "bg-muted-foreground/50")} />
+        <span title={state} className={cn("mt-1.5 size-2 shrink-0 rounded-full", dotColor(state))} />
       </div>
       <p className="flex min-w-0 items-center gap-1 font-mono text-[11px] text-muted-foreground">
         {isDb ? <HardDrive className="size-3 shrink-0" /> : <ReachIcon service={svc} className="size-3 shrink-0" />}
@@ -61,17 +66,19 @@ function ServiceNode({ data: { svc }, selected }: Props<ServiceData>) {
           <span className="truncate">{problem.short}</span>
         </p>
       ) : (
-        <div className="flex items-center gap-1">
-          {svc.stopped || svc.sleeping ? (
-            <span className="text-[11px] text-muted-foreground">{svc.stopped ? "Stopped" : "Asleep"}</span>
-          ) : live.length === 0 ? (
-            <span className="text-[11px] text-muted-foreground">Not deployed</span>
-          ) : (
-            live.map((c) => (
-              <span key={c.id} title={`${c.name}: ${c.health || c.state}`} className={cn("size-2 rounded-full", stateColors[c.health || c.state] ?? "bg-muted-foreground/50")} />
-            ))
-          )}
-        </div>
+        !replicasLikeService && (
+          <div className="flex items-center gap-1">
+            {svc.stopped || svc.sleeping ? (
+              <span className="text-[11px] text-muted-foreground">{svc.stopped ? "Stopped" : "Asleep"}</span>
+            ) : live.length === 0 ? (
+              <span className="text-[11px] text-muted-foreground">Not deployed</span>
+            ) : (
+              live.map((c) => (
+                <span key={c.id} title={`${c.name}: ${c.health || c.state}`} className={cn("size-2 rounded-full", dotColor(c.health || c.state))} />
+              ))
+            )}
+          </div>
+        )
       )}
       <Handle type="source" position={Position.Bottom} className={handle} />
     </Card>

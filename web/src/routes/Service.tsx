@@ -320,6 +320,7 @@ export function Service() {
             <ServiceSettings
               svc={svc}
               projectName={project.data?.name}
+              preview={!!project.data?.parentId}
               gitPath={git.data?.path}
               danger={
                 may("delete") && (

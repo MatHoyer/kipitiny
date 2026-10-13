@@ -45,7 +45,7 @@ function iconOptions(svc: ServiceT, image: string, { logos }: Logos) {
 }
 
 /** Image, icon, resources and how deploys roll out. */
-export function GeneralCard({ svc }: { svc: ServiceT }) {
+export function GeneralCard({ svc, preview }: { svc: ServiceT; preview?: boolean }) {
   const qc = useQueryClient();
   const isDb = isDatabase(svc.kind);
   const [form, setForm] = useState(() => settingsForm(svc));
@@ -116,9 +116,11 @@ export function GeneralCard({ svc }: { svc: ServiceT }) {
               max={10}
               value={form.replicas}
               onChange={set("replicas")}
-              disabled={svc.publishedPorts.length > 0 || svc.hostNetwork}
+              disabled={preview || svc.publishedPorts.length > 0 || svc.hostNetwork}
               description={
-                svc.publishedPorts.length > 0
+                preview
+                  ? "One: previews run one replica of each service."
+                  : svc.publishedPorts.length > 0
                   ? "One: two containers can't publish the same port."
                   : svc.hostNetwork
                     ? "One: the app runs in the host's network."
