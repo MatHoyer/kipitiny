@@ -32,6 +32,16 @@ type PgColumn struct {
 	Type       string `json:"type"`
 	Nullable   bool   `json:"nullable"`
 	PrimaryKey bool   `json:"primaryKey"`
+	// References is the column a single-column foreign key points to, set
+	// in table listings only.
+	References *PgRef `json:"references,omitempty"`
+}
+
+// PgRef names a column of another table (or the same one).
+type PgRef struct {
+	Schema string `json:"schema"`
+	Table  string `json:"table"`
+	Column string `json:"column"`
 }
 
 // PgFilter keeps rows whose Column compares to Value with Op.
@@ -189,7 +199,12 @@ func (c *Core) PgTables(ctx context.Context, id, database string) ([]PgTable, er
 	tables := []PgTable{}
 	err = t.psqlJSON(ctx, `SELECT json_build_array(n.nspname, c.relname, c.relkind, c.reltuples::bigint, pg_total_relation_size(c.oid),
   (SELECT coalesce(json_agg(json_build_array(a.attname, format_type(a.atttypid, a.atttypmod), NOT a.attnotnull,
-     coalesce(a.attnum = ANY(i.indkey), false)) ORDER BY a.attnum), '[]')
+     coalesce(a.attnum = ANY(i.indkey), false),
+     (SELECT json_build_array(fn.nspname, fc.relname, fa.attname)
+      FROM pg_constraint k JOIN pg_class fc ON fc.oid = k.confrelid JOIN pg_namespace fn ON fn.oid = fc.relnamespace
+      JOIN pg_attribute fa ON fa.attrelid = k.confrelid AND fa.attnum = k.confkey[1]
+      WHERE k.conrelid = c.oid AND k.contype = 'f' AND k.conkey = ARRAY[a.attnum] ORDER BY k.conname LIMIT 1)
+   ) ORDER BY a.attnum), '[]')
    FROM pg_attribute a LEFT JOIN pg_index i ON i.indrelid = c.oid AND i.indisprimary
    WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped))
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -206,8 +221,12 @@ ORDER BY n.nspname, c.relname;`, func(row []json.RawMessage) error {
 		tb.Columns = make([]PgColumn, len(cols))
 		for i, col := range cols {
 			c := &tb.Columns[i]
-			if err := unmarshalRow(col, &c.Name, &c.Type, &c.Nullable, &c.PrimaryKey); err != nil {
+			var ref []string
+			if err := unmarshalRow(col, &c.Name, &c.Type, &c.Nullable, &c.PrimaryKey, &ref); err != nil {
 				return err
+			}
+			if len(ref) == 3 {
+				c.References = &PgRef{Schema: ref[0], Table: ref[1], Column: ref[2]}
 			}
 		}
 		tb.Kind = pgRelKinds[kind]

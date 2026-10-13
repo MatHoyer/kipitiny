@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { api, type PgColumn, type PgFilter, type PgFilterOp, type PgTable, type RowChanges } from "../../api";
+import { api, type PgColumn, type PgFilter, type PgFilterOp, type PgRef, type PgTable, type RowChanges } from "../../api";
 import { BrowserShell, SearchBox, SidebarHeader, SidebarItem, SidebarToggle } from "./browser-shell";
 import { ChangeBar, ReviewDialog, useUnsaved } from "./changes";
 import { CELL_MAX, DataTable, type Cell, type GridEdit } from "./data-table";
@@ -52,9 +52,20 @@ export function PgBrowser({ serviceId, database, defaultSchema, dialect }: { ser
   // Kept across tables: switching table doesn't lock it again.
   const [write, setWrite] = useState(false);
   const [creating, setCreating] = useState(false);
+  // Where a followed foreign key leads: its table opens filtered on the value.
+  const [jump, setJump] = useState<{ seq: number; filters: PgFilter[] } | null>(null);
   const { confirm } = useUnsaved();
   const queryClient = useQueryClient();
-  const pick = (key: string) => confirm(() => setPicked(key));
+  const pick = (key: string) =>
+    confirm(() => {
+      setPicked(key);
+      setJump(null);
+    });
+  const follow = (ref: PgRef, value: string) =>
+    confirm(() => {
+      setPicked(tableKey({ schema: ref.schema, name: ref.table }));
+      setJump((j) => ({ seq: (j?.seq ?? 0) + 1, filters: [{ column: ref.column, op: "=", value }] }));
+    });
 
   if (tables.isPending) return <Loading />;
   if (tables.error) return <ErrorText error={tables.error} />;
@@ -166,12 +177,15 @@ export function PgBrowser({ serviceId, database, defaultSchema, dialect }: { ser
 
   return (
     <TableView
-      key={tableKey(current)}
+      // A new view on each jump, even to the same table (a self-reference).
+      key={`${tableKey(current)}:${jump?.seq ?? 0}`}
       serviceId={serviceId}
       database={database}
       table={current}
       tables={list}
       onPick={pick}
+      initialFilters={jump?.filters}
+      onFollow={follow}
       sidebar={nav}
       sidebarOpen={sidebar}
       onToggleSidebar={() => setSidebar(!sidebar)}
@@ -212,6 +226,8 @@ function TableView({
   write: writeAllowed,
   writeSwitch,
   onDropped,
+  initialFilters = [],
+  onFollow,
 }: {
   serviceId: string;
   database: string;
@@ -226,11 +242,13 @@ function TableView({
   /** Read only / Allow writes, just before Reload. */
   writeSwitch: ReactNode;
   onDropped: () => void;
+  initialFilters?: PgFilter[];
+  onFollow: (ref: PgRef, value: string) => void;
 }) {
   const [size, setSize] = useState(25);
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState<{ column: string; desc: boolean } | undefined>();
-  const [filters, setFilters] = useState<PgFilter[]>([]);
+  const [filters, setFilters] = useState(initialFilters);
   const [search, setSearch] = useState("");
   const q = { limit: size, offset: page * size, orderBy: sort?.column, desc: sort?.desc, filters, search };
   const rows = useQuery({
@@ -240,7 +258,14 @@ function TableView({
   });
   const data = rows.data;
   const cols: PgColumn[] = data?.columns ?? table.columns;
-  const columns = cols.map((c) => ({ name: c.name, type: c.type, primaryKey: c.primaryKey, required: !c.nullable && !c.primaryKey }));
+  // Only the table listing knows the foreign keys.
+  const refKey = (r: PgRef) => tableKey({ schema: r.schema, name: r.table });
+  const refs = new Map<string, PgRef>();
+  for (const c of table.columns) if (c.references && tables.some((t) => tableKey(t) === refKey(c.references!))) refs.set(c.name, c.references);
+  const columns = cols.map((c) => {
+    const ref = refs.get(c.name);
+    return { name: c.name, type: c.type, primaryKey: c.primaryKey, required: !c.nullable && !c.primaryKey, references: ref && `${refKey(ref)}.${ref.column}` };
+  });
   const pk = cols.flatMap((c, j) => (c.primaryKey ? [j] : []));
   // From the planner's estimate: rough, and unknown while searching or filtering.
   const pages = !filters.length && !search && table.rowEstimate > 0 ? Math.max(1, Math.ceil(table.rowEstimate / size)) : null;
@@ -365,7 +390,7 @@ function TableView({
     inserts: pending.inserts.map((ins) => ins.values).reverse(),
   });
 
-  const filterBar = useFilters(cols, (f) =>
+  const filterBar = useFilters(cols, initialFilters, (f) =>
     guard(() => {
       setPage(0);
       setFilters(f);
@@ -519,6 +544,7 @@ function TableView({
             }
             empty={filters.length || search ? "No row matches." : "This table is empty."}
             edit={edit}
+            onFollow={(i, j) => onFollow(refs.get(cols[j].name)!, shown[i][j]!)}
           />
         )
       )}
@@ -537,10 +563,10 @@ const strip = ({ column, op, value }: PgFilter): PgFilter => (isUnary(op) ? { co
  * value; ✓ (or Enter) applies it. Only applied, complete filters reach the
  * server, so removing an unfinished one changes nothing.
  */
-function useFilters(columns: PgColumn[], onChange: (f: PgFilter[]) => void) {
-  const seq = useRef(0);
+function useFilters(columns: PgColumn[], initial: PgFilter[], onChange: (f: PgFilter[]) => void) {
+  const seq = useRef(initial.length);
   const focusNext = useRef<number | null>(null);
-  const [draft, setDraft] = useState<Draft[]>([]);
+  const [draft, setDraft] = useState<Draft[]>(() => initial.map((f, i) => ({ ...f, id: i + 1, applied: true })));
   const publish = (next: Draft[]) => {
     setDraft(next);
     onChange(next.filter((d) => d.applied && ready(d)).map(strip));

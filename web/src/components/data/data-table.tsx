@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, KeyRound, Maximize2, Trash2, Undo2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpRight, KeyRound, Maximize2, Trash2, Undo2 } from "lucide-react";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { CopyButton } from "@/components/common";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import { prettyValue } from "./values";
 /** The server's cap on a cell (DataCellMax). */
 export const CELL_MAX = 4096;
 
-export type DataColumn = { name: string; type?: string; primaryKey?: boolean; required?: boolean };
+/** references names the row a value points to (a foreign key), followed with onFollow. */
+export type DataColumn = { name: string; type?: string; primaryKey?: boolean; required?: boolean; references?: string };
 
 /** A cell: text, null for NULL, undefined for a new row's DEFAULT. */
 export type Cell = string | null | undefined;
@@ -35,6 +36,24 @@ export type GridEdit = {
 
 const display = (v: Cell) => (v === undefined ? "DEFAULT" : v === null ? "NULL" : v);
 
+/** Opens the row a foreign key value points to. */
+function FollowButton({ column, onFollow }: { column: DataColumn; onFollow: () => void }) {
+  return (
+    <button
+      type="button"
+      title={`Open in ${column.references}`}
+      aria-label={`Open in ${column.references}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onFollow();
+      }}
+      className="mr-1 inline-flex rounded align-[-2px] text-muted-foreground hover:bg-muted hover:text-foreground"
+    >
+      <ArrowUpRight className="size-3.5" />
+    </button>
+  );
+}
+
 /**
  * A spreadsheet-like grid of text cells (null is NULL). Clicking a row opens
  * it whole in a dialog; with edit, clicking a cell edits it in place and the
@@ -50,6 +69,7 @@ export function DataTable({
   empty = "No rows.",
   className,
   edit,
+  onFollow,
 }: {
   columns: DataColumn[];
   rows: Cell[][];
@@ -61,11 +81,14 @@ export function DataTable({
   empty?: ReactNode;
   className?: string;
   edit?: GridEdit;
+  /** Follows the foreign key of a cell whose column has references. */
+  onFollow?: (row: number, col: number) => void;
 }) {
   const [open, setOpen] = useState<number | null>(null);
   const [editing, setEditing] = useState<[number, number] | null>(null);
   const cut = useMemo(() => new Set(truncated.map(([r, c]) => `${r}:${c}`)), [truncated]);
   const row = open === null ? undefined : rows[open];
+  const follows = (i: number, j: number) => !!onFollow && !!columns[j].references && rows[i][j] != null && !cut.has(`${i}:${j}`) && !edit?.state(i) && !edit?.was(i, j);
   const canEdit = (i: number, j: number) => !!edit && edit.state(i) !== "deleted" && !edit.locked(i, j);
   const nextCell = (i: number, j: number, step: number) => {
     for (let k = j + step; k >= 0 && k < columns.length; k += step) if (canEdit(i, k)) return k;
@@ -183,6 +206,7 @@ export function DataTable({
                           <span className="text-muted-foreground/70">{display(v)}</span>
                         ) : (
                           <>
+                            {follows(i, j) && <FollowButton column={columns[j]} onFollow={() => onFollow!(i, j)} />}
                             {v.replace(/\s+/g, " ")}
                             {cut.has(`${i}:${j}`) && !was && "…"}
                           </>
@@ -207,6 +231,14 @@ export function DataTable({
               row={row}
               title={rowLabel ? rowLabel(row, open) : `Row ${open + 1}`}
               isCut={(j) => cut.has(`${open}:${j}`)}
+              follow={(j) =>
+                follows(open, j)
+                  ? () => {
+                      setOpen(null);
+                      onFollow!(open, j);
+                    }
+                  : undefined
+              }
               edit={
                 edit && {
                   nulls: edit.nulls ?? false,
@@ -274,7 +306,22 @@ type RowEdit = {
 };
 
 /** A row whole: each field with its type, editable when edit is given. */
-function RowDetail({ columns, row, title, isCut, edit }: { columns: DataColumn[]; row: Cell[]; title: string; isCut: (j: number) => boolean; edit?: RowEdit }) {
+function RowDetail({
+  columns,
+  row,
+  title,
+  isCut,
+  follow,
+  edit,
+}: {
+  columns: DataColumn[];
+  row: Cell[];
+  title: string;
+  isCut: (j: number) => boolean;
+  /** Opens the row a field's foreign key points to; undefined when it has none. */
+  follow: (j: number) => (() => void) | undefined;
+  edit?: RowEdit;
+}) {
   const editable = edit && edit.state !== "deleted";
   return (
     <>
@@ -292,6 +339,7 @@ function RowDetail({ columns, row, title, isCut, edit }: { columns: DataColumn[]
           const cut = isCut(j);
           const was = edit?.was(j);
           const locked = edit?.locked(j);
+          const onFollow = follow(j);
           return (
             <div key={c.name} className="group/field grid gap-1 px-4 py-2.5 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-4">
               <dt className="flex items-start gap-1.5 pt-px font-mono text-xs">
@@ -315,6 +363,11 @@ function RowDetail({ columns, row, title, isCut, edit }: { columns: DataColumn[]
                     )}
                     {editable && locked && <span className="mt-1 block font-sans text-muted-foreground">{locked}</span>}
                   </span>
+                )}
+                {onFollow && (
+                  <Button variant="ghost" size="icon-xs" title={`Open in ${c.references}`} onClick={onFollow}>
+                    <ArrowUpRight />
+                  </Button>
                 )}
                 {v !== null && v !== undefined && (
                   <span className="opacity-0 group-hover/field:opacity-100 focus-within:opacity-100">

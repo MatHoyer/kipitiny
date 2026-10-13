@@ -82,9 +82,15 @@ CREATE VIEW v AS SELECT id FROM items;"`)
 				t.Errorf("collection on a SQL database: %v", err)
 			}
 			// The app user owns it.
-			exec(`MYSQL_PWD="$MYSQL_PASSWORD" ` + client + ` -h 127.0.0.1 -u"$MYSQL_USER" second -e "CREATE TABLE t (x INT); INSERT INTO t VALUES (1)"`)
-			if tables, err := c.PgTables(ctx, svc.ID, "second"); err != nil || len(tables) != 1 || tables[0].Schema != "second" {
+			exec(`MYSQL_PWD="$MYSQL_PASSWORD" ` + client + ` -h 127.0.0.1 -u"$MYSQL_USER" second -e "CREATE TABLE t (x INT PRIMARY KEY, a INT, b INT, UNIQUE (a, b)); INSERT INTO t VALUES (1, NULL, NULL);
+CREATE TABLE u (t INT, a INT, b INT, FOREIGN KEY (t) REFERENCES t (x), FOREIGN KEY (a, b) REFERENCES t (a, b));"`)
+			tables, err = c.PgTables(ctx, svc.ID, "second")
+			if err != nil || len(tables) != 2 || tables[0].Schema != "second" {
 				t.Fatalf("second tables = %+v, %v", tables, err)
+			}
+			// A foreign key of several columns isn't followed.
+			if u := tables[1].Columns; u[0].References == nil || *u[0].References != (PgRef{Schema: "second", Table: "t", Column: "x"}) || u[1].References != nil {
+				t.Errorf("references = %+v", u)
 			}
 			if _, err := c.PgTables(ctx, svc.ID, "mysql"); !errors.Is(err, ErrInvalid) {
 				t.Errorf("system database browsable: %v", err)

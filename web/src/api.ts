@@ -842,7 +842,9 @@ export interface GitRepo {
 export type PgDatabase = { name: string; bytes: number; main: boolean };
 /** Data browser: a postgres table or view. rowEstimate is -1 until the table is analyzed. */
 export type PgTable = { schema: string; name: string; kind: string; rowEstimate: number; bytes: number; columns: PgColumn[] };
-export type PgColumn = { name: string; type: string; nullable: boolean; primaryKey: boolean };
+/** references: the column a single-column foreign key points to, in table listings only. */
+export type PgColumn = { name: string; type: string; nullable: boolean; primaryKey: boolean; references?: PgRef };
+export type PgRef = { schema: string; table: string; column: string };
 export type PgFilterOp = "=" | "!=" | "<" | "<=" | ">" | ">=" | "like" | "null" | "notnull";
 export type PgFilter = { column: string; op: PgFilterOp; value?: string };
 export type RowQuery = { limit?: number; offset?: number; orderBy?: string; desc?: boolean; filters?: PgFilter[]; search?: string };
