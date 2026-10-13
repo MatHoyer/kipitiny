@@ -23,6 +23,7 @@ import type {
   NewColumn,
   ChangeResult,
   PgTable,
+  PreviewSettings,
   Project,
   RedisKeys,
   RedisValue,
@@ -847,6 +848,22 @@ function viaFiles<T>(f: () => T): T {
   }
 }
 
+/** Preview settings per project, in memory only. */
+const demoPreviewSettings = new Map<string, PreviewSettings>();
+
+function previewSettings(projectId: string): PreviewSettings {
+  const s = demoPreviewSettings.get(projectId) ?? {
+    baseDomain: projectId === "acme" ? "preview.acme.example" : "",
+    env: projectId === "acme" ? { STRIPE_KEY: "sk_test_demo", LOG_LEVEL: "debug" } : {},
+    secrets: projectId === "acme" ? ["STRIPE_KEY"] : [],
+    inherit: [],
+    ttlSeconds: 0,
+    sleepAfterSeconds: 0,
+    allowSeed: false,
+  };
+  return { ...s, env: Object.fromEntries(Object.entries(s.env).map(([k, v]) => [k, s.secrets.includes(k) ? MASK : v])) };
+}
+
 const routes: Route[] = [
   [
     "GET",
@@ -1020,6 +1037,29 @@ const routes: Route[] = [
   ],
   ["GET", /^\/projects\/([^/]+)$/, ({ m }) => projectOf(m[1])],
   ["GET", /^\/projects\/([^/]+)\/git$/, () => { throw notFound(); }],
+  // One preview, opened by CI for a stack of pull requests; its project isn't simulated.
+  [
+    "GET",
+    /^\/projects\/([^/]+)\/previews$/,
+    ({ m }) => {
+      const p = projectOf(m[1]);
+      if (p.id !== "acme") return [];
+      const preview = { name: "pr-42", branch: "feat/checkout-v2", commit: "9f2c4e1a", ttlSeconds: 7 * 86_400, deployedAt: now() };
+      return [{ ...p, id: "acme-pr-42", name: "acme-pr-42", parentId: p.id, preview, urls: { api: "https://pr-42-api.preview.acme.example", web: "https://pr-42-web.preview.acme.example" } }];
+    },
+  ],
+  ["DELETE", /^\/projects\/([^/]+)\/previews\/([^/]+)$/, () => null],
+  ["GET", /^\/projects\/([^/]+)\/preview-settings$/, ({ m }) => previewSettings(m[1])],
+  [
+    "PUT",
+    /^\/projects\/([^/]+)\/preview-settings$/,
+    ({ m, body }) => {
+      const old = previewSettings(m[1]);
+      const env = Object.fromEntries(Object.entries((body.env ?? {}) as Record<string, string>).map(([k, v]) => [k, v === MASK ? (old.env[k] ?? "") : v]));
+      demoPreviewSettings.set(m[1], { ...old, ...body, env });
+      return previewSettings(m[1]);
+    },
+  ],
   ["GET", /^\/projects\/([^/]+)\/compose$/, ({ m, q }) => compose(m[1], q.get("service") ?? undefined)],
   ["GET", /^\/projects\/([^/]+)\/services$/, ({ m }) => db.services.filter((s) => s.projectId === projectOf(m[1]).id).map(view)],
   [
