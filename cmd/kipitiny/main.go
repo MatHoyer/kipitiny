@@ -143,7 +143,7 @@ func serve() error {
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           api.SecureHeaders(mux),
+		Handler:           api.SecureHeaders(mux, c.TrustedProxy),
 		ReadHeaderTimeout: 10 * time.Second,
 		// Request contexts end on SIGTERM so long-lived SSE log streams don't
 		// hold up Shutdown (which only waits, it never cancels).
