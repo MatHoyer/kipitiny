@@ -71,6 +71,9 @@ their access as you change it. Removing a user revokes their tokens.
 
 A git-linked project syncs with the permissions of the user who linked it. If
 that user is removed, syncs stop until someone links the repository again.
+Members can't link a repository by URL on a loopback, private or link-local
+address (the manager would fetch it from inside your network); a repository
+from a [git provider](/docs/compose#git-providers) is fine.
 
 ## Locked out
 

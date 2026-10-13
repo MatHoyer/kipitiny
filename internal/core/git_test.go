@@ -41,6 +41,31 @@ func TestWebhookAuthorized(t *testing.T) {
 	}
 }
 
+func TestCheckRepoHost(t *testing.T) {
+	ctx := context.Background()
+	member := WithActor(ctx, Actor{Role: store.RoleMember})
+	admin := WithActor(ctx, Actor{Role: store.RoleAdmin})
+	for _, tc := range []struct {
+		ctx      context.Context
+		url, via string
+		refused  bool
+	}{
+		{member, "http://127.0.0.1:3000/me/infra.git", "", true},
+		{member, "http://10.0.0.5/me/infra.git", "", true},
+		{member, "http://169.254.169.254/latest", "", true},
+		{member, "http://[::1]/me/infra.git", "", true},
+		{member, "https://1.1.1.1/me/infra.git", "", false},
+		{member, "http://10.0.0.5/me/infra.git", "provider", false},
+		{admin, "http://10.0.0.5/me/infra.git", "", false},
+		{ctx, "http://10.0.0.5/me/infra.git", "", false},
+	} {
+		err := checkRepoHost(tc.ctx, store.ProjectGit{RepoURL: tc.url, ProviderID: tc.via})
+		if refused := errors.Is(err, ErrForbidden); refused != tc.refused {
+			t.Errorf("%s (provider %q): err = %v", tc.url, tc.via, err)
+		}
+	}
+}
+
 func TestValidateGit(t *testing.T) {
 	ok := store.ProjectGit{RepoURL: "https://github.com/me/infra.git", Branch: "main", Path: "compose.yaml", PollSeconds: 300}
 	for name, mutate := range map[string]func(*store.ProjectGit){

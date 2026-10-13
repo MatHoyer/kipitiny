@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path"
@@ -194,6 +195,9 @@ func (c *Core) gitFromInput(ctx context.Context, projectID string, in GitInput) 
 	if err := validateGit(g); err != nil {
 		return store.ProjectGit{}, err
 	}
+	if err := checkRepoHost(ctx, g); err != nil {
+		return store.ProjectGit{}, err
+	}
 	if g.ProviderID != "" {
 		p, err := c.store.GetGitProvider(ctx, g.ProviderID)
 		if errors.Is(err, store.ErrNotFound) {
@@ -211,7 +215,7 @@ func (c *Core) gitFromInput(ctx context.Context, projectID string, in GitInput) 
 func validateGit(g store.ProjectGit) error {
 	u, err := url.Parse(g.RepoURL)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-		return fmt.Errorf("%w: repository must be an https URL", ErrInvalid)
+		return fmt.Errorf("%w: repository must be an http(s) URL", ErrInvalid)
 	}
 	if u.User != nil {
 		return fmt.Errorf("%w: no credentials in the URL; a private repository is read through a git provider", ErrInvalid)
@@ -224,6 +228,32 @@ func validateGit(g store.ProjectGit) error {
 	}
 	if g.PollSeconds < minGitPoll || g.PollSeconds > maxGitPoll {
 		return fmt.Errorf("%w: poll interval must be between %d and %d seconds", ErrInvalid, minGitPoll, maxGitPoll)
+	}
+	return nil
+}
+
+// checkRepoHost refuses a member a repository on a loopback, private or
+// link-local address: the manager would fetch it, reaching services that
+// aren't meant to be reachable from outside (other containers, the cloud
+// metadata endpoint). A git provider's repositories are on the host an
+// admin set up, and admins may link anything.
+func checkRepoHost(ctx context.Context, g store.ProjectGit) error {
+	a, ok := ActorFrom(ctx)
+	if !ok || a.Admin() || g.ProviderID != "" {
+		return nil
+	}
+	u, err := url.Parse(g.RepoURL)
+	if err != nil {
+		return fmt.Errorf("%w: invalid repository URL", ErrInvalid)
+	}
+	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip", u.Hostname())
+	if err != nil {
+		return fmt.Errorf("%w: cannot resolve %s", ErrInvalid, u.Hostname())
+	}
+	for _, ip := range ips {
+		if ip = ip.Unmap(); ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
+			return fmt.Errorf("%w: %s is a private address; only admins link repositories there", ErrForbidden, u.Hostname())
+		}
 	}
 	return nil
 }
@@ -249,6 +279,17 @@ func (c *Core) SyncProjectGit(ctx context.Context, projectID string, dryRun bool
 func (c *Core) syncGit(ctx context.Context, g store.ProjectGit, force, dryRun bool) (ComposePlan, error) {
 	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
+	// The address is checked again: the name may resolve elsewhere now.
+	ctx, err := c.asLinker(ctx, g)
+	if err == nil {
+		err = checkRepoHost(ctx, g)
+	}
+	if err != nil {
+		if dryRun {
+			return ComposePlan{}, err
+		}
+		return ComposePlan{}, c.gitSynced(g, "", ComposePlan{}, nil, err)
+	}
 	if !force {
 		head, err := c.gitHead(ctx, g)
 		if err != nil {
@@ -263,10 +304,6 @@ func (c *Core) syncGit(ctx context.Context, g store.ProjectGit, force, dryRun bo
 		if dryRun {
 			return ComposePlan{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 		}
-		return ComposePlan{}, c.gitSynced(g, "", ComposePlan{}, nil, err)
-	}
-	ctx, err = c.asLinker(ctx, g)
-	if err != nil {
 		return ComposePlan{}, c.gitSynced(g, "", ComposePlan{}, nil, err)
 	}
 	a, err := c.applyCompose(fromGitSync(ctx), g.ProjectID, data, ApplyOptions{Prune: true, Deploy: true, DryRun: dryRun, Commit: commit}, true)
