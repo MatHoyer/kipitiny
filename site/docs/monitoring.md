@@ -64,6 +64,16 @@ server of its own. Email [notification channels](#notifications) and
 [invites](/docs/users) use it. Saving checks that kipitiny can connect and
 sign in; **Send a test** mails an address you type.
 
+Pick a provider first:
+
+- **Resend**: only an API key and a sender. kipitiny fills in its relay
+  (`smtp.resend.com`, TLS on port 465, user `resend`), and *How do I set up
+  Resend?* walks through verifying the sender's domain and creating a key with
+  *Sending access*.
+- **Other SMTP server**: any provider's host, port, security and credentials.
+
+For another server:
+
 - **Security**: STARTTLS (port 587), TLS (port 465), or none, for a relay on
   the same host or network only. Signing in needs TLS or STARTTLS, so the
   password never travels in clear text.
