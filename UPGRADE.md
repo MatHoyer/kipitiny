@@ -9,7 +9,7 @@ Add a notice under `## Unreleased` in the change that causes it, as
 `- warning: …` (disruptive) or `- info: …`; continue on indented lines. The
 release renames the section to its version.
 
-## Unreleased
+## 0.29.0
 - warning: Sleep mode moves from apps to projects: a sleeping project stops
   every service, databases and workers too. Apps' own sleep settings are
   dropped, and apps asleep during the upgrade start again; turn sleep on
