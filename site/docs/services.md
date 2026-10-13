@@ -69,7 +69,8 @@ order: 3
   Containers are renamed in place. A renamed service also keeps answering to its
   old name on the project network until its next deploy, so update the apps
   that call it by hostname. Renaming a database rewrites the `{{ db.<name>.* }}`
-  references to it and redeploys the apps using it. API tokens, scripts and MCP
+  references to it and redeploys the apps using it; renaming an app rewrites
+  the `{{ app.<name>.* }}` references to it (their value doesn't change). API tokens, scripts and MCP
   calls that name the project or service need the new name. Services of a
   project managed by git can't be renamed: the file owns their names, and
   renaming one there replaces it, volumes included.

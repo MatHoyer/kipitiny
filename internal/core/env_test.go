@@ -190,3 +190,46 @@ func TestSecretRefs(t *testing.T) {
 		t.Errorf("maskEnv = %v", got)
 	}
 }
+
+func TestResolveAppRefs(t *testing.T) {
+	c := &Core{cfg: config.Config{Traefik: config.Traefik{HTTPSPort: "443"}}}
+	svcs := []store.Service{
+		{Name: "web", Kind: store.ServiceKindApp, Domain: "shop.example.com", Port: 3000},
+		{Name: "worker", Kind: store.ServiceKindApp},
+		pgService(),
+	}
+	src := envSources{project: map[string]string{"PUBLIC_URL": "{{ app.web.URL }}/"}, dbs: databasesOf(svcs), apps: c.appURLs(svcs)}
+	env := map[string]string{
+		"APP_URL":  "{{ app.web.URL }}",
+		"HOST":     "{{app.web.DOMAIN}}",
+		"CALLBACK": "{{ app.web.URL }}/auth/callback",
+		"VIA_VAR":  "{{ project.PUBLIC_URL }}",
+		"NO_HOST":  "{{ app.worker.URL }}",
+		"GONE":     "{{ app.gone.DOMAIN }}",
+	}
+	want := map[string]string{
+		"APP_URL": "https://shop.example.com", "HOST": "shop.example.com", "CALLBACK": "https://shop.example.com/auth/callback",
+		"VIA_VAR": "https://shop.example.com/", "NO_HOST": "", "GONE": "",
+	}
+	if got := resolveEnv(env, src); !maps.Equal(got, want) {
+		t.Errorf("resolveEnv = %v, want %v", got, want)
+	}
+	if got, want := unresolved(env, src), []string{"app.gone.DOMAIN", "app.worker.URL"}; !slices.Equal(got, want) {
+		t.Errorf("unresolved = %v, want %v", got, want)
+	}
+	// Before the apps exist (a compose file being checked), app references pass.
+	if got := unresolved(env, envSources{project: src.project}); len(got) != 0 {
+		t.Errorf("unchecked apps: unresolved = %v", got)
+	}
+
+	c.cfg.Traefik.HTTPSPort = "8443"
+	src.apps = c.appURLs(svcs)
+	if got := resolveEnv(map[string]string{"U": "{{ app.web.URL }}", "D": "{{ app.web.DOMAIN }}"}, src); got["U"] != "https://shop.example.com:8443" || got["D"] != "shop.example.com" {
+		t.Errorf("dev HTTPS port: %v", got)
+	}
+
+	renamed := renameAppRefs(map[string]string{"A": "{{ app.web.URL }}/x", "B": "{{ app.webby.URL }}"}, "web", "front")
+	if renamed["A"] != "{{ app.front.URL }}/x" || renamed["B"] != "{{ app.webby.URL }}" {
+		t.Errorf("renameAppRefs = %v", renamed)
+	}
+}

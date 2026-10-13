@@ -47,13 +47,15 @@ export const envSecrets = (rows: EnvRow[]): string[] =>
 /**
  * A reference in a service env value: {{ project.NAME }} for a project
  * variable or secret, {{ db.SERVICE.FIELD }} for a database credential,
- * {{ scheme://… }} for a secret in a password manager.
+ * {{ scheme://… }} for a secret in a password manager, {{ app.SERVICE.URL }}
+ * or {{ app.SERVICE.DOMAIN }} for where an app of the project is public.
  */
-const refSrc = String.raw`\{\{\s*(?:project\.([A-Za-z_][A-Za-z0-9_]*)|db\.([a-z0-9-]+)\.([A-Z]+)|([a-z][a-z0-9+.-]*://[^{}]+?))\s*\}\}`;
+const refSrc = String.raw`\{\{\s*(?:project\.([A-Za-z_][A-Za-z0-9_]*)|db\.([a-z0-9-]+)\.([A-Z]+)|([a-z][a-z0-9+.-]*://[^{}]+?)|app\.([a-z0-9-]+)\.(URL|DOMAIN))\s*\}\}`;
 
 export type EnvReference =
   | { kind: "project"; name: string }
   | { kind: "db"; db: string; field: string }
+  | { kind: "app"; app: string; field: string }
   | { kind: "secret"; ref: string };
 
 /** Credentials a database reference can name, per kind. */
@@ -73,11 +75,23 @@ export const envRef = (name: string) => `{{ project.${name} }}`;
 export const dbRef = (db: string, field: string) => `{{ db.${db}.${field} }}`;
 
 const toRef = (m: RegExpMatchArray): EnvReference =>
-  m[1] ? { kind: "project", name: m[1] } : m[4] ? { kind: "secret", ref: m[4] } : { kind: "db", db: m[2], field: m[3] };
+  m[1]
+    ? { kind: "project", name: m[1] }
+    : m[4]
+      ? { kind: "secret", ref: m[4] }
+      : m[5]
+        ? { kind: "app", app: m[5], field: m[6] }
+        : { kind: "db", db: m[2], field: m[3] };
 
-/** How a reference is named in messages: project.NAME, db.SERVICE.FIELD, scheme://…. */
+/** How a reference is named in messages: project.NAME, db.SERVICE.FIELD, app.SERVICE.FIELD, scheme://…. */
 export const refName = (r: EnvReference) =>
-  r.kind === "project" ? `project.${r.name}` : r.kind === "secret" ? r.ref : `db.${r.db}.${r.field}`;
+  r.kind === "project"
+    ? `project.${r.name}`
+    : r.kind === "secret"
+      ? r.ref
+      : r.kind === "app"
+        ? `app.${r.app}.${r.field}`
+        : `db.${r.db}.${r.field}`;
 
 /** The reference a value is made of, when it is exactly one. */
 export function soleRef(value: string): EnvReference | null {

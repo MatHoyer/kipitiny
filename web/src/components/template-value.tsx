@@ -1,4 +1,4 @@
-import { ChevronRight, Database, Link2 } from "lucide-react";
+import { ChevronRight, Database, Globe, Link2 } from "lucide-react";
 import { schemeIcon } from "@/components/brand-icons";
 import { splitRefs, type EnvReference } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -46,12 +46,16 @@ function RefChip({ r, invalid }: { r: EnvReference; invalid?: boolean }) {
     >
       {r.kind === "db" ? (
         <Database className="size-3 shrink-0" />
+      ) : r.kind === "app" ? (
+        <Globe className="size-3 shrink-0" />
       ) : r.kind === "secret" ? (
         <span className="flex shrink-0 [&>svg]:size-3">{schemeIcon(r.ref.split("://")[0])}</span>
       ) : (
         <Link2 className="size-3 shrink-0" />
       )}
-      <span className="truncate">{r.kind === "db" ? `${r.db}.${r.field}` : r.kind === "secret" ? r.ref : r.name}</span>
+      <span className="truncate">
+        {r.kind === "db" ? `${r.db}.${r.field}` : r.kind === "app" ? `${r.app}.${r.field}` : r.kind === "secret" ? r.ref : r.name}
+      </span>
     </span>
   );
 }

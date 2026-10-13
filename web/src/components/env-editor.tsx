@@ -92,6 +92,8 @@ export function EnvEditor({
   // Password manager references are checked by the manager on save.
   const known = (r: EnvReference) =>
     r.kind === "secret" ||
+    // Checked when deploying: the app needs a domain.
+    r.kind === "app" ||
     (r.kind === "project"
       ? !!vars?.includes(r.name)
       : dbRefValid(databases, r.db, r.field));

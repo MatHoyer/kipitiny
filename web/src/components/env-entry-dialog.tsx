@@ -184,6 +184,8 @@ function EntryForm({
   const dupName = taken.includes(key);
   const known = (r: EnvReference) =>
     r.kind === "secret" ||
+    // Checked when deploying: the app needs a domain.
+    r.kind === "app" ||
     (r.kind === "project"
       ? !!ctx.vars?.includes(r.name)
       : dbRefValid(ctx.databases, r.db, r.field));

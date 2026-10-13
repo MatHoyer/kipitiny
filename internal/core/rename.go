@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/moby/moby/api/types/container"
@@ -99,6 +100,17 @@ func (c *Core) RenameService(ctx context.Context, id, name string) (ServiceView,
 	}
 	svc.Name = name
 
+	if svc.Kind == store.ServiceKindApp {
+		// The URL stays the same: nothing to redeploy.
+		for _, s := range others {
+			if env := renameAppRefs(s.Env, old, name); s.ID != id && !maps.Equal(env, s.Env) {
+				s.Env = env
+				if _, err := c.store.UpdateService(ctx, s); err != nil {
+					return ServiceView{}, fmt.Errorf("update references in %s: %w", s.Name, err)
+				}
+			}
+		}
+	}
 	var dependents []string
 	if svc.Kind.IsDatabase() {
 		for _, s := range others {
@@ -183,6 +195,21 @@ func onNetwork(ct container.Summary, name string) bool {
 	}
 	_, ok := ct.NetworkSettings.Networks[name]
 	return ok
+}
+
+// renameAppRefs points the {{ app.<old>.FIELD }} references of env to new.
+func renameAppRefs(env map[string]string, old, new string) map[string]string {
+	out := make(map[string]string, len(env))
+	for k, v := range env {
+		out[k] = envRefRe.ReplaceAllStringFunc(v, func(m string) string {
+			sub := envRefRe.FindStringSubmatch(m)
+			if sub[5] != old {
+				return m
+			}
+			return "{{ app." + new + "." + sub[6] + " }}"
+		})
+	}
+	return out
 }
 
 // renameDatabaseRefs points the {{ db.<old>.FIELD }} references of env to new.
