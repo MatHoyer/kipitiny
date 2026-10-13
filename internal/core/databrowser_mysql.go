@@ -143,7 +143,11 @@ func (t dataTarget) mysqlTables(ctx context.Context) ([]PgTable, error) {
   CAST(COALESCE(DATA_LENGTH + INDEX_LENGTH, 0) AS SIGNED))
 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME;
 SELECT JSON_ARRAY('c', TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE = 'YES', COLUMN_KEY = 'PRI')
-FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME, ORDINAL_POSITION;`, func(row []json.RawMessage) error {
+FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME, ORDINAL_POSITION;
+SELECT JSON_ARRAY('f', TABLE_NAME, MIN(COLUMN_NAME), MIN(REFERENCED_TABLE_NAME), MIN(REFERENCED_COLUMN_NAME))
+FROM information_schema.KEY_COLUMN_USAGE
+WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_SCHEMA = DATABASE()
+GROUP BY TABLE_NAME, CONSTRAINT_NAME HAVING COUNT(*) = 1 ORDER BY TABLE_NAME, CONSTRAINT_NAME;`, func(row []json.RawMessage) error {
 		var tag string
 		if len(row) == 0 || json.Unmarshal(row[0], &tag) != nil {
 			return errors.New("mysql output: no tag")
@@ -160,6 +164,23 @@ FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_N
 			}
 			byName[tb.Name] = len(tables)
 			tables = append(tables, tb)
+			return nil
+		}
+		if tag == "f" {
+			// Single-column foreign keys within the database.
+			var table, column string
+			var ref PgRef
+			if err := unmarshalRow(row[1:], &table, &column, &ref.Table, &ref.Column); err != nil {
+				return err
+			}
+			ref.Schema = t.db
+			if i, ok := byName[table]; ok {
+				for j := range tables[i].Columns {
+					if c := &tables[i].Columns[j]; c.Name == column && c.References == nil {
+						c.References = &ref
+					}
+				}
+			}
 			return nil
 		}
 		var table string

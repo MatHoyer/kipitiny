@@ -25,7 +25,7 @@ import type {
  * with rows in the database and keys in the cache to browse.
  */
 
-export type DemoTable = { schema: string; name: string; columns: { name: string; type: string; primaryKey?: boolean; nullable?: boolean }[]; rows: (string | null)[][] };
+export type DemoTable = { schema: string; name: string; columns: { name: string; type: string; primaryKey?: boolean; nullable?: boolean; references?: { table: string; column: string } }[]; rows: (string | null)[][] };
 export type DemoRedisKey = { key: string; type: "string" | "hash" | "list" | "set" | "zset"; ttl: number; items: string[][] };
 
 export type DemoDb = {
@@ -160,7 +160,7 @@ function tables(): DemoTable[] {
       name: "invoices",
       columns: [
         { name: "id", type: "bigint", primaryKey: true },
-        { name: "user_id", type: "bigint" },
+        { name: "user_id", type: "bigint", references: { table: "users", column: "id" } },
         { name: "amount_cents", type: "integer" },
         { name: "status", type: "text" },
         { name: "issued_at", type: "timestamp with time zone" },

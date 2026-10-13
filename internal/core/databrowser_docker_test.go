@@ -151,7 +151,9 @@ CREATE VIEW s.v AS SELECT id FROM s.items;"`)
 	}
 
 	// Another database of the instance, picked by name; anything else is refused.
-	exec(`psql -U app -d app -c "CREATE DATABASE other" && psql -U app -d other -c "CREATE TABLE notes (id int PRIMARY KEY); INSERT INTO notes VALUES (7)"`)
+	exec(`psql -U app -d app -c "CREATE DATABASE other" && psql -U app -d other -v ON_ERROR_STOP=1 -c "
+CREATE TABLE notes (id int PRIMARY KEY, a int, b int, UNIQUE (a, b)); INSERT INTO notes VALUES (7);
+CREATE TABLE tags (note int REFERENCES notes, a int, b int, FOREIGN KEY (a, b) REFERENCES notes (a, b));"`)
 	dbs, err := c.PgDatabases(ctx, svc.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -159,8 +161,12 @@ CREATE VIEW s.v AS SELECT id FROM s.items;"`)
 	if len(dbs) != 3 || dbs[0].Name != "app" || !dbs[0].Main || dbs[1].Name != "other" || dbs[1].Main || dbs[2].Name != "postgres" {
 		t.Errorf("databases: %+v", dbs)
 	}
-	if tables, err := c.PgTables(ctx, svc.ID, "other"); err != nil || len(tables) != 1 || tables[0].Name != "notes" {
+	if tables, err := c.PgTables(ctx, svc.ID, "other"); err != nil || len(tables) != 2 || tables[0].Name != "notes" {
 		t.Errorf("other tables: %+v %v", tables, err)
+	} else if tags := tables[1].Columns; tags[0].References == nil || *tags[0].References != (PgRef{Schema: "public", Table: "notes", Column: "id"}) ||
+		tags[1].References != nil || tables[0].Columns[0].References != nil {
+		// A foreign key of several columns isn't followed.
+		t.Errorf("references: %+v", tags)
 	}
 	if rows, err := c.PgRows(ctx, svc.ID, "other", "public", "notes", RowQuery{}); err != nil || *rows.Rows[0][0] != "7" {
 		t.Errorf("other rows: %v", err)

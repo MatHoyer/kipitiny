@@ -1597,14 +1597,23 @@ const routes: Route[] = [
     ({ m }): PgTable[] => {
       // The same demo data in every kind: MySQL's schema is its database, MongoDB's tables are collections.
       const kind = serviceOf(m[1]).kind;
+      const schemaOf = (t: DemoDb["tables"][number]) => (kind === "postgres" ? t.schema : "app");
       return db.tables.map((t) => ({
-        schema: kind === "postgres" ? t.schema : "app",
+        schema: schemaOf(t),
         name: t.name,
         kind: kind === "mongodb" ? "collection" : "table",
         rowEstimate: t.rows.length,
         bytes: t.rows.length * 96 + 8192,
         columns:
-          kind === "mongodb" ? [] : t.columns.map((c) => ({ name: c.name, type: c.type, nullable: !!c.nullable, primaryKey: !!c.primaryKey })),
+          kind === "mongodb"
+            ? []
+            : t.columns.map((c) => ({
+                name: c.name,
+                type: c.type,
+                nullable: !!c.nullable,
+                primaryKey: !!c.primaryKey,
+                references: c.references && { schema: schemaOf(t), ...c.references },
+              })),
       }));
     },
   ],
