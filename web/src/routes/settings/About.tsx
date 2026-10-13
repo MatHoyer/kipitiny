@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpCircle, Container, Database, ExternalLink, Package, RefreshCw } from "lucide-react";
+import { ArrowUpCircle, CircleHelp, Container, Database, ExternalLink, Package, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ErrorText, IconTile, Loading, StatCard } from "@/components/common";
 import { Card } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatBytes, timeAgo } from "@/lib/format";
 import { api, type Status } from "@/api";
 import { SettingsPage } from "./page";
@@ -50,7 +51,20 @@ export function Version() {
             />
             <StatCard
               icon={Database}
-              label="Database"
+              label={
+                <>
+                  Database
+                  <Tooltip>
+                    <TooltipTrigger aria-label="Why the size changes">
+                      <CircleHelp className="size-3.5" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      Changes land in the write-ahead log first, then are copied into the database. The log keeps its size (up to about
+                      4 MB) until the manager restarts, so the total drops after an update or restart: no data is lost.
+                    </TooltipContent>
+                  </Tooltip>
+                </>
+              }
               value={s.database ? formatBytes(s.database.sizeBytes + s.database.walBytes) : "—"}
               hint={s.database && `SQLite, ${formatBytes(s.database.walBytes)} in the write-ahead log`}
             />
