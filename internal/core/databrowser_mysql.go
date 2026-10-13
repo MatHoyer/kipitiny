@@ -126,8 +126,11 @@ GROUP BY s.SCHEMA_NAME ORDER BY s.SCHEMA_NAME`, strings.Join(skip, ", ")), func(
 func (t dataTarget) mysqlCreateDatabase(ctx context.Context, name string) error {
 	ctx, cancel := context.WithTimeout(ctx, dataConsoleTimeout)
 	defer cancel()
-	sql := fmt.Sprintf("CREATE DATABASE %s; GRANT ALL ON %s.* TO %s@'%%'",
-		mysqlIdent(name), mysqlIdent(name), "'"+strings.ReplaceAll(t.svc.Env[mysqlUser], "'", "''")+"'")
+	// The user name is a quoted literal; with NO_BACKSLASH_ESCAPES only its
+	// quotes need doubling, whatever the server's own mode.
+	sql := fmt.Sprintf("SET SESSION sql_mode = CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), 'NO_BACKSLASH_ESCAPES'); "+
+		"CREATE DATABASE %s; GRANT ALL ON %s.* TO %s@'%%'",
+		mysqlIdent(name), mysqlIdent(name), mysqlQuote(t.svc.Env[mysqlUser]))
 	return clientError(t.dk.Exec(ctx, t.container, t.mysql(sql, true, dataConsoleTimeout, nil)))
 }
 
