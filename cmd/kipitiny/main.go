@@ -145,6 +145,9 @@ func serve() error {
 		Addr:              cfg.Addr,
 		Handler:           api.SecureHeaders(mux, c.TrustedProxy),
 		ReadHeaderTimeout: 10 * time.Second,
+		// Closes keep-alive connections nobody uses. No read or write
+		// timeout: uploads, downloads and log streams can take long.
+		IdleTimeout: 2 * time.Minute,
 		// Request contexts end on SIGTERM so long-lived SSE log streams don't
 		// hold up Shutdown (which only waits, it never cancels).
 		BaseContext: func(net.Listener) context.Context { return ctx },
