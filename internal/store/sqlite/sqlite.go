@@ -1263,9 +1263,9 @@ func (s *Store) SetServiceNetworks(ctx context.Context, serviceID string, networ
 	return nil
 }
 
-func (s *Store) SetServiceMaintenance(ctx context.Context, serviceID string, m store.Maintenance) error {
-	res, err := s.db.NewUpdate().Model(&store.Service{ID: serviceID, Maintenance: m}).
-		Column("maintenance").WherePK().Exec(ctx)
+func (s *Store) SetProjectMaintenance(ctx context.Context, projectID string, m store.Maintenance) error {
+	res, err := s.db.NewUpdate().Model(&store.Project{ID: projectID, Maintenance: m, UpdatedAt: now()}).
+		Column("maintenance", "updated_at").WherePK().Exec(ctx)
 	if err != nil {
 		return mapErr(err)
 	}

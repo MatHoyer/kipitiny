@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Box, ChevronLeft, Database, GitBranch, GitPullRequestArrow, Layers, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { Activity, Box, Construction, ChevronLeft, Database, GitBranch, GitPullRequestArrow, Layers, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { lazy, Suspense, useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -33,6 +33,7 @@ import { dbFields, dbRef, envMap, envRows, envSecrets, formatBytes, liveState, s
 import {
   api,
   canBackup,
+  httpRouted,
   isDatabase,
   type DatabaseKind,
   type DatabaseRef,
@@ -48,6 +49,7 @@ import { ReachIcon, reachOf } from "@/components/reach";
 import { GitSource, useProjectGit } from "@/components/git-source";
 import { Previews } from "@/components/previews";
 import { SleepCard } from "@/components/project-sleep";
+import { MaintenanceCard, StartingCard } from "@/components/maintenance";
 import { issueRing, issueText, needsAttention, serviceIssue } from "@/components/topology";
 import { cn } from "@/lib/utils";
 
@@ -145,6 +147,15 @@ export function Project() {
         }
       />
       <PageBody>
+        {project.data?.maintenance?.enabled && (
+          <p role="status" className="flex flex-wrap items-center gap-x-2 text-sm text-amber-600 dark:text-amber-400">
+            <Construction className="size-4" />
+            Maintenance mode: visitors of the project&apos;s apps get the maintenance page.
+            <Link to="?tab=settings" replace className="underline underline-offset-4">
+              Settings
+            </Link>
+          </p>
+        )}
         {list.length > 0 && (
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatCard icon={Layers} label="Services" value={list.length} />
@@ -171,7 +182,7 @@ export function Project() {
             <TabsTrigger value="environment">Environment</TabsTrigger>
             {may("git") && <TabsTrigger value="git">Git</TabsTrigger>}
             {project.data && !parentId && <TabsTrigger value="previews">Previews</TabsTrigger>}
-            {(may("settings") || may("backups") || may("delete")) && <TabsTrigger value="settings">Settings</TabsTrigger>}
+            {(may("settings") || may("deploy") || may("backups") || may("delete")) && <TabsTrigger value="settings">Settings</TabsTrigger>}
           </TabsList>
           <TabsContent value="services" className="space-y-6">
             {services.error ? (
@@ -225,6 +236,12 @@ export function Project() {
             )}
             {project.data && services.data && may("settings") && (
               <SleepCard key={project.data.sleepAfterSeconds} project={project.data} services={services.data} />
+            )}
+            {project.data && may("deploy") && list.some(httpRouted) && (
+              <>
+                <MaintenanceCard key={`maintenance-${project.data.id}`} project={project.data} />
+                <StartingCard key={`starting-${project.data.id}`} project={project.data} />
+              </>
             )}
             {hasBackups && may("backups") && (
               <Section

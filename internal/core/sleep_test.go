@@ -150,13 +150,13 @@ func TestStartingPage(t *testing.T) {
 	}
 
 	// The starting page can be customized like the maintenance page.
-	if err := c.store.SetServiceMaintenance(ctx, svc.ID, store.Maintenance{Starting: store.StartingPage{Title: "Waking up", Message: "One moment"}}); err != nil {
+	if err := c.store.SetProjectMaintenance(ctx, p.ID, store.Maintenance{Starting: store.StartingPage{Title: "Waking up", Message: "One moment"}}); err != nil {
 		t.Fatal(err)
 	}
 	if body := string(c.StartingPage(ctx, svc.ID).Body); !strings.Contains(body, "Waking up") || !strings.Contains(body, "One moment") {
 		t.Errorf("custom text: %s", body)
 	}
-	if err := c.store.SetServiceMaintenance(ctx, svc.ID, store.Maintenance{Starting: store.StartingPage{HTML: "<h1>zzz</h1>"}}); err != nil {
+	if err := c.store.SetProjectMaintenance(ctx, p.ID, store.Maintenance{Starting: store.StartingPage{HTML: "<h1>zzz</h1>"}}); err != nil {
 		t.Fatal(err)
 	}
 	if p := c.StartingPage(ctx, svc.ID); !p.Custom || !p.Starting || string(p.Body) != "<h1>zzz</h1>" {
@@ -171,23 +171,23 @@ func TestStartingPage(t *testing.T) {
 	c.sleep.waking[p.ID] = time.Now().Add(-coldStart / 2)
 	c.sleep.mu.Unlock()
 	svc.Sleeping = false
-	if !c.starting(svc) {
+	if !c.starting(svc, false) {
 		t.Fatal("an app woken a minute ago is still starting")
 	}
 	c.sleep.mu.Lock()
 	c.sleep.waking[p.ID] = time.Now().Add(-coldStart)
 	c.sleep.mu.Unlock()
-	if c.starting(svc) {
+	if c.starting(svc, false) {
 		t.Fatal("past the cold start, the app is down, not starting")
 	}
 
 	// A stop or maintenance mode wins over sleep.
 	svc.Sleeping, svc.Stopped = true, true
-	if c.starting(svc) {
+	if c.starting(svc, false) {
 		t.Fatal("a stopped app isn't woken")
 	}
-	svc.Stopped, svc.Maintenance.Enabled = false, true
-	if c.starting(svc) {
+	svc.Stopped = false
+	if c.starting(svc, true) {
 		t.Fatal("an app in maintenance mode isn't woken")
 	}
 }

@@ -183,7 +183,7 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 
 	set := func(m store.Maintenance) {
 		t.Helper()
-		if err := c.store.SetServiceMaintenance(ctx, svc.ID, m); err != nil {
+		if err := c.store.SetProjectMaintenance(ctx, p.ID, m); err != nil {
 			t.Fatal(err)
 		}
 	}

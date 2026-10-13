@@ -275,6 +275,13 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 	if p, err = c.store.SetProjectEnv(ctx, p.ID, env, secrets); err != nil {
 		return PreviewView{}, err
 	}
+	// Previews show the parent's pages; maintenance mode stays their own.
+	m := parent.Maintenance
+	m.Enabled = p.Maintenance.Enabled
+	if err := c.store.SetProjectMaintenance(ctx, p.ID, m); err != nil {
+		return PreviewView{}, err
+	}
+	p.Maintenance = m
 	if sleep, warning := c.previewSleep(ctx, p, file, settings); sleep != p.SleepAfterSeconds {
 		if err := c.store.SetProjectSleep(ctx, p.ID, sleep); err != nil {
 			return PreviewView{}, err
