@@ -7,11 +7,13 @@ import { CheckboxField, EmptyState, ErrorText, Loading, Mono, Section, Tag } fro
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
+import { ServiceStates } from "@/components/service-states";
+import { memoryOf, useUsage } from "@/components/usage";
 import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FloatingInput } from "@/components/ui/floating-input";
-import { envMap, envRows, envSecrets, sameEnv, timeAgo, type EnvRow } from "@/lib/format";
+import { envMap, envRows, envSecrets, formatBytes, sameEnv, timeAgo, type EnvRow } from "@/lib/format";
 import { api, type PreviewSettings, type PreviewView, type Project } from "../api";
 
 const DAY = 86_400;
@@ -81,11 +83,15 @@ function PreviewCard({ parent, preview: p, canDeploy }: { parent: Project; previ
     },
   });
   const urls = Object.entries(p.urls).sort(([a], [b]) => a.localeCompare(b));
+  // Same key as the project page and the projects list, so the cache is shared.
+  const services = useQuery({ queryKey: ["services", p.id], queryFn: () => api.services(p.id), refetchInterval: 15_000 });
+  const memory = memoryOf(useUsage().data, (u) => u.projectId === p.id);
   return (
-    <Card className="gap-2 px-4">
+    // The name's link covers the card; the URLs and the close button sit above it.
+    <Card className="relative gap-2 px-4 transition-all has-[a[data-cover]:hover]:-translate-y-px has-[a[data-cover]:hover]:shadow-md">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <Link to={`/projects/${p.id}`} className="font-medium hover:underline">
+          <Link to={`/projects/${p.id}`} data-cover className="font-medium outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] hover:underline focus-visible:after:ring-3 focus-visible:after:ring-ring/50">
             {name}
           </Link>
           <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
@@ -97,12 +103,13 @@ function PreviewCard({ parent, preview: p, canDeploy }: { parent: Project; previ
             )}
             {info.commit && <span className="font-mono">{info.commit.slice(0, 7)}</span>}
             {info.deployedAt && <span>deployed {timeAgo(info.deployedAt)}</span>}
+            {!!memory && <span>{formatBytes(memory)} memory</span>}
           </p>
         </div>
         {canDeploy && (
           <ConfirmDialog
             trigger={
-              <Button variant="ghost" size="icon-sm" aria-label={`Close preview ${name}`} disabled={close.isPending}>
+              <Button variant="ghost" size="icon-sm" className="relative z-10" aria-label={`Close preview ${name}`} disabled={close.isPending}>
                 <Trash2 />
               </Button>
             }
@@ -112,8 +119,9 @@ function PreviewCard({ parent, preview: p, canDeploy }: { parent: Project; previ
           />
         )}
       </div>
+      {services.data && <ServiceStates services={services.data} />}
       {urls.length > 0 && (
-        <ul className="space-y-0.5">
+        <ul className="relative z-10 w-fit max-w-full space-y-0.5">
           {urls.map(([svc, url]) => (
             <li key={svc} className="flex min-w-0 items-center gap-1.5 text-xs">
               <span className="shrink-0 text-muted-foreground">{svc}</span>

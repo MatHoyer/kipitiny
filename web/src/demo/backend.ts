@@ -1066,6 +1066,15 @@ const routes: Route[] = [
     },
   ],
   ["GET", /^\/projects\/([^/]+)\/compose$/, ({ m, q }) => compose(m[1], q.get("service") ?? undefined)],
+  // The preview's services: the parent's, asleep (its project isn't simulated).
+  [
+    "GET",
+    /^\/projects\/acme-pr-42\/services$/,
+    () =>
+      db.services
+        .filter((s) => s.projectId === "acme")
+        .map((s) => ({ ...view(s), id: `${s.id}-pr-42`, projectId: "acme-pr-42", sleeping: true, containers: [] })),
+  ],
   ["GET", /^\/projects\/([^/]+)\/services$/, ({ m }) => db.services.filter((s) => s.projectId === projectOf(m[1]).id).map(view)],
   [
     "POST",
