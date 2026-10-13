@@ -392,7 +392,7 @@ func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Se
 	if err := dk.WaitHealthy(ctx, id, databaseReadyTimeout); err != nil {
 		return fmt.Errorf("%s did not become ready: %w", svc.Kind, err)
 	}
-	if err := c.store.SetServiceStopped(ctx, svc.ID, false); err != nil {
+	if err := c.setRunning(ctx, svc.ID); err != nil {
 		return err
 	}
 	return c.store.SetCurrentDeployment(ctx, svc.ID, dep.ID)
@@ -456,7 +456,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 		return fmt.Errorf("new version not ready: %w", readyErr)
 	}
 
-	if err := c.store.SetServiceStopped(ctx, svc.ID, false); err != nil {
+	if err := c.setRunning(ctx, svc.ID); err != nil {
 		cleanup()
 		return err
 	}
@@ -558,7 +558,7 @@ func (c *Core) swap(ctx context.Context, project store.Project, svc store.Servic
 		}
 	}
 	if err == nil {
-		if err = c.store.SetServiceStopped(ctx, svc.ID, false); err == nil {
+		if err = c.setRunning(ctx, svc.ID); err == nil {
 			err = c.store.SetCurrentDeployment(ctx, svc.ID, dep.ID)
 		}
 	}

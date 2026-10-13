@@ -217,8 +217,8 @@ func (c *Core) reconcileServer(ctx context.Context, sv store.Server, svcs []stor
 }
 
 func (c *Core) reconcileService(ctx context.Context, project store.Project, svc store.Service, cts []container.Summary) error {
-	if svc.CurrentDeploymentID == "" || svc.Stopped {
-		return nil // never deployed, or stopped on purpose
+	if svc.CurrentDeploymentID == "" || svc.Stopped || svc.Sleeping {
+		return nil // never deployed, stopped on purpose, or asleep
 	}
 	unlock, err := c.lockService(svc.ID)
 	if errors.Is(err, ErrBusy) {
@@ -230,7 +230,7 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 	defer unlock()
 
 	// Re-read under the lock: a deploy may just have finished.
-	if svc, err = c.store.GetService(ctx, svc.ID); err != nil || svc.Stopped {
+	if svc, err = c.store.GetService(ctx, svc.ID); err != nil || svc.Stopped || svc.Sleeping {
 		return err
 	}
 	if cts, err = c.serviceContainers(ctx, svc); err != nil {

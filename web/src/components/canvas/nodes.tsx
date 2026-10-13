@@ -62,8 +62,8 @@ function ServiceNode({ data: { svc }, selected }: Props<ServiceData>) {
         </p>
       ) : (
         <div className="flex items-center gap-1">
-          {svc.stopped ? (
-            <span className="text-[11px] text-muted-foreground">Stopped</span>
+          {svc.stopped || svc.sleeping ? (
+            <span className="text-[11px] text-muted-foreground">{svc.stopped ? "Stopped" : "Asleep"}</span>
           ) : live.length === 0 ? (
             <span className="text-[11px] text-muted-foreground">Not deployed</span>
           ) : (

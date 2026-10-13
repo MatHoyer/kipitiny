@@ -160,6 +160,10 @@ Replicas on one host = several identical containers with **identical Traefik rou
 - Do not write to SQLite from the loop unless something changed.
 - Remove non-running containers, start missing indices `1..Replicas`, stop+remove indices above `Replicas`.
 
+### Sleep mode
+
+Apps with a domain and port may set `sleep_after_seconds` (5 min–30 days; not with published ports, not databases). Idle signal: Traefik's Prometheus router counters (`traefik_router_requests_total`, routers labelled), on an entrypoint bound to `127.0.0.1:8082` inside the Traefik container and read every minute by an exec (`wget`), so remote servers work the same and apps on the proxy network can't read them. Counters are summed per service over its `kipitiny-<id>-<hash>@docker` routers (the pages' `@http` routers don't count); any change is activity, kept in memory only (a restart counts every app as just active). An idle app gets `sleeping=1` in the store, then its replicas are stopped (kept). The reconciler, health alerts and uptime checks skip sleeping services. A request hits the priority-1 page router (§7), whose page wakes it (`core.Wake`: clear the flag, start the containers); deploys, rollbacks and starts clear it too (`SetServiceStopped` resets `sleeping`), and a stop wins over sleep.
+
 ### Requirements for user apps
 
 - **Stateless:** sessions in DB/Redis/signed cookies.

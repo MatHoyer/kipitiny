@@ -174,6 +174,14 @@ func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreate
 		"--entrypoints.web.http.redirections.entrypoint.to=" + redirectTo,
 		"--entrypoints.web.http.redirections.entrypoint.scheme=https",
 		"--entrypoints.websecure.address=:443",
+		// Request counters per router, for sleep mode (sleep.go): on loopback,
+		// read by an exec in the container.
+		"--entrypoints.metrics.address=" + metricsAddr,
+		"--metrics.prometheus=true",
+		"--metrics.prometheus.entrypoint=metrics",
+		"--metrics.prometheus.addrouterslabels=true",
+		"--metrics.prometheus.addentrypointslabels=false",
+		"--metrics.prometheus.addserviceslabels=false",
 	}
 	// Keep X-Forwarded-For from Cloudflare, so IP allowlists and rate
 	// limits can see the client behind it (see route.behindProxy).

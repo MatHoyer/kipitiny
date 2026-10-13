@@ -76,6 +76,10 @@ export type Service = {
   publishedPorts: PublishedPort[];
   /** Seconds an app gets to exit after SIGTERM; 0 means 10. */
   stopGraceSeconds: number;
+  /** Seconds without a request before the app sleeps; 0 never (public apps only). */
+  sleepAfterSeconds: number;
+  /** Stopped by the manager for being idle; the next request starts it. */
+  sleeping: boolean;
   /** Runs in the host's network: one replica, no domain (apps only). */
   hostNetwork: boolean;
   /** The host's Docker socket mounted read-only or read-write; "" when not. */
@@ -146,6 +150,7 @@ export type TopoService = {
   port?: number;
   replicas: number;
   stopped?: boolean;
+  sleeping?: boolean;
   /** Volume holding a database's data. */
   volume?: string;
   /** IDs of the project databases its env references. */
@@ -216,6 +221,7 @@ export type ServiceInput = {
   preBackup?: string;
   publishedPorts?: PublishedPort[];
   stopGraceSeconds?: number;
+  sleepAfterSeconds?: number;
   hostNetwork?: boolean;
   dockerSocket?: "" | "ro" | "rw";
 };

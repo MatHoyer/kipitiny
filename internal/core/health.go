@@ -35,7 +35,7 @@ type svcHealth struct {
 // when a replica of the current deployment runs and passes its healthcheck
 // (or has none). judged is false when nothing is expected to run.
 func healthOf(svc store.Service, cts []container.Summary) (judged, healthy bool, detail string) {
-	if svc.CurrentDeploymentID == "" || svc.Stopped {
+	if svc.CurrentDeploymentID == "" || svc.Stopped || svc.Sleeping {
 		return false, false, ""
 	}
 	var states []string

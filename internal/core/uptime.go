@@ -172,6 +172,8 @@ func uptimeTarget(svc store.Service, chk store.UptimeCheck) (url, problem string
 		return "", "the service has no public domain"
 	case svc.Stopped:
 		return "", "the service is stopped"
+	case svc.Sleeping:
+		return "", "the service is asleep"
 	case svc.CurrentDeploymentID == "":
 		return "", "the service is not deployed yet"
 	}
