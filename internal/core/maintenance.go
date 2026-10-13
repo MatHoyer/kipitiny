@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/url"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -46,7 +47,7 @@ const (
 	providerKeySetting = "traefik_provider_key"
 )
 
-// MaintenanceInput sets an app's maintenance page and mode; see
+// MaintenanceInput sets a project's maintenance page and mode; see
 // store.Maintenance.
 type MaintenanceInput struct {
 	Enabled  bool     `json:"enabled"`
@@ -54,20 +55,17 @@ type MaintenanceInput struct {
 	Title    string   `json:"title"`
 	Message  string   `json:"message"`
 	HTML     string   `json:"html"`
-	// Starting is the page of the app waking from sleep.
+	// Starting is the page of the project waking from sleep.
 	Starting store.StartingPage `json:"starting"`
 }
 
-// SetMaintenance replaces an app's maintenance page and mode. Traefik picks
-// it up within seconds; nothing restarts. Not described by compose files, so
-// it works on git projects too.
-func (c *Core) SetMaintenance(ctx context.Context, serviceID string, in MaintenanceInput) (ServiceView, error) {
-	svc, err := c.store.GetService(ctx, serviceID)
+// SetMaintenance replaces a project's maintenance page and mode, for all its
+// apps. Traefik picks it up within seconds; nothing restarts. Not described
+// by compose files, so it works on git projects too.
+func (c *Core) SetMaintenance(ctx context.Context, projectID string, in MaintenanceInput) (store.Project, error) {
+	p, err := c.store.GetProject(ctx, projectID)
 	if err != nil {
-		return ServiceView{}, err
-	}
-	if svc.Kind != store.ServiceKindApp {
-		return ServiceView{}, fmt.Errorf("%w: only apps have a maintenance page", ErrInvalid)
+		return store.Project{}, err
 	}
 	m := store.Maintenance{
 		Enabled: in.Enabled,
@@ -86,16 +84,22 @@ func (c *Core) SetMaintenance(ctx context.Context, serviceID string, in Maintena
 		}
 	}
 	if err := validateMaintenance(m); err != nil {
-		return ServiceView{}, err
+		return store.Project{}, err
 	}
-	if m.Enabled && !httpRouted(svc) {
-		return ServiceView{}, fmt.Errorf("%w: maintenance mode needs a domain and a container port", ErrInvalid)
+	if m.Enabled {
+		svcs, err := c.store.ListServices(ctx, projectID)
+		if err != nil {
+			return store.Project{}, err
+		}
+		if !slices.ContainsFunc(svcs, httpRouted) {
+			return store.Project{}, fmt.Errorf("%w: maintenance mode needs an app with a domain and a container port", ErrInvalid)
+		}
 	}
-	if err := c.store.SetServiceMaintenance(ctx, svc.ID, m); err != nil {
-		return ServiceView{}, err
+	if err := c.store.SetProjectMaintenance(ctx, projectID, m); err != nil {
+		return store.Project{}, err
 	}
-	svc.Maintenance = m
-	return c.view(ctx, svc)
+	p.Maintenance = m
+	return maskedProject(p), nil
 }
 
 func validateMaintenance(m store.Maintenance) error {
@@ -129,48 +133,59 @@ type Page struct {
 	Body     []byte
 }
 
-// MaintenancePage is the page of the app with the given ID, or, when id is
-// empty, of the app serving rawURL's host (the URL an errors middleware
-// passes). Unknown apps get a page without a name.
+// MaintenancePage is the page of the app or the project with the given ID,
+// or, when id is empty, of the app serving rawURL's host (the URL an errors
+// middleware passes). Unknown apps get a page without a name. The page is
+// its project's, named after it: what visitors know the app as, more than
+// "web".
 func (c *Core) MaintenancePage(ctx context.Context, id, rawURL string) Page {
-	svc, ok := c.pageService(ctx, id, rawURL)
+	svc, p, ok := c.pageTarget(ctx, id, rawURL)
 	if !ok {
 		return renderPage(pageData{})
 	}
-	m := svc.Maintenance
-	name := svc.Name
-	if p, err := c.store.GetProject(ctx, svc.ProjectID); err == nil {
-		name = p.Name // what visitors know the app as, more than "web"
-	}
-	if c.starting(svc) {
-		return renderStarting(name, m.Starting)
+	m := p.Maintenance
+	if svc.ID != "" && c.starting(svc, m.Enabled) {
+		return renderStarting(p.Name, m.Starting)
 	}
 	if m.HTML != "" {
 		return Page{Custom: true, Body: []byte(m.HTML)}
 	}
-	return renderPage(pageData{Name: name, Title: m.Title, Message: m.Message, Maintenance: m.Enabled})
+	return renderPage(pageData{Name: p.Name, Title: m.Title, Message: m.Message, Maintenance: m.Enabled})
 }
 
-func (c *Core) pageService(ctx context.Context, id, rawURL string) (store.Service, bool) {
-	if id != "" {
-		svc, err := c.store.GetService(ctx, id)
-		return svc, err == nil && svc.Kind == store.ServiceKindApp
-	}
-	u, err := url.Parse(rawURL)
-	if err != nil || u.Hostname() == "" {
-		return store.Service{}, false
-	}
-	svcs, err := c.store.ListAllServices(ctx)
-	if err != nil {
-		c.log.Warn("maintenance page", "err", err)
-		return store.Service{}, false
-	}
-	for _, s := range svcs {
-		if s.Kind == store.ServiceKindApp && strings.EqualFold(s.Domain, u.Hostname()) {
-			return s, true
+// pageTarget finds whose page to serve: the app with the given ID, the
+// project with it (to see its page from the settings), or, when id is empty,
+// the app on rawURL's host. svc is zero for a project.
+func (c *Core) pageTarget(ctx context.Context, id, rawURL string) (svc store.Service, p store.Project, ok bool) {
+	switch {
+	case id != "":
+		var err error
+		if svc, err = c.store.GetService(ctx, id); errors.Is(err, store.ErrNotFound) {
+			p, err = c.store.GetProject(ctx, id)
+			return store.Service{}, p, err == nil
+		} else if err != nil || svc.Kind != store.ServiceKindApp {
+			return store.Service{}, store.Project{}, false
 		}
+	default:
+		u, err := url.Parse(rawURL)
+		if err != nil || u.Hostname() == "" {
+			return store.Service{}, store.Project{}, false
+		}
+		svcs, err := c.store.ListAllServices(ctx)
+		if err != nil {
+			c.log.Warn("maintenance page", "err", err)
+			return store.Service{}, store.Project{}, false
+		}
+		i := slices.IndexFunc(svcs, func(s store.Service) bool {
+			return s.Kind == store.ServiceKindApp && strings.EqualFold(s.Domain, u.Hostname())
+		})
+		if i < 0 {
+			return store.Service{}, store.Project{}, false
+		}
+		svc = svcs[i]
 	}
-	return store.Service{}, false
+	p, err := c.store.GetProject(ctx, svc.ProjectID)
+	return svc, p, err == nil
 }
 
 type pageData struct {
@@ -280,18 +295,14 @@ func renderPage(d pageData) Page {
 	return Page{Body: b.Bytes()}
 }
 
-// StartingPage is the page of the app with the given ID while it wakes from
-// sleep, without waking it (to see it from the settings).
+// StartingPage is the page of the app or project with the given ID while it
+// wakes from sleep, without waking it (to see it from the settings).
 func (c *Core) StartingPage(ctx context.Context, id string) Page {
-	svc, ok := c.pageService(ctx, id, "")
+	_, p, ok := c.pageTarget(ctx, id, "")
 	if !ok {
 		return renderStarting("", store.StartingPage{})
 	}
-	name := svc.Name
-	if p, err := c.store.GetProject(ctx, svc.ProjectID); err == nil {
-		name = p.Name
-	}
-	return renderStarting(name, svc.Maintenance.Starting)
+	return renderStarting(p.Name, p.Maintenance.Starting)
 }
 
 // renderStarting is the page of an app waking from sleep: it reloads every
@@ -377,9 +388,9 @@ func pagesFileConfig(upstream string) map[string]any {
 
 // TraefikConfig is the dynamic configuration a server's Traefik polls (HTTP
 // provider): for each app it routes, a fallback router serving the page when
-// no replica carries the app's router (stopped, crashed, never ready), and in
-// maintenance mode a router above the app's sending visitors to the page,
-// and the allowed IPs to the app.
+// no replica carries the app's router (stopped, crashed, never ready), and
+// while its project is in maintenance mode a router above the app's sending
+// visitors to the page, and the allowed IPs to the app.
 func (c *Core) TraefikConfig(ctx context.Context, serverID, token string) ([]byte, error) {
 	want, err := c.providerToken(ctx, serverID)
 	if err != nil {
@@ -391,6 +402,14 @@ func (c *Core) TraefikConfig(ctx context.Context, serverID, token string) ([]byt
 	svcs, err := c.store.ListAllServices(ctx)
 	if err != nil {
 		return nil, err
+	}
+	projects, err := c.store.ListProjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+	maintenance := map[string]store.Maintenance{}
+	for _, p := range projects {
+		maintenance[p.ID] = p.Maintenance
 	}
 	routers, middlewares := map[string]any{}, map[string]any{}
 	for _, svc := range svcs {
@@ -412,11 +431,12 @@ func (c *Core) TraefikConfig(ctx context.Context, serverID, token string) ([]byt
 			}
 		}
 		routers[page] = router(1, pagesService+"@file", page)
-		if !svc.Maintenance.Enabled {
+		m := maintenance[svc.ProjectID]
+		if !m.Enabled {
 			continue
 		}
 		var appChain []string
-		if len(svc.Maintenance.AllowIPs) > 0 {
+		if len(m.AllowIPs) > 0 {
 			if appChain, err = c.routerChain(ctx, svc, name); err != nil {
 				c.log.Warn("maintenance allowlist: read the app's router", "service", svc.ID, "err", err)
 			}
@@ -426,7 +446,7 @@ func (c *Core) TraefikConfig(ctx context.Context, serverID, token string) ([]byt
 			routers[name+"-maintenance"] = router(maintenancePriority, pagesService+"@file", page)
 			continue
 		}
-		allow := map[string]any{"sourceRange": svc.Maintenance.AllowIPs, "rejectStatusCode": maintenanceReject}
+		allow := map[string]any{"sourceRange": m.AllowIPs, "rejectStatusCode": maintenanceReject}
 		if rt.behindProxy {
 			allow["ipStrategy"] = map[string]int{"depth": 1}
 		}

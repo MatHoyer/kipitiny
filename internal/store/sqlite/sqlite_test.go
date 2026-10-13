@@ -1248,3 +1248,60 @@ func TestNetworks(t *testing.T) {
 		t.Fatalf("deleted network: got %v", err)
 	}
 }
+
+func TestProjectSleepAndMaintenanceMigration(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "k.db")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	sub, _ := fs.Sub(migrations, "migrations")
+	p, err := goose.NewProvider(goose.DialectSQLite3, db, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 52); err != nil {
+		t.Fatal(err)
+	}
+	// Raw inserts: the current models have columns this schema lacks.
+	for _, q := range []string{
+		`INSERT INTO projects (id, name, server_id, created_at, updated_at) VALUES ('shop', 'shop', '` + store.LocalServerID + `', '2026-01-01', '2026-01-01')`,
+		`INSERT INTO projects (id, name, server_id, parent_id, created_at, updated_at) VALUES ('pr1', 'shop-pr-1', '` + store.LocalServerID + `', 'shop', '2026-01-01', '2026-01-01')`,
+		`INSERT INTO projects (id, name, server_id, created_at, updated_at) VALUES ('blog', 'blog', '` + store.LocalServerID + `', '2026-01-01', '2026-01-01')`,
+		`INSERT INTO preview_settings (project_id, sleep_after_seconds, updated_at) VALUES ('shop', 600, '2026-01-01')`,
+		`INSERT INTO services (id, project_id, server_id, name, kind, image, sleep_after_seconds, sleeping, maintenance, created_at, updated_at)
+			VALUES ('web', 'shop', '` + store.LocalServerID + `', 'web', 'app', 'nginx', 1800, 1, '{"enabled":true,"title":"Back soon"}', '2026-01-01', '2026-01-01')`,
+		`INSERT INTO services (id, project_id, server_id, name, kind, image, maintenance, created_at, updated_at)
+			VALUES ('api', 'shop', '` + store.LocalServerID + `', 'api', 'app', 'nginx', '{"enabled":true}', '2026-01-01', '2026-01-01')`,
+	} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	shop, err := s.GetProject(ctx, "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Apps' sleep is dropped; previews sleep as their settings say.
+	if shop.SleepAfterSeconds != 0 || shop.Maintenance.Title != "Back soon" || shop.Maintenance.Enabled {
+		t.Errorf("shop: sleep %d, maintenance %+v", shop.SleepAfterSeconds, shop.Maintenance)
+	}
+	if pr, _ := s.GetProject(ctx, "pr1"); pr.SleepAfterSeconds != 600 {
+		t.Errorf("preview sleeps after %d", pr.SleepAfterSeconds)
+	}
+	if blog, _ := s.GetProject(ctx, "blog"); blog.Maintenance.Title != "" || blog.Maintenance.Enabled {
+		t.Errorf("blog: %+v", blog.Maintenance)
+	}
+	if web, _ := s.GetService(ctx, "web"); web.Sleeping {
+		t.Error("an app asleep during the upgrade stays asleep")
+	}
+}

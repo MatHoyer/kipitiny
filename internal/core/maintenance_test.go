@@ -19,28 +19,25 @@ func TestSetMaintenanceValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres", Replicas: 1})
-	if err != nil {
+	if _, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
-	worker, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "worker", Kind: store.ServiceKindApp, Image: "busybox", Replicas: 1})
-	if err != nil {
+	if _, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "worker", Kind: store.ServiceKindApp, Image: "busybox", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
-	for name, tc := range map[string]struct {
-		id string
-		in MaintenanceInput
-	}{
-		"database":       {db.ID, MaintenanceInput{Title: "x"}},
-		"no domain":      {worker.ID, MaintenanceInput{Enabled: true}},
-		"bad range":      {worker.ID, MaintenanceInput{AllowIPs: []string{"10.0.0.0/33"}}},
-		"long title":     {worker.ID, MaintenanceInput{Title: strings.Repeat("a", maxPageTitle+1)}},
-		"huge page":      {worker.ID, MaintenanceInput{HTML: strings.Repeat("a", maxPageHTML+1)}},
-		"not utf-8 html": {worker.ID, MaintenanceInput{HTML: "\xff"}},
+	for name, in := range map[string]MaintenanceInput{
+		"no app on a domain": {Enabled: true},
+		"bad range":          {AllowIPs: []string{"10.0.0.0/33"}},
+		"long title":         {Title: strings.Repeat("a", maxPageTitle+1)},
+		"huge page":          {HTML: strings.Repeat("a", maxPageHTML+1)},
+		"not utf-8 html":     {HTML: "\xff"},
 	} {
-		if _, err := c.SetMaintenance(ctx, tc.id, tc.in); !errors.Is(err, ErrInvalid) {
+		if _, err := c.SetMaintenance(ctx, p.ID, in); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: err = %v, want ErrInvalid", name, err)
 		}
+	}
+	if got, err := c.SetMaintenance(ctx, p.ID, MaintenanceInput{Title: " Back soon "}); err != nil || got.Maintenance.Title != "Back soon" {
+		t.Errorf("page without an app on a domain: %+v, %v", got.Maintenance, err)
 	}
 }
 
@@ -65,7 +62,7 @@ func TestMaintenancePage(t *testing.T) {
 	}
 
 	m := store.Maintenance{Enabled: true, Title: "Upgrading <db>", Message: "Back at 3pm."}
-	if err := c.store.SetServiceMaintenance(ctx, svc.ID, m); err != nil {
+	if err := c.store.SetProjectMaintenance(ctx, p.ID, m); err != nil {
 		t.Fatal(err)
 	}
 	body := string(c.MaintenancePage(ctx, svc.ID, "").Body)
@@ -73,7 +70,7 @@ func TestMaintenancePage(t *testing.T) {
 		t.Errorf("custom text:\n%s", body)
 	}
 	m = store.Maintenance{Enabled: true}
-	if err := c.store.SetServiceMaintenance(ctx, svc.ID, m); err != nil {
+	if err := c.store.SetProjectMaintenance(ctx, p.ID, m); err != nil {
 		t.Fatal(err)
 	}
 	if body := string(c.MaintenancePage(ctx, svc.ID, "").Body); !strings.Contains(body, "shop is down for maintenance") {
@@ -81,19 +78,29 @@ func TestMaintenancePage(t *testing.T) {
 	}
 
 	m.HTML = "<h1>Gone fishing</h1>"
-	if err := c.store.SetServiceMaintenance(ctx, svc.ID, m); err != nil {
+	if err := c.store.SetProjectMaintenance(ctx, p.ID, m); err != nil {
 		t.Fatal(err)
 	}
 	if page := c.MaintenancePage(ctx, svc.ID, ""); !page.Custom || string(page.Body) != m.HTML {
 		t.Errorf("custom HTML: %+v", page)
 	}
-	// A settings update (the form, a git sync) keeps it.
-	svc.Image = "nginx:2"
-	if _, err := c.store.UpdateService(ctx, svc); err != nil {
+	// The project's own ID serves its page too (to see it from the settings).
+	if page := c.MaintenancePage(ctx, p.ID, ""); !page.Custom || string(page.Body) != m.HTML {
+		t.Errorf("page by project: %+v", page)
+	}
+	// Every app of the project shows it.
+	if _, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "api", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1, Domain: "api.shop.example.com", Port: 80}); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := c.store.GetService(ctx, svc.ID); got.Maintenance.HTML != m.HTML || !got.Maintenance.Enabled {
-		t.Errorf("maintenance after update = %+v", got.Maintenance)
+	if page := c.MaintenancePage(ctx, "", "https://api.shop.example.com/"); string(page.Body) != m.HTML {
+		t.Errorf("another app of the project: %s", page.Body)
+	}
+	// A rename keeps it.
+	if err := c.store.RenameProject(ctx, p.ID, "store"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := c.store.GetProject(ctx, p.ID); got.Maintenance.HTML != m.HTML || !got.Maintenance.Enabled {
+		t.Errorf("maintenance after rename = %+v", got.Maintenance)
 	}
 }
 
@@ -168,7 +175,7 @@ func TestTraefikConfig(t *testing.T) {
 		t.Errorf("page path = %s", got)
 	}
 
-	if err := c.store.SetServiceMaintenance(ctx, web.ID, store.Maintenance{Enabled: true}); err != nil {
+	if err := c.store.SetProjectMaintenance(ctx, p.ID, store.Maintenance{Enabled: true}); err != nil {
 		t.Fatal(err)
 	}
 	r = get().HTTP.Routers[name+"-maintenance"]

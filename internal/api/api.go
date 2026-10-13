@@ -56,6 +56,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("PUT /api/projects/{id}/env", a.setProjectEnv)
 	handle("PUT /api/projects/{id}/name", a.renameProject)
 	handle("PUT /api/projects/{id}/sleep", a.setProjectSleep)
+	handle("PUT /api/projects/{id}/maintenance", a.setMaintenance)
 	handle("GET /api/projects/{id}/compose", a.exportCompose)
 	handle("POST /api/projects/{id}/compose", a.applyCompose)
 	handle("POST /api/projects/{id}/export", a.exportBundle)
@@ -82,7 +83,6 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("DELETE /api/services/{id}", a.deleteService)
 	handle("PUT /api/services/{id}/name", a.renameService)
 	handle("PUT /api/services/{id}/networks", a.setServiceNetworks)
-	handle("PUT /api/services/{id}/maintenance", a.setMaintenance)
 	handle("POST /api/services/{id}/deploy", a.deployService)
 	handle("POST /api/services/{id}/rollback", a.rollbackService)
 	handle("POST /api/services/{id}/{action}", a.serviceAction)
@@ -326,6 +326,19 @@ func (a *API) setProjectSleep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, p)
+}
+
+func (a *API) setMaintenance(w http.ResponseWriter, r *http.Request) {
+	var in core.MaintenanceInput
+	if !decode(w, r, &in) {
+		return
+	}
+	v, err := a.core.SetMaintenance(r.Context(), r.PathValue("id"), in)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
 }
 
 func (a *API) deleteProject(w http.ResponseWriter, r *http.Request) {

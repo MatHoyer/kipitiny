@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, type ReactNode } from "react";
-import { MaintenanceCard, StartingCard } from "@/components/maintenance";
 import { RenameCard } from "@/components/rename-card";
 import { DirtyContext } from "@/components/save-bar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -13,7 +12,7 @@ import { DomainCard, NetworksCard, PortsCard } from "./networking";
 import { GitOwned } from "./parts";
 import { VolumesCard } from "./volumes";
 
-const sectionIds = ["general", "networking", "access", "storage", "maintenance", "advanced"] as const;
+const sectionIds = ["general", "networking", "access", "storage", "advanced"] as const;
 type SectionId = (typeof sectionIds)[number];
 
 /**
@@ -42,7 +41,6 @@ export function ServiceSettings({
     { id: "networking", label: "Networking" },
     ...(http ? [{ id: "access" as const, label: "Access" }] : []),
     ...(app ? [{ id: "storage" as const, label: "Storage" }] : []),
-    ...(http && projectName ? [{ id: "maintenance" as const, label: "Maintenance" }] : []),
     { id: "advanced", label: "Advanced" },
   ];
   const [section, setSection] = useTab(
@@ -122,12 +120,6 @@ export function ServiceSettings({
       <GitOwned path={gitPath}>
         <VolumesCard key={`volumes-${svc.id}`} svc={svc} />
       </GitOwned>
-    ),
-    maintenance: projectName && (
-      <>
-        <MaintenanceCard key={`maintenance-${svc.id}`} svc={svc} projectName={projectName} />
-        <StartingCard key={`starting-${svc.id}`} svc={svc} projectName={projectName} />
-      </>
     ),
     advanced: (
       <>

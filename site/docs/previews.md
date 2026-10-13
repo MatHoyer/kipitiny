@@ -45,7 +45,8 @@ In the project's **Previews** tab, under *Preview settings*:
 | Domains | as set | `<preview>-<service>.<base domain>`, with `X-Robots-Tag: noindex` |
 | Replicas | as set | one each |
 | Published ports, host access | as set | left out (the server's ports are production's) |
-| Uptime checks, backups, maintenance | as set | none |
+| Uptime checks, backups | as set | none |
+| Maintenance and starting pages | as set | the project's, kept up to date on each deploy; maintenance mode is the preview's own |
 
 A preview never quietly falls back on production:
 

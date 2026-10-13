@@ -191,8 +191,8 @@ type Store interface {
 	DeleteNetwork(ctx context.Context, id string) error
 	// SetServiceNetworks replaces the networks a service joins.
 	SetServiceNetworks(ctx context.Context, serviceID string, networkIDs []string) error
-	// SetServiceMaintenance replaces an app's maintenance page and mode.
-	SetServiceMaintenance(ctx context.Context, serviceID string, m Maintenance) error
+	// SetProjectMaintenance replaces a project's maintenance page and mode.
+	SetProjectMaintenance(ctx context.Context, projectID string, m Maintenance) error
 
 	ListCanvasPositions(ctx context.Context) ([]CanvasPosition, error)
 	// SaveCanvasPositions upserts ps and deletes the nodes in remove.
@@ -324,9 +324,13 @@ type Project struct {
 	// SleepAfterSeconds stops every service after that long without a
 	// request to its apps, and starts them again on the next one; 0 never
 	// does.
-	SleepAfterSeconds int       `bun:"sleep_after_seconds" json:"sleepAfterSeconds"`
-	CreatedAt         time.Time `bun:"created_at" json:"createdAt"`
-	UpdatedAt         time.Time `bun:"updated_at" json:"updatedAt"`
+	SleepAfterSeconds int `bun:"sleep_after_seconds" json:"sleepAfterSeconds"`
+	// Maintenance is the page visitors of its apps get while one is down or
+	// the project is in maintenance mode. Set on its own, never by a
+	// compose file.
+	Maintenance Maintenance `bun:"maintenance,type:text" json:"maintenance"`
+	CreatedAt   time.Time   `bun:"created_at" json:"createdAt"`
+	UpdatedAt   time.Time   `bun:"updated_at" json:"updatedAt"`
 }
 
 // Preview is what a preview environment was last deployed from.
@@ -452,11 +456,8 @@ type Service struct {
 	// Networks are the IDs of the networks created by hand that the service
 	// joins besides its project network. Set on their own, never by a
 	// compose file, so a git sync keeps them.
-	Networks []string `bun:"networks" json:"networks"`
-	// Maintenance is the page visitors get while the app is down or in
-	// maintenance mode. Set on its own, never by a compose file.
-	Maintenance         Maintenance `bun:"maintenance,type:text" json:"maintenance"`
-	CurrentDeploymentID string      `bun:"current_deployment_id" json:"currentDeploymentId"`
+	Networks            []string `bun:"networks" json:"networks"`
+	CurrentDeploymentID string   `bun:"current_deployment_id" json:"currentDeploymentId"`
 	// Stopped is the desired run state after the user stopped the service.
 	Stopped bool `bun:"stopped" json:"stopped"`
 	// Sleeping is set while the manager keeps the service stopped for its
@@ -561,20 +562,21 @@ type RateLimit struct {
 	Burst   int `json:"burst"`
 }
 
-// Maintenance is an app's maintenance page, served by the manager through
-// Traefik when the app has no replica to answer, and maintenance mode,
-// which serves it to every visitor while the replicas keep running.
+// Maintenance is a project's maintenance page, served by the manager through
+// Traefik when one of its apps has no replica to answer, and maintenance
+// mode, which serves it to every visitor of its apps while the replicas
+// keep running.
 type Maintenance struct {
 	// Enabled is maintenance mode.
 	Enabled bool `json:"enabled"`
-	// AllowIPs still reach the app in maintenance mode (IPs or CIDR ranges).
+	// AllowIPs still reach the apps in maintenance mode (IPs or CIDR ranges).
 	AllowIPs []string `json:"allowIps,omitempty"`
 	// Title and Message replace the default page's text; empty keeps it.
 	Title   string `json:"title,omitempty"`
 	Message string `json:"message,omitempty"`
 	// HTML, when set, is served instead of the default page.
 	HTML string `json:"html,omitempty"`
-	// Starting is the page visitors get while the app wakes from sleep.
+	// Starting is the page visitors get while the project wakes from sleep.
 	Starting StartingPage `json:"starting,omitzero"`
 }
 

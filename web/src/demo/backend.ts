@@ -156,8 +156,7 @@ function containers(s: DemoDb["services"][number]): Container[] {
 
 function view(s: DemoDb["services"][number]): Service {
   const env = Object.fromEntries(Object.entries(s.env).map(([k, v]) => [k, s.secrets.includes(k) && !/^\s*\{\{.*\}\}\s*$/.test(v) ? MASK : v]));
-  // Saved before maintenance pages existed.
-  return { ...s, maintenance: s.maintenance ?? { enabled: false }, env, containers: containers(s) };
+  return { ...s, env, containers: containers(s) };
 }
 
 const projectNet = (p: Project) => `kipitiny-${p.id}`;
@@ -990,7 +989,7 @@ const routes: Route[] = [
       const name = String(body.name ?? "").trim();
       if (!nameRe.test(name)) throw invalid("name must be lowercase letters, digits and dashes (max 40)");
       if (db.projects.some((p) => p.name === name)) throw new HttpError(409, "already exists (name or domain taken)");
-      const p: Project = { id: newId("p"), name, serverId: "local", env: {}, secrets: [], sleepAfterSeconds: 0, createdAt: now(), updatedAt: now() };
+      const p: Project = { id: newId("p"), name, serverId: "local", env: {}, secrets: [], sleepAfterSeconds: 0, maintenance: { enabled: false }, createdAt: now(), updatedAt: now() };
       db.projects.push(p);
       save();
       return p;
@@ -1017,7 +1016,7 @@ const routes: Route[] = [
       if (body.dryRun) return { projectId: body.projectId, plan };
       let projectId = body.projectId;
       if (!projectId) {
-        const p: Project = { id: newId("p"), name, serverId: "local", env: {}, secrets: [], sleepAfterSeconds: 0, createdAt: now(), updatedAt: now() };
+        const p: Project = { id: newId("p"), name, serverId: "local", env: {}, secrets: [], sleepAfterSeconds: 0, maintenance: { enabled: false }, createdAt: now(), updatedAt: now() };
         db.projects.push(p);
         projectId = p.id;
       }
@@ -1113,6 +1112,18 @@ const routes: Route[] = [
   ],
   [
     "PUT",
+    /^\/projects\/([^/]+)\/maintenance$/,
+    ({ m, body }) => {
+      const p = projectOf(m[1]);
+      if (body.enabled && !db.services.some((s) => s.projectId === p.id && s.domain && s.port))
+        throw invalid("maintenance mode needs an app with a domain and a container port");
+      p.maintenance = body;
+      save();
+      return p;
+    },
+  ],
+  [
+    "PUT",
     /^\/projects\/([^/]+)\/sleep$/,
     ({ m, body }) => {
       const p = projectOf(m[1]);
@@ -1160,17 +1171,6 @@ const routes: Route[] = [
     ({ m, body }) => {
       const s = serviceOf(m[1]);
       s.networks = (body.networks as string[]).filter((id) => db.networks.some((n) => n.id === id));
-      save();
-      return view(s);
-    },
-  ],
-  [
-    "PUT",
-    /^\/services\/([^/]+)\/maintenance$/,
-    ({ m, body }) => {
-      const s = serviceOf(m[1]);
-      if (body.enabled && !(s.domain && s.port)) throw invalid("maintenance mode needs a domain and a container port");
-      s.maintenance = body;
       save();
       return view(s);
     },

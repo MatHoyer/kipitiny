@@ -23,18 +23,20 @@ It answers `503` with `Retry-After`, so search engines come back later instead
 of indexing it, and uptime checks still see the app as down. Replies the app
 sends itself, including its own 503s, pass through unchanged.
 
-Change it in the service's *Settings › Maintenance*: a title and a message, or
+The page belongs to the project: every app of the project shows the same one.
+Change it in the project's *Settings › Maintenance*: a title and a message, or
 a whole HTML document of your own (up to 64 KiB; inline its styles and images,
 or load them from another site, since the app is down). **Open the saved page**
 shows it.
 
-**Maintenance mode** in the same card sends every visitor to the page while
-the replicas keep running, e.g. during a long migration or manual work. IPs or
-ranges listed under *Still reach the app* get the app as usual (through its
-access settings), to check it before reopening. It applies within seconds and
-restarts nothing; agents turn it on with the `set_maintenance` MCP tool, or
-call `PUT /api/services/{id}/maintenance`. It is not part of compose files, so
-git projects set it there too.
+**Maintenance mode** in the same card sends every visitor of every app of the
+project to the page while the replicas keep running, e.g. during a long
+migration or manual work. IPs or ranges listed under *Still reach the apps*
+get the apps as usual (through each app's access settings), to check them
+before reopening. It applies within seconds and restarts nothing; agents turn
+it on with the `set_maintenance` MCP tool, or call
+`PUT /api/projects/{id}/maintenance`. It is not part of compose files, so git
+projects set it there too.
 
 The manager serves these pages through each server's Traefik: there is no
 extra container. Remote servers fetch them from the manager's domain, so they

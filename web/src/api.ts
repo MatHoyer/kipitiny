@@ -33,6 +33,8 @@ export type Project = {
   preview?: PreviewInfo;
   /** Seconds without a request to its apps before every service stops; 0 never. */
   sleepAfterSeconds: number;
+  /** The page visitors of its apps get while one can't answer, and maintenance mode. */
+  maintenance: Maintenance;
   createdAt: string;
   updatedAt: string;
 };
@@ -117,8 +119,6 @@ export type Service = {
   dockerSocket: "" | "ro" | "rw";
   /** IDs of the networks created by hand it joins, besides its project network. */
   networks: string[];
-  /** The page visitors get while the app can't answer, and maintenance mode (apps only). */
-  maintenance: Maintenance;
   currentDeploymentId: string;
   stopped: boolean;
   createdAt: string;
@@ -145,7 +145,7 @@ export type Maintenance = {
   message?: string;
   /** A whole HTML document served instead of the default page. */
   html?: string;
-  /** The page visitors get while the app wakes from sleep. */
+  /** The page visitors get while the project wakes from sleep. */
   starting?: StartingPage;
 };
 
@@ -1119,7 +1119,7 @@ export const api = {
   updateService: (id: string, patch: ServicePatch) => request<Service>(`/services/${id}`, json("PATCH", patch)),
   renameService: (id: string, name: string) => request<Service>(`/services/${id}/name`, json("PUT", { name })),
   setServiceNetworks: (id: string, networks: string[]) => request<Service>(`/services/${id}/networks`, json("PUT", { networks })),
-  setMaintenance: (id: string, m: Required<Maintenance>) => request<Service>(`/services/${id}/maintenance`, json("PUT", m)),
+  setMaintenance: (id: string, m: Required<Maintenance>) => request<Project>(`/projects/${id}/maintenance`, json("PUT", m)),
   deleteService: (id: string, confirm = "") =>
     request<void>(`/services/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),
   connection: (id: string) => request<Connection>(`/services/${id}/connection`),

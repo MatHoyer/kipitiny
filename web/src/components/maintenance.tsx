@@ -8,7 +8,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingTextarea } from "@/components/ui/floating-textarea";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Applies } from "@/components/service-settings/parts";
-import { api, type Maintenance, type Service } from "../api";
+import { api, type Maintenance, type Project } from "../api";
 
 // CodeMirror and its HTML, CSS and JS modes load only for custom pages.
 const HtmlEditor = lazy(() => import("./html-editor"));
@@ -69,21 +69,21 @@ const htmlStarter = `<!doctype html>
 </body>
 </html>`;
 
-/** Shows the page visitors get while the app can't answer, and turns maintenance mode on. */
-export function MaintenanceCard({ svc, projectName }: { svc: Service; projectName: string }) {
+/** Shows the page visitors get while an app of the project can't answer, and turns maintenance mode on. */
+export function MaintenanceCard({ project }: { project: Project }) {
   const qc = useQueryClient();
-  const d = defaults(projectName || svc.name);
-  const [form, setForm] = useState(() => toForm(svc.maintenance, d));
-  const dirty = JSON.stringify(toInput(form, d)) !== JSON.stringify(toInput(toForm(svc.maintenance, d), d));
+  const d = defaults(project.name);
+  const [form, setForm] = useState(() => toForm(project.maintenance, d));
+  const dirty = JSON.stringify(toInput(form, d)) !== JSON.stringify(toInput(toForm(project.maintenance, d), d));
   const formId = useId();
   const save = useMutation({
     meta: { error: "Couldn't save the maintenance page" },
     // The starting page is saved by its own card.
-    mutationFn: () => api.setMaintenance(svc.id, { ...toInput(form, d), starting: svc.maintenance?.starting ?? {} }),
+    mutationFn: () => api.setMaintenance(project.id, { ...toInput(form, d), starting: project.maintenance?.starting ?? {} }),
     onSuccess: (updated) => {
-      qc.setQueryData(["service", svc.id], updated);
+      qc.setQueryData(["project", project.id], updated);
       setForm(toForm(updated.maintenance, d));
-      const was = !!svc.maintenance?.enabled;
+      const was = !!project.maintenance?.enabled;
       toast.success(updated.maintenance.enabled === was ? "Maintenance page saved" : updated.maintenance.enabled ? "Maintenance mode on" : "Maintenance mode off", {
         description: "Traefik applies it within seconds; nothing restarted.",
       });
@@ -93,7 +93,7 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
   const pick = (custom: boolean) => {
     setForm((f) => ({ ...f, custom }));
     if (!custom || form.html) return;
-    fetch(`/api/pages/${svc.id}`)
+    fetch(`/api/pages/${project.id}`)
       .then((r) => (r.headers.get("Content-Type")?.startsWith("text/html") ? r.text() : htmlStarter))
       .catch(() => htmlStarter)
       .then((html) => setForm((f) => (f.custom && !f.html ? { ...f, html } : f)));
@@ -107,8 +107,8 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
       title={<Applies title="Maintenance" when="now" />}
       description={
         <>
-          Visitors of <Mono>{svc.domain}</Mono> get this page (503, so search engines come back later) while no replica can answer: stopped,
-          crashed or not ready yet.
+          Visitors of the project&apos;s apps get this page (503, so search engines come back later) while an app has no replica to answer:
+          stopped, crashed or not ready yet.
         </>
       }
     >
@@ -116,7 +116,7 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
         <div className="space-y-3">
           <CheckboxField
             label="Maintenance mode"
-            description="Every visitor gets the page while the replicas keep running, e.g. during a migration. Nothing restarts."
+            description="Every visitor of every app of the project gets the page while the replicas keep running, e.g. during a migration. Nothing restarts."
             checked={form.enabled}
             // The default message follows the mode; a custom one stays.
             onCheckedChange={(enabled) =>
@@ -125,12 +125,12 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
           />
           {form.enabled && (
             <FloatingTextarea
-              label="Still reach the app"
+              label="Still reach the apps"
               value={form.allow}
               onChange={(e) => setForm({ ...form, allow: e.target.value })}
               placeholder={"203.0.113.7\n10.0.0.0/8"}
               className="[&_textarea]:font-mono"
-              description="One IP or CIDR range per line, e.g. your own, to check the app before reopening it. They still go through the app's access settings."
+              description="One IP or CIDR range per line, e.g. your own, to check the apps before reopening them. They still go through each app's access settings."
             />
           )}
         </div>
@@ -178,7 +178,7 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
             </>
           )}
           <a
-            href={`/api/pages/${svc.id}`}
+            href={`/api/pages/${project.id}`}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
@@ -188,7 +188,7 @@ export function MaintenanceCard({ svc, projectName }: { svc: Service; projectNam
           </a>
         </div>
       </form>
-      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setForm(toForm(svc.maintenance, d))} label="Save maintenance" />
+      <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setForm(toForm(project.maintenance, d))} label="Save maintenance" />
     </Section>
   );
 }
@@ -222,23 +222,23 @@ const toStartingForm = (m: Maintenance | undefined, d: ReturnType<typeof startin
   html: m?.starting?.html ?? "",
 });
 
-/** The page visitors get while a sleeping app starts again. */
-export function StartingCard({ svc, projectName }: { svc: Service; projectName: string }) {
+/** The page visitors get while a sleeping project starts again. */
+export function StartingCard({ project }: { project: Project }) {
   const qc = useQueryClient();
-  const d = startingDefaults(projectName || svc.name);
-  const [form, setForm] = useState(() => toStartingForm(svc.maintenance, d));
+  const d = startingDefaults(project.name);
+  const [form, setForm] = useState(() => toStartingForm(project.maintenance, d));
   const input = (f: StartingForm) => {
     if (f.custom) return { html: f.html };
     const title = f.title.trim(), message = f.message.trim();
     return { title: title === d.title ? "" : title, message: message === d.message ? "" : message };
   };
-  const dirty = JSON.stringify(input(form)) !== JSON.stringify(input(toStartingForm(svc.maintenance, d)));
+  const dirty = JSON.stringify(input(form)) !== JSON.stringify(input(toStartingForm(project.maintenance, d)));
   const formId = useId();
   const save = useMutation({
     meta: { error: "Couldn't save the starting page" },
-    mutationFn: () => api.setMaintenance(svc.id, { ...saved(svc.maintenance), starting: input(form) }),
+    mutationFn: () => api.setMaintenance(project.id, { ...saved(project.maintenance), starting: input(form) }),
     onSuccess: (updated) => {
-      qc.setQueryData(["service", svc.id], updated);
+      qc.setQueryData(["project", project.id], updated);
       setForm(toStartingForm(updated.maintenance, d));
       toast.success("Starting page saved");
     },
@@ -247,7 +247,7 @@ export function StartingCard({ svc, projectName }: { svc: Service; projectName: 
   const pick = (custom: boolean) => {
     setForm((f) => ({ ...f, custom }));
     if (!custom || form.html) return;
-    fetch(`/api/pages/${svc.id}?page=starting`)
+    fetch(`/api/pages/${project.id}?page=starting`)
       .then((r) => (r.headers.get("Content-Type")?.startsWith("text/html") ? r.text() : startingStarter))
       .catch(() => startingStarter)
       .then((html) => setForm((f) => (f.custom && !f.html ? { ...f, html } : f)));
@@ -261,8 +261,8 @@ export function StartingCard({ svc, projectName }: { svc: Service; projectName: 
       title={<Applies title="Starting page" when="now" />}
       description={
         <>
-          Visitors get this page while the project wakes from sleep (project settings › Sleep mode). It reloads every 3 seconds until the
-          app answers; API calls get a 503 with <Mono>Retry-After</Mono> instead.
+          Visitors get this page while the project wakes from sleep. It reloads every 3 seconds until the app answers; API calls get a 503
+          with <Mono>Retry-After</Mono> instead.
         </>
       }
     >
@@ -303,7 +303,7 @@ export function StartingCard({ svc, projectName }: { svc: Service; projectName: 
           </>
         )}
         <a
-          href={`/api/pages/${svc.id}?page=starting`}
+          href={`/api/pages/${project.id}?page=starting`}
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
@@ -316,7 +316,7 @@ export function StartingCard({ svc, projectName }: { svc: Service; projectName: 
         form={formId}
         dirty={dirty}
         saving={save.isPending}
-        onReset={() => setForm(toStartingForm(svc.maintenance, d))}
+        onReset={() => setForm(toStartingForm(project.maintenance, d))}
         label="Save starting page"
       />
     </Section>

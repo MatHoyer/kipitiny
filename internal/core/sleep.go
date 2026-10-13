@@ -337,9 +337,9 @@ const coldStart = 2 * time.Minute
 
 // starting reports whether svc's project is asleep or was woken less than
 // coldStart ago, waking it in the background when it sleeps: a visitor gets
-// the starting page.
-func (c *Core) starting(svc store.Service) bool {
-	if svc.Stopped || svc.Maintenance.Enabled {
+// the starting page. Maintenance mode wins: nothing wakes.
+func (c *Core) starting(svc store.Service, maintenance bool) bool {
+	if svc.Stopped || maintenance {
 		return false
 	}
 	now := time.Now()
