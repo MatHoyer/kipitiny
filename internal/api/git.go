@@ -2,8 +2,10 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/MatHoyer/kipitiny/internal/core"
 )
@@ -61,15 +63,27 @@ func (a *API) syncProjectGit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, plan)
 }
 
+// webhookReadTimeout bounds how long a webhook delivery may take to send
+// its body: the server has no read timeout (uploads, streams).
+const webhookReadTimeout = 30 * time.Second
+
+// webhookBody reads a webhook's body, at most max bytes, when core asks for
+// it: after the sender is known, so unknown callers aren't buffered.
+func webhookBody(w http.ResponseWriter, r *http.Request, max int64) func() ([]byte, error) {
+	return func() ([]byte, error) {
+		_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(webhookReadTimeout))
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, max))
+		if err != nil {
+			return nil, fmt.Errorf("%w: payload too large or too slow", core.ErrInvalid)
+		}
+		return body, nil
+	}
+}
+
 // gitHook receives push webhooks for a git project (GitHub, Gitea, GitLab,
 // generic bearer token).
 func (a *API) gitHook(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 5<<20))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "payload too large")
-		return
-	}
-	err = a.core.HandleGitWebhook(r.Context(), r.PathValue("id"), r.Header.Get, body)
+	err := a.core.HandleGitWebhook(r.Context(), r.PathValue("id"), r.Header.Get, webhookBody(w, r, 5<<20))
 	switch {
 	case errors.Is(err, core.ErrIgnored):
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})

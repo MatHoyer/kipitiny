@@ -539,10 +539,20 @@ func (c *Core) kickGit(projectID string) {
 // HandleGitWebhook authenticates a push webhook and syncs the project when
 // it concerns its branch. It accepts GitHub/Gitea (X-Hub-Signature-256
 // HMAC), GitLab (X-Gitlab-Token) and generic (Bearer token) deliveries.
-func (c *Core) HandleGitWebhook(ctx context.Context, projectID string, header func(string) string, body []byte) error {
+// The body is only read once the project is known and the delivery carries
+// a signature or token, so unknown callers can't make the manager buffer
+// payloads.
+func (c *Core) HandleGitWebhook(ctx context.Context, projectID string, header func(string) string, readBody func() ([]byte, error)) error {
 	g, err := c.store.GetProjectGit(ctx, projectID)
 	if err != nil || g.WebhookSecret == "" {
 		return ErrUnauthorized // don't reveal which IDs exist
+	}
+	if header("X-Hub-Signature-256") == "" && header("X-Gitlab-Token") == "" && !strings.HasPrefix(header("Authorization"), "Bearer ") {
+		return ErrUnauthorized
+	}
+	body, err := readBody()
+	if err != nil {
+		return err
 	}
 	if !webhookAuthorized(g.WebhookSecret, header, body) {
 		return ErrUnauthorized

@@ -190,9 +190,22 @@ func TestGitProviderWebhook(t *testing.T) {
 		mac := hmac.New(sha256.New, []byte(secret))
 		mac.Write([]byte(body))
 		h := http.Header{"X-Hub-Signature-256": {"sha256=" + hex.EncodeToString(mac.Sum(nil))}, "X-Github-Event": {event}}
-		return c.HandleGitProviderWebhook(ctx, p.ID, h.Get, []byte(body))
+		return c.HandleGitProviderWebhook(ctx, p.ID, h.Get, func() ([]byte, error) { return []byte(body), nil })
 	}
 	push := `{"ref":"refs/heads/main","repository":{"clone_url":"https://github.com/Me/infra.git"}}`
+	unread := func() ([]byte, error) { t.Error("body read before the sender was known"); return nil, nil }
+	if err := c.HandleGitProviderWebhook(ctx, "nope", http.Header{"X-Hub-Signature-256": {"sha256=00"}}.Get, unread); !errors.Is(err, ErrUnauthorized) {
+		t.Errorf("unknown provider: %v", err)
+	}
+	if err := c.HandleGitProviderWebhook(ctx, p.ID, http.Header{}.Get, unread); !errors.Is(err, ErrUnauthorized) {
+		t.Errorf("unsigned: %v", err)
+	}
+	if err := c.HandleGitWebhook(ctx, proj.ID, http.Header{}.Get, unread); !errors.Is(err, ErrUnauthorized) {
+		t.Errorf("unsigned project hook: %v", err)
+	}
+	if err := c.HandleGitWebhook(ctx, "nope", http.Header{"X-Gitlab-Token": {"w"}}.Get, unread); !errors.Is(err, ErrUnauthorized) {
+		t.Errorf("unknown project: %v", err)
+	}
 	if err := send("push", push, "wrong"); !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("bad signature: %v", err)
 	}

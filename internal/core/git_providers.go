@@ -519,16 +519,25 @@ func checkProviderRepo(p store.GitProvider, repoURL string) error {
 }
 
 // HandleGitProviderWebhook authenticates a GitHub App's push webhook and
-// syncs the projects following that repository and branch.
-func (c *Core) HandleGitProviderWebhook(ctx context.Context, providerID string, header func(string) string, body []byte) error {
+// syncs the projects following that repository and branch. The body is only
+// read once the provider is known and the delivery is signed, so unknown
+// callers can't make the manager buffer payloads.
+func (c *Core) HandleGitProviderWebhook(ctx context.Context, providerID string, header func(string) string, readBody func() ([]byte, error)) error {
 	p, err := c.store.GetGitProvider(ctx, providerID)
 	if err != nil || p.WebhookSecret == "" {
 		return ErrUnauthorized // don't reveal which IDs exist
 	}
 	sig, ok := strings.CutPrefix(header("X-Hub-Signature-256"), "sha256=")
+	if !ok {
+		return ErrUnauthorized
+	}
+	body, err := readBody()
+	if err != nil {
+		return err
+	}
 	mac := hmac.New(sha256.New, []byte(p.WebhookSecret))
 	mac.Write(body)
-	if !ok || !hmac.Equal([]byte(sig), []byte(hex.EncodeToString(mac.Sum(nil)))) {
+	if !hmac.Equal([]byte(sig), []byte(hex.EncodeToString(mac.Sum(nil)))) {
 		return ErrUnauthorized
 	}
 	if header("X-GitHub-Event") != "push" {
