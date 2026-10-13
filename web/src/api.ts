@@ -27,8 +27,39 @@ export type Project = {
   env: Record<string, string>;
   /** Names of the env entries that are secrets: their values come back masked. */
   secrets: string[];
+  /** Set on a preview environment: the project it copies. */
+  parentId?: string;
+  /** What a preview was last deployed from; empty for other projects. */
+  preview?: PreviewInfo;
   createdAt: string;
   updatedAt: string;
+};
+
+export type PreviewInfo = {
+  name?: string;
+  branch?: string;
+  commit?: string;
+  /** Closed after this long without a request or a deploy; 0 never. */
+  ttlSeconds?: number;
+  deployedAt?: string;
+};
+
+/** A preview with where its apps are, by service name. */
+export type PreviewView = Project & { urls: Record<string, string> };
+
+/** How a project's previews differ from it. */
+export type PreviewSettings = {
+  /** Previews' apps are at <preview>-<service>.<baseDomain>. */
+  baseDomain: string;
+  /** Project variables of every preview, instead of the project's; secrets come back masked. */
+  env: Record<string, string>;
+  secrets: string[];
+  /** The project's secrets previews may still use. */
+  inherit: string[];
+  ttlSeconds: number;
+  sleepAfterSeconds: number;
+  /** Previews may be seeded with the project's backups (production data). */
+  allowSeed: boolean;
 };
 
 export type Container = {
@@ -1032,6 +1063,11 @@ export const api = {
   createProject: (name: string, serverId = "") => request<Project>("/projects", json("POST", { name, serverId })),
   setProjectEnv: (id: string, env: Record<string, string>, secrets: string[]) =>
     request<Project>(`/projects/${id}/env`, json("PUT", { env, secrets })),
+  previews: (id: string) => request<PreviewView[]>(`/projects/${id}/previews`),
+  closePreview: (id: string, name: string) =>
+    request<void>(`/projects/${id}/previews/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  previewSettings: (id: string) => request<PreviewSettings>(`/projects/${id}/preview-settings`),
+  setPreviewSettings: (id: string, s: PreviewSettings) => request<PreviewSettings>(`/projects/${id}/preview-settings`, json("PUT", s)),
   compose: (id: string, service?: string) => request<string>(composePath(id, service)),
   composeUrl: (id: string, service?: string) => `/api${composePath(id, service)}${service ? "&" : "?"}download=1`,
   applyCompose: (id: string, body: { compose: string; env: string; prune: boolean; dryRun?: boolean; deploy?: boolean }) =>

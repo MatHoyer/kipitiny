@@ -28,7 +28,12 @@ import { useAccess } from "@/lib/access";
 import { api, isDatabase, type Project as ProjectT, type Service } from "../api";
 
 export function Projects() {
-  const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
+  const projects = useQuery({
+    queryKey: ["projects"],
+    queryFn: api.projects,
+    // Previews are listed on their project's page.
+    select: (ps) => ps.filter((p) => !p.parentId),
+  });
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.servers });
   const canCreate = useAccess().has("create-projects");
   // Same key as the project page, so the cache is shared.

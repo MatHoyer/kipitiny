@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Box, ChevronLeft, Database, GitBranch, Layers, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { Activity, Box, ChevronLeft, Database, GitBranch, GitPullRequestArrow, Layers, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { lazy, Suspense, useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -46,6 +46,7 @@ import { ComposeDialog } from "@/components/compose-dialog";
 import { TemplateDialog } from "@/components/template-dialog";
 import { ReachIcon, reachOf } from "@/components/reach";
 import { GitSource, useProjectGit } from "@/components/git-source";
+import { Previews } from "@/components/previews";
 import { issueRing, issueText, needsAttention, serviceIssue } from "@/components/topology";
 import { cn } from "@/lib/utils";
 
@@ -56,7 +57,7 @@ export function Project() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const project = useQuery({ queryKey: ["project", id], queryFn: () => api.project(id) });
-  const [tab, setTab] = useTab(["services", "map", "environment", "git", "settings"], "services");
+  const [tab, setTab] = useTab(["services", "map", "environment", "git", "previews", "settings"], "services");
   const git = useProjectGit(id);
   const gitManaged = !!git.data;
   const { can } = useAccess();
@@ -93,7 +94,13 @@ export function Project() {
     },
   });
 
-  const crumbs = [{ label: "Projects", to: "/projects" }, { label: project.data?.name ?? <Spinner className="size-3.5" /> }];
+  const parentId = project.data?.parentId;
+  const parent = useQuery({ queryKey: ["project", parentId], queryFn: () => api.project(parentId!), enabled: !!parentId });
+  const crumbs = [
+    { label: "Projects", to: "/projects" },
+    ...(parentId ? [{ label: parent.data?.name ?? <Spinner className="size-3.5" />, to: `/projects/${parentId}?tab=previews` }] : []),
+    { label: project.data?.name ?? <Spinner className="size-3.5" /> },
+  ];
   if (project.error)
     return (
       <>
@@ -121,6 +128,12 @@ export function Project() {
                 <Tag className="flex items-center gap-1">
                   <GitBranch className="size-3" />
                   Managed by git
+                </Tag>
+              )}
+              {parentId && (
+                <Tag className="flex items-center gap-1">
+                  <GitPullRequestArrow className="size-3" />
+                  Preview{project.data.preview?.branch ? ` of ${project.data.preview.branch}` : ""}
                 </Tag>
               )}
               <ComposeDialog projectId={id} canImport={!gitManaged} />
@@ -156,6 +169,7 @@ export function Project() {
             <TabsTrigger value="map">Map</TabsTrigger>
             <TabsTrigger value="environment">Environment</TabsTrigger>
             {may("git") && <TabsTrigger value="git">Git</TabsTrigger>}
+            {project.data && !parentId && <TabsTrigger value="previews">Previews</TabsTrigger>}
             {(may("settings") || may("backups") || may("delete")) && <TabsTrigger value="settings">Settings</TabsTrigger>}
           </TabsList>
           <TabsContent value="services" className="space-y-6">
@@ -192,6 +206,11 @@ export function Project() {
           </TabsContent>
           <TabsContent value="git" className="space-y-6">
             {tab === "git" && may("git") && <GitSource projectId={id} />}
+          </TabsContent>
+          <TabsContent value="previews" className="space-y-6">
+            {tab === "previews" && project.data && !parentId && (
+              <Previews project={project.data} canDeploy={may("deploy")} canEdit={may("env")} />
+            )}
           </TabsContent>
           <TabsContent value="settings" className="space-y-6">
             {project.data && may("settings") && (
