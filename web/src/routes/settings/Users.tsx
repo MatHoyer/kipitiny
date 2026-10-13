@@ -1,49 +1,106 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Pencil, ShieldCheck, Trash2, TriangleAlert, UserPlus, UserRound, Users as UsersIcon } from "lucide-react";
-import { useState } from "react";
-import { CheckboxField, CopyField, EmptyState, ErrorText, Section, Tag } from "@/components/common";
+import {
+  ArchiveRestore,
+  Bell,
+  Check,
+  Database,
+  DatabaseBackup,
+  DatabaseZap,
+  Download,
+  Eye,
+  Folder,
+  FolderPen,
+  FolderPlus,
+  GitBranch,
+  GitFork,
+  Globe,
+  HardDrive,
+  KeyRound,
+  Mail,
+  Network,
+  Package,
+  Pencil,
+  Rocket,
+  Server,
+  Settings2,
+  ShieldCheck,
+  SquareTerminal,
+  Trash2,
+  TriangleAlert,
+  UserPlus,
+  UserRound,
+  Variable,
+  type LucideIcon,
+} from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { CopyField, ErrorText, Section, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+import { Switch } from "@/components/ui/switch";
 import { Tip } from "@/components/ui/tooltip";
 import { timeAgo } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { api, features, perms, type Feature, type Perm, type UserAccess, type UserView } from "@/api";
 import { SettingsPage } from "./page";
 
-export const permLabels: Record<Perm, { label: string; description: string }> = {
-  view: { label: "View", description: "Services, logs, stats, deployments and backups" },
-  deploy: { label: "Deploy", description: "Deploy, roll back, start, stop, maintenance" },
-  settings: { label: "Settings", description: "Create and edit services, compose files, networks, uptime checks" },
-  env: { label: "Env", description: "Variables, secrets and connection strings" },
-  domains: { label: "Domains", description: "Public domains and their middlewares" },
-  backups: { label: "Backups", description: "Back up now, verify, schedules" },
-  restore: { label: "Restore", description: "Replace data with a backup" },
-  download: { label: "Download", description: "Backup files and exports with secrets" },
-  data: { label: "Data", description: "Browse databases, read-only console" },
-  "data-write": { label: "Data write", description: "Edit rows, schema and run writing queries" },
-  files: { label: "Files", description: "Browse volume files" },
-  "files-write": { label: "Files write", description: "Upload, edit, move and delete volume files" },
-  terminal: { label: "Terminal", description: "A shell in the containers" },
-  git: { label: "Git", description: "Link, sync and unlink a repository" },
-  delete: { label: "Delete", description: "Delete services and the project" },
+type Labelled = { icon: LucideIcon; label: string; description: string };
+
+export const permLabels: Record<Perm, Labelled> = {
+  view: { icon: Eye, label: "View", description: "Services, logs, stats, deployments and backups" },
+  deploy: { icon: Rocket, label: "Deploy", description: "Deploy, roll back, start, stop, maintenance" },
+  settings: { icon: Settings2, label: "Settings", description: "Create and edit services, compose files, networks, uptime checks" },
+  env: { icon: Variable, label: "Env", description: "Variables, secrets and connection strings" },
+  domains: { icon: Globe, label: "Domains", description: "Public domains and their middlewares" },
+  backups: { icon: DatabaseBackup, label: "Backups", description: "Back up now, verify, schedules" },
+  restore: { icon: ArchiveRestore, label: "Restore", description: "Replace data with a backup" },
+  download: { icon: Download, label: "Download", description: "Backup files and exports with secrets" },
+  data: { icon: Database, label: "Data", description: "Browse databases, read-only console" },
+  "data-write": { icon: DatabaseZap, label: "Data write", description: "Edit rows, schema and run writing queries" },
+  files: { icon: Folder, label: "Files", description: "Browse volume files" },
+  "files-write": { icon: FolderPen, label: "Files write", description: "Upload, edit, move and delete volume files" },
+  terminal: { icon: SquareTerminal, label: "Terminal", description: "A shell in the containers" },
+  git: { icon: GitBranch, label: "Git", description: "Link, sync and unlink a repository" },
+  delete: { icon: Trash2, label: "Delete", description: "Delete services and the project" },
 };
 
-const featureLabels: Record<Feature, { label: string; description: string }> = {
-  "create-projects": { label: "Create projects", description: "With every permission on the ones they create" },
-  storage: { label: "Storage", description: "Pick where backups go" },
-  registries: { label: "Registries", description: "See which registries pulls can use" },
-  "git-providers": { label: "Git providers", description: "Pick a provider when linking a repository" },
-  "secret-providers": { label: "Password managers", description: "Reference their items in env" },
-  servers: { label: "Servers", description: "See the servers, without how to reach them" },
-  networks: { label: "Networks", description: "See the networks created by hand" },
-  notifications: { label: "Notifications", description: "See the channels, without where they send" },
-  domains: { label: "Domains", description: "See the base domains" },
+/** The permissions as the custom editor shows them, by what they touch. */
+const permGroups: { label: string; perms: Perm[] }[] = [
+  { label: "Run", perms: ["view", "deploy", "terminal"] },
+  { label: "Configure", perms: ["settings", "env", "domains", "git"] },
+  { label: "Data", perms: ["data", "data-write", "files", "files-write"] },
+  { label: "Backups", perms: ["backups", "restore", "download"] },
+  { label: "Danger", perms: ["delete"] },
+];
+
+/** One-click permission sets; anything else is "custom". */
+const presets: { value: string; label: string; perms: readonly Perm[] }[] = [
+  { value: "none", label: "None", perms: [] },
+  { value: "view", label: "View", perms: ["view"] },
+  { value: "deploy", label: "Deploy", perms: ["view", "deploy"] },
+  { value: "full", label: "Full", perms },
+];
+
+const presetOf = (ps: Perm[]) =>
+  presets.find((p) => p.perms.length === ps.length && p.perms.every((q) => ps.includes(q)))?.value ?? "custom";
+
+/** What members may see on the server, read-only; create-projects is a capability, shown on its own. */
+const featureLabels: Record<Feature, Labelled> = {
+  "create-projects": { icon: FolderPlus, label: "Create projects", description: "With every permission on the ones they create" },
+  storage: { icon: HardDrive, label: "Storage", description: "Pick where backups go" },
+  "git-providers": { icon: GitFork, label: "Git providers", description: "Pick one when linking a repository" },
+  registries: { icon: Package, label: "Registries", description: "Which registries pulls can use" },
+  "secret-providers": { icon: KeyRound, label: "Password managers", description: "Reference their items in env" },
+  servers: { icon: Server, label: "Servers", description: "Without how to reach them" },
+  networks: { icon: Network, label: "Networks", description: "The ones created by hand" },
+  notifications: { icon: Bell, label: "Notifications", description: "Without where they send" },
+  domains: { icon: Globe, label: "Domains", description: "The base domains" },
 };
 
 const memberDefault: UserAccess = { role: "member", features: [], grants: {} };
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 export function UsersPage() {
   const qc = useQueryClient();
@@ -62,76 +119,72 @@ export function UsersPage() {
     mutationFn: api.deleteInvite,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["invites"] }),
   });
+  const invite = (
+    <Button size="sm" onClick={() => setInviting(true)}>
+      <UserPlus data-icon="inline-start" />
+      Invite user
+    </Button>
+  );
+  const admins = users.data?.filter((u) => u.role === "admin") ?? [];
+  const members = users.data?.filter((u) => u.role !== "admin") ?? [];
+  const row = (u: UserView) => {
+    const me = u.username === account.data?.username;
+    return (
+      <UserRow
+        key={u.id}
+        user={u}
+        me={me}
+        onEdit={() => setEditing(u)}
+        remove={
+          !me && (
+            <ConfirmDialog
+              trigger={
+                <Button variant="ghost" size="icon-sm" title="Remove" aria-label="Remove" className="text-muted-foreground hover:text-destructive">
+                  <Trash2 />
+                </Button>
+              }
+              title={`Remove ${u.username}?`}
+              description="They're signed out and their API tokens stop working. Repositories they linked stop syncing until linked again."
+              confirmLabel="Remove"
+              onConfirm={() => remove.mutate(u.id)}
+            />
+          )
+        }
+      />
+    );
+  };
 
   return (
-    <SettingsPage
-      actions={
-        <Button size="sm" onClick={() => setInviting(true)}>
-          <UserPlus data-icon="inline-start" />
-          Invite user
-        </Button>
-      }
-    >
+    <SettingsPage actions={invite}>
       <ErrorText error={users.error ?? invites.error} />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {users.data?.map((u) => {
-          const projects = Object.keys(u.grants).length;
-          const me = u.username === account.data?.username;
-          return (
-            <Card key={u.id} className="gap-3 px-4">
-              <div className="flex items-start gap-3">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-sm font-semibold uppercase">
-                  {u.username.slice(0, 1)}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">
-                    {u.username}
-                    {me && <span className="font-normal text-muted-foreground"> (you)</span>}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {u.role === "admin" ? "Everything" : `${projects} project${projects === 1 ? "" : "s"}, ${u.features.length} feature${u.features.length === 1 ? "" : "s"}`}
-                  </p>
-                </div>
-                <Tag>{u.role === "admin" ? "Admin" : "Member"}</Tag>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Joined {timeAgo(u.createdAt)} · {u.totpEnabled ? "2FA on" : "2FA off"}
-              </p>
-              <div className="mt-auto flex justify-end gap-1">
-                <Tip content="Edit access">
-                  <Button variant="ghost" size="icon-sm" aria-label="Edit access" onClick={() => setEditing(u)}>
-                    <Pencil />
-                  </Button>
-                </Tip>
-                {!me && (
-                  <ConfirmDialog
-                    trigger={
-                      <Button variant="ghost" size="icon-sm" title="Remove" aria-label="Remove" className="text-muted-foreground hover:text-destructive">
-                        <Trash2 />
-                      </Button>
-                    }
-                    title={`Remove ${u.username}?`}
-                    description="They're signed out and their API tokens stop working. Repositories they linked stop syncing until linked again."
-                    confirmLabel="Remove"
-                    onConfirm={() => remove.mutate(u.id)}
-                  />
-                )}
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-      <Section title="Pending invites" description="Each link creates one account, within 7 days.">
-        {invites.data?.length === 0 ? (
-          <EmptyState icon={Mail} title="No pending invites" />
+      <Section title="Admins" description="Every project, server settings, users and the audit log.">
+        <ul className="-mx-3 -my-2 divide-y">{admins.map(row)}</ul>
+      </Section>
+      <Section title="Members" description="Only see and do what you grant them, project by project.">
+        {users.data && members.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-8 text-center">
+            <UserRound className="size-5 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">No members yet. Invite someone with access to the projects you pick.</p>
+          </div>
         ) : (
+          <ul className="-mx-3 -my-2 divide-y">{members.map(row)}</ul>
+        )}
+      </Section>
+      {!!invites.data?.length && (
+        <Section title="Pending invites" description="Each link creates one account, within 7 days.">
           <ul className="-mx-3 -my-2 divide-y">
-            {invites.data?.map((i) => (
-              <li key={i.id} className="flex items-center gap-3 px-3 py-2 text-sm">
-                {i.role === "admin" ? <ShieldCheck className="size-4 shrink-0" /> : <UserRound className="size-4 shrink-0" />}
-                <span className="min-w-0 flex-1 truncate">
-                  {i.role === "admin" ? "Admin" : `Member of ${Object.keys(i.grants).length} project(s)`}
-                  <span className="text-muted-foreground"> · created {timeAgo(i.createdAt)}, expires {timeAgo(i.expiresAt)}</span>
+            {invites.data.map((i) => (
+              <li key={i.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                  <Mail className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">
+                    {i.role === "admin" ? "Admin" : `Member of ${plural(Object.keys(i.grants).length, "project")}`}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    Created {timeAgo(i.createdAt)}, expires {timeAgo(i.expiresAt)}
+                  </span>
                 </span>
                 <Button variant="ghost" size="icon-sm" title="Revoke" aria-label="Revoke" onClick={() => revoke.mutate(i.id)}>
                   <Trash2 />
@@ -139,22 +192,45 @@ export function UsersPage() {
               </li>
             ))}
           </ul>
-        )}
-      </Section>
-      {users.data?.length === 1 && (
-        <EmptyState
-          icon={UsersIcon}
-          title="Only you so far"
-          description="Invite people as admins, or as members who only see and do what you grant them, project by project."
-        />
+        </Section>
       )}
       <Dialog open={inviting} onOpenChange={setInviting}>
-        <DialogContent className="sm:max-w-3xl">{inviting && <InviteForm onDone={() => setInviting(false)} />}</DialogContent>
+        <DialogContent className="sm:max-w-2xl">{inviting && <InviteForm onDone={() => setInviting(false)} />}</DialogContent>
       </Dialog>
       <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent className="sm:max-w-3xl">{editing && <EditForm user={editing} onDone={() => setEditing(null)} />}</DialogContent>
+        <DialogContent className="sm:max-w-2xl">{editing && <EditForm user={editing} onDone={() => setEditing(null)} />}</DialogContent>
       </Dialog>
     </SettingsPage>
+  );
+}
+
+function UserRow({ user: u, me, onEdit, remove }: { user: UserView; me: boolean; onEdit: () => void; remove: ReactNode }) {
+  const projects = Object.keys(u.grants).length;
+  return (
+    <li className="flex items-center gap-3 px-3 py-2.5">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-semibold uppercase">
+        {u.username.slice(0, 1)}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">
+          {u.username}
+          {me && <span className="font-normal text-muted-foreground"> (you)</span>}
+        </p>
+        <p className="truncate text-xs text-muted-foreground">
+          {u.role !== "admin" && `${plural(projects, "project")}, ${plural(u.features.length, "server feature")} · `}
+          Joined {timeAgo(u.createdAt)}
+        </p>
+      </div>
+      {u.totpEnabled ? <Tag className="hidden sm:inline">2FA</Tag> : <Tag className="hidden bg-transparent sm:inline">No 2FA</Tag>}
+      <div className="flex gap-1">
+        <Tip content="Edit access">
+          <Button variant="ghost" size="icon-sm" aria-label="Edit access" onClick={onEdit}>
+            <Pencil />
+          </Button>
+        </Tip>
+        {remove || <span className="size-7" />}
+      </div>
+    </li>
   );
 }
 
@@ -232,102 +308,217 @@ function InviteForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-/** A role, and for a member the server features and the permission matrix, project by permission. */
+/** A role, and for a member the server features and, project by project, a preset or custom permissions. */
 function AccessEditor({ value, onChange }: { value: UserAccess; onChange: (a: UserAccess) => void }) {
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
-  const setPerms = (projectId: string, ps: Perm[]) => {
+  // Projects whose custom editor is open, though their permissions may match a preset.
+  const [custom, setCustom] = useState<Set<string>>(
+    () => new Set(Object.entries(value.grants).flatMap(([id, ps]) => (presetOf(ps) === "custom" ? [id] : []))),
+  );
+  const setPerms = (projectId: string, ps: readonly Perm[]) => {
     const grants = { ...value.grants };
     if (ps.length) grants[projectId] = perms.filter((p) => ps.includes(p));
     else delete grants[projectId];
     onChange({ ...value, grants });
   };
-  const toggle = (projectId: string, p: Perm, on: boolean) => {
+  const toggle = (projectId: string, p: Perm) => {
     const cur = value.grants[projectId] ?? [];
+    const on = !cur.includes(p);
     let next = on ? [...cur, p] : cur.filter((q) => q !== p);
     if (on && p !== "view" && !next.includes("view")) next = ["view", ...next];
     if (!on && p === "view") next = []; // every permission implies view
     setPerms(projectId, next);
   };
+  const setFeature = (f: Feature, on: boolean) =>
+    onChange({ ...value, features: on ? [...value.features, f] : value.features.filter((x) => x !== f) });
+  const seeable = features.filter((f) => f !== "create-projects");
 
   return (
-    <div className="max-h-[65vh] space-y-5 overflow-y-auto">
-      <Segmented value={value.role} onValueChange={(v) => onChange({ ...value, role: v as UserAccess["role"] })} aria-label="Role">
-        <SegmentedItem value="member">Member</SegmentedItem>
-        <SegmentedItem value="admin">Admin</SegmentedItem>
-      </Segmented>
-      {value.role === "admin" ? (
-        <p className="text-sm text-muted-foreground">Admins do everything: every project, server settings, users and the audit log.</p>
-      ) : (
+    <div className="-mx-1 max-h-[65vh] space-y-6 overflow-y-auto px-1 pb-1">
+      <div role="radiogroup" aria-label="Role" className="grid gap-3 sm:grid-cols-2">
+        <RoleCard
+          icon={UserRound}
+          title="Member"
+          description="Sees and does only what you grant below."
+          selected={value.role === "member"}
+          onSelect={() => onChange({ ...value, role: "member" })}
+        />
+        <RoleCard
+          icon={ShieldCheck}
+          title="Admin"
+          description="Everything: every project, server settings, users, audit log."
+          selected={value.role === "admin"}
+          onSelect={() => onChange({ ...value, role: "admin" })}
+        />
+      </div>
+      {value.role === "member" && (
         <>
-          <div className="space-y-3">
-            <p className="text-sm font-medium">Server</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {features.map((f) => (
-                <CheckboxField
-                  key={f}
-                  label={featureLabels[f].label}
-                  description={featureLabels[f].description}
-                  checked={value.features.includes(f)}
-                  onCheckedChange={(on) =>
-                    onChange({ ...value, features: on ? [...value.features, f] : value.features.filter((x) => x !== f) })
-                  }
-                />
-              ))}
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-medium">Projects</h3>
+              <p className="text-xs text-muted-foreground">Every permission implies View.</p>
             </div>
-          </div>
-          <div className="space-y-3">
-            <p className="text-sm font-medium">Projects</p>
             {projects.data?.length === 0 ? (
               <p className="text-sm text-muted-foreground">No projects yet.</p>
             ) : (
-              <div className="overflow-x-auto rounded-lg border">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="px-3 py-2 text-left font-medium">Project</th>
-                      <th className="px-1 py-2 font-medium">All</th>
-                      {perms.map((p) => (
-                        <th key={p} className="px-1 py-2 font-medium whitespace-nowrap">
-                          <Tip content={permLabels[p].description}>
-                            <span className="cursor-help">{permLabels[p].label}</span>
-                          </Tip>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {projects.data?.map((pr) => {
-                      const cur = value.grants[pr.id] ?? [];
-                      const all = cur.length === perms.length;
-                      return (
-                        <tr key={pr.id} className="border-b last:border-0">
-                          <td className="px-3 py-2 font-medium whitespace-nowrap">{pr.name}</td>
-                          <td className="px-1 py-2 text-center">
-                            <Checkbox
-                              aria-label={`Every permission on ${pr.name}`}
-                              checked={all ? true : cur.length ? "indeterminate" : false}
-                              onCheckedChange={(v) => setPerms(pr.id, v === true ? [...perms] : [])}
-                            />
-                          </td>
-                          {perms.map((p) => (
-                            <td key={p} className="px-1 py-2 text-center">
-                              <Checkbox
-                                aria-label={`${permLabels[p].label} on ${pr.name}`}
-                                checked={cur.includes(p)}
-                                onCheckedChange={(v) => toggle(pr.id, p, v === true)}
-                              />
-                            </td>
+              <ul className="divide-y rounded-lg border">
+                {projects.data?.map((pr) => {
+                  const cur = value.grants[pr.id] ?? [];
+                  const open = custom.has(pr.id) || presetOf(cur) === "custom";
+                  return (
+                    <li key={pr.id} className="space-y-3 px-3 py-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="min-w-0 truncate text-sm font-medium">{pr.name}</span>
+                        <Segmented
+                          size="sm"
+                          aria-label={`Access to ${pr.name}`}
+                          value={open ? "custom" : presetOf(cur)}
+                          onValueChange={(v) => {
+                            const next = new Set(custom);
+                            if (v === "custom") next.add(pr.id);
+                            else {
+                              next.delete(pr.id);
+                              setPerms(pr.id, presets.find((p) => p.value === v)!.perms);
+                            }
+                            setCustom(next);
+                          }}
+                        >
+                          {presets.map((p) => (
+                            <SegmentedItem key={p.value} value={p.value}>
+                              {p.label}
+                            </SegmentedItem>
                           ))}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                          <SegmentedItem value="custom">Custom</SegmentedItem>
+                        </Segmented>
+                      </div>
+                      {open && (
+                        <div className="space-y-2 rounded-md bg-muted/40 p-2.5">
+                          {permGroups.map((g) => (
+                            <div key={g.label} className="flex items-start gap-2">
+                              <span className="w-20 shrink-0 pt-1.5 text-xs text-muted-foreground">{g.label}</span>
+                              <div className="flex flex-1 flex-wrap gap-1.5">
+                                {g.perms.map((p) => (
+                                  <PermChip key={p} perm={p} on={cur.includes(p)} onToggle={() => toggle(pr.id, p)} />
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
             )}
-          </div>
+          </section>
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-medium">Server</h3>
+              <p className="text-xs text-muted-foreground">What they may see in settings, read-only and without secrets.</p>
+            </div>
+            <label className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5">
+              <FeatureIcon icon={featureLabels["create-projects"].icon} on={value.features.includes("create-projects")} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">{featureLabels["create-projects"].label}</span>
+                <span className="block text-xs text-muted-foreground">{featureLabels["create-projects"].description}</span>
+              </span>
+              <Switch checked={value.features.includes("create-projects")} onCheckedChange={(on) => setFeature("create-projects", on)} />
+            </label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {seeable.map((f) => {
+                const on = value.features.includes(f);
+                const l = featureLabels[f];
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setFeature(f, !on)}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50",
+                      on && "border-primary/50 bg-primary/5 hover:bg-primary/10",
+                    )}
+                  >
+                    <FeatureIcon icon={l.icon} on={on} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{l.label}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{l.description}</span>
+                    </span>
+                    <Check className={cn("size-4 shrink-0 text-primary", !on && "invisible")} />
+                  </button>
+                );
+              })}
+            </div>
+          </section>
         </>
       )}
     </div>
+  );
+}
+
+function RoleCard({
+  icon: Icon,
+  title,
+  description,
+  selected,
+  onSelect,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onSelect}
+      className={cn(
+        "flex items-start gap-3 rounded-lg border p-3 text-left transition-colors outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50",
+        selected && "border-primary ring-1 ring-primary hover:bg-transparent",
+      )}
+    >
+      <FeatureIcon icon={Icon} on={selected} />
+      <span className="min-w-0">
+        <span className="block text-sm font-medium">{title}</span>
+        <span className="block text-xs text-muted-foreground">{description}</span>
+      </span>
+    </button>
+  );
+}
+
+function FeatureIcon({ icon: Icon, on }: { icon: LucideIcon; on: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex size-8 shrink-0 items-center justify-center rounded-md transition-colors",
+        on ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+      )}
+    >
+      <Icon className="size-4" />
+    </span>
+  );
+}
+
+function PermChip({ perm, on, onToggle }: { perm: Perm; on: boolean; onToggle: () => void }) {
+  const l = permLabels[perm];
+  return (
+    <Tip content={l.description}>
+      <button
+        type="button"
+        aria-pressed={on}
+        onClick={onToggle}
+        className={cn(
+          "inline-flex h-7 items-center gap-1.5 rounded-md border bg-background px-2 text-xs font-medium text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
+          on && "border-primary/50 bg-primary/10 text-primary hover:text-primary",
+          perm === "delete" && on && "border-destructive/50 bg-destructive/10 text-destructive hover:text-destructive",
+        )}
+      >
+        <l.icon className="size-3.5" />
+        {l.label}
+      </button>
+    </Tip>
   );
 }
