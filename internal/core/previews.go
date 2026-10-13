@@ -99,7 +99,7 @@ func (c *Core) SetPreviewSettings(ctx context.Context, projectID string, in Prev
 	if ps.Env, ps.Secrets, err = mergeEnv(in.Env, in.Secrets, old.Env, old.Secrets); err != nil {
 		return store.PreviewSettings{}, err
 	}
-	if err := c.checkSecretSchemes(ps.Env); err != nil {
+	if err := c.checkSecretSchemes(ctx, ps.Env); err != nil {
 		return store.PreviewSettings{}, err
 	}
 	for _, k := range in.Inherit {

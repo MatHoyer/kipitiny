@@ -27,8 +27,7 @@ func TestContainerRunner(t *testing.T) {
 	}
 	defer dk.Close()
 	ctx := context.Background()
-	r := NewContainerRunner(dk, image, time.Second)
-	r.name, r.volume = "kipitiny-protonpass-test", "kipitiny-protonpass-test"
+	r := NewContainerRunner(dk, image, "test", time.Second)
 	t.Cleanup(func() { _ = r.Reset(context.Background()) })
 
 	out, _, err := r.Run(ctx, []string{"pass-cli", "--version"}, nil, nil)

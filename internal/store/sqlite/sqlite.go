@@ -1224,6 +1224,41 @@ func (s *Store) DeleteRegistry(ctx context.Context, id string) error {
 	return deleteByID(ctx, s.db, "registries", id)
 }
 
+func (s *Store) ListSecretConnections(ctx context.Context) ([]store.SecretConnection, error) {
+	cs := []store.SecretConnection{}
+	err := s.db.NewSelect().Model(&cs).Order("kind", "name").Scan(ctx)
+	return cs, mapErr(err)
+}
+
+func (s *Store) GetSecretConnection(ctx context.Context, id string) (store.SecretConnection, error) {
+	var c store.SecretConnection
+	err := s.db.NewSelect().Model(&c).Where("id = ?", id).Scan(ctx)
+	return c, mapErr(err)
+}
+
+func (s *Store) CreateSecretConnection(ctx context.Context, c store.SecretConnection) (store.SecretConnection, error) {
+	c.ID, c.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&c).Exec(ctx); err != nil {
+		return store.SecretConnection{}, mapErr(err)
+	}
+	return c, nil
+}
+
+func (s *Store) SetSecretConnectionToken(ctx context.Context, id, token string) error {
+	res, err := s.db.NewUpdate().Model((*store.SecretConnection)(nil)).Set("token = ?", token).Where("id = ?", id).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) DeleteSecretConnection(ctx context.Context, id string) error {
+	return deleteByID(ctx, s.db, "secret_connections", id)
+}
+
 func (s *Store) ListNetworks(ctx context.Context) ([]store.Network, error) {
 	ns := []store.Network{}
 	err := s.db.NewSelect().Model(&ns).Order("name").Scan(ctx)

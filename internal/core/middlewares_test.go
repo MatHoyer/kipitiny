@@ -11,7 +11,6 @@ import (
 
 	"github.com/MatHoyer/kipitiny/internal/cloudflare"
 	"github.com/MatHoyer/kipitiny/internal/config"
-	"github.com/MatHoyer/kipitiny/internal/secrets"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -126,10 +125,7 @@ func TestMiddlewareLabels(t *testing.T) {
 func TestHashBasicAuth(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	c.secrets = []secrets.Provider{&fakeProvider{}}
-	if _, err := c.ConnectSecretProvider(ctx, "fake", "good"); err != nil {
-		t.Fatal(err)
-	}
+	useSecretProvider(t, c, &fakeProvider{})("")
 	svc := store.Service{Middlewares: store.Middlewares{BasicAuth: []store.BasicAuthUser{
 		{Name: "ann", Hash: "kept"},
 		{Name: "bob", Ref: "{{ fake://bob }}"},
@@ -147,7 +143,7 @@ func TestHashBasicAuth(t *testing.T) {
 		t.Error("hashing mutated the stored users")
 	}
 
-	if err := c.checkBasicAuthSchemes(store.Middlewares{BasicAuth: []store.BasicAuthUser{{Name: "x", Ref: "{{ op://v/i/f }}"}}}); !errors.Is(err, ErrInvalid) {
+	if err := c.checkBasicAuthSchemes(ctx, store.Middlewares{BasicAuth: []store.BasicAuthUser{{Name: "x", Ref: "{{ op://v/i/f }}"}}}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("unknown scheme accepted: %v", err)
 	}
 	if m := masked(svc).Middlewares; m.BasicAuth[0].Hash != "" || svc.Middlewares.BasicAuth[0].Hash != "kept" {

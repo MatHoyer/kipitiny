@@ -1305,3 +1305,65 @@ func TestProjectSleepAndMaintenanceMigration(t *testing.T) {
 		t.Error("an app asleep during the upgrade stays asleep")
 	}
 }
+
+func TestSecretConnectionsMigration(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "k.db")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	sub, _ := fs.Sub(migrations, "migrations")
+	p, err := goose.NewProvider(goose.DialectSQLite3, db, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 54); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO settings (key, value) VALUES ('secrets_protonpass_token', 'pst_x::y')`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	cs, err := s.ListSecretConnections(ctx)
+	if err != nil || len(cs) != 1 {
+		t.Fatalf("connections = %+v, %v", cs, err)
+	}
+	if c := cs[0]; c.Kind != "protonpass" || c.Name != "" || c.Token != "pst_x::y" || len(c.ID) != 26 {
+		t.Errorf("migrated = %+v", c)
+	}
+	if v, _ := s.GetSetting(ctx, "secrets_protonpass_token"); v != "" {
+		t.Errorf("setting kept: %q", v)
+	}
+
+	// Two connections of a kind need different names.
+	work, err := s.CreateSecretConnection(ctx, store.SecretConnection{Kind: "protonpass", Name: "work", Token: "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateSecretConnection(ctx, store.SecretConnection{Kind: "protonpass", Name: "work", Token: "b"}); !errors.Is(err, store.ErrConflict) {
+		t.Errorf("duplicate name: %v", err)
+	}
+	if err := s.SetSecretConnectionToken(ctx, work.ID, "c"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetSecretConnection(ctx, work.ID); got.Token != "c" {
+		t.Errorf("token = %q", got.Token)
+	}
+	if err := s.SetSecretConnectionToken(ctx, "nope", "c"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("unknown connection: %v", err)
+	}
+	if err := s.DeleteSecretConnection(ctx, work.ID); err != nil {
+		t.Fatal(err)
+	}
+	if cs, _ := s.ListSecretConnections(ctx); len(cs) != 1 {
+		t.Errorf("after delete: %+v", cs)
+	}
+}

@@ -45,8 +45,15 @@ type ContainerRunner struct {
 	timer  *time.Timer
 }
 
-func NewContainerRunner(dk *docker.Client, image string, idle time.Duration) *ContainerRunner {
-	return &ContainerRunner{dk: dk, image: image, idle: idle, name: helperName, volume: sessionVolume}
+// NewContainerRunner runs pass-cli for the connection named conn ("" for
+// the default one): each has its own helper and session.
+func NewContainerRunner(dk *docker.Client, image, conn string, idle time.Duration) *ContainerRunner {
+	r := &ContainerRunner{dk: dk, image: image, idle: idle, name: helperName, volume: sessionVolume}
+	if conn != "" {
+		r.name += "-" + conn
+		r.volume += "-" + conn
+	}
+	return r
 }
 
 func (r *ContainerRunner) Run(ctx context.Context, cmd, env []string, stdin io.Reader) ([]byte, []byte, error) {

@@ -71,7 +71,9 @@ type Core struct {
 	cleaning       atomic.Bool  // a cleanup is running
 	notified       sync.Map     // notification key -> time.Time last sent
 	notifyHTTP     *http.Client // nil: notify's default; tests redirect it
-	secrets        []secrets.Provider
+	secretKinds    []secretKind
+	secretsMu      sync.Mutex
+	secrets        map[string]secrets.Provider // by kind + "\x00" + connection name
 	secretListings secretListings
 	mfaTickets     pending[mfaTicket]
 	totpSetups     pending[string] // user ID -> secret awaiting its first code
@@ -90,7 +92,7 @@ func New(cfg config.Config, s store.Store, local *docker.Client, log *slog.Logge
 	bg, cancel := context.WithCancel(context.Background())
 	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1), dnsKick: make(chan struct{}, 1), gitKick: make(chan string, 16)}
 	c.pool = docker.NewPool(local, c.connectServer)
-	c.secrets = secretProviders(cfg, local)
+	c.secretKinds = secretKinds(cfg, local)
 	return c
 }
 
@@ -142,7 +144,7 @@ func (c *Core) bootstrapServer(ctx context.Context, sv store.Server) error {
 	}
 	if sv.Kind == store.ServerLocal {
 		c.cleanupUpdater(ctx, dk)
-		if err := c.closeSecretProviders(ctx); err != nil {
+		if err := c.cleanupSecretHelpers(ctx, dk); err != nil {
 			c.log.Warn("removing password manager helpers failed", "err", err)
 		}
 	}

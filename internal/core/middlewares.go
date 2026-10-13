@@ -11,7 +11,6 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/MatHoyer/kipitiny/internal/secrets"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -144,10 +143,12 @@ func validateMiddlewares(m store.Middlewares) error {
 }
 
 // checkBasicAuthSchemes refuses references no password manager handles.
-func (c *Core) checkBasicAuthSchemes(m store.Middlewares) error {
+func (c *Core) checkBasicAuthSchemes(ctx context.Context, m store.Middlewares) error {
 	for _, u := range m.BasicAuth {
-		if ref := basicAuthRef(u); ref != "" && c.providerFor(secrets.SchemeOf(ref)) == nil {
-			return fmt.Errorf("%w: basic auth user %s: no password manager handles %s", ErrInvalid, u.Name, ref)
+		if ref := basicAuthRef(u); ref != "" {
+			if err := c.checkSecretScheme(ctx, ref); err != nil {
+				return fmt.Errorf("%w: basic auth user %s: %v", ErrInvalid, u.Name, err)
+			}
 		}
 	}
 	return nil
