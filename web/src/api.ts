@@ -475,7 +475,17 @@ export type UserView = User & { grants: Grants; totpEnabled: boolean };
 export type UserAccess = { role: Role; features: Feature[]; grants: Grants };
 
 /** A single-use link that creates an account with this access. */
-export type Invite = UserAccess & { id: string; createdBy: string; createdAt: string; expiresAt: string };
+export type Invite = UserAccess & {
+  id: string;
+  createdBy: string;
+  /** Where the link was emailed; absent when copied by hand. */
+  email?: string;
+  createdAt: string;
+  expiresAt: string;
+};
+
+/** An invite's access, and optionally where to email it: link is the invite page's URL, the token its fragment. */
+export type InviteInput = UserAccess & { email?: string; link?: string };
 
 export type InviteInfo = { role: Role; expiresAt: string; projects: string[] };
 
@@ -1343,7 +1353,7 @@ export const api = {
   setUserAccess: (id: string, a: UserAccess) => request<UserView>(`/users/${id}`, json("PUT", a)),
   deleteUser: (id: string) => request<void>(`/users/${id}`, { method: "DELETE" }),
   invites: () => request<Invite[]>("/invites"),
-  createInvite: (a: UserAccess) => request<Invite & { token: string }>("/invites", json("POST", a)),
+  createInvite: (a: InviteInput) => request<Invite & { token: string; emailError?: string }>("/invites", json("POST", a)),
   deleteInvite: (id: string) => request<void>(`/invites/${id}`, { method: "DELETE" }),
 
   logsUrl: (serviceId: string, tail = 200) => `/api/services/${serviceId}/logs?tail=${tail}`,

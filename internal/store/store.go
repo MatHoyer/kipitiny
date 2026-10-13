@@ -283,9 +283,11 @@ type Invite struct {
 	// Grants maps project IDs to permissions.
 	Grants    map[string][]string `bun:"grants" json:"grants"`
 	CreatedBy string              `bun:"created_by" json:"createdBy"`
-	CreatedAt time.Time           `bun:"created_at" json:"createdAt"`
-	ExpiresAt time.Time           `bun:"expires_at" json:"expiresAt"`
-	UsedAt    *time.Time          `bun:"used_at" json:"usedAt,omitempty"`
+	// Email is where the link was sent; empty when copied by hand.
+	Email     string     `bun:"email" json:"email,omitempty"`
+	CreatedAt time.Time  `bun:"created_at" json:"createdAt"`
+	ExpiresAt time.Time  `bun:"expires_at" json:"expiresAt"`
+	UsedAt    *time.Time `bun:"used_at" json:"usedAt,omitempty"`
 }
 
 type Passkey struct {

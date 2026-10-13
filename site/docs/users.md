@@ -15,6 +15,10 @@ picks a username and password and is signed in; the link works for 7 days.
 Pending invites are listed under the users, where you can revoke them. The
 token is in the link's `#fragment`, so it never reaches a server or proxy log.
 
+With an [SMTP server](/docs/monitoring#email) set, an optional **email**
+sends the link to the new user as well (it is still shown once to copy). If
+sending fails, the invite exists anyway: copy the link and send it yourself.
+
 ## Project permissions
 
 A member's access is set per project. Any permission includes **view**.

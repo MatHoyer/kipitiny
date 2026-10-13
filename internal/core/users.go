@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	netmail "net/mail"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/MatHoyer/kipitiny/internal/mail"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -195,23 +198,92 @@ func (c *Core) MakeAdmin(ctx context.Context, username string) error {
 type NewInvite struct {
 	store.Invite
 	Token string `json:"token"`
+	// EmailError is why the invite couldn't be emailed; the link still works.
+	EmailError string `json:"emailError,omitempty"`
+}
+
+// InviteInput is the access an invite gives, and optionally where to email
+// it.
+type InviteInput struct {
+	UserAccess
+	// Email sends the link there through the SMTP server.
+	Email string `json:"email"`
+	// Link is the invite page's URL as the admin's browser sees it; the
+	// token is appended as its fragment. Required with Email.
+	Link string `json:"link"`
 }
 
 // CreateInvite makes a single-use link that creates an account with this
-// access; admins only.
-func (c *Core) CreateInvite(ctx context.Context, in UserAccess) (NewInvite, error) {
+// access, and emails it when asked; admins only.
+func (c *Core) CreateInvite(ctx context.Context, in InviteInput) (NewInvite, error) {
 	if err := RequireAdmin(ctx); err != nil {
 		return NewInvite{}, err
 	}
-	in, err := c.normalized(ctx, in)
+	access, err := c.normalized(ctx, in.UserAccess)
 	if err != nil {
 		return NewInvite{}, err
 	}
+	var to *netmail.Address
+	if in.Email = strings.TrimSpace(in.Email); in.Email != "" {
+		if to, err = mail.ParseAddress(in.Email); err != nil {
+			return NewInvite{}, mailErr(err)
+		}
+		if u, err := url.Parse(in.Link); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.Fragment != "" {
+			return NewInvite{}, fmt.Errorf("%w: link must be the http(s) URL of the invite page", ErrInvalid)
+		}
+		if _, ok := c.smtpConfig(ctx); !ok {
+			return NewInvite{}, ErrNoEmail
+		}
+		in.Email = to.Address
+	}
 	a, _ := ActorFrom(ctx)
 	token := randomToken(32)
-	i, err := c.store.CreateInvite(ctx, store.Invite{TokenHash: hashToken(token), Role: in.Role, Features: in.Features,
-		Grants: in.Grants, CreatedBy: a.UserID, ExpiresAt: time.Now().Add(InviteTTL)})
-	return NewInvite{Invite: i, Token: token}, err
+	i, err := c.store.CreateInvite(ctx, store.Invite{TokenHash: hashToken(token), Role: access.Role, Features: access.Features,
+		Grants: access.Grants, CreatedBy: a.UserID, Email: in.Email, ExpiresAt: time.Now().Add(InviteTTL)})
+	if err != nil {
+		return NewInvite{}, err
+	}
+	out := NewInvite{Invite: i, Token: token}
+	if to != nil {
+		if err := c.sendMail(ctx, []*netmail.Address{to}, c.inviteBody(ctx, i, in.Link+"#"+token), ""); err != nil {
+			c.log.Warn("invite not emailed", "to", in.Email, "err", err)
+			out.EmailError = err.Error()
+		}
+	}
+	return out, nil
+}
+
+// inviteBody is the email carrying an invite link.
+func (c *Core) inviteBody(ctx context.Context, i store.Invite, link string) mail.Body {
+	who := "An admin"
+	if u, err := c.store.GetUser(ctx, i.CreatedBy); err == nil {
+		who = u.Username
+	}
+	where := "a kipitiny server"
+	if c.cfg.Domain != "" {
+		where = "the kipitiny server " + c.cfg.Domain
+	}
+	b := mail.Body{
+		Title: "You're invited to kipitiny",
+		Paragraphs: []string{
+			fmt.Sprintf("%s invited you to %s. Open the link to pick your username and password.", who, where),
+			fmt.Sprintf("It works once, until %s. If you weren't expecting it, ignore this email.", i.ExpiresAt.UTC().Format("January 2, 2006 15:04 UTC")),
+		},
+		Button: &mail.Link{Label: "Accept the invite", URL: link},
+		Footer: c.mailFooter(),
+	}
+	if i.Role == store.RoleAdmin {
+		b.Fields = []mail.Field{{Name: "Role", Value: "Admin"}}
+	} else {
+		var names []string
+		for _, id := range slices.Sorted(maps.Keys(i.Grants)) {
+			if p, err := c.store.GetProject(ctx, id); err == nil {
+				names = append(names, p.Name)
+			}
+		}
+		b.Fields = []mail.Field{{Name: "Role", Value: "Member"}, {Name: "Projects", Value: strings.Join(names, ", ")}}
+	}
+	return b
 }
 
 // ListInvites returns the invites not used yet; admins only.
