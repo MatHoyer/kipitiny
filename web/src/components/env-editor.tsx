@@ -105,8 +105,13 @@ export function EnvEditor({
   });
   // Offered only once this build has a password manager to connect.
   const ctx: EnvContext = { vars, secretVars, databases, passwordManagers: passwordManagers && !!providers.data?.length };
-  // Unknown until the providers load; then a scheme no connected one resolves.
-  const unresolved = (scheme: string) => !!providers.data && !providers.data.some((p) => p.connected && p.scheme === scheme);
+  const connections = useQuery({
+    queryKey: ["secret-connections"],
+    queryFn: api.secretConnections,
+    enabled: fromManager.some(Boolean),
+  });
+  // Unknown until the connections load; then a scheme no connection resolves.
+  const unresolved = (scheme: string) => !!connections.data && !connections.data.some((c) => c.scheme === scheme);
   const counts = new Map<string, number>();
   for (const r of rows) counts.set(r.key, (counts.get(r.key) ?? 0) + 1);
   const editing = dialog.index != null ? (rows[dialog.index] ?? null) : null;

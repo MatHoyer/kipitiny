@@ -173,4 +173,5 @@ export const passwordManagerIcon = (id: string) => passwordManagerIcons[id] ?? <
 
 /** Provider ids by reference scheme, for icons where only a reference is known. */
 const schemeProviders: Record<string, string> = { pass: "protonpass" };
-export const schemeIcon = (scheme: string) => passwordManagerIcon(schemeProviders[scheme] ?? "");
+/** The mark of the manager a scheme names, through any of its connections (pass, pass+work). */
+export const schemeIcon = (scheme: string) => passwordManagerIcon(schemeProviders[scheme.split("+")[0]] ?? "");

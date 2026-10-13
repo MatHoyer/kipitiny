@@ -16,6 +16,7 @@ import type {
   Service,
   UptimeCheck,
   UserView,
+  SecretConnection,
 } from "@/api";
 
 /*
@@ -39,8 +40,10 @@ export type DemoDb = {
   backups: Backup[];
   schedules: Schedule[];
   uptime: UptimeCheck[];
-  /** IDs of the connected password managers. */
+  /** IDs of the connected password managers, before connections: seeds secretConnections. */
   passwordManagers: string[];
+  /** Added after version 3: seeded from passwordManagers on first use. */
+  secretConnections?: SecretConnection[];
   restores: Restore[];
   domains: Domain[];
   registries: Registry[];

@@ -6,6 +6,7 @@ import type {
   Notifications,
   Schedule,
   AuthState,
+  SecretConnection,
   SecretItem,
   SecretProvider,
   CanvasPoint,
@@ -537,8 +538,18 @@ const passwordManager = (): SecretProvider => ({
   example: "pass://Vault/Item/password",
   help: "This is a demo: any token connects, to sample vaults. On a server, create one with `pass-cli personal-access-token create --name kipitiny --expiration 1y`.",
   available: true,
-  connected: db.passwordManagers.includes("protonpass"),
 });
+
+/** The demo's password manager connections, seeded from the managers connected before there were several. */
+const secretConnections = (): SecretConnection[] =>
+  (db.secretConnections ??= db.passwordManagers.map((kind) => ({
+    id: `sc-${kind}`,
+    kind,
+    name: "",
+    scheme: "pass",
+    providerName: "Proton Pass",
+    createdAt: new Date().toISOString(),
+  })));
 
 /** The demo's Proton Pass helper: pulled once per page load, running for 5 minutes after each use. */
 const helper = { pulled: false, until: 0 };
@@ -660,8 +671,10 @@ function verifying(b: Backup): Backup {
   return b;
 }
 
-const connectedManager = (id: string) => {
-  if (!db.passwordManagers.includes(id)) throw invalid("this password manager isn't connected");
+const connection = (id: string) => {
+  const c = secretConnections().find((c) => c.id === id);
+  if (!c) throw notFound();
+  return c;
 };
 
 /** The sample vaults: item titles and the fields a reference can name. */
@@ -927,38 +940,52 @@ const routes: Route[] = [
   ["GET", /^\/ssh-key$/, () => ({ publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDemoDemoDemoDemoDemoDemoDemoDemoDemoDemo kipitiny" })],
   ["GET", /^\/domains$/, () => db.domains],
   ["GET", /^\/secret-providers$/, () => [passwordManager()]],
+  ["GET", /^\/secret-connections$/, () => secretConnections()],
   [
-    "PUT",
-    /^\/secret-providers\/([^/]+)$/,
-    ({ m, q, body }) => {
-      if (m[1] !== "protonpass") throw notFound();
+    "POST",
+    /^\/secret-connections$/,
+    ({ q, body }) => {
+      if (body.kind !== "protonpass") throw notFound();
+      const name = String(body.name ?? "").trim();
+      if (name && !/^[a-z][a-z0-9-]{0,30}$/.test(name)) throw invalid("name must be lowercase letters, digits and dashes, starting with a letter");
+      if (secretConnections().some((c) => c.kind === body.kind && c.name === name)) {
+        throw invalid(name ? `Proton Pass already has a connection named ${name}` : "Proton Pass already has a default connection: name this one");
+      }
       if (!String(body.token ?? "").trim()) throw invalid("a token is required");
-      db.passwordManagers = ["protonpass"];
+      const c: SecretConnection = {
+        id: newId("sc"),
+        kind: "protonpass",
+        name,
+        scheme: name ? `pass+${name}` : "pass",
+        providerName: "Proton Pass",
+        createdAt: new Date().toISOString(),
+      };
+      db.secretConnections = [...secretConnections(), c].sort((a, b) => a.name.localeCompare(b.name));
       save();
-      return q.has("progress") ? progressed([...helperSteps(), "login", "verify"], passwordManager()) : passwordManager();
+      return q.has("progress") ? progressed([...helperSteps(), "login", "verify"], c) : c;
     },
   ],
   [
     "DELETE",
-    /^\/secret-providers\/([^/]+)$/,
+    /^\/secret-connections\/([^/]+)$/,
     ({ m }) => {
-      db.passwordManagers = db.passwordManagers.filter((id) => id !== m[1]);
+      db.secretConnections = secretConnections().filter((c) => c.id !== m[1]);
       save();
     },
   ],
   [
     "POST",
-    /^\/secret-providers\/([^/]+)\/test$/,
-    ({ m, q }) => (connectedManager(m[1]), q.has("progress") ? progressed([...helperSteps(), "session"], undefined) : undefined),
+    /^\/secret-connections\/([^/]+)\/test$/,
+    ({ m, q }) => (connection(m[1]), q.has("progress") ? progressed([...helperSteps(), "session"], undefined) : undefined),
   ],
-  ["GET", /^\/secret-providers\/([^/]+)\/vaults$/, ({ m }) => (connectedManager(m[1]), Object.keys(vaults))],
+  ["GET", /^\/secret-connections\/([^/]+)\/vaults$/, ({ m }) => (connection(m[1]), Object.keys(vaults))],
   [
     "GET",
-    /^\/secret-providers\/([^/]+)\/items$/,
+    /^\/secret-connections\/([^/]+)\/items$/,
     ({ m, q }): SecretItem[] => {
-      connectedManager(m[1]);
+      const { scheme } = connection(m[1]);
       const vault = q.get("vault") ?? "";
-      return (vaults[vault] ?? []).map(([title, fields]) => ({ title, fields: fields.map((name) => ({ name, ref: `pass://${vault}/${title}/${name}` })) }));
+      return (vaults[vault] ?? []).map(([title, fields]) => ({ title, fields: fields.map((name) => ({ name, ref: `${scheme}://${vault}/${title}/${name}` })) }));
     },
   ],
   ["GET", /^\/topology$/, () => topology()],
