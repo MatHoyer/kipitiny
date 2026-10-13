@@ -157,7 +157,7 @@ func applyChannelInput(ch *store.NotificationChannel, in ChannelInput) error {
 			cfg[f.Key] = v
 		}
 	}
-	if _, err := notify.New(ch.Kind, cfg, nil); err != nil {
+	if _, err := notify.New(ch.Kind, cfg, notify.Deps{}); err != nil {
 		return fmt.Errorf("%w: %s", ErrInvalid, strings.TrimPrefix(err.Error(), notify.ErrConfig.Error()+": "))
 	}
 	events := []string{}
@@ -222,7 +222,7 @@ func (c *Core) notify(e notify.Event, path, key string) {
 }
 
 func (c *Core) send(ctx context.Context, ch store.NotificationChannel, e notify.Event) error {
-	s, err := notify.New(ch.Kind, ch.Config, c.notifyHTTP)
+	s, err := notify.New(ch.Kind, ch.Config, notify.Deps{HTTP: c.notifyHTTP, Mail: c.sendMail})
 	if err != nil {
 		return err
 	}

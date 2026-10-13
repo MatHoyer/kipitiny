@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, ChevronLeft, Pencil, Plus, Send, Trash2 } from "lucide-react";
+import { Bell, ChevronLeft, Mail, Pencil, Plus, Send, Trash2, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { DiscordIcon } from "@/components/brand-icons";
 import { CheckboxField, ChoiceTile, EmptyState, ErrorText, Tag } from "@/components/common";
@@ -17,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
+import { useAccess } from "@/lib/access";
 import { cn } from "@/lib/utils";
 import { api, type ChannelInput, type NotificationChannel, type Notifications as NotificationsState } from "@/api";
 import { SettingsPage } from "./page";
@@ -24,6 +26,7 @@ import { SettingsPage } from "./page";
 /** Brand marks by channel kind; others get a bell. */
 const kindIcons: Record<string, ReactNode> = {
   discord: <DiscordIcon className="text-[#5865F2]" />,
+  email: <Mail />,
 };
 const kindIcon = (kind: string) => kindIcons[kind] ?? <Bell />;
 
@@ -197,6 +200,8 @@ function ChannelForm({
         },
   );
   const kind = meta.kinds.find((k) => k.name === form.kind);
+  const { admin } = useAccess();
+  const email = useQuery({ queryKey: ["email"], queryFn: api.email, enabled: admin && form.kind === "email" });
   const save = useMutation({
     meta: { error: "Couldn't save the channel" },
     mutationFn: () => (channel ? api.updateChannel(channel.id, form) : api.createChannel(form)),
@@ -225,9 +230,23 @@ function ChannelForm({
         <DialogDescription>
           {form.kind === "discord"
             ? "In Discord: channel settings › Integrations › Webhooks › New Webhook, then copy its URL."
-            : "Pick the events this channel receives."}
+            : form.kind === "email"
+              ? "Sent through the SMTP server in Settings › Email, to every recipient (comma-separated)."
+              : "Pick the events this channel receives."}
         </DialogDescription>
       </DialogHeader>
+      {email.data && !email.data.configured && (
+        <p className="flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-500">
+          <TriangleAlert className="size-4 shrink-0" />
+          <span>
+            No SMTP server yet: nothing is sent until one is set in{" "}
+            <Link to="/email" className="underline">
+              Settings › Email
+            </Link>
+            .
+          </span>
+        </p>
+      )}
       {!channel && form.kind === "discord" && <HowTo label="How do I get a webhook URL?" accent="#5865F2" steps={discordGuide} />}
       <div className="space-y-4">
         <FloatingInput

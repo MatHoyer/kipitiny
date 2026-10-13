@@ -64,3 +64,26 @@ func TestEmailPasswordMasked(t *testing.T) {
 		t.Errorf("password leaked: %+v", v)
 	}
 }
+
+func TestEmailChannel(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	ch, err := c.CreateChannel(ctx, ChannelInput{Name: "ops", Kind: "email", Config: map[string]string{"to": "ops@example.com"}, Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.TestChannel(ctx, ch.ID); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "Settings › Email") {
+		t.Errorf("without SMTP: %v", err)
+	}
+
+	srv := mailtest.NewServer(t)
+	if _, err := c.SetEmail(ctx, mail.Config{Host: "127.0.0.1", Port: srv.Port, Security: mail.None, From: "ops@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.TestChannel(ctx, ch.ID); err != nil {
+		t.Fatal(err)
+	}
+	if m := <-srv.Messages; m.To[0] != "RCPT TO:<ops@example.com>" || !strings.Contains(m.Data, "Test notification") {
+		t.Errorf("sent = %+v", m)
+	}
+}

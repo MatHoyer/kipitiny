@@ -60,8 +60,9 @@ a project synced from git can only set it there.
 
 *Settings › Email* sets the SMTP server kipitiny sends email through: your
 provider's relay (Amazon SES, Postmark, Resend, Gmail, Office 365…), not a mail
-server of its own. Saving checks that kipitiny can connect and sign in;
-**Send a test** mails an address you type.
+server of its own. Email [notification channels](#notifications) and
+[invites](/docs/users) use it. Saving checks that kipitiny can connect and
+sign in; **Send a test** mails an address you type.
 
 - **Security**: STARTTLS (port 587), TLS (port 465), or none, for a relay on
   the same host or network only. Signing in needs TLS or STARTTLS, so the
@@ -75,8 +76,13 @@ credentials and is never shown again.
 
 ## Notifications
 
-*Settings › Notifications* sends events to channels. A channel is a **Discord**
-webhook (`https://discord.com/api/webhooks/…`). Each channel picks its events
+*Settings › Notifications* sends events to channels. A channel is either:
+
+- a **Discord** webhook (`https://discord.com/api/webhooks/…`);
+- **Email** to one or more recipients (comma-separated), through the SMTP
+  server set in [Email](#email). Subjects start with `[kipitiny]`.
+
+Each channel picks its events
 (by default problems and recoveries, restores and new versions, but not
 routine successes), and **Test** sends a sample message. A message links back
 to the page in kipitiny. A problem that repeats, such as a crash-looping
