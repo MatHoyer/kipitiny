@@ -45,6 +45,10 @@ func Pages(c *core.Core, log *slog.Logger) http.Handler {
 		writePage(w, r, c.MaintenancePage(r.Context(), "", r.URL.Query().Get("url")))
 	})
 	mux.HandleFunc(core.PagesPath+"{id}", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("page") == "starting" { // to see it, without waking the app
+			writePage(w, r, c.StartingPage(r.Context(), r.PathValue("id")))
+			return
+		}
 		writePage(w, r, c.MaintenancePage(r.Context(), r.PathValue("id"), ""))
 	})
 	return mux
@@ -60,6 +64,7 @@ func writePage(w http.ResponseWriter, r *http.Request, p core.Page) {
 	h.Set("X-Robots-Tag", "noindex")
 	if p.Starting {
 		h.Set("Retry-After", "5")
+		h.Set("Refresh", "3")
 		if !acceptsHTML(r) {
 			h.Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusServiceUnavailable)

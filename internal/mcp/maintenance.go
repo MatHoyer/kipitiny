@@ -16,6 +16,10 @@ type setMaintenanceIn struct {
 	Title    *string   `json:"title,omitempty" jsonschema:"the default page's heading; empty restores \"We'll be back soon\"; omitted keeps it"`
 	Message  *string   `json:"message,omitempty" jsonschema:"the default page's text; empty restores the default; omitted keeps it"`
 	HTML     *string   `json:"html,omitempty" jsonschema:"a whole HTML document served instead of the default page (max 64 KiB); empty restores the default page; omitted keeps it"`
+	// The starting page of an app waking from sleep.
+	StartingTitle   *string `json:"starting_title,omitempty" jsonschema:"the default starting page's heading (shown while the app wakes from sleep); empty restores \"Starting…\"; omitted keeps it"`
+	StartingMessage *string `json:"starting_message,omitempty" jsonschema:"the default starting page's text; empty restores the default; omitted keeps it"`
+	StartingHTML    *string `json:"starting_html,omitempty" jsonschema:"a whole HTML document served while the app wakes (max 64 KiB; the manager makes it reload every 3 s); empty restores the default; omitted keeps it"`
 }
 
 func (t *tools) setMaintenance(ctx context.Context, _ *mcp.CallToolRequest, in setMaintenanceIn) (*mcp.CallToolResult, store.Maintenance, error) {
@@ -25,7 +29,12 @@ func (t *tools) setMaintenance(ctx context.Context, _ *mcp.CallToolRequest, in s
 			return store.Maintenance{}, err
 		}
 		m := svc.Maintenance
-		v := core.MaintenanceInput{Enabled: m.Enabled, AllowIPs: m.AllowIPs, Title: m.Title, Message: m.Message, HTML: m.HTML}
+		v := core.MaintenanceInput{Enabled: m.Enabled, AllowIPs: m.AllowIPs, Title: m.Title, Message: m.Message, HTML: m.HTML, Starting: m.Starting}
+		for dst, src := range map[*string]*string{&v.Starting.Title: in.StartingTitle, &v.Starting.Message: in.StartingMessage, &v.Starting.HTML: in.StartingHTML} {
+			if src != nil {
+				*dst = *src
+			}
+		}
 		if in.Enabled != nil {
 			v.Enabled = *in.Enabled
 		}

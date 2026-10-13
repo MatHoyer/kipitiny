@@ -22,7 +22,7 @@ func TestWritePageStarting(t *testing.T) {
 		r.Header.Set("Accept", tc.accept)
 		w := httptest.NewRecorder()
 		writePage(w, r, starting)
-		if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") != "5" {
+		if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") != "5" || w.Header().Get("Refresh") != "3" {
 			t.Errorf("accept %q: status %d, Retry-After %q; want 503 and 5", tc.accept, w.Code, w.Header().Get("Retry-After"))
 		}
 		if got := w.Header().Get("Content-Type"); got != tc.wantType || !strings.Contains(w.Body.String(), tc.wantBody) {

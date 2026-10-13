@@ -97,9 +97,28 @@ func TestStartingPage(t *testing.T) {
 	if err := c.store.SetServiceSleeping(ctx, svc.ID, true); err != nil {
 		t.Fatal(err)
 	}
+	// Woken just now (the test has no Docker to start containers with).
+	c.sleep.waking = map[string]time.Time{svc.ID: time.Now()}
 	page := c.MaintenancePage(ctx, "", "https://shop.example.com/cart")
 	if body := string(page.Body); !page.Starting || !strings.Contains(body, `http-equiv="refresh"`) || !strings.Contains(body, "shop is starting") {
 		t.Fatalf("a sleeping app gets the starting page, got %+v", page)
+	}
+
+	// The starting page can be customized like the maintenance page.
+	if err := c.store.SetServiceMaintenance(ctx, svc.ID, store.Maintenance{Starting: store.StartingPage{Title: "Waking up", Message: "One moment"}}); err != nil {
+		t.Fatal(err)
+	}
+	if body := string(c.StartingPage(ctx, svc.ID).Body); !strings.Contains(body, "Waking up") || !strings.Contains(body, "One moment") {
+		t.Errorf("custom text: %s", body)
+	}
+	if err := c.store.SetServiceMaintenance(ctx, svc.ID, store.Maintenance{Starting: store.StartingPage{HTML: "<h1>zzz</h1>"}}); err != nil {
+		t.Fatal(err)
+	}
+	if p := c.StartingPage(ctx, svc.ID); !p.Custom || !p.Starting || string(p.Body) != "<h1>zzz</h1>" {
+		t.Errorf("custom HTML: %+v", p)
+	}
+	if err := validateMaintenance(store.Maintenance{Starting: store.StartingPage{HTML: strings.Repeat("a", maxPageHTML+1)}}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("huge starting page: %v", err)
 	}
 
 	// Woken, not ready yet: still starting; past the cold start, the usual page.

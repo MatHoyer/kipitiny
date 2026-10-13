@@ -138,7 +138,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_uptime_check",
 		Description: "Remove a service's uptime check and its history. Not for a git project: remove x-kipitiny.uptime from its file. Needs admin."}, t.deleteUptimeCheck)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_maintenance",
-		Description: "Set an app's maintenance page, shown (503 with Retry-After) while it has no replica to answer, and maintenance mode, which shows it to every visitor except allowed IPs while the replicas keep running (migrations, manual work). Applied within seconds, nothing restarts; works on git-linked projects too. Needs admin."}, t.setMaintenance)
+		Description: "Set an app's maintenance page, shown (503 with Retry-After) while it has no replica to answer, and maintenance mode, which shows it to every visitor except allowed IPs while the replicas keep running (migrations, manual work); also the starting page visitors get while the app wakes from sleep. Applied within seconds, nothing restarts; works on git-linked projects too. Needs admin."}, t.setMaintenance)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_previews", Annotations: readOnly,
 		Description: "A project's preview environments: name, branch, commit, last deploy, time to live and the URLs of their apps."}, t.listPreviews)
 	mcp.AddTool(server, &mcp.Tool{Name: "deploy_preview",

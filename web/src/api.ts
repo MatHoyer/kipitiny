@@ -145,7 +145,12 @@ export type Maintenance = {
   message?: string;
   /** A whole HTML document served instead of the default page. */
   html?: string;
+  /** The page visitors get while the app wakes from sleep. */
+  starting?: StartingPage;
 };
+
+/** Replaces the default "Starting…" page's text, or the whole page with html; empty keeps the default. */
+export type StartingPage = { title?: string; message?: string; html?: string };
 
 export type RateLimit = { average: number; burst: number };
 
