@@ -208,3 +208,30 @@ func TestPreviewSeedBackups(t *testing.T) {
 		t.Errorf("seeds from a failed backup")
 	}
 }
+
+func TestPreviewOneReplica(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	parent, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr, err := c.store.CreateProject(ctx, store.Project{Name: "shop-pr-1", ServerID: store.LocalServerID, ParentID: parent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.CreateService(ctx, pr.ID, ServiceInput{Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 2}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("two replicas in a preview: %v", err)
+	}
+	v, err := c.CreateService(ctx, pr.ID, ServiceInput{Name: "web", Kind: store.ServiceKindApp, Image: "nginx"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	two := 2
+	if _, err := c.UpdateService(ctx, v.ID, ServicePatch{Replicas: &two}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("scaled a preview's service: %v", err)
+	}
+	if _, err := c.CreateService(ctx, parent.ID, ServiceInput{Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 2}); err != nil {
+		t.Fatalf("the parent scales: %v", err)
+	}
+}

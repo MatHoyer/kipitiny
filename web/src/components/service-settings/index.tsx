@@ -22,11 +22,14 @@ type SectionId = (typeof sectionIds)[number];
 export function ServiceSettings({
   svc,
   projectName,
+  preview,
   gitPath,
   danger,
 }: {
   svc: ServiceT;
   projectName?: string;
+  /** In a preview environment: one replica each. */
+  preview?: boolean;
   /** The compose file a git project follows: the cards it owns are read-only. */
   gitPath?: string;
   /** Last, in Advanced. */
@@ -96,7 +99,7 @@ export function ServiceSettings({
           pending={rename.isPending}
           onRename={(name) => rename.mutate(name)}
         />
-        <GeneralCard key={`general-${svc.id}`} svc={svc} />
+        <GeneralCard key={`general-${svc.id}`} svc={svc} preview={preview} />
       </GitOwned>
     ),
     networking: (

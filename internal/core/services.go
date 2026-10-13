@@ -398,6 +398,10 @@ func (c *Core) validateIn(ctx context.Context, s store.Service, project store.Pr
 	if project.SleepAfterSeconds != 0 && (len(s.PublishedPorts) > 0 || s.HostNetwork) {
 		return fmt.Errorf("%w: %s sleeps, and traffic that goes around Traefik can't wake it: turn sleep mode off first", ErrInvalid, project.Name)
 	}
+	if project.ParentID != "" && s.Replicas > 1 {
+		// Each deploy resets it: a preview is a cheap copy, not a load test.
+		return fmt.Errorf("%w: previews run one replica of each service", ErrInvalid)
+	}
 	if err := c.checkSecretSchemes(s.Env); err != nil {
 		return err
 	}
