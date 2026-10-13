@@ -360,6 +360,24 @@ func (c *Core) DeleteProject(ctx context.Context, id, confirm string) error {
 	if confirm != p.Name {
 		return fmt.Errorf("%w: confirm with the project name", ErrInvalid)
 	}
+	return c.deleteProject(ctx, p)
+}
+
+// deleteProject is DeleteProject without the confirmation; a project's
+// previews go first.
+func (c *Core) deleteProject(ctx context.Context, p store.Project) error {
+	id := p.ID
+	all, err := c.store.ListProjects(ctx)
+	if err != nil {
+		return err
+	}
+	for _, child := range all {
+		if child.ParentID == id {
+			if err := c.deleteProject(ctx, child); err != nil {
+				return fmt.Errorf("preview %s: %w", child.Preview.Name, err)
+			}
+		}
+	}
 	svcs, err := c.store.ListServices(ctx, id)
 	if err != nil {
 		return err

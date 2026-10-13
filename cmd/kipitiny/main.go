@@ -124,6 +124,9 @@ func serve() error {
 	if err := c.StartSleep(); err != nil {
 		return err
 	}
+	if err := c.StartPreviewExpiry(); err != nil {
+		return err
+	}
 	if err := c.StartGitSync(); err != nil {
 		return err
 	}

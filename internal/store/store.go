@@ -23,6 +23,10 @@ type Store interface {
 	DeleteProject(ctx context.Context, id string) error
 	SetProjectEnv(ctx context.Context, id string, env map[string]string, secrets []string) (Project, error)
 	RenameProject(ctx context.Context, id, name string) error
+	SetProjectPreview(ctx context.Context, id string, p Preview) error
+	// GetPreviewSettings returns ErrNotFound for a project without any.
+	GetPreviewSettings(ctx context.Context, projectID string) (PreviewSettings, error)
+	SavePreviewSettings(ctx context.Context, s PreviewSettings) (PreviewSettings, error)
 
 	CreateService(ctx context.Context, s Service) (Service, error)
 	GetService(ctx context.Context, id string) (Service, error)
@@ -309,9 +313,48 @@ type Project struct {
 	// {{ project.NAME }}.
 	Env map[string]string `bun:"env" json:"env"`
 	// Secrets names the Env entries that are write-only.
-	Secrets   []string  `bun:"secrets" json:"secrets"`
+	Secrets []string `bun:"secrets" json:"secrets"`
+	// ParentID is set on a preview environment: the project it copies.
+	ParentID string `bun:"parent_id" json:"parentId,omitempty"`
+	// Preview describes a preview environment; zero for other projects.
+	Preview   Preview   `bun:"preview,type:text" json:"preview"`
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 	UpdatedAt time.Time `bun:"updated_at" json:"updatedAt"`
+}
+
+// Preview is what a preview environment was last deployed from.
+type Preview struct {
+	// Name is the preview's name under its parent (pr-12, staging).
+	Name string `json:"name,omitempty"`
+	// Branch and Commit are the source, when CI gave them; a git-linked
+	// parent's compose file is read at Branch.
+	Branch string `json:"branch,omitempty"`
+	Commit string `json:"commit,omitempty"`
+	// TTLSeconds closes the preview after that long without a request or
+	// a deploy; 0 never does.
+	TTLSeconds int `json:"ttlSeconds,omitempty"`
+	// DeployedAt is the last time CI or a user deployed it.
+	DeployedAt time.Time `json:"deployedAt,omitzero"`
+}
+
+// PreviewSettings are how a project's previews differ from it.
+type PreviewSettings struct {
+	bun.BaseModel `bun:"table:preview_settings,alias:ps" json:"-"`
+
+	ProjectID string `bun:"project_id,pk" json:"projectId"`
+	// BaseDomain hosts the previews' apps: <preview>-<service>.<base>.
+	BaseDomain string `bun:"base_domain" json:"baseDomain"`
+	// Env are project variables of every preview, replacing the parent's;
+	// Secrets names the write-only ones.
+	Env     map[string]string `bun:"env" json:"env"`
+	Secrets []string          `bun:"secrets" json:"secrets"`
+	// Inherit names the parent's secrets previews may still use; the
+	// others are left out.
+	Inherit           []string  `bun:"inherit" json:"inherit"`
+	TTLSeconds        int       `bun:"ttl_seconds" json:"ttlSeconds"`
+	SleepAfterSeconds int       `bun:"sleep_after_seconds" json:"sleepAfterSeconds"`
+	AllowSeed         bool      `bun:"allow_seed" json:"allowSeed"`
+	UpdatedAt         time.Time `bun:"updated_at" json:"updatedAt"`
 }
 
 type ServiceKind string

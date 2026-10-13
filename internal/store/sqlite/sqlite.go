@@ -179,6 +179,43 @@ func (s *Store) RenameProject(ctx context.Context, id, name string) error {
 	return nil
 }
 
+func (s *Store) SetProjectPreview(ctx context.Context, id string, p store.Preview) error {
+	pr := store.Project{ID: id, Preview: p, UpdatedAt: now()}
+	res, err := s.db.NewUpdate().Model(&pr).Column("preview", "updated_at").WherePK().Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) GetPreviewSettings(ctx context.Context, projectID string) (store.PreviewSettings, error) {
+	var ps store.PreviewSettings
+	err := s.db.NewSelect().Model(&ps).Where("project_id = ?", projectID).Scan(ctx)
+	return ps, mapErr(err)
+}
+
+func (s *Store) SavePreviewSettings(ctx context.Context, ps store.PreviewSettings) (store.PreviewSettings, error) {
+	ps.UpdatedAt = now()
+	if ps.Env == nil {
+		ps.Env = map[string]string{}
+	}
+	if ps.Secrets == nil {
+		ps.Secrets = []string{}
+	}
+	if ps.Inherit == nil {
+		ps.Inherit = []string{}
+	}
+	_, err := s.db.NewInsert().Model(&ps).On("CONFLICT (project_id) DO UPDATE").
+		Set("base_domain = EXCLUDED.base_domain").Set("env = EXCLUDED.env").Set("secrets = EXCLUDED.secrets").
+		Set("inherit = EXCLUDED.inherit").Set("ttl_seconds = EXCLUDED.ttl_seconds").
+		Set("sleep_after_seconds = EXCLUDED.sleep_after_seconds").Set("allow_seed = EXCLUDED.allow_seed").
+		Set("updated_at = EXCLUDED.updated_at").Exec(ctx)
+	return ps, mapErr(err)
+}
+
 func (s *Store) SetProjectEnv(ctx context.Context, id string, env map[string]string, secrets []string) (store.Project, error) {
 	if env == nil {
 		env = map[string]string{}
