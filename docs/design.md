@@ -313,7 +313,7 @@ Later: optional VictoriaLogs or Loki, opt-in.
 ### Notifications
 
 - `internal/notify` is transport-agnostic: an `Event` (type, level, title, message, fields, link) and a `Sender` per channel kind. Each kind declares its config fields (secret or not), so the UI renders new kinds without changes.
-- Kinds: Discord webhook now; email (SMTP), in-app and generic webhooks later.
+- Kinds: Discord webhook and email (through the SMTP server of §Email, recipients per channel) now; in-app and generic webhooks later. A sender gets its transports as `notify.Deps` (HTTP client, mail func), so `notify` stays ignorant of settings.
 
 ### Email
 

@@ -1483,7 +1483,10 @@ const routes: Route[] = [
     /^\/notifications$/,
     (): Notifications => ({
       channels: db.channels,
-      kinds: [{ name: "discord", label: "Discord", fields: [{ key: "webhookUrl", label: "Webhook URL", placeholder: "https://discord.com/api/webhooks/…", required: true, secret: true }] }],
+      kinds: [
+        { name: "discord", label: "Discord", fields: [{ key: "webhookUrl", label: "Webhook URL", placeholder: "https://discord.com/api/webhooks/…", required: true, secret: true }] },
+        { name: "email", label: "Email", fields: [{ key: "to", label: "Recipients", placeholder: "ops@example.com, oncall@example.com", required: true, secret: false }] },
+      ],
       events: EVENTS,
     }),
   ],
@@ -1491,7 +1494,9 @@ const routes: Route[] = [
     "POST",
     /^\/notifications\/channels$/,
     ({ body }) => {
-      const ch = { id: newId("ch"), name: String(body.name || "Discord"), kind: body.kind || "discord", config: { webhookUrl: MASK }, events: body.events ?? [], enabled: body.enabled ?? true, createdAt: now() };
+      const kind = String(body.kind || "discord");
+      const config: Record<string, string> = kind === "email" ? { to: String((body.config as Record<string, string>)?.to ?? "") } : { webhookUrl: MASK };
+      const ch = { id: newId("ch"), name: String(body.name || "Discord"), kind, config, events: body.events ?? [], enabled: body.enabled ?? true, createdAt: now() };
       db.channels.push(ch);
       save();
       return ch;
@@ -1503,6 +1508,7 @@ const routes: Route[] = [
     ({ m, body }) => {
       const ch = db.channels.find((x) => x.id === m[1]) ?? (() => { throw notFound(); })();
       Object.assign(ch, { name: body.name ?? ch.name, events: body.events ?? ch.events, enabled: body.enabled ?? ch.enabled });
+      if (ch.kind === "email") ch.config = { to: String((body.config as Record<string, string>)?.to ?? ch.config.to) };
       save();
       return ch;
     },

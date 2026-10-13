@@ -35,12 +35,12 @@ var discordHosts = map[string]bool{
 	"canary.discord.com": true,
 }
 
-func newDiscord(cfg map[string]string, hc *http.Client) (Sender, error) {
+func newDiscord(cfg map[string]string, d Deps) (Sender, error) {
 	u, err := url.Parse(strings.TrimSpace(cfg["webhookUrl"]))
 	if err != nil || u.Scheme != "https" || !discordHosts[u.Hostname()] || !strings.HasPrefix(u.Path, "/api/webhooks/") {
 		return nil, fmt.Errorf("%w: not a Discord webhook URL (https://discord.com/api/webhooks/…)", ErrConfig)
 	}
-	return &discord{url: u.String(), hc: hc}, nil
+	return &discord{url: u.String(), hc: d.HTTP}, nil
 }
 
 type discord struct {

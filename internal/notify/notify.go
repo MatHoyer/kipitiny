@@ -1,6 +1,7 @@
-// Package notify delivers events to external channels (Discord now; email,
-// in-app or generic webhooks later). It knows nothing about the manager:
-// core builds an Event and hands it to the Sender of each channel.
+// Package notify delivers events to external channels (Discord, email; in-app
+// or generic webhooks later). It knows nothing about the manager: core builds
+// an Event and hands it to the Sender of each channel, with the Deps it
+// delivers through.
 package notify
 
 import (
@@ -8,8 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	netmail "net/mail"
 	"slices"
 	"time"
+
+	"github.com/MatHoyer/kipitiny/internal/mail"
 )
 
 // Level sets how an event is presented (colour, icon).
@@ -46,6 +50,15 @@ type Sender interface {
 	Send(ctx context.Context, e Event) error
 }
 
+// Deps are what senders deliver through.
+type Deps struct {
+	// HTTP calls webhooks; nil uses a client with a 15 s timeout.
+	HTTP *http.Client
+	// Mail sends an email through the manager's SMTP server; nil when
+	// nothing is sent (validating a configuration).
+	Mail func(ctx context.Context, to []*netmail.Address, b mail.Body, subject string) error
+}
+
 // Kind is a delivery method. Its Fields describe the configuration, so the
 // UI renders the form of a new kind without changes.
 type Kind struct {
@@ -53,7 +66,7 @@ type Kind struct {
 	Label  string        `json:"label"`
 	Fields []ConfigField `json:"fields"`
 	// New validates a configuration and returns its sender.
-	New func(cfg map[string]string, hc *http.Client) (Sender, error) `json:"-"`
+	New func(cfg map[string]string, d Deps) (Sender, error) `json:"-"`
 }
 
 type ConfigField struct {
@@ -68,7 +81,7 @@ type ConfigField struct {
 // ErrConfig wraps every configuration error.
 var ErrConfig = errors.New("invalid notification config")
 
-var kinds = []Kind{discordKind}
+var kinds = []Kind{discordKind, emailKind}
 
 // Kinds lists the available delivery methods.
 func Kinds() []Kind { return slices.Clone(kinds) }
@@ -83,7 +96,7 @@ func Lookup(name string) (Kind, bool) {
 }
 
 // New returns the sender of a channel, checking required fields first.
-func New(kind string, cfg map[string]string, hc *http.Client) (Sender, error) {
+func New(kind string, cfg map[string]string, d Deps) (Sender, error) {
 	k, ok := Lookup(kind)
 	if !ok {
 		return nil, fmt.Errorf("%w: unknown kind %q", ErrConfig, kind)
@@ -93,10 +106,10 @@ func New(kind string, cfg map[string]string, hc *http.Client) (Sender, error) {
 			return nil, fmt.Errorf("%w: %s is required", ErrConfig, f.Label)
 		}
 	}
-	if hc == nil {
-		hc = &http.Client{Timeout: 15 * time.Second}
+	if d.HTTP == nil {
+		d.HTTP = &http.Client{Timeout: 15 * time.Second}
 	}
-	return k.New(cfg, hc)
+	return k.New(cfg, d)
 }
 
 // truncate cuts s to at most n runes, marking the cut.

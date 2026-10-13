@@ -27,7 +27,7 @@ func TestDiscordURL(t *testing.T) {
 		{"", false},
 	}
 	for _, tt := range tests {
-		_, err := New("discord", map[string]string{"webhookUrl": tt.url}, nil)
+		_, err := New("discord", map[string]string{"webhookUrl": tt.url}, Deps{})
 		if (err == nil) != tt.ok {
 			t.Errorf("%q: got %v, want ok=%v", tt.url, err, tt.ok)
 		}
@@ -35,7 +35,7 @@ func TestDiscordURL(t *testing.T) {
 			t.Errorf("%q: error should wrap ErrConfig: %v", tt.url, err)
 		}
 	}
-	if _, err := New("pigeon", nil, nil); !errors.Is(err, ErrConfig) {
+	if _, err := New("pigeon", nil, Deps{}); !errors.Is(err, ErrConfig) {
 		t.Errorf("unknown kind: %v", err)
 	}
 }
