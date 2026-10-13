@@ -180,7 +180,7 @@ export function Project() {
             <TabsTrigger value="services">Services</TabsTrigger>
             <TabsTrigger value="map">Map</TabsTrigger>
             <TabsTrigger value="environment">Environment</TabsTrigger>
-            {may("git") && <TabsTrigger value="git">Git</TabsTrigger>}
+            {may("git") && !parentId && <TabsTrigger value="git">Git</TabsTrigger>}
             {project.data && !parentId && <TabsTrigger value="previews">Previews</TabsTrigger>}
             {(may("settings") || may("deploy") || may("backups") || may("delete")) && <TabsTrigger value="settings">Settings</TabsTrigger>}
           </TabsList>
@@ -217,7 +217,7 @@ export function Project() {
             <DatabaseReferences dbs={dbs} />
           </TabsContent>
           <TabsContent value="git" className="space-y-6">
-            {tab === "git" && may("git") && <GitSource projectId={id} />}
+            {tab === "git" && may("git") && !parentId && <GitSource projectId={id} />}
           </TabsContent>
           <TabsContent value="previews" className="space-y-6">
             {tab === "previews" && project.data && !parentId && (

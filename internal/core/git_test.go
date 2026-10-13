@@ -200,3 +200,19 @@ func servicesByName(t *testing.T, c *Core, projectID string) map[string]store.Se
 	}
 	return out
 }
+
+func TestPreviewRefusesGit(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	parent, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr, err := c.store.CreateProject(ctx, store.Project{Name: "shop-pr-1", ServerID: store.LocalServerID, ParentID: parent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.LinkProjectGit(ctx, pr.ID, GitInput{RepoURL: "https://example.com/shop.git", Branch: "main"}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("linked a preview: %v", err)
+	}
+}
