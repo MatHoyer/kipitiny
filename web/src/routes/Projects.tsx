@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ChevronRight, FolderKanban, Globe, Layers, Plus, TriangleAlert } from "lucide-react";
+import { Activity, ChevronRight, FolderKanban, GitPullRequestArrow, Globe, Layers, Plus, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { ServiceIcon } from "@/components/service-icon";
@@ -34,6 +34,24 @@ export function Projects() {
     // Previews are listed on their project's page.
     select: (ps) => ps.filter((p) => !p.parentId),
   });
+  // Counted on their project's card: how many, and how many sleep.
+  const previews = useQuery({ queryKey: ["projects"], queryFn: api.projects, select: (ps) => ps.filter((p) => p.parentId) });
+  const previewServices = useQueries({
+    queries: (previews.data ?? []).map((p) => ({
+      queryKey: ["services", p.id],
+      queryFn: () => api.services(p.id),
+      refetchInterval: 15_000,
+    })),
+  });
+  const previewsOf = (id: string) => {
+    const mine = (previews.data ?? []).flatMap((p, i) => (p.parentId === id ? [previewServices[i]?.data] : []));
+    // Asleep: every app with a domain sleeps (its databases keep running).
+    const asleep = mine.filter((svcs) => {
+      const apps = svcs?.filter((s) => s.domain) ?? [];
+      return apps.length > 0 && apps.every((s) => s.sleeping);
+    }).length;
+    return { count: mine.length, asleep };
+  };
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.servers });
   const canCreate = useAccess().has("create-projects");
   // Same key as the project page, so the cache is shared.
@@ -96,7 +114,13 @@ export function Projects() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {projects.data.map((p, i) => (
-                <ProjectCard key={p.id} project={p} services={services[i]?.data} server={multi ? serverName(p.serverId) : undefined} />
+                <ProjectCard
+                  key={p.id}
+                  project={p}
+                  services={services[i]?.data}
+                  previews={previewsOf(p.id)}
+                  server={multi ? serverName(p.serverId) : undefined}
+                />
               ))}
             </div>
           </>
@@ -106,7 +130,17 @@ export function Projects() {
   );
 }
 
-function ProjectCard({ project: p, services, server }: { project: ProjectT; services?: Service[]; server?: string }) {
+function ProjectCard({
+  project: p,
+  services,
+  previews,
+  server,
+}: {
+  project: ProjectT;
+  services?: Service[];
+  previews: { count: number; asleep: number };
+  server?: string;
+}) {
   const domains = services?.filter((s) => s.domain).map((s) => s.domain) ?? [];
   const states = services?.map(liveState) ?? [];
   const bad = services?.filter(needsAttention).length ?? 0;
@@ -130,6 +164,13 @@ function ProjectCard({ project: p, services, server }: { project: ProjectT; serv
               {services ? `${services.length} service${services.length === 1 ? "" : "s"}` : <Spinner className="inline size-3" />}
               {server && ` · ${server}`}
             </p>
+            {previews.count > 0 && (
+              <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                <GitPullRequestArrow className="size-3 shrink-0" />
+                {previews.count} preview{previews.count === 1 ? "" : "s"}
+                {previews.asleep > 0 && ` · ${previews.count === previews.asleep ? "all" : previews.asleep} asleep`}
+              </p>
+            )}
           </div>
           <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </div>
