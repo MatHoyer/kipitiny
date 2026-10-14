@@ -19,8 +19,10 @@ const sessionCookie = "kipitiny_session"
 
 // publicRoutes are reachable without a session.
 var publicRoutes = map[string]bool{
-	"GET /api/health":                true,
-	"GET /api/auth/state":            true,
+	"GET /api/health":     true,
+	"GET /api/auth/state": true,
+	// The logo shows on the sign-in page and as the favicon.
+	"GET /api/branding/logo":         true,
 	"POST /api/auth/setup":           true,
 	"POST /api/auth/login":           true,
 	"POST /api/auth/login/mfa":       true,

@@ -37,6 +37,7 @@ type AuthState struct {
 	// way to sign in.
 	SSO         []SSOButton `json:"sso"`
 	SSORequired bool        `json:"ssoRequired"`
+	Branding    Branding    `json:"branding"`
 }
 
 // InitAuth creates the one-time token required to create the first
@@ -64,16 +65,16 @@ func (c *Core) AuthState(ctx context.Context, sessionToken string) (AuthState, e
 		return AuthState{}, err
 	}
 	if n == 0 {
-		return AuthState{SetupRequired: true, SSO: []SSOButton{}}, nil
+		return AuthState{SetupRequired: true, SSO: []SSOButton{}, Branding: c.Branding(ctx)}, nil
 	}
 	u, err := c.Authenticate(ctx, sessionToken)
 	if errors.Is(err, ErrUnauthorized) {
-		return AuthState{SSO: c.SSOButtons(ctx), SSORequired: c.SSORequired(ctx)}, nil
+		return AuthState{SSO: c.SSOButtons(ctx), SSORequired: c.SSORequired(ctx), Branding: c.Branding(ctx)}, nil
 	}
 	if err != nil {
 		return AuthState{}, err
 	}
-	return AuthState{User: &u, SSO: []SSOButton{}}, nil
+	return AuthState{User: &u, SSO: []SSOButton{}, Branding: c.Branding(ctx)}, nil
 }
 
 // Setup creates the first admin account and returns a session token.

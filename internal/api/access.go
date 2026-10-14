@@ -179,6 +179,8 @@ var routeAccess = map[string]access{
 	"PUT /api/secret-connections/{id}":           admin,
 	"DELETE /api/secret-connections/{id}":        admin,
 	"POST /api/secret-connections/{id}/test":     admin,
+	"PUT /api/branding":                          admin,
+	"DELETE /api/branding":                       admin,
 	"GET /api/cleanup":                           admin,
 	"PUT /api/cleanup":                           admin,
 	"POST /api/cleanup/run":                      admin,
