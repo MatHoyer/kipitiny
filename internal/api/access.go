@@ -50,6 +50,8 @@ var routeAccess = map[string]access{
 	"POST /api/account/passkeys/begin":    anyone,
 	"POST /api/account/passkeys":          anyone,
 	"DELETE /api/account/passkeys/{id}":   anyone,
+	"POST /api/account/sso/{id}/connect":  anyone,
+	"DELETE /api/account/sso/{id}":        anyone,
 	"GET /api/status":                     anyone,
 	"GET /api/stats":                      anyone,
 	"GET /api/topology":                   anyone,

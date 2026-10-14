@@ -106,6 +106,10 @@ type Account struct {
 	// RecoveryCodes is how many unused recovery codes are left.
 	RecoveryCodes int             `json:"recoveryCodes"`
 	Passkeys      []store.Passkey `json:"passkeys"`
+	// SSO lists the identities linked at single sign-on providers, and
+	// SSOProviders those to link one at.
+	SSO          []SSOIdentityView `json:"sso"`
+	SSOProviders []SSOButton       `json:"ssoProviders"`
 	// Role, Features and Grants say what the user may do, for the UI.
 	Role     store.Role          `json:"role"`
 	Features []string            `json:"features"`
@@ -147,7 +151,11 @@ func (c *Core) Account(ctx context.Context) (Account, error) {
 	if err != nil {
 		return Account{}, err
 	}
-	acc := Account{Username: u.Username, TOTPEnabled: u.TOTPSecret != "", RecoveryCodes: n, Passkeys: ps,
+	ids, err := c.ssoIdentities(ctx, u.ID)
+	if err != nil {
+		return Account{}, err
+	}
+	acc := Account{Username: u.Username, TOTPEnabled: u.TOTPSecret != "", RecoveryCodes: n, Passkeys: ps, SSO: ids, SSOProviders: c.SSOButtons(ctx),
 		Role: u.Role, Features: u.Features, Grants: map[string][]string{}}
 	if u.Role != store.RoleAdmin {
 		v, err := c.userView(ctx, u)

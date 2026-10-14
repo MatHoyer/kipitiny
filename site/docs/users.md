@@ -34,6 +34,16 @@ Single sign-on*:
 The name you give it labels the sign-in button. Several providers can be
 added side by side.
 
+A provider never creates accounts: it signs in users whose identity there is
+**linked** to their kipitiny account. Each user links theirs in *Account ›
+Single sign-on* (password asked again, then a sign-in at the provider). From
+then on, *Sign in with …* on the sign-in page brings them back where they
+were. Someone whose identity isn't linked is refused: invite them first.
+
+The provider stands in for the password only: a user with two-factor
+authentication on still enters a code afterwards. Removing a provider unlinks
+every identity linked through it.
+
 ## Project permissions
 
 A member's access is set per project. Any permission includes **view**.

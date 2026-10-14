@@ -2,6 +2,8 @@ package core
 
 import (
 	"context"
+	"crypto/subtle"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -11,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"golang.org/x/oauth2"
 
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -195,4 +198,237 @@ func (c *Core) forgetSSOProvider(id string) {
 	c.sso.mu.Lock()
 	delete(c.sso.providers, id)
 	c.sso.mu.Unlock()
+}
+
+// A sign-in at a provider is an authorization code flow with PKCE and a
+// nonce. Its state is kept here and in a cookie of the browser that
+// started it, so a link carrying someone else's code can't sign you in.
+
+// ssoFlowTTL bounds the time spent at the provider.
+const ssoFlowTTL = 10 * time.Minute
+
+// What a flow is for.
+const (
+	ssoLogin   = "login"   // sign in
+	ssoConnect = "connect" // link the identity to the signed-in user
+)
+
+type ssoFlow struct {
+	purpose     string
+	providerID  string
+	verifier    string
+	nonce       string
+	redirectURL string
+	// Connect: the user to link the identity to.
+	userID string
+	// Login: the page to land on once signed in.
+	returnTo string
+}
+
+// SSOStart is where to send the browser, and the state its cookie holds.
+type SSOStart struct {
+	URL   string `json:"url"`
+	State string `json:"-"`
+}
+
+// BeginSSO starts signing in with a provider; managerURL is the origin
+// the browser is on and returnTo the page to land on afterwards.
+func (c *Core) BeginSSO(ctx context.Context, providerID, managerURL, returnTo string) (SSOStart, error) {
+	return c.beginSSO(ctx, ssoFlow{purpose: ssoLogin, providerID: providerID, returnTo: localPath(returnTo)}, managerURL)
+}
+
+// BeginSSOConnect starts linking an identity to the signed-in user, once
+// they re-entered their password.
+func (c *Core) BeginSSOConnect(ctx context.Context, providerID, managerURL, password string) (SSOStart, error) {
+	u, err := c.confirmedUser(ctx, password)
+	if err != nil {
+		return SSOStart{}, err
+	}
+	return c.beginSSO(ctx, ssoFlow{purpose: ssoConnect, providerID: providerID, userID: u.ID}, managerURL)
+}
+
+func (c *Core) beginSSO(ctx context.Context, f ssoFlow, managerURL string) (SSOStart, error) {
+	p, err := c.store.GetSSOProvider(ctx, f.providerID)
+	if err != nil {
+		return SSOStart{}, err
+	}
+	op, err := c.oidcProvider(ctx, p)
+	if err != nil {
+		return SSOStart{}, err
+	}
+	f.verifier, f.nonce = oauth2.GenerateVerifier(), randomToken(24)
+	f.redirectURL = strings.TrimSuffix(managerURL, "/") + SSOCallbackPath
+	state := randomToken(24)
+	c.ssoFlows.put(state, f, time.Now().Add(ssoFlowTTL))
+	u := ssoOAuth(p, op, f.redirectURL).AuthCodeURL(state, oauth2.S256ChallengeOption(f.verifier), oidc.Nonce(f.nonce))
+	return SSOStart{URL: u, State: state}, nil
+}
+
+func ssoOAuth(p store.SSOProvider, op *oidc.Provider, redirectURL string) *oauth2.Config {
+	return &oauth2.Config{ClientID: p.ClientID, ClientSecret: p.ClientSecret, Endpoint: op.Endpoint(), RedirectURL: redirectURL,
+		Scopes: []string{oidc.ScopeOpenID, "email", "profile"}}
+}
+
+// SSOResult is a finished flow: a sign-in (a session, or a ticket for the
+// second factor) or a linked identity.
+type SSOResult struct {
+	Purpose   string
+	User      store.User
+	Session   string
+	MFATicket string
+	// ReturnTo is where a sign-in lands.
+	ReturnTo string
+}
+
+// FinishSSO redeems the code the provider sent the browser back with.
+// cookieState is the state the browser's cookie holds. Purpose is set even
+// on failure once the flow is known, to send the browser back to its page.
+func (c *Core) FinishSSO(ctx context.Context, state, cookieState, code string) (SSOResult, error) {
+	f, _, ok := c.ssoFlows.take(state)
+	if !ok {
+		return SSOResult{Purpose: ssoLogin}, fmt.Errorf("%w: this sign-in expired or was already used; start again", ErrInvalid)
+	}
+	res := SSOResult{Purpose: f.purpose, ReturnTo: f.returnTo}
+	if subtle.ConstantTimeCompare([]byte(state), []byte(cookieState)) != 1 {
+		return res, fmt.Errorf("%w: this sign-in was started in another browser; start again here", ErrInvalid)
+	}
+	p, err := c.store.GetSSOProvider(ctx, f.providerID)
+	if err != nil {
+		return res, err
+	}
+	id, err := c.ssoIdentity(ctx, p, f, code)
+	if err != nil {
+		return res, err
+	}
+	switch f.purpose {
+	case ssoConnect:
+		res.User, err = c.linkSSOIdentity(ctx, p, f.userID, id)
+		return res, err
+	default:
+		res.User, res.Session, res.MFATicket, err = c.ssoSignIn(ctx, p, id)
+		return res, err
+	}
+}
+
+// ssoClaims is who the provider says signed in.
+type ssoClaims struct {
+	Subject string
+	Email   string
+}
+
+// ssoIdentity exchanges the code and checks the ID token: signature,
+// issuer, audience, expiry and the flow's nonce.
+func (c *Core) ssoIdentity(ctx context.Context, p store.SSOProvider, f ssoFlow, code string) (ssoClaims, error) {
+	op, err := c.oidcProvider(ctx, p)
+	if err != nil {
+		return ssoClaims{}, err
+	}
+	hctx := c.ssoContext(ctx)
+	tok, err := ssoOAuth(p, op, f.redirectURL).Exchange(hctx, code, oauth2.VerifierOption(f.verifier))
+	if err != nil {
+		return ssoClaims{}, fmt.Errorf("%w: %s refused the sign-in: %v", ErrInvalid, p.Name, err)
+	}
+	raw, _ := tok.Extra("id_token").(string)
+	if raw == "" {
+		return ssoClaims{}, fmt.Errorf("%w: %s sent no ID token; is it an OpenID Connect provider?", ErrInvalid, p.Name)
+	}
+	idt, err := op.Verifier(&oidc.Config{ClientID: p.ClientID}).Verify(hctx, raw)
+	if err != nil {
+		return ssoClaims{}, fmt.Errorf("%w: %s sent an invalid ID token: %v", ErrInvalid, p.Name, err)
+	}
+	if subtle.ConstantTimeCompare([]byte(idt.Nonce), []byte(f.nonce)) != 1 {
+		return ssoClaims{}, fmt.Errorf("%w: %s sent an ID token for another sign-in", ErrInvalid, p.Name)
+	}
+	var claims struct {
+		Email string `json:"email"`
+	}
+	_ = idt.Claims(&claims)
+	return ssoClaims{Subject: idt.Subject, Email: claims.Email}, nil
+}
+
+// ssoSignIn signs in the user the identity is linked to. Two-factor
+// authentication still applies: the provider stands in for the password.
+func (c *Core) ssoSignIn(ctx context.Context, p store.SSOProvider, id ssoClaims) (store.User, string, string, error) {
+	link, err := c.store.GetSSOIdentity(ctx, p.ID, id.Subject)
+	if errors.Is(err, store.ErrNotFound) {
+		who := ""
+		if id.Email != "" {
+			who = " (" + id.Email + ")"
+		}
+		return store.User{}, "", "", fmt.Errorf("%w: no kipitiny account is linked to this %s account%s; ask an admin for an invite, or link it from Account once signed in",
+			ErrUnauthorized, p.Name, who)
+	}
+	if err != nil {
+		return store.User{}, "", "", err
+	}
+	u, err := c.store.GetUser(ctx, link.UserID)
+	if err != nil {
+		return store.User{}, "", "", err
+	}
+	_ = c.store.SSOIdentityUsed(ctx, link.ID, id.Email)
+	if u.TOTPSecret != "" {
+		ticket := randomToken(32)
+		c.mfaTickets.put(ticket, mfaTicket{userID: u.ID}, time.Now().Add(mfaTicketTTL))
+		return u, "", ticket, nil
+	}
+	_ = c.store.DeleteExpiredSessions(ctx)
+	session, err := c.newSession(ctx, u.ID)
+	return u, session, "", err
+}
+
+func (c *Core) linkSSOIdentity(ctx context.Context, p store.SSOProvider, userID string, id ssoClaims) (store.User, error) {
+	u, err := c.store.GetUser(ctx, userID)
+	if err != nil {
+		return store.User{}, err
+	}
+	if link, err := c.store.GetSSOIdentity(ctx, p.ID, id.Subject); err == nil {
+		if link.UserID == userID {
+			return u, nil
+		}
+		return u, fmt.Errorf("%w: this %s account is linked to another kipitiny user", ErrInvalid, p.Name)
+	}
+	_, err = c.store.CreateSSOIdentity(ctx, store.SSOIdentity{UserID: userID, ProviderID: p.ID, Subject: id.Subject, Email: id.Email})
+	if errors.Is(err, store.ErrConflict) {
+		return u, fmt.Errorf("%w: another %s account is linked to yours; unlink it first", ErrInvalid, p.Name)
+	}
+	return u, err
+}
+
+// SSOIdentityView is a linked identity, for the account page.
+type SSOIdentityView struct {
+	store.SSOIdentity
+	ProviderName string `json:"providerName"`
+}
+
+func (c *Core) ssoIdentities(ctx context.Context, userID string) ([]SSOIdentityView, error) {
+	is, err := c.store.ListSSOIdentities(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SSOIdentityView, len(is))
+	for i, id := range is {
+		out[i] = SSOIdentityView{SSOIdentity: id}
+		if p, err := c.store.GetSSOProvider(ctx, id.ProviderID); err == nil {
+			out[i].ProviderName = p.Name
+		}
+	}
+	return out, nil
+}
+
+// UnlinkSSOIdentity removes one of the signed-in user's identities.
+func (c *Core) UnlinkSSOIdentity(ctx context.Context, id string) error {
+	u, err := c.currentUser(ctx)
+	if err != nil {
+		return err
+	}
+	return c.store.DeleteSSOIdentity(ctx, u.ID, id)
+}
+
+// localPath keeps p if it is a path on this host, so a sign-in can't be
+// made to land elsewhere.
+func localPath(p string) string {
+	if !strings.HasPrefix(p, "/") || strings.HasPrefix(p, "//") || strings.ContainsAny(p, "\\\r\n") {
+		return "/"
+	}
+	return p
 }

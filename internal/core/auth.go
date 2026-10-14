@@ -33,6 +33,8 @@ var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("kipitiny-dummy-password")
 type AuthState struct {
 	SetupRequired bool        `json:"setupRequired"`
 	User          *store.User `json:"user,omitempty"`
+	// SSO lists the providers to sign in with.
+	SSO []SSOButton `json:"sso"`
 }
 
 // InitAuth creates the one-time token required to create the first
@@ -60,16 +62,16 @@ func (c *Core) AuthState(ctx context.Context, sessionToken string) (AuthState, e
 		return AuthState{}, err
 	}
 	if n == 0 {
-		return AuthState{SetupRequired: true}, nil
+		return AuthState{SetupRequired: true, SSO: []SSOButton{}}, nil
 	}
 	u, err := c.Authenticate(ctx, sessionToken)
 	if errors.Is(err, ErrUnauthorized) {
-		return AuthState{}, nil
+		return AuthState{SSO: c.SSOButtons(ctx)}, nil
 	}
 	if err != nil {
 		return AuthState{}, err
 	}
-	return AuthState{User: &u}, nil
+	return AuthState{User: &u, SSO: []SSOButton{}}, nil
 }
 
 // Setup creates the first admin account and returns a session token.

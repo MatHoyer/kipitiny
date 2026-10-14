@@ -502,11 +502,20 @@ export type MfaChallenge = { mfaRequired: true; ticket: string };
 
 export type Passkey = { id: string; name: string; createdAt: string; lastUsedAt?: string };
 
+/** A provider offered on the sign-in page. */
+export type SSOButton = { id: string; name: string };
+
+/** An identity at a single sign-on provider linked to the account; email is the provider's. */
+export type SSOIdentity = { id: string; providerId: string; providerName: string; email: string; createdAt: string; lastUsedAt?: string };
+
 export type Account = {
   username: string;
   totpEnabled: boolean;
   recoveryCodes: number;
   passkeys: Passkey[];
+  sso: SSOIdentity[];
+  /** The providers an identity can be linked at. */
+  ssoProviders: SSOButton[];
   role: Role;
   features: Feature[];
   grants: Grants;
@@ -516,7 +525,7 @@ export type TotpSetup = { secret: string; uri: string };
 
 type Ceremony<T> = { ceremony: string; options: T };
 
-export type AuthState = { setupRequired: boolean; user?: User };
+export type AuthState = { setupRequired: boolean; user?: User; sso: SSOButton[] };
 
 /** A base domain offered when giving a service a public domain. */
 export type Domain = {
@@ -1087,6 +1096,8 @@ export const api = {
     const credential = await getPasskey(options);
     return request<User>("/auth/passkey/finish", json("POST", { ceremony, credential }));
   },
+  /** The provider's sign-in page; it sends the browser back to returnTo. */
+  beginSSO: (id: string, returnTo: string) => request<{ url: string }>(`/auth/sso/${id}/begin`, json("POST", { returnTo })),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
   invite: (token: string) => request<InviteInfo>("/auth/invite", json("POST", { token })),
   acceptInvite: (token: string, username: string, password: string) =>
@@ -1106,6 +1117,9 @@ export const api = {
     return request<Passkey>("/account/passkeys", json("POST", { ceremony, name, credential }));
   },
   deletePasskey: (id: string) => request<void>(`/account/passkeys/${id}`, { method: "DELETE" }),
+  /** The provider's sign-in page, to link the identity signed in there. */
+  connectSSO: (id: string, password: string) => request<{ url: string }>(`/account/sso/${id}/connect`, json("POST", { password })),
+  unlinkSSO: (id: string) => request<void>(`/account/sso/${id}`, { method: "DELETE" }),
 
   status: () => request<Status>("/status"),
   applyUpdate: () => request<UpdateInfo>("/update", { method: "POST" }),

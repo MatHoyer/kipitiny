@@ -26,6 +26,9 @@ var publicRoutes = map[string]bool{
 	"POST /api/auth/login/mfa":      true,
 	"POST /api/auth/passkey/begin":  true,
 	"POST /api/auth/passkey/finish": true,
+	"POST /api/auth/sso/{id}/begin": true,
+	// The flow's state and the browser's cookie authenticate it.
+	"GET /api/auth/sso/callback": true,
 	// An invite link's token is its credential.
 	"POST /api/auth/invite":        true,
 	"POST /api/auth/invite/accept": true,

@@ -1223,6 +1223,43 @@ func (s *Store) DeleteSSOProvider(ctx context.Context, id string) error {
 	return deleteByID(ctx, s.db, "sso_providers", id)
 }
 
+func (s *Store) ListSSOIdentities(ctx context.Context, userID string) ([]store.SSOIdentity, error) {
+	is := []store.SSOIdentity{}
+	err := s.db.NewSelect().Model(&is).Where("user_id = ?", userID).Order("created_at").Scan(ctx)
+	return is, mapErr(err)
+}
+
+func (s *Store) GetSSOIdentity(ctx context.Context, providerID, subject string) (store.SSOIdentity, error) {
+	var i store.SSOIdentity
+	err := s.db.NewSelect().Model(&i).Where("provider_id = ? AND subject = ?", providerID, subject).Scan(ctx)
+	return i, mapErr(err)
+}
+
+func (s *Store) CreateSSOIdentity(ctx context.Context, i store.SSOIdentity) (store.SSOIdentity, error) {
+	i.ID, i.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&i).Exec(ctx); err != nil {
+		return store.SSOIdentity{}, mapErr(err)
+	}
+	return i, nil
+}
+
+func (s *Store) SSOIdentityUsed(ctx context.Context, id, email string) error {
+	_, err := s.db.NewUpdate().Model((*store.SSOIdentity)(nil)).
+		Set("email = ?", email).Set("last_used_at = ?", now()).Where("id = ?", id).Exec(ctx)
+	return mapErr(err)
+}
+
+func (s *Store) DeleteSSOIdentity(ctx context.Context, userID, id string) error {
+	res, err := s.db.NewDelete().Model((*store.SSOIdentity)(nil)).Where("id = ?", id).Where("user_id = ?", userID).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) ListRegistries(ctx context.Context) ([]store.Registry, error) {
 	rs := []store.Registry{}
 	err := s.db.NewSelect().Model(&rs).Order("host").Scan(ctx)
