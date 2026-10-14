@@ -1,10 +1,11 @@
-import { Bell, BookOpen, Brush, GitFork, HardDrive, Globe, Info, KeyRound, KeySquare, LogIn, Mail, Network, Package, ScrollText, Server, Users, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, Brush, GitFork, HardDrive, Globe, Info, KeyRound, KeySquare, LogIn, Mail, Network, Package, Palette, ScrollText, Server, Users, type LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 import type { Feature } from "@/api";
 import { EmptyState } from "@/components/common";
 import { useAccess } from "@/lib/access";
 import { docsUrl } from "@/lib/docs";
 import { Version } from "./About";
+import { Appearance } from "./Appearance";
 import { Audit } from "./Audit";
 import { Cleanup } from "./Cleanup";
 import { DomainsPage } from "./Domains";
@@ -113,6 +114,13 @@ export const settingsPages: SettingsPage[] = [
     label: "Email",
     icon: Mail,
     page: Email,
+  },
+  {
+    slug: "appearance",
+    group: "System",
+    label: "Appearance",
+    icon: Palette,
+    page: Appearance,
   },
   {
     slug: "cleanup",

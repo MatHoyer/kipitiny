@@ -1,4 +1,5 @@
 import type {
+  Branding,
   ApiToken,
   AuditEntry,
   Backup,
@@ -51,6 +52,8 @@ export type DemoDb = {
   registries: Registry[];
   /** Added after version 3: empty until a provider is added. */
   ssoProviders?: SSOProvider[];
+  /** Settings › Appearance; the logo is kept as a data URL. */
+  branding?: Branding;
   /** The SMTP server, once set in Settings › Email. */
   email?: EmailSettings;
   channels: NotificationChannel[];

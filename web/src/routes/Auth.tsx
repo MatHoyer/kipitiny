@@ -11,6 +11,7 @@ import { friendlyError } from "@/lib/errors";
 import { leaveFor, signInWithSSO, takeSSOParam } from "@/lib/sso";
 import { isCancelled, passkeysSupported } from "@/lib/webauthn";
 import { Logo } from "@/components/logo";
+import { defaultBrandName, useBranding } from "@/lib/branding";
 import { api, type SSOButton } from "../api";
 
 function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
@@ -30,6 +31,10 @@ function Shell({ title, subtitle, children }: { title: string; subtitle?: string
       </div>
     </div>
   );
+}
+
+function BrandName() {
+  return useBranding().name || defaultBrandName;
 }
 
 function Submit({ pending, children }: { pending: boolean; children: ReactNode }) {
@@ -336,7 +341,7 @@ export function AcceptInvite({ signedIn }: { signedIn: boolean }) {
       <Shell title="You're already signed in" subtitle="Sign out first to create another account with this invite.">
         <CardFooter>
           <Button variant="outline" className="w-full" onClick={leave}>
-            Back to kipitiny
+            Back to <BrandName />
           </Button>
         </CardFooter>
       </Shell>

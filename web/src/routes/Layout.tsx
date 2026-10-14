@@ -52,6 +52,7 @@ import { DemoBanner } from "@/demo/banner";
 import { api } from "../api";
 import { useAccess } from "@/lib/access";
 import { friendlyError } from "@/lib/errors";
+import { useApplyBranding } from "@/lib/branding";
 import { takeSSOParam } from "@/lib/sso";
 import { AcceptInvite, Login, Setup } from "./Auth";
 import { settingsGroups, settingsPages, useSettingsAccess } from "./settings";
@@ -60,6 +61,7 @@ import { invitePath } from "./settings/Users";
 export function Layout() {
   const auth = useQuery({ queryKey: ["auth"], queryFn: api.authState, staleTime: Infinity });
   const { pathname } = useLocation();
+  useApplyBranding(auth.data?.branding ?? {});
 
   if (auth.isPending) return null;
   if (auth.error) return <p className="p-8 text-sm text-destructive">{auth.error.message}</p>;
