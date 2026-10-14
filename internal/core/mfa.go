@@ -17,13 +17,15 @@ import (
 // It's not ErrUnauthorized: the session is still valid.
 var ErrWrongPassword = fmt.Errorf("%w: wrong password", ErrInvalid)
 
-// ErrSignInAgain asks a user without a password to confirm a change by
-// signing in again, their sign-in being too old to stand for it.
-var ErrSignInAgain = fmt.Errorf("%w: sign in again to confirm, then retry within %d minutes", ErrInvalid, int(reauthWindow.Minutes()))
+// ErrConfirmFirst asks a user without a password to confirm who they are
+// at their provider (or with a passkey) before a sensitive change.
+var ErrConfirmFirst = fmt.Errorf("%w: confirm it's you by signing in at your provider, then retry within %d minutes",
+	ErrInvalid, int(confirmWindow.Minutes()))
 
-// reauthWindow is how recent a sign-in confirms a change to an account
-// without a password (single sign-on only), in place of the password.
-const reauthWindow = 10 * time.Minute
+// confirmWindow is how long a fresh sign-in at a provider (or a passkey
+// sign-in) confirms the changes of an account without a password, in place
+// of the password.
+const confirmWindow = 10 * time.Minute
 
 const (
 	mfaTicketTTL = 5 * time.Minute
@@ -36,6 +38,8 @@ const (
 type mfaTicket struct {
 	userID   string
 	attempts int
+	// sso: the first factor was a provider, not the password.
+	sso bool
 }
 
 // LoginMFA completes a password sign-in with a TOTP code or a recovery code.
@@ -43,6 +47,9 @@ func (c *Core) LoginMFA(ctx context.Context, ticket, code string) (store.User, s
 	t, exp, ok := c.mfaTickets.take(ticket)
 	if !ok {
 		return store.User{}, "", fmt.Errorf("%w: the sign-in expired, enter your password again", ErrUnauthorized)
+	}
+	if !t.sso && c.SSORequired(ctx) {
+		return store.User{}, "", ErrSSORequired
 	}
 	u, err := c.store.GetUser(ctx, t.userID)
 	if err != nil {
@@ -115,25 +122,36 @@ type Account struct {
 	RecoveryCodes int             `json:"recoveryCodes"`
 	Passkeys      []store.Passkey `json:"passkeys"`
 	// HasPassword is false for an account that signs in with single sign-on
-	// (or passkeys) only: a recent sign-in confirms its changes instead,
-	// which RecentSignIn reports.
-	HasPassword  bool `json:"hasPassword"`
-	RecentSignIn bool `json:"recentSignIn"`
+	// (or passkeys) only: a fresh sign-in confirms its changes instead, and
+	// Confirmed reports one for this session.
+	HasPassword bool `json:"hasPassword"`
+	Confirmed   bool `json:"confirmed"`
 	// SSO lists the identities linked at single sign-on providers, and
 	// SSOProviders those to link one at.
 	SSO          []SSOIdentityView `json:"sso"`
 	SSOProviders []SSOButton       `json:"ssoProviders"`
+	// SSORequired: passkeys don't sign in for now.
+	SSORequired bool `json:"ssoRequired"`
 	// Role, Features and Grants say what the user may do, for the UI.
 	Role     store.Role          `json:"role"`
 	Features []string            `json:"features"`
 	Grants   map[string][]string `json:"grants"`
 }
 
-// recentSignIn reports whether the request's session started within
-// reauthWindow.
-func recentSignIn(ctx context.Context) bool {
+// confirmed reports whether the request's session was confirmed by a
+// fresh sign-in within confirmWindow.
+func (c *Core) confirmed(ctx context.Context) bool {
 	a, _ := ActorFrom(ctx)
-	return !a.SignedIn.IsZero() && time.Since(a.SignedIn) < reauthWindow
+	if a.Session == "" {
+		return false
+	}
+	_, ok := c.confirmations.peek(a.Session)
+	return ok
+}
+
+// confirm marks a session as confirmed for confirmWindow.
+func (c *Core) confirm(session string) {
+	c.confirmations.put(hashToken(session), struct{}{}, time.Now().Add(confirmWindow))
 }
 
 // currentUser is the signed-in user making the request; API tokens have none.
@@ -153,8 +171,8 @@ func (c *Core) confirmedUser(ctx context.Context, password string) (store.User, 
 		return store.User{}, err
 	}
 	if u.PasswordHash == "" {
-		if !recentSignIn(ctx) {
-			return store.User{}, ErrSignInAgain
+		if !c.confirmed(ctx) {
+			return store.User{}, ErrConfirmFirst
 		}
 		return u, nil
 	}
@@ -181,8 +199,8 @@ func (c *Core) Account(ctx context.Context) (Account, error) {
 	if err != nil {
 		return Account{}, err
 	}
-	acc := Account{Username: u.Username, TOTPEnabled: u.TOTPSecret != "", RecoveryCodes: n, Passkeys: ps, SSO: ids, SSOProviders: c.SSOButtons(ctx),
-		HasPassword: u.PasswordHash != "", RecentSignIn: recentSignIn(ctx),
+	acc := Account{Username: u.Username, TOTPEnabled: u.TOTPSecret != "", RecoveryCodes: n, Passkeys: ps, SSO: ids, SSOProviders: c.SSOButtons(ctx), SSORequired: c.SSORequired(ctx),
+		HasPassword: u.PasswordHash != "", Confirmed: c.confirmed(ctx),
 		Role: u.Role, Features: u.Features, Grants: map[string][]string{}}
 	if u.Role != store.RoleAdmin {
 		v, err := c.userView(ctx, u)

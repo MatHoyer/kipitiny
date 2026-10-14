@@ -43,9 +43,35 @@ were. Someone whose identity isn't linked is refused: invite them first.
 An invite link offers the providers too: the new user picks a username, then
 *Continue with …* creates the account linked to the identity they sign in
 with, **without a password**. Such an account confirms sensitive changes
-(two-factor authentication, passkeys, exporting secrets) with a sign-in less
-than 10 minutes old instead of the password, and can set a password later in
-*Account*. Its last way to sign in can't be unlinked.
+(two-factor authentication, passkeys, exporting secrets) by entering its
+credentials at the provider again instead of the password: kipitiny asks the
+provider for a fresh sign-in, even if it is still signed in there, and the
+confirmation lasts 10 minutes. A passkey sign-in counts too. It can set a
+password later in *Account*. Its last way to sign in can't be unlinked.
+
+Signing out of kipitiny doesn't sign you out of the provider: *Sign in with …*
+may then come straight back without asking anything. Use a private window to
+try another account.
+
+### Requiring single sign-on
+
+*Require single sign-on* turns password and passkey sign-in off: the sign-in
+page only shows the providers, and invites are accepted through one. API
+tokens and MCP keep working. Two-factor authentication still applies.
+Passkeys stay in *Account* but don't sign in until the requirement is turned
+off.
+
+You can only turn it on once your own account is linked at a provider, and
+the last provider can't be removed while it's on. If the provider goes down,
+turn passwords back on from the server:
+
+```sh
+docker compose exec manager /kipitiny allow-password-login
+```
+
+Disabling someone at the provider stops their next sign-in, not the sessions
+they already have (30 days) or their API tokens: remove them from kipitiny
+too.
 
 The provider stands in for the password only: a user with two-factor
 authentication on still enters a code afterwards. Removing a provider unlinks

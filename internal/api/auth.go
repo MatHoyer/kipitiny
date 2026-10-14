@@ -165,12 +165,7 @@ func (a *API) authenticate(r *http.Request) (core.Actor, bool, error) {
 		actor, err := a.core.AuthenticateToken(r.Context(), strings.TrimSpace(token))
 		return actor, true, err
 	}
-	u, signedIn, err := a.core.AuthenticateSession(r.Context(), sessionToken(r))
-	if err != nil {
-		return core.Actor{}, false, err
-	}
-	actor, err := a.core.UserActor(r.Context(), u)
-	actor.SignedIn = signedIn
+	actor, err := a.core.SessionActor(r.Context(), sessionToken(r))
 	return actor, false, err
 }
 
@@ -314,7 +309,7 @@ func (a *API) beginPasskeyLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.begins.fail(ip) // every start counts: each one holds server memory
-	opts, err := a.core.BeginPasskeyLogin(relyingParty(r))
+	opts, err := a.core.BeginPasskeyLogin(r.Context(), relyingParty(r))
 	if err != nil {
 		a.fail(w, err)
 		return

@@ -33,8 +33,10 @@ var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("kipitiny-dummy-password")
 type AuthState struct {
 	SetupRequired bool        `json:"setupRequired"`
 	User          *store.User `json:"user,omitempty"`
-	// SSO lists the providers to sign in with.
-	SSO []SSOButton `json:"sso"`
+	// SSO lists the providers to sign in with; with SSORequired, the only
+	// way to sign in.
+	SSO         []SSOButton `json:"sso"`
+	SSORequired bool        `json:"ssoRequired"`
 }
 
 // InitAuth creates the one-time token required to create the first
@@ -66,7 +68,7 @@ func (c *Core) AuthState(ctx context.Context, sessionToken string) (AuthState, e
 	}
 	u, err := c.Authenticate(ctx, sessionToken)
 	if errors.Is(err, ErrUnauthorized) {
-		return AuthState{SSO: c.SSOButtons(ctx)}, nil
+		return AuthState{SSO: c.SSOButtons(ctx), SSORequired: c.SSORequired(ctx)}, nil
 	}
 	if err != nil {
 		return AuthState{}, err
@@ -142,6 +144,9 @@ type LoginResult struct {
 }
 
 func (c *Core) Login(ctx context.Context, username, password string) (LoginResult, error) {
+	if c.SSORequired(ctx) {
+		return LoginResult{}, ErrSSORequired
+	}
 	u, err := c.store.GetUserByUsername(ctx, username)
 	if errors.Is(err, store.ErrNotFound) {
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
@@ -168,27 +173,32 @@ func (c *Core) Login(ctx context.Context, username, password string) (LoginResul
 }
 
 func (c *Core) Authenticate(ctx context.Context, sessionToken string) (store.User, error) {
-	u, _, err := c.AuthenticateSession(ctx, sessionToken)
-	return u, err
-}
-
-// AuthenticateSession is Authenticate, with when the session started.
-func (c *Core) AuthenticateSession(ctx context.Context, sessionToken string) (store.User, time.Time, error) {
 	if sessionToken == "" {
-		return store.User{}, time.Time{}, ErrUnauthorized
+		return store.User{}, ErrUnauthorized
 	}
 	sess, err := c.store.GetSession(ctx, hashToken(sessionToken))
 	if errors.Is(err, store.ErrNotFound) {
-		return store.User{}, time.Time{}, ErrUnauthorized
+		return store.User{}, ErrUnauthorized
 	}
 	if err != nil {
-		return store.User{}, time.Time{}, err
+		return store.User{}, err
 	}
 	u, err := c.store.GetUser(ctx, sess.UserID)
 	if errors.Is(err, store.ErrNotFound) {
-		return store.User{}, time.Time{}, ErrUnauthorized
+		return store.User{}, ErrUnauthorized
 	}
-	return u, sess.CreatedAt, err
+	return u, err
+}
+
+// SessionActor is the actor of a signed-in user's request.
+func (c *Core) SessionActor(ctx context.Context, sessionToken string) (Actor, error) {
+	u, err := c.Authenticate(ctx, sessionToken)
+	if err != nil {
+		return Actor{}, err
+	}
+	a, err := c.UserActor(ctx, u)
+	a.Session = hashToken(sessionToken)
+	return a, err
 }
 
 func (c *Core) Logout(ctx context.Context, sessionToken string) error {

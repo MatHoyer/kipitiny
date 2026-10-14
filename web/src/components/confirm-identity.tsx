@@ -5,26 +5,26 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { friendlyError } from "@/lib/errors";
-import { signInWithSSO } from "@/lib/sso";
+import { confirmWithSSO } from "@/lib/sso";
 import { api } from "@/api";
 
 /**
- * Confirms a sensitive change: the account's password, or for an account without one (single sign-on only) a sign-in
- * less than 10 minutes old. `ready` tells when the change may be sent.
+ * Confirms a sensitive change: the account's password, or for an account without one (single sign-on only) a fresh
+ * sign-in at its provider, good for 10 minutes. `ready` tells when the change may be sent.
  */
 export function useConfirmation() {
   const account = useQuery({ queryKey: ["account"], queryFn: api.account });
   const [password, setPassword] = useState("");
   const hasPassword = account.data?.hasPassword ?? true;
-  const ready = hasPassword ? password !== "" : !!account.data?.recentSignIn;
+  const ready = hasPassword ? password !== "" : !!account.data?.confirmed;
   return { password, setPassword, ready, hasPassword, account: account.data };
 }
 
 export function ConfirmField({ confirm, autoFocus }: { confirm: ReturnType<typeof useConfirmation>; autoFocus?: boolean }) {
   const signIn = useMutation({
     meta: { error: false },
-    mutationFn: signInWithSSO,
-    onError: (err) => toast.error("Couldn't sign in", { description: friendlyError(err) }),
+    mutationFn: confirmWithSSO,
+    onError: (err) => toast.error("Couldn't confirm", { description: friendlyError(err) }),
   });
   const { account } = confirm;
   if (confirm.hasPassword)
@@ -40,10 +40,12 @@ export function ConfirmField({ confirm, autoFocus }: { confirm: ReturnType<typeo
       />
     );
   if (!account) return null;
-  if (account.recentSignIn) return <p className="text-sm text-muted-foreground">Your account has no password: your recent sign-in confirms it.</p>;
+  if (account.confirmed) return <p className="text-sm text-muted-foreground">Your account has no password: your fresh sign-in confirms it.</p>;
   return (
     <div className="space-y-3 rounded-lg border p-3">
-      <p className="text-sm text-muted-foreground">Your account has no password: sign in again to confirm, then do this within 10 minutes.</p>
+      <p className="text-sm text-muted-foreground">
+        Your account has no password: confirm it's you by entering your credentials at your provider again, then do this within 10 minutes.
+      </p>
       <div className="flex flex-wrap gap-2">
         {account.sso.map((i) => (
           <Button
@@ -56,7 +58,7 @@ export function ConfirmField({ confirm, autoFocus }: { confirm: ReturnType<typeo
             onClick={() => signIn.mutate(i.providerId)}
           >
             <LogIn data-icon="inline-start" />
-            Sign in with {i.providerName}
+            Confirm with {i.providerName}
           </Button>
         ))}
       </div>

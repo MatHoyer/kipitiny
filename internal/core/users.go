@@ -309,8 +309,9 @@ type InviteInfo struct {
 	// Projects names the projects it grants.
 	Projects []string `json:"projects"`
 	// SSO lists the providers the account can sign in with instead of a
-	// password.
-	SSO []SSOButton `json:"sso"`
+	// password; with SSORequired, the only way to accept it.
+	SSO         []SSOButton `json:"sso"`
+	SSORequired bool        `json:"ssoRequired"`
 }
 
 // Invite describes a valid invite; ErrNotFound for an unknown, used or
@@ -320,7 +321,7 @@ func (c *Core) Invite(ctx context.Context, token string) (InviteInfo, error) {
 	if err != nil {
 		return InviteInfo{}, inviteErr(err)
 	}
-	info := InviteInfo{Role: i.Role, ExpiresAt: i.ExpiresAt, Projects: []string{}, SSO: c.SSOButtons(ctx)}
+	info := InviteInfo{Role: i.Role, ExpiresAt: i.ExpiresAt, Projects: []string{}, SSO: c.SSOButtons(ctx), SSORequired: c.SSORequired(ctx)}
 	for _, id := range slices.Sorted(maps.Keys(i.Grants)) {
 		if p, err := c.store.GetProject(ctx, id); err == nil {
 			info.Projects = append(info.Projects, p.Name)
@@ -331,6 +332,9 @@ func (c *Core) Invite(ctx context.Context, token string) (InviteInfo, error) {
 
 // AcceptInvite creates the invited account and returns a session for it.
 func (c *Core) AcceptInvite(ctx context.Context, token, username, password string) (store.User, string, error) {
+	if c.SSORequired(ctx) {
+		return store.User{}, "", ErrSSORequired
+	}
 	i, err := c.store.GetInviteByHash(ctx, hashToken(strings.TrimSpace(token)))
 	if err != nil {
 		return store.User{}, "", inviteErr(err)

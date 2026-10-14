@@ -155,7 +155,10 @@ func (c *Core) DeletePasskey(ctx context.Context, id string) error {
 
 // BeginPasskeyLogin starts a passwordless sign-in: the browser offers the
 // passkeys it holds for this domain.
-func (c *Core) BeginPasskeyLogin(rp RelyingParty) (PasskeyOptions, error) {
+func (c *Core) BeginPasskeyLogin(ctx context.Context, rp RelyingParty) (PasskeyOptions, error) {
+	if c.SSORequired(ctx) {
+		return PasskeyOptions{}, ErrSSORequired
+	}
 	w, err := rp.webauthn()
 	if err != nil {
 		return PasskeyOptions{}, err
@@ -175,6 +178,9 @@ func (c *Core) FinishPasskeyLogin(ctx context.Context, ceremonyID string, respon
 	cer, _, ok := c.ceremonies.take(ceremonyID)
 	if !ok || cer.userID != "" {
 		return store.User{}, "", fmt.Errorf("%w: the sign-in expired, try again", ErrUnauthorized)
+	}
+	if c.SSORequired(ctx) {
+		return store.User{}, "", ErrSSORequired
 	}
 	parsed, err := protocol.ParseCredentialRequestResponseBytes(response)
 	if err != nil {
@@ -214,5 +220,8 @@ func (c *Core) FinishPasskeyLogin(ctx context.Context, ceremonyID string, respon
 	}
 	_ = c.store.DeleteExpiredSessions(ctx)
 	token, err := c.newSession(ctx, user.u.ID)
+	if err == nil {
+		c.confirm(token) // the device checked its PIN or biometric just now
+	}
 	return user.u, token, err
 }

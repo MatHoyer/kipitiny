@@ -37,6 +37,8 @@ func main() {
 			run = disable2FA
 		case "make-admin":
 			run = makeAdmin
+		case "allow-password-login":
+			run = allowPasswordLogin
 		case "probe":
 			// Healthcheck injected into app containers: keep it dependency-free.
 			if len(os.Args) != 3 || probe.Check(os.Args[2]) != nil {
@@ -59,7 +61,7 @@ func main() {
 			}
 			os.Exit(0)
 		default:
-			fmt.Fprintf(os.Stderr, "usage: %s [reset-password <username> | disable-2fa <username> | make-admin <username> | deploy --service <project/service> [--tag <tag>] | preview --project <project> --name <name> [--tag <service>=<tag>] [--close] | healthcheck]\n", os.Args[0])
+			fmt.Fprintf(os.Stderr, "usage: %s [reset-password <username> | disable-2fa <username> | make-admin <username> | allow-password-login | deploy --service <project/service> [--tag <tag>] | preview --project <project> --name <name> [--tag <service>=<tag>] [--close] | healthcheck]\n", os.Args[0])
 			os.Exit(2)
 		}
 	}
@@ -254,6 +256,27 @@ func makeAdmin() error {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, os.Args[2]+" is an admin; their sessions were signed out.")
+	return nil
+}
+
+// allowPasswordLogin stops requiring single sign-on, e.g. when the provider
+// is down and nobody can sign in.
+func allowPasswordLogin() error {
+	if len(os.Args) != 2 {
+		return errors.New("usage: allow-password-login")
+	}
+	cfg := config.Load()
+	ctx := context.Background()
+	st, err := sqlite.Open(ctx, cfg.DBPath())
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	if err := core.New(cfg, st, nil, slog.Default()).AllowPasswordLogin(ctx); err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stderr, "Single sign-on is no longer required: passwords and passkeys sign in again.")
 	return nil
 }
 

@@ -888,7 +888,7 @@ const routes: Route[] = [
   [
     "GET",
     /^\/auth\/state$/,
-    (): AuthState => ({ setupRequired: false, user: { id: "demo", username: "demo", role: "admin", features: [], createdAt: now() }, sso: [] }),
+    (): AuthState => ({ setupRequired: false, user: { id: "demo", username: "demo", role: "admin", features: [], createdAt: now() }, sso: [], ssoRequired: false }),
   ],
   [
     "GET",
@@ -899,9 +899,10 @@ const routes: Route[] = [
       recoveryCodes: 0,
       passkeys: [],
       hasPassword: true,
-      recentSignIn: false,
+      confirmed: false,
       sso: [],
       ssoProviders: (db.ssoProviders ?? []).map((p) => ({ id: p.id, name: p.name })),
+      ssoRequired: false,
       role: "admin",
       features: [],
       grants: {},
@@ -1439,6 +1440,14 @@ const routes: Route[] = [
   ["GET", /^\/cloudflare$/, () => ({ connected: false, zones: [], tunnels: [] })],
   ["GET", /^\/git-providers$/, () => []],
   ["GET", /^\/sso-providers$/, () => (db.ssoProviders ??= [])],
+  ["GET", /^\/sso-required$/, () => ({ required: false })],
+  [
+    "PUT",
+    /^\/sso-required$/,
+    () => {
+      throw new HttpError(400, "link your own account at a provider first (Account › Single sign-on), so you can still sign in");
+    },
+  ],
   [
     "POST",
     /^\/sso-providers$/,

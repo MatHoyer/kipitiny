@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, LogIn, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, LockKeyhole, LogIn, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { AuthentikIcon, GoogleIcon, KeycloakIcon, MicrosoftIcon } from "@/components/brand-icons";
-import { ChoiceTile, CopyField, EmptyState, ErrorText, Mono } from "@/components/common";
+import { ChoiceTile, CopyField, EmptyState, ErrorText, Mono, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { HowTo, type HowToStep } from "@/components/how-to";
 import { Button } from "@/components/ui/button";
@@ -146,38 +146,41 @@ export function SSOPage() {
           action={add}
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {providers.data?.map((p) => {
-            const preset = presetFor(p.issuer);
-            return (
-              <Card key={p.id} className="gap-3 px-4">
-                <div className="flex items-start gap-3">
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted [&>svg]:size-5">{preset.icon}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{p.name}</p>
-                    <p className="truncate text-xs text-muted-foreground">{p.issuer}</p>
+        <>
+          {!!providers.data?.length && <RequireSSO />}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {providers.data?.map((p) => {
+              const preset = presetFor(p.issuer);
+              return (
+                <Card key={p.id} className="gap-3 px-4">
+                  <div className="flex items-start gap-3">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted [&>svg]:size-5">{preset.icon}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{p.name}</p>
+                      <p className="truncate text-xs text-muted-foreground">{p.issuer}</p>
+                    </div>
                   </div>
-                </div>
-                <div className="mt-auto flex justify-end gap-0.5">
-                  <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={() => setEditing({ step: "edit", provider: p })}>
-                    <Pencil />
-                  </Button>
-                  <ConfirmDialog
-                    trigger={
-                      <Button variant="ghost" size="icon-sm" title="Remove" aria-label="Remove" className="text-muted-foreground hover:text-destructive">
-                        <Trash2 />
-                      </Button>
-                    }
-                    title={`Remove ${p.name}?`}
-                    description="Identities linked through it are unlinked: their users sign in with a password or a passkey instead. Make sure each has one."
-                    confirmLabel="Remove"
-                    onConfirm={() => remove.mutate(p.id)}
-                  />
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+                  <div className="mt-auto flex justify-end gap-0.5">
+                    <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={() => setEditing({ step: "edit", provider: p })}>
+                      <Pencil />
+                    </Button>
+                    <ConfirmDialog
+                      trigger={
+                        <Button variant="ghost" size="icon-sm" title="Remove" aria-label="Remove" className="text-muted-foreground hover:text-destructive">
+                          <Trash2 />
+                        </Button>
+                      }
+                      title={`Remove ${p.name}?`}
+                      description="Identities linked through it are unlinked: their users sign in with a password or a passkey instead. Make sure each has one."
+                      confirmLabel="Remove"
+                      onConfirm={() => remove.mutate(p.id)}
+                    />
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </>
       )}
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="sm:max-w-lg">
@@ -203,6 +206,57 @@ export function SSOPage() {
         </DialogContent>
       </Dialog>
     </SettingsPage>
+  );
+}
+
+/** Turns password and passkey sign-in off: the providers become the only way in. */
+function RequireSSO() {
+  const qc = useQueryClient();
+  const required = useQuery({ queryKey: ["sso-required"], queryFn: api.ssoRequired });
+  const set = useMutation({
+    meta: { error: "Couldn't change it" },
+    mutationFn: api.setSSORequired,
+    onSuccess: (r) => qc.setQueryData(["sso-required"], r),
+  });
+  const on = !!required.data?.required;
+  return (
+    <Card className="mb-4 flex-row items-center gap-3 px-4">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted [&>svg]:size-5">
+        <LockKeyhole />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-2 font-medium">
+          Require single sign-on
+          {on ? <Tag className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">On</Tag> : <Tag>Off</Tag>}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Passwords and passkeys stop signing in, and invites are accepted through a provider. API tokens keep working.
+        </p>
+      </div>
+      {on ? (
+        <Button size="sm" variant="outline" loading={set.isPending} onClick={() => set.mutate(false)}>
+          Stop requiring
+        </Button>
+      ) : (
+        <ConfirmDialog
+          trigger={
+            <Button size="sm" disabled={!required.data}>
+              Require
+            </Button>
+          }
+          title="Require single sign-on?"
+          description={
+            <>
+              Everyone signs in through a provider from now on: make sure each user has linked theirs first. Your own account must be linked.
+              If the provider goes down, <Mono>kipitiny allow-password-login</Mono> on the server turns passwords back on.
+            </>
+          }
+          confirmLabel="Require"
+          destructive={false}
+          onConfirm={() => set.mutate(true)}
+        />
+      )}
+    </Card>
   );
 }
 

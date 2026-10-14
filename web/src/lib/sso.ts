@@ -23,6 +23,12 @@ export async function signInWithSSO(id: string): Promise<never> {
   return leaveFor(url);
 }
 
+/** Leaves for a fresh sign-in at the provider, confirming a change on an account without a password; back to this page. */
+export async function confirmWithSSO(id: string): Promise<never> {
+  const { url } = await api.confirmSSO(id, window.location.pathname + window.location.search);
+  return leaveFor(url);
+}
+
 export function leaveFor(url: string): Promise<never> {
   window.location.assign(url);
   return new Promise(() => {});
