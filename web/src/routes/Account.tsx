@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Fingerprint, KeyRound, Link2, LogIn, Plus, ShieldCheck, ShieldOff, Trash2, TriangleAlert } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { encode } from "uqr";
 import { CopyButton, CopyField, EmptyState, ErrorText, Section, Tag } from "@/components/common";
@@ -12,19 +12,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { FloatingInput } from "@/components/ui/floating-input";
 import { friendlyError } from "@/lib/errors";
 import { timeAgo } from "@/lib/format";
-import { leaveFor, takeSSOParam } from "@/lib/sso";
+import { leaveFor } from "@/lib/sso";
 import { isCancelled, passkeysSupported } from "@/lib/webauthn";
 import { api, type Account, type SSOButton } from "@/api";
 
 /** The signed-in user's own sign-in settings: password, two-factor authentication, passkeys. */
 export function AccountPage() {
   const account = useQuery({ queryKey: ["account"], queryFn: api.account });
-  // Back from linking an identity at a single sign-on provider.
-  useEffect(() => {
-    const error = takeSSOParam("sso-error");
-    if (error) toast.error("Couldn't link the account", { description: friendlyError(new Error(error)), duration: 12000 });
-    if (takeSSOParam("sso-connected")) toast.success("Account linked: you can sign in with it");
-  }, []);
   return (
     <>
       <PageHeader crumbs={[{ label: "Account" }]} />
@@ -318,6 +312,11 @@ function Passkeys({ account }: { account: Account }) {
       description="Sign in with your fingerprint, face or device PIN instead of a password. A passkey stands in for two-factor authentication too."
       actions={account.passkeys.length > 0 && add}
     >
+      {account.ssoRequired && (
+        <p className="text-sm text-amber-600 dark:text-amber-400">
+          This server requires single sign-on: passkeys don't sign in for now. They work again if an admin stops requiring it.
+        </p>
+      )}
       {!supported && (
         <p className="text-sm text-amber-600 dark:text-amber-400">
           Passkeys need the manager to be opened over HTTPS at a domain name (or at localhost), in a browser that supports them.

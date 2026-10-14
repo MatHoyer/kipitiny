@@ -41,7 +41,7 @@ function Submit({ pending, children }: { pending: boolean; children: ReactNode }
   );
 }
 
-export function Login({ sso }: { sso: SSOButton[] }) {
+export function Login({ sso, ssoOnly }: { sso: SSOButton[]; ssoOnly: boolean }) {
   const qc = useQueryClient();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -68,6 +68,12 @@ export function Login({ sso }: { sso: SSOButton[] }) {
   };
   const wrong = login.error?.message === "unauthorized";
   if (ticket) return <SecondFactor ticket={ticket} onRestart={() => setTicket("")} />;
+  if (ssoOnly)
+    return (
+      <Shell title="Sign in" subtitle="This server signs in through single sign-on only.">
+        <PasskeySignIn sso={sso} ssoOnly />
+      </Shell>
+    );
   return (
     <Shell title="Sign in">
       <form onSubmit={onSubmit}>
@@ -99,7 +105,7 @@ export function Login({ sso }: { sso: SSOButton[] }) {
 }
 
 /** Passwordless sign-in; a passkey stands in for the second factor too. Single sign-on providers sit next to it. */
-function PasskeySignIn({ sso = [] }: { sso?: SSOButton[] }) {
+function PasskeySignIn({ sso = [], ssoOnly = false }: { sso?: SSOButton[]; ssoOnly?: boolean }) {
   const qc = useQueryClient();
   const signIn = useMutation({
     meta: { error: false },
@@ -112,15 +118,17 @@ function PasskeySignIn({ sso = [] }: { sso?: SSOButton[] }) {
     mutationFn: signInWithSSO,
     onError: (err) => toast.error("Couldn't sign in", { description: friendlyError(err) }),
   });
-  const passkeys = passkeysSupported();
+  const passkeys = passkeysSupported() && !ssoOnly;
   if (!passkeys && sso.length === 0) return null;
   return (
     <CardContent className="flex flex-col gap-3">
-      <div className="flex w-full items-center gap-3 text-xs text-muted-foreground">
-        <Separator className="flex-1" />
-        or
-        <Separator className="flex-1" />
-      </div>
+      {!ssoOnly && (
+        <div className="flex w-full items-center gap-3 text-xs text-muted-foreground">
+          <Separator className="flex-1" />
+          or
+          <Separator className="flex-1" />
+        </div>
+      )}
       {sso.map((p) => (
         <Button
           key={p.id}
@@ -303,9 +311,12 @@ export function AcceptInvite({ signedIn }: { signedIn: boolean }) {
     },
     onSuccess: leave,
   });
+  const ssoOnly = !!info.data?.ssoRequired;
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    accept.mutate();
+    if (ssoOnly) {
+      if (info.data?.sso[0]) withSSO.mutate(info.data.sso[0].id);
+    } else accept.mutate();
   };
   const withSSO = useMutation({
     meta: { error: "Couldn't create the account" },
@@ -364,33 +375,39 @@ export function AcceptInvite({ signedIn }: { signedIn: boolean }) {
             onChange={set("username")}
             description="Lowercase letters, digits and dashes."
           />
-          <FloatingInput
-            label="Password"
-            type="password"
-            required
-            autoComplete="new-password"
-            value={form.password}
-            onChange={set("password")}
-            description="At least 10 characters."
-          />
-          <FloatingInput
-            label="Confirm password"
-            type="password"
-            required
-            autoComplete="new-password"
-            value={form.confirm}
-            onChange={set("confirm")}
-          />
-          <Submit pending={accept.isPending}>Create account</Submit>
+          {!ssoOnly && (
+            <>
+              <FloatingInput
+                label="Password"
+                type="password"
+                required
+                autoComplete="new-password"
+                value={form.password}
+                onChange={set("password")}
+                description="At least 10 characters."
+              />
+              <FloatingInput
+                label="Confirm password"
+                type="password"
+                required
+                autoComplete="new-password"
+                value={form.confirm}
+                onChange={set("confirm")}
+              />
+              <Submit pending={accept.isPending}>Create account</Submit>
+            </>
+          )}
         </CardContent>
       </form>
       {info.data.sso.length > 0 && (
         <CardContent className="flex flex-col gap-3">
-          <div className="flex w-full items-center gap-3 text-xs text-muted-foreground">
-            <Separator className="flex-1" />
-            or, without a password
-            <Separator className="flex-1" />
-          </div>
+          {!ssoOnly && (
+            <div className="flex w-full items-center gap-3 text-xs text-muted-foreground">
+              <Separator className="flex-1" />
+              or, without a password
+              <Separator className="flex-1" />
+            </div>
+          )}
           {info.data.sso.map((p) => (
             <Button
               key={p.id}

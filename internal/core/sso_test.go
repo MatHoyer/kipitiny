@@ -160,6 +160,12 @@ func TestSSOProviders(t *testing.T) {
 // subject sub, and returns the flow's state.
 func (f *fakeIssuer) answer(t *testing.T, start SSOStart, code, sub string) string {
 	t.Helper()
+	return f.answerAt(t, start, code, sub, time.Time{})
+}
+
+// answerAt is answer with the auth_time claim, unless authTime is zero.
+func (f *fakeIssuer) answerAt(t *testing.T, start SSOStart, code, sub string, authTime time.Time) string {
+	t.Helper()
 	u, err := url.Parse(start.URL)
 	if err != nil {
 		t.Fatal(err)
@@ -168,7 +174,11 @@ func (f *fakeIssuer) answer(t *testing.T, start SSOStart, code, sub string) stri
 	if !strings.HasPrefix(start.URL, f.URL+"/authorize?") || q.Get("code_challenge_method") != "S256" || q.Get("redirect_uri") != "https://kipitiny.example.com"+SSOCallbackPath {
 		t.Fatalf("authorize URL = %s", start.URL)
 	}
-	f.code(code, map[string]any{"sub": sub, "email": sub + "@example.com", "nonce": q.Get("nonce")})
+	claims := map[string]any{"sub": sub, "email": sub + "@example.com", "nonce": q.Get("nonce")}
+	if !authTime.IsZero() {
+		claims["auth_time"] = authTime.Unix()
+	}
+	f.code(code, claims)
 	return q.Get("state")
 }
 
@@ -321,10 +331,12 @@ func TestSSOInvite(t *testing.T) {
 	if err != nil || res.Purpose != ssoInvite || res.Session == "" || res.User.Username != "carol" || res.User.Role != store.RoleMember {
 		t.Fatalf("accept: %+v %v", res, err)
 	}
-	carol, signedIn, err := c.AuthenticateSession(context.Background(), res.Session)
+	carolCtx, err := c.SessionActor(context.Background(), res.Session)
 	if err != nil {
 		t.Fatal(err)
 	}
+	carol, _ := c.store.GetUser(ctx, carolCtx.UserID)
+	as := WithActor(context.Background(), carolCtx)
 	if _, err := c.Login(context.Background(), "carol", ""); !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("password sign-in without a password: %v", err)
 	}
@@ -347,18 +359,43 @@ func TestSSOInvite(t *testing.T) {
 		t.Fatalf("second account: %+v %v", res, err)
 	}
 
-	// Without a password, a recent sign-in confirms changes.
-	recent := WithActor(context.Background(), Actor{Kind: "user", UserID: carol.ID, Role: carol.Role, Scope: store.ScopeAdmin, SignedIn: signedIn})
-	old := WithActor(context.Background(), Actor{Kind: "user", UserID: carol.ID, Role: carol.Role, Scope: store.ScopeAdmin, SignedIn: signedIn.Add(-time.Hour)})
-	if acc, _ := c.Account(recent); acc.HasPassword || !acc.RecentSignIn {
+	// Without a password, changes wait for a fresh sign-in at the provider.
+	if acc, _ := c.Account(as); acc.HasPassword || acc.Confirmed {
 		t.Errorf("account = %+v", acc)
 	}
-	if _, err := c.BeginTOTP(old, ""); !errors.Is(err, ErrSignInAgain) {
-		t.Errorf("old sign-in: %v", err)
+	if _, err := c.BeginTOTP(as, ""); !errors.Is(err, ErrConfirmFirst) {
+		t.Errorf("unconfirmed: %v", err)
 	}
-	if _, err := c.BeginTOTP(recent, ""); err != nil {
-		t.Errorf("recent sign-in: %v", err)
+	start, err = c.BeginSSOConfirm(as, p.ID, origin, "/projects/x")
+	if err != nil {
+		t.Fatal(err)
 	}
+	if u, _ := url.Parse(start.URL); u.Query().Get("prompt") != "login" || u.Query().Get("max_age") != "0" {
+		t.Errorf("confirm URL = %s", start.URL)
+	}
+	// A provider that reused its session (old auth_time) doesn't confirm.
+	state = idp.answerAt(t, start, "c4", "carol-sub", time.Now().Add(-time.Hour))
+	if _, err := c.FinishSSO(context.Background(), state, state, "c4"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("stale sign-in: %v", err)
+	}
+	// Nor does another identity.
+	start, _ = c.BeginSSOConfirm(as, p.ID, origin, "/")
+	state = idp.answerAt(t, start, "c5", "someone-else", time.Now())
+	if _, err := c.FinishSSO(context.Background(), state, state, "c5"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("other identity: %v", err)
+	}
+	start, _ = c.BeginSSOConfirm(as, p.ID, origin, "/projects/x")
+	state = idp.answerAt(t, start, "c6", "carol-sub", time.Now())
+	if res, err := c.FinishSSO(context.Background(), state, state, "c6"); err != nil || res.Purpose != ssoConfirm || res.ReturnTo != "/projects/x" {
+		t.Fatalf("confirm: %+v %v", res, err)
+	}
+	if acc, _ := c.Account(as); !acc.Confirmed {
+		t.Error("not confirmed")
+	}
+	if _, err := c.BeginTOTP(as, ""); err != nil {
+		t.Errorf("confirmed: %v", err)
+	}
+	recent := as
 
 	// The only way to sign in can't be unlinked until there is a password.
 	acc, _ := c.Account(recent)
@@ -377,5 +414,62 @@ func TestSSOInvite(t *testing.T) {
 	}
 	if err := c.UnlinkSSOIdentity(recent, acc.SSO[0].ID); err != nil {
 		t.Errorf("unlink with a password: %v", err)
+	}
+}
+
+func TestSSORequired(t *testing.T) {
+	ctx := asAdmin(context.Background())
+	c := newTestCore(t, config.Config{})
+	idp := newFakeIssuer(t)
+	c.ssoHTTP = idp.Client()
+	p, err := c.CreateSSOProvider(ctx, SSOProviderInput{Name: "Company", Issuer: idp.URL, ClientID: "client", ClientSecret: "secret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const origin = "https://kipitiny.example.com"
+	hash, _ := bcrypt.GenerateFromPassword([]byte("correct horse"), bcrypt.MinCost)
+	admin, _ := c.store.CreateUser(ctx, store.User{Username: "admin", PasswordHash: string(hash), Role: store.RoleAdmin})
+	as := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", UserID: admin.ID, Role: store.RoleAdmin, Scope: store.ScopeAdmin})
+
+	// Not without a linked identity of one's own.
+	if err := c.SetSSORequired(as, true); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("unlinked admin: %v", err)
+	}
+	start, _ := c.BeginSSOConnect(as, p.ID, origin, "correct horse")
+	state := idp.answer(t, start, "c1", "admin-sub")
+	if _, err := c.FinishSSO(context.Background(), state, state, "c1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetSSORequired(as, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := c.Login(context.Background(), "admin", "correct horse"); !errors.Is(err, ErrSSORequired) {
+		t.Errorf("password: %v", err)
+	}
+	if _, err := c.BeginPasskeyLogin(context.Background(), RelyingParty{ID: "kipitiny.example.com", Origin: origin}); !errors.Is(err, ErrSSORequired) {
+		t.Errorf("passkey: %v", err)
+	}
+	inv, _ := c.CreateInvite(as, InviteInput{UserAccess: UserAccess{Role: store.RoleMember}})
+	if _, _, err := c.AcceptInvite(context.Background(), inv.Token, "dave", "a long password"); !errors.Is(err, ErrSSORequired) {
+		t.Errorf("invite with a password: %v", err)
+	}
+	if st, _ := c.AuthState(context.Background(), ""); !st.SSORequired {
+		t.Error("auth state doesn't say")
+	}
+	if err := c.DeleteSSOProvider(as, p.ID); !errors.Is(err, ErrInvalid) {
+		t.Errorf("last provider removed: %v", err)
+	}
+	start, _ = c.BeginSSO(context.Background(), p.ID, origin, "/")
+	state = idp.answer(t, start, "c2", "admin-sub")
+	if res, err := c.FinishSSO(context.Background(), state, state, "c2"); err != nil || res.Session == "" {
+		t.Fatalf("sso sign-in: %+v %v", res, err)
+	}
+
+	if err := c.AllowPasswordLogin(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := c.Login(context.Background(), "admin", "correct horse"); err != nil || res.Session == "" {
+		t.Errorf("password again: %v", err)
 	}
 }

@@ -496,7 +496,7 @@ export type Invite = UserAccess & {
 export type InviteInput = UserAccess & { email?: string; link?: string };
 
 /** sso: the providers the account can sign in with instead of a password. */
-export type InviteInfo = { role: Role; expiresAt: string; projects: string[]; sso: SSOButton[] };
+export type InviteInfo = { role: Role; expiresAt: string; projects: string[]; sso: SSOButton[]; ssoRequired: boolean };
 
 /** A password sign-in that still needs a TOTP or recovery code. */
 export type MfaChallenge = { mfaRequired: true; ticket: string };
@@ -514,12 +514,15 @@ export type Account = {
   totpEnabled: boolean;
   recoveryCodes: number;
   passkeys: Passkey[];
-  /** False for an account that signs in with single sign-on only: a sign-in less than 10 minutes old confirms its changes. */
+  /** False for an account that signs in with single sign-on only: a fresh sign-in at its provider confirms its changes, for 10 minutes. */
   hasPassword: boolean;
-  recentSignIn: boolean;
+  /** This session was confirmed that way. */
+  confirmed: boolean;
   sso: SSOIdentity[];
   /** The providers an identity can be linked at. */
   ssoProviders: SSOButton[];
+  /** Single sign-on is required: passkeys don't sign in until it isn't. */
+  ssoRequired: boolean;
   role: Role;
   features: Feature[];
   grants: Grants;
@@ -529,7 +532,8 @@ export type TotpSetup = { secret: string; uri: string };
 
 type Ceremony<T> = { ceremony: string; options: T };
 
-export type AuthState = { setupRequired: boolean; user?: User; sso: SSOButton[] };
+/** ssoRequired: password and passkey sign-in are off, the providers are the only way in. */
+export type AuthState = { setupRequired: boolean; user?: User; sso: SSOButton[]; ssoRequired: boolean };
 
 /** A base domain offered when giving a service a public domain. */
 export type Domain = {
@@ -1127,6 +1131,8 @@ export const api = {
   /** The provider's sign-in page, to link the identity signed in there. */
   connectSSO: (id: string, password: string) => request<{ url: string }>(`/account/sso/${id}/connect`, json("POST", { password })),
   unlinkSSO: (id: string) => request<void>(`/account/sso/${id}`, { method: "DELETE" }),
+  /** The provider's sign-in page, asking for the credentials again to confirm a change; back to returnTo. */
+  confirmSSO: (id: string, returnTo: string) => request<{ url: string }>(`/account/sso/${id}/confirm`, json("POST", { returnTo })),
 
   status: () => request<Status>("/status"),
   applyUpdate: () => request<UpdateInfo>("/update", { method: "POST" }),
@@ -1338,6 +1344,8 @@ export const api = {
   createSSOProvider: (p: SSOProviderInput) => request<SSOProvider>("/sso-providers", json("POST", p)),
   updateSSOProvider: (id: string, p: SSOProviderInput) => request<SSOProvider>(`/sso-providers/${id}`, json("PUT", p)),
   deleteSSOProvider: (id: string) => request<void>(`/sso-providers/${id}`, { method: "DELETE" }),
+  ssoRequired: () => request<{ required: boolean }>("/sso-required"),
+  setSSORequired: (required: boolean) => request<{ required: boolean }>("/sso-required", json("PUT", { required })),
   sshKey: () => request<{ publicKey: string }>("/ssh-key"),
   domains: () => request<Domain[]>("/domains"),
   createDomain: (name: string) => request<Domain>("/domains", json("POST", { name })),

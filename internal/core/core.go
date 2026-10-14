@@ -79,6 +79,7 @@ type Core struct {
 	totpSetups     pending[string] // user ID -> secret awaiting its first code
 	ceremonies     pending[ceremony]
 	sso            ssoState
+	confirmations  pending[struct{}] // session hash -> confirmed by a fresh sign-in
 	ssoFlows       pending[ssoFlow]
 	ssoHTTP        *http.Client // nil: a client with ssoTimeout; tests redirect it
 	stats          statsState

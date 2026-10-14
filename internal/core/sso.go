@@ -126,6 +126,13 @@ func (c *Core) DeleteSSOProvider(ctx context.Context, id string) error {
 	if err := RequireAdmin(ctx); err != nil {
 		return err
 	}
+	if c.SSORequired(ctx) {
+		if ps, err := c.store.ListSSOProviders(ctx); err != nil {
+			return err
+		} else if len(ps) == 1 && ps[0].ID == id {
+			return fmt.Errorf("%w: single sign-on is required and this is the last provider; stop requiring it first", ErrInvalid)
+		}
+	}
 	if err := c.store.DeleteSSOProvider(ctx, id); err != nil {
 		return err
 	}
@@ -213,7 +220,12 @@ const (
 	ssoLogin   = "login"   // sign in
 	ssoConnect = "connect" // link the identity to the signed-in user
 	ssoInvite  = "invite"  // create the invited account, linked to the identity
+	ssoConfirm = "confirm" // sign in again, freshly, to confirm a change
 )
+
+// ssoFreshness bounds how long before the flow started a sign-in counted
+// as fresh may have happened (clock skew between the provider and us).
+const ssoFreshness = time.Minute
 
 type ssoFlow struct {
 	purpose     string
@@ -227,6 +239,10 @@ type ssoFlow struct {
 	returnTo string
 	// Invite: its token and the username picked.
 	invite, username string
+	// Confirm: the session to confirm (its token's hash), and when the flow
+	// started, which the sign-in must not predate.
+	session string
+	started time.Time
 }
 
 // SSOStart is where to send the browser, and the state its cookie holds.
@@ -263,6 +279,25 @@ func (c *Core) BeginSSOInvite(ctx context.Context, providerID, managerURL, token
 	return c.beginSSO(ctx, ssoFlow{purpose: ssoInvite, providerID: providerID, invite: strings.TrimSpace(token), username: username}, managerURL)
 }
 
+// BeginSSOConfirm starts a fresh sign-in at a provider the signed-in user
+// is linked at, to confirm a change on an account without a password. The
+// provider is asked to sign in again even if it has a session.
+func (c *Core) BeginSSOConfirm(ctx context.Context, providerID, managerURL, returnTo string) (SSOStart, error) {
+	a, ok := ActorFrom(ctx)
+	if !ok || a.Session == "" {
+		return SSOStart{}, ErrUnauthorized
+	}
+	is, err := c.store.ListSSOIdentities(ctx, a.UserID)
+	if err != nil {
+		return SSOStart{}, err
+	}
+	if !slices.ContainsFunc(is, func(i store.SSOIdentity) bool { return i.ProviderID == providerID }) {
+		return SSOStart{}, fmt.Errorf("%w: your account isn't linked at this provider", ErrInvalid)
+	}
+	return c.beginSSO(ctx, ssoFlow{purpose: ssoConfirm, providerID: providerID, userID: a.UserID, session: a.Session,
+		started: time.Now(), returnTo: localPath(returnTo)}, managerURL)
+}
+
 func (c *Core) beginSSO(ctx context.Context, f ssoFlow, managerURL string) (SSOStart, error) {
 	p, err := c.store.GetSSOProvider(ctx, f.providerID)
 	if err != nil {
@@ -276,7 +311,13 @@ func (c *Core) beginSSO(ctx context.Context, f ssoFlow, managerURL string) (SSOS
 	f.redirectURL = strings.TrimSuffix(managerURL, "/") + SSOCallbackPath
 	state := randomToken(24)
 	c.ssoFlows.put(state, f, time.Now().Add(ssoFlowTTL))
-	u := ssoOAuth(p, op, f.redirectURL).AuthCodeURL(state, oauth2.S256ChallengeOption(f.verifier), oidc.Nonce(f.nonce))
+	opts := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(f.verifier), oidc.Nonce(f.nonce)}
+	if f.purpose == ssoConfirm {
+		// Ask for the credentials again; max_age=0 also makes providers
+		// send auth_time, checked on return.
+		opts = append(opts, oauth2.SetAuthURLParam("prompt", "login"), oauth2.SetAuthURLParam("max_age", "0"))
+	}
+	u := ssoOAuth(p, op, f.redirectURL).AuthCodeURL(state, opts...)
 	return SSOStart{URL: u, State: state}, nil
 }
 
@@ -325,6 +366,9 @@ func (c *Core) FinishSSO(ctx context.Context, state, cookieState, code string) (
 	case ssoInvite:
 		res.User, res.Session, err = c.acceptSSOInvite(ctx, p, f, id)
 		return res, err
+	case ssoConfirm:
+		res.User, err = c.confirmSSO(ctx, p, f, id)
+		return res, err
 	default:
 		res.User, res.Session, res.MFATicket, err = c.ssoSignIn(ctx, p, id)
 		return res, err
@@ -335,6 +379,9 @@ func (c *Core) FinishSSO(ctx context.Context, state, cookieState, code string) (
 type ssoClaims struct {
 	Subject string
 	Email   string
+	// AuthTime is when the user last entered their credentials there; zero
+	// when the provider didn't say.
+	AuthTime time.Time
 }
 
 // ssoIdentity exchanges the code and checks the ID token: signature,
@@ -361,10 +408,15 @@ func (c *Core) ssoIdentity(ctx context.Context, p store.SSOProvider, f ssoFlow, 
 		return ssoClaims{}, fmt.Errorf("%w: %s sent an ID token for another sign-in", ErrInvalid, p.Name)
 	}
 	var claims struct {
-		Email string `json:"email"`
+		Email    string `json:"email"`
+		AuthTime int64  `json:"auth_time"`
 	}
 	_ = idt.Claims(&claims)
-	return ssoClaims{Subject: idt.Subject, Email: claims.Email}, nil
+	out := ssoClaims{Subject: idt.Subject, Email: claims.Email}
+	if claims.AuthTime > 0 {
+		out.AuthTime = time.Unix(claims.AuthTime, 0)
+	}
+	return out, nil
 }
 
 // ssoSignIn signs in the user the identity is linked to. Two-factor
@@ -389,7 +441,7 @@ func (c *Core) ssoSignIn(ctx context.Context, p store.SSOProvider, id ssoClaims)
 	_ = c.store.SSOIdentityUsed(ctx, link.ID, id.Email)
 	if u.TOTPSecret != "" {
 		ticket := randomToken(32)
-		c.mfaTickets.put(ticket, mfaTicket{userID: u.ID}, time.Now().Add(mfaTicketTTL))
+		c.mfaTickets.put(ticket, mfaTicket{userID: u.ID, sso: true}, time.Now().Add(mfaTicketTTL))
 		return u, "", ticket, nil
 	}
 	_ = c.store.DeleteExpiredSessions(ctx)
@@ -439,6 +491,25 @@ func (c *Core) acceptSSOInvite(ctx context.Context, p store.SSOProvider, f ssoFl
 	}
 	session, err := c.newSession(ctx, u.ID)
 	return u, session, err
+}
+
+// confirmSSO marks the flow's session as confirmed, if the identity is the
+// user's and the provider asked for its credentials during the flow.
+func (c *Core) confirmSSO(ctx context.Context, p store.SSOProvider, f ssoFlow, id ssoClaims) (store.User, error) {
+	link, err := c.store.GetSSOIdentity(ctx, p.ID, id.Subject)
+	if err != nil || link.UserID != f.userID {
+		return store.User{}, fmt.Errorf("%w: that %s account isn't the one linked to yours", ErrInvalid, p.Name)
+	}
+	if id.AuthTime.IsZero() || id.AuthTime.Before(f.started.Add(-ssoFreshness)) {
+		return store.User{}, fmt.Errorf("%w: %s didn't ask for your credentials again, so it can't confirm it's you; "+
+			"sign out of %s and retry", ErrInvalid, p.Name, p.Name)
+	}
+	u, err := c.store.GetUser(ctx, f.userID)
+	if err != nil {
+		return store.User{}, err
+	}
+	c.confirmations.put(f.session, struct{}{}, time.Now().Add(confirmWindow))
+	return u, nil
 }
 
 // SSOIdentityView is a linked identity, for the account page.
@@ -506,4 +577,50 @@ func localPath(p string) string {
 		return "/"
 	}
 	return p
+}
+
+// Requiring single sign-on turns password and passkey sign-in off: users
+// sign in through a provider only (API tokens keep working). An admin turns
+// it on while linked at a provider, so someone can still sign in; the CLI's
+// allow-password-login turns it off when no provider works.
+
+const ssoRequiredSetting = "sso_required"
+
+// ErrSSORequired refuses a password or passkey sign-in while single sign-on
+// is required.
+var ErrSSORequired = fmt.Errorf("%w: password and passkey sign-in are off on this server; sign in with single sign-on", ErrInvalid)
+
+// SSORequired reports whether sign-in goes through a provider only.
+func (c *Core) SSORequired(ctx context.Context) bool {
+	v, err := c.store.GetSetting(ctx, ssoRequiredSetting)
+	return err == nil && v == "true"
+}
+
+// SetSSORequired turns password and passkey sign-in off or back on. Turning
+// it off is allowed; turning it on needs a provider the admin is linked at.
+func (c *Core) SetSSORequired(ctx context.Context, on bool) error {
+	if err := RequireAdmin(ctx); err != nil {
+		return err
+	}
+	if !on {
+		return c.store.SetSetting(ctx, ssoRequiredSetting, "")
+	}
+	u, err := c.currentUser(ctx)
+	if err != nil {
+		return err
+	}
+	is, err := c.store.ListSSOIdentities(ctx, u.ID)
+	if err != nil {
+		return err
+	}
+	if len(is) == 0 {
+		return fmt.Errorf("%w: link your own account at a provider first (Account › Single sign-on), so you can still sign in", ErrInvalid)
+	}
+	return c.store.SetSetting(ctx, ssoRequiredSetting, "true")
+}
+
+// AllowPasswordLogin turns password and passkey sign-in back on, for the CLI
+// when no provider works.
+func (c *Core) AllowPasswordLogin(ctx context.Context) error {
+	return c.store.SetSetting(ctx, ssoRequiredSetting, "")
 }

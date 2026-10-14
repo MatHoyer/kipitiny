@@ -185,6 +185,14 @@ func (a *API) ssoCallback(w http.ResponseWriter, r *http.Request) {
 		a.ssoRedirect(w, r, "/account", "sso-connected", err)
 		return
 	}
+	if res.Purpose == "confirm" {
+		to := res.ReturnTo
+		if to == "" {
+			to = "/account"
+		}
+		a.ssoRedirect(w, r, to, "sso-confirmed", err)
+		return
+	}
 	if res.Purpose == "invite" && err != nil {
 		// Back to the invite, its token in the fragment as in the link.
 		a.ssoRedirect(w, r, invitePage+"#"+url.QueryEscape(res.Invite), "", err)
@@ -227,4 +235,37 @@ func (a *API) ssoRedirect(w http.ResponseWriter, r *http.Request, page, done str
 	}
 	u.RawQuery = q.Encode()
 	http.Redirect(w, r, u.String(), http.StatusSeeOther)
+}
+
+func (a *API) ssoRequired(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]bool{"required": a.core.SSORequired(r.Context())})
+}
+
+func (a *API) setSSORequired(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Required bool `json:"required"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := a.core.SetSSORequired(r.Context(), body.Required); err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, body)
+}
+
+func (a *API) beginSSOConfirm(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ReturnTo string `json:"returnTo"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	start, err := a.core.BeginSSOConfirm(r.Context(), r.PathValue("id"), relyingParty(r).Origin, body.ReturnTo)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	a.startSSO(w, r, start)
 }

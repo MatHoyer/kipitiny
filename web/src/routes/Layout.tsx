@@ -51,6 +51,8 @@ import { Logo } from "@/components/logo";
 import { DemoBanner } from "@/demo/banner";
 import { api } from "../api";
 import { useAccess } from "@/lib/access";
+import { friendlyError } from "@/lib/errors";
+import { takeSSOParam } from "@/lib/sso";
 import { AcceptInvite, Login, Setup } from "./Auth";
 import { settingsGroups, settingsPages, useSettingsAccess } from "./settings";
 import { invitePath } from "./settings/Users";
@@ -63,7 +65,7 @@ export function Layout() {
   if (auth.error) return <p className="p-8 text-sm text-destructive">{auth.error.message}</p>;
   if (pathname === invitePath) return <AcceptInvite signedIn={!!auth.data.user} />;
   if (auth.data.setupRequired) return <Setup />;
-  if (!auth.data.user) return <Login sso={auth.data.sso} />;
+  if (!auth.data.user) return <Login sso={auth.data.sso} ssoOnly={auth.data.ssoRequired} />;
   return <App username={auth.data.user.username} />;
 }
 
@@ -74,6 +76,13 @@ const nav = [
 ];
 
 function App({ username }: { username: string }) {
+  // Back from a single sign-on provider (linking an identity, confirming a change).
+  useEffect(() => {
+    const error = takeSSOParam("sso-error");
+    if (error) toast.error("Single sign-on failed", { description: friendlyError(new Error(error)), duration: 12000 });
+    if (takeSSOParam("sso-connected")) toast.success("Account linked: you can sign in with it");
+    if (takeSSOParam("sso-confirmed")) toast.success("Confirmed", { description: "Sensitive changes go through for the next 10 minutes." });
+  }, []);
   return (
     <SidebarProvider>
       <Sidebar variant="inset">
