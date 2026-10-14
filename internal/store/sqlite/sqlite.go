@@ -1188,6 +1188,41 @@ func (s *Store) DeleteGitProvider(ctx context.Context, id string) error {
 	return deleteByID(ctx, s.db, "git_providers", id)
 }
 
+func (s *Store) ListSSOProviders(ctx context.Context) ([]store.SSOProvider, error) {
+	ps := []store.SSOProvider{}
+	err := s.db.NewSelect().Model(&ps).Order("name").Scan(ctx)
+	return ps, mapErr(err)
+}
+
+func (s *Store) GetSSOProvider(ctx context.Context, id string) (store.SSOProvider, error) {
+	var p store.SSOProvider
+	err := s.db.NewSelect().Model(&p).Where("id = ?", id).Scan(ctx)
+	return p, mapErr(err)
+}
+
+func (s *Store) CreateSSOProvider(ctx context.Context, p store.SSOProvider) (store.SSOProvider, error) {
+	p.ID, p.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&p).Exec(ctx); err != nil {
+		return store.SSOProvider{}, mapErr(err)
+	}
+	return p, nil
+}
+
+func (s *Store) UpdateSSOProvider(ctx context.Context, p store.SSOProvider) (store.SSOProvider, error) {
+	res, err := s.db.NewUpdate().Model(&p).ExcludeColumn("id", "created_at").WherePK().Exec(ctx)
+	if err != nil {
+		return store.SSOProvider{}, mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.SSOProvider{}, store.ErrNotFound
+	}
+	return s.GetSSOProvider(ctx, p.ID)
+}
+
+func (s *Store) DeleteSSOProvider(ctx context.Context, id string) error {
+	return deleteByID(ctx, s.db, "sso_providers", id)
+}
+
 func (s *Store) ListRegistries(ctx context.Context) ([]store.Registry, error) {
 	rs := []store.Registry{}
 	err := s.db.NewSelect().Model(&rs).Order("host").Scan(ctx)

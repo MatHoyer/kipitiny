@@ -1426,6 +1426,35 @@ const routes: Route[] = [
   ["POST", /^\/email\/test$/, () => undefined],
   ["GET", /^\/cloudflare$/, () => ({ connected: false, zones: [], tunnels: [] })],
   ["GET", /^\/git-providers$/, () => []],
+  ["GET", /^\/sso-providers$/, () => (db.ssoProviders ??= [])],
+  [
+    "POST",
+    /^\/sso-providers$/,
+    ({ body }) => {
+      const p = { id: newId("sso"), name: String(body.name), issuer: String(body.issuer), clientId: String(body.clientId), clientSecret: MASK, createdAt: now() };
+      (db.ssoProviders ??= []).push(p);
+      save();
+      return p;
+    },
+  ],
+  [
+    "PUT",
+    /^\/sso-providers\/([^/]+)$/,
+    ({ m, body }) => {
+      const p = db.ssoProviders?.find((x) => x.id === m[1]) ?? (() => { throw notFound(); })();
+      Object.assign(p, { name: body.name, issuer: body.issuer, clientId: body.clientId });
+      save();
+      return p;
+    },
+  ],
+  [
+    "DELETE",
+    /^\/sso-providers\/([^/]+)$/,
+    ({ m }) => {
+      db.ssoProviders = db.ssoProviders?.filter((p) => p.id !== m[1]);
+      save();
+    },
+  ],
   ["GET", /^\/registries$/, () => db.registries],
   [
     "POST",
