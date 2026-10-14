@@ -535,10 +535,19 @@ type Ceremony<T> = { ceremony: string; options: T };
 /** ssoRequired: password and passkey sign-in are off, the providers are the only way in. */
 export type AuthState = { setupRequired: boolean; user?: User; sso: SSOButton[]; ssoRequired: boolean; branding: Branding };
 
-/** The manager's name, accent (#rrggbb) and logo URL; absent ones keep kipitiny's. */
-export type Branding = { name?: string; accent?: string; logo?: string };
+/** The UI's look; absent fields keep kipitiny's. Colours are #rrggbb; accentDark replaces accent in dark mode. */
+export type Theme = {
+  accent?: string;
+  accentDark?: string;
+  tint?: string;
+  radius?: "none" | "small" | "medium" | "large" | "full";
+  font?: "geist" | "system" | "serif" | "mono";
+  density?: "comfortable" | "compact";
+};
+/** The manager's name, logo URL and theme; absent ones keep kipitiny's. */
+export type Branding = Theme & { name?: string; logo?: string };
 /** logo: a data URL to set one, "" to remove it, absent to keep it. */
-export type BrandingInput = { name: string; accent: string; logo?: string };
+export type BrandingInput = Theme & { name: string; logo?: string };
 
 /** A base domain offered when giving a service a public domain. */
 export type Domain = {

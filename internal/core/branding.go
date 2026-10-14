@@ -16,8 +16,9 @@ import (
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
-// Branding is how the manager presents itself: its name, accent colour and
-// logo, in the UI, on the sign-in page and in emails. Kept in two settings
+// Branding is how the manager presents itself: its name, logo and theme
+// (colours, corners, font, density), in the UI, on the sign-in page and,
+// name and accent, in emails. Kept in two settings
 // so reading the name doesn't load the logo.
 const (
 	brandingSetting     = "branding"
@@ -32,10 +33,51 @@ const (
 
 var accentRe = regexp.MustCompile(`^#[0-9a-f]{6}$`)
 
+// Theme is the look the UI applies; empty fields keep kipitiny's own. The
+// UI's presets only fill these in.
+type Theme struct {
+	// Accent colours buttons and focus rings (#rrggbb); AccentDark replaces
+	// it in dark mode.
+	Accent     string `json:"accent,omitempty"`
+	AccentDark string `json:"accentDark,omitempty"`
+	// Tint is mixed lightly into backgrounds, surfaces and borders.
+	Tint    string `json:"tint,omitempty"`
+	Radius  string `json:"radius,omitempty"`
+	Font    string `json:"font,omitempty"`
+	Density string `json:"density,omitempty"`
+}
+
+var (
+	themeRadii     = []string{"", "none", "small", "medium", "large", "full"}
+	themeFonts     = []string{"", "geist", "system", "serif", "mono"}
+	themeDensities = []string{"", "comfortable", "compact"}
+)
+
+func (t *Theme) normalize() error {
+	for _, c := range []struct {
+		v    *string
+		what string
+	}{{&t.Accent, "accent colour"}, {&t.AccentDark, "dark mode accent"}, {&t.Tint, "tint"}} {
+		*c.v = strings.ToLower(strings.TrimSpace(*c.v))
+		if *c.v != "" && !accentRe.MatchString(*c.v) {
+			return fmt.Errorf("%w: the %s must look like #4f46e5", ErrInvalid, c.what)
+		}
+	}
+	switch {
+	case !oneOf(t.Radius, themeRadii...):
+		return fmt.Errorf("%w: corners must be one of %s", ErrInvalid, strings.Join(themeRadii[1:], ", "))
+	case !oneOf(t.Font, themeFonts...):
+		return fmt.Errorf("%w: the font must be one of %s", ErrInvalid, strings.Join(themeFonts[1:], ", "))
+	case !oneOf(t.Density, themeDensities...):
+		return fmt.Errorf("%w: density must be one of %s", ErrInvalid, strings.Join(themeDensities[1:], ", "))
+	}
+	return nil
+}
+
 // Branding is what the UI applies; empty fields keep kipitiny's own.
 type Branding struct {
-	Name   string `json:"name,omitempty"`
-	Accent string `json:"accent,omitempty"`
+	Name string `json:"name,omitempty"`
+	Theme
 	// Logo is the logo's URL, versioned so browsers cache it until it
 	// changes.
 	Logo string `json:"logo,omitempty"`
@@ -44,14 +86,14 @@ type Branding struct {
 // BrandingInput replaces the branding. Logo is a data URL (or bare base64)
 // to set one, "" to remove it, or nil to keep the current one.
 type BrandingInput struct {
-	Name   string  `json:"name"`
-	Accent string  `json:"accent"`
-	Logo   *string `json:"logo,omitempty"`
+	Name string `json:"name"`
+	Theme
+	Logo *string `json:"logo,omitempty"`
 }
 
 type brandingSettings struct {
-	Name     string `json:"name,omitempty"`
-	Accent   string `json:"accent,omitempty"`
+	Name string `json:"name,omitempty"`
+	Theme
 	LogoType string `json:"logoType,omitempty"`
 	// LogoHash versions the logo URL.
 	LogoHash string `json:"logoHash,omitempty"`
@@ -68,7 +110,7 @@ func (c *Core) brandingSettings(ctx context.Context) brandingSettings {
 // Branding returns the manager's branding, shown before sign-in too.
 func (c *Core) Branding(ctx context.Context) Branding {
 	s := c.brandingSettings(ctx)
-	b := Branding{Name: s.Name, Accent: s.Accent}
+	b := Branding{Name: s.Name, Theme: s.Theme}
 	if s.LogoHash != "" {
 		b.Logo = "/api/branding/logo?v=" + s.LogoHash
 	}
@@ -110,9 +152,9 @@ func (c *Core) SetBranding(ctx context.Context, in BrandingInput) (Branding, err
 	if utf8.RuneCountInString(s.Name) > maxBrandName || strings.ContainsAny(s.Name, "\r\n") {
 		return Branding{}, fmt.Errorf("%w: the name must be one line of at most %d characters", ErrInvalid, maxBrandName)
 	}
-	s.Accent = strings.ToLower(strings.TrimSpace(in.Accent))
-	if s.Accent != "" && !accentRe.MatchString(s.Accent) {
-		return Branding{}, fmt.Errorf("%w: the accent colour must look like #4f46e5", ErrInvalid)
+	s.Theme = in.Theme
+	if err := s.Theme.normalize(); err != nil {
+		return Branding{}, err
 	}
 	if in.Logo != nil {
 		logo, typ, err := parseLogo(*in.Logo)

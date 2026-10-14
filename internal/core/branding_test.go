@@ -27,12 +27,12 @@ func TestSetBranding(t *testing.T) {
 		t.Fatalf("default: %+v", got)
 	}
 
-	b, err := c.SetBranding(ctx, BrandingInput{Name: " Acme ops ", Accent: "#E11D48",
+	b, err := c.SetBranding(ctx, BrandingInput{Name: " Acme ops ", Theme: Theme{Accent: "#E11D48", AccentDark: "#FB7185", Tint: "#be123c", Radius: "large", Font: "serif", Density: "compact"},
 		Logo: ptr("data:image/gif;base64," + base64.StdEncoding.EncodeToString(pngLogo))})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b.Name != "Acme ops" || b.Accent != "#e11d48" || !strings.HasPrefix(b.Logo, "/api/branding/logo?v=") {
+	if b.Name != "Acme ops" || b.Accent != "#e11d48" || b.AccentDark != "#fb7185" || b.Radius != "large" || b.Font != "serif" || b.Density != "compact" || !strings.HasPrefix(b.Logo, "/api/branding/logo?v=") {
 		t.Fatalf("set: %+v", b)
 	}
 	data, typ, err := c.BrandingLogo(ctx)
@@ -41,7 +41,7 @@ func TestSetBranding(t *testing.T) {
 	}
 
 	// No logo keeps it; "" removes it.
-	if b2, _ := c.SetBranding(ctx, BrandingInput{Name: "Acme"}); b2.Logo != b.Logo || b2.Accent != "" {
+	if b2, _ := c.SetBranding(ctx, BrandingInput{Name: "Acme"}); b2.Logo != b.Logo || b2.Theme != (Theme{}) {
 		t.Errorf("kept logo: %+v", b2)
 	}
 	if b2, _ := c.SetBranding(ctx, BrandingInput{Name: "Acme", Logo: ptr("")}); b2.Logo != "" {
@@ -72,8 +72,14 @@ func TestSetBrandingValidates(t *testing.T) {
 		{"svg", BrandingInput{Logo: b64(`<?xml version="1.0"?><!-- logo --><svg xmlns="http://www.w3.org/2000/svg"></svg>`)}, false},
 		{"long name", BrandingInput{Name: strings.Repeat("a", 41)}, true},
 		{"two lines", BrandingInput{Name: "a\nb"}, true},
-		{"named colour", BrandingInput{Accent: "red"}, true},
-		{"short hex", BrandingInput{Accent: "#fff"}, true},
+		{"full theme", BrandingInput{Theme: Theme{Accent: "#5e81ac", AccentDark: "#88c0d0", Tint: "#4c566a", Radius: "none", Font: "mono", Density: "comfortable"}}, false},
+		{"named colour", BrandingInput{Theme: Theme{Accent: "red"}}, true},
+		{"short hex", BrandingInput{Theme: Theme{Accent: "#fff"}}, true},
+		{"bad dark accent", BrandingInput{Theme: Theme{AccentDark: "blue"}}, true},
+		{"bad tint", BrandingInput{Theme: Theme{Tint: "#12345g"}}, true},
+		{"unknown radius", BrandingInput{Theme: Theme{Radius: "huge"}}, true},
+		{"unknown font", BrandingInput{Theme: Theme{Font: "comic"}}, true},
+		{"unknown density", BrandingInput{Theme: Theme{Density: "airy"}}, true},
 		{"html", BrandingInput{Logo: b64(`<html><svg></svg></html>`)}, true},
 		{"text", BrandingInput{Logo: b64("hello")}, true},
 		{"not base64", BrandingInput{Logo: ptr("data:image/png;base64,***")}, true},
@@ -108,7 +114,7 @@ func TestBrandedEmail(t *testing.T) {
 	if _, err := c.SetEmail(ctx, mail.Config{Host: "127.0.0.1", Port: srv.Port, Security: mail.None, From: "ops@example.com"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.SetBranding(ctx, BrandingInput{Name: "Acme ops", Accent: "#e11d48"}); err != nil {
+	if _, err := c.SetBranding(ctx, BrandingInput{Name: "Acme ops", Theme: Theme{Accent: "#e11d48"}}); err != nil {
 		t.Fatal(err)
 	}
 
