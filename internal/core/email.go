@@ -88,10 +88,10 @@ func (c *Core) TestEmail(ctx context.Context, to string) error {
 		return mailErr(err)
 	}
 	err = c.sendMail(ctx, []*netmail.Address{addr}, mail.Body{
-		Title:      "Test email from kipitiny",
+		Title:      "Test email from " + c.BrandName(ctx),
 		Accent:     "#22c55e",
-		Paragraphs: []string{"Email from kipitiny reaches this address: notification channels and invites can use it."},
-		Footer:     c.mailFooter(),
+		Paragraphs: []string{"Email from " + c.BrandName(ctx) + " reaches this address: notification channels and invites can use it."},
+		Footer:     c.mailFooter(ctx),
 	}, "")
 	if err != nil && !errors.Is(err, ErrInvalid) {
 		return fmt.Errorf("%w: %v", ErrInvalid, err)
@@ -105,6 +105,9 @@ func (c *Core) sendMail(ctx context.Context, to []*netmail.Address, b mail.Body,
 	if !ok {
 		return ErrNoEmail
 	}
+	if b.Accent == "" {
+		b.Accent = c.brandingSettings(ctx).Accent
+	}
 	m, err := b.Message(to, subject)
 	if err != nil {
 		return err
@@ -115,11 +118,11 @@ func (c *Core) sendMail(ctx context.Context, to []*netmail.Address, b mail.Body,
 }
 
 // mailFooter says where an email comes from.
-func (c *Core) mailFooter() string {
+func (c *Core) mailFooter(ctx context.Context) string {
 	if c.cfg.Domain != "" {
-		return "Sent by kipitiny on " + c.cfg.Domain
+		return "Sent by " + c.BrandName(ctx) + " on " + c.cfg.Domain
 	}
-	return "Sent by kipitiny"
+	return "Sent by " + c.BrandName(ctx)
 }
 
 func mailErr(err error) error {
