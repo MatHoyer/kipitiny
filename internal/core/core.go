@@ -78,6 +78,8 @@ type Core struct {
 	mfaTickets     pending[mfaTicket]
 	totpSetups     pending[string] // user ID -> secret awaiting its first code
 	ceremonies     pending[ceremony]
+	sso            ssoState
+	ssoHTTP        *http.Client // nil: a client with ssoTimeout; tests redirect it
 	stats          statsState
 	sleep          sleepState
 	uptime         uptimeState

@@ -19,6 +19,21 @@ With an [SMTP server](/docs/monitoring#email) set, an optional **email**
 sends the link to the new user as well (it is still shown once to copy). If
 sending fails, the invite exists anyway: copy the link and send it yourself.
 
+## Single sign-on
+
+Users can sign in through an OpenID Connect provider: Google, Microsoft Entra
+ID, Authentik, Keycloak, Pocket ID, Zitadel, Okta… Add it in *Settings ›
+Single sign-on*:
+
+1. Register kipitiny as a confidential web client at the provider, with the
+   **redirect URI** the form shows (`https://<manager>/api/auth/sso/callback`).
+2. Enter the provider's **issuer** URL, the **client ID** and the **client
+   secret**. kipitiny reads the issuer's OpenID configuration before saving,
+   so a wrong URL shows up right away.
+
+The name you give it labels the sign-in button. Several providers can be
+added side by side.
+
 ## Project permissions
 
 A member's access is set per project. Any permission includes **view**.

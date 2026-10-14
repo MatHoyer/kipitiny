@@ -67,6 +67,12 @@ type Store interface {
 	// DeleteGitProvider returns ErrConflict while projects use it.
 	DeleteGitProvider(ctx context.Context, id string) error
 
+	ListSSOProviders(ctx context.Context) ([]SSOProvider, error)
+	GetSSOProvider(ctx context.Context, id string) (SSOProvider, error)
+	CreateSSOProvider(ctx context.Context, p SSOProvider) (SSOProvider, error)
+	UpdateSSOProvider(ctx context.Context, p SSOProvider) (SSOProvider, error)
+	DeleteSSOProvider(ctx context.Context, id string) error
+
 	CreateDeployment(ctx context.Context, d Deployment) (Deployment, error)
 	GetDeployment(ctx context.Context, id string) (Deployment, error)
 	// ListDeployments returns the newest first; limit <= 0 returns all.
@@ -861,6 +867,19 @@ const (
 	GitLab GitProviderKind = "gitlab"
 	Gitea  GitProviderKind = "gitea"
 )
+
+// SSOProvider is an OpenID Connect provider users sign in with.
+type SSOProvider struct {
+	bun.BaseModel `bun:"table:sso_providers,alias:sso" json:"-"`
+
+	ID string `bun:"id,pk" json:"id"`
+	// Name labels the sign-in button.
+	Name         string    `bun:"name" json:"name"`
+	Issuer       string    `bun:"issuer" json:"issuer"`
+	ClientID     string    `bun:"client_id" json:"clientId"`
+	ClientSecret string    `bun:"client_secret" json:"clientSecret"`
+	CreatedAt    time.Time `bun:"created_at" json:"createdAt"`
+}
 
 // GitProvider gives access to the private repositories of a forge account:
 // a GitHub App installation, or a GitLab or Gitea OAuth authorization.

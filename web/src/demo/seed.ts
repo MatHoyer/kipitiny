@@ -12,6 +12,7 @@ import type {
   Project,
   EmailSettings,
   Registry,
+  SSOProvider,
   Restore,
   Schedule,
   Service,
@@ -48,6 +49,8 @@ export type DemoDb = {
   restores: Restore[];
   domains: Domain[];
   registries: Registry[];
+  /** Added after version 3: empty until a provider is added. */
+  ssoProviders?: SSOProvider[];
   /** The SMTP server, once set in Settings › Email. */
   email?: EmailSettings;
   channels: NotificationChannel[];

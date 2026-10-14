@@ -428,6 +428,14 @@ export type Registry = { id: string; host: string; username: string; password: s
 
 export type RegistryInput = Pick<Registry, "host" | "username" | "password">;
 
+/** An OpenID Connect provider users sign in with; clientSecret reads back masked. */
+export type SSOProvider = { id: string; name: string; issuer: string; clientId: string; clientSecret: string; createdAt: string };
+
+export type SSOProviderInput = Pick<SSOProvider, "name" | "issuer" | "clientId" | "clientSecret">;
+
+/** Where providers send the browser back after signing in: their redirect URI. */
+export const ssoCallbackUrl = () => `${window.location.origin}/api/auth/sso/callback`;
+
 /** A service on a network created by hand, reached there as its alias. */
 export type NetworkMember = { id: string; name: string; kind: ServiceKind; projectId: string; projectName: string; alias: string };
 
@@ -1305,6 +1313,10 @@ export const api = {
   updateRegistry: (id: string, r: RegistryInput) => request<Registry>(`/registries/${id}`, json("PUT", r)),
   deleteRegistry: (id: string) => request<void>(`/registries/${id}`, { method: "DELETE" }),
   testRegistry: (id: string, onStep?: (step: string) => void) => test(`/registries/${id}/test`, onStep),
+  ssoProviders: () => request<SSOProvider[]>("/sso-providers"),
+  createSSOProvider: (p: SSOProviderInput) => request<SSOProvider>("/sso-providers", json("POST", p)),
+  updateSSOProvider: (id: string, p: SSOProviderInput) => request<SSOProvider>(`/sso-providers/${id}`, json("PUT", p)),
+  deleteSSOProvider: (id: string) => request<void>(`/sso-providers/${id}`, { method: "DELETE" }),
   sshKey: () => request<{ publicKey: string }>("/ssh-key"),
   domains: () => request<Domain[]>("/domains"),
   createDomain: (name: string) => request<Domain>("/domains", json("POST", { name })),

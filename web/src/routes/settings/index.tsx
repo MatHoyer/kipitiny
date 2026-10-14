@@ -1,4 +1,4 @@
-import { Bell, BookOpen, Brush, GitFork, HardDrive, Globe, Info, KeyRound, KeySquare, Mail, Network, Package, ScrollText, Server, Users, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, Brush, GitFork, HardDrive, Globe, Info, KeyRound, KeySquare, LogIn, Mail, Network, Package, ScrollText, Server, Users, type LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 import type { Feature } from "@/api";
 import { EmptyState } from "@/components/common";
@@ -16,6 +16,7 @@ import { SettingsLabel, SettingsPage, SettingsReadOnly } from "./page";
 import { PasswordManagers } from "./PasswordManagers";
 import { Registries } from "./Registries";
 import { Servers } from "./Servers";
+import { SSOPage } from "./SSO";
 import { Storage } from "./Storage";
 import { TokensPage } from "./Tokens";
 import { UsersPage } from "./Users";
@@ -134,6 +135,13 @@ export const settingsPages: SettingsPage[] = [
     label: "Users",
     icon: Users,
     page: UsersPage,
+  },
+  {
+    slug: "sso",
+    group: "Access",
+    label: "Single sign-on",
+    icon: LogIn,
+    page: SSOPage,
   },
   {
     slug: "audit",

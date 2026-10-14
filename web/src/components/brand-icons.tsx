@@ -125,6 +125,59 @@ export function GitHubIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function GoogleIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" role="img" aria-hidden={!props["aria-label"]} {...props}>
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.6l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+    </svg>
+  );
+}
+
+export function AuthentikIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-hidden={!props["aria-label"]} {...props}>
+      <path d="M13.96 9.01h-.84V7.492h-1.234v3.663H5.722c.34.517.538.982.538 1.152 0 .46-1.445 3.059-3.197 3.059C.8 15.427-.745 12.8.372 10.855a3.062 3.062 0 0 1 2.691-1.606c1.04 0 1.971.915 2.557 1.755V6.577a3.773 3.773 0 0 1 3.77-3.769h10.84C22.31 2.808 24 4.5 24 6.577v10.845a3.773 3.773 0 0 1-3.77 3.769h-1.6V17.5h-7.64v3.692h-1.6a3.773 3.773 0 0 1-3.77-3.769v-3.41h12.114v-6.52h-1.59v.893h-.84v-.893H13.96v1.516Zm-9.956 1.845c-.662-.703-1.578-.544-2.209 0-2.105 2.054 1.338 5.553 3.302 1.447a5.395 5.395 0 0 0-1.093-1.447Z" />
+    </svg>
+  );
+}
+
+export function KeycloakIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 44.216 39.861" role="img" aria-hidden={!props["aria-label"]} {...props}>
+      <g transform="translate(-82.815 -128.588)">
+        <path fill="#4d4d4d" d="m88.61 138.456 5.716-9.865 23.018-.004 5.686 9.965.007 19.932-5.691 9.957-23.012.008-5.782-9.965z" />
+        <path fill="#ededed" d="M88.552 158.481h10.375l-5.699-10.041 4.634-9.982-9.252-.002-5.795 10.065" />
+        <path fill="#e0e0e0" d="M102.073 158.481h7.582l6.706-9.773-6.589-10.156h-8.921l-5.373 9.814z" />
+        <path fill="#acacac" d="m82.815 148.52 5.738 9.964h10.374l-5.636-9.93z" />
+        <path fill="#9e9e9e" d="m95.589 148.522 6.484 9.963h7.582l6.601-9.959z" />
+        <path fill="#00b8e3" d="m98.157 148.529-1.958.569-1.877-.572 7.667-13.288 1.918 3.316" />
+        <path fill="#33c6e9" d="m103.9 158.482-1.909 3.332-5.093-5.487-2.58-7.797v-.004h3.838" />
+        <path fill="#008aaa" d="M94.322 148.526h-.003v.003l-1.918 3.322-1.925-3.307 1.952-3.386 5.728-9.92h3.834" />
+        <path fill="#d4d4d4" d="M115.42 158.481h11.611l-.007-19.93h-11.605z" />
+        <path fill="#919191" d="M115.42 148.554v9.93h11.59v-9.93z" />
+        <path fill="#00b8e3" d="M101.992 161.817h-3.836l-5.755-9.966 1.918-3.321z" />
+        <path fill="#008aaa" d="m117.333 148.526-7.669 13.289c-.705-1.036-1.913-3.331-1.913-3.331l5.753-9.959z" />
+        <path fill="#00b8e3" d="m113.495 161.815-3.831-.001 7.67-13.288 1.917-3.317 1.921 3.34m-3.839-.023h-3.828l-5.755-9.973 1.905-3.314 4.658 5.922z" />
+        <path fill="#33c6e9" d="M119.25 145.205v.003l-1.917 3.318-7.677-13.286 3.841.002z" />
+      </g>
+    </svg>
+  );
+}
+
+export function MicrosoftIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" role="img" aria-hidden={!props["aria-label"]} {...props}>
+      <path fill="#F25022" d="M1 1h10.5v10.5H1z" />
+      <path fill="#7FBA00" d="M12.5 1H23v10.5H12.5z" />
+      <path fill="#00A4EF" d="M1 12.5h10.5V23H1z" />
+      <path fill="#FFB900" d="M12.5 12.5H23V23H12.5z" />
+    </svg>
+  );
+}
+
 export function GitLabIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-hidden={!props["aria-label"]} {...props}>
