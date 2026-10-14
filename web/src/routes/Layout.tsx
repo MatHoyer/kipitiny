@@ -63,7 +63,7 @@ export function Layout() {
   if (auth.error) return <p className="p-8 text-sm text-destructive">{auth.error.message}</p>;
   if (pathname === invitePath) return <AcceptInvite signedIn={!!auth.data.user} />;
   if (auth.data.setupRequired) return <Setup />;
-  if (!auth.data.user) return <Login />;
+  if (!auth.data.user) return <Login sso={auth.data.sso} />;
   return <App username={auth.data.user.username} />;
 }
 

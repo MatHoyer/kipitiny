@@ -8,11 +8,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/store"
@@ -150,5 +153,137 @@ func TestSSOProviders(t *testing.T) {
 	}
 	if ps, _ := c.ListSSOProviders(ctx); len(ps) != 0 {
 		t.Errorf("left = %+v", ps)
+	}
+}
+
+// answer sets the fake issuer to answer the flow behind start with
+// subject sub, and returns the flow's state.
+func (f *fakeIssuer) answer(t *testing.T, start SSOStart, code, sub string) string {
+	t.Helper()
+	u, err := url.Parse(start.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	if !strings.HasPrefix(start.URL, f.URL+"/authorize?") || q.Get("code_challenge_method") != "S256" || q.Get("redirect_uri") != "https://kipitiny.example.com"+SSOCallbackPath {
+		t.Fatalf("authorize URL = %s", start.URL)
+	}
+	f.code(code, map[string]any{"sub": sub, "email": sub + "@example.com", "nonce": q.Get("nonce")})
+	return q.Get("state")
+}
+
+func TestSSOSignIn(t *testing.T) {
+	ctx := asAdmin(context.Background())
+	c := newTestCore(t, config.Config{})
+	idp := newFakeIssuer(t)
+	c.ssoHTTP = idp.Client()
+	p, err := c.CreateSSOProvider(ctx, SSOProviderInput{Name: "Company", Issuer: idp.URL, ClientID: "client", ClientSecret: "secret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const origin = "https://kipitiny.example.com"
+	hash, _ := bcrypt.GenerateFromPassword([]byte("correct horse"), bcrypt.MinCost)
+	alice, err := c.store.CreateUser(ctx, store.User{Username: "alice", PasswordHash: string(hash), Role: store.RoleMember})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bob, err := c.store.CreateUser(ctx, store.User{Username: "bob", PasswordHash: string(hash), Role: store.RoleMember})
+	if err != nil {
+		t.Fatal(err)
+	}
+	as := func(u store.User) context.Context {
+		return WithActor(context.Background(), Actor{Kind: "user", Name: u.Username, UserID: u.ID, Role: u.Role, Scope: store.ScopeAdmin})
+	}
+
+	// Nobody is linked yet.
+	start, err := c.BeginSSO(context.Background(), p.ID, origin, "/projects/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := idp.answer(t, start, "c0", "alice-sub")
+	if res, err := c.FinishSSO(context.Background(), state, state, "c0"); !errors.Is(err, ErrUnauthorized) || !strings.Contains(err.Error(), "alice-sub@example.com") || res.Purpose != ssoLogin {
+		t.Fatalf("unlinked: %+v %v", res, err)
+	}
+
+	// Linking asks for the password, then links the identity.
+	if _, err := c.BeginSSOConnect(as(alice), p.ID, origin, "wrong"); !errors.Is(err, ErrWrongPassword) {
+		t.Fatalf("wrong password: %v", err)
+	}
+	start, err = c.BeginSSOConnect(as(alice), p.ID, origin, "correct horse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state = idp.answer(t, start, "c1", "alice-sub")
+	if _, err := c.FinishSSO(context.Background(), state, "other", "c1"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("other browser: %v", err)
+	}
+	if _, err := c.FinishSSO(context.Background(), state, state, "c1"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("state reused: %v", err)
+	}
+	start, _ = c.BeginSSOConnect(as(alice), p.ID, origin, "correct horse")
+	state = idp.answer(t, start, "c2", "alice-sub")
+	res, err := c.FinishSSO(context.Background(), state, state, "c2")
+	if err != nil || res.Purpose != ssoConnect || res.User.ID != alice.ID {
+		t.Fatalf("connect: %+v %v", res, err)
+	}
+	acc, _ := c.Account(as(alice))
+	if len(acc.SSO) != 1 || acc.SSO[0].ProviderName != "Company" || acc.SSO[0].Email != "alice-sub@example.com" {
+		t.Fatalf("account = %+v", acc.SSO)
+	}
+
+	// The same identity can't be linked to bob.
+	start, _ = c.BeginSSOConnect(as(bob), p.ID, origin, "correct horse")
+	state = idp.answer(t, start, "c3", "alice-sub")
+	if _, err := c.FinishSSO(context.Background(), state, state, "c3"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("linked twice: %v", err)
+	}
+
+	// Signing in lands where it started, with a session.
+	start, _ = c.BeginSSO(context.Background(), p.ID, origin, "/projects/x")
+	state = idp.answer(t, start, "c4", "alice-sub")
+	res, err = c.FinishSSO(context.Background(), state, state, "c4")
+	if err != nil || res.Session == "" || res.User.ID != alice.ID || res.ReturnTo != "/projects/x" {
+		t.Fatalf("sign in: %+v %v", res, err)
+	}
+	if u, err := c.Authenticate(context.Background(), res.Session); err != nil || u.ID != alice.ID {
+		t.Fatalf("session: %v", err)
+	}
+
+	// A nonce from another flow is refused.
+	start, _ = c.BeginSSO(context.Background(), p.ID, origin, "/")
+	u, _ := url.Parse(start.URL)
+	state = u.Query().Get("state")
+	idp.code("c5", map[string]any{"sub": "alice-sub", "nonce": "other"})
+	if _, err := c.FinishSSO(context.Background(), state, state, "c5"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("nonce: %v", err)
+	}
+
+	// With TOTP on, the provider stands in for the password only.
+	if err := c.store.SetTOTP(ctx, alice.ID, newTOTPSecret(), nil); err != nil {
+		t.Fatal(err)
+	}
+	start, _ = c.BeginSSO(context.Background(), p.ID, origin, "/")
+	state = idp.answer(t, start, "c6", "alice-sub")
+	res, err = c.FinishSSO(context.Background(), state, state, "c6")
+	if err != nil || res.Session != "" || res.MFATicket == "" {
+		t.Fatalf("with totp: %+v %v", res, err)
+	}
+
+	// Unlinked, the identity no longer signs in.
+	if err := c.UnlinkSSOIdentity(as(alice), acc.SSO[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	start, _ = c.BeginSSO(context.Background(), p.ID, origin, "/")
+	state = idp.answer(t, start, "c7", "alice-sub")
+	if _, err := c.FinishSSO(context.Background(), state, state, "c7"); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("unlinked: %v", err)
+	}
+}
+
+func TestLocalPath(t *testing.T) {
+	for in, want := range map[string]string{"/projects/x?a=1": "/projects/x?a=1", "": "/", "//evil.com": "/", "https://evil.com": "/", "/\\evil.com": "/"} {
+		if got := localPath(in); got != want {
+			t.Errorf("localPath(%q) = %q", in, got)
+		}
 	}
 }

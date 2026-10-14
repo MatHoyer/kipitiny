@@ -888,12 +888,22 @@ const routes: Route[] = [
   [
     "GET",
     /^\/auth\/state$/,
-    (): AuthState => ({ setupRequired: false, user: { id: "demo", username: "demo", role: "admin", features: [], createdAt: now() } }),
+    (): AuthState => ({ setupRequired: false, user: { id: "demo", username: "demo", role: "admin", features: [], createdAt: now() }, sso: [] }),
   ],
   [
     "GET",
     /^\/account$/,
-    (): Account => ({ username: "demo", totpEnabled: false, recoveryCodes: 0, passkeys: [], role: "admin", features: [], grants: {} }),
+    (): Account => ({
+      username: "demo",
+      totpEnabled: false,
+      recoveryCodes: 0,
+      passkeys: [],
+      sso: [],
+      ssoProviders: (db.ssoProviders ?? []).map((p) => ({ id: p.id, name: p.name })),
+      role: "admin",
+      features: [],
+      grants: {},
+    }),
   ],
   [
     "GET",

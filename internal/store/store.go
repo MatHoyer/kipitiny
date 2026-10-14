@@ -73,6 +73,15 @@ type Store interface {
 	UpdateSSOProvider(ctx context.Context, p SSOProvider) (SSOProvider, error)
 	DeleteSSOProvider(ctx context.Context, id string) error
 
+	ListSSOIdentities(ctx context.Context, userID string) ([]SSOIdentity, error)
+	// GetSSOIdentity finds the identity a provider's subject is linked to.
+	GetSSOIdentity(ctx context.Context, providerID, subject string) (SSOIdentity, error)
+	// CreateSSOIdentity returns ErrConflict if the subject or the user is
+	// already linked through that provider.
+	CreateSSOIdentity(ctx context.Context, i SSOIdentity) (SSOIdentity, error)
+	SSOIdentityUsed(ctx context.Context, id, email string) error
+	DeleteSSOIdentity(ctx context.Context, userID, id string) error
+
 	CreateDeployment(ctx context.Context, d Deployment) (Deployment, error)
 	GetDeployment(ctx context.Context, id string) (Deployment, error)
 	// ListDeployments returns the newest first; limit <= 0 returns all.
@@ -879,6 +888,20 @@ type SSOProvider struct {
 	ClientID     string    `bun:"client_id" json:"clientId"`
 	ClientSecret string    `bun:"client_secret" json:"clientSecret"`
 	CreatedAt    time.Time `bun:"created_at" json:"createdAt"`
+}
+
+// SSOIdentity links a user to their subject at an SSO provider.
+type SSOIdentity struct {
+	bun.BaseModel `bun:"table:sso_identities,alias:ssoi" json:"-"`
+
+	ID         string `bun:"id,pk" json:"id"`
+	UserID     string `bun:"user_id" json:"-"`
+	ProviderID string `bun:"provider_id" json:"providerId"`
+	Subject    string `bun:"subject" json:"-"`
+	// Email is the provider's, as of the last sign-in, to tell identities apart.
+	Email      string     `bun:"email" json:"email"`
+	CreatedAt  time.Time  `bun:"created_at" json:"createdAt"`
+	LastUsedAt *time.Time `bun:"last_used_at" json:"lastUsedAt,omitempty"`
 }
 
 // GitProvider gives access to the private repositories of a forge account:

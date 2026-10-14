@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fingerprint, Loader2 } from "lucide-react";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { Fingerprint, Loader2, LogIn } from "lucide-react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,9 +8,10 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/errors";
+import { signInWithSSO, takeSSOParam } from "@/lib/sso";
 import { isCancelled, passkeysSupported } from "@/lib/webauthn";
 import { Logo } from "@/components/logo";
-import { api } from "../api";
+import { api, type SSOButton } from "../api";
 
 function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
@@ -40,11 +41,18 @@ function Submit({ pending, children }: { pending: boolean; children: ReactNode }
   );
 }
 
-export function Login() {
+export function Login({ sso }: { sso: SSOButton[] }) {
   const qc = useQueryClient();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [ticket, setTicket] = useState("");
+  // Back from a single sign-on provider: its error, or the second factor to ask.
+  useEffect(() => {
+    const error = takeSSOParam("sso-error");
+    if (error) toast.error("Couldn't sign in", { description: error, duration: 12000 });
+    const mfa = takeSSOParam("sso-mfa");
+    if (mfa) setTicket(mfa);
+  }, []);
   const login = useMutation({
     meta: { error: false },
     mutationFn: () => api.login(username.trim(), password),
@@ -85,13 +93,13 @@ export function Login() {
           <Submit pending={login.isPending}>Sign in</Submit>
         </CardContent>
       </form>
-      <PasskeySignIn />
+      <PasskeySignIn sso={sso} />
     </Shell>
   );
 }
 
-/** Passwordless sign-in; a passkey stands in for the second factor too. */
-function PasskeySignIn() {
+/** Passwordless sign-in; a passkey stands in for the second factor too. Single sign-on providers sit next to it. */
+function PasskeySignIn({ sso = [] }: { sso?: SSOButton[] }) {
   const qc = useQueryClient();
   const signIn = useMutation({
     meta: { error: false },
@@ -99,7 +107,13 @@ function PasskeySignIn() {
     onSuccess: () => qc.resetQueries(),
     onError: (err) => !isCancelled(err) && toast.error("Couldn't sign in with a passkey", { description: friendlyError(err) }),
   });
-  if (!passkeysSupported()) return null;
+  const provider = useMutation({
+    meta: { error: false },
+    mutationFn: signInWithSSO,
+    onError: (err) => toast.error("Couldn't sign in", { description: friendlyError(err) }),
+  });
+  const passkeys = passkeysSupported();
+  if (!passkeys && sso.length === 0) return null;
   return (
     <CardContent className="flex flex-col gap-3">
       <div className="flex w-full items-center gap-3 text-xs text-muted-foreground">
@@ -107,17 +121,35 @@ function PasskeySignIn() {
         or
         <Separator className="flex-1" />
       </div>
-      <Button
-        type="button"
-        variant="outline"
-        size="lg"
-        className="h-11 w-full rounded-xl"
-        loading={signIn.isPending}
-        onClick={() => signIn.mutate()}
-      >
-        <Fingerprint data-icon="inline-start" />
-        Sign in with a passkey
-      </Button>
+      {sso.map((p) => (
+        <Button
+          key={p.id}
+          type="button"
+          variant="outline"
+          size="lg"
+          className="h-11 w-full rounded-xl"
+          // Stays pending while the browser leaves for the provider.
+          loading={provider.isPending && provider.variables === p.id}
+          disabled={provider.isPending}
+          onClick={() => provider.mutate(p.id)}
+        >
+          <LogIn data-icon="inline-start" />
+          Sign in with {p.name}
+        </Button>
+      ))}
+      {passkeys && (
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          className="h-11 w-full rounded-xl"
+          loading={signIn.isPending}
+          onClick={() => signIn.mutate()}
+        >
+          <Fingerprint data-icon="inline-start" />
+          Sign in with a passkey
+        </Button>
+      )}
     </CardContent>
   );
 }
