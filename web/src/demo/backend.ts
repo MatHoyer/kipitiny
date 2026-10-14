@@ -888,8 +888,26 @@ const routes: Route[] = [
   [
     "GET",
     /^\/auth\/state$/,
-    (): AuthState => ({ setupRequired: false, user: { id: "demo", username: "demo", role: "admin", features: [], createdAt: now() }, sso: [], ssoRequired: false }),
+    (): AuthState => ({
+      setupRequired: false,
+      user: { id: "demo", username: "demo", role: "admin", features: [], createdAt: now() },
+      sso: [],
+      ssoRequired: false,
+      branding: db.branding ?? {},
+    }),
   ],
+  [
+    "PUT",
+    /^\/branding$/,
+    ({ body }) => {
+      const accent = String(body.accent ?? "").toLowerCase();
+      if (accent && !/^#[0-9a-f]{6}$/.test(accent)) throw invalid("the accent colour must look like #4f46e5");
+      const logo = body.logo === undefined ? db.branding?.logo : String(body.logo) || undefined;
+      db.branding = { name: String(body.name ?? "").trim() || undefined, accent: accent || undefined, logo };
+      return db.branding;
+    },
+  ],
+  ["DELETE", /^\/branding$/, () => (db.branding = {})],
   [
     "GET",
     /^\/account$/,

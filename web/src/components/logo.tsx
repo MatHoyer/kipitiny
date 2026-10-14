@@ -1,11 +1,16 @@
+import type { Branding } from "@/api";
+import { defaultBrandName, useBranding } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
-// Same mark and wordmark as the landing page (kipitiny-homepage repo).
-export function Logo({ className }: { className?: string }) {
+// Same mark and wordmark as the landing page (kipitiny-homepage repo), unless
+// an admin set the manager's own name and logo (Settings › Appearance).
+export function Logo({ className, branding }: { className?: string; /** Shown instead of the saved one, e.g. a preview. */ branding?: Branding }) {
+  const saved = useBranding();
+  const b = branding ?? saved;
   return (
-    <span className={cn("inline-flex items-center gap-2 font-display font-bold tracking-[-0.02em]", className)}>
-      <LogoMark className="size-[1.15em]" />
-      kipitiny
+    <span className={cn("inline-flex min-w-0 items-center gap-2 font-display font-bold tracking-[-0.02em]", className)}>
+      {b.logo ? <img src={b.logo} alt="" className="size-[1.15em] shrink-0 object-contain" /> : <LogoMark className="size-[1.15em]" />}
+      <span className="truncate">{b.name || defaultBrandName}</span>
     </span>
   );
 }
