@@ -54,9 +54,9 @@ type Sender interface {
 type Deps struct {
 	// HTTP calls webhooks; nil uses a client with a 15 s timeout.
 	HTTP *http.Client
-	// Mail sends an email through the manager's SMTP server; nil when
-	// nothing is sent (validating a configuration).
-	Mail func(ctx context.Context, to []*netmail.Address, b mail.Body, subject string) error
+	// Mail sends an email through one of the manager's email providers; nil
+	// when nothing is sent (validating a configuration).
+	Mail func(ctx context.Context, provider string, to []*netmail.Address, b mail.Body, subject string) error
 	// Brand is the manager's name senders sign with; kipitiny when empty.
 	Brand string
 }
@@ -85,6 +85,14 @@ type ConfigField struct {
 	Required    bool   `json:"required"`
 	// Secret values are write-only: masked whenever a channel is read.
 	Secret bool `json:"secret"`
+	// Options makes the field a choice; the manager fills them in when
+	// listing kinds (the email providers).
+	Options []Option `json:"options,omitempty"`
+}
+
+type Option struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
 }
 
 // ErrConfig wraps every configuration error.

@@ -1195,6 +1195,41 @@ func (s *Store) DeleteGitProvider(ctx context.Context, id string) error {
 	return deleteByID(ctx, s.db, "git_providers", id)
 }
 
+func (s *Store) ListEmailProviders(ctx context.Context) ([]store.EmailProvider, error) {
+	ps := []store.EmailProvider{}
+	err := s.db.NewSelect().Model(&ps).Order("created_at").Scan(ctx)
+	return ps, mapErr(err)
+}
+
+func (s *Store) GetEmailProvider(ctx context.Context, id string) (store.EmailProvider, error) {
+	var p store.EmailProvider
+	err := s.db.NewSelect().Model(&p).Where("id = ?", id).Scan(ctx)
+	return p, mapErr(err)
+}
+
+func (s *Store) CreateEmailProvider(ctx context.Context, p store.EmailProvider) (store.EmailProvider, error) {
+	p.ID, p.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&p).Exec(ctx); err != nil {
+		return store.EmailProvider{}, mapErr(err)
+	}
+	return p, nil
+}
+
+func (s *Store) UpdateEmailProvider(ctx context.Context, p store.EmailProvider) (store.EmailProvider, error) {
+	res, err := s.db.NewUpdate().Model(&p).ExcludeColumn("id", "created_at").WherePK().Exec(ctx)
+	if err != nil {
+		return store.EmailProvider{}, mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.EmailProvider{}, store.ErrNotFound
+	}
+	return s.GetEmailProvider(ctx, p.ID)
+}
+
+func (s *Store) DeleteEmailProvider(ctx context.Context, id string) error {
+	return deleteByID(ctx, s.db, "email_providers", id)
+}
+
 func (s *Store) ListSSOProviders(ctx context.Context) ([]store.SSOProvider, error) {
 	ps := []store.SSOProvider{}
 	err := s.db.NewSelect().Model(&ps).Order("name").Scan(ctx)

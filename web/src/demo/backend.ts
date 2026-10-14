@@ -105,7 +105,26 @@ const users = () => (db.users ??= demoUsers());
 const newId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 const nameRe = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/;
 const MASK = "********";
-const defaultEmail: EmailSettings = { host: "", port: 587, security: "starttls", username: "", password: "", from: "" };
+/** The demo's email providers, passwords masked, and the one invites use: the chosen one, else the oldest. */
+const emailView = () => {
+  const ps = db.emailProviders ?? [];
+  return {
+    providers: ps.map((p) => ({ ...p, password: p.password && MASK })),
+    invites: ps.find((p) => p.id === db.emailInvites)?.id ?? ps[0]?.id ?? "",
+  };
+};
+
+/** The email providers an email channel can send through, the invites one first. */
+const emailOptions = () => {
+  const { providers, invites } = emailView();
+  return [...providers].sort((a, b) => +(b.id === invites) - +(a.id === invites)).map((p) => ({ value: p.id, label: p.name }));
+};
+
+/** An email channel's config, checked like the manager does. */
+const emailConfig = (c: Record<string, string> | undefined) => {
+  if (!db.emailProviders?.some((p) => p.id === c?.provider)) throw invalid("unknown email provider; add one in Settings › Email");
+  return { to: String(c?.to ?? ""), provider: String(c?.provider) };
+};
 
 const SERVER: Server = {
   id: "local",
@@ -1445,27 +1464,53 @@ const routes: Route[] = [
     },
   ],
 
-  ["GET", /^\/email$/, () => ({ configured: !!db.email, settings: db.email ? { ...db.email, password: db.email.password && MASK } : defaultEmail })],
+  ["GET", /^\/email$/, emailView],
   [
     "PUT",
-    /^\/email$/,
+    /^\/email\/invites$/,
+    ({ body }) => {
+      if (!db.emailProviders?.some((p) => p.id === body.provider)) throw invalid("unknown email provider");
+      db.emailInvites = String(body.provider);
+      save();
+      return emailView();
+    },
+  ],
+  [
+    "POST",
+    /^\/email\/providers$/,
     ({ body }) => {
       const s = body as unknown as EmailSettings;
-      if (!s.host || !s.from.includes("@")) throw invalid("host and sender are required");
-      db.email = { ...s, password: s.password === MASK ? (db.email?.password ?? "") : s.password };
+      if (!s.name?.trim() || !s.host || !s.from.includes("@")) throw invalid("name, host and sender are required");
+      if (db.emailProviders?.some((p) => p.name === s.name.trim())) throw invalid("an email provider with this name exists");
+      const p = { ...s, name: s.name.trim(), id: newId("mail"), createdAt: now() };
+      (db.emailProviders ??= []).push(p);
       save();
-      return { configured: true, settings: { ...db.email, password: db.email.password && MASK } };
+      return { ...p, password: p.password && MASK };
+    },
+  ],
+  [
+    "PUT",
+    /^\/email\/providers\/([^/]+)$/,
+    ({ m, body }) => {
+      const p = db.emailProviders?.find((x) => x.id === m[1]) ?? (() => { throw notFound(); })();
+      const s = body as unknown as EmailSettings;
+      if (!s.name?.trim() || !s.host || !s.from.includes("@")) throw invalid("name, host and sender are required");
+      Object.assign(p, { ...s, name: s.name.trim(), password: s.password === MASK ? p.password : s.password });
+      save();
+      return { ...p, password: p.password && MASK };
     },
   ],
   [
     "DELETE",
-    /^\/email$/,
-    () => {
-      delete db.email;
+    /^\/email\/providers\/([^/]+)$/,
+    ({ m }) => {
+      const used = db.channels.filter((c) => c.kind === "email" && c.config.provider === m[1]).map((c) => c.name);
+      if (used.length) throw invalid(`notification channels send through it (${used.join(", ")}); pick another provider for them first`);
+      db.emailProviders = db.emailProviders?.filter((p) => p.id !== m[1]);
       save();
     },
   ],
-  ["POST", /^\/email\/test$/, () => undefined],
+  ["POST", /^\/email\/providers\/([^/]+)\/test$/, () => undefined],
   ["GET", /^\/cloudflare$/, () => ({ connected: false, zones: [], tunnels: [] })],
   ["GET", /^\/git-providers$/, () => []],
   ["GET", /^\/sso-providers$/, () => (db.ssoProviders ??= [])],
@@ -1564,7 +1609,14 @@ const routes: Route[] = [
       channels: db.channels,
       kinds: [
         { name: "discord", label: "Discord", fields: [{ key: "webhookUrl", label: "Webhook URL", placeholder: "https://discord.com/api/webhooks/…", required: true, secret: true }] },
-        { name: "email", label: "Email", fields: [{ key: "to", label: "Recipients", placeholder: "ops@example.com, oncall@example.com", required: true, secret: false }] },
+        {
+          name: "email",
+          label: "Email",
+          fields: [
+            { key: "to", label: "Recipients", placeholder: "ops@example.com, oncall@example.com", required: true, secret: false },
+            { key: "provider", label: "Send through", required: true, secret: false, options: emailOptions() },
+          ],
+        },
       ],
       events: EVENTS,
     }),
@@ -1574,7 +1626,7 @@ const routes: Route[] = [
     /^\/notifications\/channels$/,
     ({ body }) => {
       const kind = String(body.kind || "discord");
-      const config: Record<string, string> = kind === "email" ? { to: String((body.config as Record<string, string>)?.to ?? "") } : { webhookUrl: MASK };
+      const config: Record<string, string> = kind === "email" ? emailConfig(body.config as Record<string, string>) : { webhookUrl: MASK };
       const ch = { id: newId("ch"), name: String(body.name || "Discord"), kind, config, events: body.events ?? [], enabled: body.enabled ?? true, createdAt: now() };
       db.channels.push(ch);
       save();
@@ -1587,7 +1639,7 @@ const routes: Route[] = [
     ({ m, body }) => {
       const ch = db.channels.find((x) => x.id === m[1]) ?? (() => { throw notFound(); })();
       Object.assign(ch, { name: body.name ?? ch.name, events: body.events ?? ch.events, enabled: body.enabled ?? ch.enabled });
-      if (ch.kind === "email") ch.config = { to: String((body.config as Record<string, string>)?.to ?? ch.config.to) };
+      if (ch.kind === "email") ch.config = emailConfig({ ...ch.config, ...(body.config as Record<string, string>) });
       save();
       return ch;
     },
@@ -1659,7 +1711,7 @@ const routes: Route[] = [
         createdAt: now(),
         expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
       };
-      if (body.email && !db.email) throw invalid("email isn't set up; configure an SMTP server in Settings › Email");
+      if (body.email && !db.emailProviders?.length) throw invalid("email isn't set up; add an email provider in Settings › Email");
       (db.invites ??= []).push(i);
       save();
       return { ...i, token: `demo${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}` };

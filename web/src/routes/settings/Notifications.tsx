@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
+import { FloatingSelect } from "@/components/ui/floating-select";
 import { useAccess } from "@/lib/access";
 import { cn } from "@/lib/utils";
 import { api, type ChannelInput, type NotificationChannel, type Notifications as NotificationsState } from "@/api";
@@ -194,7 +195,10 @@ function ChannelForm({
       : {
           name: "",
           kind: kindName,
-          config: {},
+          // A choice starts on its first option (the invites email provider).
+          config: Object.fromEntries(
+            (meta.kinds.find((k) => k.name === kindName)?.fields ?? []).flatMap((f) => (f.options?.[0] ? [[f.key, f.options[0].value]] : [])),
+          ),
           events: meta.events.filter((e) => e.default).map((e) => e.type),
           enabled: true,
         },
@@ -231,15 +235,15 @@ function ChannelForm({
           {form.kind === "discord"
             ? "In Discord: channel settings › Integrations › Webhooks › New Webhook, then copy its URL."
             : form.kind === "email"
-              ? "Sent through the SMTP server in Settings › Email, to every recipient (comma-separated)."
+              ? "Sent through one of the email providers in Settings › Email, to every recipient (comma-separated)."
               : "Pick the events this channel receives."}
         </DialogDescription>
       </DialogHeader>
-      {email.data && !email.data.configured && (
+      {email.data && email.data.providers.length === 0 && (
         <p className="flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-500">
           <TriangleAlert className="size-4 shrink-0" />
           <span>
-            No SMTP server yet: nothing is sent until one is set in{" "}
+            No email provider yet: add one in{" "}
             <Link to="/email" className="underline">
               Settings › Email
             </Link>
@@ -257,23 +261,34 @@ function ChannelForm({
           onChange={(e) => setForm({ ...form, name: e.target.value })}
           placeholder="ops-alerts"
         />
-        {kind?.fields.map((f) => (
-          <FloatingInput
-            key={f.key}
-            label={f.label}
-            type={f.secret ? "password" : "text"}
-            autoComplete="off"
-            required={f.required}
-            value={form.config[f.key] ?? ""}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                config: { ...form.config, [f.key]: e.target.value },
-              })
-            }
-            placeholder={f.placeholder}
-          />
-        ))}
+        {kind?.fields.map((f) =>
+          f.options ? (
+            <FloatingSelect
+              key={f.key}
+              label={f.label}
+              value={form.config[f.key] ?? ""}
+              onValueChange={(v) => setForm({ ...form, config: { ...form.config, [f.key]: v } })}
+              options={f.options}
+              disabled={f.options.length === 0}
+            />
+          ) : (
+            <FloatingInput
+              key={f.key}
+              label={f.label}
+              type={f.secret ? "password" : "text"}
+              autoComplete="off"
+              required={f.required}
+              value={form.config[f.key] ?? ""}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  config: { ...form.config, [f.key]: e.target.value },
+                })
+              }
+              placeholder={f.placeholder}
+            />
+          ),
+        )}
         <fieldset className="space-y-2">
           <legend className="mb-2 text-sm font-medium">Events</legend>
           <div className="grid gap-2 sm:grid-cols-2">

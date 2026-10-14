@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Mail, Pencil, Plus, Send, Trash2 } from "lucide-react";
+import { ChevronLeft, Mail, Pencil, Plus, Send, Trash2, UserPlus } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { ResendIcon } from "@/components/brand-icons";
-import { ChoiceTile, EmptyState, ErrorText, Mono } from "@/components/common";
+import { ChoiceTile, EmptyState, ErrorText, Mono, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { HowTo, type HowToStep } from "@/components/how-to";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
-import { api, type EmailSecurity, type EmailSettings } from "@/api";
+import { api, type EmailProvider as Provider, type EmailSecurity, type EmailSettings } from "@/api";
 import { SettingsPage } from "./page";
 
 const securities: { value: EmailSecurity; label: string; port: number }[] = [
@@ -21,10 +21,10 @@ const securities: { value: EmailSecurity; label: string; port: number }[] = [
 ];
 
 /**
- * A known email provider: its server is fixed, so the form only asks for its
+ * A known email service: its server is fixed, so the form only asks for its
  * API key and the sender. "other" takes any SMTP server.
  */
-type EmailProvider = {
+type EmailService = {
   id: "resend" | "other";
   label: string;
   icon: ReactNode;
@@ -40,7 +40,7 @@ type EmailProvider = {
   guide?: (domain: string) => HowToStep[];
 };
 
-const providers: EmailProvider[] = [
+const services: EmailService[] = [
   {
     id: "resend",
     label: "Resend",
@@ -92,54 +92,65 @@ const providers: EmailProvider[] = [
   },
 ];
 
-const blank: EmailSettings = { host: "", port: 587, security: "starttls", username: "", password: "", from: "" };
+const blank: EmailSettings = { name: "", host: "", port: 587, security: "starttls", username: "", password: "", from: "" };
 
-/** The provider whose server these settings use. */
-const providerOf = (s: EmailSettings) => providers.find((p) => p.server?.host === s.host) ?? providers.at(-1)!;
+/** The service whose server these settings use. */
+const serviceOf = (s: EmailSettings) => services.find((p) => p.server?.host === s.host) ?? services.at(-1)!;
 
 /** The sender's domain, for the guide. */
 const senderDomain = (from: string) => /@([^\s>]+)/.exec(from)?.[1] ?? "";
 
-/** What the dialog shows: the provider picker, or the form of a provider. */
-type Editing = { step: "pick" } | { step: "form"; provider: EmailProvider };
+/** What the dialog shows: the service picker, or the form of a service; saved is the provider being edited. */
+type Editing = { step: "pick"; saved?: Provider } | { step: "form"; service: EmailService; saved?: Provider };
 
 export function Email() {
   const qc = useQueryClient();
   const email = useQuery({ queryKey: ["email"], queryFn: api.email });
   const [editing, setEditing] = useState<Editing | null>(null);
-  const [testing, setTesting] = useState(false);
+  const [testing, setTesting] = useState<Provider | null>(null);
+  const done = () => qc.invalidateQueries({ queryKey: ["email"] });
   const remove = useMutation({
-    meta: { error: "Couldn't remove the email server" },
-    mutationFn: api.deleteEmail,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["email"] }),
+    meta: { error: "Couldn't remove the email provider" },
+    mutationFn: api.deleteEmailProvider,
+    onSuccess: done,
+  });
+  const invites = useMutation({
+    meta: { error: "Couldn't change the invites provider" },
+    mutationFn: api.setEmailInvites,
+    onSuccess: (v) => qc.setQueryData(["email"], v),
   });
   const data = email.data;
   const add = (
     <Button size="sm" onClick={() => setEditing({ step: "pick" })}>
       <Plus data-icon="inline-start" />
-      Set up email
+      Add provider
     </Button>
   );
 
   return (
-    <SettingsPage actions={data && !data.configured && add}>
+    <SettingsPage actions={data && add}>
       <ErrorText error={email.error} />
-      {data && !data.configured && (
+      {data?.providers.length === 0 && (
         <EmptyState
           icon={Mail}
-          title="No email server"
-          description="Send notifications and invites by email, through Resend or any SMTP server."
+          title="No email provider"
+          description="Send notifications and invites by email, through Resend or any SMTP server. Add several to send each through its own."
           action={add}
         />
       )}
-      {data?.configured && (
+      {!!data?.providers.length && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <EmailCard
-            settings={data.settings}
-            onTest={() => setTesting(true)}
-            onEdit={() => setEditing({ step: "form", provider: providerOf(data.settings) })}
-            onRemove={() => remove.mutate()}
-          />
+          {data.providers.map((p) => (
+            <EmailCard
+              key={p.id}
+              provider={p}
+              invites={p.id === data.invites}
+              onTest={() => setTesting(p)}
+              onInvites={() => invites.mutate(p.id)}
+              onEdit={() => setEditing({ step: "form", service: serviceOf(p), saved: p })}
+              onRemove={() => remove.mutate(p.id)}
+            />
+          ))}
         </div>
       )}
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
@@ -147,50 +158,67 @@ export function Email() {
           {editing?.step === "pick" && (
             <>
               <DialogHeader>
-                <DialogTitle>Set up email</DialogTitle>
+                <DialogTitle>{editing.saved ? `Change ${editing.saved.name}` : "Add an email provider"}</DialogTitle>
                 <DialogDescription>Where should kipitiny send email from?</DialogDescription>
               </DialogHeader>
               <div className="grid gap-3 sm:grid-cols-2">
-                {providers.map((p) => (
+                {services.map((p) => (
                   <ChoiceTile
                     key={p.id}
                     icon={p.icon}
                     title={p.label}
                     description={p.description}
-                    onClick={() => setEditing({ step: "form", provider: p })}
+                    onClick={() => setEditing({ step: "form", service: p, saved: editing.saved })}
                   />
                 ))}
               </div>
             </>
           )}
-          {editing?.step === "form" && data && (
+          {editing?.step === "form" && (
             <EmailForm
-              key={editing.provider.id}
-              provider={editing.provider}
-              // Editing keeps the saved settings; a new or other provider starts from its server.
-              saved={data.configured && providerOf(data.settings) === editing.provider ? data.settings : null}
-              onBack={() => setEditing({ step: "pick" })}
+              key={editing.service.id}
+              service={editing.service}
+              editing={editing.saved}
+              onBack={() => setEditing({ step: "pick", saved: editing.saved })}
               onDone={() => setEditing(null)}
             />
           )}
         </DialogContent>
       </Dialog>
-      <Dialog open={testing} onOpenChange={setTesting}>
-        <DialogContent className="sm:max-w-md">{testing && <TestForm onDone={() => setTesting(false)} />}</DialogContent>
+      <Dialog open={testing !== null} onOpenChange={(o) => !o && setTesting(null)}>
+        <DialogContent className="sm:max-w-md">{testing && <TestForm provider={testing} onDone={() => setTesting(null)} />}</DialogContent>
       </Dialog>
     </SettingsPage>
   );
 }
 
-function EmailCard({ settings: s, onTest, onEdit, onRemove }: { settings: EmailSettings; onTest: () => void; onEdit: () => void; onRemove: () => void }) {
-  const p = providerOf(s);
+function EmailCard({
+  provider: s,
+  invites,
+  onTest,
+  onInvites,
+  onEdit,
+  onRemove,
+}: {
+  provider: Provider;
+  /** Invites go through it. */
+  invites: boolean;
+  onTest: () => void;
+  onInvites: () => void;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  const p = serviceOf(s);
   const security = securities.find((x) => x.value === s.security)?.label ?? s.security;
   return (
     <Card size="sm" className="gap-3 px-4">
       <div className="flex items-start gap-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted [&>svg]:size-5">{p.icon}</span>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{p.label}</p>
+          <p className="flex items-center gap-2 font-medium">
+            <span className="truncate">{s.name}</span>
+            {invites && <Tag>Invites</Tag>}
+          </p>
           <p className="truncate text-xs text-muted-foreground" title={s.from}>
             {s.from}
           </p>
@@ -203,6 +231,11 @@ function EmailCard({ settings: s, onTest, onEdit, onRemove }: { settings: EmailS
         <Button variant="ghost" size="icon-sm" title="Send a test" aria-label="Send a test" onClick={onTest}>
           <Send />
         </Button>
+        {!invites && (
+          <Button variant="ghost" size="icon-sm" title="Send invites through it" aria-label="Send invites through it" onClick={onInvites}>
+            <UserPlus />
+          </Button>
+        )}
         <Button variant="ghost" size="icon-sm" title="Edit" aria-label="Edit" onClick={onEdit}>
           <Pencil />
         </Button>
@@ -212,8 +245,12 @@ function EmailCard({ settings: s, onTest, onEdit, onRemove }: { settings: EmailS
               <Trash2 />
             </Button>
           }
-          title="Remove the email server?"
-          description="Email channels and invites stop sending until one is set again."
+          title={`Remove ${s.name}?`}
+          description={
+            invites
+              ? "Invites move to another provider, if there is one. Channels sending through it must pick another first."
+              : "Channels sending through it must pick another provider first."
+          }
           confirmLabel="Remove"
           onConfirm={onRemove}
         />
@@ -223,24 +260,27 @@ function EmailCard({ settings: s, onTest, onEdit, onRemove }: { settings: EmailS
 }
 
 function EmailForm({
-  provider: p,
-  saved,
+  service: p,
+  editing,
   onBack,
   onDone,
 }: {
-  provider: EmailProvider;
-  /** The saved settings when editing them. */
-  saved: EmailSettings | null;
+  service: EmailService;
+  /** The provider being edited, possibly switching to another service. */
+  editing?: Provider;
   onBack: () => void;
   onDone: () => void;
 }) {
   const qc = useQueryClient();
-  const [form, setForm] = useState<EmailSettings>(() => saved ?? { ...blank, ...p.server });
+  // Editing keeps the saved settings, unless it switches to another service.
+  const saved = editing && serviceOf(editing) === p ? editing : null;
+  const [form, setForm] = useState<EmailSettings>(() => saved ?? { ...blank, ...p.server, name: editing?.name ?? (p.server ? p.label : "") });
   const save = useMutation({
-    meta: { error: "Couldn't save the email server" },
-    mutationFn: () => api.setEmail(form),
-    onSuccess: (v) => {
-      qc.setQueryData(["email"], v);
+    meta: { error: "Couldn't save the email provider" },
+    mutationFn: () => (editing ? api.updateEmailProvider(editing.id, form) : api.createEmailProvider(form)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["email"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
       onDone();
     },
   });
@@ -254,6 +294,17 @@ function EmailForm({
     e.preventDefault();
     save.mutate();
   };
+  const name = (
+    <FloatingInput
+      label="Name"
+      required
+      maxLength={64}
+      value={form.name}
+      onChange={(e) => set("name", e.target.value)}
+      placeholder="Alerts"
+      description="Shown when picking where invites and notification channels send through."
+    />
+  );
   const sender = (
     <FloatingInput
       label="Sender"
@@ -271,7 +322,7 @@ function EmailForm({
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2 [&>svg]:size-5">
           {p.icon}
-          {saved ? `Edit ${p.label}` : p.server ? `Connect ${p.label}` : "Connect an SMTP server"}
+          {editing ? `Edit ${editing.name}` : p.server ? `Connect ${p.label}` : "Connect an SMTP server"}
         </DialogTitle>
         <DialogDescription>
           {p.help} Saving checks kipitiny can connect and sign in.
@@ -280,6 +331,7 @@ function EmailForm({
       {!saved && p.guide && <HowTo label={`How do I set up ${p.label}?`} accent={p.accent} steps={p.guide(senderDomain(form.from))} />}
       {p.server ? (
         <div className="space-y-4">
+          {name}
           {sender}
           <FloatingInput
             label={p.secret?.label ?? "Password"}
@@ -294,6 +346,7 @@ function EmailForm({
         </div>
       ) : (
         <div className="space-y-4">
+          {name}
           <div className="grid gap-4 sm:grid-cols-[1fr_7rem]">
             <FloatingInput label="Host" required value={form.host} onChange={(e) => set("host", e.target.value)} placeholder="smtp.example.com" />
             <FloatingInput
@@ -331,21 +384,21 @@ function EmailForm({
       <DialogFooter>
         <Button type="button" variant="ghost" disabled={save.isPending} onClick={onBack}>
           <ChevronLeft data-icon="inline-start" />
-          {saved ? "Change provider" : "Back"}
+          {editing ? "Change service" : "Back"}
         </Button>
         <Button type="submit" loading={save.isPending}>
-          {saved ? "Save" : "Connect"}
+          {editing ? "Save" : "Connect"}
         </Button>
       </DialogFooter>
     </form>
   );
 }
 
-function TestForm({ onDone }: { onDone: () => void }) {
+function TestForm({ provider, onDone }: { provider: Provider; onDone: () => void }) {
   const [to, setTo] = useState("");
   const test = useMutation({
     meta: { error: "The test email wasn't sent" },
-    mutationFn: () => api.testEmail(to),
+    mutationFn: () => api.testEmailProvider(provider.id, to),
     onSuccess: () => {
       toast.success(`Test email sent to ${to}`);
       onDone();
@@ -358,7 +411,7 @@ function TestForm({ onDone }: { onDone: () => void }) {
   return (
     <form onSubmit={onSubmit} className="contents">
       <DialogHeader>
-        <DialogTitle>Send a test email</DialogTitle>
+        <DialogTitle>Send a test through {provider.name}</DialogTitle>
         <DialogDescription>Check it arrives, and not in spam: if it does, your provider may need SPF or DKIM set up for the sender's domain.</DialogDescription>
       </DialogHeader>
       <FloatingInput label="To" type="email" required autoFocus value={to} onChange={(e) => setTo(e.target.value)} placeholder="you@example.com" />

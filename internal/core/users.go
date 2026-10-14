@@ -231,8 +231,8 @@ func (c *Core) CreateInvite(ctx context.Context, in InviteInput) (NewInvite, err
 		if u, err := url.Parse(in.Link); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.Fragment != "" {
 			return NewInvite{}, fmt.Errorf("%w: link must be the http(s) URL of the invite page", ErrInvalid)
 		}
-		if _, ok := c.smtpConfig(ctx); !ok {
-			return NewInvite{}, ErrNoEmail
+		if _, err := c.emailProvider(ctx, ""); err != nil {
+			return NewInvite{}, err
 		}
 		in.Email = to.Address
 	}
@@ -245,7 +245,7 @@ func (c *Core) CreateInvite(ctx context.Context, in InviteInput) (NewInvite, err
 	}
 	out := NewInvite{Invite: i, Token: token}
 	if to != nil {
-		if err := c.sendMail(ctx, []*netmail.Address{to}, c.inviteBody(ctx, i, in.Link+"#"+token), ""); err != nil {
+		if err := c.sendMail(ctx, "", []*netmail.Address{to}, c.inviteBody(ctx, i, in.Link+"#"+token), ""); err != nil {
 			c.log.Warn("invite not emailed", "to", in.Email, "err", err)
 			out.EmailError = err.Error()
 		}

@@ -67,6 +67,12 @@ type Store interface {
 	// DeleteGitProvider returns ErrConflict while projects use it.
 	DeleteGitProvider(ctx context.Context, id string) error
 
+	ListEmailProviders(ctx context.Context) ([]EmailProvider, error)
+	GetEmailProvider(ctx context.Context, id string) (EmailProvider, error)
+	CreateEmailProvider(ctx context.Context, p EmailProvider) (EmailProvider, error)
+	UpdateEmailProvider(ctx context.Context, p EmailProvider) (EmailProvider, error)
+	DeleteEmailProvider(ctx context.Context, id string) error
+
 	ListSSOProviders(ctx context.Context) ([]SSOProvider, error)
 	GetSSOProvider(ctx context.Context, id string) (SSOProvider, error)
 	CreateSSOProvider(ctx context.Context, p SSOProvider) (SSOProvider, error)
@@ -877,6 +883,22 @@ const (
 	GitLab GitProviderKind = "gitlab"
 	Gitea  GitProviderKind = "gitea"
 )
+
+// EmailProvider is an SMTP server email goes out through.
+type EmailProvider struct {
+	bun.BaseModel `bun:"table:email_providers,alias:ep" json:"-"`
+
+	ID       string `bun:"id,pk" json:"id"`
+	Name     string `bun:"name" json:"name"`
+	Host     string `bun:"host" json:"host"`
+	Port     int    `bun:"port" json:"port"`
+	Security string `bun:"security" json:"security"`
+	Username string `bun:"username" json:"username"`
+	Password string `bun:"password" json:"password"`
+	// From is the sender, an address with an optional name.
+	From      string    `bun:"sender" json:"from"`
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+}
 
 // SSOProvider is an OpenID Connect provider users sign in with.
 type SSOProvider struct {

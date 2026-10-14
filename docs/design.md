@@ -313,13 +313,13 @@ Later: optional VictoriaLogs or Loki, opt-in.
 
 ### Notifications
 
-- `internal/notify` is transport-agnostic: an `Event` (type, level, title, message, fields, link) and a `Sender` per channel kind. Each kind declares its config fields (secret or not), so the UI renders new kinds without changes.
-- Kinds: Discord webhook and email (through the SMTP server of §Email, recipients per channel) now; in-app and generic webhooks later. A sender gets its transports as `notify.Deps` (HTTP client, mail func), so `notify` stays ignorant of settings.
+- `internal/notify` is transport-agnostic: an `Event` (type, level, title, message, fields, link) and a `Sender` per channel kind. Each kind declares its config fields (secret or not, free text or a choice whose options core fills in, like the email providers), so the UI renders new kinds without changes.
+- Kinds: Discord webhook and email (recipients and an email provider of §Email per channel) now; in-app and generic webhooks later. A sender gets its transports as `notify.Deps` (HTTP client, mail func), so `notify` stays ignorant of settings.
 
 ### Email
 
-- `internal/mail` sends through an SMTP server the admin sets in Settings › Email (stdlib `net/smtp`, PLAIN or LOGIN sign-in, STARTTLS/TLS/none). No mail server in the manager: deliverability needs a sender reputation it can't have.
-- One configuration per manager, a JSON `smtp` setting (password masked on read). Saving connects and signs in, nothing sent.
+- `internal/mail` sends through SMTP servers the admin sets in Settings › Email (stdlib `net/smtp`, PLAIN or LOGIN sign-in, STARTTLS/TLS/none). No mail server in the manager: deliverability needs a sender reputation it can't have.
+- Several servers, `email_providers` (issue #329, password masked on read), so invites and each notification channel can send through their own (another sender, another account's quota). Invites use the one the `email_invites` setting names, else the oldest; an email channel names its provider in its config, and a provider can't be removed while a channel uses it. Saving connects and signs in, nothing sent. The single `smtp` setting of earlier versions becomes a provider at startup, used by invites and the existing email channels.
 - Messages are multipart text + HTML from one layout (`mail.Body`): notification channels and invites render through it.
 - Channels live in `notification_channels` and subscribe to event types (deploy/backup/restore/restore-test outcomes, restarted services, cleanup errors, new versions). Secrets are masked on read.
 - Core emits events where operations finish; delivery runs in the background with a timeout, and keyed events (a crash loop) are throttled.

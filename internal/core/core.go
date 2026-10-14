@@ -110,6 +110,9 @@ func (c *Core) Bootstrap(ctx context.Context) error {
 	if err := c.store.FailRunningOperations(ctx, "interrupted by manager restart"); err != nil {
 		return err
 	}
+	if err := c.migrateSMTPSetting(ctx); err != nil {
+		return err
+	}
 	if c.cfg.Domain != "" && !c.cfg.Traefik.Enabled {
 		c.log.Warn("KIPITINY_DOMAIN is ignored without the managed Traefik; route it in your own proxy", "domain", c.cfg.Domain)
 	}

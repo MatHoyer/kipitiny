@@ -572,8 +572,9 @@ export type Cloudflare = {
 
 export type EmailSecurity = "starttls" | "tls" | "none";
 
-/** The SMTP server email goes through; the password comes back masked. */
+/** An SMTP server email goes through; the password comes back masked. */
 export type EmailSettings = {
+  name: string;
   host: string;
   port: number;
   security: EmailSecurity;
@@ -583,7 +584,10 @@ export type EmailSettings = {
   from: string;
 };
 
-export type Email = { configured: boolean; settings: EmailSettings };
+export type EmailProvider = EmailSettings & { id: string; createdAt: string };
+
+/** invites: the ID of the provider invites go through, empty without providers. */
+export type Email = { providers: EmailProvider[]; invites: string };
 
 /** A password manager whose references (scheme://…) service env can use. */
 export type SecretProvider = {
@@ -663,7 +667,8 @@ export type Cleanup = {
 export type NotificationKind = {
   name: string;
   label: string;
-  fields: { key: string; label: string; placeholder?: string; required: boolean; secret: boolean }[];
+  /** A field with options is a choice (an email channel's provider). */
+  fields: { key: string; label: string; placeholder?: string; required: boolean; secret: boolean; options?: { value: string; label: string }[] }[];
 };
 
 export type NotificationChannel = {
@@ -1392,9 +1397,11 @@ export const api = {
   setCleanup: (s: CleanupSettings) => request<Cleanup>("/cleanup", json("PUT", s)),
   runCleanup: () => request<Cleanup>("/cleanup/run", { method: "POST" }),
   email: () => request<Email>("/email"),
-  setEmail: (s: EmailSettings) => request<Email>("/email", json("PUT", s)),
-  deleteEmail: () => request<void>("/email", { method: "DELETE" }),
-  testEmail: (to: string) => request<void>("/email/test", json("POST", { to })),
+  setEmailInvites: (provider: string) => request<Email>("/email/invites", json("PUT", { provider })),
+  createEmailProvider: (s: EmailSettings) => request<EmailProvider>("/email/providers", json("POST", s)),
+  updateEmailProvider: (id: string, s: EmailSettings) => request<EmailProvider>(`/email/providers/${id}`, json("PUT", s)),
+  deleteEmailProvider: (id: string) => request<void>(`/email/providers/${id}`, { method: "DELETE" }),
+  testEmailProvider: (id: string, to: string) => request<void>(`/email/providers/${id}/test`, json("POST", { to })),
   notifications: () => request<Notifications>("/notifications"),
   createChannel: (c: ChannelInput) => request<NotificationChannel>("/notifications/channels", json("POST", c)),
   updateChannel: (id: string, c: ChannelInput) =>

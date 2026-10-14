@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -73,13 +74,54 @@ type NotificationsView struct {
 
 func (c *Core) Notifications(ctx context.Context) (NotificationsView, error) {
 	chs, err := c.store.ListNotificationChannels(ctx)
+	if err != nil {
+		return NotificationsView{}, err
+	}
 	for i := range chs {
 		chs[i] = maskedChannel(chs[i])
 		if isMember(ctx) { // where alerts go is the admins'
 			chs[i].Config = map[string]string{}
 		}
 	}
-	return NotificationsView{Channels: chs, Kinds: notify.Kinds(), Events: eventTypes}, err
+	kinds := notify.Kinds()
+	if !isMember(ctx) {
+		if kinds, err = c.withEmailProviders(ctx, kinds); err != nil {
+			return NotificationsView{}, err
+		}
+	}
+	return NotificationsView{Channels: chs, Kinds: kinds, Events: eventTypes}, nil
+}
+
+// withEmailProviders offers the email providers in the email kind's
+// provider field, the invites one first.
+func (c *Core) withEmailProviders(ctx context.Context, kinds []notify.Kind) ([]notify.Kind, error) {
+	ps, err := c.store.ListEmailProviders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	opts := []notify.Option{}
+	inv, _ := invitesProvider(ctx, c.store, ps)
+	for _, p := range ps {
+		o := notify.Option{Value: p.ID, Label: p.Name}
+		if p.ID == inv.ID {
+			opts = slices.Insert(opts, 0, o)
+		} else {
+			opts = append(opts, o)
+		}
+	}
+	for i, k := range kinds {
+		if k.Name != "email" {
+			continue
+		}
+		fields := slices.Clone(k.Fields)
+		for j := range fields {
+			if fields[j].Key == notify.EmailProviderKey {
+				fields[j].Options = opts
+			}
+		}
+		kinds[i].Fields = fields
+	}
+	return kinds, nil
 }
 
 type ChannelInput struct {
@@ -95,6 +137,9 @@ func (c *Core) CreateChannel(ctx context.Context, in ChannelInput) (store.Notifi
 	if err := applyChannelInput(&ch, in); err != nil {
 		return store.NotificationChannel{}, err
 	}
+	if err := c.checkChannelProvider(ctx, ch); err != nil {
+		return store.NotificationChannel{}, err
+	}
 	ch, err := c.store.CreateNotificationChannel(ctx, ch)
 	return maskedChannel(ch), err
 }
@@ -106,6 +151,9 @@ func (c *Core) UpdateChannel(ctx context.Context, id string, in ChannelInput) (s
 		return store.NotificationChannel{}, err
 	}
 	if err := applyChannelInput(&ch, in); err != nil {
+		return store.NotificationChannel{}, err
+	}
+	if err := c.checkChannelProvider(ctx, ch); err != nil {
 		return store.NotificationChannel{}, err
 	}
 	ch, err = c.store.UpdateNotificationChannel(ctx, ch)
@@ -170,6 +218,19 @@ func applyChannelInput(ch *store.NotificationChannel, in ChannelInput) error {
 		}
 	}
 	ch.Name, ch.Config, ch.Events, ch.Enabled = name, cfg, events, in.Enabled
+	return nil
+}
+
+// checkChannelProvider makes sure an email channel's provider exists.
+func (c *Core) checkChannelProvider(ctx context.Context, ch store.NotificationChannel) error {
+	if ch.Kind != "email" {
+		return nil
+	}
+	if _, err := c.store.GetEmailProvider(ctx, ch.Config[notify.EmailProviderKey]); errors.Is(err, store.ErrNotFound) {
+		return fmt.Errorf("%w: unknown email provider; add one in Settings › Email", ErrInvalid)
+	} else if err != nil {
+		return err
+	}
 	return nil
 }
 
