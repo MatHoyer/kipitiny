@@ -898,6 +898,8 @@ const routes: Route[] = [
       totpEnabled: false,
       recoveryCodes: 0,
       passkeys: [],
+      hasPassword: true,
+      recentSignIn: false,
       sso: [],
       ssoProviders: (db.ssoProviders ?? []).map((p) => ({ id: p.id, name: p.name })),
       role: "admin",

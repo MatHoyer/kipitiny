@@ -19,14 +19,15 @@ const sessionCookie = "kipitiny_session"
 
 // publicRoutes are reachable without a session.
 var publicRoutes = map[string]bool{
-	"GET /api/health":               true,
-	"GET /api/auth/state":           true,
-	"POST /api/auth/setup":          true,
-	"POST /api/auth/login":          true,
-	"POST /api/auth/login/mfa":      true,
-	"POST /api/auth/passkey/begin":  true,
-	"POST /api/auth/passkey/finish": true,
-	"POST /api/auth/sso/{id}/begin": true,
+	"GET /api/health":                true,
+	"GET /api/auth/state":            true,
+	"POST /api/auth/setup":           true,
+	"POST /api/auth/login":           true,
+	"POST /api/auth/login/mfa":       true,
+	"POST /api/auth/passkey/begin":   true,
+	"POST /api/auth/passkey/finish":  true,
+	"POST /api/auth/sso/{id}/begin":  true,
+	"POST /api/auth/sso/{id}/invite": true,
 	// The flow's state and the browser's cookie authenticate it.
 	"GET /api/auth/sso/callback": true,
 	// An invite link's token is its credential.
@@ -164,11 +165,12 @@ func (a *API) authenticate(r *http.Request) (core.Actor, bool, error) {
 		actor, err := a.core.AuthenticateToken(r.Context(), strings.TrimSpace(token))
 		return actor, true, err
 	}
-	u, err := a.core.Authenticate(r.Context(), sessionToken(r))
+	u, signedIn, err := a.core.AuthenticateSession(r.Context(), sessionToken(r))
 	if err != nil {
 		return core.Actor{}, false, err
 	}
 	actor, err := a.core.UserActor(r.Context(), u)
+	actor.SignedIn = signedIn
 	return actor, false, err
 }
 

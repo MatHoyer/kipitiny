@@ -3,9 +3,9 @@ import { Download, FileCode, FileUp, KeyRound, Rocket, ScanSearch } from "lucide
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { toast } from "sonner";
 import { CheckboxField, CopyButton, ErrorText, Loading, Tag } from "@/components/common";
+import { ConfirmField, useConfirmation } from "@/components/confirm-identity";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingTextarea } from "@/components/ui/floating-textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDocsUrl } from "@/lib/docs";
@@ -84,9 +84,9 @@ function ComposeView({ projectId, service }: { projectId: string; service?: stri
 }
 
 function ExportBundle({ projectId, service, onDone }: { projectId: string; service?: string; onDone: () => void }) {
-  const [password, setPassword] = useState("");
+  const confirm = useConfirmation();
   const exportBundle = useMutation({
-    mutationFn: () => api.exportBundle(projectId, password, service),
+    mutationFn: () => api.exportBundle(projectId, confirm.password, service),
     onSuccess: (blob) => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -94,7 +94,7 @@ function ExportBundle({ projectId, service, onDone }: { projectId: string; servi
       a.download = "kipitiny-export.zip";
       a.click();
       URL.revokeObjectURL(url);
-      setPassword("");
+      confirm.setPassword("");
       onDone();
     },
   });
@@ -109,17 +109,10 @@ function ExportBundle({ projectId, service, onDone }: { projectId: string; servi
         passwords, basic auth hashes). Import both on another kipitiny, or run them with{" "}
         <code>docker compose --env-file .env up</code>. Keep the file safe.
       </p>
-      <FloatingInput
-        label="Your password"
-        type="password"
-        autoComplete="current-password"
-        required
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
+      <ConfirmField confirm={confirm} />
       <ErrorText error={exportBundle.error} />
       <DialogFooter>
-        <Button type="submit" disabled={!password || exportBundle.isPending}>
+        <Button type="submit" disabled={!confirm.ready || exportBundle.isPending}>
           <KeyRound data-icon="inline-start" />
           Export with secrets
         </Button>

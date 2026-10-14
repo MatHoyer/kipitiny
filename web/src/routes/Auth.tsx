@@ -8,7 +8,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/errors";
-import { signInWithSSO, takeSSOParam } from "@/lib/sso";
+import { leaveFor, signInWithSSO, takeSSOParam } from "@/lib/sso";
 import { isCancelled, passkeysSupported } from "@/lib/webauthn";
 import { Logo } from "@/components/logo";
 import { api, type SSOButton } from "../api";
@@ -49,7 +49,7 @@ export function Login({ sso }: { sso: SSOButton[] }) {
   // Back from a single sign-on provider: its error, or the second factor to ask.
   useEffect(() => {
     const error = takeSSOParam("sso-error");
-    if (error) toast.error("Couldn't sign in", { description: error, duration: 12000 });
+    if (error) toast.error("Couldn't sign in", { description: friendlyError(new Error(error)), duration: 12000 });
     const mfa = takeSSOParam("sso-mfa");
     if (mfa) setTicket(mfa);
   }, []);
@@ -307,6 +307,18 @@ export function AcceptInvite({ signedIn }: { signedIn: boolean }) {
     e.preventDefault();
     accept.mutate();
   };
+  const withSSO = useMutation({
+    meta: { error: "Couldn't create the account" },
+    mutationFn: async (id: string) => {
+      if (!form.username.trim()) throw new Error("Pick a username first.");
+      return leaveFor((await api.beginSSOInvite(id, token, form.username.trim())).url);
+    },
+  });
+  // Back from a single sign-on provider that couldn't create the account.
+  useEffect(() => {
+    const error = takeSSOParam("sso-error");
+    if (error) toast.error("Couldn't create the account", { description: friendlyError(new Error(error)), duration: 12000 });
+  }, []);
 
   if (signedIn)
     return (
@@ -372,6 +384,30 @@ export function AcceptInvite({ signedIn }: { signedIn: boolean }) {
           <Submit pending={accept.isPending}>Create account</Submit>
         </CardContent>
       </form>
+      {info.data.sso.length > 0 && (
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex w-full items-center gap-3 text-xs text-muted-foreground">
+            <Separator className="flex-1" />
+            or, without a password
+            <Separator className="flex-1" />
+          </div>
+          {info.data.sso.map((p) => (
+            <Button
+              key={p.id}
+              type="button"
+              variant="outline"
+              size="lg"
+              className="h-11 w-full rounded-xl"
+              loading={withSSO.isPending && withSSO.variables === p.id}
+              disabled={withSSO.isPending}
+              onClick={() => withSSO.mutate(p.id)}
+            >
+              <LogIn data-icon="inline-start" />
+              Continue with {p.name}
+            </Button>
+          ))}
+        </CardContent>
+      )}
     </Shell>
   );
 }

@@ -114,9 +114,10 @@ type Store interface {
 	ListInvites(ctx context.Context) ([]Invite, error)
 	// GetInviteByHash returns ErrNotFound for unknown, used or expired invites.
 	GetInviteByHash(ctx context.Context, hash string) (Invite, error)
-	// AcceptInvite creates u with the invite's role, features and grants and
-	// marks the invite used, at once. ErrNotFound if it was used or expired.
-	AcceptInvite(ctx context.Context, inviteID string, u User) (User, error)
+	// AcceptInvite creates u with the invite's role, features and grants,
+	// links sso to it when set, and marks the invite used, at once.
+	// ErrNotFound if it was used or expired.
+	AcceptInvite(ctx context.Context, inviteID string, u User, sso *SSOIdentity) (User, error)
 	DeleteInvite(ctx context.Context, id string) error
 	// SetPassword updates the hash and revokes all of the user's sessions.
 	SetPassword(ctx context.Context, userID, passwordHash string) error

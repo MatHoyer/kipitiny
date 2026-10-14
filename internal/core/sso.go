@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -211,6 +212,7 @@ const ssoFlowTTL = 10 * time.Minute
 const (
 	ssoLogin   = "login"   // sign in
 	ssoConnect = "connect" // link the identity to the signed-in user
+	ssoInvite  = "invite"  // create the invited account, linked to the identity
 )
 
 type ssoFlow struct {
@@ -223,6 +225,8 @@ type ssoFlow struct {
 	userID string
 	// Login: the page to land on once signed in.
 	returnTo string
+	// Invite: its token and the username picked.
+	invite, username string
 }
 
 // SSOStart is where to send the browser, and the state its cookie holds.
@@ -245,6 +249,18 @@ func (c *Core) BeginSSOConnect(ctx context.Context, providerID, managerURL, pass
 		return SSOStart{}, err
 	}
 	return c.beginSSO(ctx, ssoFlow{purpose: ssoConnect, providerID: providerID, userID: u.ID}, managerURL)
+}
+
+// BeginSSOInvite starts creating an invited account that signs in with a
+// provider instead of a password.
+func (c *Core) BeginSSOInvite(ctx context.Context, providerID, managerURL, token, username string) (SSOStart, error) {
+	if _, err := c.store.GetInviteByHash(ctx, hashToken(strings.TrimSpace(token))); err != nil {
+		return SSOStart{}, inviteErr(err)
+	}
+	if err := c.checkNewUsername(ctx, username); err != nil {
+		return SSOStart{}, err
+	}
+	return c.beginSSO(ctx, ssoFlow{purpose: ssoInvite, providerID: providerID, invite: strings.TrimSpace(token), username: username}, managerURL)
 }
 
 func (c *Core) beginSSO(ctx context.Context, f ssoFlow, managerURL string) (SSOStart, error) {
@@ -278,6 +294,8 @@ type SSOResult struct {
 	MFATicket string
 	// ReturnTo is where a sign-in lands.
 	ReturnTo string
+	// Invite is the token of the invite being accepted, to go back to it.
+	Invite string
 }
 
 // FinishSSO redeems the code the provider sent the browser back with.
@@ -288,7 +306,7 @@ func (c *Core) FinishSSO(ctx context.Context, state, cookieState, code string) (
 	if !ok {
 		return SSOResult{Purpose: ssoLogin}, fmt.Errorf("%w: this sign-in expired or was already used; start again", ErrInvalid)
 	}
-	res := SSOResult{Purpose: f.purpose, ReturnTo: f.returnTo}
+	res := SSOResult{Purpose: f.purpose, ReturnTo: f.returnTo, Invite: f.invite}
 	if subtle.ConstantTimeCompare([]byte(state), []byte(cookieState)) != 1 {
 		return res, fmt.Errorf("%w: this sign-in was started in another browser; start again here", ErrInvalid)
 	}
@@ -303,6 +321,9 @@ func (c *Core) FinishSSO(ctx context.Context, state, cookieState, code string) (
 	switch f.purpose {
 	case ssoConnect:
 		res.User, err = c.linkSSOIdentity(ctx, p, f.userID, id)
+		return res, err
+	case ssoInvite:
+		res.User, res.Session, err = c.acceptSSOInvite(ctx, p, f, id)
 		return res, err
 	default:
 		res.User, res.Session, res.MFATicket, err = c.ssoSignIn(ctx, p, id)
@@ -394,6 +415,32 @@ func (c *Core) linkSSOIdentity(ctx context.Context, p store.SSOProvider, userID 
 	return u, err
 }
 
+// acceptSSOInvite creates the invited account without a password, linked
+// to the identity, and signs it in.
+func (c *Core) acceptSSOInvite(ctx context.Context, p store.SSOProvider, f ssoFlow, id ssoClaims) (store.User, string, error) {
+	if link, err := c.store.GetSSOIdentity(ctx, p.ID, id.Subject); err == nil {
+		owner := "another user"
+		if u, err := c.store.GetUser(ctx, link.UserID); err == nil {
+			owner = u.Username
+		}
+		return store.User{}, "", fmt.Errorf("%w: this %s account already signs in as %s", ErrInvalid, p.Name, owner)
+	}
+	i, err := c.store.GetInviteByHash(ctx, hashToken(f.invite))
+	if err != nil {
+		return store.User{}, "", inviteErr(err)
+	}
+	if err := c.checkNewUsername(ctx, f.username); err != nil {
+		return store.User{}, "", err
+	}
+	u, err := c.store.AcceptInvite(ctx, i.ID, store.User{Username: f.username},
+		&store.SSOIdentity{ProviderID: p.ID, Subject: id.Subject, Email: id.Email})
+	if err != nil {
+		return store.User{}, "", inviteErr(err)
+	}
+	session, err := c.newSession(ctx, u.ID)
+	return u, session, err
+}
+
 // SSOIdentityView is a linked identity, for the account page.
 type SSOIdentityView struct {
 	store.SSOIdentity
@@ -421,7 +468,35 @@ func (c *Core) UnlinkSSOIdentity(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
+	if err := c.keepASignIn(ctx, u, "", id); err != nil {
+		return err
+	}
 	return c.store.DeleteSSOIdentity(ctx, u.ID, id)
+}
+
+// keepASignIn fails when removing that passkey or identity would leave an
+// account without a password no way to sign in.
+func (c *Core) keepASignIn(ctx context.Context, u store.User, passkeyID, identityID string) error {
+	if u.PasswordHash != "" {
+		return nil
+	}
+	ps, err := c.store.ListPasskeys(ctx, u.ID)
+	if err != nil {
+		return err
+	}
+	is, err := c.store.ListSSOIdentities(ctx, u.ID)
+	if err != nil {
+		return err
+	}
+	left := len(ps) + len(is)
+	if slices.ContainsFunc(ps, func(p store.Passkey) bool { return p.ID == passkeyID }) ||
+		slices.ContainsFunc(is, func(i store.SSOIdentity) bool { return i.ID == identityID }) {
+		left--
+	}
+	if left == 0 {
+		return fmt.Errorf("%w: it's the only way you sign in; set a password or add a passkey first", ErrInvalid)
+	}
+	return nil
 }
 
 // localPath keeps p if it is a path on this host, so a sign-in can't be

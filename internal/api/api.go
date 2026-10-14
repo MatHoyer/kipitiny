@@ -37,6 +37,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("POST /api/auth/passkey/finish", a.finishPasskeyLogin)
 	handle("POST /api/auth/logout", a.logout)
 	handle("POST /api/auth/sso/{id}/begin", a.beginSSOLogin)
+	handle("POST /api/auth/sso/{id}/invite", a.beginSSOInvite)
 	handle("GET /api/auth/sso/callback", a.ssoCallback)
 	handle("GET /api/account", a.account)
 	handle("POST /api/account/sso/{id}/connect", a.beginSSOConnect)
