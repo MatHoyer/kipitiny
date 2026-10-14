@@ -35,6 +35,7 @@ import type {
   ServiceStats,
   ServiceUsage,
   Status,
+  Theme,
   Topology,
   TopoNode,
   TopoService,
@@ -900,10 +901,20 @@ const routes: Route[] = [
     "PUT",
     /^\/branding$/,
     ({ body }) => {
-      const accent = String(body.accent ?? "").toLowerCase();
-      if (accent && !/^#[0-9a-f]{6}$/.test(accent)) throw invalid("the accent colour must look like #4f46e5");
+      const theme: Theme = {};
+      for (const k of ["accent", "accentDark", "tint"] as const) {
+        const v = String(body[k] ?? "").toLowerCase();
+        if (v && !/^#[0-9a-f]{6}$/.test(v)) throw invalid(`the ${k} must look like #4f46e5`);
+        theme[k] = v || undefined;
+      }
+      const choices = { radius: ["none", "small", "medium", "large", "full"], font: ["geist", "system", "serif", "mono"], density: ["comfortable", "compact"] };
+      for (const [k, options] of Object.entries(choices) as [keyof typeof choices, string[]][]) {
+        const v = String(body[k] ?? "");
+        if (v && !options.includes(v)) throw invalid(`${k} must be one of ${options.join(", ")}`);
+        (theme as Record<string, string | undefined>)[k] = v || undefined;
+      }
       const logo = body.logo === undefined ? db.branding?.logo : String(body.logo) || undefined;
-      db.branding = { name: String(body.name ?? "").trim() || undefined, accent: accent || undefined, logo };
+      db.branding = { ...theme, name: String(body.name ?? "").trim() || undefined, logo };
       return db.branding;
     },
   ],
