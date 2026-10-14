@@ -10,6 +10,10 @@ import (
 	"github.com/MatHoyer/kipitiny/internal/mail"
 )
 
+// EmailProviderKey is the email field naming the provider mail goes
+// through; its options are the manager's.
+const EmailProviderKey = "provider"
+
 var emailKind = Kind{
 	Name:  "email",
 	Label: "Email",
@@ -18,6 +22,10 @@ var emailKind = Kind{
 		Label:       "Recipients",
 		Placeholder: "ops@example.com, oncall@example.com",
 		Required:    true,
+	}, {
+		Key:      EmailProviderKey,
+		Label:    "Send through",
+		Required: true,
 	}},
 	New: newEmail,
 }
@@ -27,13 +35,14 @@ func newEmail(cfg map[string]string, d Deps) (Sender, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrConfig, strings.TrimPrefix(err.Error(), mail.ErrConfig.Error()+": "))
 	}
-	return &email{to: to, send: d.Mail, brand: d.brand()}, nil
+	return &email{provider: cfg[EmailProviderKey], to: to, send: d.Mail, brand: d.brand()}, nil
 }
 
 type email struct {
-	to    []*netmail.Address
-	send  func(ctx context.Context, to []*netmail.Address, b mail.Body, subject string) error
-	brand string
+	provider string
+	to       []*netmail.Address
+	send     func(ctx context.Context, provider string, to []*netmail.Address, b mail.Body, subject string) error
+	brand    string
 }
 
 var emailColors = map[Level]string{
@@ -63,9 +72,9 @@ func emailBody(e Event, brand string) mail.Body {
 
 func (m *email) Send(ctx context.Context, e Event) error {
 	if m.send == nil {
-		return errors.New("email: no SMTP server")
+		return errors.New("email: no email provider")
 	}
-	if err := m.send(ctx, m.to, emailBody(e, m.brand), "["+m.brand+"] "+e.Title); err != nil {
+	if err := m.send(ctx, m.provider, m.to, emailBody(e, m.brand), "["+m.brand+"] "+e.Title); err != nil {
 		return fmt.Errorf("email: %w", err)
 	}
 	return nil

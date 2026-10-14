@@ -310,7 +310,8 @@ function InviteForm({ onDone }: { onDone: () => void }) {
       </>
     );
   }
-  const noSmtp = smtp.data && !smtp.data.configured;
+  const noSmtp = smtp.data && smtp.data.providers.length === 0;
+  const via = smtp.data?.providers.find((p) => p.id === smtp.data?.invites)?.name;
   return (
     <>
       <DialogHeader>
@@ -329,14 +330,14 @@ function InviteForm({ onDone }: { onDone: () => void }) {
         description={
           noSmtp ? (
             <>
-              Set an SMTP server in{" "}
+              Add an email provider in{" "}
               <Link to="/email" className="underline">
                 Settings › Email
               </Link>{" "}
               to email invites. You can still copy the link.
             </>
           ) : (
-            "Sends them the link. Leave empty to copy it yourself."
+            `Sends them the link${via ? ` through ${via}` : ""}. Leave empty to copy it yourself.`
           )
         }
       />

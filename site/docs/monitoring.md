@@ -58,13 +58,22 @@ a project synced from git can only set it there.
 
 ## Email
 
-*Settings › Email* sets the SMTP server kipitiny sends email through: your
-provider's relay (Amazon SES, Postmark, Resend, Gmail, Office 365…), not a mail
-server of its own. Email [notification channels](#notifications) and
-[invites](/docs/users) use it. Saving checks that kipitiny can connect and
-sign in; **Send a test** mails an address you type.
+*Settings › Email* sets the SMTP servers kipitiny sends email through, its
+email providers: your provider's relay (Amazon SES, Postmark, Resend, Gmail,
+Office 365…), not a mail server of its own. Saving checks that kipitiny can
+connect and sign in; **Send a test** mails an address you type.
 
-Pick a provider first:
+Add as many as you need, each with a name: invites can go out through one
+sender and alerts through another, or each team's channel through its own
+account.
+
+- **Invites** go through the provider tagged *Invites*; another becomes it
+  with *Send invites through it*. With a single provider, that's the one.
+- Each email [notification channel](#notifications) picks its provider in
+  *Send through*. A provider can't be removed while a channel sends through
+  it.
+
+Add a provider by picking its service first:
 
 - **Resend**: only an API key and a sender. kipitiny fills in its relay
   (`smtp.resend.com`, TLS on port 465, user `resend`), and *How do I set up
@@ -89,8 +98,8 @@ credentials and is never shown again.
 *Settings › Notifications* sends events to channels. A channel is either:
 
 - a **Discord** webhook (`https://discord.com/api/webhooks/…`);
-- **Email** to one or more recipients (comma-separated), through the SMTP
-  server set in [Email](#email). Subjects start with `[kipitiny]`.
+- **Email** to one or more recipients (comma-separated), through one of the
+  providers set in [Email](#email). Subjects start with `[kipitiny]`.
 
 Each channel picks its events
 (by default problems and recoveries, restores and new versions, but not

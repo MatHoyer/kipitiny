@@ -11,7 +11,7 @@ import type {
   Network,
   NotificationChannel,
   Project,
-  EmailSettings,
+  EmailProvider,
   Registry,
   SSOProvider,
   Restore,
@@ -54,8 +54,10 @@ export type DemoDb = {
   ssoProviders?: SSOProvider[];
   /** Settings › Appearance; the logo is kept as a data URL. */
   branding?: Branding;
-  /** The SMTP server, once set in Settings › Email. */
-  email?: EmailSettings;
+  /** The SMTP servers set in Settings › Email. */
+  emailProviders?: EmailProvider[];
+  /** The provider invites go through. */
+  emailInvites?: string;
   channels: NotificationChannel[];
   tokens: ApiToken[];
   /** Added after version 3: seeded on first use (demoUsers). */

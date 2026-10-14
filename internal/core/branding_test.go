@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/MatHoyer/kipitiny/internal/config"
-	"github.com/MatHoyer/kipitiny/internal/mail"
 	"github.com/MatHoyer/kipitiny/internal/mail/mailtest"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -111,7 +110,8 @@ func TestBrandedEmail(t *testing.T) {
 	c := newTestCore(t, config.Config{Domain: "ops.example.com"})
 	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin})
 	srv := mailtest.NewServer(t)
-	if _, err := c.SetEmail(ctx, mail.Config{Host: "127.0.0.1", Port: srv.Port, Security: mail.None, From: "ops@example.com"}); err != nil {
+	p, err := c.CreateEmailProvider(ctx, localProvider("relay", srv))
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.SetBranding(ctx, BrandingInput{Name: "Acme ops", Theme: Theme{Accent: "#e11d48"}}); err != nil {
@@ -120,7 +120,7 @@ func TestBrandedEmail(t *testing.T) {
 
 	to := []*netmail.Address{{Address: "a@example.com"}}
 	inv := store.Invite{Role: store.RoleAdmin, ExpiresAt: time.Now().Add(time.Hour)}
-	if err := c.sendMail(ctx, to, c.inviteBody(ctx, inv, "https://ops.example.com/invite#t"), ""); err != nil {
+	if err := c.sendMail(ctx, "", to, c.inviteBody(ctx, inv, "https://ops.example.com/invite#t"), ""); err != nil {
 		t.Fatal(err)
 	}
 	m := <-srv.Messages
@@ -131,7 +131,7 @@ func TestBrandedEmail(t *testing.T) {
 	}
 
 	// Notifications keep their level's colour.
-	if err := c.TestEmail(ctx, "a@example.com"); err != nil {
+	if err := c.TestEmailProvider(ctx, p.ID, "a@example.com"); err != nil {
 		t.Fatal(err)
 	}
 	if m := <-srv.Messages; !strings.Contains(m.Data, "Test email from Acme ops") || strings.Contains(m.Data, "#e11d48") {
