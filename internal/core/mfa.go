@@ -17,6 +17,14 @@ import (
 // It's not ErrUnauthorized: the session is still valid.
 var ErrWrongPassword = fmt.Errorf("%w: wrong password", ErrInvalid)
 
+// ErrSignInAgain asks a user without a password to confirm a change by
+// signing in again, their sign-in being too old to stand for it.
+var ErrSignInAgain = fmt.Errorf("%w: sign in again to confirm, then retry within %d minutes", ErrInvalid, int(reauthWindow.Minutes()))
+
+// reauthWindow is how recent a sign-in confirms a change to an account
+// without a password (single sign-on only), in place of the password.
+const reauthWindow = 10 * time.Minute
+
 const (
 	mfaTicketTTL = 5 * time.Minute
 	// mfaTicketAttempts bounds the codes tried per password check.
@@ -106,6 +114,11 @@ type Account struct {
 	// RecoveryCodes is how many unused recovery codes are left.
 	RecoveryCodes int             `json:"recoveryCodes"`
 	Passkeys      []store.Passkey `json:"passkeys"`
+	// HasPassword is false for an account that signs in with single sign-on
+	// (or passkeys) only: a recent sign-in confirms its changes instead,
+	// which RecentSignIn reports.
+	HasPassword  bool `json:"hasPassword"`
+	RecentSignIn bool `json:"recentSignIn"`
 	// SSO lists the identities linked at single sign-on providers, and
 	// SSOProviders those to link one at.
 	SSO          []SSOIdentityView `json:"sso"`
@@ -114,6 +127,13 @@ type Account struct {
 	Role     store.Role          `json:"role"`
 	Features []string            `json:"features"`
 	Grants   map[string][]string `json:"grants"`
+}
+
+// recentSignIn reports whether the request's session started within
+// reauthWindow.
+func recentSignIn(ctx context.Context) bool {
+	a, _ := ActorFrom(ctx)
+	return !a.SignedIn.IsZero() && time.Since(a.SignedIn) < reauthWindow
 }
 
 // currentUser is the signed-in user making the request; API tokens have none.
@@ -131,6 +151,12 @@ func (c *Core) confirmedUser(ctx context.Context, password string) (store.User, 
 	u, err := c.currentUser(ctx)
 	if err != nil {
 		return store.User{}, err
+	}
+	if u.PasswordHash == "" {
+		if !recentSignIn(ctx) {
+			return store.User{}, ErrSignInAgain
+		}
+		return u, nil
 	}
 	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) != nil {
 		return store.User{}, ErrWrongPassword
@@ -156,6 +182,7 @@ func (c *Core) Account(ctx context.Context) (Account, error) {
 		return Account{}, err
 	}
 	acc := Account{Username: u.Username, TOTPEnabled: u.TOTPSecret != "", RecoveryCodes: n, Passkeys: ps, SSO: ids, SSOProviders: c.SSOButtons(ctx),
+		HasPassword: u.PasswordHash != "", RecentSignIn: recentSignIn(ctx),
 		Role: u.Role, Features: u.Features, Grants: map[string][]string{}}
 	if u.Role != store.RoleAdmin {
 		v, err := c.userView(ctx, u)

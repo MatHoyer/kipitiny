@@ -243,14 +243,14 @@ func TestUserAccessAndInvites(t *testing.T) {
 		t.Fatalf("invite by hash: %+v %v", got, err)
 	}
 
-	m, err := s.AcceptInvite(ctx, inv.ID, store.User{Username: "alice", PasswordHash: "y"})
+	m, err := s.AcceptInvite(ctx, inv.ID, store.User{Username: "alice", PasswordHash: "y"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if m.Role != store.RoleMember || len(m.Features) != 1 {
 		t.Fatalf("member: %+v", m)
 	}
-	if _, err := s.AcceptInvite(ctx, inv.ID, store.User{Username: "bob", PasswordHash: "y"}); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.AcceptInvite(ctx, inv.ID, store.User{Username: "bob", PasswordHash: "y"}, nil); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("invite reused: %v", err)
 	}
 	gs, err := s.ListGrants(ctx, m.ID)

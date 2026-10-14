@@ -308,6 +308,9 @@ type InviteInfo struct {
 	ExpiresAt time.Time  `json:"expiresAt"`
 	// Projects names the projects it grants.
 	Projects []string `json:"projects"`
+	// SSO lists the providers the account can sign in with instead of a
+	// password.
+	SSO []SSOButton `json:"sso"`
 }
 
 // Invite describes a valid invite; ErrNotFound for an unknown, used or
@@ -317,7 +320,7 @@ func (c *Core) Invite(ctx context.Context, token string) (InviteInfo, error) {
 	if err != nil {
 		return InviteInfo{}, inviteErr(err)
 	}
-	info := InviteInfo{Role: i.Role, ExpiresAt: i.ExpiresAt, Projects: []string{}}
+	info := InviteInfo{Role: i.Role, ExpiresAt: i.ExpiresAt, Projects: []string{}, SSO: c.SSOButtons(ctx)}
 	for _, id := range slices.Sorted(maps.Keys(i.Grants)) {
 		if p, err := c.store.GetProject(ctx, id); err == nil {
 			info.Projects = append(info.Projects, p.Name)
@@ -332,25 +335,33 @@ func (c *Core) AcceptInvite(ctx context.Context, token, username, password strin
 	if err != nil {
 		return store.User{}, "", inviteErr(err)
 	}
-	if !nameRe.MatchString(username) {
-		return store.User{}, "", fmt.Errorf("%w: username must be lowercase letters, digits and dashes", ErrInvalid)
+	if err := c.checkNewUsername(ctx, username); err != nil {
+		return store.User{}, "", err
 	}
 	if err := validatePassword(password); err != nil {
 		return store.User{}, "", err
-	}
-	if _, err := c.store.GetUserByUsername(ctx, username); err == nil {
-		return store.User{}, "", fmt.Errorf("%w: username %s is taken", ErrInvalid, username)
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return store.User{}, "", err
 	}
-	u, err := c.store.AcceptInvite(ctx, i.ID, store.User{Username: username, PasswordHash: string(hash)})
+	u, err := c.store.AcceptInvite(ctx, i.ID, store.User{Username: username, PasswordHash: string(hash)}, nil)
 	if err != nil {
 		return store.User{}, "", inviteErr(err)
 	}
 	session, err := c.newSession(ctx, u.ID)
 	return u, session, err
+}
+
+// checkNewUsername fails unless username is valid and free.
+func (c *Core) checkNewUsername(ctx context.Context, username string) error {
+	if !nameRe.MatchString(username) {
+		return fmt.Errorf("%w: username must be lowercase letters, digits and dashes", ErrInvalid)
+	}
+	if _, err := c.store.GetUserByUsername(ctx, username); err == nil {
+		return fmt.Errorf("%w: username %s is taken", ErrInvalid, username)
+	}
+	return nil
 }
 
 func inviteErr(err error) error {

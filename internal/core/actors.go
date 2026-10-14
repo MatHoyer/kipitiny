@@ -27,6 +27,8 @@ type Actor struct {
 	Features []string   `json:"-"`
 	// Grants maps project IDs to a member's permissions; nil for admins.
 	Grants map[string][]string `json:"-"`
+	// SignedIn is when the session started; zero for tokens.
+	SignedIn time.Time `json:"-"`
 }
 
 func (a Actor) String() string { return a.Kind + ":" + a.Name }

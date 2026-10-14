@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { encode } from "uqr";
 import { CopyButton, CopyField, EmptyState, ErrorText, Section, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmField, useConfirmation } from "@/components/confirm-identity";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -21,7 +22,7 @@ export function AccountPage() {
   // Back from linking an identity at a single sign-on provider.
   useEffect(() => {
     const error = takeSSOParam("sso-error");
-    if (error) toast.error("Couldn't link the account", { description: error, duration: 12000 });
+    if (error) toast.error("Couldn't link the account", { description: friendlyError(new Error(error)), duration: 12000 });
     if (takeSSOParam("sso-connected")) toast.success("Account linked: you can sign in with it");
   }, []);
   return (
@@ -34,7 +35,7 @@ export function AccountPage() {
             <TwoFactor account={account.data} />
             <Passkeys account={account.data} />
             <SingleSignOn account={account.data} />
-            <ChangePassword username={account.data.username} />
+            <ChangePassword account={account.data} />
           </>
         )}
       </PageBody>
@@ -95,7 +96,7 @@ function TwoFactor({ account }: { account: Account }) {
   );
 }
 
-/** Asks for the account password before a change to how it signs in. */
+/** Asks for the account password (or a recent sign-in, without one) before a change to how it signs in. */
 function ConfirmPassword({
   title,
   description,
@@ -113,10 +114,10 @@ function ConfirmPassword({
   children?: ReactNode;
   onSubmit: (password: string) => void;
 }) {
-  const [password, setPassword] = useState("");
+  const confirm = useConfirmation();
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    onSubmit(password);
+    onSubmit(confirm.password);
   };
   return (
     <form onSubmit={submit} className="contents">
@@ -126,18 +127,10 @@ function ConfirmPassword({
       </DialogHeader>
       <div className="space-y-4">
         {children}
-        <FloatingInput
-          label="Your password"
-          type="password"
-          required
-          autoFocus={!children}
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <ConfirmField confirm={confirm} autoFocus={!children} />
       </div>
       <DialogFooter>
-        <Button type="submit" variant={destructive ? "destructive" : "default"} loading={pending}>
+        <Button type="submit" variant={destructive ? "destructive" : "default"} loading={pending} disabled={!confirm.ready}>
           {submitLabel}
         </Button>
       </DialogFooter>
@@ -489,18 +482,22 @@ function AddPasskey({ onDone }: { onDone: () => void }) {
   );
 }
 
-function ChangePassword({ username }: { username: string }) {
+function ChangePassword({ account }: { account: Account }) {
+  const qc = useQueryClient();
   const [form, setForm] = useState({ current: "", password: "", confirm: "" });
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
+  const confirm = useConfirmation();
+  const has = account.hasPassword;
   const change = useMutation({
-    meta: { error: "Couldn't change the password" },
+    meta: { error: has ? "Couldn't change the password" : "Couldn't set the password" },
     mutationFn: () => {
       if (form.password !== form.confirm) throw new Error("Passwords don't match.");
       return api.changePassword(form.current, form.password);
     },
     onSuccess: () => {
       setForm({ current: "", password: "", confirm: "" });
-      toast.success("Password changed", { description: "Other sessions were signed out." });
+      qc.invalidateQueries({ queryKey: ["account"] });
+      toast.success(has ? "Password changed" : "Password set", { description: "Other sessions were signed out." });
     },
   });
   const onSubmit = (e: FormEvent) => {
@@ -508,18 +505,27 @@ function ChangePassword({ username }: { username: string }) {
     change.mutate();
   };
   return (
-    <Section title="Password" description="Changing it signs out every other session.">
+    <Section
+      title="Password"
+      description={
+        has ? "Changing it signs out every other session." : "Your account signs in with single sign-on only. A password lets it sign in without the provider too."
+      }
+    >
       <form onSubmit={onSubmit} className="space-y-4">
         {/* Lets password managers tie the new password to the account. */}
-        <input type="text" autoComplete="username" value={username} readOnly hidden />
-        <FloatingInput
-          label="Current password"
-          type="password"
-          required
-          autoComplete="current-password"
-          value={form.current}
-          onChange={set("current")}
-        />
+        <input type="text" autoComplete="username" value={account.username} readOnly hidden />
+        {has ? (
+          <FloatingInput
+            label="Current password"
+            type="password"
+            required
+            autoComplete="current-password"
+            value={form.current}
+            onChange={set("current")}
+          />
+        ) : (
+          <ConfirmField confirm={confirm} />
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <FloatingInput
             label="New password"
@@ -540,8 +546,8 @@ function ChangePassword({ username }: { username: string }) {
           />
         </div>
         <div className="flex justify-end">
-          <Button type="submit" loading={change.isPending}>
-            Change password
+          <Button type="submit" loading={change.isPending} disabled={!has && !confirm.ready}>
+            {has ? "Change password" : "Set password"}
           </Button>
         </div>
       </form>

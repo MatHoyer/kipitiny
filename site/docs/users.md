@@ -40,9 +40,17 @@ Single sign-on* (password asked again, then a sign-in at the provider). From
 then on, *Sign in with …* on the sign-in page brings them back where they
 were. Someone whose identity isn't linked is refused: invite them first.
 
+An invite link offers the providers too: the new user picks a username, then
+*Continue with …* creates the account linked to the identity they sign in
+with, **without a password**. Such an account confirms sensitive changes
+(two-factor authentication, passkeys, exporting secrets) with a sign-in less
+than 10 minutes old instead of the password, and can set a password later in
+*Account*. Its last way to sign in can't be unlinked.
+
 The provider stands in for the password only: a user with two-factor
 authentication on still enters a code afterwards. Removing a provider unlinks
-every identity linked through it.
+every identity linked through it, which locks out accounts without a password
+or passkey: give them a password with `reset-password` (below) if needed.
 
 ## Project permissions
 
@@ -111,4 +119,11 @@ If no admin can sign in, make a user admin from the server:
 
 ```sh
 docker compose exec manager /kipitiny make-admin alice
+```
+
+A user who can't sign in at all (provider removed, password lost) gets a new
+password the same way:
+
+```sh
+docker compose exec -it manager /kipitiny reset-password alice
 ```

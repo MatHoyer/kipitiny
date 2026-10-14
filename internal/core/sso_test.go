@@ -287,3 +287,95 @@ func TestLocalPath(t *testing.T) {
 		}
 	}
 }
+
+func TestSSOInvite(t *testing.T) {
+	ctx := asAdmin(context.Background())
+	c := newTestCore(t, config.Config{})
+	idp := newFakeIssuer(t)
+	c.ssoHTTP = idp.Client()
+	p, err := c.CreateSSOProvider(ctx, SSOProviderInput{Name: "Company", Issuer: idp.URL, ClientID: "client", ClientSecret: "secret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const origin = "https://kipitiny.example.com"
+	inv, err := c.CreateInvite(ctx, InviteInput{UserAccess: UserAccess{Role: store.RoleMember}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info, _ := c.Invite(ctx, inv.Token); len(info.SSO) != 1 {
+		t.Errorf("invite offers %+v", info.SSO)
+	}
+	if _, err := c.BeginSSOInvite(ctx, p.ID, origin, "nope", "carol"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("unknown invite: %v", err)
+	}
+	if _, err := c.BeginSSOInvite(ctx, p.ID, origin, inv.Token, "Carol!"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("bad username: %v", err)
+	}
+
+	start, err := c.BeginSSOInvite(ctx, p.ID, origin, inv.Token, "carol")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := idp.answer(t, start, "c1", "carol-sub")
+	res, err := c.FinishSSO(context.Background(), state, state, "c1")
+	if err != nil || res.Purpose != ssoInvite || res.Session == "" || res.User.Username != "carol" || res.User.Role != store.RoleMember {
+		t.Fatalf("accept: %+v %v", res, err)
+	}
+	carol, signedIn, err := c.AuthenticateSession(context.Background(), res.Session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Login(context.Background(), "carol", ""); !errors.Is(err, ErrUnauthorized) {
+		t.Errorf("password sign-in without a password: %v", err)
+	}
+
+	// The invite is used; the identity signs in.
+	if _, err := c.BeginSSOInvite(ctx, p.ID, origin, inv.Token, "dave"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("invite reused: %v", err)
+	}
+	start, _ = c.BeginSSO(context.Background(), p.ID, origin, "/")
+	state = idp.answer(t, start, "c2", "carol-sub")
+	if res, err := c.FinishSSO(context.Background(), state, state, "c2"); err != nil || res.User.ID != carol.ID {
+		t.Fatalf("sign in: %+v %v", res, err)
+	}
+
+	// An identity already linked can't accept another invite.
+	inv2, _ := c.CreateInvite(ctx, InviteInput{UserAccess: UserAccess{Role: store.RoleMember}})
+	start, _ = c.BeginSSOInvite(ctx, p.ID, origin, inv2.Token, "carol2")
+	state = idp.answer(t, start, "c3", "carol-sub")
+	if res, err := c.FinishSSO(context.Background(), state, state, "c3"); !errors.Is(err, ErrInvalid) || res.Invite != inv2.Token {
+		t.Fatalf("second account: %+v %v", res, err)
+	}
+
+	// Without a password, a recent sign-in confirms changes.
+	recent := WithActor(context.Background(), Actor{Kind: "user", UserID: carol.ID, Role: carol.Role, Scope: store.ScopeAdmin, SignedIn: signedIn})
+	old := WithActor(context.Background(), Actor{Kind: "user", UserID: carol.ID, Role: carol.Role, Scope: store.ScopeAdmin, SignedIn: signedIn.Add(-time.Hour)})
+	if acc, _ := c.Account(recent); acc.HasPassword || !acc.RecentSignIn {
+		t.Errorf("account = %+v", acc)
+	}
+	if _, err := c.BeginTOTP(old, ""); !errors.Is(err, ErrSignInAgain) {
+		t.Errorf("old sign-in: %v", err)
+	}
+	if _, err := c.BeginTOTP(recent, ""); err != nil {
+		t.Errorf("recent sign-in: %v", err)
+	}
+
+	// The only way to sign in can't be unlinked until there is a password.
+	acc, _ := c.Account(recent)
+	if err := c.UnlinkSSOIdentity(recent, acc.SSO[0].ID); !errors.Is(err, ErrInvalid) {
+		t.Errorf("last sign-in unlinked: %v", err)
+	}
+	session, err := c.ChangePassword(recent, "", "a long password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acc, _ := c.Account(recent); !acc.HasPassword {
+		t.Error("password not set")
+	}
+	if _, err := c.Authenticate(context.Background(), session); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.UnlinkSSOIdentity(recent, acc.SSO[0].ID); err != nil {
+		t.Errorf("unlink with a password: %v", err)
+	}
+}

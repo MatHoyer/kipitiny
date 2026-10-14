@@ -532,7 +532,7 @@ func (s *Store) GetInviteByHash(ctx context.Context, hash string) (store.Invite,
 	return i, mapErr(err)
 }
 
-func (s *Store) AcceptInvite(ctx context.Context, inviteID string, u store.User) (store.User, error) {
+func (s *Store) AcceptInvite(ctx context.Context, inviteID string, u store.User, sso *store.SSOIdentity) (store.User, error) {
 	var created store.User
 	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		var i store.Invite
@@ -547,6 +547,13 @@ func (s *Store) AcceptInvite(ctx context.Context, inviteID string, u store.User)
 		u.Role, u.Features = i.Role, i.Features
 		if created, err = createUser(ctx, tx, u); err != nil {
 			return err
+		}
+		if sso != nil {
+			id := *sso
+			id.ID, id.UserID, id.CreatedAt = ids.New(), created.ID, now()
+			if _, err := tx.NewInsert().Model(&id).Exec(ctx); err != nil {
+				return mapErr(err)
+			}
 		}
 		for projectID, perms := range i.Grants {
 			// A project deleted since the invite was made is skipped.

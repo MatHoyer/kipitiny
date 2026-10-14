@@ -495,7 +495,8 @@ export type Invite = UserAccess & {
 /** An invite's access, and optionally where to email it: link is the invite page's URL, the token its fragment. */
 export type InviteInput = UserAccess & { email?: string; link?: string };
 
-export type InviteInfo = { role: Role; expiresAt: string; projects: string[] };
+/** sso: the providers the account can sign in with instead of a password. */
+export type InviteInfo = { role: Role; expiresAt: string; projects: string[]; sso: SSOButton[] };
 
 /** A password sign-in that still needs a TOTP or recovery code. */
 export type MfaChallenge = { mfaRequired: true; ticket: string };
@@ -513,6 +514,9 @@ export type Account = {
   totpEnabled: boolean;
   recoveryCodes: number;
   passkeys: Passkey[];
+  /** False for an account that signs in with single sign-on only: a sign-in less than 10 minutes old confirms its changes. */
+  hasPassword: boolean;
+  recentSignIn: boolean;
   sso: SSOIdentity[];
   /** The providers an identity can be linked at. */
   ssoProviders: SSOButton[];
@@ -1100,6 +1104,9 @@ export const api = {
   beginSSO: (id: string, returnTo: string) => request<{ url: string }>(`/auth/sso/${id}/begin`, json("POST", { returnTo })),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
   invite: (token: string) => request<InviteInfo>("/auth/invite", json("POST", { token })),
+  /** The provider's sign-in page, to create the invited account signing in with it. */
+  beginSSOInvite: (id: string, token: string, username: string) =>
+    request<{ url: string }>(`/auth/sso/${id}/invite`, json("POST", { token, username })),
   acceptInvite: (token: string, username: string, password: string) =>
     request<User>("/auth/invite/accept", json("POST", { token, username, password })),
 

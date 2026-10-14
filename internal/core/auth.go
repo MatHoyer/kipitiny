@@ -150,6 +150,10 @@ func (c *Core) Login(ctx context.Context, username, password string) (LoginResul
 	if err != nil {
 		return LoginResult{}, err
 	}
+	if u.PasswordHash == "" { // single sign-on only
+		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
+		return LoginResult{}, ErrUnauthorized
+	}
 	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) != nil {
 		return LoginResult{}, ErrUnauthorized
 	}
@@ -164,21 +168,27 @@ func (c *Core) Login(ctx context.Context, username, password string) (LoginResul
 }
 
 func (c *Core) Authenticate(ctx context.Context, sessionToken string) (store.User, error) {
+	u, _, err := c.AuthenticateSession(ctx, sessionToken)
+	return u, err
+}
+
+// AuthenticateSession is Authenticate, with when the session started.
+func (c *Core) AuthenticateSession(ctx context.Context, sessionToken string) (store.User, time.Time, error) {
 	if sessionToken == "" {
-		return store.User{}, ErrUnauthorized
+		return store.User{}, time.Time{}, ErrUnauthorized
 	}
 	sess, err := c.store.GetSession(ctx, hashToken(sessionToken))
 	if errors.Is(err, store.ErrNotFound) {
-		return store.User{}, ErrUnauthorized
+		return store.User{}, time.Time{}, ErrUnauthorized
 	}
 	if err != nil {
-		return store.User{}, err
+		return store.User{}, time.Time{}, err
 	}
 	u, err := c.store.GetUser(ctx, sess.UserID)
 	if errors.Is(err, store.ErrNotFound) {
-		return store.User{}, ErrUnauthorized
+		return store.User{}, time.Time{}, ErrUnauthorized
 	}
-	return u, err
+	return u, sess.CreatedAt, err
 }
 
 func (c *Core) Logout(ctx context.Context, sessionToken string) error {

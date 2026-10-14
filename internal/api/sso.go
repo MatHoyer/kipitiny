@@ -53,6 +53,9 @@ func (a *API) deleteSSOProvider(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// invitePage is the UI's page for invite links.
+const invitePage = "/invite"
+
 // ssoCookie binds a sign-in at a provider to the browser that started it.
 const ssoCookie = "kipitiny_sso"
 
@@ -90,6 +93,28 @@ func (a *API) beginSSOLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	start, err := a.core.BeginSSO(r.Context(), r.PathValue("id"), relyingParty(r).Origin, body.ReturnTo)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	a.startSSO(w, r, start)
+}
+
+func (a *API) beginSSOInvite(w http.ResponseWriter, r *http.Request) {
+	ip := a.clientIP(r)
+	if !a.begins.allow(ip) {
+		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
+		return
+	}
+	a.begins.fail(ip)
+	var body struct {
+		Token    string `json:"token"`
+		Username string `json:"username"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	start, err := a.core.BeginSSOInvite(r.Context(), r.PathValue("id"), relyingParty(r).Origin, body.Token, body.Username)
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -158,6 +183,11 @@ func (a *API) ssoCallback(w http.ResponseWriter, r *http.Request) {
 		}
 		a.core.Audit(ctx, "POST /api/account/sso/{id}/connect", "", status, err)
 		a.ssoRedirect(w, r, "/account", "sso-connected", err)
+		return
+	}
+	if res.Purpose == "invite" && err != nil {
+		// Back to the invite, its token in the fragment as in the link.
+		a.ssoRedirect(w, r, invitePage+"#"+url.QueryEscape(res.Invite), "", err)
 		return
 	}
 	if err == nil && res.MFATicket != "" {

@@ -7,11 +7,12 @@ import { api } from "@/api";
 export function takeSSOParam(name: string): string | null {
   const url = new URL(window.location.href);
   const hash = new URLSearchParams(url.hash.slice(1));
-  const value = url.searchParams.get(name) ?? hash.get(name);
-  if (value === null) return null;
-  url.searchParams.delete(name);
-  hash.delete(name);
-  url.hash = hash.toString();
+  let value = url.searchParams.get(name);
+  if (value !== null) url.searchParams.delete(name);
+  else if ((value = hash.get(name)) !== null) {
+    hash.delete(name);
+    url.hash = hash.toString();
+  } else return null;
   window.history.replaceState(window.history.state, "", url);
   return value;
 }
