@@ -57,6 +57,15 @@ type Deps struct {
 	// Mail sends an email through the manager's SMTP server; nil when
 	// nothing is sent (validating a configuration).
 	Mail func(ctx context.Context, to []*netmail.Address, b mail.Body, subject string) error
+	// Brand is the manager's name senders sign with; kipitiny when empty.
+	Brand string
+}
+
+func (d Deps) brand() string {
+	if d.Brand != "" {
+		return d.Brand
+	}
+	return "kipitiny"
 }
 
 // Kind is a delivery method. Its Fields describe the configuration, so the

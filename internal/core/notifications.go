@@ -222,7 +222,7 @@ func (c *Core) notify(e notify.Event, path, key string) {
 }
 
 func (c *Core) send(ctx context.Context, ch store.NotificationChannel, e notify.Event) error {
-	s, err := notify.New(ch.Kind, ch.Config, notify.Deps{HTTP: c.notifyHTTP, Mail: c.sendMail})
+	s, err := notify.New(ch.Kind, ch.Config, notify.Deps{HTTP: c.notifyHTTP, Mail: c.sendMail, Brand: c.BrandName(ctx)})
 	if err != nil {
 		return err
 	}

@@ -27,12 +27,13 @@ func newEmail(cfg map[string]string, d Deps) (Sender, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrConfig, strings.TrimPrefix(err.Error(), mail.ErrConfig.Error()+": "))
 	}
-	return &email{to: to, send: d.Mail}, nil
+	return &email{to: to, send: d.Mail, brand: d.brand()}, nil
 }
 
 type email struct {
-	to   []*netmail.Address
-	send func(ctx context.Context, to []*netmail.Address, b mail.Body, subject string) error
+	to    []*netmail.Address
+	send  func(ctx context.Context, to []*netmail.Address, b mail.Body, subject string) error
+	brand string
 }
 
 var emailColors = map[Level]string{
@@ -42,11 +43,11 @@ var emailColors = map[Level]string{
 	Error:   "#ef4444",
 }
 
-func emailBody(e Event) mail.Body {
+func emailBody(e Event, brand string) mail.Body {
 	b := mail.Body{
 		Title:  e.Title,
 		Accent: emailColors[e.Level],
-		Footer: "kipitiny · " + e.Type + " · " + e.Time.UTC().Format("2006-01-02 15:04 UTC"),
+		Footer: brand + " · " + e.Type + " · " + e.Time.UTC().Format("2006-01-02 15:04 UTC"),
 	}
 	if e.Message != "" {
 		b.Paragraphs = []string{truncate(e.Message, 8000)}
@@ -55,7 +56,7 @@ func emailBody(e Event) mail.Body {
 		b.Fields = append(b.Fields, mail.Field{Name: f.Name, Value: f.Value})
 	}
 	if e.URL != "" {
-		b.Button = &mail.Link{Label: "Open in kipitiny", URL: e.URL}
+		b.Button = &mail.Link{Label: "Open in " + brand, URL: e.URL}
 	}
 	return b
 }
@@ -64,7 +65,7 @@ func (m *email) Send(ctx context.Context, e Event) error {
 	if m.send == nil {
 		return errors.New("email: no SMTP server")
 	}
-	if err := m.send(ctx, m.to, emailBody(e), "[kipitiny] "+e.Title); err != nil {
+	if err := m.send(ctx, m.to, emailBody(e, m.brand), "["+m.brand+"] "+e.Title); err != nil {
 		return fmt.Errorf("email: %w", err)
 	}
 	return nil

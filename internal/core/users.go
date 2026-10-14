@@ -259,18 +259,24 @@ func (c *Core) inviteBody(ctx context.Context, i store.Invite, link string) mail
 	if u, err := c.store.GetUser(ctx, i.CreatedBy); err == nil {
 		who = u.Username
 	}
-	where := "a kipitiny server"
-	if c.cfg.Domain != "" {
+	brand := c.BrandName(ctx)
+	where := "a " + brand + " server"
+	switch {
+	case brand != DefaultBrandName && c.cfg.Domain != "":
+		where = brand + " (" + c.cfg.Domain + ")"
+	case brand != DefaultBrandName:
+		where = brand
+	case c.cfg.Domain != "":
 		where = "the kipitiny server " + c.cfg.Domain
 	}
 	b := mail.Body{
-		Title: "You're invited to kipitiny",
+		Title: "You're invited to " + brand,
 		Paragraphs: []string{
 			fmt.Sprintf("%s invited you to %s. Open the link to pick your username and password.", who, where),
 			fmt.Sprintf("It works once, until %s. If you weren't expecting it, ignore this email.", i.ExpiresAt.UTC().Format("January 2, 2006 15:04 UTC")),
 		},
 		Button: &mail.Link{Label: "Accept the invite", URL: link},
-		Footer: c.mailFooter(),
+		Footer: c.mailFooter(ctx),
 	}
 	if i.Role == store.RoleAdmin {
 		b.Fields = []mail.Field{{Name: "Role", Value: "Admin"}}

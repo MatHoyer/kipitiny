@@ -30,6 +30,7 @@ func TestEmailSend(t *testing.T) {
 			gotTo, got, subject = to, b, subj
 			return nil
 		},
+		Brand: "Acme ops",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -46,10 +47,10 @@ func TestEmailSend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(gotTo) != 1 || subject != "[kipitiny] shop/web deployment failed" || got.Accent != emailColors[Error] {
+	if len(gotTo) != 1 || subject != "[Acme ops] shop/web deployment failed" || got.Accent != emailColors[Error] {
 		t.Errorf("to %v, subject %q, body %+v", gotTo, subject, got)
 	}
-	if got.Button == nil || got.Button.URL != "https://kipitiny.example.com/services/1" || got.Footer != "kipitiny · deploy.failed · 2026-01-02 03:04 UTC" {
+	if got.Button == nil || got.Button.URL != "https://kipitiny.example.com/services/1" || got.Footer != "Acme ops · deploy.failed · 2026-01-02 03:04 UTC" || got.Button.Label != "Open in Acme ops" {
 		t.Errorf("body = %+v", got)
 	}
 

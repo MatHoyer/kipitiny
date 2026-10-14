@@ -40,12 +40,13 @@ func newDiscord(cfg map[string]string, d Deps) (Sender, error) {
 	if err != nil || u.Scheme != "https" || !discordHosts[u.Hostname()] || !strings.HasPrefix(u.Path, "/api/webhooks/") {
 		return nil, fmt.Errorf("%w: not a Discord webhook URL (https://discord.com/api/webhooks/…)", ErrConfig)
 	}
-	return &discord{url: u.String(), hc: d.HTTP}, nil
+	return &discord{url: u.String(), hc: d.HTTP, brand: d.brand()}, nil
 }
 
 type discord struct {
-	url string
-	hc  *http.Client
+	url   string
+	hc    *http.Client
+	brand string
 }
 
 var discordColors = map[Level]int{
@@ -81,7 +82,7 @@ type discordFooter struct {
 }
 
 // discordPayload respects Discord's embed limits.
-func discordPayload(e Event) discordMessage {
+func discordPayload(e Event, brand string) discordMessage {
 	em := discordEmbed{
 		Title:       truncate(e.Title, 256),
 		Description: truncate(e.Message, 4096),
@@ -99,11 +100,11 @@ func discordPayload(e Event) discordMessage {
 		}
 		em.Fields = append(em.Fields, discordField{Name: truncate(f.Name, 256), Value: truncate(f.Value, 1024), Inline: true})
 	}
-	return discordMessage{Username: "kipitiny", Embeds: []discordEmbed{em}}
+	return discordMessage{Username: brand, Embeds: []discordEmbed{em}}
 }
 
 func (d *discord) Send(ctx context.Context, e Event) error {
-	body, err := json.Marshal(discordPayload(e))
+	body, err := json.Marshal(discordPayload(e, d.brand))
 	if err != nil {
 		return err
 	}

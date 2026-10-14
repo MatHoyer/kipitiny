@@ -49,7 +49,7 @@ func TestDiscordPayload(t *testing.T) {
 		Fields:  []Field{{"Project", "shop"}, {"Image", ""}},
 		Time:    time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
 	}
-	m := discordPayload(e)
+	m := discordPayload(e, "Acme ops")
 	em := m.Embeds[0]
 	if len([]rune(em.Title)) != 256 || !strings.HasSuffix(em.Title, "…") {
 		t.Errorf("title not truncated: %d runes", len([]rune(em.Title)))
@@ -74,7 +74,7 @@ func TestDiscordSend(t *testing.T) {
 		w.Write([]byte(`{"message": "Unknown Webhook"}`))
 	}))
 	defer srv.Close()
-	d := &discord{url: srv.URL + "/api/webhooks/1/secret-token", hc: srv.Client()}
+	d := &discord{url: srv.URL + "/api/webhooks/1/secret-token", hc: srv.Client(), brand: "kipitiny"}
 
 	if err := d.Send(context.Background(), Event{Title: "hi", Level: Info}); err != nil {
 		t.Fatal(err)
