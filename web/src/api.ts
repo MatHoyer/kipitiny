@@ -1443,6 +1443,8 @@ export const api = {
   testChannel: (id: string) => request<void>(`/notifications/channels/${id}/test`, { method: "POST" }),
   tokens: () => request<ApiToken[]>("/tokens"),
   createToken: (t: TokenInput) => request<ApiToken & { token: string }>("/tokens", json("POST", t)),
+  updateToken: (id: string, t: TokenInput) => request<ApiToken>(`/tokens/${id}`, json("PUT", t)),
+  rollToken: (id: string) => request<ApiToken & { token: string }>(`/tokens/${id}/roll`, { method: "POST" }),
   deleteToken: (id: string) => request<void>(`/tokens/${id}`, { method: "DELETE" }),
   audit: () => request<AuditEntry[]>("/audit?limit=200"),
   users: () => request<UserView[]>("/users"),

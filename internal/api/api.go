@@ -229,6 +229,8 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("POST /api/notifications/channels/{id}/test", a.testChannel)
 	handle("GET /api/tokens", a.listTokens)
 	handle("POST /api/tokens", a.createToken)
+	handle("PUT /api/tokens/{id}", a.updateToken)
+	handle("POST /api/tokens/{id}/roll", a.rollToken)
 	handle("DELETE /api/tokens/{id}", a.deleteToken)
 	handle("GET /api/audit", a.listAudit)
 	handle("GET /api/users", a.listUsers)

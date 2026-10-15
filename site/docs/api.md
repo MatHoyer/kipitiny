@@ -36,6 +36,10 @@ never reaches users, settings or the audit log.
 
 You can't give a token what you don't have yourself: those choices are disabled.
 If you later lose a permission, your restricted tokens lose it too.
+Edit a token (the pencil on its card) to rename it or change its access: anything
+using it keeps working with the new access, the token itself stays the same.
+Roll it (the arrows) if it leaked: it gets a new secret with the same access, and
+the old one stops working immediately.
 
 Secrets are masked in every response, except what `get_connection` reveals. Every
 mutation, from the UI, a token or an agent (including refused attempts), lands

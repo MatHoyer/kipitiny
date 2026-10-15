@@ -1042,6 +1042,17 @@ func (s *Store) GetAPITokenByHash(ctx context.Context, hash string) (store.APITo
 	return t, nil
 }
 
+func (s *Store) UpdateAPIToken(ctx context.Context, t store.APIToken) (store.APIToken, error) {
+	res, err := s.db.NewUpdate().Model(&t).Column("name", "restricted", "features", "grants", "token_hash").WherePK().Exec(ctx)
+	if err != nil {
+		return store.APIToken{}, mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.APIToken{}, store.ErrNotFound
+	}
+	return t, nil
+}
+
 func (s *Store) DeleteAPIToken(ctx context.Context, id string) error {
 	return deleteByID(ctx, s.db, "api_tokens", id)
 }

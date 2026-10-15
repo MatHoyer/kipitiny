@@ -190,6 +190,8 @@ type Store interface {
 	ListAPITokens(ctx context.Context, userID string) ([]APIToken, error)
 	// GetAPITokenByHash also records the use.
 	GetAPITokenByHash(ctx context.Context, hash string) (APIToken, error)
+	// UpdateAPIToken saves a token's name, access and hash.
+	UpdateAPIToken(ctx context.Context, t APIToken) (APIToken, error)
 	DeleteAPIToken(ctx context.Context, id string) error
 
 	CreateDomain(ctx context.Context, d Domain) (Domain, error)
