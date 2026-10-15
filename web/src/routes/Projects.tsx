@@ -1,13 +1,15 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ChevronRight, FolderKanban, GitPullRequestArrow, Globe, Layers, Plus, TriangleAlert } from "lucide-react";
+import { Activity, ChevronRight, FolderKanban, GitPullRequestArrow, Globe, LayoutGrid, Layers, Plus, Table2, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { ServiceStates } from "@/components/service-states";
+import { ServicesTable } from "@/components/services-table";
 import { TagChips, TagFilter, useTagFilter } from "@/components/tags";
 import { TemplateDialog } from "@/components/template-dialog";
 import { EmptyState, ErrorText, IconTile, StatCard, Tag, Loading } from "@/components/common";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
 import {
@@ -26,6 +28,7 @@ import { memoryOf, useUsage } from "@/components/usage";
 import { formatBytes, liveState, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAccess } from "@/lib/access";
+import { useTab } from "@/hooks/use-tab";
 import { api, isDatabase, type Project as ProjectT, type Service } from "../api";
 
 export function Projects() {
@@ -66,6 +69,31 @@ export function Projects() {
   const all = services.flatMap((q) => q.data ?? []);
   const states = all.map(liveState);
   const filter = useTagFilter();
+  const [view] = useTab(["cards", "table"] as const, "cards", "view");
+  const [, setParams] = useSearchParams();
+  // Project and service tags differ: switching drops the tag filter (one update, two would race).
+  const setView = (next: string) =>
+    setParams(
+      (p) => {
+        p.delete("tag");
+        if (next === "table") p.set("view", next);
+        else p.delete("view");
+        return p;
+      },
+      { replace: true },
+    );
+  const viewSwitch = (
+    <Segmented value={view} onValueChange={setView} aria-label="View">
+      <SegmentedItem value="cards">
+        <LayoutGrid />
+        Projects
+      </SegmentedItem>
+      <SegmentedItem value="table">
+        <Table2 />
+        Services
+      </SegmentedItem>
+    </Segmented>
+  );
   const shown = (projects.data ?? []).flatMap((p, i) => (filter.matches(p.tags) ? [{ p, svcs: services[i]?.data }] : []));
 
   return (
@@ -113,21 +141,30 @@ export function Projects() {
                 tone={all.some(needsAttention) ? "bad" : undefined}
               />
             </div>
-            <TagFilter items={(projects.data ?? []).map((p) => p.tags)} filter={filter} />
-            {shown.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">No project has every selected tag.</p>
+            {view === "table" ? (
+              <ServicesTable projects={projects.data} services={all} filter={filter} viewSwitch={viewSwitch} />
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {shown.map(({ p, svcs }) => (
-                  <ProjectCard
-                    key={p.id}
-                    project={p}
-                    services={svcs}
-                    previews={previewsOf(p.id)}
-                    server={multi ? serverName(p.serverId) : undefined}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {viewSwitch}
+                  <TagFilter items={(projects.data ?? []).map((p) => p.tags)} filter={filter} />
+                </div>
+                {shown.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">No project has every selected tag.</p>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {shown.map(({ p, svcs }) => (
+                      <ProjectCard
+                        key={p.id}
+                        project={p}
+                        services={svcs}
+                        previews={previewsOf(p.id)}
+                        server={multi ? serverName(p.serverId) : undefined}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </>
         )}

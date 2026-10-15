@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ListFilter, Plus, X } from "lucide-react";
 import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
-import { Popover } from "radix-ui";
+import { HoverCard, Popover } from "radix-ui";
 import { Section } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,15 +37,36 @@ export function TagChip({ name, color, className, children }: { name: string; co
   );
 }
 
-/** A card's tags, read-only. */
-export function TagChips({ tags, className }: { tags?: string[]; className?: string }) {
+/** A card's tags, read-only. With max, one line: the rest folds into a +N chip that shows them on hover. */
+export function TagChips({ tags, max, className }: { tags?: string[]; max?: number; className?: string }) {
   const { colorOf } = useTags();
   if (!tags?.length) return null;
+  const rest = max === undefined ? [] : tags.slice(max);
   return (
-    <div className={cn("flex flex-wrap gap-1", className)}>
-      {tags.map((t) => (
+    <div className={cn("flex gap-1", max === undefined ? "flex-wrap" : "flex-nowrap", className)}>
+      {tags.slice(0, max).map((t) => (
         <TagChip key={t} name={t} color={colorOf(t)} />
       ))}
+      {rest.length > 0 && (
+        <HoverCard.Root openDelay={200} closeDelay={100}>
+          <HoverCard.Trigger asChild>
+            <span aria-label={`Also ${rest.join(", ")}`} className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+              +{rest.length}
+            </span>
+          </HoverCard.Trigger>
+          <HoverCard.Portal>
+            <HoverCard.Content
+              sideOffset={4}
+              className="z-50 flex max-w-xs flex-wrap gap-1 rounded-md border bg-popover p-2 shadow-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {rest.map((t) => (
+                <TagChip key={t} name={t} color={colorOf(t)} />
+              ))}
+            </HoverCard.Content>
+          </HoverCard.Portal>
+        </HoverCard.Root>
+      )}
     </div>
   );
 }
@@ -70,7 +91,7 @@ export function useTagFilter() {
 
 /**
  * Narrows a list to the items carrying every picked tag: a menu of the tags
- * its items carry, with how many do, and the picked ones as removable chips.
+ * its items carry, with how many do; its trigger counts the picked ones.
  */
 export function TagFilter({ items, filter }: { items: (string[] | undefined)[]; filter: ReturnType<typeof useTagFilter> }) {
   const { colorOf } = useTags();
@@ -82,16 +103,9 @@ export function TagFilter({ items, filter }: { items: (string[] | undefined)[]; 
   const toggle = (t: string) => filter.set(filter.selected.includes(t) ? filter.selected.filter((s) => s !== t) : [...filter.selected, t]);
   return (
     <div className="flex flex-wrap items-center justify-end gap-1.5">
-      {filter.selected.map((t) => (
-        <TagChip key={t} name={t} color={colorOf(t)} className="py-1 pr-1">
-          <button type="button" aria-label={`Stop filtering by ${t}`} onClick={() => toggle(t)} className="rounded-sm opacity-60 hover:opacity-100">
-            <X className="size-3" />
-          </button>
-        </TagChip>
-      ))}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm">
+          <Button variant="outline">
             <ListFilter data-icon="inline-start" />
             Tags
             {filter.selected.length > 0 && <span className="rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums">{filter.selected.length}</span>}
