@@ -786,6 +786,28 @@ export type HostUsage = {
   uptimeSec: number;
 };
 
+export type SecurityStatus = "ok" | "warn" | "fail" | "unknown";
+
+/** One point of a host's security checklist. */
+export type SecurityItem = {
+  id: string;
+  title: string;
+  status: SecurityStatus;
+  /** What was found. */
+  detail?: string;
+  /** What to do about it. */
+  hint?: string;
+};
+
+/** The last check of a server's host; checkedAt is the zero time before the first. */
+export type SecurityReport = {
+  checkedAt: string;
+  os?: string;
+  items: SecurityItem[];
+  /** Set when the host couldn't be checked at all. */
+  error?: string;
+};
+
 export type ServerStats = {
   /** Null while the server can't be read. */
   current: HostUsage | null;
@@ -1388,6 +1410,8 @@ export const api = {
 
   servers: () => request<Server[]>("/servers"),
   serverStats: (id: string) => request<ServerStats>(`/servers/${id}/stats`),
+  serverSecurity: (id: string) => request<SecurityReport>(`/servers/${id}/security`),
+  checkServerSecurity: (id: string) => request<SecurityReport>(`/servers/${id}/security/check`, { method: "POST" }),
   /** With onStep, reports each step of reaching and preparing the server as it starts. */
   createServer: (s: ServerInput, onStep?: (step: string) => void) =>
     onStep ? progress<Server>("/servers", json("POST", s), onStep) : request<Server>("/servers", json("POST", s)),
