@@ -19,3 +19,13 @@ through SSH to any target), restore tests, logs and the reconciler all work the
 same on every server. The injected health probe is copied to each server once
 (it needs the same CPU architecture as the manager; otherwise replicas are
 gated on staying up instead).
+
+## Host usage
+
+Each server's page shows its **Host** section: CPU (with cores, load average
+and uptime), memory (with swap and the share of kipitiny's containers) and the
+disk holding Docker's data, with the last five minutes. They're read every ten
+seconds from inside the server's Traefik container, which sees the host's
+`/proc` and sits on Docker's data disk, so nothing else runs on the server.
+They're kept in memory only: a manager restart starts the charts over. The API
+serves them at `GET /api/servers/{id}/stats`.

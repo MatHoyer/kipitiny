@@ -158,6 +158,7 @@ var routeAccess = map[string]access{
 	"PUT /api/servers/{id}":                      admin,
 	"DELETE /api/servers/{id}":                   admin,
 	"GET /api/servers/{id}/terminal":             admin,
+	"GET /api/servers/{id}/stats":                feature(core.FeatureServers),
 	"POST /api/domains":                          admin,
 	"PATCH /api/domains/{id}":                    admin,
 	"DELETE /api/domains/{id}":                   admin,

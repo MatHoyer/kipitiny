@@ -768,6 +768,31 @@ export type ServiceStats = {
 
 export type ServiceUsage = Usage & { projectId: string; serverId: string };
 
+/** A server's host resource use at one moment. */
+export type HostUsage = {
+  at: string;
+  /** Percent of the whole machine: 100 is every core busy. */
+  cpu: number;
+  cores: number;
+  /** 1, 5 and 15 minute load average. */
+  load: [number, number, number];
+  memoryBytes: number;
+  memoryTotalBytes: number;
+  swapBytes: number;
+  swapTotalBytes: number;
+  /** The filesystem holding Docker's data. */
+  diskBytes: number;
+  diskTotalBytes: number;
+  uptimeSec: number;
+};
+
+export type ServerStats = {
+  /** Null while the server can't be read. */
+  current: HostUsage | null;
+  /** The last five minutes, one point every ten seconds. */
+  history: HostUsage[];
+};
+
 export type UptimeCheck = {
   serviceId: string;
   path: string;
@@ -1362,6 +1387,7 @@ export const api = {
   restores: (serviceId: string) => request<Restore[]>(`/services/${serviceId}/restores`),
 
   servers: () => request<Server[]>("/servers"),
+  serverStats: (id: string) => request<ServerStats>(`/servers/${id}/stats`),
   /** With onStep, reports each step of reaching and preparing the server as it starts. */
   createServer: (s: ServerInput, onStep?: (step: string) => void) =>
     onStep ? progress<Server>("/servers", json("POST", s), onStep) : request<Server>("/servers", json("POST", s)),
