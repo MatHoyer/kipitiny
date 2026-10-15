@@ -44,6 +44,7 @@ type ServiceInput struct {
 	Kind     store.ServiceKind `json:"kind"`
 	Image    string            `json:"image"`
 	Icon     string            `json:"icon"`
+	Tags     []string          `json:"tags"`
 	Replicas int               `json:"replicas"`
 	Port     int               `json:"port"`
 	Domain   string            `json:"domain"`
@@ -78,8 +79,10 @@ type ServiceInput struct {
 // map; secrets equal to SecretMask keep their stored value. Secrets names the
 // write-only entries; nil keeps the stored flags.
 type ServicePatch struct {
-	Image      *string           `json:"image"`
-	Icon       *string           `json:"icon"`
+	Image *string `json:"image"`
+	Icon  *string `json:"icon"`
+	// Tags replaces the service's tags; nil keeps them.
+	Tags       []string          `json:"tags"`
 	Replicas   *int              `json:"replicas"`
 	Port       *int              `json:"port"`
 	Domain     *string           `json:"domain"`
@@ -192,6 +195,11 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
 	}
+	tags, err := normalizeTags(in.Tags)
+	if err != nil {
+		return store.Service{}, err
+	}
+	svc.Tags = tags
 	env, secrets, envErr := mergeEnv(svc.Env, in.Secrets, nil, nil)
 	if envErr != nil {
 		return store.Service{}, envErr
@@ -308,6 +316,11 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 	}
 	if p.Icon != nil {
 		svc.Icon = strings.TrimSpace(*p.Icon)
+	}
+	if p.Tags != nil {
+		if svc.Tags, err = normalizeTags(p.Tags); err != nil {
+			return store.Service{}, err
+		}
 	}
 	if p.Replicas != nil {
 		svc.Replicas = *p.Replicas

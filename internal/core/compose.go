@@ -113,6 +113,7 @@ func exportFile(p store.Project, svcs []store.Service, checks map[string]store.U
 				PreDeploy:  s.PreDeploy,
 				PreBackup:  s.PreBackup,
 				Icon:       s.Icon,
+				Tags:       s.Tags,
 			},
 		}
 		if s.Replicas > 1 {
@@ -488,6 +489,7 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 		Kind:             store.ServiceKind(cs.X.Kind),
 		Image:            cs.Image,
 		Icon:             cs.X.Icon,
+		Tags:             cs.X.Tags,
 		Replicas:         cs.Replicas,
 		Port:             cs.X.Port,
 		Domain:           cs.X.Domain,
@@ -625,7 +627,7 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 	}
 	if len(fields) > 0 {
 		// Scaling, the icon and sleep mode apply without a deploy.
-		needsDeploy := slices.ContainsFunc(fields, func(f string) bool { return f != "replicas" && f != "icon" && f != "sleepAfter" })
+		needsDeploy := slices.ContainsFunc(fields, func(f string) bool { return f != "replicas" && f != "icon" && f != "tags" && f != "sleepAfter" })
 		a.updates = append(a.updates, pendingUpdate{id: old.ID, name: name, patch: patch, deploy: needsDeploy})
 	}
 	if uptimeChanged {
@@ -681,6 +683,7 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 	p := ServicePatch{
 		Image:            &in.Image,
 		Icon:             &in.Icon,
+		Tags:             in.Tags,
 		Replicas:         &in.Replicas,
 		Port:             &in.Port,
 		Domain:           &in.Domain,
@@ -706,6 +709,9 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 	if p.PublishedPorts == nil {
 		p.PublishedPorts = []store.PublishedPort{}
 	}
+	if p.Tags == nil {
+		p.Tags = []string{}
+	}
 	if old.Kind.IsDatabase() {
 		if in.MemoryMB == 0 {
 			p.MemoryMB = nil
@@ -726,6 +732,7 @@ func changedFields(old, svc store.Service) []string {
 	}
 	add("image", old.Image != svc.Image)
 	add("icon", old.Icon != svc.Icon)
+	add("tags", !slices.Equal(old.Tags, svc.Tags))
 	add("replicas", old.Replicas != svc.Replicas)
 	add("port", old.Port != svc.Port)
 	add("domain", old.Domain != svc.Domain)

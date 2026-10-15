@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, type ReactNode } from "react";
 import { RenameCard } from "@/components/rename-card";
+import { TagsCard } from "@/components/tags";
 import { DirtyContext } from "@/components/save-bar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
@@ -83,6 +84,16 @@ export function ServiceSettings({
     },
   });
 
+  const setTags = useMutation({
+    meta: { error: "Couldn't save the tags" },
+    mutationFn: (tags: string[]) => api.setServiceTags(svc.id, tags),
+    onSuccess: (updated) => {
+      qc.setQueryData(["service", svc.id], updated);
+      qc.invalidateQueries({ queryKey: ["services", updated.projectId] });
+      qc.invalidateQueries({ queryKey: ["tags"] });
+    },
+  });
+
   // Keys reset each card's form when another service opens; siblings need distinct ones.
   const content: Record<SectionId, ReactNode> = {
     general: (
@@ -98,6 +109,13 @@ export function ServiceSettings({
           disabled={!!gitPath}
           pending={rename.isPending}
           onRename={(name) => rename.mutate(name)}
+        />
+        <TagsCard
+          tags={svc.tags ?? []}
+          description={gitPath ? "Set with x-kipitiny.tags in the compose file." : "They group the project's services, which its page filters by."}
+          disabled={!!gitPath}
+          pending={setTags.isPending}
+          onSave={(tags) => setTags.mutate(tags)}
         />
         <GeneralCard key={`general-${svc.id}`} svc={svc} preview={preview} />
       </GitOwned>

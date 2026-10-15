@@ -23,6 +23,7 @@ type Store interface {
 	DeleteProject(ctx context.Context, id string) error
 	SetProjectEnv(ctx context.Context, id string, env map[string]string, secrets []string) (Project, error)
 	RenameProject(ctx context.Context, id, name string) error
+	SetProjectTags(ctx context.Context, id string, tags []string) error
 	SetProjectPreview(ctx context.Context, id string, p Preview) error
 	SetProjectSleep(ctx context.Context, id string, sleepAfterSeconds int) error
 	// SetProjectSleeping flags the project's deployed, running services as
@@ -37,6 +38,7 @@ type Store interface {
 	ListServices(ctx context.Context, projectID string) ([]Service, error)
 	UpdateService(ctx context.Context, s Service) (Service, error)
 	RenameService(ctx context.Context, id, name string) error
+	SetServiceTags(ctx context.Context, id string, tags []string) error
 	SetCurrentDeployment(ctx context.Context, serviceID, deploymentID string) error
 	// SetDeploymentImage records the image a deployment runs, pinned to the
 	// digest it was pulled at.
@@ -222,6 +224,10 @@ type Store interface {
 	// SetProjectMaintenance replaces a project's maintenance page and mode.
 	SetProjectMaintenance(ctx context.Context, projectID string, m Maintenance) error
 
+	ListTagColors(ctx context.Context) ([]TagColor, error)
+	// SetTagColor sets the color of a tag; an empty color deletes it.
+	SetTagColor(ctx context.Context, name, color string) error
+
 	ListCanvasPositions(ctx context.Context) ([]CanvasPosition, error)
 	// SaveCanvasPositions upserts ps and deletes the nodes in remove.
 	SaveCanvasPositions(ctx context.Context, ps []CanvasPosition, remove []string) error
@@ -359,8 +365,11 @@ type Project struct {
 	// the project is in maintenance mode. Set on its own, never by a
 	// compose file.
 	Maintenance Maintenance `bun:"maintenance,type:text" json:"maintenance"`
-	CreatedAt   time.Time   `bun:"created_at" json:"createdAt"`
-	UpdatedAt   time.Time   `bun:"updated_at" json:"updatedAt"`
+	// Tags group projects in the UI. Set on their own, never by a compose
+	// file.
+	Tags      []string  `bun:"tags" json:"tags"`
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+	UpdatedAt time.Time `bun:"updated_at" json:"updatedAt"`
 }
 
 // Preview is what a preview environment was last deployed from.
@@ -438,6 +447,9 @@ type Service struct {
 	// Icon names the logo the UI shows (e.g. ghost), set by a template or
 	// the user; empty picks one from the kind or image.
 	Icon string `bun:"icon" json:"icon"`
+	// Tags group services in the UI, like Icon set by a compose file or
+	// the user.
+	Tags []string `bun:"tags" json:"tags"`
 	// Replicas is always 1 for databases.
 	Replicas int `bun:"replicas" json:"replicas"`
 	// Port is the container port Traefik routes to; 0 when not public.
@@ -1003,6 +1015,15 @@ type Network struct {
 }
 
 // CanvasPosition is where a node of the map canvas was dragged to.
+// TagColor is the color a user picked for a tag, one of core's palette.
+type TagColor struct {
+	bun.BaseModel `bun:"table:tag_colors,alias:tag_color" json:"-"`
+
+	Name      string    `bun:"name,pk" json:"name"`
+	Color     string    `bun:"color" json:"color"`
+	UpdatedAt time.Time `bun:"updated_at" json:"-"`
+}
+
 type CanvasPosition struct {
 	bun.BaseModel `bun:"table:canvas_positions,alias:canvas_position" json:"-"`
 

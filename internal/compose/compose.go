@@ -70,14 +70,17 @@ const DockerSocket = "/var/run/docker.sock"
 type Ext struct {
 	// Kind is app, postgres, redis, mysql, mariadb or mongodb; empty means
 	// app, unless the image is the official postgres or redis one.
-	Kind       string   `yaml:"kind,omitempty"`
-	Domain     string   `yaml:"domain,omitempty"`
-	Port       int      `yaml:"port,omitempty"`
-	HealthPath string   `yaml:"health_path,omitempty"`
-	PreDeploy  string   `yaml:"pre_deploy,omitempty"`
-	PreBackup  string   `yaml:"pre_backup,omitempty"`
-	Icon       string   `yaml:"icon,omitempty"`
-	Secrets    []string `yaml:"secrets,omitempty"`
+	Kind       string `yaml:"kind,omitempty"`
+	Domain     string `yaml:"domain,omitempty"`
+	Port       int    `yaml:"port,omitempty"`
+	HealthPath string `yaml:"health_path,omitempty"`
+	PreDeploy  string `yaml:"pre_deploy,omitempty"`
+	PreBackup  string `yaml:"pre_backup,omitempty"`
+	Icon       string `yaml:"icon,omitempty"`
+	// Tags group services in the UI. Tagged so the hash of a service
+	// without any stays the same.
+	Tags    []string `yaml:"tags,omitempty" json:",omitempty"`
+	Secrets []string `yaml:"secrets,omitempty"`
 	// Password is a database's password, usually ${NAME}; empty generates
 	// one.
 	Password    string       `yaml:"password,omitempty"`
@@ -252,7 +255,7 @@ func Escape(s string) string {
 
 func isZeroExt(x Ext) bool {
 	return x.Kind == "" && x.Domain == "" && x.Port == 0 && x.HealthPath == "" && x.PreDeploy == "" &&
-		x.PreBackup == "" && x.Icon == "" && len(x.Secrets) == 0 && x.Password == "" && x.Middlewares == nil &&
+		x.PreBackup == "" && x.Icon == "" && len(x.Tags) == 0 && len(x.Secrets) == 0 && x.Password == "" && x.Middlewares == nil &&
 		x.Uptime == nil
 }
 

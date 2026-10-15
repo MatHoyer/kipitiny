@@ -129,6 +129,7 @@ services:
 | `pre_deploy` | shell command | apps | Runs once (`sh -c`) in a one-off container before a rollout, e.g. migrations. A failure aborts the deploy. |
 | `pre_backup` | shell command | apps | Runs in a running replica before each volume backup, e.g. to flush to disk. |
 | `icon` | name | all | Logo the UI shows (e.g. `ghost`, `n8n`). Default: from the kind or image. |
+| `tags` | list of names | all | [Tags](/docs/services#tags) grouping the service in the UI (up to 10, lowercased). Without it, the service has none: applying the file removes the ones set in the UI. |
 | `secrets` | list of env keys | apps | Which `environment` entries are secrets (write-only in the UI and API, masked everywhere, exported only with secrets). Without it, the values given as `${NAME}` are (see [Values](#values-references-and-secrets)). |
 | `password` | string, usually `${NAME}` | databases | The database's password at creation, to keep the credentials of a moved database. Empty generates one. It can't change afterwards. |
 | `middlewares` | mapping | public apps | Applied by Traefik to every request, below. |
@@ -157,7 +158,7 @@ services:
 
 `postgres`, `redis`, `mysql`, `mariadb` and `mongodb` services are managed: one replica, a data volume of their own, a generated password, private to the project, backed up and restore-tested.
 
-- Only `image`, the memory and CPU limits, `icon` and `password` apply. `environment`, `volumes` and `ports` are ignored with a warning; `stop_grace_period`, `domain` and `middlewares` are errors.
+- Only `image`, the memory and CPU limits, `icon`, `tags` and `password` apply. `environment`, `volumes` and `ports` are ignored with a warning; `stop_grace_period`, `domain` and `middlewares` are errors.
 - Postgres needs a major version in the tag (`postgres:17-alpine`). It can't change major version afterwards (that takes a dump and restore). Memory: at least 128 MB, default 512 MB.
 - Redis memory: at least 32 MB, default 256 MB; Redis keeps its data within 75% of it.
 - MySQL (default `mysql:8.4`) and MariaDB (default `mariadb:11.8`) memory: at least 256 MB, default 512 MB; half of it goes to InnoDB's buffer pool.
@@ -212,7 +213,7 @@ A variable whose value is a missing `${NAME}` keeps its current value; on a proj
 1. The whole file is parsed and every service validated against the project as it will be (variables, databases, ports, domains). Any error stops everything: nothing has changed.
 2. Project variables are set; services are created (databases first) and updated where something differs.
 3. With pruning (always with git, an option on import), apps the file doesn't list are deleted with their volumes. Databases the file doesn't list are only reported, and kept until deleted by hand.
-4. Created services, and services whose change needs it (anything but `replicas` and `icon`), are deployed: databases first, then apps once the databases are up. Scaling applies at once.
+4. Created services, and services whose change needs it (anything but `replicas`, `icon` and `tags`), are deployed: databases first, then apps once the databases are up. Scaling applies at once.
 
 A service can't change kind (an app into a database): delete it first.
 

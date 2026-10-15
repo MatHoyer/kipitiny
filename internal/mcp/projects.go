@@ -19,6 +19,7 @@ import (
 type ProjectSummary struct {
 	Name     string   `json:"name"`
 	Server   string   `json:"server"`
+	Tags     []string `json:"tags,omitempty"`
 	Services []string `json:"services"`
 	// Git is the compose file the project follows, when linked.
 	Git string `json:"git,omitempty"`
@@ -42,7 +43,7 @@ func (t *tools) listProjects(ctx context.Context, _ *mcp.CallToolRequest, _ stru
 	}
 	out := listProjectsOut{Projects: []ProjectSummary{}}
 	for _, p := range projects {
-		s := ProjectSummary{Name: p.Name, Server: p.ServerID, Services: []string{}}
+		s := ProjectSummary{Name: p.Name, Server: p.ServerID, Tags: p.Tags, Services: []string{}}
 		if i := slices.IndexFunc(servers, func(sv core.ServerView) bool { return sv.ID == p.ServerID }); i >= 0 {
 			s.Server = servers[i].Name
 		}
@@ -125,6 +126,44 @@ func (t *tools) renameService(ctx context.Context, _ *mcp.CallToolRequest, in re
 		}
 		view, err := t.c.RenameService(ctx, svc.ID, in.Name)
 		return renamed{Name: view.Name}, err
+	})
+	return nil, out, err
+}
+
+type projectTagsIn struct {
+	Project string   `json:"project" jsonschema:"the project name"`
+	Tags    []string `json:"tags" jsonschema:"every tag it should have; empty removes them all"`
+}
+
+type serviceTagsIn struct {
+	Service string   `json:"service" jsonschema:"the service as project/service, or its ID"`
+	Tags    []string `json:"tags" jsonschema:"every tag it should have; empty removes them all"`
+}
+
+type tagsOut struct {
+	Tags []string `json:"tags"`
+}
+
+func (t *tools) setProjectTags(ctx context.Context, _ *mcp.CallToolRequest, in projectTagsIn) (*mcp.CallToolResult, tagsOut, error) {
+	out, err := mutate(ctx, t.c, "set_project_tags", in.Project, func() (tagsOut, error) {
+		p, err := t.project(ctx, in.Project, core.PermSettings)
+		if err != nil {
+			return tagsOut{}, err
+		}
+		p, err = t.c.SetProjectTags(ctx, p.ID, in.Tags)
+		return tagsOut{Tags: p.Tags}, err
+	})
+	return nil, out, err
+}
+
+func (t *tools) setServiceTags(ctx context.Context, _ *mcp.CallToolRequest, in serviceTagsIn) (*mcp.CallToolResult, tagsOut, error) {
+	out, err := mutate(ctx, t.c, "set_service_tags", in.Service, func() (tagsOut, error) {
+		svc, err := t.service(ctx, in.Service, core.PermSettings)
+		if err != nil {
+			return tagsOut{}, err
+		}
+		view, err := t.c.SetServiceTags(ctx, svc.ID, in.Tags)
+		return tagsOut{Tags: view.Tags}, err
 	})
 	return nil, out, err
 }

@@ -149,6 +149,9 @@ func (s *Store) CreateProject(ctx context.Context, p store.Project) (store.Proje
 	if p.Secrets == nil {
 		p.Secrets = []string{}
 	}
+	if p.Tags == nil {
+		p.Tags = []string{}
+	}
 	if _, err := s.db.NewInsert().Model(&p).Exec(ctx); err != nil {
 		return store.Project{}, mapErr(err)
 	}
@@ -170,6 +173,21 @@ func (s *Store) ListProjects(ctx context.Context) ([]store.Project, error) {
 func (s *Store) RenameProject(ctx context.Context, id, name string) error {
 	res, err := s.db.NewUpdate().Model((*store.Project)(nil)).
 		Set("name = ?", name).Set("updated_at = ?", now()).Where("id = ?", id).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) SetProjectTags(ctx context.Context, id string, tags []string) error {
+	if tags == nil {
+		tags = []string{}
+	}
+	pr := store.Project{ID: id, Tags: tags, UpdatedAt: now()}
+	res, err := s.db.NewUpdate().Model(&pr).Column("tags", "updated_at").WherePK().Exec(ctx)
 	if err != nil {
 		return mapErr(err)
 	}
@@ -274,6 +292,9 @@ func (s *Store) CreateService(ctx context.Context, svc store.Service) (store.Ser
 	if svc.Networks == nil {
 		svc.Networks = []string{}
 	}
+	if svc.Tags == nil {
+		svc.Tags = []string{}
+	}
 	// Services always run on their project's server.
 	err := s.db.NewSelect().Model((*store.Project)(nil)).Column("server_id").
 		Where("id = ?", svc.ProjectID).Scan(ctx, &svc.ServerID)
@@ -301,8 +322,11 @@ func (s *Store) ListServices(ctx context.Context, projectID string) ([]store.Ser
 
 func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Service, error) {
 	svc.UpdatedAt = now()
+	if svc.Tags == nil {
+		svc.Tags = []string{}
+	}
 	res, err := s.db.NewUpdate().Model(&svc).
-		Column("image", "icon", "replicas", "port", "domain", "env", "secrets", "memory_mb", "cpus", "health_path", "healthcheck", "pre_deploy", "volumes", "middlewares", "pre_backup", "published_ports", "stop_grace_seconds", "host_network", "docker_socket", "updated_at").
+		Column("image", "icon", "tags", "replicas", "port", "domain", "env", "secrets", "memory_mb", "cpus", "health_path", "healthcheck", "pre_deploy", "volumes", "middlewares", "pre_backup", "published_ports", "stop_grace_seconds", "host_network", "docker_socket", "updated_at").
 		WherePK().Exec(ctx)
 	if err != nil {
 		return store.Service{}, mapErr(err)
@@ -316,6 +340,21 @@ func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Ser
 func (s *Store) RenameService(ctx context.Context, id, name string) error {
 	res, err := s.db.NewUpdate().Model((*store.Service)(nil)).
 		Set("name = ?", name).Set("updated_at = ?", now()).Where("id = ?", id).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) SetServiceTags(ctx context.Context, id string, tags []string) error {
+	if tags == nil {
+		tags = []string{}
+	}
+	svc := store.Service{ID: id, Tags: tags, UpdatedAt: now()}
+	res, err := s.db.NewUpdate().Model(&svc).Column("tags", "updated_at").WherePK().Exec(ctx)
 	if err != nil {
 		return mapErr(err)
 	}
@@ -1434,6 +1473,25 @@ func (s *Store) ListCanvasPositions(ctx context.Context) ([]store.CanvasPosition
 	ps := []store.CanvasPosition{}
 	err := s.db.NewSelect().Model(&ps).Order("node").Scan(ctx)
 	return ps, mapErr(err)
+}
+
+func (s *Store) ListTagColors(ctx context.Context) ([]store.TagColor, error) {
+	cs := []store.TagColor{}
+	err := s.db.NewSelect().Model(&cs).Order("name").Scan(ctx)
+	return cs, mapErr(err)
+}
+
+func (s *Store) SetTagColor(ctx context.Context, name, color string) error {
+	if color == "" {
+		_, err := s.db.NewDelete().Model((*store.TagColor)(nil)).Where("name = ?", name).Exec(ctx)
+		return mapErr(err)
+	}
+	_, err := s.db.NewInsert().Model(&store.TagColor{Name: name, Color: color, UpdatedAt: now()}).
+		On("CONFLICT (name) DO UPDATE").
+		Set("color = EXCLUDED.color").
+		Set("updated_at = EXCLUDED.updated_at").
+		Exec(ctx)
+	return mapErr(err)
 }
 
 func (s *Store) SaveCanvasPositions(ctx context.Context, ps []store.CanvasPosition, remove []string) error {
