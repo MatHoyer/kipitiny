@@ -71,7 +71,7 @@ func filesTestService(t *testing.T, svc store.Service, vol, seed string) (*Core,
 	if err != nil || code != 0 {
 		t.Fatalf("seed: %d %v %s", code, err, out.String())
 	}
-	return c, WithActor(ctx, Actor{Kind: "token", Name: "test", Role: store.RoleAdmin, Scope: store.ScopeRead}), svc
+	return c, WithActor(ctx, reader(svc, "files")), svc
 }
 
 func TestVolumeFilesDockerApp(t *testing.T) {
@@ -128,17 +128,18 @@ ln -s mods/a.jar ok-link`)
 		}
 	}
 
-	// Listing needs read; contents, like backups, admin.
-	if _, err := c.ReadVolumeFile(ctx, svc.ID, "data/server.properties"); !errors.Is(err, ErrForbidden) {
-		t.Errorf("read with a read token: %v", err)
+	// Contents need the files permission, like listing.
+	viewer := WithActor(ctx, reader(svc))
+	if _, err := c.ReadVolumeFile(viewer, svc.ID, "data/server.properties"); !errors.Is(err, ErrForbidden) {
+		t.Errorf("read as a viewer: %v", err)
 	}
-	if err := c.DownloadVolumeFile(ctx, svc.ID, "data/server.properties", io.Discard); !errors.Is(err, ErrForbidden) {
-		t.Errorf("download with a read token: %v", err)
+	if err := c.DownloadVolumeFile(viewer, svc.ID, "data/server.properties", io.Discard); !errors.Is(err, ErrForbidden) {
+		t.Errorf("download as a viewer: %v", err)
 	}
-	if err := c.ArchiveVolumeFiles(ctx, svc.ID, "data", nil, io.Discard); !errors.Is(err, ErrForbidden) {
-		t.Errorf("archive with a read token: %v", err)
+	if err := c.ArchiveVolumeFiles(viewer, svc.ID, "data", nil, io.Discard); !errors.Is(err, ErrForbidden) {
+		t.Errorf("archive as a viewer: %v", err)
 	}
-	ctx = WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin, Scope: store.ScopeAdmin})
+	ctx = WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin})
 
 	f, err := c.ReadVolumeFile(ctx, svc.ID, "data/server.properties")
 	if err != nil || f.Content != "motd=hi\n" || f.Type != "file" || f.Path != "data/server.properties" {
@@ -201,8 +202,8 @@ ln -s mods/a.jar ok-link`)
 		t.Error("helper kept after close")
 	}
 
-	if _, err := c.ListVolumeFiles(WithActor(context.Background(), Actor{Kind: "token", Scope: ""}), svc.ID, ""); !errors.Is(err, ErrForbidden) {
-		t.Errorf("no scope: %v", err)
+	if _, err := c.ListVolumeFiles(WithActor(context.Background(), Actor{Kind: "token"}), svc.ID, ""); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("no access: %v", err)
 	}
 }
 
@@ -256,10 +257,10 @@ chown 1000:1000 ops.json
 chmod 600 ops.json
 ln -s /etc etc-link
 ln -s .. up`)
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin, Scope: store.ScopeAdmin})
+	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin})
 
 	if err := c.MakeVolumeDir(readCtx, svc.ID, "data/x"); !errors.Is(err, ErrForbidden) {
-		t.Errorf("mkdir with a read token: %v", err)
+		t.Errorf("mkdir with only the files permission: %v", err)
 	}
 	if err := c.MakeVolumeDir(ctx, svc.ID, "data/mods/new/deep"); err != nil {
 		t.Fatal(err)
@@ -387,7 +388,7 @@ ln -s .. up`)
 
 func TestVolumeFilesDockerDatabaseWrite(t *testing.T) {
 	c, _, svc := filesTestService(t, store.Service{Name: "db", Kind: store.ServiceKindRedis}, "", `printf x > /seed/dump.rdb`)
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin, Scope: store.ScopeAdmin})
+	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin})
 	if err := c.DeleteVolumePaths(ctx, svc.ID, []string{"data/dump.rdb"}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("delete in a database: %v", err)
 	}
@@ -425,7 +426,7 @@ func containerFilesTest(t *testing.T, kind store.ServiceKind, image string, cmd 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = dk.RemoveContainerAndVolumes(context.Background(), id) })
-	return c, WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin, Scope: store.ScopeAdmin}), svc, id
+	return c, WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin}), svc, id
 }
 
 func TestVolumeFilesDockerContainer(t *testing.T) {

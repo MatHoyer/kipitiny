@@ -822,31 +822,21 @@ type BackupSchedule struct {
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 }
 
-type Scope string
-
-const (
-	ScopeRead   Scope = "read"   // look only
-	ScopeDeploy Scope = "deploy" // plus deploy, rollback, start/stop, backups
-	ScopeAdmin  Scope = "admin"  // everything
-)
-
-// Allows reports whether a holder of s may do what needs want.
-func (s Scope) Allows(want Scope) bool {
-	rank := map[Scope]int{ScopeRead: 1, ScopeDeploy: 2, ScopeAdmin: 3}
-	return rank[s] >= rank[want] && rank[want] > 0
-}
-
 type APIToken struct {
 	bun.BaseModel `bun:"table:api_tokens,alias:token" json:"-"`
 
 	ID   string `bun:"id,pk" json:"id"`
 	Name string `bun:"name" json:"name"`
 	// UserID owns the token, which never does more than its owner may.
-	UserID     string     `bun:"user_id,nullzero" json:"userId"`
-	TokenHash  string     `bun:"token_hash" json:"-"`
-	Scope      Scope      `bun:"scope" json:"scope"`
-	CreatedAt  time.Time  `bun:"created_at" json:"createdAt"`
-	LastUsedAt *time.Time `bun:"last_used_at" json:"lastUsedAt,omitempty"`
+	UserID    string `bun:"user_id,nullzero" json:"userId"`
+	TokenHash string `bun:"token_hash" json:"-"`
+	// Restricted limits the token to Features and Grants (project IDs to
+	// permissions), within its owner's; otherwise it has all of them.
+	Restricted bool                `bun:"restricted" json:"restricted"`
+	Features   []string            `bun:"features" json:"features"`
+	Grants     map[string][]string `bun:"grants" json:"grants"`
+	CreatedAt  time.Time           `bun:"created_at" json:"createdAt"`
+	LastUsedAt *time.Time          `bun:"last_used_at" json:"lastUsedAt,omitempty"`
 }
 
 // Domain is a base domain (example.com) offered in the UI when giving a

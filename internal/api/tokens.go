@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/MatHoyer/kipitiny/internal/core"
 )
 
 func (a *API) listTokens(w http.ResponseWriter, r *http.Request) {
@@ -17,14 +17,11 @@ func (a *API) listTokens(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createToken(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Name  string      `json:"name"`
-		Scope store.Scope `json:"scope"`
-	}
+	var body core.TokenInput
 	if !decode(w, r, &body) {
 		return
 	}
-	t, err := a.core.CreateAPIToken(r.Context(), body.Name, body.Scope)
+	t, err := a.core.CreateAPIToken(r.Context(), body)
 	if err != nil {
 		a.fail(w, err)
 		return

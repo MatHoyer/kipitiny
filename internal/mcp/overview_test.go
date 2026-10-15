@@ -1,23 +1,27 @@
 package mcp
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/MatHoyer/kipitiny/internal/store"
+
+	"github.com/MatHoyer/kipitiny/internal/core"
 )
 
 func TestOverviewTools(t *testing.T) {
 	e := newEnv(t)
-	read, admin := e.session(store.ScopeRead), e.session(store.ScopeAdmin)
+	e.st.CreateProject(context.Background(), store.Project{Name: "shop"})
+	read, admin := e.session(core.PermView), e.session()
 
-	if out, isErr := e.call(read, "list_git_repos", nil); isErr || out != `{"providers":[]}` {
+	if out, isErr := e.call(admin, "list_git_repos", nil); isErr || out != `{"providers":[]}` {
 		t.Errorf("list_git_repos without providers: %s", out)
 	}
-	if out, isErr := e.call(read, "list_git_repos", map[string]any{"provider": "github"}); !isErr || !strings.Contains(out, "not found") {
+	if out, isErr := e.call(admin, "list_git_repos", map[string]any{"provider": "github"}); !isErr || !strings.Contains(out, "not found") {
 		t.Errorf("list_git_repos unknown provider: %s", out)
 	}
-	if out, isErr := e.call(read, "list_git_branches", map[string]any{"provider": "github", "repo": "me/shop"}); !isErr || !strings.Contains(out, "not found") {
+	if out, isErr := e.call(admin, "list_git_branches", map[string]any{"provider": "github", "repo": "me/shop"}); !isErr || !strings.Contains(out, "not found") {
 		t.Errorf("list_git_branches unknown provider: %s", out)
 	}
 	if out, isErr := e.call(read, "get_topology", map[string]any{"project": "nope"}); !isErr || !strings.Contains(out, "not found") {
@@ -28,7 +32,7 @@ func TestOverviewTools(t *testing.T) {
 	}
 
 	// The audit log is admin only, and holds refused attempts.
-	if out, isErr := e.call(read, "get_audit_log", nil); !isErr || !strings.Contains(out, "needs the admin scope") {
+	if out, isErr := e.call(read, "get_audit_log", nil); !isErr || !strings.Contains(out, "forbidden") {
 		t.Errorf("get_audit_log with a read token: %s", out)
 	}
 	e.call(read, "delete_project", map[string]any{"project": "shop", "confirm": "shop"})

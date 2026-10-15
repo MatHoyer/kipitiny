@@ -188,7 +188,7 @@ func volumePath(svc store.Service, p string) (vol fileVolume, abs string, err er
 
 // ListVolumeFiles lists a folder of svc's volumes, or the volumes at "".
 func (c *Core) ListVolumeFiles(ctx context.Context, serviceID, p string) (VolumeListing, error) {
-	if err := c.requireOn(ctx, serviceID, store.ScopeRead, PermFiles); err != nil {
+	if err := c.requireOn(ctx, serviceID, PermFiles); err != nil {
 		return VolumeListing{}, err
 	}
 	svc, err := c.store.GetService(ctx, serviceID)
@@ -241,7 +241,7 @@ exit 0`
 
 // StatVolumePath describes one path of svc's volumes, symlinks followed.
 func (c *Core) StatVolumePath(ctx context.Context, serviceID, p string) (VolumeEntry, error) {
-	if err := c.requireOn(ctx, serviceID, store.ScopeRead, PermFiles); err != nil {
+	if err := c.requireOn(ctx, serviceID, PermFiles); err != nil {
 		return VolumeEntry{}, err
 	}
 	svc, err := c.store.GetService(ctx, serviceID)
@@ -277,7 +277,7 @@ func (c *Core) StatVolumePath(ctx context.Context, serviceID, p string) (VolumeE
 // FilesTextMax; binary files are refused (download them). Contents may hold
 // secrets, like backups: admin only.
 func (c *Core) ReadVolumeFile(ctx context.Context, serviceID, p string) (VolumeFile, error) {
-	if err := c.requireOn(ctx, serviceID, store.ScopeAdmin, PermFiles); err != nil {
+	if err := c.requireOn(ctx, serviceID, PermFiles); err != nil {
 		return VolumeFile{}, err
 	}
 	svc, err := c.store.GetService(ctx, serviceID)
@@ -326,7 +326,7 @@ head -c ` + strconv.Itoa(FilesTextMax+1) + ` "$p"`
 // DownloadVolumeFile streams a file of svc's volumes to w as it is; admin
 // only.
 func (c *Core) DownloadVolumeFile(ctx context.Context, serviceID, p string, w io.Writer) error {
-	if err := c.requireOn(ctx, serviceID, store.ScopeAdmin, PermFiles); err != nil {
+	if err := c.requireOn(ctx, serviceID, PermFiles); err != nil {
 		return err
 	}
 	svc, err := c.store.GetService(ctx, serviceID)
@@ -354,7 +354,7 @@ cat "$p"`, vol, abs), func(r io.Reader) error {
 // e.g. a selection; empty for the folder itself) of svc's volumes to w.
 // Symlinks are archived as links. Admin only.
 func (c *Core) ArchiveVolumeFiles(ctx context.Context, serviceID, dir string, names []string, w io.Writer) error {
-	if err := c.requireOn(ctx, serviceID, store.ScopeAdmin, PermFiles); err != nil {
+	if err := c.requireOn(ctx, serviceID, PermFiles); err != nil {
 		return err
 	}
 	svc, err := c.store.GetService(ctx, serviceID)

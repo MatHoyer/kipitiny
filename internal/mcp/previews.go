@@ -7,7 +7,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/MatHoyer/kipitiny/internal/core"
-	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
 type listPreviewsIn struct {
@@ -19,7 +18,7 @@ type listPreviewsOut struct {
 }
 
 func (t *tools) listPreviews(ctx context.Context, _ *mcp.CallToolRequest, in listPreviewsIn) (*mcp.CallToolResult, listPreviewsOut, error) {
-	if err := core.Require(ctx, store.ScopeRead); err != nil {
+	if err := core.Authenticated(ctx); err != nil {
 		return nil, listPreviewsOut{}, err
 	}
 	p, err := t.project(ctx, in.Project, core.PermView)
@@ -42,7 +41,7 @@ type deployPreviewIn struct {
 }
 
 func (t *tools) deployPreview(ctx context.Context, _ *mcp.CallToolRequest, in deployPreviewIn) (*mcp.CallToolResult, core.PreviewView, error) {
-	out, err := mutate(ctx, t.c, store.ScopeDeploy, "deploy_preview", in.Project+"/"+in.Name, func() (core.PreviewView, error) {
+	out, err := mutate(ctx, t.c, "deploy_preview", in.Project+"/"+in.Name, func() (core.PreviewView, error) {
 		p, err := t.project(ctx, in.Project, core.PermDeploy)
 		if err != nil {
 			return core.PreviewView{}, err
@@ -70,7 +69,7 @@ type closePreviewOut struct {
 }
 
 func (t *tools) closePreview(ctx context.Context, _ *mcp.CallToolRequest, in closePreviewIn) (*mcp.CallToolResult, closePreviewOut, error) {
-	out, err := mutate(ctx, t.c, store.ScopeDeploy, "close_preview", in.Project+"/"+in.Name, func() (closePreviewOut, error) {
+	out, err := mutate(ctx, t.c, "close_preview", in.Project+"/"+in.Name, func() (closePreviewOut, error) {
 		p, err := t.project(ctx, in.Project, core.PermDeploy)
 		if err != nil {
 			return closePreviewOut{}, err

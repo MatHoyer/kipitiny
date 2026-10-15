@@ -9,7 +9,7 @@ Adminer, Compass or RedisInsight next to it. The manager runs the database's own
 client (`psql`, `mysql`/`mariadb`, `mongosh`, `redis-cli`) inside its container,
 like backups do: nothing is exposed, nothing is installed, and the client always
 matches the server. The database must be running. Agents get the same through
-[MCP](/docs/api) tools, with the same scopes.
+[MCP](/docs/api) tools, with the same permissions.
 
 On MySQL, MariaDB and MongoDB, browsing and the read-only console use a
 **read-only user** the manager creates in the database (`kipitiny_read`, with
@@ -136,8 +136,8 @@ queries are kept per database in this browser only (*History*).
 
 ## Access
 
-Browsing (and CSV export) needs a **read** token; editing and the console need
-**admin**, which the web UI always has. Every console run lands in the
+Browsing, CSV export and the read-only console need the *data* permission;
+editing and writing queries need *data write*. Every console run lands in the
 [audit log](/docs/api) as `data console` or `data console (write)`, every save
 as `data edit`, every create or drop as `data schema`, with the service but
 without the query or values, which may hold secrets.

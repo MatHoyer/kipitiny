@@ -26,7 +26,7 @@ func previewCmd() error {
 	var opts previewOptions
 	tags, env := pairs{}, pairs{}
 	fs.StringVar(&cl.base, "url", os.Getenv("KIPITINY_URL"), "manager URL (env KIPITINY_URL)")
-	fs.StringVar(&cl.token, "token", os.Getenv("KIPITINY_TOKEN"), "API token with the deploy scope (env KIPITINY_TOKEN)")
+	fs.StringVar(&cl.token, "token", os.Getenv("KIPITINY_TOKEN"), "API token with the deploy permission (env KIPITINY_TOKEN)")
 	project := fs.String("project", "", "the project previewed, by name or ID")
 	name := fs.String("name", "", "the preview's name, e.g. pr-12 (lowercase letters, digits, dashes)")
 	fs.Var(tags, "tag", "service=tag (or service=sha256:…) to deploy; repeat per service; others keep the project's image")

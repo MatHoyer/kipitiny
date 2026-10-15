@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MatHoyer/kipitiny/internal/core"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -16,13 +17,13 @@ func TestDeleteTools(t *testing.T) {
 	if _, err := e.st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
-	read, admin := e.session(store.ScopeRead), e.session(store.ScopeAdmin)
+	read, admin := e.session(core.PermView), e.session()
 
 	for name, args := range map[string]map[string]any{
 		"delete_service": {"service": "shop/web", "confirm": "web"},
 		"delete_project": {"project": "shop", "confirm": "shop"},
 	} {
-		if out, isErr := e.call(read, name, args); !isErr || !strings.Contains(out, "needs the admin scope") {
+		if out, isErr := e.call(read, name, args); !isErr || !strings.Contains(out, "forbidden") {
 			t.Errorf("%s with a read token: %s", name, out)
 		}
 	}

@@ -63,8 +63,7 @@ var Features = []Feature{
 	FeatureNetworks, FeatureNotifications, FeatureDomains, FeatureCreateProjects,
 }
 
-// Admin reports whether the actor may do everything (still within a
-// token's scope).
+// Admin reports whether the actor may do everything.
 func (a Actor) Admin() bool { return a.Role == store.RoleAdmin }
 
 // Can reports whether the actor holds p in the project.
@@ -204,7 +203,7 @@ func (c *Core) AuthorizeService(ctx context.Context, ref string, p Perm) (store.
 
 // UserActor is the actor of a signed-in user, with their grants.
 func (c *Core) UserActor(ctx context.Context, u store.User) (Actor, error) {
-	a := Actor{Kind: "user", Name: u.Username, Scope: store.ScopeAdmin, UserID: u.ID, Role: u.Role, Features: u.Features}
+	a := Actor{Kind: "user", Name: u.Username, UserID: u.ID, Role: u.Role, Features: u.Features}
 	return c.withGrants(ctx, a)
 }
 
@@ -220,20 +219,25 @@ func (c *Core) withGrants(ctx context.Context, a Actor) (Actor, error) {
 	for _, g := range gs {
 		a.Grants[g.ProjectID] = g.Perms
 	}
-	if len(gs) == 0 {
-		return a, nil
+	return a, c.withPreviews(ctx, a.Grants)
+}
+
+// withPreviews adds to grants the previews of the projects in it: a
+// project's previews come with it.
+func (c *Core) withPreviews(ctx context.Context, grants map[string][]string) error {
+	if len(grants) == 0 {
+		return nil
 	}
-	// A project's previews come with it.
 	ps, err := c.store.ListProjects(ctx)
 	if err != nil {
-		return Actor{}, err
+		return err
 	}
 	for _, p := range ps {
-		if perms, ok := a.Grants[p.ParentID]; ok && p.ParentID != "" {
-			a.Grants[p.ID] = perms
+		if perms, ok := grants[p.ParentID]; ok && p.ParentID != "" {
+			grants[p.ID] = perms
 		}
 	}
-	return a, nil
+	return nil
 }
 
 // check is Authorize for work that may run without an actor (loops, the
@@ -318,12 +322,8 @@ func (c *Core) grantCreator(ctx context.Context, projectID string) error {
 	return nil
 }
 
-// requireOn checks the actor's token scope and its permission on the
-// service's project.
-func (c *Core) requireOn(ctx context.Context, serviceID string, scope store.Scope, p Perm) error {
-	if err := Require(ctx, scope); err != nil {
-		return err
-	}
+// requireOn checks the actor's permission on the service's project.
+func (c *Core) requireOn(ctx context.Context, serviceID string, p Perm) error {
 	projectID, err := c.ProjectOf(ctx, IDService, serviceID)
 	if err != nil {
 		return err

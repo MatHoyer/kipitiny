@@ -18,7 +18,7 @@ type listTemplatesOut struct {
 }
 
 func (t *tools) listTemplates(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listTemplatesOut, error) {
-	if err := core.Require(ctx, store.ScopeRead); err != nil {
+	if err := core.Authenticated(ctx); err != nil {
 		return nil, listTemplatesOut{}, err
 	}
 	return nil, listTemplatesOut{Templates: t.c.ListTemplates()}, nil
@@ -33,7 +33,7 @@ type installTemplateIn struct {
 }
 
 func (t *tools) installTemplate(ctx context.Context, _ *mcp.CallToolRequest, in installTemplateIn) (*mcp.CallToolResult, core.TemplateResult, error) {
-	out, err := mutate(ctx, t.c, store.ScopeAdmin, "install_template", in.Project, func() (core.TemplateResult, error) {
+	out, err := mutate(ctx, t.c, "install_template", in.Project, func() (core.TemplateResult, error) {
 		req := core.TemplateInstall{Values: in.Values, DryRun: in.DryRun}
 		p, err := t.findProject(ctx, in.Project)
 		switch {

@@ -214,7 +214,7 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 			return PreviewView{}, fmt.Errorf("%w: invalid env var name %q", ErrInvalid, k)
 		}
 		if envRefRe.MatchString(v) {
-			// A deploy token must not reach secrets through a reference.
+			// CI with the deploy permission must not reach secrets through a reference.
 			return PreviewView{}, fmt.Errorf("%w: %s: CI's values are plain text, references go in the preview settings", ErrInvalid, k)
 		}
 	}

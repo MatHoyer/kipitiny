@@ -77,7 +77,7 @@ func dataTestDB(t *testing.T, kind store.ServiceKind, cfg *container.Config) (*C
 		t.Fatalf("%s: %v", cmd, err)
 		return ""
 	}
-	return c, WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin, Scope: store.ScopeAdmin}), svc, exec
+	return c, WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin}), svc, exec
 }
 
 func TestDataBrowserDockerPostgres(t *testing.T) {
@@ -185,8 +185,8 @@ CREATE TABLE tags (note int REFERENCES notes, a int, b int, FOREIGN KEY (a, b) R
 			t.Errorf("create %q: %v", name, err)
 		}
 	}
-	if _, err := c.CreatePgDatabase(WithActor(context.Background(), Actor{Role: store.RoleAdmin, Scope: store.ScopeRead}), svc.ID, "nope", ""); !errors.Is(err, ErrForbidden) {
-		t.Errorf("read scope create: %v", err)
+	if _, err := c.CreatePgDatabase(WithActor(context.Background(), reader(svc, "data")), svc.ID, "nope", ""); !errors.Is(err, ErrForbidden) {
+		t.Errorf("data reader create: %v", err)
 	}
 	for _, db := range []string{"missing", "host=example.com dbname=app", "template0"} {
 		if _, err := c.PgTables(ctx, svc.ID, db); !errors.Is(err, ErrInvalid) {
@@ -194,8 +194,8 @@ CREATE TABLE tags (note int REFERENCES notes, a int, b int, FOREIGN KEY (a, b) R
 		}
 	}
 
-	if _, err := c.PgTables(WithActor(context.Background(), Actor{Role: store.RoleAdmin, Scope: store.ScopeRead}), svc.ID, ""); err != nil {
-		t.Errorf("read scope: %v", err)
+	if _, err := c.PgTables(WithActor(context.Background(), reader(svc, "data")), svc.ID, ""); err != nil {
+		t.Errorf("data reader: %v", err)
 	}
 	if _, err := c.PgTables(context.Background(), svc.ID, ""); !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("no actor: %v", err)
@@ -335,8 +335,8 @@ func TestDataConsoleDockerPostgres(t *testing.T) {
 	if len(audit) != 7 || audit[0].Action != "data console (write)" || audit[0].Target != svc.ID {
 		t.Errorf("audit: %+v", audit)
 	}
-	if _, err := c.DataConsole(WithActor(context.Background(), Actor{Role: store.RoleAdmin, Scope: store.ScopeRead}), svc.ID, "", "SELECT 1", false); !errors.Is(err, ErrForbidden) {
-		t.Errorf("read scope: %v", err)
+	if _, err := c.DataConsole(WithActor(context.Background(), reader(svc)), svc.ID, "", "SELECT 1", false); !errors.Is(err, ErrForbidden) {
+		t.Errorf("viewer console: %v", err)
 	}
 }
 
@@ -467,4 +467,9 @@ func TestBackupDockerOtherDatabase(t *testing.T) {
 	if _, err := c.CreateBackupSchedule(ctx, svc.ID, ScheduleInput{Cron: "@daily", KeepLast: 3, Database: "nope"}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("schedule of nope: %v", err)
 	}
+}
+
+// reader is a member who may view svc's project, plus perms.
+func reader(svc store.Service, perms ...string) Actor {
+	return Actor{Kind: "user", Role: store.RoleMember, Grants: map[string][]string{svc.ProjectID: append([]string{"view"}, perms...)}}
 }

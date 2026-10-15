@@ -9,6 +9,14 @@ Add a notice under `## Unreleased` in the change that causes it, as
 `- warning: …` (disruptive) or `- info: …`; continue on indented lines. The
 release renames the section to its version.
 
+## Unreleased
+- info: API tokens lose their scope (read, deploy, admin): a token does what
+  its owner may, or only what it's restricted to. Read and deploy tokens
+  become restricted tokens on the projects their owner could reach at the
+  upgrade (read: view and data; deploy: plus deploy and backups); they don't
+  reach projects created later, nor users and settings. Create a new token if
+  one needs more.
+
 ## 0.29.0
 - warning: Sleep mode moves from apps to projects: a sleeping project stops
   every service, databases and workers too. Apps' own sleep settings are

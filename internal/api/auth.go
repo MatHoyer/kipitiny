@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"github.com/MatHoyer/kipitiny/internal/core"
-	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
 const sessionCookie = "kipitiny_session"
@@ -52,59 +50,8 @@ func sessionOnly(pattern string) bool {
 		strings.HasPrefix(pattern, "GET /api/git-providers/github/") || pattern == "GET /api/git-providers/oauth/callback"
 }
 
-// deployRoutes are the mutations a deploy-scoped token may perform.
-var deployRoutes = map[string]bool{
-	"POST /api/services/{id}/deploy":   true,
-	"POST /api/services/{id}/rollback": true,
-	"POST /api/services/{id}/{action}": true, // start, stop, restart
-	"POST /api/services/{id}/backups":  true,
-	"POST /api/projects/{id}/backups":  true,
-	"POST /api/backups/{id}/verify":    true,
-	// A preview runs the parent's images with other tags (never another
-	// repository) and no secret the preview settings don't give.
-	"PUT /api/projects/{id}/previews/{name}":    true,
-	"DELETE /api/projects/{id}/previews/{name}": true,
-}
-
-// secretReads reveal credentials or backup contents: admin only.
-var secretReads = map[string]bool{
-	"GET /api/services/{id}/connection": true,
-	// The webhook secret.
-	"GET /api/projects/{id}/git": true,
-	// Connections finished in the browser change providers.
-	"GET /api/git-providers/github/launch":    true,
-	"GET /api/git-providers/github/created":   true,
-	"GET /api/git-providers/github/installed": true,
-	"GET /api/git-providers/oauth/callback":   true,
-	"GET /api/storage/{id}/key":               true,
-	"GET /api/backups/{id}/download":          true,
-	// Volume file contents may hold secrets, like backups.
-	"GET /api/services/{id}/files/content":  true,
-	"GET /api/services/{id}/files/download": true,
-	"GET /api/audit":                        true,
-	// Shells in a container or on a host.
-	"GET /api/services/{id}/terminal": true,
-	"GET /api/servers/{id}/terminal":  true,
-	// Names only, but they map what the password manager token can read.
-	"GET /api/secret-connections/{id}/vaults": true,
-	"GET /api/secret-connections/{id}/items":  true,
-}
-
-// requiredScope maps a route to the scope an API token needs.
-func requiredScope(pattern string) store.Scope {
-	switch {
-	case secretReads[pattern]:
-		return store.ScopeAdmin
-	case strings.HasPrefix(pattern, "GET "):
-		return store.ScopeRead
-	case deployRoutes[pattern]:
-		return store.ScopeDeploy
-	}
-	return store.ScopeAdmin
-}
-
 // protect enforces same-origin mutations, authentication (session cookie or
-// bearer token), token scopes, and records every mutation in the audit log.
+// bearer token), and records every mutation in the audit log.
 func (a *API) protect(mux *http.ServeMux) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !sameOrigin(r) {
@@ -125,10 +72,6 @@ func (a *API) protect(mux *http.ServeMux) http.Handler {
 			writeError(w, http.StatusForbidden, "not available to API tokens")
 			return
 		}
-		if !actor.Scope.Allows(requiredScope(pattern)) {
-			writeError(w, http.StatusForbidden, fmt.Sprintf("this token's scope (%s) does not allow that", actor.Scope))
-			return
-		}
 		ctx := core.WithActor(r.Context(), actor)
 		if r.Method == http.MethodGet || r.Method == http.MethodHead {
 			mux.ServeHTTP(w, r.WithContext(ctx))
@@ -144,7 +87,7 @@ func (a *API) protect(mux *http.ServeMux) http.Handler {
 }
 
 // Authenticated protects a non-API handler (e.g. /mcp) with the same session
-// or token authentication; the handler enforces scopes itself.
+// or token authentication; the handler enforces permissions itself.
 func (a *API) Authenticated(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !sameOrigin(r) {

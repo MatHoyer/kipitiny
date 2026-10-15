@@ -87,7 +87,7 @@ export function StateBadge({ state, className }: { state: string; className?: st
   );
 }
 
-/** Small label, e.g. a token scope or "age". */
+/** Small label, e.g. a token's access or "age". */
 export function Tag({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <span className={cn("rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground", className)}>

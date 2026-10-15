@@ -56,7 +56,7 @@ func TestSchemaDockerPostgres(t *testing.T) {
 
 func TestSchemaDockerMySQL(t *testing.T) {
 	c, ctx, svc, _ := dumpTestDB(t, store.ServiceKindMariaDB)
-	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin, Scope: store.ScopeAdmin})
+	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin})
 	cols := []NewColumn{{Name: "id", Type: "bigint auto_increment", PrimaryKey: true}, {Name: "at", Type: "datetime", Default: "CURRENT_TIMESTAMP"}}
 	if _, err := c.CreateTable(ctx, svc.ID, "", "", "items", cols, true); err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func TestSchemaDockerMySQL(t *testing.T) {
 
 func TestSchemaDockerMongo(t *testing.T) {
 	c, ctx, svc, _ := dumpTestDB(t, store.ServiceKindMongoDB)
-	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin, Scope: store.ScopeAdmin})
+	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin})
 	if _, err := c.CreateCollection(ctx, svc.ID, "", "events", true); err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,6 @@
 // Package mcp exposes task-oriented tools to AI agents over the Model
 // Context Protocol (Streamable HTTP at /mcp). Tools are thin adapters over
-// the core layer; each checks the caller's token scope, masks secrets like
+// the core layer; each checks the caller's permissions, masks secrets like
 // the REST API and records mutations in the audit log.
 package mcp
 
@@ -40,9 +40,8 @@ func Handler(c *core.Core, version string) http.Handler {
 	docsIndex, docsBase, docsSources := docs(version)
 	server := mcp.NewServer(&mcp.Implementation{Name: "kipitiny", Version: version}, &mcp.ServerOptions{
 		Instructions: "Manage apps and databases (PostgreSQL, Redis, MySQL, MariaDB, MongoDB) on this kipitiny server. " +
-			"Refer to services as project/service. Read tools need a read token; " +
-			"deploy, rollback, service_action, backup_database, backup_project and verify_backup need deploy (with deploy, deploy_image only changes the tag of an existing app); " +
-			"the other tools need admin (each says so). A member's token also needs the matching permission on the project (the refusal names it). Deleting a service or project or restoring a backup takes its name as an explicit confirmation. " +
+			"Refer to services as project/service. A token may do what its owner may, or only the projects and permissions it was restricted to; " +
+			"a refusal names the missing permission (with deploy but not settings, deploy_image only changes the tag of an existing app). Deleting a service or project or restoring a backup takes its name as an explicit confirmation. " +
 			"Documentation of this version, as markdown: " + docsIndex + " lists every page; read the relevant one before guessing how a feature works. " +
 			"If the site is unreachable, the same pages are in " + docsSources + ".",
 	})
@@ -61,23 +60,23 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "get_audit_log", Annotations: readOnly,
 		Description: "Recent mutations by users, tokens and agents, including refused ones: actor, action, target, status and error. Needs admin."}, t.getAuditLog)
 	mcp.AddTool(server, &mcp.Tool{Name: "create_project",
-		Description: "Create an empty project on a server (this one by default). Add services with deploy_image, apply_project_compose or link_project_git. Needs admin."}, t.createProject)
+		Description: "Create an empty project on a server (this one by default). Add services with deploy_image, apply_project_compose or link_project_git."}, t.createProject)
 	mcp.AddTool(server, &mcp.Tool{Name: "rename_project",
-		Description: "Rename a project. Its containers are renamed in place; nothing restarts. Needs admin."}, t.renameProject)
+		Description: "Rename a project. Its containers are renamed in place; nothing restarts."}, t.renameProject)
 	mcp.AddTool(server, &mcp.Tool{Name: "rename_service",
-		Description: "Rename a service. Nothing restarts; until its next deploy it also answers to its old name on the project network. Renaming a database rewrites the {{ db.NAME.* }} references to it and redeploys the apps using it. Not for projects linked to git (edit the file). Needs admin."}, t.renameService)
+		Description: "Rename a service. Nothing restarts; until its next deploy it also answers to its old name on the project network. Renaming a database rewrites the {{ db.NAME.* }} references to it and redeploys the apps using it. Not for projects linked to git (edit the file)."}, t.renameService)
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_service", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Delete a service: its containers, volumes (data) and deploy logs; backups are kept. confirm must repeat the service name. " +
-			"A database still referenced by an app, or a service of a git-linked project, is refused. Needs admin."}, t.deleteService)
+			"A database still referenced by an app, or a service of a git-linked project, is refused."}, t.deleteService)
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_project", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
-		Description: "Delete a project with every service, volume and its network; backups are kept. confirm must repeat the project name. Needs admin."}, t.deleteProject)
+		Description: "Delete a project with every service, volume and its network; backups are kept. confirm must repeat the project name."}, t.deleteProject)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_project_git", Annotations: readOnly,
 		Description: "A project's git link: repository, branch, compose file path, auto sync, the last sync's commit, time, error and warnings, and the services running another image than the file's."}, t.getProjectGit)
 	mcp.AddTool(server, &mcp.Tool{Name: "link_project_git", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Link a project to a compose file in a git repository (see " + docsBase + "/compose/llms.txt). The file then owns the services: every commit is applied and apps it doesn't list are deleted with their volumes. " +
-			"Run with dry_run first to see what the first sync changes. Needs admin."}, t.linkProjectGit)
+			"Run with dry_run first to see what the first sync changes."}, t.linkProjectGit)
 	mcp.AddTool(server, &mcp.Tool{Name: "sync_project_git", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
-		Description: "Apply a git-linked project's compose file now, as a push would. dry_run returns the plan only. Needs admin."}, t.syncProjectGit)
+		Description: "Apply a git-linked project's compose file now, as a push would. dry_run returns the plan only."}, t.syncProjectGit)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_git_repos", Annotations: readOnly,
 		Description: "Repositories the connected git providers can read (full name, clone URL, default branch), to pick one for link_project_git."}, t.listGitRepos)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_git_branches", Annotations: readOnly,
@@ -93,19 +92,19 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "deploy",
 		Description: "Deploy a service's current settings (zero-downtime for apps without published ports), or another tag of an app's image. Returns the deployment; poll get_app_status for the outcome."}, t.deploy)
 	mcp.AddTool(server, &mcp.Tool{Name: "deploy_image",
-		Description: "Create (or update) an app running a Docker image in a project, then deploy it. The project is created if missing. With a deploy token, only an existing app's image tag or digest can change; anything else needs admin."}, t.deployImage)
+		Description: "Create (or update) an app running a Docker image in a project, then deploy it. The project is created if missing. With the deploy permission but not settings, only an existing app's image tag or digest can change."}, t.deployImage)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_project_env",
 		Description: "Set or remove a project's shared variables (readable) and secrets (write-only). Services use either as {{ project.NAME }} in an env value; they pick up changes on their next deploy."}, t.setProjectEnv)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_project_compose", Annotations: readOnly,
 		Description: "A project (or one of its services) as an equivalent docker-compose file, kipitiny settings in x-kipitiny blocks. Secret values are ${NAME} variables without values."}, t.getProjectCompose)
 	mcp.AddTool(server, &mcp.Tool{Name: "apply_project_compose", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Make a project match a docker-compose file (format of get_project_compose, fully documented at " + docsBase + "/compose/llms.txt): creates and updates services, then deploys the changed ones. " +
-			"dry_run returns the plan only. prune also deletes the apps the file doesn't list (with their volumes): confirm must repeat the project name. Needs admin."}, t.applyProjectCompose)
+			"dry_run returns the plan only. prune also deletes the apps the file doesn't list (with their volumes): confirm must repeat the project name."}, t.applyProjectCompose)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_templates", Annotations: readOnly,
 		Description: "One-click apps this kipitiny can install: each one's id, description, the inputs it asks for and its compose file."}, t.listTemplates)
 	mcp.AddTool(server, &mcp.Tool{Name: "install_template",
 		Description: "Install a template (see list_templates) into a project, created if missing: applies its compose file with values as the inputs, then deploys. " +
-			"Nothing existing is deleted. dry_run returns the plan only. Needs admin."}, t.installTemplate)
+			"Nothing existing is deleted. dry_run returns the plan only."}, t.installTemplate)
 	mcp.AddTool(server, &mcp.Tool{Name: "rollback",
 		Description: "Redeploy the image of an earlier successful deployment (the previous one by default)."}, t.rollback)
 	mcp.AddTool(server, &mcp.Tool{Name: "backup_database",
@@ -122,7 +121,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "verify_backup",
 		Description: "Restore-test a successful backup in a throwaway, network-less container; list_backups then shows the result."}, t.verifyBackup)
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_backup", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
-		Description: "Delete a backup and its file from storage. Needs admin."}, t.deleteBackup)
+		Description: "Delete a backup and its file from storage."}, t.deleteBackup)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_restores", Annotations: readOnly,
 		Description: "Restores of a service: which backup, when and the outcome."}, t.listRestores)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_deployments", Annotations: readOnly,
@@ -130,15 +129,15 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "list_backup_schedules", Annotations: readOnly,
 		Description: "A service's backup schedules: cron (UTC), storage, retention, restore tests and next run."}, t.listBackupSchedules)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_backup_schedule",
-		Description: "Add a backup schedule to a service, or change one (schedule_id; omitted fields are kept). Each schedule prunes its own backups by its retention. Needs admin."}, t.setBackupSchedule)
+		Description: "Add a backup schedule to a service, or change one (schedule_id; omitted fields are kept). Each schedule prunes its own backups by its retention."}, t.setBackupSchedule)
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_backup_schedule",
-		Description: "Delete one of a service's backup schedules; the backups it made are kept. Needs admin."}, t.deleteBackupSchedule)
+		Description: "Delete one of a service's backup schedules; the backups it made are kept."}, t.deleteBackupSchedule)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_uptime_check",
-		Description: "Create or replace the uptime check of an app with a public domain: an HTTPS request to a path at an interval, notifying when it goes down. It runs right away; get_app_status shows its results. A git project's checks are in its compose file (x-kipitiny.uptime) instead. Needs admin."}, t.setUptimeCheck)
+		Description: "Create or replace the uptime check of an app with a public domain: an HTTPS request to a path at an interval, notifying when it goes down. It runs right away; get_app_status shows its results. A git project's checks are in its compose file (x-kipitiny.uptime) instead."}, t.setUptimeCheck)
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_uptime_check",
-		Description: "Remove a service's uptime check and its history. Not for a git project: remove x-kipitiny.uptime from its file. Needs admin."}, t.deleteUptimeCheck)
+		Description: "Remove a service's uptime check and its history. Not for a git project: remove x-kipitiny.uptime from its file."}, t.deleteUptimeCheck)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_maintenance",
-		Description: "Set a project's maintenance page, shown (503 with Retry-After) while one of its apps has no replica to answer, and maintenance mode, which shows it to every visitor of its apps except allowed IPs while the replicas keep running (migrations, manual work); also the starting page visitors get while the project wakes from sleep. Applied within seconds, nothing restarts; works on git-linked projects too. Needs admin."}, t.setMaintenance)
+		Description: "Set a project's maintenance page, shown (503 with Retry-After) while one of its apps has no replica to answer, and maintenance mode, which shows it to every visitor of its apps except allowed IPs while the replicas keep running (migrations, manual work); also the starting page visitors get while the project wakes from sleep. Applied within seconds, nothing restarts; works on git-linked projects too."}, t.setMaintenance)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_previews", Annotations: readOnly,
 		Description: "A project's preview environments: name, branch, commit, last deploy, time to live and the URLs of their apps."}, t.listPreviews)
 	mcp.AddTool(server, &mcp.Tool{Name: "deploy_preview",
@@ -146,22 +145,22 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "close_preview", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Close a preview environment: delete its containers, volumes and databases. Needs deploy."}, t.closePreview)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_sleep",
-		Description: "Set a project's sleep mode: after this long without a request to any of its apps, every service stops, databases too, and the next request starts them again behind a \"starting\" page (503 with Retry-After for API calls). Background workers don't run while it sleeps; a deploy, a start, a backup or a data query wakes it. Needs an app with a domain, and no service with published ports or the host network; get_app_status reports sleeping services. Needs admin."}, t.setSleep)
+		Description: "Set a project's sleep mode: after this long without a request to any of its apps, every service stops, databases too, and the next request starts them again behind a \"starting\" page (503 with Retry-After for API calls). Background workers don't run while it sleeps; a deploy, a start, a backup or a data query wakes it. Needs an app with a domain, and no service with published ports or the host network; get_app_status reports sleeping services."}, t.setSleep)
 	mcp.AddTool(server, &mcp.Tool{Name: "sync_dns", Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
 		Description: "Sync the Cloudflare DNS records and tunnel routes of service domains now instead of waiting for the next round (every ten minutes, and seconds after a domain changes); public IPs are detected again. Returns each managed hostname's state. Needs admin and a connected Cloudflare token."}, t.syncDNS)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_networks", Annotations: readOnly,
 		Description: "Networks created by hand on each server, next to the automatic proxy and project networks, with the services on them and the name each is reached at (<project>-<service>)."}, t.listNetworks)
 	mcp.AddTool(server, &mcp.Tool{Name: "create_network",
-		Description: "Create a network on a server (this one by default) that services of several projects can join with set_service_networks to reach each other. Needs admin."}, t.createNetwork)
+		Description: "Create a network on a server (this one by default) that services of several projects can join with set_service_networks to reach each other."}, t.createNetwork)
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_network", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
-		Description: "Delete a network created by hand. Its services leave it right away (nothing restarts) and can no longer reach each other through it. Needs admin."}, t.deleteNetwork)
+		Description: "Delete a network created by hand. Its services leave it right away (nothing restarts) and can no longer reach each other through it."}, t.deleteNetwork)
 	mcp.AddTool(server, &mcp.Tool{Name: "set_service_networks",
-		Description: "Set the networks created by hand that a service joins, besides its project network; applied to its containers right away, without restarting them. Works on git-linked projects too. Needs admin."}, t.setServiceNetworks)
+		Description: "Set the networks created by hand that a service joins, besides its project network; applied to its containers right away, without restarting them. Works on git-linked projects too."}, t.setServiceNetworks)
 
 	mcp.AddTool(server, &mcp.Tool{Name: "list_databases", Annotations: readOnly,
 		Description: "The databases of a PostgreSQL, MySQL, MariaDB or MongoDB service's instance, with their size; main is the service's own."}, t.listDatabases)
 	mcp.AddTool(server, &mcp.Tool{Name: "create_database",
-		Description: "Create a database in a PostgreSQL, MySQL or MariaDB service's instance, owned by the service's user, or in a MongoDB one with its first collection. Needs admin."}, t.createDatabase)
+		Description: "Create a database in a PostgreSQL, MySQL or MariaDB service's instance, owned by the service's user, or in a MongoDB one with its first collection."}, t.createDatabase)
 	mcp.AddTool(server, &mcp.Tool{Name: "list_tables", Annotations: readOnly,
 		Description: "Tables and views of a PostgreSQL, MySQL or MariaDB database with their columns, estimated rows and size, or the collections of a MongoDB one (no columns)."}, t.listTables)
 	mcp.AddTool(server, &mcp.Tool{Name: "read_table", Annotations: readOnly,
@@ -173,25 +172,25 @@ func Handler(c *core.Core, version string) http.Handler {
 	mcp.AddTool(server, &mcp.Tool{Name: "get_redis_key", Annotations: readOnly,
 		Description: "One page of a Redis key's value: [value] for a string, [field, value] pairs for a hash, [member, score] for a sorted set."}, t.getRedisKey)
 	mcp.AddTool(server, &mcp.Tool{Name: "query_database", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
-		Description: "Run SQL on a PostgreSQL, MySQL or MariaDB service, a command on a Redis one, or mongosh JavaScript on a MongoDB one; read-only unless write is set. Prefer read_table, find_documents and get_redis_key to look at data. Needs admin."}, t.queryDatabase)
+		Description: "Run SQL on a PostgreSQL, MySQL or MariaDB service, a command on a Redis one, or mongosh JavaScript on a MongoDB one; read-only unless write is set. Prefer read_table, find_documents and get_redis_key to look at data."}, t.queryDatabase)
 	mcp.AddTool(server, &mcp.Tool{Name: "get_connection",
-		Description: "A database service's host, port, user, password and URL, as apps of its project reach it. Needs admin."}, t.getConnection)
+		Description: "A database service's host, port, user, password and URL, as apps of its project reach it."}, t.getConnection)
 
 	mcp.AddTool(server, &mcp.Tool{Name: "list_volume_files", Annotations: readOnly,
 		Description: "Files and folders in a service's volumes (an app's named volumes, a database's data volume) or in its running container: name, type, size, modified time, mode, owner, symlink target. " +
 			"Paths are <volume>/<path>, or @container/<absolute path> for the container's own filesystem (the first running replica; @<container ID>/... picks one); an empty path lists the volumes and @container. " +
 			"A database's files are read-only. Changes in a container's filesystem reach that replica only and are lost on the next deploy: keep files that matter in a volume."}, t.listVolumeFiles)
 	mcp.AddTool(server, &mcp.Tool{Name: "read_volume_file", Annotations: readOnly,
-		Description: "The content of a text file in a service's volumes or container (see list_volume_files for paths), up to 1 MiB; binary files are refused. Needs admin (files may hold secrets)."}, t.readVolumeFile)
+		Description: "The content of a text file in a service's volumes or container (see list_volume_files for paths), up to 1 MiB; binary files are refused. Files may hold secrets."}, t.readVolumeFile)
 	mcp.AddTool(server, &mcp.Tool{Name: "write_volume_file",
 		Description: "Write a file in an app's volumes or container (see list_volume_files for paths; a container's changes are lost on the next deploy), as text or base64 up to 16 MiB (e.g. a plugin's .jar), creating missing folders. New files belong to their folder's owner. " +
-			"The app sees it right away; most apps need a restart (service_action) to load new plugins or config. Needs admin."}, t.writeVolumeFile)
+			"The app sees it right away; most apps need a restart (service_action) to load new plugins or config."}, t.writeVolumeFile)
 	mcp.AddTool(server, &mcp.Tool{Name: "make_volume_dir",
-		Description: "Create a folder, with missing parents, in an app's volumes or container. Needs admin."}, t.makeVolumeDir)
+		Description: "Create a folder, with missing parents, in an app's volumes or container."}, t.makeVolumeDir)
 	mcp.AddTool(server, &mcp.Tool{Name: "move_volume_path",
-		Description: "Move, rename or (with copy) copy a file or folder within an app's volumes, or within its container. Needs admin."}, t.moveVolumePath)
+		Description: "Move, rename or (with copy) copy a file or folder within an app's volumes, or within its container."}, t.moveVolumePath)
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_volume_paths", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
-		Description: "Delete files or folders (with their content) in an app's volumes or container; nothing is deleted unless every path exists. Back up first (backup_database) when unsure. Needs admin."}, t.deleteVolumePaths)
+		Description: "Delete files or folders (with their content) in an app's volumes or container; nothing is deleted unless every path exists. Back up first (backup_database) when unsure."}, t.deleteVolumePaths)
 
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{
 		Stateless:    true,
@@ -201,16 +200,18 @@ func Handler(c *core.Core, version string) http.Handler {
 
 type tools struct{ c *core.Core }
 
-// mutate checks the scope, runs f and records the outcome in the audit log.
-func mutate[T any](ctx context.Context, c *core.Core, scope store.Scope, action, target string, f func() (T, error)) (T, error) {
+// mutate checks there is an actor, runs f and records the outcome in the audit log.
+func mutate[T any](ctx context.Context, c *core.Core, action, target string, f func() (T, error)) (T, error) {
 	var zero T
-	if err := core.Require(ctx, scope); err != nil {
+	if err := core.Authenticated(ctx); err != nil {
 		c.Audit(ctx, "mcp "+action, target, http.StatusForbidden, err) // denied attempts matter too
 		return zero, err
 	}
 	out, err := f()
 	status := http.StatusOK
-	if err != nil {
+	if errors.Is(err, core.ErrForbidden) {
+		status = http.StatusForbidden
+	} else if err != nil {
 		status = http.StatusBadRequest
 	}
 	c.Audit(ctx, "mcp "+action, target, status, err)
@@ -248,7 +249,7 @@ type listServicesOut struct {
 }
 
 func (t *tools) listServices(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listServicesOut, error) {
-	if err := core.Require(ctx, store.ScopeRead); err != nil {
+	if err := core.Authenticated(ctx); err != nil {
 		return nil, listServicesOut{}, err
 	}
 	projects, err := t.c.ListProjects(ctx)
@@ -308,7 +309,7 @@ type appStatusOut struct {
 }
 
 func (t *tools) getAppStatus(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, appStatusOut, error) {
-	if err := core.Require(ctx, store.ScopeRead); err != nil {
+	if err := core.Authenticated(ctx); err != nil {
 		return nil, appStatusOut{}, err
 	}
 	svc, err := t.service(ctx, in.Service, core.PermView)
@@ -349,7 +350,7 @@ type getLogsOut struct {
 }
 
 func (t *tools) getLogs(ctx context.Context, _ *mcp.CallToolRequest, in getLogsIn) (*mcp.CallToolResult, getLogsOut, error) {
-	if err := core.Require(ctx, store.ScopeRead); err != nil {
+	if err := core.Authenticated(ctx); err != nil {
 		return nil, getLogsOut{}, err
 	}
 	svc, err := t.service(ctx, in.Service, core.PermView)
@@ -380,7 +381,7 @@ type deployIn struct {
 }
 
 func (t *tools) deploy(ctx context.Context, _ *mcp.CallToolRequest, in deployIn) (*mcp.CallToolResult, store.Deployment, error) {
-	dep, err := mutate(ctx, t.c, store.ScopeDeploy, "deploy", in.Service, func() (store.Deployment, error) {
+	dep, err := mutate(ctx, t.c, "deploy", in.Service, func() (store.Deployment, error) {
 		svc, err := t.service(ctx, in.Service, core.PermDeploy)
 		if err != nil {
 			return store.Deployment{}, err
@@ -419,20 +420,21 @@ func (in deployImageIn) ports() []store.PublishedPort {
 	return out
 }
 
-// deployImage needs admin to create apps or change anything but the tag: it
-// could otherwise run any image with env that references password-manager
-// and database secrets, publish host ports and claim domains. A deploy token
-// gets what REST deploy allows, another tag of an existing app's image.
+// deployImage needs the settings permission to create apps or change anything
+// but the tag: it could otherwise run any image with env that references
+// password-manager and database secrets, publish host ports and claim domains.
+// The deploy permission gets what REST deploy allows, another tag of an
+// existing app's image.
 func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in deployImageIn) (*mcp.CallToolResult, store.Deployment, error) {
-	dep, err := mutate(ctx, t.c, store.ScopeDeploy, "deploy_image", in.Project+"/"+in.Name, func() (store.Deployment, error) {
-		if core.Require(ctx, store.ScopeAdmin) != nil {
+	dep, err := mutate(ctx, t.c, "deploy_image", in.Project+"/"+in.Name, func() (store.Deployment, error) {
+		project, err := t.findProject(ctx, in.Project)
+		if err == nil && core.Authorize(ctx, project.ID, core.PermSettings) != nil {
 			return t.retag(ctx, in)
 		}
-		project, err := t.findOrCreateProject(ctx, in.Project)
-		if err != nil {
-			return store.Deployment{}, err
+		if errors.Is(err, store.ErrNotFound) {
+			project, err = t.c.CreateProject(ctx, in.Project, "")
 		}
-		if err := core.Authorize(ctx, project.ID, core.PermSettings); err != nil {
+		if err != nil {
 			return store.Deployment{}, err
 		}
 		svc, err := t.c.ResolveService(ctx, project.Name+"/"+in.Name)
@@ -472,12 +474,12 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 	return nil, dep, err
 }
 
-// retag is deploy_image for a deploy token: the app must exist and only its
-// image tag or digest may change.
+// retag is deploy_image without the settings permission: the app must exist
+// and only its image tag or digest may change.
 func (t *tools) retag(ctx context.Context, in deployImageIn) (store.Deployment, error) {
 	svc, err := t.service(ctx, in.Project+"/"+in.Name, core.PermDeploy)
 	if errors.Is(err, store.ErrNotFound) {
-		return store.Deployment{}, fmt.Errorf("%w: needs the admin scope to create an app", core.ErrForbidden)
+		return store.Deployment{}, fmt.Errorf("%w: needs the settings permission to create an app", core.ErrForbidden)
 	}
 	if err != nil {
 		return store.Deployment{}, err
@@ -487,7 +489,7 @@ func (t *tools) retag(ctx context.Context, in deployImageIn) (store.Deployment, 
 	}
 	if in.Env != nil || in.PublishedPorts != nil || in.StopGraceSeconds != nil ||
 		(in.Domain != "" && in.Domain != svc.Domain) || (in.Port != 0 && in.Port != svc.Port) {
-		return store.Deployment{}, fmt.Errorf("%w: needs the admin scope to change anything but the image tag", core.ErrForbidden)
+		return store.Deployment{}, fmt.Errorf("%w: needs the settings permission to change anything but the image tag", core.ErrForbidden)
 	}
 	opts, err := core.RetagOptions(svc.Image, in.Image)
 	if err != nil {
@@ -510,7 +512,7 @@ type setProjectEnvOut struct {
 }
 
 func (t *tools) setProjectEnv(ctx context.Context, _ *mcp.CallToolRequest, in setProjectEnvIn) (*mcp.CallToolResult, setProjectEnvOut, error) {
-	out, err := mutate(ctx, t.c, store.ScopeAdmin, "set_project_env", in.Project, func() (setProjectEnvOut, error) {
+	out, err := mutate(ctx, t.c, "set_project_env", in.Project, func() (setProjectEnvOut, error) {
 		project, err := t.project(ctx, in.Project, core.PermEnv)
 		if err != nil {
 			return setProjectEnvOut{}, err
@@ -548,7 +550,7 @@ type getProjectComposeOut struct {
 }
 
 func (t *tools) getProjectCompose(ctx context.Context, _ *mcp.CallToolRequest, in getProjectComposeIn) (*mcp.CallToolResult, getProjectComposeOut, error) {
-	if err := core.Require(ctx, store.ScopeRead); err != nil {
+	if err := core.Authenticated(ctx); err != nil {
 		return nil, getProjectComposeOut{}, err
 	}
 	project, err := t.project(ctx, in.Project, core.PermView)
@@ -571,7 +573,7 @@ type applyProjectComposeIn struct {
 }
 
 func (t *tools) applyProjectCompose(ctx context.Context, _ *mcp.CallToolRequest, in applyProjectComposeIn) (*mcp.CallToolResult, core.ComposePlan, error) {
-	out, err := mutate(ctx, t.c, store.ScopeAdmin, "apply_project_compose", in.Project, func() (core.ComposePlan, error) {
+	out, err := mutate(ctx, t.c, "apply_project_compose", in.Project, func() (core.ComposePlan, error) {
 		project, err := t.project(ctx, in.Project, core.PermSettings)
 		if err != nil {
 			return core.ComposePlan{}, err
@@ -624,21 +626,13 @@ func (t *tools) backup(ctx context.Context, id string, p core.Perm) error {
 	return core.Authorize(ctx, projectID, p)
 }
 
-func (t *tools) findOrCreateProject(ctx context.Context, name string) (store.Project, error) {
-	p, err := t.findProject(ctx, name)
-	if errors.Is(err, store.ErrNotFound) {
-		return t.c.CreateProject(ctx, name, "")
-	}
-	return p, err
-}
-
 type rollbackIn struct {
 	Service      string `json:"service" jsonschema:"the service as project/service, or its ID"`
 	DeploymentID string `json:"deployment_id,omitempty" jsonschema:"deployment to return to; default: the previous successful one"`
 }
 
 func (t *tools) rollback(ctx context.Context, _ *mcp.CallToolRequest, in rollbackIn) (*mcp.CallToolResult, store.Deployment, error) {
-	dep, err := mutate(ctx, t.c, store.ScopeDeploy, "rollback", in.Service, func() (store.Deployment, error) {
+	dep, err := mutate(ctx, t.c, "rollback", in.Service, func() (store.Deployment, error) {
 		svc, err := t.service(ctx, in.Service, core.PermDeploy)
 		if err != nil {
 			return store.Deployment{}, err
@@ -656,7 +650,7 @@ type backupIn struct {
 }
 
 func (t *tools) backupDatabase(ctx context.Context, _ *mcp.CallToolRequest, in backupIn) (*mcp.CallToolResult, store.Backup, error) {
-	b, err := mutate(ctx, t.c, store.ScopeDeploy, "backup_database", in.Database, func() (store.Backup, error) {
+	b, err := mutate(ctx, t.c, "backup_database", in.Database, func() (store.Backup, error) {
 		svc, err := t.service(ctx, in.Database, core.PermBackups)
 		if err != nil {
 			return store.Backup{}, err
@@ -679,7 +673,7 @@ type listStorageOut struct {
 }
 
 func (t *tools) listStorage(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listStorageOut, error) {
-	if err := core.Require(ctx, store.ScopeRead); err != nil {
+	if err := core.Authenticated(ctx); err != nil {
 		return nil, listStorageOut{}, err
 	}
 	if err := core.RequireFeature(ctx, core.FeatureStorage); err != nil {
@@ -705,7 +699,7 @@ type listBackupsOut struct {
 }
 
 func (t *tools) listBackups(ctx context.Context, _ *mcp.CallToolRequest, in listBackupsIn) (*mcp.CallToolResult, listBackupsOut, error) {
-	if err := core.Require(ctx, store.ScopeRead); err != nil {
+	if err := core.Authenticated(ctx); err != nil {
 		return nil, listBackupsOut{}, err
 	}
 	svc, err := t.service(ctx, in.Database, core.PermView)
@@ -723,7 +717,7 @@ type restoreIn struct {
 }
 
 func (t *tools) restoreDatabase(ctx context.Context, _ *mcp.CallToolRequest, in restoreIn) (*mcp.CallToolResult, store.Restore, error) {
-	r, err := mutate(ctx, t.c, store.ScopeAdmin, "restore_database", in.Database, func() (store.Restore, error) {
+	r, err := mutate(ctx, t.c, "restore_database", in.Database, func() (store.Restore, error) {
 		svc, err := t.service(ctx, in.Database, core.PermRestore)
 		if err != nil {
 			return store.Restore{}, err

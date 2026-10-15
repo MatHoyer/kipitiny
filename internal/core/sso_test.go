@@ -99,7 +99,7 @@ func (f *fakeIssuer) code(code string, claims map[string]any) {
 }
 
 func asAdmin(ctx context.Context) context.Context {
-	return WithActor(ctx, Actor{Kind: "user", Name: "admin", Scope: store.ScopeAdmin, Role: store.RoleAdmin})
+	return WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin})
 }
 
 func TestSSOProviders(t *testing.T) {
@@ -120,7 +120,7 @@ func TestSSOProviders(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	member := WithActor(context.Background(), Actor{Kind: "user", Scope: store.ScopeAdmin, Role: store.RoleMember})
+	member := WithActor(context.Background(), Actor{Kind: "user", Role: store.RoleMember})
 	if _, err := c.CreateSSOProvider(member, in); !errors.Is(err, ErrForbidden) {
 		t.Errorf("member: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestSSOSignIn(t *testing.T) {
 		t.Fatal(err)
 	}
 	as := func(u store.User) context.Context {
-		return WithActor(context.Background(), Actor{Kind: "user", Name: u.Username, UserID: u.ID, Role: u.Role, Scope: store.ScopeAdmin})
+		return WithActor(context.Background(), Actor{Kind: "user", Name: u.Username, UserID: u.ID, Role: u.Role})
 	}
 
 	// Nobody is linked yet.
@@ -429,7 +429,7 @@ func TestSSORequired(t *testing.T) {
 	const origin = "https://kipitiny.example.com"
 	hash, _ := bcrypt.GenerateFromPassword([]byte("correct horse"), bcrypt.MinCost)
 	admin, _ := c.store.CreateUser(ctx, store.User{Username: "admin", PasswordHash: string(hash), Role: store.RoleAdmin})
-	as := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", UserID: admin.ID, Role: store.RoleAdmin, Scope: store.ScopeAdmin})
+	as := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", UserID: admin.ID, Role: store.RoleAdmin})
 
 	// Not without a linked identity of one's own.
 	if err := c.SetSSORequired(as, true); !errors.Is(err, ErrInvalid) {

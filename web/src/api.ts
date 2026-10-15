@@ -418,10 +418,22 @@ export type ServerInput = {
   resetHostKey?: boolean;
 };
 
-export type Scope = "read" | "deploy" | "admin";
+/**
+ * userId owns the token, which never does more than its owner may. A restricted one only gets its features and
+ * grants, within its owner's.
+ */
+export type ApiToken = {
+  id: string;
+  name: string;
+  userId?: string;
+  restricted: boolean;
+  features: Feature[];
+  grants: Grants;
+  createdAt: string;
+  lastUsedAt?: string;
+};
 
-/** userId owns the token, which never does more than its owner may. */
-export type ApiToken = { id: string; name: string; scope: Scope; userId?: string; createdAt: string; lastUsedAt?: string };
+export type TokenInput = Pick<ApiToken, "name" | "restricted" | "features" | "grants">;
 
 /** Credentials pulls from one registry host use; password reads back masked. */
 export type Registry = { id: string; host: string; username: string; password: string; createdAt: string };
@@ -1409,8 +1421,7 @@ export const api = {
   deleteChannel: (id: string) => request<void>(`/notifications/channels/${id}`, { method: "DELETE" }),
   testChannel: (id: string) => request<void>(`/notifications/channels/${id}/test`, { method: "POST" }),
   tokens: () => request<ApiToken[]>("/tokens"),
-  createToken: (name: string, scope: Scope) =>
-    request<ApiToken & { token: string }>("/tokens", json("POST", { name, scope })),
+  createToken: (t: TokenInput) => request<ApiToken & { token: string }>("/tokens", json("POST", t)),
   deleteToken: (id: string) => request<void>(`/tokens/${id}`, { method: "DELETE" }),
   audit: () => request<AuditEntry[]>("/audit?limit=200"),
   users: () => request<UserView[]>("/users"),

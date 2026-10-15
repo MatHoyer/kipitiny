@@ -98,8 +98,8 @@ func retagImage(image, tag, dgst string) (string, error) {
 }
 
 // RetagOptions turns image into the DeployOptions that move a service from
-// current to it, refusing a different repository: what a deploy token may
-// do. A bare repository means its latest tag.
+// current to it, refusing a different repository: what the deploy
+// permission alone may do. A bare repository means its latest tag.
 func RetagOptions(current, image string) (DeployOptions, error) {
 	cur, err := reference.ParseNormalizedNamed(current)
 	if err != nil {
@@ -110,7 +110,7 @@ func RetagOptions(current, image string) (DeployOptions, error) {
 		return DeployOptions{}, fmt.Errorf("%w: image %q: %v", ErrInvalid, image, err)
 	}
 	if named.Name() != cur.Name() {
-		return DeployOptions{}, fmt.Errorf("%w: needs the admin scope to change the image repository (%s)", ErrForbidden, reference.FamiliarName(cur))
+		return DeployOptions{}, fmt.Errorf("%w: needs the settings permission to change the image repository (%s)", ErrForbidden, reference.FamiliarName(cur))
 	}
 	var opts DeployOptions
 	if d, ok := named.(reference.Digested); ok {

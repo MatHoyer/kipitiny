@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -11,15 +12,14 @@ import (
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
-// ErrForbidden means the caller is authenticated but its scope is too small.
+// ErrForbidden means the caller is authenticated but may not do that.
 var ErrForbidden = errors.New("forbidden")
 
 // Actor is who performs a request: a signed-in user or an API token acting
-// for its owner. A token's scope caps what its owner may do.
+// for its owner. A token never does more than its owner may.
 type Actor struct {
-	Kind  string      `json:"kind"` // "user" or "token"
-	Name  string      `json:"name"`
-	Scope store.Scope `json:"scope"`
+	Kind string `json:"kind"` // "user" or "token"
+	Name string `json:"name"`
 	// UserID is the signed-in user's, or the token owner's.
 	UserID string `json:"-"`
 	// Role, Features and Grants are the user's (the token owner's).
@@ -44,14 +44,10 @@ func ActorFrom(ctx context.Context) (Actor, bool) {
 	return a, ok
 }
 
-// Require fails unless the context's actor holds scope want.
-func Require(ctx context.Context, want store.Scope) error {
-	a, ok := ActorFrom(ctx)
-	if !ok {
+// Authenticated fails unless the context has an actor.
+func Authenticated(ctx context.Context) error {
+	if _, ok := ActorFrom(ctx); !ok {
 		return ErrUnauthorized
-	}
-	if !a.Scope.Allows(want) {
-		return fmt.Errorf("%w: needs the %s scope", ErrForbidden, want)
 	}
 	return nil
 }
@@ -65,20 +61,47 @@ type NewToken struct {
 	Token string `json:"token"`
 }
 
-func (c *Core) CreateAPIToken(ctx context.Context, name string, scope store.Scope) (NewToken, error) {
-	name = strings.TrimSpace(name)
+// TokenInput is a new token: its name, and when Restricted the
+// features and project permissions it gets, within its creator's.
+type TokenInput struct {
+	Name       string              `json:"name"`
+	Restricted bool                `json:"restricted"`
+	Features   []string            `json:"features"`
+	Grants     map[string][]string `json:"grants"`
+}
+
+func (c *Core) CreateAPIToken(ctx context.Context, in TokenInput) (NewToken, error) {
+	name := strings.TrimSpace(in.Name)
 	if name == "" || len(name) > 60 {
 		return NewToken{}, fmt.Errorf("%w: give the token a name (max 60 characters)", ErrInvalid)
-	}
-	if !scope.Allows(store.ScopeRead) {
-		return NewToken{}, fmt.Errorf("%w: scope must be read, deploy or admin", ErrInvalid)
 	}
 	a, ok := ActorFrom(ctx)
 	if !ok || a.Kind != "user" {
 		return NewToken{}, ErrUnauthorized
 	}
+	t := store.APIToken{Name: name, UserID: a.UserID, Restricted: in.Restricted}
+	if in.Restricted {
+		access, err := c.normalized(ctx, UserAccess{Role: store.RoleMember, Features: in.Features, Grants: in.Grants})
+		if err != nil {
+			return NewToken{}, err
+		}
+		for _, f := range access.Features {
+			if !a.Has(Feature(f)) {
+				return NewToken{}, fmt.Errorf("%w: a token can't see %s when you can't", ErrForbidden, f)
+			}
+		}
+		for projectID, perms := range access.Grants {
+			for _, p := range perms {
+				if !a.Can(projectID, Perm(p)) {
+					return NewToken{}, fmt.Errorf("%w: a token can't have the %s permission on a project where you don't", ErrForbidden, p)
+				}
+			}
+		}
+		t.Features, t.Grants = access.Features, access.Grants
+	}
 	token := tokenPrefix + randomToken(32)
-	t, err := c.store.CreateAPIToken(ctx, store.APIToken{Name: name, Scope: scope, TokenHash: hashToken(token), UserID: a.UserID})
+	t.TokenHash = hashToken(token)
+	t, err := c.store.CreateAPIToken(ctx, t)
 	if err != nil {
 		return NewToken{}, err
 	}
@@ -121,16 +144,51 @@ func (c *Core) AuthenticateToken(ctx context.Context, token string) (Actor, erro
 	if err != nil {
 		return Actor{}, err
 	}
-	a := Actor{Kind: "token", Name: t.Name, Scope: t.Scope, Role: store.RoleAdmin}
-	if t.UserID == "" {
-		return a, nil // made before tokens had owners, when only admins existed
+	a := Actor{Kind: "token", Name: t.Name, Role: store.RoleAdmin}
+	// Tokens made before they had owners, when only admins existed, act as one.
+	if t.UserID != "" {
+		u, err := c.store.GetUser(ctx, t.UserID)
+		if err != nil {
+			return Actor{}, err
+		}
+		a.UserID, a.Role, a.Features = u.ID, u.Role, u.Features
+		if a, err = c.withGrants(ctx, a); err != nil {
+			return Actor{}, err
+		}
 	}
-	u, err := c.store.GetUser(ctx, t.UserID)
-	if err != nil {
+	if !t.Restricted {
+		return a, nil
+	}
+	return c.restricted(ctx, a, t)
+}
+
+// restricted narrows the owner's actor a to what token t was given: it acts
+// as a member holding what both have, so an owner losing a permission takes
+// it from the token too.
+func (c *Core) restricted(ctx context.Context, a Actor, t store.APIToken) (Actor, error) {
+	tok := Actor{Role: store.RoleMember, Grants: maps.Clone(t.Grants)}
+	if err := c.withPreviews(ctx, tok.Grants); err != nil {
 		return Actor{}, err
 	}
-	a.UserID, a.Role, a.Features = u.ID, u.Role, u.Features
-	return c.withGrants(ctx, a)
+	out := a
+	out.Role, out.Features, out.Grants = store.RoleMember, []string{}, map[string][]string{}
+	for _, f := range t.Features {
+		if a.Has(Feature(f)) {
+			out.Features = append(out.Features, f)
+		}
+	}
+	for projectID := range tok.Grants {
+		var perms []string
+		for _, p := range Perms {
+			if a.Can(projectID, p) && tok.Can(projectID, p) {
+				perms = append(perms, string(p))
+			}
+		}
+		if len(perms) > 0 {
+			out.Grants[projectID] = perms
+		}
+	}
+	return out, nil
 }
 
 const auditRetention = 90 * 24 * time.Hour

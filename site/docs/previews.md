@@ -60,7 +60,7 @@ A preview never quietly falls back on production:
 
 ## Open previews from CI
 
-Create a **deploy** token (members need *deploy* on the project) and keep it
+Create a token restricted to *deploy* on the project and keep it
 as a CI secret. `kipitiny preview` (in the manager image) creates or updates a
 preview, waits for the services that changed and prints their URLs:
 

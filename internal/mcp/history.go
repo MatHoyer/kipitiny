@@ -16,7 +16,7 @@ type backupArg struct {
 }
 
 func (t *tools) verifyBackup(ctx context.Context, _ *mcp.CallToolRequest, in backupArg) (*mcp.CallToolResult, store.Backup, error) {
-	b, err := mutate(ctx, t.c, store.ScopeDeploy, "verify_backup", in.BackupID, func() (store.Backup, error) {
+	b, err := mutate(ctx, t.c, "verify_backup", in.BackupID, func() (store.Backup, error) {
 		if err := t.backup(ctx, in.BackupID, core.PermBackups); err != nil {
 			return store.Backup{}, err
 		}
@@ -26,7 +26,7 @@ func (t *tools) verifyBackup(ctx context.Context, _ *mcp.CallToolRequest, in bac
 }
 
 func (t *tools) deleteBackup(ctx context.Context, _ *mcp.CallToolRequest, in backupArg) (*mcp.CallToolResult, deleted, error) {
-	out, err := mutate(ctx, t.c, store.ScopeAdmin, "delete_backup", in.BackupID, func() (deleted, error) {
+	out, err := mutate(ctx, t.c, "delete_backup", in.BackupID, func() (deleted, error) {
 		if err := t.backup(ctx, in.BackupID, core.PermBackups); err != nil {
 			return deleted{}, err
 		}
@@ -49,7 +49,7 @@ type backupProjectOut struct {
 // backupProject reports partial failures next to the backups that started,
 // as the REST route does.
 func (t *tools) backupProject(ctx context.Context, _ *mcp.CallToolRequest, in backupProjectIn) (*mcp.CallToolResult, backupProjectOut, error) {
-	out, err := mutate(ctx, t.c, store.ScopeDeploy, "backup_project", in.Project, func() (backupProjectOut, error) {
+	out, err := mutate(ctx, t.c, "backup_project", in.Project, func() (backupProjectOut, error) {
 		p, err := t.project(ctx, in.Project, core.PermBackups)
 		if err != nil {
 			return backupProjectOut{}, err
@@ -72,7 +72,7 @@ type listRestoresOut struct {
 }
 
 func (t *tools) listRestores(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, listRestoresOut, error) {
-	if err := core.Require(ctx, store.ScopeRead); err != nil {
+	if err := core.Authenticated(ctx); err != nil {
 		return nil, listRestoresOut{}, err
 	}
 	svc, err := t.service(ctx, in.Service, core.PermView)
@@ -93,7 +93,7 @@ type listDeploymentsOut struct {
 }
 
 func (t *tools) listDeployments(ctx context.Context, _ *mcp.CallToolRequest, in listDeploymentsIn) (*mcp.CallToolResult, listDeploymentsOut, error) {
-	if err := core.Require(ctx, store.ScopeRead); err != nil {
+	if err := core.Authenticated(ctx); err != nil {
 		return nil, listDeploymentsOut{}, err
 	}
 	svc, err := t.service(ctx, in.Service, core.PermView)

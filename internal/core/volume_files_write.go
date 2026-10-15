@@ -14,8 +14,8 @@ import (
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
-// Writes to volume files need the admin scope, are refused on databases and
-// are audited with their paths. What they create belongs to the owner of the
+// Writes to volume files need the files-write permission, are refused on
+// databases and are audited with their paths. What they create belongs to the owner of the
 // folder it lands in (an image running as uid 1000 can use an upload), and a
 // file replaced keeps its owner and mode. Symlinks are resolved in parent
 // folders only: deleting or moving a link acts on the link.
@@ -72,7 +72,7 @@ func volumeEntry(svc store.Service, p string) (vol fileVolume, abs string, rel [
 
 // writableService loads a service whose volumes may be written.
 func (c *Core) writableService(ctx context.Context, id string) (store.Service, error) {
-	if err := c.requireOn(ctx, id, store.ScopeAdmin, PermFilesEdit); err != nil {
+	if err := c.requireOn(ctx, id, PermFilesEdit); err != nil {
 		return store.Service{}, err
 	}
 	svc, err := c.store.GetService(ctx, id)

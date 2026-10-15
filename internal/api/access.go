@@ -8,10 +8,9 @@ import (
 	"github.com/MatHoyer/kipitiny/internal/core"
 )
 
-// access is what a route needs from a user besides a token's scope:
-// a permission on the project its {id} belongs to, a server feature, or
-// being an admin. Routes for anyone signed in show only what core lets the
-// caller see.
+// access is what a route needs from a user or token: a permission on the
+// project its {id} belongs to, a server feature, or being an admin. Routes
+// for anyone signed in show only what core lets the caller see.
 type access struct {
 	perm    core.Perm
 	kind    core.IDKind

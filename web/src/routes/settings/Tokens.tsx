@@ -1,23 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, KeySquare, Plus, Rocket, ShieldCheck, Trash2, TriangleAlert, type LucideIcon } from "lucide-react";
+import { KeySquare, Plus, ShieldCheck, SlidersHorizontal, Trash2, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { AccessEditor } from "@/components/access-editor";
 import { CopyField, EmptyState, ErrorText, Section, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingSelect } from "@/components/ui/floating-select";
 import { useAccess } from "@/lib/access";
 import { timeAgo } from "@/lib/format";
-import { api, type Scope } from "@/api";
+import { api, type UserAccess } from "@/api";
 import { SettingsPage } from "./page";
 
-const scopes: Record<Scope, { icon: LucideIcon; label: string; description: string }> = {
-  read: { icon: Eye, label: "Read", description: "Status, logs, backups list" },
-  deploy: { icon: Rocket, label: "Deploy", description: "Read + deploy, rollback, start/stop, back up" },
-  admin: { icon: ShieldCheck, label: "Admin", description: "Everything, including settings, secrets and restores" },
+/** A token's access in the editor's terms: "admin" is everything its owner may do, "member" restricted. */
+const tokenRoles = {
+  admin: { title: "Same as you", description: "Everything you may do, following your access as it changes." },
+  member: { title: "Restricted", description: "Only the projects and permissions picked below, never more than yours." },
 };
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 const mcpCommand = (token: string) =>
   `claude mcp add --transport http kipitiny ${window.location.origin}/mcp --header "Authorization: Bearer ${token}"`;
@@ -51,8 +53,8 @@ export function TokensPage() {
         title="MCP endpoint"
         description={
           admin
-            ? "Where AI agents connect, with a token of the scope they need."
-            : "Where AI agents connect. A token never does more than you may, whatever its scope."
+            ? "Where AI agents connect, with a token restricted to what they need."
+            : "Where AI agents connect. A token never does more than you may."
         }
       >
         <CopyField value={`${window.location.origin}/mcp`} />
@@ -68,21 +70,25 @@ export function TokensPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {tokens.data?.map((t) => {
-            const s = scopes[t.scope];
+            const Icon = t.restricted ? SlidersHorizontal : ShieldCheck;
             return (
               <Card key={t.id} className="gap-3 px-4">
                 <div className="flex items-start gap-3">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted [&>svg]:size-5">
-                    <s.icon />
+                    <Icon />
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">
                       {t.name}
                       {admin && owner(t.userId) && <span className="font-normal text-muted-foreground"> · {owner(t.userId)}</span>}
                     </p>
-                    <p className="truncate text-xs text-muted-foreground">{s.description}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {t.restricted
+                        ? `${plural(Object.keys(t.grants ?? {}).length, "project")}, ${plural(t.features?.length ?? 0, "server feature")}`
+                        : tokenRoles.admin.description}
+                    </p>
                   </div>
-                  <Tag>{s.label}</Tag>
+                  <Tag>{t.restricted ? tokenRoles.member.title : tokenRoles.admin.title}</Tag>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Created {timeAgo(t.createdAt)} · {t.lastUsedAt ? `last used ${timeAgo(t.lastUsedAt)}` : "never used"}
@@ -106,7 +112,7 @@ export function TokensPage() {
         </div>
       )}
       <Dialog open={creating} onOpenChange={setCreating}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl">
           {/* Remounted on every open, so a previous token never shows again. */}
           {creating && <TokenForm onDone={() => setCreating(false)} />}
         </DialogContent>
@@ -118,10 +124,12 @@ export function TokensPage() {
 function TokenForm({ onDone }: { onDone: () => void }) {
   const qc = useQueryClient();
   const [name, setName] = useState("");
-  const [scope, setScope] = useState<Scope>("read");
+  const [access, setAccess] = useState<UserAccess>({ role: "admin", features: [], grants: {} });
+  const limit = useAccess();
   const create = useMutation({
     meta: { error: "Couldn't create the token" },
-    mutationFn: () => api.createToken(name.trim(), scope),
+    mutationFn: () =>
+      api.createToken({ name: name.trim(), restricted: access.role === "member", features: access.features, grants: access.grants }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tokens"] }),
   });
   const onSubmit = (e: FormEvent) => {
@@ -156,12 +164,7 @@ function TokenForm({ onDone }: { onDone: () => void }) {
       </DialogHeader>
       <div className="space-y-4">
         <FloatingInput label="Name" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="github-ci" />
-        <FloatingSelect
-          label="Scope"
-          value={scope}
-          onValueChange={(v) => setScope(v as Scope)}
-          options={(Object.keys(scopes) as Scope[]).map((v) => ({ value: v, label: `${scopes[v].label}: ${scopes[v].description}` }))}
-        />
+        <AccessEditor value={access} onChange={setAccess} roles={tokenRoles} limit={limit} />
       </div>
       <DialogFooter>
         <Button type="submit" loading={create.isPending}>

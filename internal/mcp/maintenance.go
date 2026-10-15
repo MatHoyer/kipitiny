@@ -23,7 +23,7 @@ type setMaintenanceIn struct {
 }
 
 func (t *tools) setMaintenance(ctx context.Context, _ *mcp.CallToolRequest, in setMaintenanceIn) (*mcp.CallToolResult, store.Maintenance, error) {
-	out, err := mutate(ctx, t.c, store.ScopeAdmin, "set_maintenance", in.Project, func() (store.Maintenance, error) {
+	out, err := mutate(ctx, t.c, "set_maintenance", in.Project, func() (store.Maintenance, error) {
 		p, err := t.project(ctx, in.Project, core.PermDeploy)
 		if err != nil {
 			return store.Maintenance{}, err
