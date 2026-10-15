@@ -100,6 +100,7 @@ services:
     x-kipitiny:
       domain: shop.example.com
       port: 3000
+      tags: [Shop, front]
       secrets: [API_KEY]
       uptime: {path: /health, interval: 2m}
       middlewares:
@@ -131,7 +132,8 @@ services:
 		t.Errorf("db = %+v", db)
 	}
 	web := byName["web"]
-	if web.Env["API_KEY"] != "k3y" || !slices.Equal(web.Secrets, []string{"API_KEY"}) || web.Middlewares.BasicAuth[0].Hash != hash {
+	if web.Env["API_KEY"] != "k3y" || !slices.Equal(web.Secrets, []string{"API_KEY"}) || web.Middlewares.BasicAuth[0].Hash != hash ||
+		!slices.Equal(web.Tags, []string{"front", "shop"}) {
 		t.Errorf("web = %+v", web)
 	}
 	if chk, err := c.store.GetUptimeCheck(ctx, web.ID); err != nil || chk.Path != "/health" || chk.IntervalSec != 120 ||

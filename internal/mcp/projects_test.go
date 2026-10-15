@@ -105,6 +105,8 @@ func TestProjectTools(t *testing.T) {
 		"create_project":   {"name": "x"},
 		"rename_project":   {"project": "site", "name": "x"},
 		"rename_service":   {"service": "shop/web", "name": "x"},
+		"set_project_tags": {"project": "site", "tags": []string{"x"}},
+		"set_service_tags": {"service": "shop/web", "tags": []string{"x"}},
 		"link_project_git": {"project": "site", "repo_url": "https://github.com/me/site.git"},
 		"sync_project_git": {"project": "shop"},
 		"service_action":   {"service": "shop/web", "action": "stop"},
@@ -119,6 +121,15 @@ func TestProjectTools(t *testing.T) {
 	}
 	if out, isErr = call(admin, "rename_service", map[string]any{"service": "shop/web", "name": "front"}); !isErr || !strings.Contains(out, "git") {
 		t.Errorf("rename_service in a git project: %s", out)
+	}
+	if out, isErr = call(admin, "set_project_tags", map[string]any{"project": "homepage", "tags": []string{"Prod", " prod ", "client  a"}}); isErr || out != `{"tags":["client a","prod"]}` {
+		t.Errorf("set_project_tags: %s", out)
+	}
+	if out, isErr = call(read, "list_projects", nil); isErr || !strings.Contains(out, `"tags":["client a","prod"]`) {
+		t.Errorf("list_projects with tags: %s", out)
+	}
+	if out, isErr = call(admin, "set_service_tags", map[string]any{"service": "shop/web", "tags": []string{"front"}}); !isErr || !strings.Contains(out, "git") {
+		t.Errorf("set_service_tags in a git project: %s", out)
 	}
 	if out, isErr = call(admin, "service_action", map[string]any{"service": "shop/web", "action": "explode"}); !isErr || !strings.Contains(out, "start, stop or restart") {
 		t.Errorf("service_action bad action: %s", out)

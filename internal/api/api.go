@@ -56,12 +56,15 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("POST /api/update/check", a.checkUpdate)
 	handle("GET /api/update/preflight", a.updatePreflight)
 	handle("GET /api/projects", a.listProjects)
+	handle("GET /api/tags", a.listTags)
+	handle("PUT /api/tags/{name}", a.setTagColor)
 	handle("POST /api/projects", a.createProject)
 	handle("GET /api/projects/{id}", a.getProject)
 	handle("DELETE /api/projects/{id}", a.deleteProject)
 	handle("PUT /api/projects/{id}/env", a.setProjectEnv)
 	handle("PUT /api/projects/{id}/name", a.renameProject)
 	handle("PUT /api/projects/{id}/sleep", a.setProjectSleep)
+	handle("PUT /api/projects/{id}/tags", a.setProjectTags)
 	handle("PUT /api/projects/{id}/maintenance", a.setMaintenance)
 	handle("GET /api/projects/{id}/compose", a.exportCompose)
 	handle("POST /api/projects/{id}/compose", a.applyCompose)
@@ -89,6 +92,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("DELETE /api/services/{id}", a.deleteService)
 	handle("PUT /api/services/{id}/name", a.renameService)
 	handle("PUT /api/services/{id}/networks", a.setServiceNetworks)
+	handle("PUT /api/services/{id}/tags", a.setServiceTags)
 	handle("POST /api/services/{id}/deploy", a.deployService)
 	handle("POST /api/services/{id}/rollback", a.rollbackService)
 	handle("POST /api/services/{id}/{action}", a.serviceAction)
@@ -334,6 +338,60 @@ func (a *API) renameProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, p)
+}
+
+func (a *API) setProjectTags(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Tags []string `json:"tags"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	p, err := a.core.SetProjectTags(r.Context(), r.PathValue("id"), body.Tags)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
+}
+
+func (a *API) setServiceTags(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Tags []string `json:"tags"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	v, err := a.core.SetServiceTags(r.Context(), r.PathValue("id"), body.Tags)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+func (a *API) listTags(w http.ResponseWriter, r *http.Request) {
+	tags, err := a.core.ListTags(r.Context())
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tags": tags, "colors": core.TagColors})
+}
+
+func (a *API) setTagColor(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Color string `json:"color"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	t, err := a.core.SetTagColor(r.Context(), r.PathValue("name"), body.Color)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
 }
 
 func (a *API) setProjectSleep(w http.ResponseWriter, r *http.Request) {

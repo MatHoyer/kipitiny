@@ -69,9 +69,9 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 	yes := true
 
 	addTool(s, &mcp.Tool{Name: "list_services", Annotations: readOnly,
-		Description: "List every project with its services, their kind, image, domain and current status."}, t.listServices)
+		Description: "List every project with its services, their kind, image, domain, tags and current status."}, t.listServices)
 	addTool(s, &mcp.Tool{Name: "list_projects", Annotations: readOnly,
-		Description: "List every project, including empty ones, with its server, service names and the git compose file it follows, if any."}, t.listProjects)
+		Description: "List every project, including empty ones, with its server, tags, service names and the git compose file it follows, if any."}, t.listProjects)
 	addTool(s, &mcp.Tool{Name: "get_manager_status", Annotations: readOnly,
 		Description: "The manager's version and available update, its Docker engine, its database size, and the current CPU, memory and network use of every running service."}, t.getManagerStatus)
 	addTool(s, &mcp.Tool{Name: "get_topology", Annotations: readOnly,
@@ -84,6 +84,11 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 		Description: "Rename a project. Its containers are renamed in place; nothing restarts."}, t.renameProject)
 	addTool(s, &mcp.Tool{Name: "rename_service",
 		Description: "Rename a service. Nothing restarts; until its next deploy it also answers to its old name on the project network. Renaming a database rewrites the {{ db.NAME.* }} references to it and redeploys the apps using it. Not for projects linked to git (edit the file)."}, t.renameService)
+	addTool(s, &mcp.Tool{Name: "set_project_tags", Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
+		Description: "Replace a project's tags, which group projects in the UI. Tags are lowercased; up to 10, of up to 32 letters, digits, spaces and . _ / : -."}, t.setProjectTags)
+	addTool(s, &mcp.Tool{Name: "set_service_tags", Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
+		Description: "Replace a service's tags, which group services in the UI; same rules as set_project_tags. " +
+			"Not for projects linked to git (set x-kipitiny.tags in the file)."}, t.setServiceTags)
 	addTool(s, &mcp.Tool{Name: "delete_service", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Delete a service: its containers, volumes (data) and deploy logs; backups are kept. confirm must repeat the service name. " +
 			"A database still referenced by an app, or a service of a git-linked project, is refused."}, t.deleteService)
@@ -252,12 +257,13 @@ type serviceArg struct {
 }
 
 type ServiceSummary struct {
-	Project string `json:"project"`
-	Service string `json:"service"`
-	Kind    string `json:"kind"`
-	Image   string `json:"image"`
-	Domain  string `json:"domain,omitempty"`
-	Status  string `json:"status"`
+	Project string   `json:"project"`
+	Service string   `json:"service"`
+	Kind    string   `json:"kind"`
+	Image   string   `json:"image"`
+	Domain  string   `json:"domain,omitempty"`
+	Tags    []string `json:"tags,omitempty"`
+	Status  string   `json:"status"`
 }
 
 type listServicesOut struct {
@@ -281,7 +287,7 @@ func (t *tools) listServices(ctx context.Context, _ *mcp.CallToolRequest, _ stru
 		for _, s := range svcs {
 			out.Services = append(out.Services, ServiceSummary{
 				Project: p.Name, Service: s.Name, Kind: string(s.Kind), Image: s.Image,
-				Domain: s.Domain, Status: status(s),
+				Domain: s.Domain, Tags: s.Tags, Status: status(s),
 			})
 		}
 	}

@@ -3,6 +3,7 @@ import { Activity, ChevronRight, FolderKanban, GitPullRequestArrow, Globe, Layer
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { ServiceStates } from "@/components/service-states";
+import { TagChips, TagFilter, useTagFilter } from "@/components/tags";
 import { TemplateDialog } from "@/components/template-dialog";
 import { EmptyState, ErrorText, IconTile, StatCard, Tag, Loading } from "@/components/common";
 import { PageBody, PageHeader } from "@/components/page-header";
@@ -64,6 +65,8 @@ export function Projects() {
   const multi = (servers.data?.length ?? 0) > 1;
   const all = services.flatMap((q) => q.data ?? []);
   const states = all.map(liveState);
+  const filter = useTagFilter();
+  const shown = (projects.data ?? []).flatMap((p, i) => (filter.matches(p.tags) ? [{ p, svcs: services[i]?.data }] : []));
 
   return (
     <>
@@ -110,17 +113,22 @@ export function Projects() {
                 tone={all.some(needsAttention) ? "bad" : undefined}
               />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {projects.data.map((p, i) => (
-                <ProjectCard
-                  key={p.id}
-                  project={p}
-                  services={services[i]?.data}
-                  previews={previewsOf(p.id)}
-                  server={multi ? serverName(p.serverId) : undefined}
-                />
-              ))}
-            </div>
+            <TagFilter items={(projects.data ?? []).map((p) => p.tags)} filter={filter} />
+            {shown.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">No project has every selected tag.</p>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {shown.map(({ p, svcs }) => (
+                  <ProjectCard
+                    key={p.id}
+                    project={p}
+                    services={svcs}
+                    previews={previewsOf(p.id)}
+                    server={multi ? serverName(p.serverId) : undefined}
+                  />
+                ))}
+              </div>
+            )}
           </>
         )}
       </PageBody>
@@ -191,7 +199,9 @@ function ProjectCard({
             {domains.length > 2 && <Tag>+{domains.length - 2}</Tag>}
           </div>
         )}
-        <p className="mt-auto text-xs text-muted-foreground">
+        {/* The first of what's pinned to the bottom takes the space. */}
+        <TagChips tags={p.tags} className="mt-auto" />
+        <p className={cn("text-xs text-muted-foreground", !p.tags?.length && "mt-auto")}>
           {memory ? `${formatBytes(memory)} memory · ` : ""}Updated {timeAgo(p.updatedAt)}
         </p>
       </Card>

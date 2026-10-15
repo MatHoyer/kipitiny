@@ -35,9 +35,23 @@ export type Project = {
   sleepAfterSeconds: number;
   /** The page visitors of its apps get while one can't answer, and maintenance mode. */
   maintenance: Maintenance;
+  /** Lowercase names grouping projects in the UI. */
+  tags: string[];
   createdAt: string;
   updatedAt: string;
 };
+
+/** A tag in use, with its color and how many visible projects and services carry it. */
+export type TagInfo = {
+  name: string;
+  color: string;
+  /** A user picked the color; else it derives from the name. */
+  custom: boolean;
+  projects: number;
+  services: number;
+};
+
+export type TagList = { tags: TagInfo[]; colors: string[] };
 
 export type PreviewInfo = {
   name?: string;
@@ -88,6 +102,8 @@ export type Service = {
   image: string;
   /** Logo name shown in the UI (e.g. ghost); empty picks one from the kind or image. */
   icon: string;
+  /** Lowercase names grouping services in the UI; a git project's come from its compose file. */
+  tags: string[];
   /** A database of a git project that the compose file no longer lists. */
   orphaned: boolean;
   replicas: number;
@@ -1212,6 +1228,10 @@ export const api = {
     return res.blob();
   },
   renameProject: (id: string, name: string) => request<Project>(`/projects/${id}/name`, json("PUT", { name })),
+  setProjectTags: (id: string, tags: string[]) => request<Project>(`/projects/${id}/tags`, json("PUT", { tags })),
+  tags: () => request<TagList>("/tags"),
+  /** An empty color goes back to the one derived from the name. */
+  setTagColor: (name: string, color: string) => request<TagInfo>(`/tags/${encodeURIComponent(name)}`, json("PUT", { color })),
   setProjectSleep: (id: string, sleepAfterSeconds: number) =>
     request<Project>(`/projects/${id}/sleep`, json("PUT", { sleepAfterSeconds })),
   deleteProject: (id: string, confirm: string) =>
@@ -1224,6 +1244,7 @@ export const api = {
   updateService: (id: string, patch: ServicePatch) => request<Service>(`/services/${id}`, json("PATCH", patch)),
   renameService: (id: string, name: string) => request<Service>(`/services/${id}/name`, json("PUT", { name })),
   setServiceNetworks: (id: string, networks: string[]) => request<Service>(`/services/${id}/networks`, json("PUT", { networks })),
+  setServiceTags: (id: string, tags: string[]) => request<Service>(`/services/${id}/tags`, json("PUT", { tags })),
   setMaintenance: (id: string, m: Required<Maintenance>) => request<Project>(`/projects/${id}/maintenance`, json("PUT", m)),
   deleteService: (id: string, confirm = "") =>
     request<void>(`/services/${id}?confirm=${encodeURIComponent(confirm)}`, { method: "DELETE" }),

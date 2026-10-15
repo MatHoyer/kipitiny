@@ -27,6 +27,7 @@ import type {
   PgTable,
   PreviewSettings,
   Project,
+  TagInfo,
   UpgradeNotice,
   RedisKeys,
   RedisValue,
@@ -45,6 +46,7 @@ import type {
   UptimeResult,
   Usage,
 } from "@/api";
+import { autoTagColor, normalizeTag, tagColors } from "@/lib/tags";
 import { files } from "./files";
 import { demoUsers, seed, service as newService, type DemoDb } from "./seed";
 import { demoLogos, demoTemplates } from "./templates";
@@ -104,6 +106,34 @@ const users = () => (db.users ??= demoUsers());
 
 const newId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 const nameRe = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/;
+
+/** Validates tags as the manager does (core.normalizeTags). */
+function demoTags(input: unknown): string[] {
+  const out: string[] = [];
+  for (const raw of Array.isArray(input) ? input : []) {
+    const t = normalizeTag(String(raw));
+    if (!t || out.includes(t)) continue;
+    if ([...t].length > 32 || !/^[\p{L}\p{N}][\p{L}\p{N} ._/:-]*$/u.test(t)) throw invalid(`tag "${t}" must be up to 32 letters, digits, spaces and . _ / : -`);
+    out.push(t);
+  }
+  if (out.length > 10) throw invalid("up to 10 tags");
+  return out.sort();
+}
+
+/** The tags in use, with their colors. */
+function demoTagList(): TagInfo[] {
+  const byName = new Map<string, TagInfo>();
+  const get = (name: string) => {
+    if (!byName.has(name)) {
+      const custom = db.tagColors?.[name];
+      byName.set(name, { name, color: custom ?? autoTagColor(name), custom: !!custom, projects: 0, services: 0 });
+    }
+    return byName.get(name)!;
+  };
+  for (const p of db.projects) for (const t of p.tags ?? []) get(t).projects++;
+  for (const s of db.services) for (const t of s.tags ?? []) get(t).services++;
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
 const MASK = "********";
 /** The demo's email providers, passwords masked, and the one invites use: the chosen one, else the oldest. */
 const emailView = () => {
@@ -1079,7 +1109,7 @@ const routes: Route[] = [
       const name = String(body.name ?? "").trim();
       if (!nameRe.test(name)) throw invalid("name must be lowercase letters, digits and dashes (max 40)");
       if (db.projects.some((p) => p.name === name)) throw new HttpError(409, "already exists (name or domain taken)");
-      const p: Project = { id: newId("p"), name, serverId: "local", env: {}, secrets: [], sleepAfterSeconds: 0, maintenance: { enabled: false }, createdAt: now(), updatedAt: now() };
+      const p: Project = { id: newId("p"), name, serverId: "local", env: {}, secrets: [], sleepAfterSeconds: 0, maintenance: { enabled: false }, tags: [], createdAt: now(), updatedAt: now() };
       db.projects.push(p);
       save();
       return p;
@@ -1106,7 +1136,7 @@ const routes: Route[] = [
       if (body.dryRun) return { projectId: body.projectId, plan };
       let projectId = body.projectId;
       if (!projectId) {
-        const p: Project = { id: newId("p"), name, serverId: "local", env: {}, secrets: [], sleepAfterSeconds: 0, maintenance: { enabled: false }, createdAt: now(), updatedAt: now() };
+        const p: Project = { id: newId("p"), name, serverId: "local", env: {}, secrets: [], sleepAfterSeconds: 0, maintenance: { enabled: false }, tags: [], createdAt: now(), updatedAt: now() };
         db.projects.push(p);
         projectId = p.id;
       }
@@ -1223,6 +1253,31 @@ const routes: Route[] = [
   ],
   [
     "PUT",
+    /^\/projects\/([^/]+)\/tags$/,
+    ({ m, body }) => {
+      const p = projectOf(m[1]);
+      p.tags = demoTags(body.tags);
+      save();
+      return p;
+    },
+  ],
+  ["GET", /^\/tags$/, () => ({ tags: demoTagList(), colors: tagColors })],
+  [
+    "PUT",
+    /^\/tags\/([^/]+)$/,
+    ({ m, body }) => {
+      const name = normalizeTag(decodeURIComponent(m[1]));
+      const color = String(body.color ?? "");
+      if (color && !(tagColors as readonly string[]).includes(color)) throw invalid(`color must be one of ${tagColors.join(", ")}`);
+      const colors = (db.tagColors ??= {});
+      if (color) colors[name] = color;
+      else delete colors[name];
+      save();
+      return demoTagList().find((t) => t.name === name) ?? { name, color: color || autoTagColor(name), custom: !!color, projects: 0, services: 0 };
+    },
+  ],
+  [
+    "PUT",
     /^\/projects\/([^/]+)\/sleep$/,
     ({ m, body }) => {
       const p = projectOf(m[1]);
@@ -1260,6 +1315,16 @@ const routes: Route[] = [
       const s = serviceOf(m[1]);
       if (!nameRe.test(body.name)) throw invalid("name must be lowercase letters, digits and dashes (max 40)");
       s.name = body.name;
+      save();
+      return view(s);
+    },
+  ],
+  [
+    "PUT",
+    /^\/services\/([^/]+)\/tags$/,
+    ({ m, body }) => {
+      const s = serviceOf(m[1]);
+      s.tags = demoTags(body.tags);
       save();
       return view(s);
     },

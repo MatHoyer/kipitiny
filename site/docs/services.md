@@ -75,6 +75,28 @@ order: 3
   project managed by git can't be renamed: the file owns their names, and
   renaming one there replaces it, volumes included.
 
+## Tags
+
+Tags group projects and services: a project's card on the projects page and a
+service's card on its project's page show them, and both pages filter by them
+(a filter keeps what has every selected tag, and stays in the address so it
+can be shared).
+
+- Set a project's tags in its **Settings**, a service's in **Settings ›
+  General**. A tag is lowercased, up to 32 letters, digits, spaces and
+  `. _ / : -`; up to 10 each.
+- A project linked to git takes its services' tags from the compose file
+  (`x-kipitiny.tags`, see [Compose](/docs/compose#x-kipitiny-per-service));
+  its own tags are set in the UI as for any project. Changing tags never
+  redeploys anything.
+- Each tag gets a color from its name. Click a tag in the Tags card to pick
+  another one: it applies wherever the tag appears. Admins may color any tag,
+  members the tags of projects they may change the settings of.
+- API: `PUT /api/projects/{id}/tags` and `PUT /api/services/{id}/tags` with
+  `{"tags": [...]}`; `GET /api/tags` lists the tags in use with their colors,
+  `PUT /api/tags/{name}` with `{"color": "blue"}` (empty: back to its own).
+  MCP: `set_project_tags` and `set_service_tags`.
+
 ## Networks
 
 Two kinds of networks are automatic: each project has a private one (its

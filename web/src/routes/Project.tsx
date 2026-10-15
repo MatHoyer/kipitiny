@@ -7,6 +7,7 @@ import { ServiceIcon, ServiceIconTile } from "@/components/service-icon";
 import { ChoiceTile, CopyButton, DangerZone, EmptyState, ErrorText, Mono, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { RenameCard } from "@/components/rename-card";
+import { TagChips, TagFilter, TagsCard, useTagFilter } from "@/components/tags";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
@@ -88,6 +89,16 @@ export function Project() {
       qc.invalidateQueries({ queryKey: ["projects"] });
     },
   });
+  const setTags = useMutation({
+    meta: { error: "Couldn't save the tags" },
+    mutationFn: (tags: string[]) => api.setProjectTags(id, tags),
+    onSuccess: (p) => {
+      qc.setQueryData(["project", id], p);
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["tags"] });
+    },
+  });
+  const filter = useTagFilter();
   const remove = useMutation({
     meta: { error: "Couldn't delete the project" },
     mutationFn: (confirm: string) => api.deleteProject(id, confirm),
@@ -117,6 +128,8 @@ export function Project() {
   const list = services.data ?? [];
   const apps = list.filter((s) => !isDatabase(s.kind));
   const dbs = list.flatMap((s) => (isDatabase(s.kind) ? [{ ...s, kind: s.kind }] : []));
+  const shownApps = apps.filter((s) => filter.matches(s.tags));
+  const shownDbs = dbs.filter((s) => filter.matches(s.tags));
   const states = list.map(liveState);
   const attention = list.filter(needsAttention).length;
 
@@ -204,8 +217,12 @@ export function Project() {
               />
             ) : (
               <>
-                <ServiceGroup title="Apps" services={apps} />
-                <ServiceGroup title="Databases" services={dbs} />
+                <TagFilter items={list.map((s) => s.tags)} filter={filter} />
+                <ServiceGroup title="Apps" services={shownApps} />
+                <ServiceGroup title="Databases" services={shownDbs} />
+                {shownApps.length + shownDbs.length === 0 && (
+                  <p className="py-6 text-center text-sm text-muted-foreground">No service has every selected tag.</p>
+                )}
               </>
             )}
           </TabsContent>
@@ -232,6 +249,14 @@ export function Project() {
                 description="Containers are renamed in place; nothing restarts. Tokens and scripts that name the project need the new name."
                 pending={rename.isPending}
                 onRename={(name) => rename.mutate(name)}
+              />
+            )}
+            {project.data && may("settings") && (
+              <TagsCard
+                tags={project.data.tags ?? []}
+                description="They group projects on the projects page, which filters by them."
+                pending={setTags.isPending}
+                onSave={(tags) => setTags.mutate(tags)}
               />
             )}
             {project.data && services.data && may("settings") && (
@@ -338,7 +363,9 @@ function ServiceCard({ svc: s }: { svc: ServiceT }) {
             <span className="truncate">{problem.short}</span>
           </p>
         )}
-        <div className="mt-auto flex flex-wrap items-center gap-1.5">
+        {/* The first of what's pinned to the bottom takes the space. */}
+        <TagChips tags={s.tags} className="mt-auto" />
+        <div className={cn("flex flex-wrap items-center gap-1.5", !s.tags?.length && "mt-auto")}>
           {isDb ? (
             <>
               <Tag>

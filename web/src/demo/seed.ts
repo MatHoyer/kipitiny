@@ -54,6 +54,8 @@ export type DemoDb = {
   ssoProviders?: SSOProvider[];
   /** Settings › Appearance; the logo is kept as a data URL. */
   branding?: Branding;
+  /** Added after version 3: the colors picked for tags, by name. */
+  tagColors?: Record<string, string>;
   /** The SMTP servers set in Settings › Email. */
   emailProviders?: EmailProvider[];
   /** The provider invites go through. */
@@ -83,6 +85,7 @@ export function service(p: Partial<Service> & Pick<Service, "id" | "name" | "kin
     projectId: "acme",
     serverId: "local",
     icon: "",
+    tags: [],
     orphaned: false,
     replicas: 1,
     port: 0,
@@ -264,7 +267,7 @@ function backups(): Backup[] {
 
 export function seed(): DemoDb {
   const services = [
-    service({ id: "web", name: "web", kind: "app", image: "nginx:1.27-alpine", domain: "acme.example", port: 80 }),
+    service({ id: "web", name: "web", kind: "app", image: "nginx:1.27-alpine", domain: "acme.example", port: 80, tags: ["frontend"] }),
     service({
       id: "api",
       name: "api",
@@ -298,7 +301,20 @@ export function seed(): DemoDb {
   ];
   return {
     version: 3,
-    projects: [{ id: "acme", name: "acme", serverId: "local", env: { APP_URL: "https://acme.example" }, secrets: [], sleepAfterSeconds: 0, maintenance: { enabled: false }, createdAt: at(30), updatedAt: at(2) }],
+    projects: [
+      {
+        id: "acme",
+        name: "acme",
+        serverId: "local",
+        env: { APP_URL: "https://acme.example" },
+        secrets: [],
+        sleepAfterSeconds: 0,
+        maintenance: { enabled: false },
+        tags: ["production"],
+        createdAt: at(30),
+        updatedAt: at(2),
+      },
+    ],
     services,
     networks: [],
     deployments: services.map((s) => ({ id: `dep-${s.id}`, serviceId: s.id, status: "succeeded", image: s.image, triggeredBy: "user:demo", createdAt: at(2, 14), finishedAt: at(2, 14) })),
