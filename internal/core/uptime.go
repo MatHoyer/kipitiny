@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +21,7 @@ const (
 	// a flapping service doesn't flood the channels.
 	uptimeDownAfter = 3
 	uptimeUpAfter   = 2
-	// uptimeRecent is how many results each check keeps in memory.
+	// uptimeRecent is how many results each check keeps.
 	uptimeRecent = 60
 	// uptimeKeep is how long hourly counts are kept.
 	uptimeKeep = 30 * 24 * time.Hour
@@ -29,15 +30,7 @@ const (
 	defaultUptimeTimeout  = 10
 )
 
-// UptimeResult is the outcome of one check.
-type UptimeResult struct {
-	At time.Time `json:"at"`
-	OK bool      `json:"ok"`
-	// Status is 0 when no response arrived.
-	Status    int    `json:"status,omitempty"`
-	LatencyMS int64  `json:"latencyMs"`
-	Error     string `json:"error,omitempty"`
-}
+type UptimeResult = store.UptimeResult
 
 // uptimeState tracks the checks between runs, in memory.
 type uptimeState struct {
@@ -138,7 +131,7 @@ func (c *Core) scheduleUptime(ctx context.Context) {
 		seen[chk.ServiceID] = true
 		r := c.uptime.runs[chk.ServiceID]
 		if r == nil {
-			r = &uptimeRun{down: chk.Down}
+			r = &uptimeRun{down: chk.Down, recent: chk.Recent}
 			c.uptime.runs[chk.ServiceID] = r
 		}
 		if !chk.Enabled || r.running || now.Before(r.next) {
@@ -209,8 +202,11 @@ func (c *Core) runUptime(ctx context.Context, chk store.UptimeCheck, r *uptimeRu
 
 	c.uptime.mu.Lock()
 	changed := r.observe(out)
-	down, lastError := r.down, r.lastError
+	down, lastError, recent := r.down, r.lastError, slices.Clone(r.recent)
 	c.uptime.mu.Unlock()
+	if err := c.store.SetUptimeRecent(ctx, chk.ServiceID, recent); err != nil {
+		c.log.Warn("save uptime results", "service", svc.Name, "err", err)
+	}
 	if !changed {
 		return
 	}
@@ -299,6 +295,8 @@ func (c *Core) Uptime(ctx context.Context, serviceID string) (UptimeView, error)
 	c.uptime.mu.Lock()
 	if r := c.uptime.runs[serviceID]; r != nil {
 		v.Recent = append(v.Recent, r.recent...)
+	} else {
+		v.Recent = append(v.Recent, chk.Recent...)
 	}
 	c.uptime.mu.Unlock()
 

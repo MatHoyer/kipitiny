@@ -242,6 +242,8 @@ type Store interface {
 	SetUptimeState(ctx context.Context, serviceID string, down bool, since time.Time) error
 	// DeleteUptimeCheck also deletes its results.
 	DeleteUptimeCheck(ctx context.Context, serviceID string) error
+	// SetUptimeRecent replaces the last results of a service's check.
+	SetUptimeRecent(ctx context.Context, serviceID string, recent []UptimeResult) error
 	// AddUptimeResult counts one check in the hour of at.
 	AddUptimeResult(ctx context.Context, serviceID string, at time.Time, ok bool, latency time.Duration) error
 	// ListUptimeHours returns the hours from since on, oldest first.
@@ -1051,7 +1053,19 @@ type UptimeCheck struct {
 	// Down is the state last notified, since ChangedAt.
 	Down      bool       `bun:"down" json:"down"`
 	ChangedAt *time.Time `bun:"changed_at" json:"changedAt,omitempty"`
-	CreatedAt time.Time  `bun:"created_at" json:"createdAt"`
+	// Recent are the last results, oldest first.
+	Recent    []UptimeResult `bun:"recent" json:"-"`
+	CreatedAt time.Time      `bun:"created_at" json:"createdAt"`
+}
+
+// UptimeResult is the outcome of one check.
+type UptimeResult struct {
+	At time.Time `json:"at"`
+	OK bool      `json:"ok"`
+	// Status is 0 when no response arrived.
+	Status    int    `json:"status,omitempty"`
+	LatencyMS int64  `json:"latencyMs"`
+	Error     string `json:"error,omitempty"`
 }
 
 // UptimeHour counts the checks of a service in one hour.

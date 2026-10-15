@@ -1543,6 +1543,9 @@ func (s *Store) GetUptimeCheck(ctx context.Context, serviceID string) (store.Upt
 
 func (s *Store) SaveUptimeCheck(ctx context.Context, c store.UptimeCheck) (store.UptimeCheck, error) {
 	c.CreatedAt = now()
+	if c.Recent == nil {
+		c.Recent = []store.UptimeResult{}
+	}
 	_, err := s.db.NewInsert().Model(&c).
 		On("CONFLICT (service_id) DO UPDATE").
 		Set("path = EXCLUDED.path").
@@ -1582,6 +1585,15 @@ func (s *Store) DeleteUptimeCheck(ctx context.Context, serviceID string) error {
 		_, err = tx.NewDelete().Model((*store.UptimeHour)(nil)).Where("service_id = ?", serviceID).Exec(ctx)
 		return mapErr(err)
 	})
+}
+
+func (s *Store) SetUptimeRecent(ctx context.Context, serviceID string, recent []store.UptimeResult) error {
+	if recent == nil {
+		recent = []store.UptimeResult{}
+	}
+	_, err := s.db.NewUpdate().Model(&store.UptimeCheck{Recent: recent}).Column("recent").
+		Where("service_id = ?", serviceID).Exec(ctx)
+	return mapErr(err)
 }
 
 func (s *Store) AddUptimeResult(ctx context.Context, serviceID string, at time.Time, ok bool, latency time.Duration) error {

@@ -53,7 +53,7 @@ a project synced from git can only set it there.
   2 successful ones, so one slow answer doesn't flood the channels
   (`uptime.down`, `uptime.up`).
 - The last 60 results are shown with their response time; hourly availability
-  is kept for 30 days.
+  is kept for 30 days. Both survive manager restarts and updates.
 - A check pauses while the service is stopped or not deployed yet.
 
 ## Email
