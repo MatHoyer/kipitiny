@@ -163,6 +163,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("GET /api/servers/{id}/stats", a.serverStats)
 	handle("GET /api/servers/{id}/security", a.serverSecurity)
 	handle("POST /api/servers/{id}/security/check", a.checkServerSecurity)
+	handle("POST /api/servers/{id}/security/fix", a.fixServerSecurity)
 	handle("GET /api/ssh-key", a.sshKey)
 	handle("GET /api/domains", a.listDomains)
 	handle("POST /api/domains", a.createDomain)

@@ -310,19 +310,39 @@ function serviceStats(s: DemoDb["services"][number]): ServiceStats {
   return { current: history.at(-1) ?? null, history, containers: per };
 }
 
-/** A typical fresh VPS: patched by hand so far, SSH still open to passwords. */
+/** The demo's fix run: each step takes two seconds, then its points pass. */
+let demoFix: { ids: string[]; at: number; fixed: string[] } | null = null;
+
 function securityReport(): SecurityReport {
+  const base = baseSecurityReport();
+  if (!demoFix) return base;
+  const steps = ["read", ...demoFix.ids, "check"];
+  const i = Math.floor((Date.now() - demoFix.at) / 2000);
+  const done = i >= steps.length;
+  if (done) demoFix.fixed = [...new Set([...demoFix.fixed, ...demoFix.ids])];
+  const fix = {
+    ids: demoFix.ids,
+    startedAt: new Date(demoFix.at).toISOString(),
+    finishedAt: done ? new Date(demoFix.at + steps.length * 2000).toISOString() : undefined,
+    results: demoFix.ids.slice(0, Math.max(0, i - 1)).map((id) => ({ id })),
+  };
+  const items = base.items.map((it) => (demoFix!.fixed.includes(it.id) ? { ...it, status: "ok" as const, fix: false, detail: "Fixed by kipitiny." } : it));
+  return { ...base, items, fix, fixStep: done ? undefined : steps[i] };
+}
+
+/** A typical fresh VPS: patched by hand so far, SSH still open to passwords. */
+function baseSecurityReport(): SecurityReport {
   return {
     checkedAt: new Date(Date.now() - 2 * 3600_000).toISOString(),
     os: "Ubuntu 24.04.1 LTS",
     items: [
-      { id: "updates", title: "Security updates", status: "warn", detail: "3 security updates pending (12 updates in all).", hint: "Install them, or turn on automatic updates." },
+      { id: "updates", title: "Security updates", status: "warn", detail: "3 security updates pending (12 updates in all).", hint: "Install them, or turn on automatic updates.", fix: true },
       { id: "reboot", title: "Reboot", status: "ok", detail: "No reboot needed." },
-      { id: "auto_updates", title: "Automatic security updates", status: "fail", detail: "Off: security fixes wait for someone to install them.", hint: "Install and enable unattended-upgrades." },
-      { id: "ssh_password", title: "SSH password login", status: "fail", detail: "On: passwords can be guessed from the internet.", hint: "Set PasswordAuthentication no, once your key logs in." },
+      { id: "auto_updates", title: "Automatic security updates", status: "fail", detail: "Off: security fixes wait for someone to install them.", hint: "Install and enable unattended-upgrades.", fix: true },
+      { id: "ssh_password", title: "SSH password login", status: "fail", detail: "On: passwords can be guessed from the internet.", hint: "Set PasswordAuthentication no, once your key logs in.", fix: true },
       { id: "ssh_root", title: "SSH root login", status: "ok", detail: "root: without-password." },
-      { id: "firewall", title: "Firewall", status: "fail", detail: "No active firewall (ufw, firewalld or nftables).", hint: "Allow SSH, then deny other incoming traffic. Ports published by Docker go around it either way." },
-      { id: "fail2ban", title: "Brute-force protection", status: "warn", detail: "fail2ban isn't running: SSH login attempts aren't throttled.", hint: "Install fail2ban with its sshd jail." },
+      { id: "firewall", title: "Firewall", status: "fail", detail: "No active firewall (ufw, firewalld or nftables).", hint: "Allow SSH, then deny other incoming traffic. Ports published by Docker go around it either way.", fix: true },
+      { id: "fail2ban", title: "Brute-force protection", status: "warn", detail: "fail2ban isn't running: SSH login attempts aren't throttled.", hint: "Install fail2ban with its sshd jail.", fix: true },
       { id: "ports", title: "Open ports", status: "ok", detail: "Only SSH (22) and ports published by Docker." },
     ],
   };
@@ -1049,6 +1069,14 @@ const routes: Route[] = [
   ["GET", /^\/servers\/[^/]+\/stats$/, hostStats],
   ["GET", /^\/servers\/[^/]+\/security$/, securityReport],
   ["POST", /^\/servers\/[^/]+\/security\/check$/, () => ({ ...securityReport(), checkedAt: new Date().toISOString() })],
+  [
+    "POST",
+    /^\/servers\/[^/]+\/security\/fix$/,
+    ({ body }) => {
+      demoFix = { ids: (body as { fixes: string[] }).fixes, at: Date.now(), fixed: demoFix?.fixed ?? [] };
+      return securityReport();
+    },
+  ],
   [
     "POST",
     /^\/servers$/,

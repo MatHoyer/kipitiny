@@ -93,3 +93,18 @@ func (a *API) checkServerSecurity(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, rep)
 }
+
+func (a *API) fixServerSecurity(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Fixes []string `json:"fixes"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	rep, err := a.core.FixServerSecurity(r.Context(), r.PathValue("id"), in.Fixes)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, rep)
+}

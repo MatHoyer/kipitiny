@@ -797,6 +797,19 @@ export type SecurityItem = {
   detail?: string;
   /** What to do about it. */
   hint?: string;
+  /** kipitiny can fix it. */
+  fix?: boolean;
+  /** Why kipitiny can't fix it, when it isn't OK. */
+  noFix?: string;
+};
+
+/** A run fixing checklist points; finishedAt is absent while it runs. */
+export type FixRun = {
+  ids: string[];
+  startedAt: string;
+  finishedAt?: string;
+  results: { id: string; error?: string; output?: string }[];
+  error?: string;
 };
 
 /** The last check of a server's host; checkedAt is the zero time before the first. */
@@ -806,6 +819,10 @@ export type SecurityReport = {
   items: SecurityItem[];
   /** Set when the host couldn't be checked at all. */
   error?: string;
+  /** The running or last fix run since the manager started. */
+  fix?: FixRun;
+  /** Where the running fix is: "read", an item ID, or "check". */
+  fixStep?: string;
 };
 
 export type ServerStats = {
@@ -1412,6 +1429,7 @@ export const api = {
   serverStats: (id: string) => request<ServerStats>(`/servers/${id}/stats`),
   serverSecurity: (id: string) => request<SecurityReport>(`/servers/${id}/security`),
   checkServerSecurity: (id: string) => request<SecurityReport>(`/servers/${id}/security/check`, { method: "POST" }),
+  fixServerSecurity: (id: string, fixes: string[]) => request<SecurityReport>(`/servers/${id}/security/fix`, json("POST", { fixes })),
   /** With onStep, reports each step of reaching and preparing the server as it starts. */
   createServer: (s: ServerInput, onStep?: (step: string) => void) =>
     onStep ? progress<Server>("/servers", json("POST", s), onStep) : request<Server>("/servers", json("POST", s)),

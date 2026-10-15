@@ -68,8 +68,9 @@ type Core struct {
 	gitFlows       pending[gitFlow]
 	gitTokens      gitTokens
 	proxy          proxyState
-	cleaning       atomic.Bool  // a cleanup is running
-	securityBusy   atomic.Bool  // a security check started by hand is running
+	cleaning       atomic.Bool // a cleanup is running
+	securityBusy   atomic.Bool // a security check started by hand is running
+	securityFix    securityFixState
 	notified       sync.Map     // notification key -> time.Time last sent
 	notifyHTTP     *http.Client // nil: notify's default; tests redirect it
 	secretKinds    []secretKind

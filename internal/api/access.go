@@ -161,6 +161,7 @@ var routeAccess = map[string]access{
 	"GET /api/servers/{id}/stats":                feature(core.FeatureServers),
 	"GET /api/servers/{id}/security":             admin,
 	"POST /api/servers/{id}/security/check":      admin,
+	"POST /api/servers/{id}/security/fix":        admin,
 	"POST /api/domains":                          admin,
 	"PATCH /api/domains/{id}":                    admin,
 	"DELETE /api/domains/{id}":                   admin,

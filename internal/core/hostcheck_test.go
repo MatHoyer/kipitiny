@@ -10,6 +10,7 @@ security_updates=3
 reboot=1
 auto_updates=0
 ssh_port=2222
+ssh_port=22
 ssh_passwordauthentication=yes
 ssh_permitrootlogin=without-password
 ssh_keys=2
@@ -17,6 +18,7 @@ firewall=
 fail2ban=0
 listen=0.0.0.0:2222 users:(("sshd",pid=812,fd=3))
 listen=[::]:2222 users:(("sshd",pid=812,fd=4))
+listen=0.0.0.0:22 users:(("sshd",pid=812,fd=5))
 listen=0.0.0.0:443 users:(("docker-proxy",pid=1500,fd=7))
 listen=127.0.0.53%lo:53 users:(("systemd-resolve",pid=500,fd=14))
 listen=100.99.32.90%tailscale0:45091 users:(("tailscaled",pid=900,fd=20))
@@ -25,7 +27,7 @@ listen=0.0.0.0:3306 users:(("mysqld",pid=1000,fd=21))
 listen=[::]:3306 users:(("mysqld",pid=1000,fd=22))
 `
 	f := parseHostFacts(out)
-	if f.kv["os"] != "Ubuntu 24.04.1 LTS" || len(f.listen) != 8 || f.listen[0].process != "sshd" || f.listen[0].port != "2222" {
+	if f.kv["os"] != "Ubuntu 24.04.1 LTS" || len(f.listen) != 9 || len(f.sshPorts) != 2 || f.listen[0].process != "sshd" || f.listen[0].port != "2222" {
 		t.Fatalf("facts: %+v", f)
 	}
 	got := map[string]SecurityItem{}
@@ -54,7 +56,7 @@ listen=[::]:3306 users:(("mysqld",pid=1000,fd=22))
 	// No package manager or sshd (a container, a desktop): unknown, not failed.
 	items := securityItems(parseHostFacts("firewall=ufw\nfail2ban=1\n"))
 	for _, it := range items {
-		if it.Status == SecurityFail || it.Status == SecurityWarn {
+		if it.Status == SecurityFail || it.Status == SecurityWarn || it.ID == "ssh_password" && it.Status != SecurityOK {
 			t.Errorf("bare host: %+v", it)
 		}
 	}

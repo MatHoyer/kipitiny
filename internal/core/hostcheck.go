@@ -44,6 +44,9 @@ type SecurityItem struct {
 	// Detail says what was found, Hint what to do about it.
 	Detail string `json:"detail,omitempty"`
 	Hint   string `json:"hint,omitempty"`
+	// Fix is whether kipitiny can fix it; NoFix says why not when it isn't OK.
+	Fix   bool   `json:"fix,omitempty"`
+	NoFix string `json:"noFix,omitempty"`
 }
 
 // SecurityReport is the last check of a server's host.
@@ -56,6 +59,11 @@ type SecurityReport struct {
 	// SecurityUpdates and Reboot are kept to notify only on a change.
 	SecurityUpdates int  `json:"securityUpdates"`
 	Reboot          bool `json:"reboot"`
+
+	// Fix is the running or last fix run since the manager started, at
+	// FixStep (a FixStep* or an item ID) while it runs.
+	Fix     *FixRun `json:"fix,omitempty"`
+	FixStep string  `json:"fixStep,omitempty"`
 }
 
 func securitySetting(serverID string) string { return "security/" + serverID }
@@ -78,7 +86,10 @@ elif command -v dnf >/dev/null 2>&1; then
   needs-restarting -r >/dev/null 2>&1; [ $? = 1 ] && echo reboot=1 || echo reboot=0
   if systemctl is-enabled -q dnf-automatic.timer 2>/dev/null || systemctl is-enabled -q dnf-automatic-install.timer 2>/dev/null; then echo auto_updates=1; else echo auto_updates=0; fi
 fi
+command -v sshd >/dev/null 2>&1 && echo sshd=1
+[ -d /run/sshd ] || mkdir -p /run/sshd # sshd -T needs it; socket-activated hosts only create it on a connection
 sshd -T 2>/dev/null | grep -Ei '^(port|passwordauthentication|permitrootlogin) ' | sed 's/^/ssh_/; s/ /=/'
+grep -qiE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf' /etc/ssh/sshd_config 2>/dev/null && echo ssh_include=1
 echo "ssh_keys=$(cat /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys 2>/dev/null | grep -cE '^(ssh-|ecdsa-|sk-)')"
 fw=
 if command -v ufw >/dev/null 2>&1 && grep -q '^ENABLED=yes' /etc/ufw/ufw.conf 2>/dev/null; then fw=ufw
@@ -132,6 +143,8 @@ func lastLine(s string) string {
 type hostFacts struct {
 	kv     map[string]string
 	listen []listener
+	// sshPorts are the ports sshd listens on, checked numbers.
+	sshPorts []string
 }
 
 type listener struct{ addr, port, process string }
@@ -144,8 +157,16 @@ func parseHostFacts(out string) hostFacts {
 		if !ok {
 			continue
 		}
+		k, v = strings.ToLower(k), strings.TrimSpace(v)
+		if k == "ssh_port" {
+			// sshd -T prints one line per Port.
+			if n, err := strconv.Atoi(v); err == nil && n > 0 && n < 65536 && !slices.Contains(f.sshPorts, v) {
+				f.sshPorts = append(f.sshPorts, v)
+			}
+			continue
+		}
 		if k != "listen" {
-			f.kv[strings.ToLower(k)] = strings.TrimSpace(v)
+			f.kv[k] = v
 			continue
 		}
 		// listen=0.0.0.0:22 users:(("sshd",pid=1,fd=3))
@@ -197,10 +218,12 @@ func securityItems(f hostFacts) []SecurityItem {
 			map[string]string{"apt": "Install and enable unattended-upgrades.", "dnf": "Install dnf-automatic and enable its timer."}[pm])
 	}
 
-	switch pw := f.kv["ssh_passwordauthentication"]; pw {
-	case "":
+	switch pw := f.kv["ssh_passwordauthentication"]; {
+	case pw == "" && f.kv["sshd"] != "1":
+		add("ssh_password", "SSH password login", SecurityOK, "No SSH server installed.", "")
+	case pw == "":
 		add("ssh_password", "SSH password login", SecurityUnknown, "Couldn't read the SSH server's settings.", "")
-	case "no":
+	case pw == "no":
 		add("ssh_password", "SSH password login", SecurityOK, "Off: only keys can log in.", "")
 	default:
 		add("ssh_password", "SSH password login", SecurityFail, "On: passwords can be guessed from the internet.",
@@ -226,10 +249,13 @@ func securityItems(f hostFacts) []SecurityItem {
 		add("fail2ban", "Brute-force protection", SecurityWarn, "fail2ban isn't running: SSH login attempts aren't throttled.", "Install fail2ban with its sshd jail.")
 	}
 
-	sshPort := cmpOr(f.kv["ssh_port"], "22")
+	sshPorts := f.sshPorts
+	if len(sshPorts) == 0 {
+		sshPorts = []string{"22"}
+	}
 	var exposed []string
 	for _, l := range f.listen {
-		if l.process == "docker-proxy" || l.process == "sshd" && l.port == sshPort || !public(l.addr) {
+		if l.process == "docker-proxy" || l.process == "sshd" && slices.Contains(sshPorts, l.port) || !public(l.addr) {
 			continue
 		}
 		s := l.port
@@ -242,21 +268,24 @@ func securityItems(f hostFacts) []SecurityItem {
 	}
 	switch {
 	case len(exposed) == 0:
-		add("ports", "Open ports", SecurityOK, "Only SSH ("+sshPort+") and ports published by Docker.", "")
+		add("ports", "Open ports", SecurityOK, "Only SSH ("+strings.Join(sshPorts, ", ")+") and ports published by Docker.", "")
 	case f.kv["firewall"] != "":
 		add("ports", "Open ports", SecurityOK, "Also listening: "+strings.Join(exposed, ", ")+"; the firewall filters them.", "")
 	default:
 		add("ports", "Open ports", SecurityWarn, "Reachable from outside: "+strings.Join(exposed, ", ")+".",
 			"Stop what you don't need, or bind it to 127.0.0.1, or turn on a firewall.")
 	}
-	return items
-}
-
-func cmpOr(s, def string) string {
-	if s == "" {
-		return def
+	for i := range items {
+		if items[i].Status == SecurityOK {
+			continue
+		}
+		if err := fixable(items[i].ID, f); err != nil {
+			items[i].NoFix = err.Error()
+		} else {
+			items[i].Fix = true
+		}
 	}
-	return s
+	return items
 }
 
 // cgnat is where Tailscale and carrier-grade NAT addresses live.
@@ -358,6 +387,8 @@ func (c *Core) ServerSecurity(ctx context.Context, serverID string) (SecurityRep
 	if r.Items == nil {
 		r.Items = []SecurityItem{}
 	}
+	r.FixStep, _ = c.steps.get(securityFixKey(serverID))
+	r.Fix = c.securityFix.get(serverID)
 	return r, err
 }
 
@@ -375,5 +406,6 @@ func (c *Core) CheckServerSecurity(ctx context.Context, serverID string) (Securi
 		return SecurityReport{}, fmt.Errorf("%w: a check is already running", ErrBusy)
 	}
 	defer c.securityBusy.Store(false)
-	return c.checkSecurity(ctx, sv), nil
+	c.checkSecurity(ctx, sv)
+	return c.ServerSecurity(ctx, serverID)
 }
