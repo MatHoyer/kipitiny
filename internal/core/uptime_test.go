@@ -169,7 +169,7 @@ func TestUptimeChecks(t *testing.T) {
 	}
 	mu.Unlock()
 
-	c.uptime.runs = map[string]*uptimeRun{svc.ID: r}
+	c.uptime.runs = nil // a restart: the results come from the store
 	v, err = c.Uptime(ctx, svc.ID)
 	if err != nil {
 		t.Fatal(err)

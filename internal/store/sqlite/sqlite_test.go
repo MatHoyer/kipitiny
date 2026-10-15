@@ -980,8 +980,16 @@ func TestUptime(t *testing.T) {
 	if err != nil || c.Path != "/health" || c.IntervalSec != 30 || c.ExpectedStatus != 204 || c.Enabled || !c.Down || c.ChangedAt == nil {
 		t.Fatalf("update: %+v %v", c, err)
 	}
-	if cs, err := s.ListUptimeChecks(ctx); err != nil || len(cs) != 1 {
+	if cs, err := s.ListUptimeChecks(ctx); err != nil || len(cs) != 1 || cs[0].Recent == nil {
 		t.Fatalf("list: %v %v", cs, err)
+	}
+	recent := []store.UptimeResult{{At: time.Now().UTC().Truncate(time.Second), Status: 503, Error: "status 503"}}
+	if err := s.SetUptimeRecent(ctx, svc.ID, recent); err != nil {
+		t.Fatal(err)
+	}
+	// Saving the settings again keeps the results.
+	if c, err := s.SaveUptimeCheck(ctx, store.UptimeCheck{ServiceID: svc.ID, Path: "/", IntervalSec: 60, TimeoutSec: 10}); err != nil || !reflect.DeepEqual(c.Recent, recent) {
+		t.Fatalf("recent: %+v %v", c.Recent, err)
 	}
 
 	h0 := time.Date(2026, 10, 4, 9, 0, 0, 0, time.UTC)
