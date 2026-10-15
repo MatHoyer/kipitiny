@@ -528,7 +528,7 @@ function TableView({
       ) : (
         data && (
           <DataTable
-            className="max-h-none rounded-none border-0"
+            className="h-full max-h-none rounded-none border-0"
             columns={columns}
             rows={shown}
             truncated={data.truncated.map(([r, c]): [number, number] => [r + nNew, c])}
