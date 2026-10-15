@@ -75,3 +75,21 @@ func (a *API) serverStats(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, st)
 }
+
+func (a *API) serverSecurity(w http.ResponseWriter, r *http.Request) {
+	rep, err := a.core.ServerSecurity(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rep)
+}
+
+func (a *API) checkServerSecurity(w http.ResponseWriter, r *http.Request) {
+	rep, err := a.core.CheckServerSecurity(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rep)
+}

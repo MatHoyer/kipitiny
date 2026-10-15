@@ -33,6 +33,7 @@ import type {
   RedisValue,
   HostUsage,
   Server,
+  SecurityReport,
   ServerStats,
   Service,
   ServiceStats,
@@ -307,6 +308,24 @@ function serviceStats(s: DemoDb["services"][number]): ServiceStats {
   const history = s.stopped ? [] : Array.from({ length: 30 }, (_, i) => usage(s, t - (29 - i) * 10_000));
   const per = Object.fromEntries(containers(s).map((c) => [c.id.slice(0, 12), { current: history.at(-1) ?? null, history }]));
   return { current: history.at(-1) ?? null, history, containers: per };
+}
+
+/** A typical fresh VPS: patched by hand so far, SSH still open to passwords. */
+function securityReport(): SecurityReport {
+  return {
+    checkedAt: new Date(Date.now() - 2 * 3600_000).toISOString(),
+    os: "Ubuntu 24.04.1 LTS",
+    items: [
+      { id: "updates", title: "Security updates", status: "warn", detail: "3 security updates pending (12 updates in all).", hint: "Install them, or turn on automatic updates." },
+      { id: "reboot", title: "Reboot", status: "ok", detail: "No reboot needed." },
+      { id: "auto_updates", title: "Automatic security updates", status: "fail", detail: "Off: security fixes wait for someone to install them.", hint: "Install and enable unattended-upgrades." },
+      { id: "ssh_password", title: "SSH password login", status: "fail", detail: "On: passwords can be guessed from the internet.", hint: "Set PasswordAuthentication no, once your key logs in." },
+      { id: "ssh_root", title: "SSH root login", status: "ok", detail: "root: without-password." },
+      { id: "firewall", title: "Firewall", status: "fail", detail: "No active firewall (ufw, firewalld or nftables).", hint: "Allow SSH, then deny other incoming traffic. Ports published by Docker go around it either way." },
+      { id: "fail2ban", title: "Brute-force protection", status: "warn", detail: "fail2ban isn't running: SSH login attempts aren't throttled.", hint: "Install fail2ban with its sshd jail." },
+      { id: "ports", title: "Open ports", status: "ok", detail: "Only SSH (22) and ports published by Docker." },
+    ],
+  };
 }
 
 /** A host that's busy enough to look alive: a slow wave over a fixed machine. */
@@ -601,6 +620,8 @@ const EVENTS: Notifications["events"] = [
   { type: "restore.succeeded", label: "Restore succeeded", default: true },
   { type: "cleanup.failed", label: "Cleanup had errors", default: true },
   { type: "update.available", label: "New kipitiny version", default: true },
+  { type: "server.updates_pending", label: "Server has security updates", default: true },
+  { type: "server.reboot_required", label: "Server needs a reboot", default: true },
 ];
 
 const backupKindOf = (kind: string) => (kind === "postgres" ? "postgres" : kind === "redis" || kind === "app" ? "volume" : "dump");
@@ -1026,6 +1047,8 @@ const routes: Route[] = [
 
   ["GET", /^\/servers$/, () => [{ ...SERVER, projects: db.projects.length }]],
   ["GET", /^\/servers\/[^/]+\/stats$/, hostStats],
+  ["GET", /^\/servers\/[^/]+\/security$/, securityReport],
+  ["POST", /^\/servers\/[^/]+\/security\/check$/, () => ({ ...securityReport(), checkedAt: new Date().toISOString() })],
   [
     "POST",
     /^\/servers$/,

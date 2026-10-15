@@ -29,3 +29,23 @@ seconds from inside the server's Traefik container, which sees the host's
 `/proc` and sits on Docker's data disk, so nothing else runs on the server.
 They're kept in memory only: a manager restart starts the charts over. The API
 serves them at `GET /api/servers/{id}/stats`.
+
+## Security checklist
+
+Admins see a **Security** section on each server's page: the host is checked a
+minute after the manager starts, then every six hours, or with **Check now**.
+
+| Check | Looks at |
+|-------|----------|
+| Security updates | pending updates from apt or dnf (security ones counted apart) |
+| Reboot | whether installed updates wait for a reboot |
+| Automatic security updates | unattended-upgrades, or the dnf-automatic timer |
+| SSH password login, SSH root login | the SSH server's effective settings (`sshd -T`) |
+| Firewall | ufw, firewalld or nftables active |
+| Brute-force protection | fail2ban running |
+| Open ports | what listens on a public address besides SSH and Docker's published ports |
+
+The check runs the host's own tools as root in a short-lived container (the
+same way as the host terminal) and only reads. New security updates and a
+needed reboot are [notifications](/docs/monitoring#notifications)
+(`server.updates_pending`, `server.reboot_required`).

@@ -165,15 +165,17 @@ func (c *Core) OpenServerTerminal(ctx context.Context, serverID string, cols, ro
 	return c.openTerminal(ctx, target, tty, err)
 }
 
-// cleanupTerminals removes host shell helpers left by a crash.
+// cleanupTerminals removes host shell and host check helpers left by a crash.
 func (c *Core) cleanupTerminals(ctx context.Context, dk *docker.Client) error {
-	cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: terminalComponent})
-	if err != nil {
-		return err
-	}
-	for _, ct := range cts {
-		if err := dk.RemoveContainer(ctx, ct.ID, 0); err != nil {
+	for _, component := range []string{terminalComponent, hostCheckComponent} {
+		cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: component})
+		if err != nil {
 			return err
+		}
+		for _, ct := range cts {
+			if err := dk.RemoveContainer(ctx, ct.ID, 0); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

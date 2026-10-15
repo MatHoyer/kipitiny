@@ -113,6 +113,7 @@ service, is sent at most once per 15 minutes.
 | `service.unhealthy`, `service.healthy` | No healthy replica for 2 minutes, then recovered. |
 | `service.restarted` | The reconciler restarted a service's container stopped outside kipitiny. |
 | `uptime.down`, `uptime.up` | An uptime check failed 3 times in a row, then passed twice. |
+| `server.updates_pending`, `server.reboot_required` | A server's [security check](/docs/servers#security-checklist) finds new security updates, or that a reboot is needed. |
 | `backup.succeeded`, `backup.failed` | A backup ends (manual or scheduled). |
 | `verify.succeeded`, `verify.failed` | A backup's restore test ends. |
 | `restore.succeeded`, `restore.failed` | A restore ends. |

@@ -29,6 +29,8 @@ const (
 	EventServiceHealthy   = "service.healthy"
 	EventUptimeDown       = "uptime.down"
 	EventUptimeUp         = "uptime.up"
+	EventServerUpdates    = "server.updates_pending"
+	EventServerReboot     = "server.reboot_required"
 )
 
 // EventType describes an event a channel can subscribe to.
@@ -57,6 +59,8 @@ var eventTypes = []EventType{
 	{EventRestoreSucceeded, "Restore succeeded", true},
 	{EventCleanupFailed, "Cleanup had errors", true},
 	{EventUpdateAvailable, "New kipitiny version", true},
+	{EventServerUpdates, "Server has security updates", true},
+	{EventServerReboot, "Server needs a reboot", true},
 }
 
 const (
