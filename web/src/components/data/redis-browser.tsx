@@ -630,9 +630,9 @@ function ValueView({
           <ErrorText error={pages.error} />
         </div>
       ) : (
-        <>
-          {pending.deleteKey && <p className="border-b bg-destructive/5 px-3 py-2 text-xs text-destructive">Saving deletes this key.</p>}
-          <div className={cn(pending.deleteKey && "text-muted-foreground line-through")}>
+        <div className="flex h-full flex-col">
+          {pending.deleteKey && <p className="shrink-0 border-b bg-destructive/5 px-3 py-2 text-xs text-destructive">Saving deletes this key.</p>}
+          <div className={cn("min-h-0 flex-1 overflow-auto", pending.deleteKey && "text-muted-foreground line-through")}>
             {first!.type === "string" ? (
               write && !pending.deleteKey && truncated.length === 0 ? (
                 <StringEditor
@@ -662,7 +662,7 @@ function ValueView({
                 const g = grid(first!.type, shownItems, shownCut);
                 return (
                   <DataTable
-                    className="max-h-none rounded-none border-0"
+                    className="h-full max-h-none rounded-none border-0"
                     columns={g.columns}
                     rows={g.rows as Cell[][]}
                     truncated={g.truncated}
@@ -674,7 +674,7 @@ function ValueView({
               })()
             )}
           </div>
-        </>
+        </div>
       )}
     </BrowserShell>
   );
