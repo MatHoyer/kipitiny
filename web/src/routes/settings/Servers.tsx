@@ -32,7 +32,9 @@ import { HowTo } from "@/components/how-to";
 import { StepsProgress, type PlannedStep } from "@/components/test-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { SaveBar } from "@/components/save-bar";
+import { ServerSecuritySection } from "@/components/server-security";
 import { HostUsageSection, memoryOf, useUsage } from "@/components/usage";
+import { useAccess } from "@/lib/access";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
@@ -103,6 +105,7 @@ export function ServerPage() {
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.servers, refetchInterval: 30_000 });
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
   const usage = useUsage();
+  const { admin } = useAccess();
   const remove = useMutation({
     meta: { error: "Couldn't remove the server" },
     mutationFn: api.deleteServer,
@@ -155,6 +158,8 @@ export function ServerPage() {
         )}
 
         <HostUsageSection serverId={s.id} containers={total} />
+
+        {admin && <ServerSecuritySection key={`sec-${s.id}`} serverId={s.id} />}
 
         <NetworkSection key={`net-${s.id}`} server={s} />
         {s.kind === "ssh" && <ConnectionSection key={`ssh-${s.id}`} server={s} />}
