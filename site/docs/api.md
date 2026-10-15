@@ -40,3 +40,20 @@ If you later lose a permission, your restricted tokens lose it too.
 Secrets are masked in every response, except what `get_connection` reveals. Every
 mutation, from the UI, a token or an agent (including refused attempts), lands
 in the audit log (kept 90 days).
+
+## Dry-run mode
+
+Add `?dry_run=true` to the endpoint to let an agent rehearse without changing
+anything, for example to review its plan before giving it the real endpoint:
+
+```sh
+claude mcp add --transport http kipitiny-dry "https://kipitiny.example.com/mcp?dry_run=true" \
+  --header "Authorization: Bearer kpt_…"
+```
+
+Read tools work as usual, and so does `query_database` without `write`. Tools
+that take `dry_run` (`apply_project_compose`, `install_template`,
+`link_project_git`, `sync_project_git`) always return their plan. Every other
+tool that changes something is not run: it answers with the arguments it would
+have been called with. Those calls don't check scope, permissions or whether
+their targets exist.

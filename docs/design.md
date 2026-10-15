@@ -359,6 +359,7 @@ Clients ────┤                            ├──→ core (service la
 
 - All logic in `internal/core`. REST handlers and MCP tools are thin adapters. Permissions enforced in one place.
 - MCP built in (`/mcp` module), Streamable HTTP at `/mcp`, reusing auth, tokens, permissions, audit logs. Standalone stdio proxy later.
+- Dry-run mode (`/mcp?dry_run=true`, a second server with the same tools): read-only tools run, tools with a `dry_run` input have it forced, `query_database` runs without `write`, any other tool returns an error result naming its arguments and runs nothing.
 - Task-oriented tools, not 1:1 REST mapping: `deploy_image`, `get_app_status`, `get_logs`, `rollback`, `backup_database`, `restore_database`.
 - Mask secrets in every tool response; restricted tokens; confirmation for destructive tools.
 - MCP covers what an operator does on projects, services, data, backups and git; server settings (servers, storage, providers, notifications, Cloudflare, cleanup, updates) stay in the UI, and session-only routes (tokens, account, project export with every secret) never reach it.

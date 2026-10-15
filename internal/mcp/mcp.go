@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -35,167 +36,182 @@ func docs(version string) (index, base, sources string) {
 }
 
 // Handler serves MCP. It must run behind authentication that puts a
-// core.Actor in the request context.
+// core.Actor in the request context. /mcp?dry_run=true serves the same tools
+// in dry-run mode (see addTool).
 func Handler(c *core.Core, version string) http.Handler {
-	docsIndex, docsBase, docsSources := docs(version)
-	server := mcp.NewServer(&mcp.Implementation{Name: "kipitiny", Version: version}, &mcp.ServerOptions{
-		Instructions: "Manage apps and databases (PostgreSQL, Redis, MySQL, MariaDB, MongoDB) on this kipitiny server. " +
-			"Refer to services as project/service. A token may do what its owner may, or only the projects and permissions it was restricted to; " +
-			"a refusal names the missing permission (with deploy but not settings, deploy_image only changes the tag of an existing app). Deleting a service or project or restoring a backup takes its name as an explicit confirmation. " +
-			"Documentation of this version, as markdown: " + docsIndex + " lists every page; read the relevant one before guessing how a feature works. " +
-			"If the site is unreachable, the same pages are in " + docsSources + ".",
+	live, dry := newServer(c, version, false), newServer(c, version, true)
+	return mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
+		if on, _ := strconv.ParseBool(r.URL.Query().Get("dry_run")); on {
+			return dry
+		}
+		return live
+	}, &mcp.StreamableHTTPOptions{
+		Stateless:    true,
+		JSONResponse: true,
 	})
+}
+
+func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
+	docsIndex, docsBase, docsSources := docs(version)
+	instructions := "Manage apps and databases (PostgreSQL, Redis, MySQL, MariaDB, MongoDB) on this kipitiny server. " +
+		"Refer to services as project/service. A token may do what its owner may, or only the projects and permissions it was restricted to; " +
+		"a refusal names the missing permission (with deploy but not settings, deploy_image only changes the tag of an existing app). Deleting a service or project or restoring a backup takes its name as an explicit confirmation. " +
+		"Documentation of this version, as markdown: " + docsIndex + " lists every page; read the relevant one before guessing how a feature works. " +
+		"If the site is unreachable, the same pages are in " + docsSources + "."
+	if dryRun {
+		instructions += " This connection is in dry-run mode: read tools work, tools taking dry_run always return their plan, " +
+			"and every other tool that changes something only says it was not run. Nothing changes."
+	}
+	server := mcp.NewServer(&mcp.Implementation{Name: "kipitiny", Version: version}, &mcp.ServerOptions{Instructions: instructions})
+	s := toolset{server: server, dryRun: dryRun}
 	t := &tools{c: c}
 	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true}
 	yes := true
 
-	mcp.AddTool(server, &mcp.Tool{Name: "list_services", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "list_services", Annotations: readOnly,
 		Description: "List every project with its services, their kind, image, domain and current status."}, t.listServices)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_projects", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "list_projects", Annotations: readOnly,
 		Description: "List every project, including empty ones, with its server, service names and the git compose file it follows, if any."}, t.listProjects)
-	mcp.AddTool(server, &mcp.Tool{Name: "get_manager_status", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "get_manager_status", Annotations: readOnly,
 		Description: "The manager's version and available update, its Docker engine, its database size, and the current CPU, memory and network use of every running service."}, t.getManagerStatus)
-	mcp.AddTool(server, &mcp.Tool{Name: "get_topology", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "get_topology", Annotations: readOnly,
 		Description: "The network map of each server: entrypoints and the reverse proxy, Docker networks with subnets, and each project's containers with their IPs and aliases."}, t.getTopology)
-	mcp.AddTool(server, &mcp.Tool{Name: "get_audit_log", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "get_audit_log", Annotations: readOnly,
 		Description: "Recent mutations by users, tokens and agents, including refused ones: actor, action, target, status and error. Needs admin."}, t.getAuditLog)
-	mcp.AddTool(server, &mcp.Tool{Name: "create_project",
+	addTool(s, &mcp.Tool{Name: "create_project",
 		Description: "Create an empty project on a server (this one by default). Add services with deploy_image, apply_project_compose or link_project_git."}, t.createProject)
-	mcp.AddTool(server, &mcp.Tool{Name: "rename_project",
+	addTool(s, &mcp.Tool{Name: "rename_project",
 		Description: "Rename a project. Its containers are renamed in place; nothing restarts."}, t.renameProject)
-	mcp.AddTool(server, &mcp.Tool{Name: "rename_service",
+	addTool(s, &mcp.Tool{Name: "rename_service",
 		Description: "Rename a service. Nothing restarts; until its next deploy it also answers to its old name on the project network. Renaming a database rewrites the {{ db.NAME.* }} references to it and redeploys the apps using it. Not for projects linked to git (edit the file)."}, t.renameService)
-	mcp.AddTool(server, &mcp.Tool{Name: "delete_service", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+	addTool(s, &mcp.Tool{Name: "delete_service", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Delete a service: its containers, volumes (data) and deploy logs; backups are kept. confirm must repeat the service name. " +
 			"A database still referenced by an app, or a service of a git-linked project, is refused."}, t.deleteService)
-	mcp.AddTool(server, &mcp.Tool{Name: "delete_project", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+	addTool(s, &mcp.Tool{Name: "delete_project", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Delete a project with every service, volume and its network; backups are kept. confirm must repeat the project name."}, t.deleteProject)
-	mcp.AddTool(server, &mcp.Tool{Name: "get_project_git", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "get_project_git", Annotations: readOnly,
 		Description: "A project's git link: repository, branch, compose file path, auto sync, the last sync's commit, time, error and warnings, and the services running another image than the file's."}, t.getProjectGit)
-	mcp.AddTool(server, &mcp.Tool{Name: "link_project_git", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+	addTool(s, &mcp.Tool{Name: "link_project_git", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Link a project to a compose file in a git repository (see " + docsBase + "/compose/llms.txt). The file then owns the services: every commit is applied and apps it doesn't list are deleted with their volumes. " +
 			"Run with dry_run first to see what the first sync changes."}, t.linkProjectGit)
-	mcp.AddTool(server, &mcp.Tool{Name: "sync_project_git", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+	addTool(s, &mcp.Tool{Name: "sync_project_git", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Apply a git-linked project's compose file now, as a push would. dry_run returns the plan only."}, t.syncProjectGit)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_git_repos", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "list_git_repos", Annotations: readOnly,
 		Description: "Repositories the connected git providers can read (full name, clone URL, default branch), to pick one for link_project_git."}, t.listGitRepos)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_git_branches", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "list_git_branches", Annotations: readOnly,
 		Description: "Branches of a repository a git provider can read."}, t.listGitBranches)
-	mcp.AddTool(server, &mcp.Tool{Name: "service_action",
+	addTool(s, &mcp.Tool{Name: "service_action",
 		Description: "Start, stop or restart a service. A stopped service stays stopped until started."}, t.serviceAction)
-	mcp.AddTool(server, &mcp.Tool{Name: "get_deployment_log", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "get_deployment_log", Annotations: readOnly,
 		Description: "The log of a deployment (pull, readiness, errors): a service's latest one, or one by ID from get_app_status."}, t.getDeploymentLog)
-	mcp.AddTool(server, &mcp.Tool{Name: "get_app_status", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "get_app_status", Annotations: readOnly,
 		Description: "Status of one service: containers and health, settings (secrets masked), the last deployments with errors, current CPU/memory/network use, uptime check results."}, t.getAppStatus)
-	mcp.AddTool(server, &mcp.Tool{Name: "get_logs", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "get_logs", Annotations: readOnly,
 		Description: "Recent log lines of a service's running containers, optionally filtered by a case-insensitive substring."}, t.getLogs)
-	mcp.AddTool(server, &mcp.Tool{Name: "deploy",
+	addTool(s, &mcp.Tool{Name: "deploy",
 		Description: "Deploy a service's current settings (zero-downtime for apps without published ports), or another tag of an app's image. Returns the deployment; poll get_app_status for the outcome."}, t.deploy)
-	mcp.AddTool(server, &mcp.Tool{Name: "deploy_image",
+	addTool(s, &mcp.Tool{Name: "deploy_image",
 		Description: "Create (or update) an app running a Docker image in a project, then deploy it. The project is created if missing. With the deploy permission but not settings, only an existing app's image tag or digest can change."}, t.deployImage)
-	mcp.AddTool(server, &mcp.Tool{Name: "set_project_env",
+	addTool(s, &mcp.Tool{Name: "set_project_env",
 		Description: "Set or remove a project's shared variables (readable) and secrets (write-only). Services use either as {{ project.NAME }} in an env value; they pick up changes on their next deploy."}, t.setProjectEnv)
-	mcp.AddTool(server, &mcp.Tool{Name: "get_project_compose", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "get_project_compose", Annotations: readOnly,
 		Description: "A project (or one of its services) as an equivalent docker-compose file, kipitiny settings in x-kipitiny blocks. Secret values are ${NAME} variables without values."}, t.getProjectCompose)
-	mcp.AddTool(server, &mcp.Tool{Name: "apply_project_compose", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+	addTool(s, &mcp.Tool{Name: "apply_project_compose", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Make a project match a docker-compose file (format of get_project_compose, fully documented at " + docsBase + "/compose/llms.txt): creates and updates services, then deploys the changed ones. " +
 			"dry_run returns the plan only. prune also deletes the apps the file doesn't list (with their volumes): confirm must repeat the project name."}, t.applyProjectCompose)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_templates", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "list_templates", Annotations: readOnly,
 		Description: "One-click apps this kipitiny can install: each one's id, description, the inputs it asks for and its compose file."}, t.listTemplates)
-	mcp.AddTool(server, &mcp.Tool{Name: "install_template",
+	addTool(s, &mcp.Tool{Name: "install_template",
 		Description: "Install a template (see list_templates) into a project, created if missing: applies its compose file with values as the inputs, then deploys. " +
 			"Nothing existing is deleted. dry_run returns the plan only."}, t.installTemplate)
-	mcp.AddTool(server, &mcp.Tool{Name: "rollback",
+	addTool(s, &mcp.Tool{Name: "rollback",
 		Description: "Redeploy the image of an earlier successful deployment (the previous one by default)."}, t.rollback)
-	mcp.AddTool(server, &mcp.Tool{Name: "backup_database",
+	addTool(s, &mcp.Tool{Name: "backup_database",
 		Description: "Start a backup of a service to a storage (local disk by default; see list_storage): a pg_dump of a PostgreSQL service, a dump of a MySQL, MariaDB or MongoDB one by its own tool, an archive of the volumes of a Redis service or an app with volumes."}, t.backupDatabase)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_backups", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "list_backups", Annotations: readOnly,
 		Description: "Backups of a service with status, size, storage (targetId) and restore-test result."}, t.listBackups)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_storage", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "list_storage", Annotations: readOnly,
 		Description: "Where kipitiny can store files (local disk, S3, drives), with their IDs and whether files are encrypted."}, t.listStorage)
-	mcp.AddTool(server, &mcp.Tool{Name: "restore_database", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+	addTool(s, &mcp.Tool{Name: "restore_database", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Replace a service's data with a backup. Destructive: confirm must repeat the service name. For a PostgreSQL dump, apps referencing the database are stopped meanwhile; for a volume archive, the service itself is."}, t.restoreDatabase)
 
-	mcp.AddTool(server, &mcp.Tool{Name: "backup_project",
+	addTool(s, &mcp.Tool{Name: "backup_project",
 		Description: "Back up every database and app with volumes of a project to one storage. Services whose backup can't start are listed in error; the others still run."}, t.backupProject)
-	mcp.AddTool(server, &mcp.Tool{Name: "verify_backup",
+	addTool(s, &mcp.Tool{Name: "verify_backup",
 		Description: "Restore-test a successful backup in a throwaway, network-less container; list_backups then shows the result."}, t.verifyBackup)
-	mcp.AddTool(server, &mcp.Tool{Name: "delete_backup", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+	addTool(s, &mcp.Tool{Name: "delete_backup", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Delete a backup and its file from storage."}, t.deleteBackup)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_restores", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "list_restores", Annotations: readOnly,
 		Description: "Restores of a service: which backup, when and the outcome."}, t.listRestores)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_deployments", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "list_deployments", Annotations: readOnly,
 		Description: "A service's deployments, newest first: image, status, error, commit and who triggered it. IDs work with get_deployment_log and rollback."}, t.listDeployments)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_backup_schedules", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "list_backup_schedules", Annotations: readOnly,
 		Description: "A service's backup schedules: cron (UTC), storage, retention, restore tests and next run."}, t.listBackupSchedules)
-	mcp.AddTool(server, &mcp.Tool{Name: "set_backup_schedule",
+	addTool(s, &mcp.Tool{Name: "set_backup_schedule",
 		Description: "Add a backup schedule to a service, or change one (schedule_id; omitted fields are kept). Each schedule prunes its own backups by its retention."}, t.setBackupSchedule)
-	mcp.AddTool(server, &mcp.Tool{Name: "delete_backup_schedule",
+	addTool(s, &mcp.Tool{Name: "delete_backup_schedule",
 		Description: "Delete one of a service's backup schedules; the backups it made are kept."}, t.deleteBackupSchedule)
-	mcp.AddTool(server, &mcp.Tool{Name: "set_uptime_check",
+	addTool(s, &mcp.Tool{Name: "set_uptime_check",
 		Description: "Create or replace the uptime check of an app with a public domain: an HTTPS request to a path at an interval, notifying when it goes down. It runs right away; get_app_status shows its results. A git project's checks are in its compose file (x-kipitiny.uptime) instead."}, t.setUptimeCheck)
-	mcp.AddTool(server, &mcp.Tool{Name: "delete_uptime_check",
+	addTool(s, &mcp.Tool{Name: "delete_uptime_check",
 		Description: "Remove a service's uptime check and its history. Not for a git project: remove x-kipitiny.uptime from its file."}, t.deleteUptimeCheck)
-	mcp.AddTool(server, &mcp.Tool{Name: "set_maintenance",
+	addTool(s, &mcp.Tool{Name: "set_maintenance",
 		Description: "Set a project's maintenance page, shown (503 with Retry-After) while one of its apps has no replica to answer, and maintenance mode, which shows it to every visitor of its apps except allowed IPs while the replicas keep running (migrations, manual work); also the starting page visitors get while the project wakes from sleep. Applied within seconds, nothing restarts; works on git-linked projects too."}, t.setMaintenance)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_previews", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "list_previews", Annotations: readOnly,
 		Description: "A project's preview environments: name, branch, commit, last deploy, time to live and the URLs of their apps."}, t.listPreviews)
-	mcp.AddTool(server, &mcp.Tool{Name: "deploy_preview",
+	addTool(s, &mcp.Tool{Name: "deploy_preview",
 		Description: "Create or update a preview environment of a project: a copy with fresh databases, its apps on the preview base domain (asleep when unused), the project variables of its preview settings instead of production's secrets, and the given image tags. Changed services deploy in the background; list_previews and get_app_status show the outcome. Refused when a value it needs is missing or points at production. Needs deploy."}, t.deployPreview)
-	mcp.AddTool(server, &mcp.Tool{Name: "close_preview", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+	addTool(s, &mcp.Tool{Name: "close_preview", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Close a preview environment: delete its containers, volumes and databases. Needs deploy."}, t.closePreview)
-	mcp.AddTool(server, &mcp.Tool{Name: "set_sleep",
+	addTool(s, &mcp.Tool{Name: "set_sleep",
 		Description: "Set a project's sleep mode: after this long without a request to any of its apps, every service stops, databases too, and the next request starts them again behind a \"starting\" page (503 with Retry-After for API calls). Background workers don't run while it sleeps; a deploy, a start, a backup or a data query wakes it. Needs an app with a domain, and no service with published ports or the host network; get_app_status reports sleeping services."}, t.setSleep)
-	mcp.AddTool(server, &mcp.Tool{Name: "sync_dns", Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
+	addTool(s, &mcp.Tool{Name: "sync_dns", Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
 		Description: "Sync the Cloudflare DNS records and tunnel routes of service domains now instead of waiting for the next round (every ten minutes, and seconds after a domain changes); public IPs are detected again. Returns each managed hostname's state. Needs admin and a connected Cloudflare token."}, t.syncDNS)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_networks", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "list_networks", Annotations: readOnly,
 		Description: "Networks created by hand on each server, next to the automatic proxy and project networks, with the services on them and the name each is reached at (<project>-<service>)."}, t.listNetworks)
-	mcp.AddTool(server, &mcp.Tool{Name: "create_network",
+	addTool(s, &mcp.Tool{Name: "create_network",
 		Description: "Create a network on a server (this one by default) that services of several projects can join with set_service_networks to reach each other."}, t.createNetwork)
-	mcp.AddTool(server, &mcp.Tool{Name: "delete_network", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+	addTool(s, &mcp.Tool{Name: "delete_network", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Delete a network created by hand. Its services leave it right away (nothing restarts) and can no longer reach each other through it."}, t.deleteNetwork)
-	mcp.AddTool(server, &mcp.Tool{Name: "set_service_networks",
+	addTool(s, &mcp.Tool{Name: "set_service_networks",
 		Description: "Set the networks created by hand that a service joins, besides its project network; applied to its containers right away, without restarting them. Works on git-linked projects too."}, t.setServiceNetworks)
 
-	mcp.AddTool(server, &mcp.Tool{Name: "list_databases", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "list_databases", Annotations: readOnly,
 		Description: "The databases of a PostgreSQL, MySQL, MariaDB or MongoDB service's instance, with their size; main is the service's own."}, t.listDatabases)
-	mcp.AddTool(server, &mcp.Tool{Name: "create_database",
+	addTool(s, &mcp.Tool{Name: "create_database",
 		Description: "Create a database in a PostgreSQL, MySQL or MariaDB service's instance, owned by the service's user, or in a MongoDB one with its first collection."}, t.createDatabase)
-	mcp.AddTool(server, &mcp.Tool{Name: "list_tables", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "list_tables", Annotations: readOnly,
 		Description: "Tables and views of a PostgreSQL, MySQL or MariaDB database with their columns, estimated rows and size, or the collections of a MongoDB one (no columns)."}, t.listTables)
-	mcp.AddTool(server, &mcp.Tool{Name: "read_table", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "read_table", Annotations: readOnly,
 		Description: "Rows of a PostgreSQL, MySQL or MariaDB table or view, paged, sorted and filtered. Cells are text (null is NULL, binary is 0x hex); long ones are cut and listed in truncated."}, t.readTable)
-	mcp.AddTool(server, &mcp.Tool{Name: "find_documents", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "find_documents", Annotations: readOnly,
 		Description: "Documents of a MongoDB collection as relaxed Extended JSON, paged, filtered and sorted; long ones are cut and listed in truncated."}, t.findDocuments)
-	mcp.AddTool(server, &mcp.Tool{Name: "scan_redis_keys", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "scan_redis_keys", Annotations: readOnly,
 		Description: "One SCAN step over a Redis service's keys, with their type, TTL and size. Call again with the returned cursor until it is 0."}, t.scanRedisKeys)
-	mcp.AddTool(server, &mcp.Tool{Name: "get_redis_key", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "get_redis_key", Annotations: readOnly,
 		Description: "One page of a Redis key's value: [value] for a string, [field, value] pairs for a hash, [member, score] for a sorted set."}, t.getRedisKey)
-	mcp.AddTool(server, &mcp.Tool{Name: "query_database", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+	addTool(s, &mcp.Tool{Name: "query_database", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Run SQL on a PostgreSQL, MySQL or MariaDB service, a command on a Redis one, or mongosh JavaScript on a MongoDB one; read-only unless write is set. Prefer read_table, find_documents and get_redis_key to look at data."}, t.queryDatabase)
-	mcp.AddTool(server, &mcp.Tool{Name: "get_connection",
+	addTool(s, &mcp.Tool{Name: "get_connection",
 		Description: "A database service's host, port, user, password and URL, as apps of its project reach it."}, t.getConnection)
 
-	mcp.AddTool(server, &mcp.Tool{Name: "list_volume_files", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "list_volume_files", Annotations: readOnly,
 		Description: "Files and folders in a service's volumes (an app's named volumes, a database's data volume) or in its running container: name, type, size, modified time, mode, owner, symlink target. " +
 			"Paths are <volume>/<path>, or @container/<absolute path> for the container's own filesystem (the first running replica; @<container ID>/... picks one); an empty path lists the volumes and @container. " +
 			"A database's files are read-only. Changes in a container's filesystem reach that replica only and are lost on the next deploy: keep files that matter in a volume."}, t.listVolumeFiles)
-	mcp.AddTool(server, &mcp.Tool{Name: "read_volume_file", Annotations: readOnly,
+	addTool(s, &mcp.Tool{Name: "read_volume_file", Annotations: readOnly,
 		Description: "The content of a text file in a service's volumes or container (see list_volume_files for paths), up to 1 MiB; binary files are refused. Files may hold secrets."}, t.readVolumeFile)
-	mcp.AddTool(server, &mcp.Tool{Name: "write_volume_file",
+	addTool(s, &mcp.Tool{Name: "write_volume_file",
 		Description: "Write a file in an app's volumes or container (see list_volume_files for paths; a container's changes are lost on the next deploy), as text or base64 up to 16 MiB (e.g. a plugin's .jar), creating missing folders. New files belong to their folder's owner. " +
 			"The app sees it right away; most apps need a restart (service_action) to load new plugins or config."}, t.writeVolumeFile)
-	mcp.AddTool(server, &mcp.Tool{Name: "make_volume_dir",
+	addTool(s, &mcp.Tool{Name: "make_volume_dir",
 		Description: "Create a folder, with missing parents, in an app's volumes or container."}, t.makeVolumeDir)
-	mcp.AddTool(server, &mcp.Tool{Name: "move_volume_path",
+	addTool(s, &mcp.Tool{Name: "move_volume_path",
 		Description: "Move, rename or (with copy) copy a file or folder within an app's volumes, or within its container."}, t.moveVolumePath)
-	mcp.AddTool(server, &mcp.Tool{Name: "delete_volume_paths", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+	addTool(s, &mcp.Tool{Name: "delete_volume_paths", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Delete files or folders (with their content) in an app's volumes or container; nothing is deleted unless every path exists. Back up first (backup_database) when unsure."}, t.deleteVolumePaths)
 
-	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{
-		Stateless:    true,
-		JSONResponse: true,
-	})
+	return server
 }
 
 type tools struct{ c *core.Core }
