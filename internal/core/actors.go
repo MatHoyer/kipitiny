@@ -71,33 +71,13 @@ type TokenInput struct {
 }
 
 func (c *Core) CreateAPIToken(ctx context.Context, in TokenInput) (NewToken, error) {
-	name := strings.TrimSpace(in.Name)
-	if name == "" || len(name) > 60 {
-		return NewToken{}, fmt.Errorf("%w: give the token a name (max 60 characters)", ErrInvalid)
-	}
 	a, ok := ActorFrom(ctx)
 	if !ok || a.Kind != "user" {
 		return NewToken{}, ErrUnauthorized
 	}
-	t := store.APIToken{Name: name, UserID: a.UserID, Restricted: in.Restricted}
-	if in.Restricted {
-		access, err := c.normalized(ctx, UserAccess{Role: store.RoleMember, Features: in.Features, Grants: in.Grants})
-		if err != nil {
-			return NewToken{}, err
-		}
-		for _, f := range access.Features {
-			if !a.Has(Feature(f)) {
-				return NewToken{}, fmt.Errorf("%w: a token can't see %s when you can't", ErrForbidden, f)
-			}
-		}
-		for projectID, perms := range access.Grants {
-			for _, p := range perms {
-				if !a.Can(projectID, Perm(p)) {
-					return NewToken{}, fmt.Errorf("%w: a token can't have the %s permission on a project where you don't", ErrForbidden, p)
-				}
-			}
-		}
-		t.Features, t.Grants = access.Features, access.Grants
+	t := store.APIToken{UserID: a.UserID}
+	if err := c.setTokenAccess(ctx, a, &t, in); err != nil {
+		return NewToken{}, err
 	}
 	token := tokenPrefix + randomToken(32)
 	t.TokenHash = hashToken(token)
@@ -106,6 +86,81 @@ func (c *Core) CreateAPIToken(ctx context.Context, in TokenInput) (NewToken, err
 		return NewToken{}, err
 	}
 	return NewToken{APIToken: t, Token: token}, nil
+}
+
+// UpdateAPIToken renames a token and changes its access; a member only their own.
+func (c *Core) UpdateAPIToken(ctx context.Context, id string, in TokenInput) (store.APIToken, error) {
+	a, t, err := c.ownToken(ctx, id)
+	if err != nil {
+		return store.APIToken{}, err
+	}
+	if err := c.setTokenAccess(ctx, a, &t, in); err != nil {
+		return store.APIToken{}, err
+	}
+	return c.store.UpdateAPIToken(ctx, t)
+}
+
+// RollAPIToken replaces a token's secret, keeping its name and access: the
+// old secret stops working immediately.
+func (c *Core) RollAPIToken(ctx context.Context, id string) (NewToken, error) {
+	_, t, err := c.ownToken(ctx, id)
+	if err != nil {
+		return NewToken{}, err
+	}
+	token := tokenPrefix + randomToken(32)
+	t.TokenHash = hashToken(token)
+	if t, err = c.store.UpdateAPIToken(ctx, t); err != nil {
+		return NewToken{}, err
+	}
+	return NewToken{APIToken: t, Token: token}, nil
+}
+
+// ownToken is token id, when the signed-in user may manage it.
+func (c *Core) ownToken(ctx context.Context, id string) (Actor, store.APIToken, error) {
+	a, ok := ActorFrom(ctx)
+	if !ok || a.Kind != "user" {
+		return Actor{}, store.APIToken{}, ErrUnauthorized
+	}
+	ts, err := c.ListAPITokens(ctx)
+	if err != nil {
+		return Actor{}, store.APIToken{}, err
+	}
+	i := slices.IndexFunc(ts, func(t store.APIToken) bool { return t.ID == id })
+	if i < 0 {
+		return Actor{}, store.APIToken{}, fmt.Errorf("%w: token", store.ErrNotFound)
+	}
+	return a, ts[i], nil
+}
+
+// setTokenAccess validates in and sets it on t: what a restricted token
+// gets stays within what a, its creator or editor, holds.
+func (c *Core) setTokenAccess(ctx context.Context, a Actor, t *store.APIToken, in TokenInput) error {
+	name := strings.TrimSpace(in.Name)
+	if name == "" || len(name) > 60 {
+		return fmt.Errorf("%w: give the token a name (max 60 characters)", ErrInvalid)
+	}
+	t.Name, t.Restricted, t.Features, t.Grants = name, in.Restricted, []string{}, map[string][]string{}
+	if !in.Restricted {
+		return nil
+	}
+	access, err := c.normalized(ctx, UserAccess{Role: store.RoleMember, Features: in.Features, Grants: in.Grants})
+	if err != nil {
+		return err
+	}
+	for _, f := range access.Features {
+		if !a.Has(Feature(f)) {
+			return fmt.Errorf("%w: a token can't see %s when you can't", ErrForbidden, f)
+		}
+	}
+	for projectID, perms := range access.Grants {
+		for _, p := range perms {
+			if !a.Can(projectID, Perm(p)) {
+				return fmt.Errorf("%w: a token can't have the %s permission on a project where you don't", ErrForbidden, p)
+			}
+		}
+	}
+	t.Features, t.Grants = access.Features, access.Grants
+	return nil
 }
 
 // ListAPITokens returns every token to an admin, a member's own to them.

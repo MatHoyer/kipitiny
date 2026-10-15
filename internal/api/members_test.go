@@ -363,6 +363,43 @@ func TestRestrictedTokens(t *testing.T) {
 		t.Fatalf("token restricted to nothing: %+v %v", a, err)
 	}
 
+	// Editing a token keeps it within its editor's access, and changes it in place.
+	edit := core.TokenInput{Name: "deployer", Restricted: true, Grants: map[string][]string{shop: {"deploy"}}}
+	if _, err := m.c.UpdateAPIToken(memberCtx, tok.ID, core.TokenInput{Name: "x", Restricted: true,
+		Grants: map[string][]string{shop: {"data"}}}); !errors.Is(err, core.ErrForbidden) {
+		t.Errorf("editing a token beyond the member's permissions: %v", err)
+	}
+	adminTok, err := m.c.CreateAPIToken(adminCtx, core.TokenInput{Name: "admin's"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.c.UpdateAPIToken(memberCtx, adminTok.ID, edit); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("a member editing another's token: %v", err)
+	}
+	if u, err := m.c.UpdateAPIToken(memberCtx, tok.ID, edit); err != nil || u.Name != "deployer" || len(u.Features) != 0 {
+		t.Fatalf("editing a token: %+v %v", u, err)
+	}
+	a, err = m.c.AuthenticateToken(ctx, tok.Token)
+	if err != nil || a.Name != "deployer" || !a.Can(shop, core.PermDeploy) || a.Has(core.FeatureStorage) {
+		t.Fatalf("token after its edit: %+v %v", a, err)
+	}
+
+	// Rolling a token replaces its secret and keeps its access.
+	if _, err := m.c.RollAPIToken(memberCtx, adminTok.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("a member rolling another's token: %v", err)
+	}
+	rolled, err := m.c.RollAPIToken(memberCtx, tok.ID)
+	if err != nil || rolled.Token == tok.Token {
+		t.Fatalf("rolling a token: %+v %v", rolled, err)
+	}
+	if _, err := m.c.AuthenticateToken(ctx, tok.Token); !errors.Is(err, core.ErrUnauthorized) {
+		t.Errorf("the rolled-over secret still works: %v", err)
+	}
+	if a, err = m.c.AuthenticateToken(ctx, rolled.Token); err != nil || !a.Can(shop, core.PermDeploy) {
+		t.Fatalf("token after its roll: %+v %v", a, err)
+	}
+	tok = rolled
+
 	// The owner losing a permission or feature takes it from the token.
 	m.as(t, []core.Perm{core.PermView})
 	a, err = m.c.AuthenticateToken(ctx, tok.Token)

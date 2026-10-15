@@ -40,6 +40,8 @@ var routeAccess = map[string]access{
 	// Tokens act for their owner: members manage their own.
 	"GET /api/tokens":                    anyone,
 	"POST /api/tokens":                   anyone,
+	"PUT /api/tokens/{id}":               anyone,
+	"POST /api/tokens/{id}/roll":         anyone,
 	"DELETE /api/tokens/{id}":            anyone,
 	"PUT /api/account/password":          anyone,
 	"POST /api/account/totp":             anyone,

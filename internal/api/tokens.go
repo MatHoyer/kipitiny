@@ -30,6 +30,29 @@ func (a *API) createToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, t)
 }
 
+func (a *API) updateToken(w http.ResponseWriter, r *http.Request) {
+	var body core.TokenInput
+	if !decode(w, r, &body) {
+		return
+	}
+	t, err := a.core.UpdateAPIToken(r.Context(), r.PathValue("id"), body)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
+func (a *API) rollToken(w http.ResponseWriter, r *http.Request) {
+	t, err := a.core.RollAPIToken(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, t)
+}
+
 func (a *API) deleteToken(w http.ResponseWriter, r *http.Request) {
 	if err := a.core.DeleteAPIToken(r.Context(), r.PathValue("id")); err != nil {
 		a.fail(w, err)
