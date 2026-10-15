@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MatHoyer/kipitiny/internal/core"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -25,7 +26,7 @@ func TestHistoryTools(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	read, deploy, admin := e.session(store.ScopeRead), e.session(store.ScopeDeploy), e.session(store.ScopeAdmin)
+	read, deploy, admin := e.session(core.PermView), e.session(core.PermView, core.PermDeploy, core.PermBackups), e.session()
 
 	out, isErr := e.call(read, "list_deployments", map[string]any{"service": "shop/web", "limit": 2})
 	var deps listDeploymentsOut
@@ -38,15 +39,10 @@ func TestHistoryTools(t *testing.T) {
 
 	for name, args := range map[string]map[string]any{
 		"backup_project": {"project": "shop"},
-		"verify_backup":  {"backup_id": "x"},
-		"delete_backup":  {"backup_id": "x"},
 	} {
 		if out, isErr := e.call(read, name, args); !isErr || !strings.Contains(out, "needs the") {
 			t.Errorf("%s with a read token: %s", name, out)
 		}
-	}
-	if out, isErr = e.call(deploy, "delete_backup", map[string]any{"backup_id": "x"}); !isErr || !strings.Contains(out, "needs the admin scope") {
-		t.Errorf("delete_backup with a deploy token: %s", out)
 	}
 	if out, isErr = e.call(deploy, "backup_project", map[string]any{"project": "site"}); !isErr || !strings.Contains(out, "no databases or volumes") {
 		t.Errorf("backup_project without data: %s", out)

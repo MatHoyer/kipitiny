@@ -25,7 +25,7 @@ func deployCmd() error {
 	cl := deployClient{interval: 2 * time.Second, out: os.Stdout}
 	var opts deployOptions
 	fs.StringVar(&cl.base, "url", os.Getenv("KIPITINY_URL"), "manager URL (env KIPITINY_URL)")
-	fs.StringVar(&cl.token, "token", os.Getenv("KIPITINY_TOKEN"), "API token with the deploy scope (env KIPITINY_TOKEN)")
+	fs.StringVar(&cl.token, "token", os.Getenv("KIPITINY_TOKEN"), "API token with the deploy permission (env KIPITINY_TOKEN)")
 	service := fs.String("service", "", "service as project/service, or its ID")
 	fs.StringVar(&opts.Tag, "tag", "", "image services: deploy this tag of the service's image")
 	fs.StringVar(&opts.Digest, "digest", "", "image services: deploy this digest (sha256:…) of the service's image")

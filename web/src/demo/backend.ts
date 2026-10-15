@@ -1658,7 +1658,15 @@ const routes: Route[] = [
     "POST",
     /^\/tokens$/,
     ({ body }) => {
-      const t = { id: newId("tok"), name: String(body.name || "token"), scope: body.scope || "read", createdAt: now() };
+      const restricted = !!body.restricted;
+      const t = {
+        id: newId("tok"),
+        name: String(body.name || "token"),
+        restricted,
+        features: restricted ? body.features || [] : [],
+        grants: restricted ? body.grants || {} : {},
+        createdAt: now(),
+      };
       db.tokens.push(t);
       save();
       return { ...t, token: `kpt_demo_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}` };

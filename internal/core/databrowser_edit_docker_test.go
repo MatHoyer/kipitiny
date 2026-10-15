@@ -65,9 +65,9 @@ CREATE VIEW v AS SELECT id FROM items;"`)
 	if _, err = c.ApplyRowChanges(ctx, svc.ID, "", "public", "missing", RowChanges{Inserts: []map[string]*string{{}}}, true); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("missing table: %v", err)
 	}
-	read := WithActor(ctx, Actor{Kind: "token", Name: "read", Scope: store.ScopeRead})
+	read := WithActor(ctx, Actor{Kind: "token", Name: "read"})
 	if _, err = c.ApplyRowChanges(read, svc.ID, "", "public", "items", ch, false); err == nil {
-		t.Error("read scope previewed changes")
+		t.Error("a stranger previewed changes")
 	}
 }
 
@@ -75,7 +75,7 @@ func TestRowChangesDockerMySQL(t *testing.T) {
 	for _, kind := range []store.ServiceKind{store.ServiceKindMySQL, store.ServiceKindMariaDB} {
 		t.Run(string(kind), func(t *testing.T) {
 			c, ctx, svc, exec := dumpTestDB(t, kind)
-			ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin, Scope: store.ScopeAdmin})
+			ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin})
 			client := `MYSQL_PWD="$MYSQL_PASSWORD" ` + mysqlBin(kind, "mysql") + ` -h 127.0.0.1 -u"$MYSQL_USER" "$MYSQL_DATABASE" `
 			exec(client + `-e "
 CREATE TABLE items (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL DEFAULT 'none', b BLOB, n INT NULL);
@@ -119,7 +119,7 @@ CREATE VIEW v AS SELECT id FROM items;"`)
 
 func TestDocChangesDockerMongo(t *testing.T) {
 	c, ctx, svc, exec := dumpTestDB(t, store.ServiceKindMongoDB)
-	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin, Scope: store.ScopeAdmin})
+	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin})
 	shell := `mongosh --quiet "mongodb://$MONGO_INITDB_ROOT_USERNAME:$MONGO_INITDB_ROOT_PASSWORD@127.0.0.1/app?authSource=admin" --eval `
 	exec(shell + `'
 db.items.insertMany([{ _id: 1, n: NumberLong(5), name: "one", tags: ["a"] }, { _id: 2, name: "two" }, { _id: 3, name: "three" }]);

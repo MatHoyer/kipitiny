@@ -178,7 +178,7 @@ func TestInviteEmail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := WithActor(context.Background(), Actor{Kind: "user", UserID: admin.ID, Role: store.RoleAdmin, Scope: store.ScopeAdmin})
+	ctx := WithActor(context.Background(), Actor{Kind: "user", UserID: admin.ID, Role: store.RoleAdmin})
 	in := InviteInput{UserAccess: UserAccess{Role: store.RoleAdmin}, Email: "new@example.com", Link: "https://kipitiny.example.com/invite"}
 	if _, err := c.CreateInvite(ctx, in); !errors.Is(err, ErrNoEmail) {
 		t.Fatalf("without SMTP: %v", err)

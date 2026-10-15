@@ -130,8 +130,10 @@ they connect (hosts, accounts, keys, URLs), to use them in their projects:
 ## API tokens and git syncs
 
 Members create their own [API tokens](/docs/api). A token acts for its owner:
-whatever its scope, it never does more than the owner may, and it follows
-their access as you change it. Removing a user revokes their tokens.
+it never does more than the owner may, and it follows
+their access as you change it. Removing a user revokes their tokens. A
+[restricted token](/docs/api#restricted-tokens) gets only some of its owner's
+projects and permissions.
 
 A git-linked project syncs with the permissions of the user who linked it. If
 that user is removed, syncs stop until someone links the repository again.

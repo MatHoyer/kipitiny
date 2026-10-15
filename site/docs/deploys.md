@@ -44,8 +44,8 @@ stays stopped. Services busy with a deploy, backup or restore are left alone.
 
 Services run Docker images; kipitiny doesn't build them. Build, test and push
 the image once in CI, then have kipitiny deploy that exact image.
-Create a **deploy** token (Settings), keep it as a CI secret, and end the
-pipeline with `kipitiny deploy` (in the manager image):
+Create a token restricted to *deploy* on the project (Settings), keep it as a
+CI secret, and end the pipeline with `kipitiny deploy` (in the manager image):
 
 ```yaml
 # .github/workflows/deploy.yml (after docker/build-push-action pushed
@@ -61,7 +61,7 @@ pipeline with `kipitiny deploy` (in the manager image):
 It starts the deployment, prints its log and exits non-zero if it fails
 (`--timeout`, default 20m; `--no-wait` to return at once). `--tag` (or
 `--digest sha256:…`) replaces only the tag of the service's image, never its
-repository, so a deploy token can't run another image; once deployed, the
+repository, so a token with only *deploy* can't run another image; once deployed, the
 service keeps it. The same is `POST /api/services/<id>/deploy` with
 `{"tag": "…", "commit": "…"}`, or the MCP `deploy` tool's `tag`.
 

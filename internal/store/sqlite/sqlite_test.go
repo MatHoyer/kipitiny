@@ -279,10 +279,10 @@ func TestUserAccessAndInvites(t *testing.T) {
 		t.Fatalf("users: %+v %v", us, err)
 	}
 
-	if _, err := s.CreateAPIToken(ctx, store.APIToken{Name: "a", TokenHash: "t1", Scope: store.ScopeRead, UserID: admin.ID}); err != nil {
+	if _, err := s.CreateAPIToken(ctx, store.APIToken{Name: "a", TokenHash: "t1", UserID: admin.ID}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateAPIToken(ctx, store.APIToken{Name: "m", TokenHash: "t2", Scope: store.ScopeRead, UserID: m.ID}); err != nil {
+	if _, err := s.CreateAPIToken(ctx, store.APIToken{Name: "m", TokenHash: "t2", UserID: m.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if ts, _ := s.ListAPITokens(ctx, m.ID); len(ts) != 1 || ts[0].Name != "m" {
@@ -473,7 +473,7 @@ func TestSnapshot(t *testing.T) {
 func TestTokensAndAudit(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
-	tok, err := s.CreateAPIToken(ctx, store.APIToken{Name: "ci", TokenHash: "h1", Scope: store.ScopeDeploy})
+	tok, err := s.CreateAPIToken(ctx, store.APIToken{Name: "ci", TokenHash: "h1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -501,26 +501,6 @@ func TestTokensAndAudit(t *testing.T) {
 	}
 	if es, _ := s.ListAudit(ctx, 10); len(es) != 0 {
 		t.Fatalf("prune: %v", es)
-	}
-}
-
-func TestScopeAllows(t *testing.T) {
-	cases := []struct {
-		have, want store.Scope
-		ok         bool
-	}{
-		{store.ScopeRead, store.ScopeRead, true},
-		{store.ScopeRead, store.ScopeDeploy, false},
-		{store.ScopeDeploy, store.ScopeRead, true},
-		{store.ScopeDeploy, store.ScopeAdmin, false},
-		{store.ScopeAdmin, store.ScopeDeploy, true},
-		{"bogus", store.ScopeRead, false},
-		{store.ScopeAdmin, "bogus", false},
-	}
-	for _, c := range cases {
-		if got := c.have.Allows(c.want); got != c.ok {
-			t.Errorf("%s allows %s = %v", c.have, c.want, got)
-		}
 	}
 }
 
@@ -1365,5 +1345,57 @@ func TestSecretConnectionsMigration(t *testing.T) {
 	}
 	if cs, _ := s.ListSecretConnections(ctx); len(cs) != 1 {
 		t.Errorf("after delete: %+v", cs)
+	}
+}
+
+func TestTokenScopeMigration(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "k.db")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	sub, _ := fs.Sub(migrations, "migrations")
+	p, err := goose.NewProvider(goose.DialectSQLite3, db, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 59); err != nil {
+		t.Fatal(err)
+	}
+	const at = "2026-01-01 00:00:00+00:00"
+	for _, q := range []string{
+		`INSERT INTO users (id, username, password_hash, created_at, role) VALUES ('a', 'admin', 'x', '` + at + `', 'admin')`,
+		`INSERT INTO users (id, username, password_hash, created_at, role) VALUES ('m', 'member', 'x', '` + at + `', 'member')`,
+		`INSERT INTO projects (id, name, created_at, updated_at) VALUES ('p1', 'shop', '` + at + `', '` + at + `')`,
+		`INSERT INTO projects (id, name, created_at, updated_at) VALUES ('p2', 'site', '` + at + `', '` + at + `')`,
+		`INSERT INTO projects (id, name, created_at, updated_at, parent_id) VALUES ('pv', 'shop-pr-1', '` + at + `', '` + at + `', 'p1')`,
+		`INSERT INTO project_grants (user_id, project_id, perms, created_at) VALUES ('m', 'p2', '["view","deploy"]', '` + at + `')`,
+		`INSERT INTO api_tokens (id, name, token_hash, scope, created_at, user_id) VALUES ('tr', 'r', 'hr', 'read', '` + at + `', 'a')`,
+		`INSERT INTO api_tokens (id, name, token_hash, scope, created_at, user_id) VALUES ('td', 'd', 'hd', 'deploy', '` + at + `', 'm')`,
+		`INSERT INTO api_tokens (id, name, token_hash, scope, created_at, user_id) VALUES ('ta', 'f', 'ha', 'admin', '` + at + `', 'a')`,
+	} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	db.Close()
+
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for hash, want := range map[string]store.APIToken{
+		"hr": {Restricted: true, Grants: map[string][]string{"p1": {"view", "data"}, "p2": {"view", "data"}}},
+		"hd": {Restricted: true, Grants: map[string][]string{"p2": {"view", "deploy", "backups", "data"}}},
+		"ha": {Restricted: false, Grants: map[string][]string{}},
+	} {
+		tok, err := s.GetAPITokenByHash(ctx, hash)
+		if err != nil || tok.Restricted != want.Restricted || !reflect.DeepEqual(tok.Grants, want.Grants) ||
+			(want.Restricted && !slices.Contains(tok.Features, "storage")) || slices.Contains(tok.Features, "create-projects") {
+			t.Errorf("%s = %+v, %v", hash, tok, err)
+		}
 	}
 }

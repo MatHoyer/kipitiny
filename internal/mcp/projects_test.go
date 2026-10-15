@@ -50,8 +50,13 @@ func TestProjectTools(t *testing.T) {
 	}
 
 	owner, _ := asUser(t, c, st, "admin", store.RoleAdmin)
-	session := func(scope store.Scope) *mcp.ClientSession {
-		tok, _ := c.CreateAPIToken(owner, string(scope), scope)
+	session := func(perms ...string) *mcp.ClientSession {
+		in := core.TokenInput{Name: "agent", Restricted: len(perms) > 0, Grants: map[string][]string{}}
+		ps, _ := st.ListProjects(ctx)
+		for _, p := range ps {
+			in.Grants[p.ID] = perms
+		}
+		tok, _ := c.CreateAPIToken(owner, in)
 		cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(ctx, &mcp.StreamableClientTransport{
 			Endpoint: srv.URL, HTTPClient: &http.Client{Transport: bearer{tok.Token}},
 		}, nil)
@@ -73,7 +78,7 @@ func TestProjectTools(t *testing.T) {
 		}
 		return string(raw), res.IsError
 	}
-	read, admin := session(store.ScopeRead), session(store.ScopeAdmin)
+	read, admin := session("view"), session()
 
 	out, isErr := call(read, "list_projects", nil)
 	var list listProjectsOut
@@ -87,15 +92,15 @@ func TestProjectTools(t *testing.T) {
 		t.Errorf("shop: %+v", p)
 	}
 
-	out, isErr = call(read, "get_project_git", map[string]any{"project": "shop"})
+	out, isErr = call(admin, "get_project_git", map[string]any{"project": "shop"})
 	if isErr || !strings.Contains(out, `"repoUrl":"https://github.com/me/shop.git"`) || strings.Contains(out, "hook-s3cret") {
 		t.Errorf("get_project_git: %s", out)
 	}
-	if out, isErr = call(read, "get_project_git", map[string]any{"project": "site"}); !isErr || !strings.Contains(out, "isn't linked") {
+	if out, isErr = call(admin, "get_project_git", map[string]any{"project": "site"}); !isErr || !strings.Contains(out, "isn't linked") {
 		t.Errorf("get_project_git unlinked: %s", out)
 	}
 
-	// Mutations need their scope.
+	// Mutations need their permission.
 	for name, args := range map[string]map[string]any{
 		"create_project":   {"name": "x"},
 		"rename_project":   {"project": "site", "name": "x"},
@@ -104,7 +109,7 @@ func TestProjectTools(t *testing.T) {
 		"sync_project_git": {"project": "shop"},
 		"service_action":   {"service": "shop/web", "action": "stop"},
 	} {
-		if out, isErr := call(read, name, args); !isErr || !strings.Contains(out, "needs the") {
+		if out, isErr := call(read, name, args); !isErr || !strings.Contains(out, "forbidden") {
 			t.Errorf("%s with a read token: %s", name, out)
 		}
 	}

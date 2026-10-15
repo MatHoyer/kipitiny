@@ -24,11 +24,13 @@ import (
 // env is an MCP server over a fresh store, for tools that refuse before
 // reaching Docker.
 type env struct {
-	st      store.Store
-	c       *core.Core
-	session func(store.Scope) *mcp.ClientSession
-	// sessionOf is a session with a token of the context's user.
-	sessionOf func(owner context.Context, scope store.Scope) *mcp.ClientSession
+	st store.Store
+	c  *core.Core
+	// session is a session with a token of an admin, restricted to perms on
+	// every existing project when some are given.
+	session func(perms ...core.Perm) *mcp.ClientSession
+	// sessionOf is the same with a token of the context's user.
+	sessionOf func(owner context.Context, perms ...core.Perm) *mcp.ClientSession
 	// call returns the structured output, or the error text and true.
 	call func(cs *mcp.ClientSession, name string, args map[string]any) (string, bool)
 }
@@ -48,8 +50,15 @@ func newEnv(t *testing.T) env {
 	t.Cleanup(srv.Close)
 	e := env{st: st, c: c}
 	admin, _ := asUser(t, c, st, "admin", store.RoleAdmin)
-	e.sessionOf = func(owner context.Context, scope store.Scope) *mcp.ClientSession {
-		tok, err := c.CreateAPIToken(owner, string(scope), scope)
+	e.sessionOf = func(owner context.Context, perms ...core.Perm) *mcp.ClientSession {
+		in := core.TokenInput{Name: "agent", Restricted: len(perms) > 0, Grants: map[string][]string{}}
+		ps, _ := st.ListProjects(ctx)
+		for _, p := range ps {
+			for _, perm := range perms {
+				in.Grants[p.ID] = append(in.Grants[p.ID], string(perm))
+			}
+		}
+		tok, err := c.CreateAPIToken(owner, in)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -62,7 +71,7 @@ func newEnv(t *testing.T) env {
 		t.Cleanup(func() { cs.Close() })
 		return cs
 	}
-	e.session = func(scope store.Scope) *mcp.ClientSession { return e.sessionOf(admin, scope) }
+	e.session = func(perms ...core.Perm) *mcp.ClientSession { return e.sessionOf(admin, perms...) }
 	e.call = func(cs *mcp.ClientSession, name string, args map[string]any) (string, bool) {
 		t.Helper()
 		res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
@@ -89,14 +98,14 @@ func TestDataTools(t *testing.T) {
 	if _, err := e.st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
-	read, admin := e.session(store.ScopeRead), e.session(store.ScopeAdmin)
+	read, admin := e.session(core.PermView), e.session()
 
 	for name, args := range map[string]map[string]any{
 		"create_database": {"service": "shop/db", "name": "analytics"},
 		"query_database":  {"service": "shop/db", "query": "SELECT 1"},
 		"get_connection":  {"service": "shop/db"},
 	} {
-		if out, isErr := e.call(read, name, args); !isErr || !strings.Contains(out, "needs the admin scope") {
+		if out, isErr := e.call(read, name, args); !isErr || !strings.Contains(out, "forbidden") {
 			t.Errorf("%s with a read token: %s", name, out)
 		}
 	}
@@ -111,6 +120,7 @@ func TestDataTools(t *testing.T) {
 	}
 
 	// The browser checks the kind before reaching Docker.
+	reader := e.session(core.PermView, core.PermData)
 	for name, args := range map[string]map[string]any{
 		"list_databases":  {"service": "shop/web"},
 		"list_tables":     {"service": "shop/web"},
@@ -118,7 +128,7 @@ func TestDataTools(t *testing.T) {
 		"scan_redis_keys": {"service": "shop/db"},
 		"get_redis_key":   {"service": "shop/db", "key": "k"},
 	} {
-		if out, isErr := e.call(read, name, args); !isErr || strings.Contains(out, "needs the") {
+		if out, isErr := e.call(reader, name, args); !isErr || strings.Contains(out, "needs the") {
 			t.Errorf("%s on the wrong kind: %s", name, out)
 		}
 	}

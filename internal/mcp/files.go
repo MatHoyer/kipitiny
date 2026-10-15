@@ -14,7 +14,7 @@ import (
 	"github.com/MatHoyer/kipitiny/internal/core"
 )
 
-// Volume files: browsing (read), writes (admin). The core checks the scopes
+// Volume files: browsing and writes. The core checks the permissions
 // and audits writes itself.
 
 // maxWriteBase64 caps a binary file written through MCP (decoded size).

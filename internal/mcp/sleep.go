@@ -7,7 +7,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/MatHoyer/kipitiny/internal/core"
-	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
 type setSleepIn struct {
@@ -20,7 +19,7 @@ type setSleepOut struct {
 }
 
 func (t *tools) setSleep(ctx context.Context, _ *mcp.CallToolRequest, in setSleepIn) (*mcp.CallToolResult, setSleepOut, error) {
-	out, err := mutate(ctx, t.c, store.ScopeAdmin, "set_sleep", in.Project, func() (setSleepOut, error) {
+	out, err := mutate(ctx, t.c, "set_sleep", in.Project, func() (setSleepOut, error) {
 		p, err := t.project(ctx, in.Project, core.PermSettings)
 		if err != nil {
 			return setSleepOut{}, err

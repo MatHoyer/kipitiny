@@ -29,7 +29,7 @@ type listProjectsOut struct {
 }
 
 func (t *tools) listProjects(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listProjectsOut, error) {
-	if err := core.Require(ctx, store.ScopeRead); err != nil {
+	if err := core.Authenticated(ctx); err != nil {
 		return nil, listProjectsOut{}, err
 	}
 	projects, err := t.c.ListProjects(ctx)
@@ -69,7 +69,7 @@ type createProjectIn struct {
 }
 
 func (t *tools) createProject(ctx context.Context, _ *mcp.CallToolRequest, in createProjectIn) (*mcp.CallToolResult, ProjectSummary, error) {
-	out, err := mutate(ctx, t.c, store.ScopeAdmin, "create_project", in.Name, func() (ProjectSummary, error) {
+	out, err := mutate(ctx, t.c, "create_project", in.Name, func() (ProjectSummary, error) {
 		serverID := ""
 		if in.Server != "" {
 			servers, err := t.c.ListServers(ctx)
@@ -101,7 +101,7 @@ type renamed struct {
 }
 
 func (t *tools) renameProject(ctx context.Context, _ *mcp.CallToolRequest, in renameProjectIn) (*mcp.CallToolResult, renamed, error) {
-	out, err := mutate(ctx, t.c, store.ScopeAdmin, "rename_project", in.Project, func() (renamed, error) {
+	out, err := mutate(ctx, t.c, "rename_project", in.Project, func() (renamed, error) {
 		p, err := t.project(ctx, in.Project, core.PermSettings)
 		if err != nil {
 			return renamed{}, err
@@ -118,7 +118,7 @@ type renameServiceIn struct {
 }
 
 func (t *tools) renameService(ctx context.Context, _ *mcp.CallToolRequest, in renameServiceIn) (*mcp.CallToolResult, renamed, error) {
-	out, err := mutate(ctx, t.c, store.ScopeAdmin, "rename_service", in.Service, func() (renamed, error) {
+	out, err := mutate(ctx, t.c, "rename_service", in.Service, func() (renamed, error) {
 		svc, err := t.service(ctx, in.Service, core.PermSettings)
 		if err != nil {
 			return renamed{}, err
@@ -166,7 +166,7 @@ func (t *tools) gitLink(ctx context.Context, g core.GitStatus) (GitLink, error) 
 }
 
 func (t *tools) getProjectGit(ctx context.Context, _ *mcp.CallToolRequest, in projectArg) (*mcp.CallToolResult, GitLink, error) {
-	if err := core.Require(ctx, store.ScopeRead); err != nil {
+	if err := core.Authenticated(ctx); err != nil {
 		return nil, GitLink{}, err
 	}
 	p, err := t.project(ctx, in.Project, core.PermGit)
@@ -201,7 +201,7 @@ type linkProjectGitOut struct {
 }
 
 func (t *tools) linkProjectGit(ctx context.Context, _ *mcp.CallToolRequest, in linkProjectGitIn) (*mcp.CallToolResult, linkProjectGitOut, error) {
-	out, err := mutate(ctx, t.c, store.ScopeAdmin, "link_project_git", in.Project, func() (linkProjectGitOut, error) {
+	out, err := mutate(ctx, t.c, "link_project_git", in.Project, func() (linkProjectGitOut, error) {
 		p, err := t.project(ctx, in.Project, core.PermGit)
 		if err != nil {
 			return linkProjectGitOut{}, err
@@ -238,7 +238,7 @@ type syncProjectGitIn struct {
 }
 
 func (t *tools) syncProjectGit(ctx context.Context, _ *mcp.CallToolRequest, in syncProjectGitIn) (*mcp.CallToolResult, core.ComposePlan, error) {
-	out, err := mutate(ctx, t.c, store.ScopeAdmin, "sync_project_git", in.Project, func() (core.ComposePlan, error) {
+	out, err := mutate(ctx, t.c, "sync_project_git", in.Project, func() (core.ComposePlan, error) {
 		p, err := t.project(ctx, in.Project, core.PermGit)
 		if err != nil {
 			return core.ComposePlan{}, err
@@ -258,7 +258,7 @@ type serviceActionOut struct {
 }
 
 func (t *tools) serviceAction(ctx context.Context, _ *mcp.CallToolRequest, in serviceActionIn) (*mcp.CallToolResult, serviceActionOut, error) {
-	out, err := mutate(ctx, t.c, store.ScopeDeploy, "service_action", in.Service, func() (serviceActionOut, error) {
+	out, err := mutate(ctx, t.c, "service_action", in.Service, func() (serviceActionOut, error) {
 		action := core.Action(in.Action)
 		if !slices.Contains([]core.Action{core.ActionStart, core.ActionStop, core.ActionRestart}, action) {
 			return serviceActionOut{}, fmt.Errorf("action must be start, stop or restart")
@@ -285,7 +285,7 @@ type getDeploymentLogOut struct {
 }
 
 func (t *tools) getDeploymentLog(ctx context.Context, _ *mcp.CallToolRequest, in getDeploymentLogIn) (*mcp.CallToolResult, getDeploymentLogOut, error) {
-	if err := core.Require(ctx, store.ScopeRead); err != nil {
+	if err := core.Authenticated(ctx); err != nil {
 		return nil, getDeploymentLogOut{}, err
 	}
 	id := in.DeploymentID
@@ -351,7 +351,7 @@ type deleted struct {
 // deleteService always wants the confirmation, even for an app without
 // data: an agent deleting the wrong service is costly either way.
 func (t *tools) deleteService(ctx context.Context, _ *mcp.CallToolRequest, in deleteServiceIn) (*mcp.CallToolResult, deleted, error) {
-	out, err := mutate(ctx, t.c, store.ScopeAdmin, "delete_service", in.Service, func() (deleted, error) {
+	out, err := mutate(ctx, t.c, "delete_service", in.Service, func() (deleted, error) {
 		svc, err := t.service(ctx, in.Service, core.PermDelete)
 		if err != nil {
 			return deleted{}, err
@@ -370,7 +370,7 @@ type deleteProjectIn struct {
 }
 
 func (t *tools) deleteProject(ctx context.Context, _ *mcp.CallToolRequest, in deleteProjectIn) (*mcp.CallToolResult, deleted, error) {
-	out, err := mutate(ctx, t.c, store.ScopeAdmin, "delete_project", in.Project, func() (deleted, error) {
+	out, err := mutate(ctx, t.c, "delete_project", in.Project, func() (deleted, error) {
 		p, err := t.project(ctx, in.Project, core.PermDelete)
 		if err != nil {
 			return deleted{}, err

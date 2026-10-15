@@ -66,7 +66,7 @@ func TestTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	admin, _ := asUser(t, c, st, "admin", store.RoleAdmin)
-	readTok, _ := c.CreateAPIToken(admin, "agent", store.ScopeRead)
+	readTok, _ := c.CreateAPIToken(admin, core.TokenInput{Name: "agent", Restricted: true, Grants: map[string][]string{p.ID: {"view"}}})
 
 	connect := func(tok string) *mcp.ClientSession {
 		client := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil)
@@ -126,17 +126,17 @@ func TestTools(t *testing.T) {
 		t.Fatalf("backup with read token should be refused: %v %+v", err, res)
 	}
 	text, _ := json.Marshal(res.Content)
-	if !strings.Contains(string(text), "needs the deploy scope") {
+	if !strings.Contains(string(text), "forbidden") {
 		t.Fatalf("refusal message: %s", text)
 	}
 
-	// With a deploy token, deploy_image only retags an existing app: no new
+	// With only the deploy permission, deploy_image only retags an existing app: no new
 	// apps, other images or env (which could pull secrets out).
 	if _, err := st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp,
 		Image: "ghcr.io/org/web:v1", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
-	deployTok, _ := c.CreateAPIToken(admin, "ci", store.ScopeDeploy)
+	deployTok, _ := c.CreateAPIToken(admin, core.TokenInput{Name: "ci", Restricted: true, Grants: map[string][]string{p.ID: {"view", "deploy"}}})
 	ds := connect(deployTok.Token)
 	defer ds.Close()
 	for name, args := range map[string]map[string]any{
@@ -150,7 +150,7 @@ func TestTools(t *testing.T) {
 			t.Fatalf("deploy_image %s with deploy token should be refused: %v %+v", name, err, res)
 		}
 		text, _ := json.Marshal(res.Content)
-		if !strings.Contains(string(text), "needs the admin scope") {
+		if !strings.Contains(string(text), "needs the settings permission") {
 			t.Fatalf("%s refusal message: %s", name, text)
 		}
 	}

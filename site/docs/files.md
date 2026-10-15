@@ -6,7 +6,7 @@ order: 7
 
 A service's **Files** tab manages its files from the browser: no `docker cp`, no
 SSH, no file manager container next to it. Agents get the same through
-[MCP](/docs/api) tools, with the same scopes.
+[MCP](/docs/api) tools, with the same permissions.
 
 The tab starts by listing where files live:
 
@@ -89,9 +89,9 @@ image, logs written to disk, or to try a quick fix. Writing there has limits:
 
 ## Access
 
-Listing files needs a read token. Reading or downloading a file's content needs
-admin, as files may hold secrets (like backup downloads). Every change (upload,
-save, new folder, move, copy, delete) needs admin and lands in the
+Listing, reading and downloading files needs the *files* permission; files may
+hold secrets, so give it like backup downloads. Every change (upload, save, new
+folder, move, copy, delete) needs *files write* and lands in the
 [audit log](/docs/api) with its path.
 
 ## API and MCP

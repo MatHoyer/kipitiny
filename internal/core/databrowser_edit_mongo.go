@@ -79,7 +79,7 @@ type mongoOp struct {
 // ApplyDocChanges saves edits to a MongoDB collection, or with apply unset
 // only returns what it would run, as mongosh calls. Admin only.
 func (c *Core) ApplyDocChanges(ctx context.Context, id, database, collection string, ch DocChanges, apply bool) (res ChangeResult, err error) {
-	if err := c.requireOn(ctx, id, store.ScopeAdmin, PermDataEdit); err != nil {
+	if err := c.requireOn(ctx, id, PermDataEdit); err != nil {
 		return ChangeResult{}, err
 	}
 	if apply {

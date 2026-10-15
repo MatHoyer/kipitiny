@@ -967,6 +967,12 @@ func (s *Store) FailRunningOperations(ctx context.Context, errMsg string) error 
 
 func (s *Store) CreateAPIToken(ctx context.Context, t store.APIToken) (store.APIToken, error) {
 	t.ID, t.CreatedAt = ids.New(), now()
+	if t.Features == nil {
+		t.Features = []string{}
+	}
+	if t.Grants == nil {
+		t.Grants = map[string][]string{}
+	}
 	if _, err := s.db.NewInsert().Model(&t).Exec(ctx); err != nil {
 		return store.APIToken{}, mapErr(err)
 	}

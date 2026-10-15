@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MatHoyer/kipitiny/internal/core"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -21,7 +22,7 @@ func TestVolumeFileTools(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	read, admin := e.session(store.ScopeRead), e.session(store.ScopeAdmin)
+	read, admin := e.session(core.PermView, core.PermFiles), e.session()
 
 	// The volumes themselves come from the settings, without Docker.
 	out, isErr := e.call(read, "list_volume_files", map[string]any{"service": "game/mc"})
@@ -38,7 +39,7 @@ func TestVolumeFileTools(t *testing.T) {
 		"move_volume_path":    {"service": "game/mc", "from": "data/x", "to": "data/y"},
 		"delete_volume_paths": {"service": "game/mc", "paths": []string{"data/x"}},
 	} {
-		if out, isErr := e.call(read, name, args); !isErr || !strings.Contains(out, "needs the admin scope") {
+		if out, isErr := e.call(read, name, args); !isErr || !strings.Contains(out, "forbidden") {
 			t.Errorf("%s with a read token: %s", name, out)
 		}
 	}
@@ -63,9 +64,6 @@ func TestVolumeFileTools(t *testing.T) {
 		if out, isErr := e.call(admin, tc.name, tc.args); !isErr || !strings.Contains(out, tc.want) {
 			t.Errorf("%s %v: %s, want %q", tc.name, tc.args, out, tc.want)
 		}
-	}
-	if out, isErr = e.call(read, "read_volume_file", map[string]any{"service": "game/mc", "path": "data/a"}); !isErr || !strings.Contains(out, "needs the admin scope") {
-		t.Errorf("read_volume_file with a read token: %s", out)
 	}
 	if out, isErr = e.call(admin, "read_volume_file", map[string]any{"service": "game/web", "path": ""}); !isErr || !strings.Contains(out, "not a file") {
 		t.Errorf("read_volume_file of the root: %s", out)

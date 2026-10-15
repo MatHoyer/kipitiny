@@ -54,7 +54,7 @@ func (c *Core) DataConsole(ctx context.Context, id, database, query string, writ
 	if write {
 		perm = PermDataEdit
 	}
-	if err := c.requireOn(ctx, id, store.ScopeAdmin, perm); err != nil {
+	if err := c.requireOn(ctx, id, perm); err != nil {
 		return ConsoleResult{}, err
 	}
 	action := "data console"

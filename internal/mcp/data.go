@@ -9,8 +9,8 @@ import (
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
-// Database contents: browsing (read), the console and credentials (admin).
-// The core checks the scopes of the data browser itself.
+// Database contents: browsing, the console and credentials.
+// The core checks the permissions of the data browser itself.
 
 type listDatabasesOut struct {
 	Databases []core.PgDatabase `json:"databases"`
@@ -32,7 +32,7 @@ type createDatabaseIn struct {
 }
 
 func (t *tools) createDatabase(ctx context.Context, _ *mcp.CallToolRequest, in createDatabaseIn) (*mcp.CallToolResult, core.PgDatabase, error) {
-	db, err := mutate(ctx, t.c, store.ScopeAdmin, "create_database", in.Service+"/"+in.Name, func() (core.PgDatabase, error) {
+	db, err := mutate(ctx, t.c, "create_database", in.Service+"/"+in.Name, func() (core.PgDatabase, error) {
 		svc, err := t.service(ctx, in.Service, core.PermView)
 		if err != nil {
 			return core.PgDatabase{}, err
@@ -159,9 +159,6 @@ type queryDatabaseIn struct {
 
 // queryDatabase is audited by the core, without the query's text.
 func (t *tools) queryDatabase(ctx context.Context, _ *mcp.CallToolRequest, in queryDatabaseIn) (*mcp.CallToolResult, core.ConsoleResult, error) {
-	if err := core.Require(ctx, store.ScopeAdmin); err != nil {
-		return nil, core.ConsoleResult{}, err
-	}
 	svc, err := t.service(ctx, in.Service, core.PermView)
 	if err != nil {
 		return nil, core.ConsoleResult{}, friendly(err)
@@ -170,11 +167,8 @@ func (t *tools) queryDatabase(ctx context.Context, _ *mcp.CallToolRequest, in qu
 	return nil, res, friendly(err)
 }
 
-// getConnection reveals credentials: admin only, like the REST route.
+// getConnection reveals credentials, like the REST route.
 func (t *tools) getConnection(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, core.Connection, error) {
-	if err := core.Require(ctx, store.ScopeAdmin); err != nil {
-		return nil, core.Connection{}, err
-	}
 	svc, err := t.service(ctx, in.Service, core.PermEnv)
 	if err != nil {
 		return nil, core.Connection{}, friendly(err)

@@ -66,7 +66,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/mcp-dark.png">
-  <img alt="The MCP endpoint and API tokens scoped read or deploy" src="docs/screenshots/mcp-light.png">
+  <img alt="The MCP endpoint and API tokens, full or restricted" src="docs/screenshots/mcp-light.png">
 </picture>
 
 Try it without installing anything: the [demo](https://kipitiny.mathieuhoyer.fr/demo) is the real interface,

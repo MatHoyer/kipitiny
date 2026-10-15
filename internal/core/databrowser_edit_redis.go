@@ -66,7 +66,7 @@ type redisCheck struct {
 // ApplyKeyChanges saves edits to a Redis key, or with apply unset only
 // returns the commands it would run. Admin only.
 func (c *Core) ApplyKeyChanges(ctx context.Context, id, key string, ch KeyChanges, apply bool) (res ChangeResult, err error) {
-	if err := c.requireOn(ctx, id, store.ScopeAdmin, PermDataEdit); err != nil {
+	if err := c.requireOn(ctx, id, PermDataEdit); err != nil {
 		return ChangeResult{}, err
 	}
 	if apply {

@@ -14,7 +14,6 @@ import (
 
 	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/ids"
-	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
 // terminalShells are the shells a container terminal can run. "auto" takes
@@ -59,7 +58,7 @@ func (c *Core) openTerminal(ctx context.Context, target string, tty *docker.TTY,
 // OpenServiceTerminal starts a shell in one of the service's running
 // containers (by ID prefix or name; the first replica when empty). Admin only.
 func (c *Core) OpenServiceTerminal(ctx context.Context, serviceID, containerRef, shell string, cols, rows uint) (*Terminal, error) {
-	if err := c.requireOn(ctx, serviceID, store.ScopeAdmin, PermTerminal); err != nil {
+	if err := c.requireOn(ctx, serviceID, PermTerminal); err != nil {
 		return nil, err
 	}
 	if shell == "" {
@@ -134,9 +133,6 @@ var hostShell = []string{"nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--
 // privileged helper container sharing its PID namespace (Docker access is
 // root on the host anyway). Admin only.
 func (c *Core) OpenServerTerminal(ctx context.Context, serverID string, cols, rows uint) (*Terminal, error) {
-	if err := Require(ctx, store.ScopeAdmin); err != nil {
-		return nil, err
-	}
 	if err := RequireAdmin(ctx); err != nil {
 		return nil, err
 	}

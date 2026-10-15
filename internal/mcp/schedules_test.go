@@ -24,7 +24,7 @@ func TestScheduleTools(t *testing.T) {
 	if _, err := e.st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "worker", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
-	read, admin := e.session(store.ScopeRead), e.session(store.ScopeAdmin)
+	read, admin := e.session(core.PermView), e.session()
 
 	for name, args := range map[string]map[string]any{
 		"set_backup_schedule":    {"service": "shop/db", "cron": "@daily"},
@@ -32,7 +32,7 @@ func TestScheduleTools(t *testing.T) {
 		"set_uptime_check":       {"service": "shop/worker"},
 		"delete_uptime_check":    {"service": "shop/worker"},
 	} {
-		if out, isErr := e.call(read, name, args); !isErr || !strings.Contains(out, "needs the admin scope") {
+		if out, isErr := e.call(read, name, args); !isErr || !strings.Contains(out, "forbidden") {
 			t.Errorf("%s with a read token: %s", name, out)
 		}
 	}

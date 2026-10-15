@@ -71,7 +71,7 @@ func TestMemberTools(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return e.sessionOf(core.WithActor(ctx, a), store.ScopeAdmin)
+		return e.sessionOf(core.WithActor(ctx, a))
 	}
 	// args fills a tool's properties that name a project, service or backup
 	// with s's, and its other required ones with harmless values.

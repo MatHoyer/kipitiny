@@ -323,15 +323,15 @@ export function seed(): DemoDb {
       { id: "ch-1", name: "#ops", kind: "discord", config: { webhookUrl: "********" }, events: ["deploy.failed", "backup.failed", "uptime.down", "service.restarted", "service.unhealthy"], enabled: true, createdAt: at(20) },
     ],
     tokens: [
-      { id: "tok-1", name: "github-actions", scope: "deploy", createdAt: at(25), lastUsedAt: at(2, 14) },
-      { id: "tok-2", name: "claude-code", scope: "read", createdAt: at(10), lastUsedAt: at(0, 10) },
+      { id: "tok-1", name: "github-actions", restricted: true, features: [], grants: { acme: ["view", "deploy"] }, createdAt: at(25), lastUsedAt: at(2, 14) },
+      { id: "tok-2", name: "claude-code", restricted: true, features: [], grants: { acme: ["view", "data"] }, createdAt: at(10), lastUsedAt: at(0, 10) },
     ],
     audit: [
       { id: "au-1", actor: "token:github-actions", action: "POST /api/services/{id}/deploy", target: "api", status: 202, createdAt: at(2, 14) },
       { id: "au-2", actor: "token:github-actions", action: "POST /api/services/{id}/deploy", target: "web", status: 202, createdAt: at(2, 14) },
       { id: "au-3", actor: "user:demo", action: "POST /api/backups/{id}/restore", target: "bk-db-3", status: 202, createdAt: at(3, 11) },
       { id: "au-4", actor: "user:demo", action: "PATCH /api/services/{id}", target: "api", status: 200, createdAt: at(4, 16) },
-      { id: "au-5", actor: "token:claude-code", action: "POST /api/services/{id}/deploy", target: "api", status: 403, error: "this token's scope (read) does not allow that", createdAt: at(5, 10) },
+      { id: "au-5", actor: "token:claude-code", action: "POST /api/services/{id}/deploy", target: "api", status: 403, error: "forbidden: needs the deploy permission on this project", createdAt: at(5, 10) },
       { id: "au-6", actor: "user:demo", action: "POST /api/projects/{id}/services", target: "acme", status: 201, createdAt: at(30, 9) },
     ],
     cleanup: { enabled: true, cron: "0 5 * * 0", minAgeHours: 24, images: "unused", volumes: "anonymous", buildCache: true, containers: true, networks: true, keepDeployments: 20 },

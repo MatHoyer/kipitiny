@@ -52,7 +52,7 @@ func (c *Core) schemaAudit(ctx context.Context, id string, apply bool, err *erro
 // (schema is PostgreSQL's; MySQL's is the database), or with apply unset
 // only returns the statement. Admin only.
 func (c *Core) CreateTable(ctx context.Context, id, database, schema, table string, cols []NewColumn, apply bool) (res ChangeResult, err error) {
-	if err := c.requireOn(ctx, id, store.ScopeAdmin, PermDataEdit); err != nil {
+	if err := c.requireOn(ctx, id, PermDataEdit); err != nil {
 		return ChangeResult{}, err
 	}
 	defer c.schemaAudit(ctx, id, apply, &err)
@@ -133,7 +133,7 @@ func createTableSQL(name string, ident func(string) string, cols []NewColumn) (s
 // depends on it is dropped with it: the database refuses instead. Admin
 // only.
 func (c *Core) DropTable(ctx context.Context, id, database, schema, table string, apply bool) (res ChangeResult, err error) {
-	if err := c.requireOn(ctx, id, store.ScopeAdmin, PermDataEdit); err != nil {
+	if err := c.requireOn(ctx, id, PermDataEdit); err != nil {
 		return ChangeResult{}, err
 	}
 	defer c.schemaAudit(ctx, id, apply, &err)
@@ -187,7 +187,7 @@ func (t dataTarget) runDDL(ctx context.Context, sql string) error {
 // CreateCollection creates a collection in a MongoDB database, or with
 // apply unset only returns the call. Admin only.
 func (c *Core) CreateCollection(ctx context.Context, id, database, collection string, apply bool) (res ChangeResult, err error) {
-	if err := c.requireOn(ctx, id, store.ScopeAdmin, PermDataEdit); err != nil {
+	if err := c.requireOn(ctx, id, PermDataEdit); err != nil {
 		return ChangeResult{}, err
 	}
 	defer c.schemaAudit(ctx, id, apply, &err)
@@ -220,7 +220,7 @@ func (c *Core) CreateCollection(ctx context.Context, id, database, collection st
 // DropCollection drops a MongoDB collection or view with its documents
 // and indexes, or with apply unset only returns the call. Admin only.
 func (c *Core) DropCollection(ctx context.Context, id, database, collection string, apply bool) (res ChangeResult, err error) {
-	if err := c.requireOn(ctx, id, store.ScopeAdmin, PermDataEdit); err != nil {
+	if err := c.requireOn(ctx, id, PermDataEdit); err != nil {
 		return ChangeResult{}, err
 	}
 	defer c.schemaAudit(ctx, id, apply, &err)

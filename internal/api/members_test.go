@@ -114,7 +114,7 @@ func (m members) as(t *testing.T, perms []core.Perm, features ...core.Feature) c
 // on shop.
 func (m members) token(t *testing.T, perms ...core.Perm) string {
 	t.Helper()
-	tok, err := m.c.CreateAPIToken(m.as(t, perms), "t", store.ScopeAdmin)
+	tok, err := m.c.CreateAPIToken(m.as(t, perms), core.TokenInput{Name: "t"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestMemberRequests(t *testing.T) {
 		Endpoint: "s3.example.com", Bucket: "bkt", AccessKey: "AKIAEXAMPLE", SecretKey: "s3cret"}); err != nil {
 		t.Fatal(err)
 	}
-	tok, err := m.c.CreateAPIToken(m.as(t, nil, core.FeatureStorage), "storage", store.ScopeRead)
+	tok, err := m.c.CreateAPIToken(m.as(t, nil, core.FeatureStorage), core.TokenInput{Name: "storage"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,11 +273,11 @@ func TestMemberTokens(t *testing.T) {
 		t.Fatal(err)
 	}
 	adminCtx, memberCtx := core.WithActor(ctx, adminActor), m.as(t, []core.Perm{core.PermView})
-	adminTok, err := m.c.CreateAPIToken(adminCtx, "admin's", store.ScopeAdmin)
+	adminTok, err := m.c.CreateAPIToken(adminCtx, core.TokenInput{Name: "admin's"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	mine, err := m.c.CreateAPIToken(memberCtx, "mine", store.ScopeAdmin)
+	mine, err := m.c.CreateAPIToken(memberCtx, core.TokenInput{Name: "mine"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,5 +300,73 @@ func TestMemberTokens(t *testing.T) {
 	}
 	if err := m.c.DeleteAPIToken(adminCtx, adminTok.ID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRestrictedTokens(t *testing.T) {
+	m := newMembers(t)
+	ctx := context.Background()
+	admin, err := m.st.GetUserByUsername(ctx, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminActor, err := m.c.UserActor(ctx, admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminCtx := core.WithActor(ctx, adminActor)
+	shop, other := m.shop[core.IDProject], m.other[core.IDProject]
+	restricted := func(ctx context.Context, features []string, grants map[string][]string) (core.Actor, error) {
+		t.Helper()
+		tok, err := m.c.CreateAPIToken(ctx, core.TokenInput{Name: "agent", Restricted: true, Features: features, Grants: grants})
+		if err != nil {
+			return core.Actor{}, err
+		}
+		return m.c.AuthenticateToken(ctx, tok.Token)
+	}
+
+	// An admin's restricted token acts as a member with what it was given.
+	a, err := restricted(adminCtx, []string{string(core.FeatureStorage)}, map[string][]string{shop: {"deploy"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Admin() || !a.Can(shop, core.PermView) || !a.Can(shop, core.PermDeploy) || a.Can(shop, core.PermData) ||
+		a.Can(other, core.PermView) || !a.Has(core.FeatureStorage) || a.Has(core.FeatureServers) {
+		t.Fatalf("admin's restricted token: %+v", a)
+	}
+	if err := m.authorize(core.WithActor(ctx, a), "GET /api/users", "", nil); !errors.Is(err, core.ErrForbidden) {
+		t.Errorf("restricted token reached an admin route: %v", err)
+	}
+
+	// A member's token can't be given more than the member holds.
+	memberCtx := m.as(t, []core.Perm{core.PermView, core.PermDeploy}, core.FeatureStorage)
+	if _, err := restricted(memberCtx, nil, map[string][]string{shop: {"data"}}); !errors.Is(err, core.ErrForbidden) {
+		t.Errorf("token beyond the member's permissions: %v", err)
+	}
+	if _, err := restricted(memberCtx, nil, map[string][]string{other: {"view"}}); !errors.Is(err, core.ErrForbidden) {
+		t.Errorf("token on a project the member can't see: %v", err)
+	}
+	if _, err := restricted(memberCtx, []string{string(core.FeatureServers)}, nil); !errors.Is(err, core.ErrForbidden) {
+		t.Errorf("token with a feature the member lacks: %v", err)
+	}
+	if _, err := restricted(memberCtx, nil, map[string][]string{shop: {"nope"}}); !errors.Is(err, core.ErrInvalid) {
+		t.Errorf("unknown permission: %v", err)
+	}
+	tok, err := m.c.CreateAPIToken(memberCtx, core.TokenInput{Name: "viewer", Restricted: true,
+		Features: []string{string(core.FeatureStorage)}, Grants: map[string][]string{shop: {"view", "deploy"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Restricted to nothing, a token sees no project.
+	a, err = restricted(memberCtx, nil, nil)
+	if err != nil || a.Can(shop, core.PermView) || a.Has(core.FeatureStorage) {
+		t.Fatalf("token restricted to nothing: %+v %v", a, err)
+	}
+
+	// The owner losing a permission or feature takes it from the token.
+	m.as(t, []core.Perm{core.PermView})
+	a, err = m.c.AuthenticateToken(ctx, tok.Token)
+	if err != nil || !a.Can(shop, core.PermView) || a.Can(shop, core.PermDeploy) || a.Has(core.FeatureStorage) {
+		t.Fatalf("token after the owner lost deploy: %+v %v", a, err)
 	}
 }
