@@ -9,8 +9,8 @@ Add a notice under `## Unreleased` in the change that causes it, as
 `- warning: …` (disruptive) or `- info: …`; continue on indented lines. The
 release renames the section to its version.
 
-## Unreleased
-- info: API tokens lose their scope (read, deploy, admin): a token does what
+## 0.33.0
+- warning: API tokens lose their scope (read, deploy, admin): a token does what
   its owner may, or only what it's restricted to. Read and deploy tokens
   become restricted tokens on the projects their owner could reach at the
   upgrade (read: view and data; deploy: plus deploy and backups); they don't
