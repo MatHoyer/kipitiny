@@ -64,8 +64,9 @@ type statsState struct {
 	mu         sync.Mutex
 	prev       map[string]sample // container ID -> last sample, for rates
 	series     map[string]*series
-	containers map[string]*series // container ID ->
-	last       time.Time          // of the last round
+	containers map[string]*series     // container ID ->
+	hosts      map[string]*hostSeries // server ID ->
+	last       time.Time              // of the last round
 }
 
 type series struct {
@@ -136,8 +137,19 @@ func (c *Core) sampleStats(ctx context.Context) {
 		wg    sync.WaitGroup
 		got   = map[string]sample{}
 		owner = map[string]string{} // container ID -> service ID
+		hosts = map[string]hostSample{}
 	)
 	for _, sv := range servers {
+		wg.Go(func() {
+			h, err := sampleHost(ctx, c.dockerFor(sv.ID))
+			if err != nil {
+				c.log.Debug("host stats", "server", sv.Name, "err", err)
+			} else {
+				mu.Lock()
+				hosts[sv.ID] = h
+				mu.Unlock()
+			}
+		})
 		wg.Go(func() {
 			s, o, err := sampleServer(ctx, c.dockerFor(sv.ID), byID)
 			if err != nil {
@@ -151,7 +163,9 @@ func (c *Core) sampleStats(ctx context.Context) {
 		})
 	}
 	wg.Wait()
-	c.stats.record(time.Now(), got, owner, byID)
+	now := time.Now()
+	c.stats.record(now, got, owner, byID)
+	c.stats.recordHosts(now, hosts)
 }
 
 // sampleServer reads the counters of the server's running replicas that

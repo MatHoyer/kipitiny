@@ -66,3 +66,12 @@ func (a *API) sshKey(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"publicKey": key})
 }
+
+func (a *API) serverStats(w http.ResponseWriter, r *http.Request) {
+	st, err := a.core.ServerStats(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, st)
+}

@@ -31,7 +31,9 @@ import type {
   UpgradeNotice,
   RedisKeys,
   RedisValue,
+  HostUsage,
   Server,
+  ServerStats,
   Service,
   ServiceStats,
   ServiceUsage,
@@ -305,6 +307,29 @@ function serviceStats(s: DemoDb["services"][number]): ServiceStats {
   const history = s.stopped ? [] : Array.from({ length: 30 }, (_, i) => usage(s, t - (29 - i) * 10_000));
   const per = Object.fromEntries(containers(s).map((c) => [c.id.slice(0, 12), { current: history.at(-1) ?? null, history }]));
   return { current: history.at(-1) ?? null, history, containers: per };
+}
+
+/** A host that's busy enough to look alive: a slow wave over a fixed machine. */
+function hostStats(): ServerStats {
+  const t = Date.now();
+  const history = Array.from({ length: 30 }, (_, i): HostUsage => {
+    const at = t - (29 - i) * 10_000;
+    const wave = (Math.sin(at / 60_000) + 1) / 2;
+    return {
+      at: new Date(at).toISOString(),
+      cpu: 8 + wave * 14,
+      cores: 4,
+      load: [0.4 + wave, 0.6, 0.55],
+      memoryBytes: Math.round((3.1 + wave * 0.4) * 2 ** 30),
+      memoryTotalBytes: 8 * 2 ** 30,
+      swapBytes: 0,
+      swapTotalBytes: 2 * 2 ** 30,
+      diskBytes: 31 * 2 ** 30,
+      diskTotalBytes: 80 * 2 ** 30,
+      uptimeSec: 12 * 86400 + at / 1000 - t / 1000,
+    };
+  });
+  return { current: history.at(-1) ?? null, history };
 }
 
 /** Saves key edits like the manager does: every check first, then the writes, as one script would. */
@@ -1000,6 +1025,7 @@ const routes: Route[] = [
   ["POST", /^\/auth\/logout$/, () => undefined],
 
   ["GET", /^\/servers$/, () => [{ ...SERVER, projects: db.projects.length }]],
+  ["GET", /^\/servers\/[^/]+\/stats$/, hostStats],
   [
     "POST",
     /^\/servers$/,

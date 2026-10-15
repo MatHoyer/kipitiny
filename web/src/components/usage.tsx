@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Cpu, MemoryStick, Network, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowUp, Cpu, HardDrive, MemoryStick, Network, type LucideIcon } from "lucide-react";
 import { useState, type PointerEvent, type ReactNode } from "react";
 import { Empty, Section } from "@/components/common";
 import { Card } from "@/components/ui/card";
@@ -155,6 +155,59 @@ export function ServiceUsageSection({ serviceId }: { serviceId: string }) {
       description={`${replicas > 1 ? `Total of ${replicas} replicas; open a container below for its own share.` : "Of the running replica."} The charts cover the last five minutes.`}
     >
       {stats.isPending ? null : !cur ? <Empty>Not running.</Empty> : <UsageGrid current={cur} history={stats.data?.history ?? []} />}
+    </Section>
+  );
+}
+
+const percent = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` : "");
+
+/** How long a host has been up, in its largest unit. */
+function formatUptime(sec: number): string {
+  const d = Math.floor(sec / 86400);
+  return d > 0 ? `${d} day${d > 1 ? "s" : ""}` : `${Math.floor(sec / 3600)} h`;
+}
+
+/** Live CPU, memory and disk use of a server's host, with the last five minutes; containers is the memory its services use. */
+export function HostUsageSection({ serverId, containers }: { serverId: string; containers?: number }) {
+  const stats = useQuery({ queryKey: ["server-stats", serverId], queryFn: () => api.serverStats(serverId), refetchInterval: SAMPLE_MS });
+  const cur = stats.data?.current;
+  const history = stats.data?.history ?? [];
+  const times = history.map((p) => p.at);
+  return (
+    <Section title="Host" description="The whole machine, not only kipitiny's containers. The charts cover the last five minutes.">
+      {stats.isPending ? null : !cur ? (
+        <Empty>Can't read the host right now.</Empty>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <UsageCard
+            icon={Cpu}
+            label="CPU"
+            value={formatCpu(cur.cpu)}
+            hint={`${cur.cores} cores · load ${cur.load.map((l) => l.toFixed(2)).join(" ")} · up ${formatUptime(cur.uptimeSec)}`}
+            chart={<Sparkline values={history.map((p) => p.cpu)} max={100} format={formatCpu} times={times} />}
+          />
+          <UsageCard
+            icon={MemoryStick}
+            label="Memory"
+            value={percent(cur.memoryBytes, cur.memoryTotalBytes)}
+            hint={[
+              `${formatBytes(cur.memoryBytes)} of ${formatBytes(cur.memoryTotalBytes)}`,
+              containers !== undefined && `containers ${formatBytes(containers)}`,
+              cur.swapTotalBytes > 0 && `swap ${formatBytes(cur.swapBytes)}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+            chart={<Sparkline values={history.map((p) => p.memoryBytes)} max={cur.memoryTotalBytes} format={formatBytes} times={times} />}
+          />
+          <UsageCard
+            icon={HardDrive}
+            label="Disk"
+            value={percent(cur.diskBytes, cur.diskTotalBytes)}
+            hint={`${formatBytes(cur.diskBytes)} of ${formatBytes(cur.diskTotalBytes)}, Docker's data`}
+            chart={<Sparkline values={history.map((p) => p.diskBytes)} max={cur.diskTotalBytes} format={formatBytes} times={times} />}
+          />
+        </div>
+      )}
     </Section>
   );
 }

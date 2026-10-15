@@ -32,7 +32,7 @@ import { HowTo } from "@/components/how-to";
 import { StepsProgress, type PlannedStep } from "@/components/test-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { SaveBar } from "@/components/save-bar";
-import { memoryOf, useUsage } from "@/components/usage";
+import { HostUsageSection, memoryOf, useUsage } from "@/components/usage";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
@@ -153,6 +153,8 @@ export function ServerPage() {
             {s.dockerError}
           </p>
         )}
+
+        <HostUsageSection serverId={s.id} containers={total} />
 
         <NetworkSection key={`net-${s.id}`} server={s} />
         {s.kind === "ssh" && <ConnectionSection key={`ssh-${s.id}`} server={s} />}
