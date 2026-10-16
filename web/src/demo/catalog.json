@@ -318,6 +318,54 @@
           "domainInput": "DOMAIN"
         }
       ]
+    },
+    {
+      "id": "umami",
+      "title": "Umami",
+      "description": "Simple, privacy-friendly web analytics. No cookies, GDPR-compliant, one small script per site.",
+      "website": "https://umami.is",
+      "docs": "https://umami.is/docs",
+      "icon": "umami",
+      "notes": "Sign in with `admin` / `umami`, then change the password right away (**Settings → Profile**).\n\n- Add a website in **Settings → Websites** and put its tracking script in your pages.\n- Sites, users and events are in the `db` database: back it up from its **Backups** tab.\n- Two-factor sign-in needs `TWO_FACTOR_ENCRYPTION_KEY` in the service's environment: 64 hex characters, like the output of `openssl rand -hex 32`.",
+      "category": "analytics",
+      "tags": [
+        "web analytics",
+        "stats",
+        "privacy",
+        "google analytics"
+      ],
+      "inputs": [
+        {
+          "name": "DOMAIN",
+          "label": "Domain",
+          "type": "domain",
+          "placeholder": "umami.example.com",
+          "required": true
+        },
+        {
+          "name": "APP_SECRET",
+          "label": "App secret",
+          "type": "secret",
+          "generate": 32
+        }
+      ],
+      "project": "umami",
+      "compose": "",
+      "services": [
+        {
+          "name": "db",
+          "kind": "postgres",
+          "image": "postgres"
+        },
+        {
+          "name": "umami",
+          "kind": "app",
+          "image": "ghcr.io/umami-software/umami",
+          "icon": "umami",
+          "port": 3000,
+          "domainInput": "DOMAIN"
+        }
+      ]
     }
   ],
   "logos": [
@@ -348,6 +396,15 @@
         "paperless-ngx"
       ],
       "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1000 1000\"><path fill=\"#17541F\" d=\"M341,949.1c-6.9-20.3-20.7-61.2-21.9-61-199.6-88.9-182.5-229.8-134.3-347.5,30,137.2,268.8,148.9,146.2,336-.9,2.2,10,27.8,19.5,51.3,22.7-51.9,58.6-115.5,55.8-120.8C178,398.7,724.9,299,807.1,18.5c83,251.5,53.1,659.8-377.4,814.9-2,1.4-63.5,148.6-66.9,150.2-.2-2.1-33.2,2.9-30.1-8.7,1.6-7,4.8-16.2,8.2-25.6h0v-.2h.1ZM323.1,846.2c48.3-71.9-12.7-120.8-56.9-152.2,81.2,107.4,66.4,120.8,56.9,152.2h0Z\"/></svg>"
+    },
+    {
+      "name": "umami",
+      "label": "Umami",
+      "color": "#7A7A7A",
+      "images": [
+        "umami"
+      ],
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 428 389.11\"><circle cx=\"214.15\" cy=\"181\" r=\"171\" fill=\"none\" stroke=\"#7A7A7A\" stroke-miterlimit=\"10\" stroke-width=\"20\"/><path fill=\"#7A7A7A\" d=\"M413 134.11H15.29a15 15 0 0 0-15 15v15.3C.12 168 0 171.52 0 175.11c0 118.19 95.81 214 214 214 116.4 0 211.1-92.94 213.93-208.67 0-.44.07-.88.07-1.33v-30a15 15 0 0 0-15-15Z\"/></svg>"
     }
   ]
 }

@@ -1,0 +1,43 @@
+# Umami: privacy-friendly web analytics, a Google Analytics alternative.
+# Its own PostgreSQL holds the sites and the events.
+x-template:
+  title: Umami
+  description: Simple, privacy-friendly web analytics. No cookies, GDPR-compliant, one small script per site.
+  website: https://umami.is
+  docs: https://umami.is/docs
+  icon: umami
+  category: analytics
+  tags: [web analytics, stats, privacy, google analytics]
+  notes: |
+    Sign in with `admin` / `umami`, then change the password right away (**Settings → Profile**).
+
+    - Add a website in **Settings → Websites** and put its tracking script in your pages.
+    - Sites, users and events are in the `db` database: back it up from its **Backups** tab.
+    - Two-factor sign-in needs `TWO_FACTOR_ENCRYPTION_KEY` in the service's environment: 64 hex characters, like the output of `openssl rand -hex 32`.
+  logo:
+    label: Umami
+    color: "#7A7A7A"
+    images: [umami]
+  inputs:
+    - name: DOMAIN
+      label: Domain
+      type: domain
+      required: true
+      placeholder: umami.example.com
+    - name: APP_SECRET
+      label: App secret
+      generate: 32
+name: umami
+services:
+  umami:
+    image: ghcr.io/umami-software/umami:3.4.0
+    expose: ["3000"]
+    environment:
+      DATABASE_URL: "{{ db.db.URL }}"
+      APP_SECRET: ${APP_SECRET}
+    x-kipitiny:
+      domain: ${DOMAIN}
+      icon: umami
+      secrets: [APP_SECRET]
+  db:
+    image: postgres:17-alpine
