@@ -137,6 +137,8 @@ export type Service = {
   runtime: Runtime;
   /** Written into the containers before they start: compose configs, secrets, files from git. */
   files: ServiceFile[];
+  /** Services of the project started before this one. */
+  dependsOn: Dependency[];
   /** IDs of the networks created by hand it joins, besides its project network. */
   networks: string[];
   currentDeploymentId: string;
@@ -300,7 +302,12 @@ export type Runtime = {
   securityOpt?: string[];
   /** Host paths mounted, as /host:/container[:ro] (admins only). */
   binds?: string[];
+  /** "no" (a job, run once) or "on-failure[:retries]"; unset keeps it running. */
+  restart?: string;
 };
+
+/** A service started before another: "healthy" waits until it's ready, "completed" until it exits 0. */
+export type Dependency = { service: string; condition?: "healthy" | "completed" };
 
 /** A file written into an app's containers; responses leave its content out. */
 export type ServiceFile = {
@@ -354,7 +361,8 @@ export type ServicePatch = Partial<Omit<ServiceInput, "name">>;
 export type Deployment = {
   id: string;
   serviceId: string;
-  status: "running" | "succeeded" | "failed";
+  /** skipped: not tried, a service it depends on failed (compose). */
+  status: "running" | "succeeded" | "failed" | "skipped";
   image: string;
   gitCommit?: string;
   /** user:<name> or token:<name>. */

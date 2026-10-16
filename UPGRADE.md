@@ -18,6 +18,12 @@ release renames the section to its version.
   volume instead of the one kipitiny created: its data there is no longer
   seen) and `driver_opts`. External volumes and driver options need an admin:
   a git project linked by a member fails to sync until they're removed.
+- warning: `restart` and `depends_on` in compose files now apply. A service
+  with `restart: "no"` becomes a job: its deploys wait for it to exit 0, so a
+  long-running server written that way fails to deploy; drop the line (or use
+  `restart: unless-stopped`). With `on-failure`, a container that exits isn't
+  started again by kipitiny. `depends_on` naming a service missing from the
+  file, or a cycle, is now an error.
 
 ## 0.33.0
 - warning: API tokens lose their scope (read, deploy, admin): a token does what

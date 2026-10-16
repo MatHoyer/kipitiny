@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -120,5 +121,49 @@ func TestFilesDocker(t *testing.T) {
 	copyContainerLogs(ctx, dk, []string{id}, &out)
 	if got := out.String(); !strings.Contains(got, "conf\ns3cret\n640\n755\n1777\n0\nmade\n") {
 		t.Errorf("output = %q", got)
+	}
+}
+
+// TestJobsDocker checks the readiness of jobs (restart "no" and
+// on-failure) on the local Docker daemon.
+//
+//	KIPITINY_TEST_DOCKER=1 go test ./internal/core/ -run JobsDocker
+func TestJobsDocker(t *testing.T) {
+	if os.Getenv("KIPITINY_TEST_DOCKER") == "" {
+		t.Skip("KIPITINY_TEST_DOCKER not set")
+	}
+	ctx := context.Background()
+	dk, err := docker.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := dk.EnsureImage(ctx, "busybox", ""); err != nil {
+		t.Fatal(err)
+	}
+	c := &Core{}
+	for i, tc := range []struct {
+		restart, script string
+		ok              bool
+	}{
+		{"no", "sleep 7; exit 0", true}, // longer than stableFor: waits for the exit
+		{"no", "exit 3", false},
+		{"on-failure:3", "[ -f /tmp/again ] && exit 0; touch /tmp/again; exit 1", true},
+		{"on-failure:1", "exit 1", false},
+		{"", "exit 0", false},
+	} {
+		svc := store.Service{ID: "01JOBTEST" + strconv.Itoa(i), Name: "job", Kind: store.ServiceKindApp, Image: "busybox", Replicas: 1,
+			Runtime: store.Runtime{Command: []string{"sh", "-c", tc.script}, Restart: tc.restart}}
+		spec := containerSpec(store.Project{ID: "P", Name: "kipitiny-test"}, svc, envSources{}, "D1", 1, route{})
+		delete(spec.Config.Labels, docker.LabelManaged)
+		spec.NetworkingConfig = &network.NetworkingConfig{}
+		spec.Name += strconv.Itoa(i)
+		id, err := dk.Run(ctx, spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = dk.RemoveContainer(context.Background(), id, 0) })
+		if err := c.waitReady(ctx, dk, id, tc.restart); (err == nil) != tc.ok {
+			t.Errorf("restart %q, %q: err = %v", tc.restart, tc.script, err)
+		}
 	}
 }

@@ -2,8 +2,10 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
@@ -70,24 +72,42 @@ func (c *Core) preDeploy(ctx context.Context, project store.Project, svc store.S
 
 // waitReady waits until a new replica can take traffic: its healthcheck
 // (image or injected probe) passes, or, without one, it stays up for a few
-// seconds. A container that exits or restarts fails immediately.
-func (c *Core) waitReady(ctx context.Context, dk *docker.Client, id string) error {
+// seconds. A container that exits or restarts fails immediately. With a
+// restart policy (store.Runtime.Restart), exiting 0 is ready too; a job
+// (restart "no") is ready only then, and on-failure may restart.
+func (c *Core) waitReady(ctx context.Context, dk *docker.Client, id, restart string) error {
 	ctx, cancel := context.WithTimeout(ctx, readyTimeout)
 	defer cancel()
 	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
 	var stableSince time.Time
+	name := id
+	notReady := func() error {
+		if restart == "no" {
+			return fmt.Errorf("%s still running after %s: a job (restart: \"no\") must exit", name, readyTimeout)
+		}
+		return fmt.Errorf("%s not ready after %s", name, readyTimeout)
+	}
 	for {
 		res, err := dk.ContainerInspect(ctx, id, client.ContainerInspectOptions{})
 		if err != nil {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) { // the timeout hit during the call
+				return notReady()
+			}
 			return err
 		}
 		ct := res.Container
+		name = ct.Name[1:]
 		st := ct.State
-		if st == nil || (!st.Running && st.Status != container.StateCreated) || st.Restarting || ct.RestartCount > 0 {
+		if restart != "" && st != nil && st.Status == container.StateExited && st.ExitCode == 0 {
+			return nil
+		}
+		onFailure := strings.HasPrefix(restart, "on-failure")
+		if st == nil || (!st.Running && !st.Restarting && st.Status != container.StateCreated) || (!onFailure && (st.Restarting || ct.RestartCount > 0)) {
 			return fmt.Errorf("%s crashed (exit code %d)", ct.Name[1:], exitCode(st))
 		}
 		switch {
+		case restart == "no" || st.Restarting: // a job: until it exits
 		case st.Health != nil && st.Health.Status == container.Unhealthy:
 			return fmt.Errorf("%s is unhealthy", ct.Name[1:])
 		case st.Health != nil:
@@ -103,7 +123,7 @@ func (c *Core) waitReady(ctx context.Context, dk *docker.Client, id string) erro
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("%s not ready after %s", ct.Name[1:], readyTimeout)
+			return notReady()
 		case <-tick.C:
 		}
 	}

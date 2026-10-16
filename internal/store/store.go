@@ -505,6 +505,9 @@ type Service struct {
 	// Files are written into an app's containers before they start: compose
 	// configs, secrets and files bind-mounted from a git repository.
 	Files []ServiceFile `bun:"files" json:"files"`
+	// DependsOn names the services of the project that start before this
+	// one (deploys, waking up).
+	DependsOn []Dependency `bun:"depends_on" json:"dependsOn"`
 	// Networks are the IDs of the networks created by hand that the service
 	// joins besides its project network. Set on their own, never by a
 	// compose file, so a git sync keeps them.
@@ -638,6 +641,17 @@ type Runtime struct {
 	SecurityOpt []string `json:"securityOpt,omitempty"`
 	// Binds mount host paths, as /host:/container[:ro].
 	Binds []string `json:"binds,omitempty"`
+	// Restart is "" (always restarted), "no" (a job: it runs once, a
+	// deploy waits for it to exit 0) or "on-failure[:max retries]".
+	Restart string `json:"restart,omitempty"`
+}
+
+// Dependency is a service another one waits for.
+type Dependency struct {
+	Service string `json:"service"`
+	// Condition is "" (started), "healthy" (ready) or "completed" (a job
+	// that exited 0).
+	Condition string `json:"condition,omitempty"`
 }
 
 // ServiceFile is a file written into an app's containers before they start.
@@ -667,7 +681,7 @@ type Ulimit struct {
 func (r Runtime) IsZero() bool {
 	return len(r.Command) == 0 && len(r.Entrypoint) == 0 && r.User == "" && r.WorkingDir == "" && len(r.Labels) == 0 &&
 		len(r.Tmpfs) == 0 && r.ShmSizeMB == 0 && len(r.Ulimits) == 0 && len(r.Sysctls) == 0 && !r.ReadOnly && !r.Init &&
-		r.StopSignal == "" && !r.TTY && !r.StdinOpen && len(r.ExtraHosts) == 0 && len(r.CapDrop) == 0 && !r.HostAccess()
+		r.StopSignal == "" && !r.TTY && !r.StdinOpen && len(r.ExtraHosts) == 0 && len(r.CapDrop) == 0 && r.Restart == "" && !r.HostAccess()
 }
 
 // HostAccess reports whether r loosens the container's isolation, which
@@ -744,6 +758,9 @@ const (
 	DeploymentRunning   DeploymentStatus = "running"
 	DeploymentSucceeded DeploymentStatus = "succeeded"
 	DeploymentFailed    DeploymentStatus = "failed"
+	// DeploymentSkipped is a compose deploy not tried because a service it
+	// depends on (healthy or completed) failed; the old version keeps running.
+	DeploymentSkipped DeploymentStatus = "skipped"
 )
 
 type Deployment struct {

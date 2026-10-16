@@ -361,8 +361,8 @@ func (c *Core) starting(svc store.Service, maintenance bool) bool {
 	return ok && now.Sub(woken) < coldStart
 }
 
-// wakeProject starts a sleeping project's services again, databases first
-// and ready before the apps start, so they find them; the reconciler takes
+// wakeProject starts a sleeping project's services again, databases first,
+// then apps after those they depend on, so they find them; the reconciler takes
 // it from there. Waking an awake project does nothing. It takes no service
 // lock: a deploy or a backup holding one wakes the project it needs.
 func (c *Core) wakeProject(ctx context.Context, projectID string) error {
@@ -379,25 +379,29 @@ func (c *Core) wakeProject(ctx context.Context, projectID string) error {
 	if err := c.store.SetProjectSleeping(ctx, projectID, false); err != nil {
 		return err
 	}
-	slices.SortStableFunc(svcs, func(a, b store.Service) int { return cmpBool(!a.Kind.IsDatabase(), !b.Kind.IsDatabase()) })
-	for _, svc := range svcs {
+	// In dependency order, each service awaited as the others need it.
+	// shortcut: one service at a time, even those that don't depend on each
+	// other; start them in parallel if waking gets slow.
+	await := awaited(svcs)
+	for _, svc := range startOrder(svcs) {
 		cts, err := c.activeContainers(ctx, svc)
 		if err != nil {
 			return err
 		}
 		dk := c.dockerFor(svc.ServerID)
 		for _, ct := range cts {
-			if ct.State == container.StateRunning {
-				continue
+			if ct.State == container.StateRunning || (isJob(svc) && completed(ct)) {
+				continue // a job that already did its work stays done
 			}
 			if _, err := dk.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{}); err != nil {
 				c.kick() // the reconciler recreates what can't start
 				c.log.Warn("wake: start failed", "container", ct.Names[0], "err", err)
-				continue
 			}
-			if svc.Kind.IsDatabase() {
-				if err := c.waitReady(ctx, dk, ct.ID); err != nil {
-					c.log.Warn("wake: database not ready", "service", svc.Name, "err", err)
+		}
+		if cond := await[svc.Name]; cond != "" {
+			for _, ct := range cts {
+				if err := c.waitCondition(ctx, dk, ct.ID, svc, cond); err != nil {
+					c.log.Warn("wake: dependency not ready, starting the next services anyway", "service", svc.Name, "err", err)
 				}
 			}
 		}

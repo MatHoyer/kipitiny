@@ -47,7 +47,7 @@ func healthOf(svc store.Service, cts []container.Summary) (judged, healthy bool,
 		if ct.Health != nil && ct.Health.Status != "" {
 			health = ct.Health.Status
 		}
-		if ct.State == container.StateRunning && (health == container.NoHealthcheck || health == container.Healthy) {
+		if ct.State == container.StateRunning && (health == container.NoHealthcheck || health == container.Healthy) || isJob(svc) && completed(ct) {
 			return true, true, ""
 		}
 		state := string(ct.State)

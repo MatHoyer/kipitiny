@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/moby/moby/api/types/container"
@@ -100,29 +101,33 @@ func (c *Core) RenameService(ctx context.Context, id, name string) (ServiceView,
 	}
 	svc.Name = name
 
-	if svc.Kind == store.ServiceKindApp {
-		// The URL stays the same: nothing to redeploy.
-		for _, s := range others {
-			if env := renameAppRefs(s.Env, old, name); s.ID != id && !maps.Equal(env, s.Env) {
-				s.Env = env
-				if _, err := c.store.UpdateService(ctx, s); err != nil {
-					return ServiceView{}, fmt.Errorf("update references in %s: %w", s.Name, err)
-				}
+	var dependents []string
+	for _, s := range others {
+		if s.ID == id {
+			continue
+		}
+		changed := false
+		for i, d := range s.DependsOn {
+			if d.Service == old {
+				s.DependsOn = slices.Clone(s.DependsOn)
+				s.DependsOn[i].Service, changed = name, true
 			}
 		}
-	}
-	var dependents []string
-	if svc.Kind.IsDatabase() {
-		for _, s := range others {
-			if s.ID == id || !usesDatabase(s.Env, old) {
-				continue
+		switch {
+		case svc.Kind == store.ServiceKindApp:
+			// The URL stays the same: nothing to redeploy.
+			if env := renameAppRefs(s.Env, old, name); !maps.Equal(env, s.Env) {
+				s.Env, changed = env, true
 			}
-			s.Env = renameDatabaseRefs(s.Env, old, name)
-			if _, err := c.store.UpdateService(ctx, s); err != nil {
-				return ServiceView{}, fmt.Errorf("update references in %s: %w", s.Name, err)
-			}
+		case usesDatabase(s.Env, old):
+			s.Env, changed = renameDatabaseRefs(s.Env, old, name), true
 			if s.Kind == store.ServiceKindApp && !s.Stopped && s.CurrentDeploymentID != "" {
 				dependents = append(dependents, s.ID)
+			}
+		}
+		if changed {
+			if _, err := c.store.UpdateService(ctx, s); err != nil {
+				return ServiceView{}, fmt.Errorf("update references in %s: %w", s.Name, err)
 			}
 		}
 	}

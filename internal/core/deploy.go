@@ -452,7 +452,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 	logf("Waiting for %d new replica(s) to become ready (%s)", len(started), readinessMode(svc))
 	errs := make(chan error, len(started))
 	for _, id := range started {
-		go func() { errs <- c.waitReady(ctx, dk, id) }()
+		go func() { errs <- c.waitReady(ctx, dk, id, svc.Runtime.Restart) }()
 	}
 	var readyErr error
 	for range started {
@@ -563,7 +563,7 @@ func (c *Core) swap(ctx context.Context, project store.Project, svc store.Servic
 	id, err := c.runContainer(ctx, dk, spec, serviceFiles(svc, src)...)
 	if err == nil {
 		logf("Waiting for the new replica to become ready (%s)", readinessMode(svc))
-		if err = c.waitReady(ctx, dk, id); err != nil {
+		if err = c.waitReady(ctx, dk, id, svc.Runtime.Restart); err != nil {
 			copyContainerLogs(ctx, dk, []string{id}, out)
 			err = fmt.Errorf("new version not ready: %w", err)
 		}
@@ -595,6 +595,8 @@ func isActive(ct container.Summary, svc store.Service) bool {
 
 func readinessMode(svc store.Service) string {
 	switch {
+	case svc.Runtime.Restart == "no":
+		return "a job: exiting with code 0"
 	case svc.Healthcheck.Set() && svc.Healthcheck.Test[0] == "NONE":
 		return "running for 5s"
 	case svc.Healthcheck.Set():
