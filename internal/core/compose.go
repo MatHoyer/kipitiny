@@ -754,7 +754,7 @@ func changedFields(old, svc store.Service) []string {
 		old.Healthcheck.StartPeriodSeconds != svc.Healthcheck.StartPeriodSeconds || old.Healthcheck.Retries != svc.Healthcheck.Retries)
 	add("preDeploy", old.PreDeploy != svc.PreDeploy)
 	add("preBackup", old.PreBackup != svc.PreBackup)
-	add("volumes", !slices.Equal(old.Volumes, svc.Volumes))
+	add("volumes", !reflect.DeepEqual(old.Volumes, svc.Volumes))
 	add("publishedPorts", !slices.Equal(old.PublishedPorts, svc.PublishedPorts))
 	add("stopGraceSeconds", old.StopGraceSeconds != svc.StopGraceSeconds)
 	add("hostNetwork", old.HostNetwork != svc.HostNetwork)

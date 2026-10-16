@@ -59,7 +59,7 @@ func TestVolumeBackupDocker(t *testing.T) {
 			// remove it as an orphan.
 			Labels: map[string]string{docker.LabelProject: p.ID, docker.LabelService: svc.ID, docker.LabelDeploy: "D1"},
 		},
-		HostConfig: &container.HostConfig{Mounts: []mount.Mount{appVolumeMount(svc, svc.Volumes[0])}},
+		HostConfig: &container.HostConfig{Mounts: []mount.Mount{appVolumeMount(svc, svc.Volumes[0].Name, svc.Volumes[0].Path)}},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -554,14 +554,26 @@ type ProjectGit struct {
 
 // Volume is a named volume mounted at Path in every replica of an app.
 type Volume struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	ReadOnly bool   `json:"readOnly,omitempty"`
+	// External names an existing Docker volume mounted as is: kipitiny
+	// never creates, labels or removes it. Admins only.
+	External string `json:"external,omitempty"`
+	// DriverOpts are the local driver's options a new volume is created
+	// with (an NFS share…). Admins only: they can mount host paths.
+	DriverOpts map[string]string `json:"driverOpts,omitempty"`
 }
+
+// HostAccess reports whether v reaches beyond the service's own data.
+func (v Volume) HostAccess() bool { return v.External != "" || len(v.DriverOpts) > 0 }
 
 // PublishedPort binds HostPort on the server to ContainerPort of an app.
 type PublishedPort struct {
-	HostPort      int `json:"hostPort"`
-	ContainerPort int `json:"containerPort"`
+	// HostIP is the server address the port is bound on; empty is every one.
+	HostIP        string `json:"hostIp,omitempty"`
+	HostPort      int    `json:"hostPort"`
+	ContainerPort int    `json:"containerPort"`
 	// Protocol is "tcp" or "udp".
 	Protocol string `json:"protocol"`
 }

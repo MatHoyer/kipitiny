@@ -77,8 +77,8 @@ Each key under `services` is a service. Its name is also its hostname inside the
 | `environment` | Env variables, as a mapping or a `KEY=value` list. Values may hold references (see [Values](#values-references-and-secrets)). A key without a value (`- KEY` or `KEY:`) means `${KEY}`. |
 | `expose` | The container port HTTP is routed to from the domain: `["3000"]`. With several, `x-kipitiny.port` picks one. Same as `x-kipitiny.port`. |
 | `healthcheck` | Docker's healthcheck: `test` (a list starting with `CMD` or `CMD-SHELL`, or a string run by the shell), `interval`, `timeout`, `start_period`, `retries`, or `disable: true`. A new replica takes traffic once it passes. Without `start_period`, it is checked every second while starting. The command runs in the container, so the image needs it (`wget`, `curl`…); `x-kipitiny.health_path` works with any image. Not for databases. |
-| `ports` | Host ports published straight to the container, for traffic that isn't HTTP: `"25565:25565"`, `"9000:9000/udp"`, or the long form `{target: 25565, published: 25565, protocol: tcp}`. One port per entry, no ranges. An app with published ports runs one replica. HTTP goes through `expose` (or `x-kipitiny.port`) instead. |
-| `volumes` | Named volumes: `name:/path` or `{type: volume, source: name, target: /path}`. Shared by the service's replicas, kept across deploys, backed up, managed from the [Files](/docs/files) tab. At most 10. Names: lowercase letters, digits and dashes. The one bind mount allowed is the Docker socket, `/var/run/docker.sock:/var/run/docker.sock` (`:ro` for read-only); see [Host access](#host-access). |
+| `ports` | Host ports published straight to the container, for traffic that isn't HTTP: `"25565:25565"`, `"9000:9000/udp"`, a range `"8000-8010:8000-8010"`, or the long form `{target: 25565, published: 25565, protocol: tcp, host_ip: 127.0.0.1}`. A host IP (`"127.0.0.1:5432:5432"`, `"[::1]:5432:5432"`) binds that address only, e.g. the server itself; without one, every address. At most 20 ports. An app with published ports runs one replica. HTTP goes through `expose` (or `x-kipitiny.port`) instead. |
+| `volumes` | Named volumes: `name:/path` (`:ro` for read-only) or `{type: volume, source: name, target: /path, read_only: true}`. Shared by the service's replicas, kept across deploys, backed up, managed from the [Files](/docs/files) tab. At most 10. Names: lowercase letters, digits and dashes. An anonymous volume (`/app/node_modules`) is kept as a named one after its path (`app-node-modules`), with a warning. The one bind mount allowed is the Docker socket, `/var/run/docker.sock:/var/run/docker.sock` (`:ro` for read-only); see [Host access](#host-access). |
 | `network_mode` | Only `host`: the app runs in the server's network. See [Host access](#host-access). |
 | `deploy` | `replicas` (1–10; databases always 1) and `resources.limits.memory` / `resources.limits.cpus`. |
 | `mem_limit` | Same as `deploy.resources.limits.memory` (`512m`, `1g`, bytes). |
@@ -105,7 +105,7 @@ Each key under `services` is a service. Its name is also its hostname inside the
 | `build` | Ignored when `image` is set (with a warning); an error without one. |
 | `x-kipitiny` | kipitiny's settings, below. |
 
-Top level: `name` (the project name, informational), `services`, `volumes` (each volume's options are ignored: kipitiny creates local named volumes) and `x-kipitiny` (project variables).
+Top level: `name` (the project name, informational), `services`, `volumes` and `x-kipitiny` (project variables). A top-level volume may be `external: true` (with `name:` when the Docker volume is named otherwise): an existing volume, mounted as is and never removed by kipitiny. Or it may set the local driver's `driver_opts` (`type`, `o`, `device`), e.g. an NFS share, used when the volume is created. Both are admin-only, see [Host access](#host-access); other drivers are refused, other options ignored.
 
 ### Ignored with a warning
 
@@ -134,6 +134,7 @@ services:
 - **`network_mode: host`:** the app shares the server's network and listens on its ports directly (open them in the firewall if needed). It has no domain or published ports, isn't on the project network (other services can't reach it by name), runs one replica, and deploys stop the old container before starting the new one.
 - **The Docker socket** is mounted at `/var/run/docker.sock`, from the server's own socket. `:ro` only stops the app from replacing the socket file, not from using it: the app can still create, change and remove containers, so read-only gives no protection.
 - **Capabilities, devices, privileged mode and security options** (`cap_add`, `devices`, `privileged`, `security_opt`) are for VPNs, network tools and hardware (a Zigbee stick, a GPU, `/dev/net/tun`). `privileged` and most capabilities let the app escape its container.
+- **External volumes and driver options** reach data beyond the app's own: another volume on the server, a network share, or (with `o: bind`) any path of the host.
 - Any of these gives the app control of the server: only use images you trust. Databases can't have them, previews leave such services out, and only admins can turn them on (a member may still change the app's other settings, or remove them).
 - A service runs on its project's server: to monitor several servers, make one project per server. The Beszel hub itself is a normal app (`henrygd/beszel`, port 8090, a volume at `/beszel_data`). Both are also [one-click templates](/docs/templates).
 

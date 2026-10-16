@@ -3,7 +3,7 @@ import type { PublishedPort } from "@/api";
 import { cn } from "@/lib/utils";
 
 export const portLabel = (p: PublishedPort) =>
-  `${p.hostPort}${p.containerPort !== p.hostPort ? `→${p.containerPort}` : ""}/${p.protocol}`;
+  `${p.hostIp ? (p.hostIp.includes(":") ? `[${p.hostIp}]:` : `${p.hostIp}:`) : ""}${p.hostPort}${p.containerPort !== p.hostPort ? `→${p.containerPort}` : ""}/${p.protocol}`;
 
 type Reachable = { domain?: string; port?: number; publishedPorts?: PublishedPort[]; hostNetwork?: boolean };
 

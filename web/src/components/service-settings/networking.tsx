@@ -80,10 +80,10 @@ export function DomainCard({ svc }: { svc: ServiceT }) {
   );
 }
 
-type PortRow = { hostPort: string; containerPort: string; protocol: PublishedPort["protocol"] };
+type PortRow = { hostIp: string; hostPort: string; containerPort: string; protocol: PublishedPort["protocol"] };
 
 const portRows = (ports: PublishedPort[]): PortRow[] =>
-  ports.map((p) => ({ hostPort: String(p.hostPort), containerPort: String(p.containerPort), protocol: p.protocol }));
+  ports.map((p) => ({ hostIp: p.hostIp ?? "", hostPort: String(p.hostPort), containerPort: String(p.containerPort), protocol: p.protocol }));
 
 /** Host ports bound straight to an app's container, for traffic that isn't HTTP. */
 export function PortsCard({ svc }: { svc: ServiceT }) {
@@ -96,6 +96,7 @@ export function PortsCard({ svc }: { svc: ServiceT }) {
     mutationFn: () =>
       api.updateService(svc.id, {
         publishedPorts: rows.map((r) => ({
+          hostIp: r.hostIp.trim(),
           hostPort: Number(r.hostPort) || 0,
           containerPort: Number(r.containerPort) || 0,
           protocol: r.protocol,
@@ -125,7 +126,7 @@ export function PortsCard({ svc }: { svc: ServiceT }) {
           type="button"
           size="sm"
           variant="outline"
-          onClick={() => setRows([...rows, { hostPort: "", containerPort: "", protocol: "tcp" }])}
+          onClick={() => setRows([...rows, { hostIp: "", hostPort: "", containerPort: "", protocol: "tcp" }])}
         >
           <Plus data-icon="inline-start" />
           Add port
@@ -136,7 +137,16 @@ export function PortsCard({ svc }: { svc: ServiceT }) {
       <form id={formId} onSubmit={onSubmit} className="space-y-3">
         {rows.length === 0 && <Empty>No published ports: the app is only reachable through its domain, if any.</Empty>}
         {rows.map((r, i) => (
-          <div key={i} className="flex items-start gap-2">
+          <div key={i} className="flex flex-wrap items-start gap-2 sm:flex-nowrap">
+            <FloatingInput
+              label="Address"
+              value={r.hostIp}
+              onChange={(e) => set(i, "hostIp")(e.target.value)}
+              placeholder="all"
+              title="The server address to bind, e.g. 127.0.0.1 for the server itself only. Empty: every address."
+              className="w-full sm:w-36 sm:shrink-0"
+              inputClassName="font-mono"
+            />
             <FloatingInput
               label="Host port"
               required

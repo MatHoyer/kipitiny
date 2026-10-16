@@ -14,10 +14,12 @@ func TestRoundTrip(t *testing.T) {
 		Name: "shop",
 		Services: map[string]Service{
 			"web": {
-				Image:            "ghcr.io/me/shop:1.4.2",
-				Environment:      map[string]string{"DATABASE_URL": "{{ db.db.URL }}", "API_KEY": "${WEB_API_KEY}", "PRICE": "$$5"},
-				Ports:            []store.PublishedPort{{HostPort: 2525, ContainerPort: 25, Protocol: "tcp"}, {HostPort: 9000, ContainerPort: 9000, Protocol: "udp"}},
-				Volumes:          []store.Volume{{Name: "uploads", Path: "/app/uploads"}},
+				Image:       "ghcr.io/me/shop:1.4.2",
+				Environment: map[string]string{"DATABASE_URL": "{{ db.db.URL }}", "API_KEY": "${WEB_API_KEY}", "PRICE": "$$5"},
+				Ports: []store.PublishedPort{{HostPort: 2525, ContainerPort: 25, Protocol: "tcp"}, {HostPort: 9000, ContainerPort: 9000, Protocol: "udp"},
+					{HostIP: "127.0.0.1", HostPort: 5432, ContainerPort: 5432, Protocol: "tcp"}, {HostIP: "::1", HostPort: 6379, ContainerPort: 6379, Protocol: "tcp"}},
+				Volumes: []store.Volume{{Name: "uploads", Path: "/app/uploads"}, {Name: "config", Path: "/config", ReadOnly: true},
+					{Name: "media", Path: "/media", External: "nas-media"}, {Name: "nfs", Path: "/nfs", DriverOpts: map[string]string{"type": "nfs", "o": "addr=10.0.0.5", "device": ":/export"}}},
 				Replicas:         2,
 				MemoryMB:         256,
 				CPUs:             0.5,
@@ -104,14 +106,14 @@ volumes:
 	if web.Image != "app:latest" || web.MemoryMB != 1024 || web.Environment["FROM_PROJECT"] != "{{ project.FROM_PROJECT }}" || web.Environment["PLAIN"] != "1" {
 		t.Errorf("web = %+v", web)
 	}
-	if len(web.Ports) != 1 || web.Ports[0] != (store.PublishedPort{HostPort: 8080, ContainerPort: 80, Protocol: "tcp"}) {
+	if len(web.Ports) != 1 || web.Ports[0] != (store.PublishedPort{HostIP: "127.0.0.1", HostPort: 8080, ContainerPort: 80, Protocol: "tcp"}) {
 		t.Errorf("ports = %+v", web.Ports)
 	}
 	db := f.Services["db"]
 	if db.X.Kind != "postgres" || db.Environment != nil || db.Volumes != nil {
 		t.Errorf("db = %+v", db)
 	}
-	for _, w := range []string{"version is ignored", "build is ignored", "restart is ignored", "depends_on is ignored", "host IP is ignored", "isn't published", "driver is ignored", "environment of a postgres"} {
+	for _, w := range []string{"version is ignored", "build is ignored", "restart is ignored", "depends_on is ignored", "isn't published", "environment of a postgres"} {
 		if !strings.Contains(strings.Join(warns, "\n"), w) {
 			t.Errorf("missing warning %q in %v", w, warns)
 		}
@@ -126,14 +128,14 @@ func TestParseErrors(t *testing.T) {
 		"bad quote":    {"services:\n  web:\n    image: a\n    command: echo 'hi\n", "unterminated quote"},
 		"bad bool":     {"services:\n  web:\n    image: a\n    init: maybe\n", "not true or false"},
 		"bind mount":   {"services:\n  web:\n    image: a\n    volumes: [./data:/data]\n", "bind mounts"},
-		"anonymous":    {"services:\n  web:\n    image: a\n    volumes: [/data]\n", "anonymous"},
+		"nfs plugin":   {"services:\n  web:\n    image: a\n    volumes: [d:/d]\nvolumes: {d: {driver: rexray}}\n", "driver rexray"},
 		"missing var":  {"services:\n  web:\n    image: a:${TAG}\n", "variables not set: TAG"},
 		"required var": {"services:\n  web:\n    image: a:${TAG:?set a tag}\n", "set a tag"},
 		"bad ext":      {"services:\n  web:\n    image: a\n    x-kipitiny:\n      domian: x\n", "domian"},
 		"plain auth":   {"services:\n  web:\n    image: a\n    x-kipitiny:\n      middlewares:\n        basic_auth: [{name: a}]\n", "bcrypt hash"},
 		"top secrets":  {"services:\n  web:\n    image: a\nsecrets: {}\n", "top-level secrets"},
 		"no services":  {"name: x\n", "no services"},
-		"port range":   {"services:\n  web:\n    image: a\n    ports: [\"8000-8001:80\"]\n", "ranges"},
+		"port range":   {"services:\n  web:\n    image: a\n    ports: [\"8000-8001:80\"]\n", "ranges of the same length"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, _, err := Parse([]byte(tc.src), Vars{})
@@ -167,7 +169,7 @@ services:
 	if s.StopGraceSeconds != 90 || s.Replicas != 3 || s.MemoryMB != 2 || s.CPUs != 1.5 || s.X.Password != "${PW}" {
 		t.Errorf("service = %+v", s)
 	}
-	if s.Ports[0] != (store.PublishedPort{HostPort: 5353, ContainerPort: 53, Protocol: "udp"}) || s.Volumes[0] != (store.Volume{Name: "data", Path: "/data"}) {
+	if s.Ports[0] != (store.PublishedPort{HostPort: 5353, ContainerPort: 53, Protocol: "udp"}) || !reflect.DeepEqual(s.Volumes[0], store.Volume{Name: "data", Path: "/data"}) {
 		t.Errorf("ports/volumes = %+v %+v", s.Ports, s.Volumes)
 	}
 }
@@ -367,5 +369,35 @@ func TestSplitCommand(t *testing.T) {
 	}
 	if _, err := SplitCommand(`a "b`); err == nil {
 		t.Error("want an error for an unterminated quote")
+	}
+}
+
+func TestPortsAndVolumes(t *testing.T) {
+	data := []byte(`
+services:
+  web:
+    image: a
+    ports: ["8000-8002:9000-9002/udp", "[::1]:5432:5432"]
+    volumes: [/app/node_modules, /app/node-modules, "cache:/cache:ro", shared:/shared]
+volumes:
+  shared: {external: true}
+`)
+	f, warns, err := Parse(data, Vars{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := f.Services["web"]
+	want := []store.PublishedPort{{HostPort: 8000, ContainerPort: 9000, Protocol: "udp"}, {HostPort: 8001, ContainerPort: 9001, Protocol: "udp"},
+		{HostPort: 8002, ContainerPort: 9002, Protocol: "udp"}, {HostIP: "::1", HostPort: 5432, ContainerPort: 5432, Protocol: "tcp"}}
+	if !slices.Equal(s.Ports, want) {
+		t.Errorf("ports = %+v", s.Ports)
+	}
+	wantVols := []store.Volume{{Name: "app-node-modules", Path: "/app/node_modules"}, {Name: "app-node-modules-2", Path: "/app/node-modules"},
+		{Name: "cache", Path: "/cache", ReadOnly: true}, {Name: "shared", Path: "/shared", External: "shared"}}
+	if !reflect.DeepEqual(s.Volumes, wantVols) {
+		t.Errorf("volumes = %+v", s.Volumes)
+	}
+	if len(warns) != 2 || !strings.Contains(warns[0], "anonymous") {
+		t.Errorf("warnings = %v", warns)
 	}
 }
