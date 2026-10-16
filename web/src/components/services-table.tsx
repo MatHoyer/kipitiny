@@ -1,16 +1,20 @@
-import { ArrowDown, ArrowUp, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, Play, RotateCw, Search, Square, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { databaseLabels } from "@/components/brand-icons";
+import { BulkBar, useBulk, useSelection } from "@/components/bulk";
 import { StateBadge, stateColors } from "@/components/common";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ServiceIcon } from "@/components/service-icon";
 import { TagChips, TagFilter, type useTagFilter } from "@/components/tags";
 import { needsAttention } from "@/components/topology";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { liveState } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { isDatabase, type Project, type Service, type ServiceKind } from "../api";
+import { api, isDatabase, type Project, type Service, type ServiceKind } from "../api";
 
 type SortKey = "name" | "project" | "kind" | "state";
 
@@ -58,6 +62,10 @@ export function ServicesTable({
   const value = (r: (typeof rows)[number]) =>
     sort.key === "name" ? r.s.name : sort.key === "project" ? r.project : sort.key === "kind" ? kindLabel(r.s.kind) : r.state;
   rows.sort((a, b) => (sort.desc ? -1 : 1) * value(a).localeCompare(value(b)) || a.s.name.localeCompare(b.s.name));
+  const sel = useSelection(rows.map((r) => r.s));
+  const bulk = useBulk<Service>(sel.clear);
+  const act = (label: string, a: "start" | "stop" | "restart") => bulk.mutate({ label, items: sel.chosen, run: (s) => api.serviceAction(s.id, a) });
+  const n = sel.chosen.length;
 
   const header = (key: SortKey, label: string, className?: string) => (
     <th scope="col" aria-sort={sort.key === key ? (sort.desc ? "descending" : "ascending") : undefined} className={cn("border-b px-3 py-2.5 font-normal", className)}>
@@ -117,7 +125,10 @@ export function ServicesTable({
           <table className="w-full border-separate border-spacing-0 text-sm">
             <thead className="text-left text-xs text-muted-foreground">
               <tr>
-                {header("name", "Service", "w-full pl-4")}
+                <th scope="col" className="w-0 border-b py-2.5 pl-4">
+                  <Checkbox checked={sel.all} onCheckedChange={(on) => sel.setAll(on === true)} aria-label="Select all shown services" />
+                </th>
+                {header("name", "Service", "w-full")}
                 {header("project", "Project")}
                 {header("kind", "Kind", "hidden sm:table-cell")}
                 {header("state", "State")}
@@ -133,7 +144,10 @@ export function ServicesTable({
               {rows.map(({ s, project, state: st }) => (
                 // The whole row opens the service; the name is its keyboard target.
                 <tr key={s.id} onClick={() => navigate(`/services/${s.id}`)} className="cursor-pointer hover:bg-muted/60">
-                  <td className="max-w-0 border-b py-2.5 pr-3 pl-4">
+                  <td className="border-b py-2.5 pl-4" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox checked={sel.has(s.id)} onCheckedChange={(on) => sel.toggle(s.id, on === true)} aria-label={`Select ${s.name}`} />
+                  </td>
+                  <td className="max-w-0 border-b px-3 py-2.5">
                     <Link to={`/services/${s.id}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-2.5 outline-none focus-visible:underline">
                       <ServiceIcon service={s} className="size-4 shrink-0 text-muted-foreground" />
                       <span className="min-w-0">
@@ -157,6 +171,32 @@ export function ServicesTable({
           </table>
         </div>
       )}
+      <BulkBar count={n} noun="service" onClear={sel.clear}>
+        <Button size="sm" variant="outline" disabled={bulk.isPending} onClick={() => act("Start", "start")}>
+          <Play data-icon="inline-start" />
+          Start
+        </Button>
+        <Button size="sm" variant="outline" disabled={bulk.isPending} onClick={() => act("Stop", "stop")}>
+          <Square data-icon="inline-start" />
+          Stop
+        </Button>
+        <Button size="sm" variant="outline" disabled={bulk.isPending} onClick={() => act("Restart", "restart")}>
+          <RotateCw data-icon="inline-start" />
+          Restart
+        </Button>
+        <ConfirmDialog
+          trigger={
+            <Button size="sm" variant="destructive" disabled={bulk.isPending}>
+              <Trash2 data-icon="inline-start" />
+              Delete
+            </Button>
+          }
+          title={`Delete ${n} service${n === 1 ? "" : "s"}?`}
+          description={`${sel.chosen.map((s) => s.name).join(", ")}: their containers and volumes go, data included.`}
+          typeToConfirm={`delete ${n}`}
+          onConfirm={() => bulk.mutate({ label: "Delete", items: sel.chosen, run: (s) => api.deleteService(s.id, s.name) })}
+        />
+      </BulkBar>
     </>
   );
 }

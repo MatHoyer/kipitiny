@@ -48,7 +48,7 @@ const toInput = (f: Form, d: Defaults): Required<Maintenance> => ({
 });
 
 /** The maintenance settings as saved, to change one part of them. */
-const saved = (m: Maintenance | undefined): Required<Maintenance> => ({
+export const saved = (m: Maintenance | undefined): Required<Maintenance> => ({
   enabled: !!m?.enabled,
   allowIps: m?.allowIps ?? [],
   title: m?.title ?? "",

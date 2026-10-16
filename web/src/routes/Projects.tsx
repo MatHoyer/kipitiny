@@ -1,7 +1,10 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ChevronRight, FolderKanban, GitPullRequestArrow, Globe, LayoutGrid, Layers, Plus, Table2, TriangleAlert } from "lucide-react";
+import { Activity, Construction, FolderKanban, GitPullRequestArrow, Globe, LayoutGrid, Layers, Play, Plus, Square, Table2, Trash2, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
+import { BulkBar, useBulk, useSelection } from "@/components/bulk";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { saved } from "@/components/maintenance";
 import { ServiceStates } from "@/components/service-states";
 import { ServicesTable } from "@/components/services-table";
 import { TagChips, TagFilter, useTagFilter } from "@/components/tags";
@@ -12,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -95,6 +99,18 @@ export function Projects() {
     </Segmented>
   );
   const shown = (projects.data ?? []).flatMap((p, i) => (filter.matches(p.tags) ? [{ p, svcs: services[i]?.data }] : []));
+  const sel = useSelection(shown.map((x) => x.p));
+  const bulk = useBulk<ProjectT>(sel.clear);
+  const n = sel.chosen.length;
+  const servicesOf = (id: string) => shown.find((x) => x.p.id === id)?.svcs ?? [];
+  const act = (label: string, a: "start" | "stop") =>
+    bulk.mutate({ label, items: sel.chosen, run: (p) => Promise.all(servicesOf(p.id).map((s) => api.serviceAction(s.id, a))) });
+  const maintenance = (enabled: boolean) =>
+    bulk.mutate({
+      label: `Maintenance ${enabled ? "on" : "off"}`,
+      items: sel.chosen,
+      run: (p) => api.setMaintenance(p.id, { ...saved(p.maintenance), enabled }),
+    });
 
   return (
     <>
@@ -160,10 +176,41 @@ export function Projects() {
                         services={svcs}
                         previews={previewsOf(p.id)}
                         server={multi ? serverName(p.serverId) : undefined}
+                        selected={sel.has(p.id)}
+                        onSelect={(on) => sel.toggle(p.id, on)}
                       />
                     ))}
                   </div>
                 )}
+                <BulkBar count={n} noun="project" onClear={sel.clear}>
+                  <Button size="sm" variant="outline" disabled={bulk.isPending} onClick={() => act("Start", "start")}>
+                    <Play data-icon="inline-start" />
+                    Start
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={bulk.isPending} onClick={() => act("Stop", "stop")}>
+                    <Square data-icon="inline-start" />
+                    Stop
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={bulk.isPending} onClick={() => maintenance(true)}>
+                    <Construction data-icon="inline-start" />
+                    Maintenance on
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={bulk.isPending} onClick={() => maintenance(false)}>
+                    Maintenance off
+                  </Button>
+                  <ConfirmDialog
+                    trigger={
+                      <Button size="sm" variant="destructive" disabled={bulk.isPending}>
+                        <Trash2 data-icon="inline-start" />
+                        Delete
+                      </Button>
+                    }
+                    title={`Delete ${n} project${n === 1 ? "" : "s"}?`}
+                    description={`${sel.chosen.map((p) => p.name).join(", ")}: every service, volume and preview of them goes, data included.`}
+                    typeToConfirm={`delete ${n}`}
+                    onConfirm={() => bulk.mutate({ label: "Delete", items: sel.chosen, run: (p) => api.deleteProject(p.id, p.name) })}
+                  />
+                </BulkBar>
               </>
             )}
           </>
@@ -178,11 +225,15 @@ function ProjectCard({
   services,
   previews,
   server,
+  selected,
+  onSelect,
 }: {
   project: ProjectT;
   services?: Service[];
   previews: { count: number; asleep: number; failing: number };
   server?: string;
+  selected: boolean;
+  onSelect: (on: boolean) => void;
 }) {
   const domains = services?.filter((s) => s.domain).map((s) => s.domain) ?? [];
   // The first misconfiguration (a missing network…), as the service's own card shows it.
@@ -190,59 +241,68 @@ function ProjectCard({
   const memory = memoryOf(useUsage().data, (u) => u.projectId === p.id);
 
   return (
-    <Link to={`/projects/${p.id}`} className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-      <Card
-        className={cn(
-          "h-full gap-3 px-4 transition-all group-hover:-translate-y-px group-hover:shadow-md group-hover:ring-foreground/20",
-          issue && issueRing.error,
-        )}
-      >
-        <div className="flex items-start gap-3">
-          <IconTile icon={FolderKanban} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium">{p.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {services ? `${services.length} service${services.length === 1 ? "" : "s"}` : <Spinner className="inline size-3" />}
-              {server && ` · ${server}`}
-            </p>
-            {previews.count > 0 && (
-              <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                <GitPullRequestArrow className="size-3 shrink-0" />
-                {previews.count} preview{previews.count === 1 ? "" : "s"}
-                {previews.asleep > 0 && ` · ${previews.count === previews.asleep ? "all" : previews.asleep} asleep`}
-                {previews.failing > 0 && <span className={issueText.error}>· {previews.failing} failing</span>}
+    // The checkbox sits over the card, outside the link: a button can't nest in it.
+    <div className="relative">
+      <Link to={`/projects/${p.id}`} className="group block h-full rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+        <Card
+          className={cn(
+            "h-full gap-3 px-4 transition-all group-hover:-translate-y-px group-hover:shadow-md group-hover:ring-foreground/20",
+            issue && issueRing.error,
+          )}
+        >
+          <div className="flex items-start gap-3">
+            <IconTile icon={FolderKanban} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{p.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {services ? `${services.length} service${services.length === 1 ? "" : "s"}` : <Spinner className="inline size-3" />}
+                {server && ` · ${server}`}
               </p>
-            )}
+              {previews.count > 0 && (
+                <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <GitPullRequestArrow className="size-3 shrink-0" />
+                  {previews.count} preview{previews.count === 1 ? "" : "s"}
+                  {previews.asleep > 0 && ` · ${previews.count === previews.asleep ? "all" : previews.asleep} asleep`}
+                  {previews.failing > 0 && <span className={issueText.error}>· {previews.failing} failing</span>}
+                </p>
+              )}
+            </div>
+            <span className="size-4 shrink-0" />
           </div>
-          <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-        </div>
-        {services && <ServiceStates services={services} />}
-        {issue && (
-          <p title={issue.i!.text} className={cn("flex items-center gap-1.5 text-xs", issueText.error)}>
-            <TriangleAlert className="size-3.5 shrink-0" />
-            <span className="truncate">
-              {issue.s.name}: {issue.i!.short}
-            </span>
+          {services && <ServiceStates services={services} />}
+          {issue && (
+            <p title={issue.i!.text} className={cn("flex items-center gap-1.5 text-xs", issueText.error)}>
+              <TriangleAlert className="size-3.5 shrink-0" />
+              <span className="truncate">
+                {issue.s.name}: {issue.i!.short}
+              </span>
+            </p>
+          )}
+          {domains.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {domains.slice(0, 2).map((d) => (
+                <Tag key={d} className="flex max-w-full items-center gap-1 truncate font-mono font-normal">
+                  <Globe className="size-3 shrink-0" />
+                  {d}
+                </Tag>
+              ))}
+              {domains.length > 2 && <Tag>+{domains.length - 2}</Tag>}
+            </div>
+          )}
+          {/* The first of what's pinned to the bottom takes the space. */}
+          <TagChips tags={p.tags} className="mt-auto" />
+          <p className={cn("text-xs text-muted-foreground", !p.tags?.length && "mt-auto")}>
+            {memory ? `${formatBytes(memory)} memory · ` : ""}Updated {timeAgo(p.updatedAt)}
           </p>
-        )}
-        {domains.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {domains.slice(0, 2).map((d) => (
-              <Tag key={d} className="flex max-w-full items-center gap-1 truncate font-mono font-normal">
-                <Globe className="size-3 shrink-0" />
-                {d}
-              </Tag>
-            ))}
-            {domains.length > 2 && <Tag>+{domains.length - 2}</Tag>}
-          </div>
-        )}
-        {/* The first of what's pinned to the bottom takes the space. */}
-        <TagChips tags={p.tags} className="mt-auto" />
-        <p className={cn("text-xs text-muted-foreground", !p.tags?.length && "mt-auto")}>
-          {memory ? `${formatBytes(memory)} memory · ` : ""}Updated {timeAgo(p.updatedAt)}
-        </p>
-      </Card>
-    </Link>
+        </Card>
+      </Link>
+      <Checkbox
+        checked={selected}
+        onCheckedChange={(on) => onSelect(on === true)}
+        aria-label={`Select ${p.name}`}
+        className="absolute top-5 right-4 bg-card"
+      />
+    </div>
   );
 }
 
