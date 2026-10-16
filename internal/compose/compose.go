@@ -73,6 +73,8 @@ type Service struct {
 	// variable: secrets, unless x-kipitiny.secrets says otherwise.
 	VarEnv []string `json:"-"`
 	X      Ext
+	// disabled is a service whose profiles kipitiny doesn't run.
+	disabled bool
 }
 
 // DockerSocket is the only path a service may bind-mount: the host's
@@ -90,6 +92,10 @@ type Ext struct {
 	PreDeploy  string `yaml:"pre_deploy,omitempty"`
 	PreBackup  string `yaml:"pre_backup,omitempty"`
 	Icon       string `yaml:"icon,omitempty"`
+	// Preview is "only" (a service of previews alone, e.g. a mail catcher)
+	// or "skip" (left out of previews). Tagged so the hash of a service
+	// without it stays the same.
+	Preview string `yaml:"preview,omitempty" json:",omitempty"`
 	// Tags group services in the UI. Tagged so the hash of a service
 	// without any stays the same.
 	Tags    []string `yaml:"tags,omitempty" json:",omitempty"`
@@ -166,7 +172,7 @@ const ExtKey = "x-kipitiny"
 // supportedServiceKeys are the compose service keys Parse reads.
 var supportedServiceKeys = []string{"image", "build", "environment", "ports", "expose", "volumes", "deploy", "mem_limit", "cpus", "stop_grace_period", "network_mode", "healthcheck",
 	"command", "entrypoint", "user", "working_dir", "labels", "tmpfs", "shm_size", "ulimits", "sysctls", "read_only", "init", "stop_signal",
-	"tty", "stdin_open", "extra_hosts", "cap_add", "cap_drop", "devices", "privileged", "security_opt", "configs", "secrets", "env_file", "extends", "depends_on", "restart", "networks", ExtKey}
+	"tty", "stdin_open", "extra_hosts", "cap_add", "cap_drop", "devices", "privileged", "security_opt", "configs", "secrets", "env_file", "extends", "depends_on", "restart", "networks", "profiles", ExtKey}
 
 // Keys that change nothing kipitiny can't do itself (it orders, networks
 // and restarts services on its own): dropped with a warning. Any other
@@ -290,7 +296,7 @@ func Escape(s string) string {
 
 func isZeroExt(x Ext) bool {
 	return x.Kind == "" && x.Domain == "" && x.Port == 0 && x.HealthPath == "" && x.PreDeploy == "" &&
-		x.PreBackup == "" && x.Icon == "" && len(x.Tags) == 0 && len(x.Secrets) == 0 && x.Password == "" && x.Middlewares == nil &&
+		x.PreBackup == "" && x.Icon == "" && x.Preview == "" && len(x.Tags) == 0 && len(x.Secrets) == 0 && x.Password == "" && x.Middlewares == nil &&
 		x.Uptime == nil
 }
 
@@ -516,7 +522,9 @@ func parse(data []byte, vars Vars, depth int) (File, []string, error) {
 		p.resolveExtends(services)
 		for name, v := range pairs(services) {
 			p.svc = name
-			f.Services[name] = p.service(name, v)
+			if s := p.service(name, v); !s.disabled {
+				f.Services[name] = s
+			}
 		}
 	}
 	p.svc = ""
@@ -640,6 +648,7 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 	var expose []int
 	var rt store.Runtime
 	var envFile map[string]string
+	var profiles []string
 	for k, v := range pairs(n) {
 		switch {
 		case k == "image":
@@ -683,6 +692,8 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 			s.DependsOn = p.dependsOn(v)
 		case k == "networks":
 			s.Networks, s.ExternalNetworks = p.serviceNetworks(v)
+		case k == "profiles":
+			profiles = p.list(k, v)
 		case p.runtimeKey(k, v, &rt):
 		case slices.Contains(ignoredServiceKeys, k):
 			p.warn("%s is ignored", k)
@@ -717,6 +728,15 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 	p.varEnv = nil
 	if s.X.Kind == "" {
 		s.X.Kind = inferKind(s.Image)
+	}
+	switch {
+	case slices.Contains(profiles, "preview") && s.X.Preview == "skip":
+		p.fail("the preview profile and %s.preview: skip contradict each other", ExtKey)
+	case slices.Contains(profiles, "preview"):
+		s.X.Preview = "only"
+	case len(profiles) > 0:
+		p.warn("skipped: kipitiny only runs the preview profile (and services without profiles)")
+		s.disabled = true
 	}
 	if s.HostNetwork && s.Networks != nil {
 		p.fail("an app in the host network can't join networks")
@@ -1136,6 +1156,9 @@ func (p *parser) ext(n *yaml.Node) Ext {
 	}
 	if !p.strict(n, &x) {
 		return Ext{}
+	}
+	if x.Preview != "" && x.Preview != "only" && x.Preview != "skip" {
+		p.fail("%s.preview must be only or skip", ExtKey)
 	}
 	if x.Middlewares != nil {
 		for _, u := range x.Middlewares.BasicAuth {

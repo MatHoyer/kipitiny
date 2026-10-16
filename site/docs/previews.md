@@ -48,6 +48,30 @@ In the project's **Previews** tab, under *Preview settings*:
 | Uptime checks, backups | as set | none |
 | Maintenance and starting pages | as set | the project's, kept up to date on each deploy; maintenance mode is the preview's own |
 
+In a git project's compose file, `x-kipitiny.preview: skip` leaves a service
+out of previews (a scheduler emailing real customers), and `profiles: [preview]`
+(or `x-kipitiny.preview: only`) makes one for previews only, never run in the
+project itself. A mail catcher, for instance, gives each preview its own inbox,
+reached by name on its network:
+
+```yaml
+services:
+  web:
+    image: ghcr.io/acme/web:1.4
+    environment:
+      SMTP_HOST: "{{ project.SMTP_HOST }}"
+  mailpit:
+    image: axllent/mailpit:v1.27
+    profiles: [preview]
+    expose: ["8025"]
+    x-kipitiny:
+      domain: mail.example.com
+```
+
+with the project variable `SMTP_HOST` set to the real server, and to `mailpit`
+(SMTP on port 1025) in the preview settings; its web UI is at
+`<preview>-mailpit.<base domain>`.
+
 A preview never quietly falls back on production:
 
 - A value it needs and doesn't get (a secret the preview settings don't set)

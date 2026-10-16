@@ -460,6 +460,17 @@ func (a *applier) prepare(ctx context.Context, f compose.File) error {
 	inputs := map[string]ServiceInput{}
 	var errs []string
 	for _, name := range f.ServiceNames() {
+		switch preview := f.Services[name].X.Preview; {
+		case preview == "only" && a.git:
+			a.warn("service %s runs in previews only", name)
+			continue
+		case preview == "only":
+			// Previews of a project without git copy its services.
+			a.warn("service %s skipped: %s.preview only applies to git projects (previews read the file)", name, compose.ExtKey)
+			continue
+		case preview == "skip" && !a.git:
+			a.warn("service %s: %s.preview only applies to git projects (previews read the file)", name, compose.ExtKey)
+		}
 		in, err := a.input(name, f.Services[name])
 		if err == nil {
 			if in.networks, err = externalNetworks(f.Services[name], nets, a.project.ServerID); err != nil {
