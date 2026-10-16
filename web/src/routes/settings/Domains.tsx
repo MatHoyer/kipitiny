@@ -158,7 +158,7 @@ function AddDomainDialog() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="example.com"
-            description="In a zone of the connected Cloudflare token, its DNS records are created for you."
+            description="Zones of the connected Cloudflare token are added on connect; DNS records in them are created for you."
           />
           <DialogFooter>
             <Button type="submit" loading={create.isPending}>
