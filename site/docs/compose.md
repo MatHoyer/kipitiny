@@ -84,6 +84,20 @@ Each key under `services` is a service. Its name is also its hostname inside the
 | `mem_limit` | Same as `deploy.resources.limits.memory` (`512m`, `1g`, bytes). |
 | `cpus` | Same as `deploy.resources.limits.cpus` (cores, `0.5` = half a core; 0.01–256). |
 | `stop_grace_period` | Time an app gets to exit after SIGTERM before it is killed (`30s`, `1m30s`; at most 10 minutes; default 10 s). Not for databases. |
+| `command` | Replaces the image's `CMD`: a list (`["worker", "--queue", "mail"]`) or a string split like a shell does, without expanding variables (use `sh -c '…'` for that). Lets several services run the same image differently. |
+| `entrypoint` | Replaces the image's `ENTRYPOINT`, same forms as `command`; `""` clears it. The pre-deploy command ignores both. |
+| `user` | The user the container runs as: a name or UID, optionally `:group` (`"1000:1000"`). |
+| `working_dir` | The directory the command starts in (an absolute path). |
+| `labels` | Docker labels added to the container, as a mapping or a `key=value` list. `traefik.*` and `kipitiny.*` labels are the manager's: dropped with a warning (route with `x-kipitiny.domain`). |
+| `tmpfs` | In-memory mounts, emptied on every start: `/run` or `/tmp:size=64m,mode=1777`, one or a list. A volume of `type: tmpfs` (with `tmpfs.size` / `tmpfs.mode`) does the same. |
+| `shm_size` | Size of `/dev/shm` (`256m`, `1g`); Docker's default is 64 MB. Browsers and some databases need more. |
+| `ulimits` | Process limits: `nofile: 65535`, or `nofile: {soft: 1024, hard: 4096}`. |
+| `sysctls` | Namespaced kernel parameters, as a mapping or a `key=value` list: `net.core.somaxconn: 1024`. An app in the host network can't set `net.*` ones. |
+| `read_only` | `true` mounts the root filesystem read-only; volumes and `tmpfs` stay writable. |
+| `init` | `true` runs a small init as PID 1 that forwards signals and reaps zombie processes. |
+| `stop_signal` | The signal a stop sends first (`SIGINT`, `SIGQUIT`…), then `SIGKILL` after `stop_grace_period`. |
+| `tty`, `stdin_open` | Give the container a terminal and keep its stdin open, for images that expect one. |
+| `extra_hosts` | Entries added to `/etc/hosts`: `["db.local:10.0.0.2"]` or a mapping. `host-gateway` as the IP is the server itself. |
 | `build` | Ignored when `image` is set (with a warning); an error without one. |
 | `x-kipitiny` | kipitiny's settings, below. |
 
@@ -91,11 +105,11 @@ Top level: `name` (the project name, informational), `services`, `volumes` (each
 
 ### Ignored with a warning
 
-kipitiny orders, networks and restarts services itself, so these are dropped and reported: `container_name`, `depends_on`, `hostname`, `labels`, `links`, `logging`, `networks`, `pull_policy`, `restart`, `init`, `extra_hosts`, `stop_signal`, and the top-level `version` and `networks`. Other `x-*` keys are ignored silently. To connect services of different projects, use the [networks created by hand](/docs/services#networks), set outside the file.
+kipitiny orders, networks and restarts services itself, so these are dropped and reported: `container_name`, `depends_on`, `hostname`, `links`, `logging`, `networks`, `pull_policy`, `restart`, and the top-level `version` and `networks`. A database's `command`, `user` and the like are dropped too: the manager runs it. Other `x-*` keys are ignored silently. To connect services of different projects, use the [networks created by hand](/docs/services#networks), set outside the file.
 
 ### Errors
 
-Any other key is refused, because ignoring it would run something different from what the file says: for example `command`, `entrypoint`, `user`, `working_dir`, `env_file`, `secrets`, `configs`, `privileged`, `cap_add`, `devices`, `profiles`, `extends`, `tmpfs`. Bind mounts (`./data:/data`, `/srv:/srv`, except the Docker socket) and anonymous volumes (`/data`) are refused too: use a named volume. So is any `network_mode` but `host`.
+Any other key is refused, because ignoring it would run something different from what the file says: for example `env_file`, `secrets`, `configs`, `privileged`, `cap_add`, `devices`, `profiles`, `extends`, `platform`. Bind mounts (`./data:/data`, `/srv:/srv`, except the Docker socket) and anonymous volumes (`/data`) are refused too: use a named volume. So is any `network_mode` but `host`.
 
 ### Host access
 

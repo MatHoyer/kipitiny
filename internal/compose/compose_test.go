@@ -37,6 +37,13 @@ func TestRoundTrip(t *testing.T) {
 			"worker": {
 				Image:       "ghcr.io/me/shop-worker:1.4.2",
 				Healthcheck: &store.Healthcheck{Test: []string{"CMD", "wget", "-qO-", "http://localhost:8080/healthz"}, IntervalSeconds: 30, StartPeriodSeconds: 90, Retries: 3},
+				Runtime: &store.Runtime{
+					Command: []string{"worker", "--queue", "a b"}, Entrypoint: []string{""}, User: "1000:1000", WorkingDir: "/app",
+					Labels: map[string]string{"com.example.team": "shop"}, Tmpfs: map[string]string{"/tmp": "size=64m", "/run": ""},
+					ShmSizeMB: 256, Ulimits: map[string]store.Ulimit{"nofile": {Soft: 1024, Hard: 4096}, "nproc": {Soft: 512, Hard: 512}},
+					Sysctls: map[string]string{"net.core.somaxconn": "1024"}, ReadOnly: true, Init: true, StopSignal: "SIGINT",
+					TTY: true, StdinOpen: true, ExtraHosts: []string{"host.docker.internal:host-gateway"},
+				},
 			},
 			"db": {Image: "postgres:17-alpine", MemoryMB: 512, X: Ext{Kind: "postgres", Password: "${DB_PASSWORD}"}},
 		},
@@ -112,7 +119,9 @@ volumes:
 func TestParseErrors(t *testing.T) {
 	for name, tc := range map[string]struct{ src, want string }{
 		"build only":   {"services:\n  web:\n    build: .\n", "kipitiny doesn't build"},
-		"command":      {"services:\n  web:\n    image: a\n    command: run\n", "command is not supported"},
+		"privileged":   {"services:\n  web:\n    image: a\n    privileged: true\n", "privileged is not supported"},
+		"bad quote":    {"services:\n  web:\n    image: a\n    command: echo 'hi\n", "unterminated quote"},
+		"bad bool":     {"services:\n  web:\n    image: a\n    init: maybe\n", "not true or false"},
 		"bind mount":   {"services:\n  web:\n    image: a\n    volumes: [./data:/data]\n", "bind mounts"},
 		"anonymous":    {"services:\n  web:\n    image: a\n    volumes: [/data]\n", "anonymous"},
 		"missing var":  {"services:\n  web:\n    image: a:${TAG}\n", "variables not set: TAG"},
@@ -298,5 +307,62 @@ func TestSleepAfterMoved(t *testing.T) {
 	}
 	if len(warns) != 1 || !strings.Contains(warns[0], "sleep_after is ignored") || f.Services["web"].X.Domain != "shop.example.com" {
 		t.Fatalf("warnings %v, web %+v", warns, f.Services["web"].X)
+	}
+}
+
+func TestRuntimeKeys(t *testing.T) {
+	data := []byte(`
+services:
+  web:
+    image: shop
+    command: celery -A "shop app" worker --loglevel=$${LEVEL}
+    entrypoint: ""
+    labels: [com.example.a=1, traefik.enable=true]
+    tmpfs: /run
+    volumes: [{type: tmpfs, target: /cache, tmpfs: {size: 1000000}}]
+    ulimits: {nofile: 65535}
+    sysctls: [net.core.somaxconn=1024]
+    extra_hosts: {db.local: 10.0.0.2}
+  db:
+    image: postgres:17
+    command: postgres -c max_connections=200
+`)
+	f, warns, err := Parse(data, Vars{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := &store.Runtime{
+		Command: []string{"celery", "-A", "shop app", "worker", "--loglevel=${LEVEL}"}, Entrypoint: []string{""},
+		Labels: map[string]string{"com.example.a": "1"}, Tmpfs: map[string]string{"/run": "", "/cache": "size=1000000"},
+		Ulimits: map[string]store.Ulimit{"nofile": {Soft: 65535, Hard: 65535}}, Sysctls: map[string]string{"net.core.somaxconn": "1024"},
+		ExtraHosts: []string{"db.local:10.0.0.2"},
+	}
+	if got := f.Services["web"].Runtime; !reflect.DeepEqual(got, want) {
+		t.Errorf("runtime = %+v", got)
+	}
+	if f.Services["db"].Runtime != nil {
+		t.Error("a database's command is the manager's")
+	}
+	joined := strings.Join(warns, "\n")
+	if !strings.Contains(joined, "label traefik.enable is ignored") || !strings.Contains(joined, "of a postgres service are ignored") {
+		t.Errorf("warnings = %v", warns)
+	}
+}
+
+func TestSplitCommand(t *testing.T) {
+	for in, want := range map[string][]string{
+		"":                        {},
+		"  a  b ":                 {"a", "b"},
+		`sh -c 'echo "$HOME" ok'`: {"sh", "-c", `echo "$HOME" ok`},
+		`a "b \"c\" \n" d\ e`:     {"a", `b "c" \n`, "d e"},
+		`x''y ""`:                 {"xy", ""},
+	} {
+		got, err := SplitCommand(in)
+		if err != nil || !slices.Equal(got, want) {
+			t.Errorf("SplitCommand(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	if _, err := SplitCommand(`a "b`); err == nil {
+		t.Error("want an error for an unterminated quote")
 	}
 }

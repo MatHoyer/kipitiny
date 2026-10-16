@@ -56,6 +56,9 @@ type Service struct {
 	// Healthcheck is compose's healthcheck key; nil when the file has none.
 	// Tagged so the hash of a service that doesn't use it stays the same.
 	Healthcheck *store.Healthcheck `json:",omitempty"`
+	// Runtime holds command, entrypoint, user, tmpfs…; nil when the file
+	// sets none. Tagged like Healthcheck.
+	Runtime *store.Runtime `json:",omitempty"`
 	// VarEnv lists the environment keys whose whole value is a ${NAME}
 	// variable: secrets, unless x-kipitiny.secrets says otherwise.
 	VarEnv []string `json:"-"`
@@ -151,7 +154,9 @@ type RateLimit struct {
 const ExtKey = "x-kipitiny"
 
 // supportedServiceKeys are the compose service keys Parse reads.
-var supportedServiceKeys = []string{"image", "build", "environment", "ports", "expose", "volumes", "deploy", "mem_limit", "cpus", "stop_grace_period", "network_mode", "healthcheck", ExtKey}
+var supportedServiceKeys = []string{"image", "build", "environment", "ports", "expose", "volumes", "deploy", "mem_limit", "cpus", "stop_grace_period", "network_mode", "healthcheck",
+	"command", "entrypoint", "user", "working_dir", "labels", "tmpfs", "shm_size", "ulimits", "sysctls", "read_only", "init", "stop_signal",
+	"tty", "stdin_open", "extra_hosts", ExtKey}
 
 // Keys that change nothing kipitiny can't do itself (it orders, networks
 // and restarts services on its own): dropped with a warning. Any other
@@ -160,8 +165,7 @@ var supportedServiceKeys = []string{"image", "build", "environment", "ports", "e
 var (
 	ignoredServiceKeys = []string{
 		"container_name", "depends_on", "hostname",
-		"labels", "links", "logging", "networks", "pull_policy", "restart",
-		"init", "extra_hosts", "stop_signal",
+		"links", "logging", "networks", "pull_policy", "restart",
 	}
 	ignoredTopKeys = []string{"version", "networks"}
 )
@@ -231,6 +235,9 @@ func Marshal(f File) ([]byte, error) {
 		if h := s.Healthcheck; h != nil && h.Set() {
 			o.Healthcheck = outHealthcheckOf(*h)
 		}
+		if r := s.Runtime; r != nil {
+			o.outRuntime = outRuntimeOf(*r)
+		}
 		if !isZeroExt(x) {
 			o.X = &x
 		}
@@ -276,7 +283,81 @@ type outService struct {
 	StopGracePeriod string            `yaml:"stop_grace_period,omitempty"`
 	Healthcheck     *outHealthcheck   `yaml:"healthcheck,omitempty"`
 	Deploy          *outDeploy        `yaml:"deploy,omitempty"`
-	X               *Ext              `yaml:"x-kipitiny,omitempty"`
+	outRuntime      `yaml:",inline"`
+	X               *Ext `yaml:"x-kipitiny,omitempty"`
+}
+
+type outRuntime struct {
+	Command    []string          `yaml:"command,omitempty,flow"`
+	Entrypoint []string          `yaml:"entrypoint,omitempty,flow"`
+	User       string            `yaml:"user,omitempty"`
+	WorkingDir string            `yaml:"working_dir,omitempty"`
+	Labels     map[string]string `yaml:"labels,omitempty"`
+	Tmpfs      []string          `yaml:"tmpfs,omitempty"`
+	ShmSize    string            `yaml:"shm_size,omitempty"`
+	Ulimits    map[string]any    `yaml:"ulimits,omitempty"`
+	Sysctls    map[string]string `yaml:"sysctls,omitempty"`
+	ReadOnly   bool              `yaml:"read_only,omitempty"`
+	Init       bool              `yaml:"init,omitempty"`
+	StopSignal string            `yaml:"stop_signal,omitempty"`
+	TTY        bool              `yaml:"tty,omitempty"`
+	StdinOpen  bool              `yaml:"stdin_open,omitempty"`
+	ExtraHosts []string          `yaml:"extra_hosts,omitempty"`
+}
+
+func outRuntimeOf(r store.Runtime) outRuntime {
+	o := outRuntime{Command: r.Command, Entrypoint: r.Entrypoint, User: r.User, WorkingDir: r.WorkingDir, Labels: r.Labels,
+		Sysctls: r.Sysctls, ReadOnly: r.ReadOnly, Init: r.Init, StopSignal: r.StopSignal, TTY: r.TTY, StdinOpen: r.StdinOpen,
+		ExtraHosts: r.ExtraHosts}
+	for _, path := range slices.Sorted(maps.Keys(r.Tmpfs)) {
+		v := path
+		if opts := r.Tmpfs[path]; opts != "" {
+			v += ":" + opts
+		}
+		o.Tmpfs = append(o.Tmpfs, v)
+	}
+	if r.ShmSizeMB > 0 {
+		o.ShmSize = strconv.Itoa(r.ShmSizeMB) + "m"
+	}
+	for name, u := range r.Ulimits {
+		if o.Ulimits == nil {
+			o.Ulimits = map[string]any{}
+		}
+		if u.Soft == u.Hard {
+			o.Ulimits[name] = u.Soft
+		} else {
+			o.Ulimits[name] = map[string]int64{"soft": u.Soft, "hard": u.Hard}
+		}
+	}
+	return o
+}
+
+// EscapeRuntime makes r's values literal in a compose file (see Escape).
+func EscapeRuntime(r store.Runtime) store.Runtime {
+	list := func(l []string) []string {
+		if l == nil {
+			return nil
+		}
+		out := make([]string, len(l))
+		for i, v := range l {
+			out[i] = Escape(v)
+		}
+		return out
+	}
+	values := func(m map[string]string) map[string]string {
+		if m == nil {
+			return nil
+		}
+		out := make(map[string]string, len(m))
+		for k, v := range m {
+			out[k] = Escape(v)
+		}
+		return out
+	}
+	r.Command, r.Entrypoint, r.ExtraHosts = list(r.Command), list(r.Entrypoint), list(r.ExtraHosts)
+	r.User, r.WorkingDir, r.StopSignal = Escape(r.User), Escape(r.WorkingDir), Escape(r.StopSignal)
+	r.Labels, r.Tmpfs, r.Sysctls = values(r.Labels), values(r.Tmpfs), values(r.Sysctls)
+	return r
 }
 
 type outHealthcheck struct {
@@ -453,6 +534,7 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 	}
 	hasBuild := false
 	var expose []int
+	var rt store.Runtime
 	for k, v := range pairs(n) {
 		switch {
 		case k == "image":
@@ -468,7 +550,7 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 		case k == "healthcheck":
 			s.Healthcheck = p.healthcheck(v)
 		case k == "volumes":
-			s.Volumes, s.DockerSocket = p.volumes(v)
+			s.Volumes, s.DockerSocket = p.volumes(v, &rt)
 		case k == "network_mode":
 			if mode := p.str(v); mode == "host" {
 				s.HostNetwork = true
@@ -485,6 +567,7 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 			s.StopGraceSeconds = p.duration(v)
 		case k == ExtKey:
 			s.X = p.ext(v)
+		case p.runtimeKey(k, v, &rt):
 		case slices.Contains(ignoredServiceKeys, k):
 			p.warn("%s is ignored", k)
 		case strings.HasPrefix(k, "x-"):
@@ -506,6 +589,9 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 	case len(expose) > 1 && s.X.Port == 0:
 		p.warn("expose lists several ports: set x-kipitiny.port to the one HTTP is routed to")
 	}
+	if !rt.IsZero() {
+		s.Runtime = &rt
+	}
 	s.VarEnv = slices.Compact(slices.Sorted(slices.Values(p.varEnv)))
 	p.varEnv = nil
 	if s.X.Kind == "" {
@@ -523,6 +609,10 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 		}
 		if s.HostNetwork || s.DockerSocket != "" {
 			p.fail("a %s service can't use the host network or the Docker socket", s.X.Kind)
+		}
+		if s.Runtime != nil {
+			p.warn("command, user, tmpfs and the like of a %s service are ignored (the manager runs it)", s.X.Kind)
+			s.Runtime = nil
 		}
 	}
 	return s
@@ -666,7 +756,7 @@ func (p *parser) ports(n *yaml.Node) []store.PublishedPort {
 
 // volumes reads named volumes, and the Docker socket's bind mount ("ro"
 // or "rw"; "" without one).
-func (p *parser) volumes(n *yaml.Node) ([]store.Volume, string) {
+func (p *parser) volumes(n *yaml.Node, rt *store.Runtime) ([]store.Volume, string) {
 	var out []store.Volume
 	socket := ""
 	if n.Kind != yaml.SequenceNode {
@@ -677,6 +767,7 @@ func (p *parser) volumes(n *yaml.Node) ([]store.Volume, string) {
 		var v store.Volume
 		typ := "volume"
 		readOnly := false
+		var tmpfsOpts []string
 		if item.Kind == yaml.MappingNode {
 			for k, val := range pairs(item) {
 				switch k {
@@ -688,6 +779,17 @@ func (p *parser) volumes(n *yaml.Node) ([]store.Volume, string) {
 					v.Path = p.str(val)
 				case "read_only":
 					readOnly = p.str(val) == "true"
+				case "tmpfs":
+					for tk, tv := range pairs(val) {
+						switch tk {
+						case "size":
+							tmpfsOpts = append(tmpfsOpts, "size="+p.str(tv))
+						case "mode":
+							tmpfsOpts = append(tmpfsOpts, "mode="+p.str(tv))
+						default:
+							p.warn("volume tmpfs.%s is ignored", tk)
+						}
+					}
 				case "volume", "bind":
 					p.warn("volume %s is ignored", k)
 				default:
@@ -720,6 +822,11 @@ func (p *parser) volumes(n *yaml.Node) ([]store.Volume, string) {
 			}
 		case typ == "bind":
 			p.fail("volume %s: bind mounts are not supported (only %s), use a named volume", v.Name, DockerSocket)
+		case typ == "tmpfs":
+			if rt.Tmpfs == nil {
+				rt.Tmpfs = map[string]string{}
+			}
+			rt.Tmpfs[v.Path] = strings.Join(tmpfsOpts, ",")
 		case typ != "volume":
 			p.fail("volume type %s is not supported", typ)
 		case v.Name == "":

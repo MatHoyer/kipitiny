@@ -70,6 +70,8 @@ type ServiceInput struct {
 	HostNetwork bool `json:"hostNetwork"`
 	// DockerSocket mounts the host's Docker socket: "", "ro" or "rw".
 	DockerSocket string `json:"dockerSocket"`
+	// Runtime holds command, entrypoint, user, tmpfs… (apps only).
+	Runtime store.Runtime `json:"runtime"`
 	// Password is a new database's password, from a compose export; empty
 	// generates one. Not settable through the API.
 	Password string `json:"-"`
@@ -104,6 +106,8 @@ type ServicePatch struct {
 	StopGraceSeconds *int                  `json:"stopGraceSeconds"`
 	HostNetwork      *bool                 `json:"hostNetwork"`
 	DockerSocket     *string               `json:"dockerSocket"`
+	// Runtime replaces the app's runtime settings; nil keeps them.
+	Runtime *store.Runtime `json:"runtime"`
 }
 
 type ContainerView struct {
@@ -191,6 +195,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		StopGraceSeconds: in.StopGraceSeconds,
 		HostNetwork:      in.HostNetwork,
 		DockerSocket:     in.DockerSocket,
+		Runtime:          normalizeRuntime(in.Runtime),
 	}
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
@@ -373,6 +378,9 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 	if p.DockerSocket != nil {
 		svc.DockerSocket = *p.DockerSocket
 	}
+	if p.Runtime != nil {
+		svc.Runtime = normalizeRuntime(*p.Runtime)
+	}
 	if p.Middlewares != nil {
 		if svc.Middlewares, err = mergeMiddlewares(*p.Middlewares, old.Middlewares); err != nil {
 			return store.Service{}, err
@@ -479,6 +487,9 @@ func validateService(s store.Service) error {
 		if s.HostNetwork || s.DockerSocket != "" {
 			return fmt.Errorf("%w: databases can't use the host network or the Docker socket", ErrInvalid)
 		}
+		if !s.Runtime.IsZero() {
+			return fmt.Errorf("%w: the manager sets how a database runs (command, user…)", ErrInvalid)
+		}
 		return validateDatabase(s)
 	}
 	if err := validateVolumes(s.Volumes); err != nil {
@@ -491,6 +502,9 @@ func validateService(s store.Service) error {
 		return err
 	}
 	if err := validateHostAccess(s); err != nil {
+		return err
+	}
+	if err := validateRuntime(s); err != nil {
 		return err
 	}
 	if s.StopGraceSeconds < 0 || s.StopGraceSeconds > maxStopGraceSeconds {

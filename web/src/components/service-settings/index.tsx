@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTab } from "@/hooks/use-tab";
 import { api, httpRouted, isDatabase, type Service as ServiceT } from "../../api";
 import { AccessCard } from "./access";
+import { ContainerCard } from "./container";
 import { GeneralCard } from "./general";
 import { HostAccessCard } from "./host-access";
 import { DomainCard, NetworksCard, PortsCard } from "./networking";
@@ -146,6 +147,7 @@ export function ServiceSettings({
       <>
         {app && (
           <GitOwned path={gitPath}>
+            <ContainerCard key={`container-${svc.id}`} svc={svc} />
             <HostAccessCard key={`host-${svc.id}`} svc={svc} />
           </GitOwned>
         )}

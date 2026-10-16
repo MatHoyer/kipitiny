@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -122,6 +123,10 @@ func exportFile(p store.Project, svcs []store.Service, checks map[string]store.U
 		if s.Healthcheck.Set() {
 			h := s.Healthcheck
 			cs.Healthcheck = &h
+		}
+		if !s.Runtime.IsZero() {
+			r := compose.EscapeRuntime(s.Runtime)
+			cs.Runtime = &r
 		}
 		for _, v := range s.Volumes {
 			if volumeUsers[v.Name] > 1 {
@@ -518,6 +523,9 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 	if cs.Healthcheck != nil {
 		in.Healthcheck = *cs.Healthcheck
 	}
+	if cs.Runtime != nil {
+		in.Runtime = *cs.Runtime
+	}
 	if in.Secrets == nil {
 		// Without x-kipitiny.secrets, a value given as a whole ${NAME} is a
 		// secret, unless it became a reference (a project variable keeps
@@ -699,6 +707,7 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 		StopGraceSeconds: &in.StopGraceSeconds,
 		HostNetwork:      &in.HostNetwork,
 		DockerSocket:     &in.DockerSocket,
+		Runtime:          &in.Runtime,
 	}
 	if in.Image == "" { // a database on the default image
 		p.Image = nil
@@ -750,6 +759,7 @@ func changedFields(old, svc store.Service) []string {
 	add("stopGraceSeconds", old.StopGraceSeconds != svc.StopGraceSeconds)
 	add("hostNetwork", old.HostNetwork != svc.HostNetwork)
 	add("dockerSocket", old.DockerSocket != svc.DockerSocket)
+	add("runtime", !reflect.DeepEqual(old.Runtime, svc.Runtime))
 	add("middlewares", !sameMiddlewares(old.Middlewares, svc.Middlewares))
 	return out
 }

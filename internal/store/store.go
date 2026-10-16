@@ -499,6 +499,9 @@ type Service struct {
 	// PreBackup runs (sh -c) in a running replica before each volume
 	// backup, e.g. to flush to disk. A failure aborts the backup.
 	PreBackup string `bun:"pre_backup" json:"preBackup"`
+	// Runtime holds the rarer container settings (command, user, tmpfs…);
+	// the zero value runs the image as built. Apps only.
+	Runtime Runtime `bun:"runtime,type:text" json:"runtime"`
 	// Networks are the IDs of the networks created by hand that the service
 	// joins besides its project network. Set on their own, never by a
 	// compose file, so a git sync keeps them.
@@ -576,6 +579,51 @@ type Healthcheck struct {
 
 // Set reports whether the healthcheck replaces the image's.
 func (h Healthcheck) Set() bool { return len(h.Test) > 0 }
+
+// Runtime is how an app's container runs, beyond its image, env and
+// resources: compose's command, entrypoint, user, tmpfs… Empty fields keep
+// the image's or Docker's defaults.
+type Runtime struct {
+	// Command and Entrypoint replace the image's CMD and ENTRYPOINT;
+	// Entrypoint [""] clears the image's.
+	Command    []string `json:"command,omitempty"`
+	Entrypoint []string `json:"entrypoint,omitempty"`
+	// User is a name or UID, optionally with :group.
+	User       string `json:"user,omitempty"`
+	WorkingDir string `json:"workingDir,omitempty"`
+	// Labels are added to the container's own (never kipitiny.* or traefik.*).
+	Labels map[string]string `json:"labels,omitempty"`
+	// Tmpfs maps an in-memory mount's path to its options (size=64m,mode=1777).
+	Tmpfs map[string]string `json:"tmpfs,omitempty"`
+	// ShmSizeMB sizes /dev/shm; 0 keeps Docker's 64 MB.
+	ShmSizeMB int               `json:"shmSizeMb,omitempty"`
+	Ulimits   map[string]Ulimit `json:"ulimits,omitempty"`
+	// Sysctls are namespaced kernel parameters (net.core.somaxconn…).
+	Sysctls map[string]string `json:"sysctls,omitempty"`
+	// ReadOnly mounts the root filesystem read-only.
+	ReadOnly bool `json:"readOnly,omitempty"`
+	// Init runs an init process as PID 1 that reaps zombies.
+	Init       bool   `json:"init,omitempty"`
+	StopSignal string `json:"stopSignal,omitempty"`
+	TTY        bool   `json:"tty,omitempty"`
+	StdinOpen  bool   `json:"stdinOpen,omitempty"`
+	// ExtraHosts are host:ip entries added to /etc/hosts (ip may be
+	// host-gateway).
+	ExtraHosts []string `json:"extraHosts,omitempty"`
+}
+
+// Ulimit is a soft and hard limit; compose's single value sets both.
+type Ulimit struct {
+	Soft int64 `json:"soft"`
+	Hard int64 `json:"hard"`
+}
+
+// IsZero reports whether r changes nothing.
+func (r Runtime) IsZero() bool {
+	return len(r.Command) == 0 && len(r.Entrypoint) == 0 && r.User == "" && r.WorkingDir == "" && len(r.Labels) == 0 &&
+		len(r.Tmpfs) == 0 && r.ShmSizeMB == 0 && len(r.Ulimits) == 0 && len(r.Sysctls) == 0 && !r.ReadOnly && !r.Init &&
+		r.StopSignal == "" && !r.TTY && !r.StdinOpen && len(r.ExtraHosts) == 0
+}
 
 // Middlewares are the Traefik middlewares on an app's router; the zero
 // value adds none.
