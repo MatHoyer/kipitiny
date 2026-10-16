@@ -293,7 +293,7 @@ func networkIssues(project store.Project, svc store.Service, cts []container.Sum
 
 // runContainer creates and starts spec after creating the networks it joins:
 // one removed outside kipitiny would fail the create.
-func (c *Core) runContainer(ctx context.Context, dk *docker.Client, spec client.ContainerCreateOptions) (string, error) {
+func (c *Core) runContainer(ctx context.Context, dk *docker.Client, spec client.ContainerCreateOptions, files ...docker.File) (string, error) {
 	if spec.NetworkingConfig != nil {
 		for name := range spec.NetworkingConfig.EndpointsConfig {
 			if err := dk.EnsureNetwork(ctx, name); err != nil {
@@ -301,7 +301,7 @@ func (c *Core) runContainer(ctx context.Context, dk *docker.Client, spec client.
 			}
 		}
 	}
-	return dk.Run(ctx, spec)
+	return dk.Run(ctx, spec, files...)
 }
 
 // ensureNetworks creates a server's networks that are missing, e.g. after

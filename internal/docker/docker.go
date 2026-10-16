@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"path"
-	"slices"
 	"strings"
 	"time"
 
@@ -214,6 +213,7 @@ func (c *Client) Login(ctx context.Context, server, username, password string) e
 type File struct {
 	Path    string // absolute
 	Content []byte
+	Mode    int64 // 0 is 0644
 }
 
 // Run creates and starts a container, first writing files into it. If
@@ -243,24 +243,19 @@ func (c *Client) Run(ctx context.Context, opts client.ContainerCreateOptions, fi
 	return res.ID, nil
 }
 
-// tarFiles archives files relative to "/", with their parent directories.
+// tarFiles archives files relative to "/". It has no entries for their
+// parent directories: Docker creates the missing ones, and an entry would
+// reset an existing one's owner and mode (/tmp would lose its sticky bit).
 func tarFiles(files []File) (io.Reader, error) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	dirs := map[string]bool{}
 	for _, f := range files {
 		rel := strings.TrimPrefix(path.Clean(f.Path), "/")
-		var parents []string
-		for d := path.Dir(rel); d != "." && !dirs[d]; d = path.Dir(d) {
-			dirs[d] = true
-			parents = append(parents, d)
+		mode := f.Mode
+		if mode == 0 {
+			mode = 0o644
 		}
-		for _, d := range slices.Backward(parents) {
-			if err := tw.WriteHeader(&tar.Header{Typeflag: tar.TypeDir, Name: d + "/", Mode: 0o755}); err != nil {
-				return nil, err
-			}
-		}
-		if err := tw.WriteHeader(&tar.Header{Name: rel, Mode: 0o644, Size: int64(len(f.Content))}); err != nil {
+		if err := tw.WriteHeader(&tar.Header{Name: rel, Mode: mode, Size: int64(len(f.Content))}); err != nil {
 			return nil, err
 		}
 		if _, err := tw.Write(f.Content); err != nil {

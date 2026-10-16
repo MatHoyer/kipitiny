@@ -35,7 +35,8 @@ func TestTarFiles(t *testing.T) {
 		}
 		names = append(names, h.Name)
 	}
-	want := []string{"etc/", "etc/traefik/", "etc/traefik/a.yml", "etc/traefik/b.yml"}
+	// No directory entries: they would reset existing directories.
+	want := []string{"etc/traefik/a.yml", "etc/traefik/b.yml"}
 	if len(names) != len(want) {
 		t.Fatalf("entries = %v", names)
 	}

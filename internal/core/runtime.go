@@ -66,6 +66,9 @@ func normalizeRuntime(r store.Runtime) store.Runtime {
 	if len(r.SecurityOpt) == 0 {
 		r.SecurityOpt = nil
 	}
+	if len(r.Binds) == 0 {
+		r.Binds = nil
+	}
 	return r
 }
 
@@ -142,6 +145,15 @@ func validateRuntime(s store.Service) error {
 			return invalid("device %q must be /dev/host[:/dev/container[:rwm]]", d)
 		}
 	}
+	for _, b := range r.Binds {
+		parts := strings.Split(b, ":")
+		if len(parts) < 2 || len(parts) > 3 || !path.IsAbs(parts[0]) || !path.IsAbs(parts[1]) || (len(parts) == 3 && parts[2] != "ro" && parts[2] != "rw") {
+			return invalid("bind mount %q must be /host/path:/container/path[:ro]", b)
+		}
+	}
+	if len(r.Binds) > maxRuntimeEntries {
+		return invalid("too many bind mounts")
+	}
 	for _, o := range r.SecurityOpt {
 		if o == "" || strings.ContainsAny(o, " \t\n") {
 			return invalid("invalid security option %q", o)
@@ -193,6 +205,7 @@ func applyRuntime(cfg *container.Config, host *container.HostConfig, r store.Run
 		}
 	}
 	host.Privileged = r.Privileged
+	host.Binds = slices.Clone(r.Binds)
 	host.SecurityOpt = slices.Clone(r.SecurityOpt)
 	for _, d := range r.Devices {
 		parts := append(strings.Split(d, ":"), "", "")
@@ -209,5 +222,5 @@ func applyRuntime(cfg *container.Config, host *container.HostConfig, r store.Run
 
 // runtimeHostAccess is the part of r only admins change.
 func runtimeHostAccess(r store.Runtime) store.Runtime {
-	return store.Runtime{CapAdd: r.CapAdd, Devices: r.Devices, Privileged: r.Privileged, SecurityOpt: r.SecurityOpt}
+	return store.Runtime{CapAdd: r.CapAdd, Devices: r.Devices, Privileged: r.Privileged, SecurityOpt: r.SecurityOpt, Binds: r.Binds}
 }

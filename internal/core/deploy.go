@@ -174,7 +174,7 @@ func (c *Core) startDeploy(ctx context.Context, serviceID string, req deployRequ
 		unlock()
 		return store.Deployment{}, err
 	}
-	if err := checkRefs(svc.Env, envSources{project: project.Env, dbs: databasesOf(others), apps: c.appURLs(others)}); err != nil {
+	if err := checkRefs(refEnv(svc), envSources{project: project.Env, dbs: databasesOf(others), apps: c.appURLs(others)}); err != nil {
 		unlock()
 		return store.Deployment{}, err
 	}
@@ -395,7 +395,7 @@ func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Se
 	}
 	spec := containerSpec(project, svc, src, dep.ID, 1, c.routeFor(ctx, svc))
 	logf("Starting %s", spec.Name)
-	id, err := c.runContainer(ctx, dk, spec)
+	id, err := c.runContainer(ctx, dk, spec, serviceFiles(svc, src)...)
 	if err != nil {
 		return err
 	}
@@ -441,7 +441,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 	for i := 1; i <= svc.Replicas; i++ {
 		spec := replicaSpec(project, svc, src, dep.ID, i, probe, c.routeFor(ctx, svc))
 		logf("Starting %s", spec.Name)
-		id, err := c.runContainer(ctx, dk, spec)
+		id, err := c.runContainer(ctx, dk, spec, serviceFiles(svc, src)...)
 		if err != nil {
 			cleanup()
 			return err
@@ -560,7 +560,7 @@ func (c *Core) swap(ctx context.Context, project store.Project, svc store.Servic
 
 	spec := replicaSpec(project, svc, src, dep.ID, 1, probe, c.routeFor(ctx, svc))
 	logf("Starting %s", spec.Name)
-	id, err := c.runContainer(ctx, dk, spec)
+	id, err := c.runContainer(ctx, dk, spec, serviceFiles(svc, src)...)
 	if err == nil {
 		logf("Waiting for the new replica to become ready (%s)", readinessMode(svc))
 		if err = c.waitReady(ctx, dk, id); err != nil {
