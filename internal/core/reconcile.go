@@ -276,6 +276,8 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 				return err
 			}
 			log.Info("reconcile: recreated missing replica", "replica", i)
+		case ct.State == container.StateExited && isJob(want):
+			// Ran once (or Docker gave up on-failure): not restarted.
 		case ct.State == container.StateExited || ct.State == container.StateCreated:
 			if _, err := dk.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{}); cerrdefs.IsNotFound(err) {
 				// A network it was on was removed outside kipitiny: Docker

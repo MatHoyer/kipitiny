@@ -25,6 +25,19 @@ func (p *parser) runtimeKey(k string, v *yaml.Node, rt *store.Runtime) bool {
 		}
 	case "user":
 		rt.User = p.str(v)
+	case "restart":
+		switch r := p.str(v); {
+		case r == "always" || r == "unless-stopped": // kipitiny's own behaviour
+		case r == "no" || r == "on-failure":
+			rt.Restart = r
+		case strings.HasPrefix(r, "on-failure:"):
+			if n, err := strconv.Atoi(strings.TrimPrefix(r, "on-failure:")); err != nil || n < 0 {
+				p.fail("restart %s: the retries must be a number", r)
+			}
+			rt.Restart = r
+		default:
+			p.fail("restart %s is not supported (no, always, unless-stopped or on-failure)", r)
+		}
 	case "working_dir":
 		rt.WorkingDir = p.str(v)
 	case "labels":

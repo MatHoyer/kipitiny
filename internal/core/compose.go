@@ -139,6 +139,11 @@ func exportFile(p store.Project, svcs []store.Service, checks map[string]store.U
 			f.Size = 0
 			cs.Files = append(cs.Files, f)
 		}
+		for _, d := range s.DependsOn { // not one deleted since
+			if slices.ContainsFunc(svcs, func(o store.Service) bool { return o.Name == d.Service }) {
+				cs.DependsOn = append(cs.DependsOn, d)
+			}
+		}
 		for _, v := range s.Volumes {
 			if volumeUsers[v.Name] > 1 {
 				v.Name = s.Name + "-" + v.Name
@@ -544,7 +549,7 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 	if cs.Runtime != nil {
 		in.Runtime = *cs.Runtime
 	}
-	in.Files = cs.Files
+	in.Files, in.DependsOn = cs.Files, cs.DependsOn
 	if in.Secrets == nil {
 		// Without x-kipitiny.secrets, a value given as a whole ${NAME} is a
 		// secret, unless it became a reference (a project variable keeps
@@ -653,8 +658,11 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		return nil
 	}
 	if len(fields) > 0 {
-		// Scaling, the icon and sleep mode apply without a deploy.
-		needsDeploy := slices.ContainsFunc(fields, func(f string) bool { return f != "replicas" && f != "icon" && f != "tags" && f != "sleepAfter" })
+		// Scaling, the icon, sleep mode and the start order apply without a
+		// deploy.
+		needsDeploy := slices.ContainsFunc(fields, func(f string) bool {
+			return f != "replicas" && f != "icon" && f != "tags" && f != "sleepAfter" && f != "dependsOn"
+		})
 		a.updates = append(a.updates, pendingUpdate{id: old.ID, name: name, patch: patch, deploy: needsDeploy})
 	}
 	if uptimeChanged {
@@ -728,6 +736,7 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 		DockerSocket:     &in.DockerSocket,
 		Runtime:          &in.Runtime,
 		Files:            in.Files,
+		DependsOn:        in.DependsOn,
 	}
 	if in.Image == "" { // a database on the default image
 		p.Image = nil
@@ -743,6 +752,9 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 	}
 	if p.Files == nil {
 		p.Files = []store.ServiceFile{}
+	}
+	if p.DependsOn == nil {
+		p.DependsOn = []store.Dependency{}
 	}
 	if old.Kind.IsDatabase() {
 		if in.MemoryMB == 0 {
@@ -784,6 +796,7 @@ func changedFields(old, svc store.Service) []string {
 	add("dockerSocket", old.DockerSocket != svc.DockerSocket)
 	add("runtime", !reflect.DeepEqual(old.Runtime, svc.Runtime))
 	add("files", !sameFiles(old.Files, svc.Files))
+	add("dependsOn", !slices.Equal(old.DependsOn, svc.DependsOn))
 	add("middlewares", !sameMiddlewares(old.Middlewares, svc.Middlewares))
 	return out
 }
@@ -910,8 +923,9 @@ func boolCmp(x, y bool) int {
 	return 1
 }
 
-// deployInOrder deploys the databases, waits for them, then the apps, so a
-// new app's pre-deploy (migrations) finds its database up.
+// deployInOrder deploys the databases, waits for them, then the apps, each
+// once the deploys of those it depends on are done, so a new app's
+// pre-deploy (migrations) finds its database up.
 func (c *Core) deployInOrder(dbs, apps []string, commit string, between func()) {
 	ctx := c.bg
 	var started []string
@@ -923,8 +937,55 @@ func (c *Core) deployInOrder(dbs, apps []string, commit string, between func()) 
 		}
 		started = append(started, d.ID)
 	}
+	if !c.waitDeployments(ctx, started) {
+		return
+	}
+	if between != nil {
+		between()
+	}
+	var svcs []store.Service
+	for _, id := range apps {
+		svc, err := c.store.GetService(ctx, id)
+		if err != nil {
+			c.log.Warn("compose deploy", "service", id, "err", err)
+			continue
+		}
+		svcs = append(svcs, svc)
+	}
+	deployed := map[string]string{} // service name → deployment ID
+	for _, svc := range startOrder(svcs) {
+		var deps []string
+		for _, d := range svc.DependsOn {
+			if id, ok := deployed[d.Service]; ok {
+				deps = append(deps, id)
+			}
+		}
+		if !c.waitDeployments(ctx, deps) {
+			return
+		}
+		if failed := c.failedDependency(ctx, svc, deployed); failed != "" {
+			d, err := c.skipDeploy(ctx, svc, commit, fmt.Sprintf("not deployed: %s, which it depends on, wasn't deployed", failed))
+			if err != nil {
+				c.log.Warn("compose deploy", "service", svc.ID, "err", err)
+				continue
+			}
+			deployed[svc.Name] = d.ID
+			continue
+		}
+		d, err := c.Deploy(ctx, svc.ID, DeployOptions{Commit: commit})
+		if err != nil {
+			c.log.Warn("compose deploy", "service", svc.ID, "err", err)
+			continue
+		}
+		deployed[svc.Name] = d.ID
+	}
+}
+
+// waitDeployments waits until deployments are over, at most
+// deployTimeout; false when ctx ends.
+func (c *Core) waitDeployments(ctx context.Context, ids []string) bool {
 	deadline := time.Now().Add(deployTimeout)
-	for _, id := range started {
+	for _, id := range ids {
 		for time.Now().Before(deadline) {
 			d, err := c.store.GetDeployment(ctx, id)
 			if err != nil || d.Status != store.DeploymentRunning {
@@ -932,17 +993,10 @@ func (c *Core) deployInOrder(dbs, apps []string, commit string, between func()) 
 			}
 			select {
 			case <-ctx.Done():
-				return
+				return false
 			case <-time.After(2 * time.Second):
 			}
 		}
 	}
-	if between != nil {
-		between()
-	}
-	for _, id := range apps {
-		if _, err := c.Deploy(ctx, id, DeployOptions{Commit: commit}); err != nil {
-			c.log.Warn("compose deploy", "service", id, "err", err)
-		}
-	}
+	return true
 }

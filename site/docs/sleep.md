@@ -37,7 +37,9 @@ outside the project.
   is a plain start). A stopped service stays as it is.
 - The next visitor of any of its apps gets a **Starting…** page while the
   project starts: databases first, then the apps once their databases are
-  ready. It reloads to the app as soon as a replica is ready, or says the
+  ready, each after the services it `depends_on` in its
+  [compose file](/docs/compose) (at most two minutes per service; jobs that
+  already ran aren't run again). It reloads to the app as soon as a replica is ready, or says the
   app couldn't start after two minutes. API calls (requests that don't
   accept HTML) get `503 Service Unavailable` with `Retry-After` instead, so
   clients retry.

@@ -7,6 +7,7 @@ import (
 	"path"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/moby/moby/api/types/container"
@@ -21,6 +22,7 @@ const (
 
 var (
 	stopSignalRe = regexp.MustCompile(`^(SIG)?[A-Z][A-Z0-9+-]*$|^[0-9]{1,2}$`)
+	restartRe    = regexp.MustCompile(`^(no|on-failure(:[0-9]{1,4})?)$`)
 	sysctlRe     = regexp.MustCompile(`^[a-z0-9_]+(\.[a-z0-9_-]+)+$`)
 	labelKeyRe   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*$`)
 	capRe        = regexp.MustCompile(`^[A-Z][A-Z_]*$`)
@@ -129,6 +131,9 @@ func validateRuntime(s store.Service) error {
 	if r.StopSignal != "" && !stopSignalRe.MatchString(r.StopSignal) {
 		return invalid("stop signal must be a signal name (SIGINT) or number")
 	}
+	if r.Restart != "" && !restartRe.MatchString(r.Restart) {
+		return invalid("restart must be no or on-failure[:retries]")
+	}
 	for _, c := range append(slices.Clone(r.CapAdd), r.CapDrop...) {
 		if !capRe.MatchString(c) {
 			return invalid("invalid capability %q", c)
@@ -178,6 +183,11 @@ func applyRuntime(cfg *container.Config, host *container.HostConfig, r store.Run
 	}
 	cfg.User, cfg.WorkingDir, cfg.StopSignal = r.User, r.WorkingDir, r.StopSignal
 	cfg.Tty, cfg.OpenStdin = r.TTY, r.StdinOpen
+	if r.Restart != "" {
+		mode, retries, _ := strings.Cut(r.Restart, ":")
+		n, _ := strconv.Atoi(retries)
+		host.RestartPolicy = container.RestartPolicy{Name: container.RestartPolicyMode(mode), MaximumRetryCount: n}
+	}
 	for k, v := range r.Labels {
 		if _, ours := cfg.Labels[k]; !ours {
 			cfg.Labels[k] = v

@@ -74,6 +74,8 @@ type ServiceInput struct {
 	Runtime store.Runtime `json:"runtime"`
 	// Files are written into the app's containers (apps only).
 	Files []store.ServiceFile `json:"files"`
+	// DependsOn names services of the project started first (apps only).
+	DependsOn []store.Dependency `json:"dependsOn"`
 	// Password is a new database's password, from a compose export; empty
 	// generates one. Not settable through the API.
 	Password string `json:"-"`
@@ -113,6 +115,8 @@ type ServicePatch struct {
 	// Files replaces the app's files; nil keeps them. A file without its
 	// content keeps the stored one.
 	Files []store.ServiceFile `json:"files"`
+	// DependsOn replaces the services the app starts after; nil keeps them.
+	DependsOn []store.Dependency `json:"dependsOn"`
 }
 
 type ContainerView struct {
@@ -202,6 +206,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		DockerSocket:     in.DockerSocket,
 		Runtime:          normalizeRuntime(in.Runtime),
 		Files:            normalizeFiles(in.Files, nil),
+		DependsOn:        in.DependsOn,
 	}
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
@@ -390,6 +395,9 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 	if p.Files != nil {
 		svc.Files = normalizeFiles(p.Files, old.Files)
 	}
+	if p.DependsOn != nil {
+		svc.DependsOn = p.DependsOn
+	}
 	if p.Middlewares != nil {
 		if svc.Middlewares, err = mergeMiddlewares(*p.Middlewares, old.Middlewares); err != nil {
 			return store.Service{}, err
@@ -499,6 +507,9 @@ func validateService(s store.Service) error {
 		if !s.Runtime.IsZero() || len(s.Files) > 0 {
 			return fmt.Errorf("%w: the manager sets how a database runs (command, user, files…)", ErrInvalid)
 		}
+		if len(s.DependsOn) > 0 {
+			return fmt.Errorf("%w: databases start first, so depend on nothing", ErrInvalid)
+		}
 		return validateDatabase(s)
 	}
 	if err := validateVolumes(s.Volumes); err != nil {
@@ -517,6 +528,9 @@ func validateService(s store.Service) error {
 		return err
 	}
 	if err := validateFiles(s); err != nil {
+		return err
+	}
+	if err := validateDependsOn(s); err != nil {
 		return err
 	}
 	if s.StopGraceSeconds < 0 || s.StopGraceSeconds > maxStopGraceSeconds {

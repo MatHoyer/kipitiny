@@ -62,6 +62,8 @@ type Service struct {
 	Runtime *store.Runtime `json:",omitempty"`
 	// Files are the configs, secrets and repository files bind-mounted.
 	Files []store.ServiceFile `json:",omitempty"`
+	// DependsOn are the services of the file this one starts after.
+	DependsOn []store.Dependency `json:",omitempty"`
 	// VarEnv lists the environment keys whose whole value is a ${NAME}
 	// variable: secrets, unless x-kipitiny.secrets says otherwise.
 	VarEnv []string `json:"-"`
@@ -159,7 +161,7 @@ const ExtKey = "x-kipitiny"
 // supportedServiceKeys are the compose service keys Parse reads.
 var supportedServiceKeys = []string{"image", "build", "environment", "ports", "expose", "volumes", "deploy", "mem_limit", "cpus", "stop_grace_period", "network_mode", "healthcheck",
 	"command", "entrypoint", "user", "working_dir", "labels", "tmpfs", "shm_size", "ulimits", "sysctls", "read_only", "init", "stop_signal",
-	"tty", "stdin_open", "extra_hosts", "cap_add", "cap_drop", "devices", "privileged", "security_opt", "configs", "secrets", "env_file", "extends", ExtKey}
+	"tty", "stdin_open", "extra_hosts", "cap_add", "cap_drop", "devices", "privileged", "security_opt", "configs", "secrets", "env_file", "extends", "depends_on", "restart", ExtKey}
 
 // Keys that change nothing kipitiny can't do itself (it orders, networks
 // and restarts services on its own): dropped with a warning. Any other
@@ -167,8 +169,8 @@ var supportedServiceKeys = []string{"image", "build", "environment", "ports", "e
 // the file says.
 var (
 	ignoredServiceKeys = []string{
-		"container_name", "depends_on", "hostname",
-		"links", "logging", "networks", "pull_policy", "restart",
+		"container_name", "hostname",
+		"links", "logging", "networks", "pull_policy",
 	}
 	ignoredTopKeys = []string{"version", "networks"}
 )
@@ -257,6 +259,7 @@ func Marshal(f File) ([]byte, error) {
 			o.Volumes = append(o.Volumes, r.Binds...)
 		}
 		marshalFiles(name, s.Files, &o, &out)
+		o.DependsOn = outDependsOn(s.DependsOn)
 		if !isZeroExt(x) {
 			o.X = &x
 		}
@@ -312,6 +315,7 @@ type outService struct {
 	Deploy          *outDeploy        `yaml:"deploy,omitempty"`
 	Configs         []outFileRef      `yaml:"configs,omitempty"`
 	Secrets         []outFileRef      `yaml:"secrets,omitempty"`
+	DependsOn       any               `yaml:"depends_on,omitempty"`
 	outRuntime      `yaml:",inline"`
 	X               *Ext `yaml:"x-kipitiny,omitempty"`
 }
@@ -337,10 +341,11 @@ type outRuntime struct {
 	Devices    []string          `yaml:"devices,omitempty"`
 	Privileged bool              `yaml:"privileged,omitempty"`
 	SecOpt     []string          `yaml:"security_opt,omitempty"`
+	Restart    string            `yaml:"restart,omitempty"`
 }
 
 func outRuntimeOf(r store.Runtime) outRuntime {
-	o := outRuntime{Command: r.Command, Entrypoint: r.Entrypoint, User: r.User, WorkingDir: r.WorkingDir, Labels: r.Labels,
+	o := outRuntime{Command: r.Command, Entrypoint: r.Entrypoint, User: r.User, WorkingDir: r.WorkingDir, Labels: r.Labels, Restart: r.Restart,
 		Sysctls: r.Sysctls, ReadOnly: r.ReadOnly, Init: r.Init, StopSignal: r.StopSignal, TTY: r.TTY, StdinOpen: r.StdinOpen,
 		ExtraHosts: r.ExtraHosts, CapAdd: r.CapAdd, CapDrop: r.CapDrop, Devices: r.Devices, Privileged: r.Privileged, SecOpt: r.SecurityOpt}
 	for _, path := range slices.Sorted(maps.Keys(r.Tmpfs)) {
@@ -511,6 +516,7 @@ func parse(data []byte, vars Vars, depth int) (File, []string, error) {
 	if len(f.Services) == 0 {
 		p.fail("no services")
 	}
+	p.checkDependencies(f.Services)
 	if len(p.missing) > 0 {
 		slices.Sort(p.missing)
 		p.fail("variables not set: %s", strings.Join(slices.Compact(p.missing), ", "))
@@ -660,6 +666,8 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 		case k == ExtKey:
 			s.X = p.ext(v)
 		case k == "extends": // merged before, by resolveExtends
+		case k == "depends_on":
+			s.DependsOn = p.dependsOn(v)
 		case p.runtimeKey(k, v, &rt):
 		case slices.Contains(ignoredServiceKeys, k):
 			p.warn("%s is ignored", k)
@@ -711,6 +719,10 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 		if s.Runtime != nil || s.Files != nil {
 			p.warn("command, user, files and the like of a %s service are ignored (the manager runs it)", s.X.Kind)
 			s.Runtime, s.Files = nil, nil
+		}
+		if s.DependsOn != nil {
+			p.warn("depends_on of a %s service is ignored: databases start first", s.X.Kind)
+			s.DependsOn = nil
 		}
 	}
 	return s

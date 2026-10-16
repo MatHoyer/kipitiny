@@ -146,12 +146,14 @@ export function formatDateTime(iso: string): string {
 }
 
 /** Aggregate state of a service from its containers. */
-export function serviceState(containers: { state: string; health?: string }[]): string {
+export function serviceState(containers: { state: string; status?: string; health?: string }[]): string {
   if (containers.length === 0) return "not deployed";
   if (containers.some((c) => c.health === "unhealthy")) return "unhealthy";
   if (containers.some((c) => c.health === "starting")) return "starting";
   if (containers.every((c) => c.state === "running")) return "running";
   if (containers.some((c) => c.state === "running")) return "degraded";
+  // A job that exited 0 is done (the manager counts it healthy); apps that keep running get restarted instead.
+  if (containers.every((c) => c.state === "exited" && c.status?.startsWith("Exited (0)"))) return "completed";
   return containers[0].state;
 }
 
@@ -185,7 +187,7 @@ export function formatDuration(ms: number): string {
 export function liveState(svc: {
   stopped: boolean;
   sleeping?: boolean;
-  containers: { state: string; health?: string; retired?: boolean }[];
+  containers: { state: string; status?: string; health?: string; retired?: boolean }[];
 }): string {
   return svc.stopped ? "stopped" : svc.sleeping ? "asleep" : serviceState(svc.containers.filter((c) => !c.retired));
 }

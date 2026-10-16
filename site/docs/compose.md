@@ -104,6 +104,8 @@ Each key under `services` is a service. Its name is also its hostname inside the
 | `devices` | Host devices mapped into the container: `/dev/net/tun`, `/dev/ttyUSB0:/dev/ttyACM0:rwm`. See [Host access](#host-access). |
 | `privileged` | `true` gives the container every capability and device. See [Host access](#host-access). |
 | `security_opt` | Security options: `no-new-privileges:true`, `apparmor=unconfined`, `seccomp=unconfined`… See [Host access](#host-access). |
+| `depends_on` | Services of the file started first, on deploy and when the project [wakes up](/docs/sleep): a list of names, or `{db: {condition: service_healthy}}`. `service_started` (the default) only orders; `service_healthy` waits until it's ready (its healthcheck, or running for 5 s); `service_completed_successfully` waits until a job exits 0. When the deploy of such a service fails, its dependents aren't deployed: their deployment shows as *skipped*, and their previous version keeps running. Databases always start first. Unknown names and cycles are errors; `required` and `restart` are ignored. Renaming a service updates the references. |
+| `restart` | `always` and `unless-stopped` are kipitiny's own behaviour: a stopped container is started again. `"no"` makes the service a **job** (a migration, a seed): a deploy waits until it exits 0 (at most 3 minutes), it isn't restarted afterwards nor when the project wakes up, and a job that exited 0 counts as healthy. `on-failure` (or `on-failure:3`, the retries) lets Docker restart it while it fails; it counts as ready once it runs like an app, or exits 0. |
 | `extends` | Starts from another service: `extends: base`, or `{service: base, file: common.yml}` from another file of the repository (git projects only). Mappings such as `environment` merge, `ports`, `volumes` and other lists add up (a volume, config or secret at the same target replaces the base's), other keys replace the base's. Relative paths in the other file stay relative to it. |
 | `build` | Ignored when `image` is set (with a warning); an error without one. |
 | `x-kipitiny` | kipitiny's settings, below. |
@@ -112,7 +114,7 @@ Top level: `name` (the project name, informational), `services`, `volumes`, `con
 
 ### Ignored with a warning
 
-kipitiny orders, networks and restarts services itself, so these are dropped and reported: `container_name`, `depends_on`, `hostname`, `links`, `logging`, `networks`, `pull_policy`, `restart`, and the top-level `version` and `networks`. A database's `command`, `user` and the like are dropped too: the manager runs it. Other `x-*` keys are ignored silently. To connect services of different projects, use the [networks created by hand](/docs/services#networks), set outside the file.
+kipitiny networks services itself, so these are dropped and reported: `container_name`, `hostname`, `links`, `logging`, `networks`, `pull_policy`, and the top-level `version` and `networks`. A database's `command`, `user`, `depends_on` and the like are dropped too: the manager runs it, and databases always start first. Other `x-*` keys are ignored silently. To connect services of different projects, use the [networks created by hand](/docs/services#networks), set outside the file.
 
 ### Errors
 
@@ -249,7 +251,7 @@ A variable whose value is a missing `${NAME}` keeps its current value; on a proj
 1. The whole file is parsed and every service validated against the project as it will be (variables, databases, ports, domains). Any error stops everything: nothing has changed.
 2. Project variables are set; services are created (databases first) and updated where something differs.
 3. With pruning (always with git, an option on import), apps the file doesn't list are deleted with their volumes. Databases the file doesn't list are only reported, and kept until deleted by hand.
-4. Created services, and services whose change needs it (anything but `replicas`, `icon` and `tags`), are deployed: databases first, then apps once the databases are up. Scaling applies at once.
+4. Created services, and services whose change needs it (anything but `replicas`, `icon` and `tags`), are deployed: databases first, then apps once the databases are up, each after the deploys of the services it [`depends_on`](#compose-keys-kipitiny-reads). Scaling and `depends_on` apply at once.
 
 A service can't change kind (an app into a database): delete it first.
 

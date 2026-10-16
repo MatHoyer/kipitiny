@@ -3,6 +3,7 @@ import {
   Activity,
   ChevronRight,
   CircleCheck,
+  CircleSlash,
   CircleX,
   Construction,
   ExternalLink,
@@ -682,6 +683,7 @@ function Deployments({
 const statusIcon = {
   succeeded: <CircleCheck className="size-4.5 text-emerald-600 dark:text-emerald-400" />,
   failed: <CircleX className="size-4.5 text-destructive" />,
+  skipped: <CircleSlash className="size-4.5 text-pink-500" />,
   running: <Spinner className="size-4.5 text-sky-500" />,
 } satisfies Record<Deployment["status"], ReactNode>;
 
@@ -725,7 +727,7 @@ function DeploymentRow({
                 {new Date(d.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ·{" "}
                 {d.status === "running" ? `running for ${took}` : took}
                 {d.triggeredBy && <> · by {triggeredBy(d.triggeredBy)}</>}
-                {d.error && <span className="text-destructive"> · {d.error}</span>}
+                {d.error && <span className={d.status === "skipped" ? "text-pink-600 dark:text-pink-400" : "text-destructive"}> · {d.error}</span>}
               </p>
             </div>
             <span className="text-xs whitespace-nowrap text-muted-foreground max-sm:hidden">{timeAgo(d.createdAt)}</span>

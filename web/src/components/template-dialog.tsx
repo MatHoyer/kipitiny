@@ -383,7 +383,7 @@ function DeployProgress({ projectId, deploying }: { projectId: string; deploying
     { title: "Databases", hint: "Deployed together", rows: rows.filter((r) => isDatabase(r.s.kind)) },
     { title: "Apps", hint: "Deployed together once the databases are up", rows: rows.filter((r) => !isDatabase(r.s.kind)) },
   ].filter((w) => w.rows.length > 0);
-  const stateOf = (r: DeployRow): StepState => (r.d?.status === "succeeded" ? "done" : r.d?.status === "failed" ? "failed" : r.d ? "active" : "todo");
+  const stateOf = (r: DeployRow): StepState => (r.d?.status === "succeeded" ? "done" : r.d?.status === "failed" || r.d?.status === "skipped" ? "failed" : r.d ? "active" : "todo");
   // The first wave not fully up is the current one; a failure in it stops there.
   const pending = waves.findIndex((w) => w.rows.some((r) => stateOf(r) !== "done"));
   const wave = waves[pending];
@@ -408,7 +408,7 @@ function DeployProgress({ projectId, deploying }: { projectId: string; deploying
                   ))}
                 </ul>
                 {w.rows
-                  .filter((r) => r.d?.status === "failed")
+                  .filter((r) => r.d?.status === "failed" || r.d?.status === "skipped")
                   .map((r) => (
                     <p key={r.s.id} className="text-destructive animate-in fade-in">
                       {r.s.name}: {r.d!.error || "failed, see its deployment log"}
@@ -428,7 +428,7 @@ type DeployRow = { s: Service; d?: Deployment };
 
 /** A service in its wave, with its own mark; what it's doing shows on hover. */
 function DeployChip({ row: { s, d }, state }: { row: DeployRow; state: StepState }) {
-  const doing = !d ? "Waiting" : d.status === "running" ? `Pulling ${d.image} and starting it` : d.status === "failed" ? "Failed" : `Running ${d.image}`;
+  const doing = !d ? "Waiting" : d.status === "running" ? `Pulling ${d.image} and starting it` : d.status === "failed" ? "Failed" : d.status === "skipped" ? "Skipped" : `Running ${d.image}`;
   return (
     <li title={doing} className="flex items-center gap-1.5 rounded-full border bg-background py-0.5 pr-2.5 pl-0.5 text-foreground">
       <StepNode state={state} busy={state === "active"} size="sm" />
