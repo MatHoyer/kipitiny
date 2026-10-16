@@ -82,6 +82,7 @@ function otherSettings(r: Runtime, files: ServiceT["files"], deps: ServiceT["dep
   for (const b of r.binds ?? []) out.push(["bind", b]);
   for (const [path, opts] of Object.entries(r.tmpfs ?? {})) out.push(["tmpfs", opts ? `${path}:${opts}` : path]);
   if (r.shmSizeMb) out.push(["shm_size", `${r.shmSizeMb} MB`]);
+  if (r.memoryReservationMb) out.push(["memory reservation", `${r.memoryReservationMb} MB`]);
   for (const [name, u] of Object.entries(r.ulimits ?? {})) out.push(["ulimits", `${name} ${u.soft === u.hard ? u.soft : `${u.soft}:${u.hard}`}`]);
   for (const [k, v] of Object.entries(r.sysctls ?? {})) out.push(["sysctls", `${k}=${v}`]);
   for (const h of r.extraHosts ?? []) out.push(["extra_hosts", h]);

@@ -645,6 +645,9 @@ type Runtime struct {
 	SecurityOpt []string `json:"securityOpt,omitempty"`
 	// Binds mount host paths, as /host:/container[:ro].
 	Binds []string `json:"binds,omitempty"`
+	// MemoryReservationMB is the memory Docker tries to leave the container
+	// when the server runs short (a soft limit).
+	MemoryReservationMB int `json:"memoryReservationMb,omitempty"`
 	// Restart is "" (always restarted), "no" (a job: it runs once, a
 	// deploy waits for it to exit 0) or "on-failure[:max retries]".
 	Restart string `json:"restart,omitempty"`
@@ -685,7 +688,7 @@ type Ulimit struct {
 func (r Runtime) IsZero() bool {
 	return len(r.Command) == 0 && len(r.Entrypoint) == 0 && r.User == "" && r.WorkingDir == "" && len(r.Labels) == 0 &&
 		len(r.Tmpfs) == 0 && r.ShmSizeMB == 0 && len(r.Ulimits) == 0 && len(r.Sysctls) == 0 && !r.ReadOnly && !r.Init &&
-		r.StopSignal == "" && !r.TTY && !r.StdinOpen && len(r.ExtraHosts) == 0 && len(r.CapDrop) == 0 && r.Restart == "" && !r.HostAccess()
+		r.StopSignal == "" && !r.TTY && !r.StdinOpen && len(r.ExtraHosts) == 0 && len(r.CapDrop) == 0 && r.Restart == "" && r.MemoryReservationMB == 0 && !r.HostAccess()
 }
 
 // HostAccess reports whether r loosens the container's isolation, which

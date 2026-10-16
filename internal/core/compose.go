@@ -170,6 +170,14 @@ func exportFile(p store.Project, svcs []store.Service, checks map[string]store.U
 		case s.Kind.IsDatabase():
 			cs.X.Kind = string(s.Kind)
 			cs.X.Password = secret(varName(s.Name, "PASSWORD"), s.Env[databasePasswordKey(s.Kind)])
+			for _, k := range databaseNameKeys { // to recreate it alike
+				if v, ok := s.Env[k]; ok {
+					if cs.Environment == nil {
+						cs.Environment = map[string]string{}
+					}
+					cs.Environment[k] = v
+				}
+			}
 		default:
 			if len(s.Env) > 0 {
 				cs.Environment = map[string]string{}
@@ -684,6 +692,11 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 	if in.Kind.IsDatabase() && in.Password != "" && in.Password != old.Env[databasePasswordKey(old.Kind)] {
 		a.warn("service %s: a database's password is fixed at creation; kept", name)
 	}
+	for _, k := range databaseNameKeys {
+		if v := in.Env[k]; in.Kind.IsDatabase() && v != "" && v != old.Env[k] {
+			a.warn("service %s: %s is fixed at creation; %s kept", name, k, old.Env[k])
+		}
+	}
 	svc, err := a.c.patched(old, patch)
 	if err != nil {
 		return err
@@ -708,7 +721,8 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		// Scaling, the icon, sleep mode and the start order apply without a
 		// deploy.
 		needsDeploy := slices.ContainsFunc(fields, func(f string) bool {
-			return f != "replicas" && f != "icon" && f != "tags" && f != "sleepAfter" && f != "dependsOn" && f != "networks"
+			return f != "replicas" && f != "icon" && f != "tags" && f != "sleepAfter" && f != "dependsOn" && f != "networks" &&
+				!(f == "files" && old.Kind.IsDatabase()) // init scripts run on an empty database only
 		})
 		a.updates = append(a.updates, pendingUpdate{id: old.ID, name: name, patch: patch, deploy: needsDeploy})
 	}

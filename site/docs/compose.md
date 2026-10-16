@@ -82,7 +82,7 @@ Each key under `services` is a service. Its name is also its hostname inside the
 | `configs`, `secrets` | Files written into the container: see [Files](#files). |
 | `env_file` | `.env`-style files of the git repository, merged into `environment` (which wins): a path, a list, or `{path: …, required: false}`. Git projects only; elsewhere, use `environment`, a `.env` or the project variables. |
 | `network_mode` | Only `host`: the app runs in the server's network. See [Host access](#host-access). |
-| `deploy` | `replicas` (1–10; databases always 1) and `resources.limits.memory` / `resources.limits.cpus`. |
+| `deploy` | `replicas` (1–10; databases always 1), `resources.limits.memory` / `resources.limits.cpus`, `resources.reservations.memory` (memory Docker tries to leave the app when the server runs short, at most the limit), and `restart_policy` (`condition: none` is `restart: "no"`, `on-failure` with `max_attempts` is `restart: on-failure:N`, `any` the default). `update_config` and `rollback_config` are ignored: kipitiny starts the new replicas, moves traffic once they're ready, then stops the old ones. |
 | `mem_limit` | Same as `deploy.resources.limits.memory` (`512m`, `1g`, bytes). |
 | `cpus` | Same as `deploy.resources.limits.cpus` (cores, `0.5` = half a core; 0.01–256). |
 | `stop_grace_period` | Time an app gets to exit after SIGTERM before it is killed (`30s`, `1m30s`; at most 10 minutes; default 10 s). Not for databases. |
@@ -199,7 +199,9 @@ services:
 
 `postgres`, `redis`, `mysql`, `mariadb` and `mongodb` services are managed: one replica, a data volume of their own, a generated password, private to the project, backed up and restore-tested.
 
-- Only `image`, the memory and CPU limits, `icon`, `tags` and `password` apply. `environment`, `volumes` and `ports` are ignored with a warning; `stop_grace_period`, `domain` and `middlewares` are errors.
+- Only `image`, the memory and CPU limits, `icon`, `tags`, `password`, the user and database name and init scripts apply. `volumes`, `ports` and the rest of `environment` are ignored with a warning; `stop_grace_period`, `domain` and `middlewares` are errors.
+- From `environment`, a new database takes its user and database name (`POSTGRES_USER` / `POSTGRES_DB`, `MYSQL_USER` / `MYSQL_DATABASE` or the `MARIADB_` ones, `MONGO_INITDB_ROOT_USERNAME` / `MONGO_INITDB_DATABASE`: letters, digits and underscores) and its password (`POSTGRES_PASSWORD` and the like, as `x-kipitiny.password`). Like the password, they're fixed at creation: a later change is reported and kept as is. An export writes them, so a moved database keeps them.
+- Files in `/docker-entrypoint-initdb.d` (a [config or a bind mount](#files) of the repository: `./init.sql:/docker-entrypoint-initdb.d/init.sql`) run on the database's first start, as the official images do; changing them later redeploys nothing (they only run on an empty database). Not for Redis.
 - Postgres needs a major version in the tag (`postgres:17-alpine`). It can't change major version afterwards (that takes a dump and restore). Memory: at least 128 MB, default 512 MB.
 - Redis memory: at least 32 MB, default 256 MB; Redis keeps its data within 75% of it.
 - MySQL (default `mysql:8.4`) and MariaDB (default `mariadb:11.8`) memory: at least 256 MB, default 512 MB; half of it goes to InnoDB's buffer pool.

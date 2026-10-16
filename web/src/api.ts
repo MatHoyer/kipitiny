@@ -304,6 +304,8 @@ export type Runtime = {
   securityOpt?: string[];
   /** Host paths mounted, as /host:/container[:ro] (admins only). */
   binds?: string[];
+  /** Memory Docker tries to leave it when the server runs short. */
+  memoryReservationMb?: number;
   /** "no" (a job, run once) or "on-failure[:retries]"; unset keeps it running. */
   restart?: string;
 };

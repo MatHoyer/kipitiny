@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/moby/moby/api/types/container"
 
+	"github.com/MatHoyer/kipitiny/internal/compose"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -34,6 +37,12 @@ func DataVolume(svc store.Service) string {
 
 // validateDatabase checks what every database kind shares, then the kind's
 // own rules.
+// databaseNameKeys are a database's user and database name in its env: a
+// new one takes them from its input (a compose file), the rest is generated.
+var databaseNameKeys = []string{pgUser, pgDatabase, mysqlUser, mysqlDatabase, mongoUser, mongoDatabase}
+
+var databaseNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,62}$`)
+
 func validateDatabase(s store.Service) error {
 	if s.HealthPath != "" || s.Healthcheck.Set() || s.PreDeploy != "" {
 		return fmt.Errorf("%w: databases have a built-in healthcheck and no pre-deploy command", ErrInvalid)
@@ -53,6 +62,16 @@ func validateDatabase(s store.Service) error {
 				// Backups and connection strings read the credentials as stored.
 				return fmt.Errorf("%w: %s: a database can't use password manager references (%s)", ErrInvalid, k, refName(m))
 			}
+		}
+	}
+	for _, k := range databaseNameKeys {
+		if v, ok := s.Env[k]; ok && !databaseNameRe.MatchString(v) {
+			return fmt.Errorf("%w: %s: letters, digits and underscores, at most 63, not starting with a digit", ErrInvalid, k)
+		}
+	}
+	for _, f := range s.Files {
+		if s.Kind == store.ServiceKindRedis || !strings.HasPrefix(f.Path, compose.InitDir+"/") {
+			return fmt.Errorf("%w: a database's files go in %s (scripts run on its first start)", ErrInvalid, compose.InitDir)
 		}
 	}
 	switch s.Kind {
