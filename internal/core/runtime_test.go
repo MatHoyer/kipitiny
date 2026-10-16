@@ -104,3 +104,50 @@ func TestValidateRuntime(t *testing.T) {
 		t.Errorf("database: got %v", err)
 	}
 }
+
+func TestRuntimeHostAccess(t *testing.T) {
+	app := store.Service{ID: "S1", ProjectID: "P1", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Env: map[string]string{}}
+	app.Runtime = normalizeRuntime(store.Runtime{CapAdd: []string{"cap_net_admin"}, CapDrop: []string{"MKNOD"},
+		Devices: []string{"/dev/net/tun", "/dev/ttyUSB0:/dev/ttyACM0:r"}, SecurityOpt: []string{"apparmor=unconfined"}})
+	if err := validateService(app); err != nil {
+		t.Fatal(err)
+	}
+	host := containerSpec(store.Project{ID: "P1", Name: "vpn"}, app, envSources{}, "D1", 1, route{}).HostConfig
+	if !slices.Equal(host.CapAdd, []string{"NET_ADMIN"}) || !slices.Equal(host.CapDrop, []string{"NET_RAW", "MKNOD"}) ||
+		!slices.Equal(host.SecurityOpt, []string{"apparmor=unconfined"}) || len(host.Devices) != 2 ||
+		host.Devices[0].PathInContainer != "/dev/net/tun" || host.Devices[0].CgroupPermissions != "rwm" ||
+		host.Devices[1].PathInContainer != "/dev/ttyACM0" || host.Devices[1].CgroupPermissions != "r" {
+		t.Errorf("host config = %+v", host)
+	}
+	raw := app
+	raw.Runtime = store.Runtime{CapAdd: []string{"NET_RAW"}}
+	if host := containerSpec(store.Project{ID: "P1"}, raw, envSources{}, "D1", 1, route{}).HostConfig; slices.Contains(host.CapDrop, "NET_RAW") {
+		t.Errorf("NET_RAW added back is still dropped: %v", host.CapDrop)
+	}
+	for _, r := range []store.Runtime{{CapAdd: []string{"net admin"}}, {Devices: []string{"dev/x"}}, {Devices: []string{"/dev/x:/dev/x:rwx"}}} {
+		bad := app
+		bad.Runtime = r
+		if err := validateService(bad); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%+v: got %v", r, err)
+		}
+	}
+
+	member := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", Role: store.RoleMember})
+	admin := WithActor(context.Background(), Actor{Kind: "user", Name: "root", Role: store.RoleAdmin})
+	plain := app
+	plain.Runtime = store.Runtime{}
+	if err := checkServiceChange(member, plain, app); !errors.Is(err, ErrForbidden) {
+		t.Errorf("member adding host access: %v", err)
+	}
+	if err := checkServiceChange(admin, plain, app); err != nil {
+		t.Errorf("admin: %v", err)
+	}
+	if err := checkServiceChange(member, app, plain); errors.Is(err, ErrForbidden) {
+		t.Errorf("member removing host access: %v", err)
+	}
+	cmd := app
+	cmd.Runtime.Command = []string{"run"}
+	if err := checkServiceChange(member, app, cmd); errors.Is(err, ErrForbidden) {
+		t.Errorf("member changing the command of an app with host access: %v", err)
+	}
+}

@@ -156,7 +156,7 @@ const ExtKey = "x-kipitiny"
 // supportedServiceKeys are the compose service keys Parse reads.
 var supportedServiceKeys = []string{"image", "build", "environment", "ports", "expose", "volumes", "deploy", "mem_limit", "cpus", "stop_grace_period", "network_mode", "healthcheck",
 	"command", "entrypoint", "user", "working_dir", "labels", "tmpfs", "shm_size", "ulimits", "sysctls", "read_only", "init", "stop_signal",
-	"tty", "stdin_open", "extra_hosts", ExtKey}
+	"tty", "stdin_open", "extra_hosts", "cap_add", "cap_drop", "devices", "privileged", "security_opt", ExtKey}
 
 // Keys that change nothing kipitiny can't do itself (it orders, networks
 // and restarts services on its own): dropped with a warning. Any other
@@ -303,12 +303,17 @@ type outRuntime struct {
 	TTY        bool              `yaml:"tty,omitempty"`
 	StdinOpen  bool              `yaml:"stdin_open,omitempty"`
 	ExtraHosts []string          `yaml:"extra_hosts,omitempty"`
+	CapAdd     []string          `yaml:"cap_add,omitempty"`
+	CapDrop    []string          `yaml:"cap_drop,omitempty"`
+	Devices    []string          `yaml:"devices,omitempty"`
+	Privileged bool              `yaml:"privileged,omitempty"`
+	SecOpt     []string          `yaml:"security_opt,omitempty"`
 }
 
 func outRuntimeOf(r store.Runtime) outRuntime {
 	o := outRuntime{Command: r.Command, Entrypoint: r.Entrypoint, User: r.User, WorkingDir: r.WorkingDir, Labels: r.Labels,
 		Sysctls: r.Sysctls, ReadOnly: r.ReadOnly, Init: r.Init, StopSignal: r.StopSignal, TTY: r.TTY, StdinOpen: r.StdinOpen,
-		ExtraHosts: r.ExtraHosts}
+		ExtraHosts: r.ExtraHosts, CapAdd: r.CapAdd, CapDrop: r.CapDrop, Devices: r.Devices, Privileged: r.Privileged, SecOpt: r.SecurityOpt}
 	for _, path := range slices.Sorted(maps.Keys(r.Tmpfs)) {
 		v := path
 		if opts := r.Tmpfs[path]; opts != "" {
@@ -355,6 +360,7 @@ func EscapeRuntime(r store.Runtime) store.Runtime {
 		return out
 	}
 	r.Command, r.Entrypoint, r.ExtraHosts = list(r.Command), list(r.Entrypoint), list(r.ExtraHosts)
+	r.Devices, r.SecurityOpt = list(r.Devices), list(r.SecurityOpt)
 	r.User, r.WorkingDir, r.StopSignal = Escape(r.User), Escape(r.WorkingDir), Escape(r.StopSignal)
 	r.Labels, r.Tmpfs, r.Sysctls = values(r.Labels), values(r.Tmpfs), values(r.Sysctls)
 	return r

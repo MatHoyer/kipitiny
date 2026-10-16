@@ -43,6 +43,8 @@ func TestRoundTrip(t *testing.T) {
 					ShmSizeMB: 256, Ulimits: map[string]store.Ulimit{"nofile": {Soft: 1024, Hard: 4096}, "nproc": {Soft: 512, Hard: 512}},
 					Sysctls: map[string]string{"net.core.somaxconn": "1024"}, ReadOnly: true, Init: true, StopSignal: "SIGINT",
 					TTY: true, StdinOpen: true, ExtraHosts: []string{"host.docker.internal:host-gateway"},
+					CapAdd: []string{"NET_ADMIN"}, CapDrop: []string{"MKNOD"}, Devices: []string{"/dev/net/tun"}, Privileged: true,
+					SecurityOpt: []string{"no-new-privileges:true"},
 				},
 			},
 			"db": {Image: "postgres:17-alpine", MemoryMB: 512, X: Ext{Kind: "postgres", Password: "${DB_PASSWORD}"}},
@@ -119,7 +121,8 @@ volumes:
 func TestParseErrors(t *testing.T) {
 	for name, tc := range map[string]struct{ src, want string }{
 		"build only":   {"services:\n  web:\n    build: .\n", "kipitiny doesn't build"},
-		"privileged":   {"services:\n  web:\n    image: a\n    privileged: true\n", "privileged is not supported"},
+		"cgroup":       {"services:\n  web:\n    image: a\n    cgroup: host\n", "cgroup is not supported"},
+		"cap string":   {"services:\n  web:\n    image: a\n    cap_add: NET_ADMIN\n", "cap_add must be a list"},
 		"bad quote":    {"services:\n  web:\n    image: a\n    command: echo 'hi\n", "unterminated quote"},
 		"bad bool":     {"services:\n  web:\n    image: a\n    init: maybe\n", "not true or false"},
 		"bind mount":   {"services:\n  web:\n    image: a\n    volumes: [./data:/data]\n", "bind mounts"},

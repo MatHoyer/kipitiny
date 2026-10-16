@@ -98,6 +98,10 @@ Each key under `services` is a service. Its name is also its hostname inside the
 | `stop_signal` | The signal a stop sends first (`SIGINT`, `SIGQUIT`…), then `SIGKILL` after `stop_grace_period`. |
 | `tty`, `stdin_open` | Give the container a terminal and keep its stdin open, for images that expect one. |
 | `extra_hosts` | Entries added to `/etc/hosts`: `["db.local:10.0.0.2"]` or a mapping. `host-gateway` as the IP is the server itself. |
+| `cap_add`, `cap_drop` | Linux capabilities to add or remove (`NET_ADMIN`, `SYS_TIME`…, with or without `CAP_`). kipitiny drops `NET_RAW` from every app unless it's added back. See [Host access](#host-access). |
+| `devices` | Host devices mapped into the container: `/dev/net/tun`, `/dev/ttyUSB0:/dev/ttyACM0:rwm`. See [Host access](#host-access). |
+| `privileged` | `true` gives the container every capability and device. See [Host access](#host-access). |
+| `security_opt` | Security options: `no-new-privileges:true`, `apparmor=unconfined`, `seccomp=unconfined`… See [Host access](#host-access). |
 | `build` | Ignored when `image` is set (with a warning); an error without one. |
 | `x-kipitiny` | kipitiny's settings, below. |
 
@@ -109,7 +113,7 @@ kipitiny orders, networks and restarts services itself, so these are dropped and
 
 ### Errors
 
-Any other key is refused, because ignoring it would run something different from what the file says: for example `env_file`, `secrets`, `configs`, `privileged`, `cap_add`, `devices`, `profiles`, `extends`, `platform`. Bind mounts (`./data:/data`, `/srv:/srv`, except the Docker socket) and anonymous volumes (`/data`) are refused too: use a named volume. So is any `network_mode` but `host`.
+Any other key is refused, because ignoring it would run something different from what the file says: for example `env_file`, `secrets`, `configs`, `profiles`, `extends`, `platform`, `cgroup`, `pid`, `ipc`. Bind mounts (`./data:/data`, `/srv:/srv`, except the Docker socket) and anonymous volumes (`/data`) are refused too: use a named volume. So is any `network_mode` but `host`.
 
 ### Host access
 
@@ -129,7 +133,8 @@ services:
 
 - **`network_mode: host`:** the app shares the server's network and listens on its ports directly (open them in the firewall if needed). It has no domain or published ports, isn't on the project network (other services can't reach it by name), runs one replica, and deploys stop the old container before starting the new one.
 - **The Docker socket** is mounted at `/var/run/docker.sock`, from the server's own socket. `:ro` only stops the app from replacing the socket file, not from using it: the app can still create, change and remove containers, so read-only gives no protection.
-- Either one gives the app control of the server: only use images you trust. Databases can't have them. Only admins can turn them on.
+- **Capabilities, devices, privileged mode and security options** (`cap_add`, `devices`, `privileged`, `security_opt`) are for VPNs, network tools and hardware (a Zigbee stick, a GPU, `/dev/net/tun`). `privileged` and most capabilities let the app escape its container.
+- Any of these gives the app control of the server: only use images you trust. Databases can't have them, previews leave such services out, and only admins can turn them on (a member may still change the app's other settings, or remove them).
 - A service runs on its project's server: to monitor several servers, make one project per server. The Beszel hub itself is a normal app (`henrygd/beszel`, port 8090, a volume at `/beszel_data`). Both are also [one-click templates](/docs/templates).
 
 ### `x-kipitiny` (per service)

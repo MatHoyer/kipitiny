@@ -610,6 +610,17 @@ type Runtime struct {
 	// ExtraHosts are host:ip entries added to /etc/hosts (ip may be
 	// host-gateway).
 	ExtraHosts []string `json:"extraHosts,omitempty"`
+	// The settings below loosen the container's isolation: only admins set
+	// them (HostAccess).
+	//
+	// CapAdd and CapDrop are Linux capabilities without CAP_ (NET_ADMIN).
+	CapAdd  []string `json:"capAdd,omitempty"`
+	CapDrop []string `json:"capDrop,omitempty"`
+	// Devices are host devices, as host[:container[:permissions]].
+	Devices []string `json:"devices,omitempty"`
+	// Privileged gives the container every capability and device.
+	Privileged  bool     `json:"privileged,omitempty"`
+	SecurityOpt []string `json:"securityOpt,omitempty"`
 }
 
 // Ulimit is a soft and hard limit; compose's single value sets both.
@@ -622,7 +633,13 @@ type Ulimit struct {
 func (r Runtime) IsZero() bool {
 	return len(r.Command) == 0 && len(r.Entrypoint) == 0 && r.User == "" && r.WorkingDir == "" && len(r.Labels) == 0 &&
 		len(r.Tmpfs) == 0 && r.ShmSizeMB == 0 && len(r.Ulimits) == 0 && len(r.Sysctls) == 0 && !r.ReadOnly && !r.Init &&
-		r.StopSignal == "" && !r.TTY && !r.StdinOpen && len(r.ExtraHosts) == 0
+		r.StopSignal == "" && !r.TTY && !r.StdinOpen && len(r.ExtraHosts) == 0 && len(r.CapDrop) == 0 && !r.HostAccess()
+}
+
+// HostAccess reports whether r loosens the container's isolation, which
+// gives control of the server, like the Docker socket.
+func (r Runtime) HostAccess() bool {
+	return len(r.CapAdd) > 0 || len(r.Devices) > 0 || r.Privileged || len(r.SecurityOpt) > 0
 }
 
 // Middlewares are the Traefik middlewares on an app's router; the zero

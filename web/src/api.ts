@@ -276,6 +276,12 @@ export type Runtime = {
   stdinOpen?: boolean;
   /** host:ip entries for /etc/hosts. */
   extraHosts?: string[];
+  /** Loosen the container's isolation; only admins set them. */
+  capAdd?: string[];
+  capDrop?: string[];
+  devices?: string[];
+  privileged?: boolean;
+  securityOpt?: string[];
 };
 
 export type Topology = { servers: ServerTopology[] };
