@@ -240,18 +240,25 @@ func Marshal(f File) ([]byte, error) {
 		if s.StopGraceSeconds > 0 {
 			o.StopGracePeriod = (time.Duration(s.StopGraceSeconds) * time.Second).String()
 		}
-		if s.Replicas > 1 || s.MemoryMB > 0 || s.CPUs > 0 {
+		reserved := 0
+		if s.Runtime != nil {
+			reserved = s.Runtime.MemoryReservationMB
+		}
+		if s.Replicas > 1 || s.MemoryMB > 0 || s.CPUs > 0 || reserved > 0 {
 			d := &outDeploy{}
 			if s.Replicas > 1 {
 				d.Replicas = s.Replicas
 			}
-			if s.MemoryMB > 0 || s.CPUs > 0 {
+			if s.MemoryMB > 0 || s.CPUs > 0 || reserved > 0 {
 				d.Resources = &outResources{}
 				if s.MemoryMB > 0 {
 					d.Resources.Limits.Memory = strconv.Itoa(s.MemoryMB) + "M"
 				}
 				if s.CPUs > 0 {
 					d.Resources.Limits.CPUs = quoted(strconv.FormatFloat(s.CPUs, 'f', -1, 64))
+				}
+				if reserved > 0 {
+					d.Resources.Reservations.Memory = strconv.Itoa(reserved) + "M"
 				}
 			}
 			o.Deploy = d
@@ -446,7 +453,10 @@ type outResources struct {
 	Limits struct {
 		CPUs   quoted `yaml:"cpus,omitempty"`
 		Memory string `yaml:"memory,omitempty"`
-	} `yaml:"limits"`
+	} `yaml:"limits,omitempty"`
+	Reservations struct {
+		Memory string `yaml:"memory,omitempty"`
+	} `yaml:"reservations,omitempty"`
 }
 
 // quoted is written double-quoted: "8080:80" unquoted is a base-60 number
@@ -678,7 +688,7 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 				p.fail("network_mode %s is not supported (only host)", mode)
 			}
 		case k == "deploy":
-			p.deploy(v, &s)
+			p.deploy(v, &s, &rt)
 		case k == "mem_limit":
 			s.MemoryMB = p.memory(v)
 		case k == "cpus":
@@ -743,10 +753,7 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 	}
 	if store.ServiceKind(s.X.Kind).IsDatabase() {
 		// The manager generates a database's environment and owns its volume.
-		if len(s.Environment) > 0 {
-			p.warn("environment of a %s service is ignored (generated)", s.X.Kind)
-			s.Environment = nil
-		}
+		p.databaseEnv(&s)
 		if len(s.Volumes) > 0 {
 			p.warn("volumes of a %s service are ignored (the manager keeps its data volume)", s.X.Kind)
 			s.Volumes = nil
@@ -754,9 +761,10 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 		if s.HostNetwork || s.DockerSocket != "" {
 			p.fail("a %s service can't use the host network or the Docker socket", s.X.Kind)
 		}
-		if s.Runtime != nil || s.Files != nil {
-			p.warn("command, user, files and the like of a %s service are ignored (the manager runs it)", s.X.Kind)
-			s.Runtime, s.Files = nil, nil
+		s.Files = p.initFiles(s.X.Kind, s.Files)
+		if s.Runtime != nil {
+			p.warn("command, user and the like of a %s service are ignored (the manager runs it)", s.X.Kind)
+			s.Runtime = nil
 		}
 		if s.DependsOn != nil {
 			p.warn("depends_on of a %s service is ignored: databases start first", s.X.Kind)
@@ -986,13 +994,23 @@ func (p *parser) volumes(n *yaml.Node, rt *store.Runtime, files *[]store.Service
 	return out, socket
 }
 
-func (p *parser) deploy(n *yaml.Node, s *Service) {
+func (p *parser) deploy(n *yaml.Node, s *Service, rt *store.Runtime) {
 	for k, v := range pairs(n) {
 		switch k {
 		case "replicas":
 			s.Replicas = p.int(v)
 		case "resources":
 			for rk, rv := range pairs(v) {
+				if rk == "reservations" {
+					for lk, lv := range pairs(rv) {
+						if lk == "memory" {
+							rt.MemoryReservationMB = p.memory(lv)
+						} else {
+							p.warn("deploy.resources.reservations.%s is ignored", lk)
+						}
+					}
+					continue
+				}
 				if rk != "limits" {
 					p.warn("deploy.resources.%s is ignored", rk)
 					continue
@@ -1008,6 +1026,10 @@ func (p *parser) deploy(n *yaml.Node, s *Service) {
 					}
 				}
 			}
+		case "restart_policy":
+			p.restartPolicy(v, rt)
+		case "update_config", "rollback_config":
+			p.warn("deploy.%s is ignored: kipitiny starts the new replicas and moves traffic once they're ready, then stops the old ones", k)
 		default:
 			p.warn("deploy.%s is ignored", k)
 		}

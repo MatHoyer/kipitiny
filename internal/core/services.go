@@ -290,6 +290,13 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 	default:
 		return store.Service{}, fmt.Errorf("%w: unknown service kind %q", ErrInvalid, svc.Kind)
 	}
+	if svc.Kind.IsDatabase() {
+		for _, k := range databaseNameKeys {
+			if _, generated := svc.Env[k]; generated && in.Env[k] != "" {
+				svc.Env[k] = in.Env[k]
+			}
+		}
+	}
 	return svc, nil
 }
 
@@ -519,8 +526,8 @@ func validateService(s store.Service) error {
 		if s.HostNetwork || s.DockerSocket != "" {
 			return fmt.Errorf("%w: databases can't use the host network or the Docker socket", ErrInvalid)
 		}
-		if !s.Runtime.IsZero() || len(s.Files) > 0 {
-			return fmt.Errorf("%w: the manager sets how a database runs (command, user, files…)", ErrInvalid)
+		if !s.Runtime.IsZero() {
+			return fmt.Errorf("%w: the manager sets how a database runs (command, user…)", ErrInvalid)
 		}
 		if len(s.DependsOn) > 0 {
 			return fmt.Errorf("%w: databases start first, so depend on nothing", ErrInvalid)

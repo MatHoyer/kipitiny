@@ -112,6 +112,9 @@ func validateRuntime(s store.Service) error {
 	if r.ShmSizeMB < 0 || r.ShmSizeMB > maxShmSizeMB {
 		return invalid("shm size must be between 0 and %d MB", maxShmSizeMB)
 	}
+	if r.MemoryReservationMB < 0 || (s.MemoryMB > 0 && r.MemoryReservationMB > s.MemoryMB) {
+		return invalid("memory reservation must be positive and at most the memory limit")
+	}
 	for name, u := range r.Ulimits {
 		if !slices.Contains(ulimitNames, name) {
 			return invalid("unknown ulimit %q", name)
@@ -195,6 +198,7 @@ func applyRuntime(cfg *container.Config, host *container.HostConfig, r store.Run
 	}
 	host.Tmpfs = maps.Clone(r.Tmpfs)
 	host.ShmSize = int64(r.ShmSizeMB) << 20
+	host.MemoryReservation = int64(r.MemoryReservationMB) << 20
 	for _, name := range slices.Sorted(maps.Keys(r.Ulimits)) {
 		u := r.Ulimits[name]
 		host.Ulimits = append(host.Ulimits, &container.Ulimit{Name: name, Soft: u.Soft, Hard: u.Hard})

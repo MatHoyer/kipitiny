@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"time"
 
@@ -52,7 +53,7 @@ func TestExportFile(t *testing.T) {
 		t.Errorf("basic auth = %+v", u)
 	}
 	db := f.Services["db"]
-	if db.X.Kind != "postgres" || db.Environment != nil || db.X.Password != "${DB_PASSWORD}" || env["DB_PASSWORD"] != "pw" {
+	if db.X.Kind != "postgres" || !maps.Equal(db.Environment, map[string]string{pgUser: "app", pgDatabase: "app"}) || db.X.Password != "${DB_PASSWORD}" || env["DB_PASSWORD"] != "pw" {
 		t.Errorf("db = %+v", db)
 	}
 	if f.X.Variables["TOKEN"] != "${PROJECT_TOKEN}" || f.X.Variables["REGION"] != "eu" || env["PROJECT_TOKEN"] != "t0k" {

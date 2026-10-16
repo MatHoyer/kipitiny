@@ -24,6 +24,13 @@ release renames the section to its version.
   `restart: unless-stopped`). With `on-failure`, a container that exits isn't
   started again by kipitiny. `depends_on` naming a service missing from the
   file, or a cycle, is now an error.
+- warning: `deploy.restart_policy` now applies like `restart` (`condition:
+  none` makes the service a job, see above).
+- info: A database's `environment` in compose files is no longer all
+  ignored: a new database takes its user, database name and password from
+  `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PASSWORD` and the like. Existing
+  databases keep theirs (a sync reports the difference). Exports now write
+  the user and database name.
 - warning: `networks` in compose files now apply. A service listing
   networks is only on those: it no longer reaches the project's services on
   other networks (add `default` to keep the project network), and gets
