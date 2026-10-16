@@ -404,7 +404,7 @@
       "images": [
         "umami"
       ],
-      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 428 389.11\"><circle cx=\"214.15\" cy=\"181\" r=\"171\" fill=\"none\" stroke=\"#7A7A7A\" stroke-miterlimit=\"10\" stroke-width=\"20\"/><path fill=\"#7A7A7A\" d=\"M413 134.11H15.29a15 15 0 0 0-15 15v15.3C.12 168 0 171.52 0 175.11c0 118.19 95.81 214 214 214 116.4 0 211.1-92.94 213.93-208.67 0-.44.07-.88.07-1.33v-30a15 15 0 0 0-15-15Z\"/></svg>"
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 20 20\"><circle cx=\"10\" cy=\"9.4\" r=\"8\" style=\"fill:none;stroke:#7A7A7A;stroke-width:.9346;stroke-miterlimit:10\"/><path fill=\"#7A7A7A\" d=\"M19.3 7.2H.7c-.4 0-.7.3-.7.7v1.2c0 5.5 4.5 10 10 10 5.4 0 9.9-4.3 10-9.8V7.9c0-.4-.3-.7-.7-.7\"/></svg>"
     }
   ]
 }
