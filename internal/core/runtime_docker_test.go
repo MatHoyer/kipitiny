@@ -167,3 +167,56 @@ func TestJobsDocker(t *testing.T) {
 		}
 	}
 }
+
+// TestProjectNetworksDocker checks that services only reach those they share a
+// project network with, on the local Docker daemon.
+//
+//	KIPITINY_TEST_DOCKER=1 go test ./internal/core/ -run ProjectNetworksDocker
+func TestProjectNetworksDocker(t *testing.T) {
+	if os.Getenv("KIPITINY_TEST_DOCKER") == "" {
+		t.Skip("KIPITINY_TEST_DOCKER not set")
+	}
+	ctx := context.Background()
+	dk, err := docker.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := dk.EnsureImage(ctx, "busybox", ""); err != nil {
+		t.Fatal(err)
+	}
+	c := &Core{}
+	p := store.Project{ID: "01NETTEST00000000000000000", Name: "kipitiny-nettest"}
+	t.Cleanup(func() {
+		for _, n := range []string{"default", "front", "back"} {
+			_ = dk.RemoveNetwork(context.Background(), docker.ProjectNetworkNamed(p.ID, n))
+		}
+	})
+	run := func(name string, nets []string, script string) string {
+		svc := store.Service{ID: "01NET" + name, Name: name, Kind: store.ServiceKindApp, Image: "busybox", Replicas: 1, ProjectNetworks: nets,
+			Runtime: store.Runtime{Command: []string{"sh", "-c", script}}}
+		spec := containerSpec(p, svc, envSources{}, "D1", 1, route{})
+		delete(spec.Config.Labels, docker.LabelManaged)
+		spec.HostConfig.RestartPolicy = container.RestartPolicy{}
+		id, err := c.runContainer(ctx, dk, spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = dk.RemoveContainer(context.Background(), id, 0) })
+		return id
+	}
+	run("db", []string{"back"}, "sleep 30")
+	run("api", []string{"back", "front"}, "sleep 30")
+	run("other", nil, "sleep 30")
+	id := run("web", []string{"front"}, `sleep 1; for h in api db other; do wget -T 2 -O- http://$h:1 2>&1 | grep -q "bad address" && echo no-$h || echo $h; done`)
+	wait := dk.ContainerWait(ctx, id, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
+	select {
+	case <-wait.Result:
+	case err := <-wait.Error:
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	copyContainerLogs(ctx, dk, []string{id}, &out)
+	if got := out.String(); !strings.Contains(got, "api\nno-db\nno-other\n") {
+		t.Errorf("output = %q", got)
+	}
+}

@@ -73,8 +73,9 @@ const runtimeForm = (r: Runtime) => ({
 });
 
 /** The settings only a compose file (or the API) sets, listed so the card shows everything that applies. */
-function otherSettings(r: Runtime, files: ServiceT["files"], deps: ServiceT["dependsOn"]) {
+function otherSettings(r: Runtime, files: ServiceT["files"], deps: ServiceT["dependsOn"], nets: ServiceT["projectNetworks"]) {
   const out: [string, string][] = [];
+  for (const n of nets ?? []) out.push(["networks", n]);
   for (const d of deps ?? []) out.push(["depends_on", d.condition ? `${d.service} (${d.condition})` : d.service]);
   if (r.restart) out.push(["restart", r.restart === "no" ? "no (a job: runs once)" : r.restart]);
   for (const f of files ?? []) out.push([f.secret ? "secret" : "file", `${f.path} (${f.size} B${f.source ? `, from ${f.source}` : ""})`]);
@@ -107,7 +108,7 @@ export function ContainerCard({ svc }: { svc: ServiceT }) {
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
   const command = splitCommand(form.command);
   const entrypoint = splitCommand(form.entrypoint);
-  const others = otherSettings(runtime, svc.files, svc.dependsOn);
+  const others = otherSettings(runtime, svc.files, svc.dependsOn, svc.projectNetworks);
 
   const save = useMutation({
     meta: { error: "Couldn't save the container settings" },

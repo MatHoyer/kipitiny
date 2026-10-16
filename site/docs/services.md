@@ -118,8 +118,11 @@ env value and the password as a secret. Renaming the project or service moves
 that name at once. A database on such a network is still never public, but any
 service on it can connect. An app in the host network can't join one.
 
-These networks aren't part of a compose file: a project managed by git keeps
-the ones set here across syncs. Deleting a network detaches its services first.
+A compose file can set them too, as `external: true` networks listed by a
+service (see [compose networks](/docs/compose#compose-keys-kipitiny-reads));
+for services whose block has no `networks` key, a project managed by git keeps
+the ones set here across syncs. A compose file can also split a project into
+networks of its own, so that only some of its services reach each other. Deleting a network detaches its services first.
 The **Map** draws them with a line to each of their services.
 
 ## Private registries

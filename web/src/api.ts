@@ -139,7 +139,9 @@ export type Service = {
   files: ServiceFile[];
   /** Services of the project started before this one. */
   dependsOn: Dependency[];
-  /** IDs of the networks created by hand it joins, besides its project network. */
+  /** The project's own networks it's on, by compose name; empty is the default one. */
+  projectNetworks: string[];
+  /** IDs of the networks created by hand it joins, besides its project networks. */
   networks: string[];
   currentDeploymentId: string;
   stopped: boolean;

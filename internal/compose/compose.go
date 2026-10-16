@@ -62,6 +62,11 @@ type Service struct {
 	Runtime *store.Runtime `json:",omitempty"`
 	// Files are the configs, secrets and repository files bind-mounted.
 	Files []store.ServiceFile `json:",omitempty"`
+	// Networks are the file's own networks the service is on ("default"
+	// included); nil without a networks key. ExternalNetworks are the
+	// external ones, by name: networks created by hand in kipitiny.
+	Networks         []string `json:",omitempty"`
+	ExternalNetworks []string `json:",omitempty"`
 	// DependsOn are the services of the file this one starts after.
 	DependsOn []store.Dependency `json:",omitempty"`
 	// VarEnv lists the environment keys whose whole value is a ${NAME}
@@ -161,7 +166,7 @@ const ExtKey = "x-kipitiny"
 // supportedServiceKeys are the compose service keys Parse reads.
 var supportedServiceKeys = []string{"image", "build", "environment", "ports", "expose", "volumes", "deploy", "mem_limit", "cpus", "stop_grace_period", "network_mode", "healthcheck",
 	"command", "entrypoint", "user", "working_dir", "labels", "tmpfs", "shm_size", "ulimits", "sysctls", "read_only", "init", "stop_signal",
-	"tty", "stdin_open", "extra_hosts", "cap_add", "cap_drop", "devices", "privileged", "security_opt", "configs", "secrets", "env_file", "extends", "depends_on", "restart", ExtKey}
+	"tty", "stdin_open", "extra_hosts", "cap_add", "cap_drop", "devices", "privileged", "security_opt", "configs", "secrets", "env_file", "extends", "depends_on", "restart", "networks", ExtKey}
 
 // Keys that change nothing kipitiny can't do itself (it orders, networks
 // and restarts services on its own): dropped with a warning. Any other
@@ -170,9 +175,9 @@ var supportedServiceKeys = []string{"image", "build", "environment", "ports", "e
 var (
 	ignoredServiceKeys = []string{
 		"container_name", "hostname",
-		"links", "logging", "networks", "pull_policy",
+		"links", "logging", "pull_policy",
 	}
-	ignoredTopKeys = []string{"version", "networks"}
+	ignoredTopKeys = []string{"version"}
 )
 
 // Marshal writes f as compose YAML. Strings are written as given: literal
@@ -260,6 +265,7 @@ func Marshal(f File) ([]byte, error) {
 		}
 		marshalFiles(name, s.Files, &o, &out)
 		o.DependsOn = outDependsOn(s.DependsOn)
+		o.Networks = marshalNetworks(s, &out)
 		if !isZeroExt(x) {
 			o.X = &x
 		}
@@ -294,6 +300,7 @@ type outFile struct {
 	Volumes  map[string]outVolume  `yaml:"volumes,omitempty"`
 	Configs  map[string]outTopFile `yaml:"configs,omitempty"`
 	Secrets  map[string]outTopFile `yaml:"secrets,omitempty"`
+	Networks map[string]outNetwork `yaml:"networks,omitempty"`
 	X        *FileExt              `yaml:"x-kipitiny,omitempty"`
 }
 
@@ -316,6 +323,7 @@ type outService struct {
 	Configs         []outFileRef      `yaml:"configs,omitempty"`
 	Secrets         []outFileRef      `yaml:"secrets,omitempty"`
 	DependsOn       any               `yaml:"depends_on,omitempty"`
+	Networks        []string          `yaml:"networks,omitempty"`
 	outRuntime      `yaml:",inline"`
 	X               *Ext `yaml:"x-kipitiny,omitempty"`
 }
@@ -489,6 +497,8 @@ func parse(data []byte, vars Vars, depth int) (File, []string, error) {
 			include = v
 		case k == "volumes":
 			p.top = p.topVolumes(v)
+		case k == "networks":
+			p.nets = p.topNetworks(v)
 		case k == "configs":
 			p.configs = p.topFiles("config", v)
 		case k == "secrets":
@@ -533,11 +543,14 @@ type parser struct {
 	// secrets the top-level ones.
 	top              map[string]store.Volume
 	configs, secrets map[string]topFile
-	svc              string
-	ctx              string
-	warns            []string
-	errs             []string
-	missing          []string
+	// nets holds the top-level networks: external ones map to their name,
+	// the others to "".
+	nets    map[string]string
+	svc     string
+	ctx     string
+	warns   []string
+	errs    []string
+	missing []string
 	// varEnv collects the current service's environment keys written as a
 	// whole ${NAME}.
 	varEnv []string
@@ -668,6 +681,8 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 		case k == "extends": // merged before, by resolveExtends
 		case k == "depends_on":
 			s.DependsOn = p.dependsOn(v)
+		case k == "networks":
+			s.Networks, s.ExternalNetworks = p.serviceNetworks(v)
 		case p.runtimeKey(k, v, &rt):
 		case slices.Contains(ignoredServiceKeys, k):
 			p.warn("%s is ignored", k)
@@ -702,6 +717,9 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 	p.varEnv = nil
 	if s.X.Kind == "" {
 		s.X.Kind = inferKind(s.Image)
+	}
+	if s.HostNetwork && s.Networks != nil {
+		p.fail("an app in the host network can't join networks")
 	}
 	if store.ServiceKind(s.X.Kind).IsDatabase() {
 		// The manager generates a database's environment and owns its volume.

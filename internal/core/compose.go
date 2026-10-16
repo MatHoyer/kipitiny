@@ -58,7 +58,11 @@ func (c *Core) ExportCompose(ctx context.Context, projectID string, opts ExportO
 	for _, chk := range checks {
 		byService[chk.ServiceID] = chk
 	}
-	f, env := exportFile(p, svcs, byService, opts.Service == "")
+	nets, err := c.store.ListNetworks(ctx)
+	if err != nil {
+		return Export{}, err
+	}
+	f, env := exportFile(p, svcs, byService, nets, opts.Service == "")
 	data, err := compose.Marshal(f)
 	if err != nil {
 		return Export{}, err
@@ -71,9 +75,10 @@ func (c *Core) ExportCompose(ctx context.Context, projectID string, opts ExportO
 }
 
 // exportFile maps the services and their uptime checks (by service ID) to
-// compose, with the variables their secrets became. withProject adds the
-// project's shared variables.
-func exportFile(p store.Project, svcs []store.Service, checks map[string]store.UptimeCheck, withProject bool) (compose.File, map[string]string) {
+// compose, with the variables their secrets became. Networks created by
+// hand (nets) become external networks. withProject adds the project's
+// shared variables.
+func exportFile(p store.Project, svcs []store.Service, checks map[string]store.UptimeCheck, nets []store.Network, withProject bool) (compose.File, map[string]string) {
 	f := compose.File{Name: p.Name, Services: map[string]compose.Service{}}
 	env := map[string]string{}
 	secret := func(name, value string) string {
@@ -142,6 +147,17 @@ func exportFile(p store.Project, svcs []store.Service, checks map[string]store.U
 		for _, d := range s.DependsOn { // not one deleted since
 			if slices.ContainsFunc(svcs, func(o store.Service) bool { return o.Name == d.Service }) {
 				cs.DependsOn = append(cs.DependsOn, d)
+			}
+		}
+		for _, id := range s.Networks {
+			if i := slices.IndexFunc(nets, func(n store.Network) bool { return n.ID == id }); i >= 0 {
+				cs.ExternalNetworks = append(cs.ExternalNetworks, nets[i].Name)
+			}
+		}
+		if len(s.ProjectNetworks) > 0 || len(cs.ExternalNetworks) > 0 {
+			cs.Networks = s.ProjectNetworks
+			if len(cs.Networks) == 0 {
+				cs.Networks = []string{"default"}
 			}
 		}
 		for _, v := range s.Volumes {
@@ -386,6 +402,13 @@ type applier struct {
 	// checks to save or delete.
 	uptimes   map[string]*compose.Uptime
 	uptimeOps []uptimeOp
+	// networkOps set the networks created by hand of existing services.
+	networkOps []networkOp
+}
+
+type networkOp struct {
+	id, name string
+	ids      []string
 }
 
 // uptimeOp saves a service's check, or deletes it when check is nil.
@@ -430,10 +453,19 @@ func (a *applier) prepare(ctx context.Context, f compose.File) error {
 			dbs[name] = s
 		}
 	}
+	nets, err := a.c.store.ListNetworks(ctx)
+	if err != nil {
+		return err
+	}
 	inputs := map[string]ServiceInput{}
 	var errs []string
 	for _, name := range f.ServiceNames() {
 		in, err := a.input(name, f.Services[name])
+		if err == nil {
+			if in.networks, err = externalNetworks(f.Services[name], nets, a.project.ServerID); err != nil {
+				err = fmt.Errorf("service %s: %w", name, err)
+			}
+		}
 		if err != nil {
 			errs = append(errs, err.Error())
 			continue
@@ -549,7 +581,7 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 	if cs.Runtime != nil {
 		in.Runtime = *cs.Runtime
 	}
-	in.Files, in.DependsOn = cs.Files, cs.DependsOn
+	in.Files, in.DependsOn, in.ProjectNetworks = cs.Files, cs.DependsOn, cs.Networks
 	if in.Secrets == nil {
 		// Without x-kipitiny.secrets, a value given as a whole ${NAME} is a
 		// secret, unless it became a reference (a project variable keeps
@@ -649,6 +681,10 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		return err
 	}
 	fields := changedFields(old, svc)
+	if in.networks != nil && !slices.Equal(slices.Sorted(slices.Values(old.Networks)), in.networks) {
+		fields = append(fields, "networks")
+		a.networkOps = append(a.networkOps, networkOp{id: old.ID, name: name, ids: in.networks})
+	}
 	uptimeChanged, err := a.prepareUptime(ctx, name, svc)
 	if err != nil {
 		return err
@@ -661,7 +697,7 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		// Scaling, the icon, sleep mode and the start order apply without a
 		// deploy.
 		needsDeploy := slices.ContainsFunc(fields, func(f string) bool {
-			return f != "replicas" && f != "icon" && f != "tags" && f != "sleepAfter" && f != "dependsOn"
+			return f != "replicas" && f != "icon" && f != "tags" && f != "sleepAfter" && f != "dependsOn" && f != "networks"
 		})
 		a.updates = append(a.updates, pendingUpdate{id: old.ID, name: name, patch: patch, deploy: needsDeploy})
 	}
@@ -737,6 +773,7 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 		Runtime:          &in.Runtime,
 		Files:            in.Files,
 		DependsOn:        in.DependsOn,
+		ProjectNetworks:  in.ProjectNetworks,
 	}
 	if in.Image == "" { // a database on the default image
 		p.Image = nil
@@ -755,6 +792,9 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 	}
 	if p.DependsOn == nil {
 		p.DependsOn = []store.Dependency{}
+	}
+	if p.ProjectNetworks == nil {
+		p.ProjectNetworks = []string{}
 	}
 	if old.Kind.IsDatabase() {
 		if in.MemoryMB == 0 {
@@ -797,6 +837,7 @@ func changedFields(old, svc store.Service) []string {
 	add("runtime", !reflect.DeepEqual(old.Runtime, svc.Runtime))
 	add("files", !sameFiles(old.Files, svc.Files))
 	add("dependsOn", !slices.Equal(old.DependsOn, svc.DependsOn))
+	add("projectNetworks", !slices.Equal(old.ProjectNetworks, svc.ProjectNetworks))
 	add("middlewares", !sameMiddlewares(old.Middlewares, svc.Middlewares))
 	return out
 }
@@ -832,6 +873,11 @@ func (a *applier) apply(ctx context.Context) error {
 			return fmt.Errorf("create %s: %w", in.Name, err)
 		}
 		a.created[in.Name] = svc.ID
+		if len(in.networks) > 0 {
+			if err := c.store.SetServiceNetworks(ctx, svc.ID, in.networks); err != nil {
+				return fmt.Errorf("networks of %s: %w", in.Name, err)
+			}
+		}
 		queue(svc.ID, svc.Kind)
 	}
 	for _, u := range a.updates {
@@ -841,6 +887,11 @@ func (a *applier) apply(ctx context.Context) error {
 		}
 		if u.deploy && !svc.Stopped && svc.CurrentDeploymentID != "" {
 			queue(svc.ID, svc.Kind)
+		}
+	}
+	for _, op := range a.networkOps {
+		if _, err := c.SetServiceNetworks(ctx, op.id, op.ids); err != nil {
+			return fmt.Errorf("networks of %s: %w", op.name, err)
 		}
 	}
 	for _, op := range a.uptimeOps {
@@ -999,4 +1050,22 @@ func (c *Core) waitDeployments(ctx context.Context, ids []string) bool {
 		}
 	}
 	return true
+}
+
+// externalNetworks maps a service's external networks to the networks
+// created by hand on server, by name; nil when the service lists none.
+func externalNetworks(cs compose.Service, nets []store.Network, server string) ([]string, error) {
+	if cs.Networks == nil {
+		return nil, nil
+	}
+	ids := []string{}
+	for _, name := range cs.ExternalNetworks {
+		i := slices.IndexFunc(nets, func(n store.Network) bool { return n.Name == name && n.ServerID == server })
+		if i < 0 {
+			return nil, fmt.Errorf("network %s doesn't exist on the project's server: create it in Networks first", name)
+		}
+		ids = append(ids, nets[i].ID)
+	}
+	slices.Sort(ids)
+	return ids, nil
 }

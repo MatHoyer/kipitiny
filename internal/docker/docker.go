@@ -42,6 +42,15 @@ func ProjectNetwork(projectID string) string {
 	return "kipitiny-" + projectID
 }
 
+// ProjectNetworkNamed is a project's network of a compose file: name
+// "default" is the project network.
+func ProjectNetworkNamed(projectID, name string) string {
+	if name == "default" {
+		return ProjectNetwork(projectID)
+	}
+	return ProjectNetwork(projectID) + "-" + name
+}
+
 // customNetworkPrefix starts the names of networks created by hand; project
 // IDs never start with "net-".
 const customNetworkPrefix = "kipitiny-net-"

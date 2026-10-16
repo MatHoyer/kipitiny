@@ -508,9 +508,13 @@ type Service struct {
 	// DependsOn names the services of the project that start before this
 	// one (deploys, waking up).
 	DependsOn []Dependency `bun:"depends_on" json:"dependsOn"`
+	// ProjectNetworks are the project's own networks the service is on, by
+	// compose name ("default" is the project network); empty is the
+	// default one only. Services share only the networks they're both on.
+	ProjectNetworks []string `bun:"project_networks" json:"projectNetworks"`
 	// Networks are the IDs of the networks created by hand that the service
-	// joins besides its project network. Set on their own, never by a
-	// compose file, so a git sync keeps them.
+	// joins besides its project networks. Set on their own, or by a compose
+	// file whose service lists networks (external ones).
 	Networks            []string `bun:"networks" json:"networks"`
 	CurrentDeploymentID string   `bun:"current_deployment_id" json:"currentDeploymentId"`
 	// Stopped is the desired run state after the user stopped the service.
