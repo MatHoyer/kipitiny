@@ -400,25 +400,43 @@ func (c *Core) previewSource(ctx context.Context, parent store.Project, branch s
 		if branch != "" {
 			g.Branch = branch
 		}
-		data, _, err := c.gitReadFile(ctx, g)
-		if err != nil {
+		var f compose.File
+		read := false
+		err := c.withGitFile(ctx, g, func(data []byte, _ string, files repoFiles) error {
+			read = true
+			// ${NAME} values the file doesn't get become {{ project.NAME }}:
+			// the preview's variables.
+			var err error
+			f, _, err = compose.Parse(data, compose.Vars{
+				Lookup: func(string) (string, bool) { return "", false },
+				Ref:    func(_, _, name string) string { return "{{ project." + name + " }}" },
+				Files:  files,
+			})
+			return err
+		})
+		if !read {
 			return compose.File{}, nil, "", fmt.Errorf("read %s at %s: %w", g.Path, g.Branch, err)
 		}
-		// ${NAME} values the file doesn't get become {{ project.NAME }}:
-		// the preview's variables.
-		f, _, err := compose.Parse(data, compose.Vars{
-			Lookup: func(string) (string, bool) { return "", false },
-			Ref:    func(_, _, name string) string { return "{{ project." + name + " }}" },
-		})
 		if err != nil {
 			return compose.File{}, nil, "", fmt.Errorf("%w: %s at %s: %v", ErrInvalid, g.Path, g.Branch, err)
 		}
-		for _, s := range f.Services {
+		vars := map[string]string{}
+		for name, s := range f.Services {
 			for k, v := range s.Environment {
 				s.Environment[k] = compose.Escape(v)
 			}
+			// Marshal writes a secret file as the variable giving it: its
+			// content, from the repository or a {{ project.NAME }}.
+			for i, file := range s.Files {
+				if file.Secret {
+					v := varName(name, file.Source)
+					vars[v], s.Files[i].Content = string(file.Content), []byte(v)
+				} else {
+					s.Files[i].Content = []byte(compose.Escape(string(file.Content)))
+				}
+			}
 		}
-		return f, map[string]string{}, g.Branch, nil
+		return f, vars, g.Branch, nil
 	}
 	if !errors.Is(err, store.ErrNotFound) {
 		return compose.File{}, nil, "", err
@@ -442,6 +460,14 @@ func (c *Core) previewSource(ctx context.Context, parent store.Project, branch s
 	for k, v := range vars {
 		if strings.Contains(k, "_BASIC_AUTH_") {
 			keep[k] = v
+		}
+	}
+	// Secret files too: secret NAME is the preview's variable NAME.
+	for name, s := range f.Services {
+		for _, file := range s.Files {
+			if file.Secret {
+				keep[varName(name, file.Source)] = "{{ project." + nonVarRe.ReplaceAllString(strings.ToUpper(strings.TrimPrefix(file.Source, "secret:")), "_") + " }}"
+			}
 		}
 	}
 	return f, keep, branch, nil

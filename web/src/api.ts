@@ -135,6 +135,8 @@ export type Service = {
   dockerSocket: "" | "ro" | "rw";
   /** Command, entrypoint, user, tmpfs… (apps only); empty fields keep the image's. */
   runtime: Runtime;
+  /** Written into the containers before they start: compose configs, secrets, files from git. */
+  files: ServiceFile[];
   /** IDs of the networks created by hand it joins, besides its project network. */
   networks: string[];
   currentDeploymentId: string;
@@ -296,6 +298,19 @@ export type Runtime = {
   devices?: string[];
   privileged?: boolean;
   securityOpt?: string[];
+  /** Host paths mounted, as /host:/container[:ro] (admins only). */
+  binds?: string[];
+};
+
+/** A file written into an app's containers; responses leave its content out. */
+export type ServiceFile = {
+  path: string;
+  size: number;
+  mode?: number;
+  /** A compose secret: its references resolve at deploy. */
+  secret?: boolean;
+  /** config:NAME, secret:NAME, or the repository path it was mounted from. */
+  source?: string;
 };
 
 export type Topology = { servers: ServerTopology[] };

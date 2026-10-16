@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/url"
 	"os"
@@ -22,6 +21,8 @@ import (
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
@@ -299,14 +300,22 @@ func (c *Core) syncGit(ctx context.Context, g store.ProjectGit, force, dryRun bo
 			return ComposePlan{}, nil
 		}
 	}
-	data, commit, err := c.gitReadFile(ctx, g)
-	if err != nil {
+	var a *applier
+	var commit string
+	read := false
+	err = c.withGitFile(ctx, g, func(data []byte, cm string, files repoFiles) error {
+		read, commit = true, cm
+		var err error
+		a, err = c.applyCompose(fromGitSync(ctx), g.ProjectID, data,
+			ApplyOptions{Prune: true, Deploy: true, DryRun: dryRun, Commit: commit, files: files}, true)
+		return err
+	})
+	if !read {
 		if dryRun {
 			return ComposePlan{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 		}
 		return ComposePlan{}, c.gitSynced(g, "", ComposePlan{}, nil, err)
 	}
-	a, err := c.applyCompose(fromGitSync(ctx), g.ProjectID, data, ApplyOptions{Prune: true, Deploy: true, DryRun: dryRun, Commit: commit}, true)
 	if dryRun {
 		if err != nil {
 			return ComposePlan{}, err
@@ -457,25 +466,42 @@ func (c *Core) gitHead(ctx context.Context, g store.ProjectGit) (string, error) 
 	return "", fmt.Errorf("branch %s not found in %s", g.Branch, g.RepoURL)
 }
 
-// gitReadFile shallow-clones the branch into a temporary directory (on
-// disk: memory stays flat whatever the repository's size) and reads the
-// compose file. Returns its content and the commit.
+// gitReadFile reads the compose file of the branch: its content and the
+// commit.
+func (c *Core) gitReadFile(ctx context.Context, g store.ProjectGit) ([]byte, string, error) {
+	var data []byte
+	var commit string
+	err := c.withGitFile(ctx, g, func(d []byte, cm string, _ repoFiles) error {
+		data, commit = d, cm
+		return nil
+	})
+	return data, commit, err
+}
+
+// repoFiles reads a path of the repository relative to the compose file
+// (compose.Vars.Files).
+type repoFiles = func(rel string) ([]store.ServiceFile, error)
+
+// withGitFile shallow-clones the branch into a temporary directory (on
+// disk: memory stays flat whatever the repository's size) and calls fn with
+// the compose file, the commit, and a reader of the repository's other
+// files, valid until fn returns.
 //
 // Unpacking holds the whole commit's files in memory for a moment. Go would
 // keep that memory for minutes before returning it, which shows as the
 // manager's usage: syncs are rare, so it goes back to the OS right away.
-func (c *Core) gitReadFile(ctx context.Context, g store.ProjectGit) ([]byte, string, error) {
+func (c *Core) withGitFile(ctx context.Context, g store.ProjectGit, fn func(data []byte, commit string, files repoFiles) error) error {
 	auth, err := c.gitAuth(ctx, g)
 	if err != nil {
-		return nil, "", err
+		return err
 	}
 	base := filepath.Join(c.cfg.DataDir, "git")
 	if err := os.MkdirAll(base, 0o700); err != nil {
-		return nil, "", err
+		return err
 	}
 	dir, err := os.MkdirTemp(base, "clone-")
 	if err != nil {
-		return nil, "", err
+		return err
 	}
 	defer os.RemoveAll(dir)
 	defer func() {
@@ -492,30 +518,75 @@ func (c *Core) gitReadFile(ctx context.Context, g store.ProjectGit) ([]byte, str
 		Tags:          git.NoTags,
 	})
 	if err != nil {
-		return nil, "", gitAccessError(g, "clone", err)
+		return gitAccessError(g, "clone", err)
 	}
 	head, err := repo.Head()
 	if err != nil {
-		return nil, "", fmt.Errorf("clone %s: %w", g.RepoURL, err)
+		return fmt.Errorf("clone %s: %w", g.RepoURL, err)
 	}
 	commit, err := repo.CommitObject(head.Hash())
 	if err != nil {
-		return nil, "", err
+		return err
 	}
 	f, err := commit.File(g.Path)
 	if err != nil {
-		return nil, "", fmt.Errorf("%s not found on %s: %w", g.Path, g.Branch, err)
+		return fmt.Errorf("%s not found on %s: %w", g.Path, g.Branch, err)
 	}
 	if f.Size > maxComposeBytes {
-		return nil, "", fmt.Errorf("%s is larger than %d bytes", g.Path, maxComposeBytes)
+		return fmt.Errorf("%s is larger than %d bytes", g.Path, maxComposeBytes)
 	}
-	r, err := f.Reader()
+	data, err := f.Contents()
 	if err != nil {
-		return nil, "", err
+		return err
 	}
-	defer r.Close()
-	data, err := io.ReadAll(r)
-	return data, head.Hash().String(), err
+	return fn([]byte(data), head.Hash().String(), func(rel string) ([]store.ServiceFile, error) {
+		return commitFiles(commit, path.Dir(g.Path), rel, g.Branch)
+	})
+}
+
+// commitFiles reads rel, relative to dir, from a commit: a file (Path "")
+// or a directory's files, within a service's limits.
+func commitFiles(commit *object.Commit, dir, rel, branch string) ([]store.ServiceFile, error) {
+	p := path.Clean(path.Join(dir, rel))
+	if p == ".." || strings.HasPrefix(p, "../") || path.IsAbs(rel) {
+		return nil, fmt.Errorf("outside the repository")
+	}
+	read := func(f *object.File, name string) (store.ServiceFile, error) {
+		if f.Mode == filemode.Symlink || f.Mode == filemode.Submodule {
+			return store.ServiceFile{}, fmt.Errorf("%s is a symlink or submodule", path.Join(rel, name))
+		}
+		if f.Size > maxServiceFileBytes {
+			return store.ServiceFile{}, fmt.Errorf("%s is larger than %d MB", path.Join(rel, name), maxServiceFileBytes>>20)
+		}
+		content, err := f.Contents()
+		mode := int64(0o644)
+		if f.Mode == filemode.Executable {
+			mode = 0o755
+		}
+		return store.ServiceFile{Path: name, Content: []byte(content), Mode: mode}, err
+	}
+	if f, err := commit.File(p); err == nil {
+		sf, err := read(f, "")
+		return []store.ServiceFile{sf}, err
+	}
+	tree, err := commit.Tree()
+	if err == nil && p != "." {
+		tree, err = tree.Tree(p)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("not found on %s", branch)
+	}
+	var out []store.ServiceFile
+	total := int64(0)
+	err = tree.Files().ForEach(func(f *object.File) error {
+		if total += f.Size; total > maxServiceFileBytes || len(out) >= maxServiceFiles {
+			return fmt.Errorf("more than %d files or %d MB", maxServiceFiles, maxServiceFileBytes>>20)
+		}
+		sf, err := read(f, f.Name)
+		out = append(out, sf)
+		return err
+	})
+	return out, err
 }
 
 // StartGitSync polls the branches of the projects with auto sync, each on

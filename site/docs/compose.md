@@ -78,7 +78,9 @@ Each key under `services` is a service. Its name is also its hostname inside the
 | `expose` | The container port HTTP is routed to from the domain: `["3000"]`. With several, `x-kipitiny.port` picks one. Same as `x-kipitiny.port`. |
 | `healthcheck` | Docker's healthcheck: `test` (a list starting with `CMD` or `CMD-SHELL`, or a string run by the shell), `interval`, `timeout`, `start_period`, `retries`, or `disable: true`. A new replica takes traffic once it passes. Without `start_period`, it is checked every second while starting. The command runs in the container, so the image needs it (`wget`, `curl`…); `x-kipitiny.health_path` works with any image. Not for databases. |
 | `ports` | Host ports published straight to the container, for traffic that isn't HTTP: `"25565:25565"`, `"9000:9000/udp"`, a range `"8000-8010:8000-8010"`, or the long form `{target: 25565, published: 25565, protocol: tcp, host_ip: 127.0.0.1}`. A host IP (`"127.0.0.1:5432:5432"`, `"[::1]:5432:5432"`) binds that address only, e.g. the server itself; without one, every address. At most 20 ports. An app with published ports runs one replica. HTTP goes through `expose` (or `x-kipitiny.port`) instead. |
-| `volumes` | Named volumes: `name:/path` (`:ro` for read-only) or `{type: volume, source: name, target: /path, read_only: true}`. Shared by the service's replicas, kept across deploys, backed up, managed from the [Files](/docs/files) tab. At most 10. Names: lowercase letters, digits and dashes. An anonymous volume (`/app/node_modules`) is kept as a named one after its path (`app-node-modules`), with a warning. The one bind mount allowed is the Docker socket, `/var/run/docker.sock:/var/run/docker.sock` (`:ro` for read-only); see [Host access](#host-access). |
+| `volumes` | Named volumes: `name:/path` (`:ro` for read-only) or `{type: volume, source: name, target: /path, read_only: true}`. Shared by the service's replicas, kept across deploys, backed up, managed from the [Files](/docs/files) tab. At most 10. Names: lowercase letters, digits and dashes. An anonymous volume (`/app/node_modules`) is kept as a named one after its path (`app-node-modules`), with a warning. Bind mounts: see [Files](#files). |
+| `configs`, `secrets` | Files written into the container: see [Files](#files). |
+| `env_file` | `.env`-style files of the git repository, merged into `environment` (which wins): a path, a list, or `{path: …, required: false}`. Git projects only; elsewhere, use `environment`, a `.env` or the project variables. |
 | `network_mode` | Only `host`: the app runs in the server's network. See [Host access](#host-access). |
 | `deploy` | `replicas` (1–10; databases always 1) and `resources.limits.memory` / `resources.limits.cpus`. |
 | `mem_limit` | Same as `deploy.resources.limits.memory` (`512m`, `1g`, bytes). |
@@ -113,7 +115,19 @@ kipitiny orders, networks and restarts services itself, so these are dropped and
 
 ### Errors
 
-Any other key is refused, because ignoring it would run something different from what the file says: for example `env_file`, `secrets`, `configs`, `profiles`, `extends`, `platform`, `cgroup`, `pid`, `ipc`. Bind mounts (`./data:/data`, `/srv:/srv`, except the Docker socket) and anonymous volumes (`/data`) are refused too: use a named volume. So is any `network_mode` but `host`.
+Any other key is refused, because ignoring it would run something different from what the file says: for example `profiles`, `extends`, `platform`, `cgroup`, `pid`, `ipc`. So is any `network_mode` but `host`.
+
+### Files
+
+Files a service needs, such as a config, a certificate or a script, are written into its containers before they start, so they work on remote servers too. They come from:
+
+- **Top-level `configs`**: `content:` (written as is, `$$` for a literal `$`) works in any project; `file: ./path` reads the repository and `environment: NAME` a compose variable of the `.env` (unlike secrets, not a project variable). A service lists them as `configs: [name]` (at `/name`) or `{source: name, target: /etc/app.conf, mode: 0440}`.
+- **Top-level `secrets`**: the same, at `/run/secrets/name` by default (a relative `target` goes under `/run/secrets`). `environment: NAME` takes the value from the `.env`, else becomes `{{ project.NAME }}`, resolved at deploy like the env's [references](#values-references-and-secrets) (password manager ones too). An export writes them as variables, valued in the `.env`.
+- **Bind mounts of the repository**: `./nginx.conf:/etc/nginx/nginx.conf` or a directory, `./conf:/etc/app`, relative to the compose file. Git projects only, read at each sync: a change in the repository redeploys the service. They're copies: `:ro` is ignored, and nothing the container writes goes back.
+
+At most 100 files and 4 MB per service, not in a volume or `tmpfs` (use a volume for data the app writes), nor with `read_only`. `uid` and `gid` are ignored: files belong to root. Their contents don't show in the API or the UI, only their paths and sizes.
+
+Absolute bind mounts (`/srv/media:/media`) mount a path of the server: admin-only, see [Host access](#host-access). The Docker socket, `/var/run/docker.sock:/var/run/docker.sock` (`:ro` for read-only), has its own setting. Paths starting with `~` are refused.
 
 ### Host access
 
@@ -134,6 +148,7 @@ services:
 - **`network_mode: host`:** the app shares the server's network and listens on its ports directly (open them in the firewall if needed). It has no domain or published ports, isn't on the project network (other services can't reach it by name), runs one replica, and deploys stop the old container before starting the new one.
 - **The Docker socket** is mounted at `/var/run/docker.sock`, from the server's own socket. `:ro` only stops the app from replacing the socket file, not from using it: the app can still create, change and remove containers, so read-only gives no protection.
 - **Capabilities, devices, privileged mode and security options** (`cap_add`, `devices`, `privileged`, `security_opt`) are for VPNs, network tools and hardware (a Zigbee stick, a GPU, `/dev/net/tun`). `privileged` and most capabilities let the app escape its container.
+- **Absolute bind mounts** (`/srv/media:/media`) mount a path of the server, `:ro` for read-only.
 - **External volumes and driver options** reach data beyond the app's own: another volume on the server, a network share, or (with `o: bind`) any path of the host.
 - Any of these gives the app control of the server: only use images you trust. Databases can't have them, previews leave such services out, and only admins can turn them on (a member may still change the app's other settings, or remove them).
 - A service runs on its project's server: to monitor several servers, make one project per server. The Beszel hub itself is a normal app (`henrygd/beszel`, port 8090, a volume at `/beszel_data`). Both are also [one-click templates](/docs/templates).

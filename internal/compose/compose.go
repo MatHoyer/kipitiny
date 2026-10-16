@@ -60,6 +60,8 @@ type Service struct {
 	// Runtime holds command, entrypoint, user, tmpfs…; nil when the file
 	// sets none. Tagged like Healthcheck.
 	Runtime *store.Runtime `json:",omitempty"`
+	// Files are the configs, secrets and repository files bind-mounted.
+	Files []store.ServiceFile `json:",omitempty"`
 	// VarEnv lists the environment keys whose whole value is a ${NAME}
 	// variable: secrets, unless x-kipitiny.secrets says otherwise.
 	VarEnv []string `json:"-"`
@@ -157,7 +159,7 @@ const ExtKey = "x-kipitiny"
 // supportedServiceKeys are the compose service keys Parse reads.
 var supportedServiceKeys = []string{"image", "build", "environment", "ports", "expose", "volumes", "deploy", "mem_limit", "cpus", "stop_grace_period", "network_mode", "healthcheck",
 	"command", "entrypoint", "user", "working_dir", "labels", "tmpfs", "shm_size", "ulimits", "sysctls", "read_only", "init", "stop_signal",
-	"tty", "stdin_open", "extra_hosts", "cap_add", "cap_drop", "devices", "privileged", "security_opt", ExtKey}
+	"tty", "stdin_open", "extra_hosts", "cap_add", "cap_drop", "devices", "privileged", "security_opt", "configs", "secrets", "env_file", ExtKey}
 
 // Keys that change nothing kipitiny can't do itself (it orders, networks
 // and restarts services on its own): dropped with a warning. Any other
@@ -252,7 +254,9 @@ func Marshal(f File) ([]byte, error) {
 		}
 		if r := s.Runtime; r != nil {
 			o.outRuntime = outRuntimeOf(*r)
+			o.Volumes = append(o.Volumes, r.Binds...)
 		}
+		marshalFiles(name, s.Files, &o, &out)
 		if !isZeroExt(x) {
 			o.X = &x
 		}
@@ -285,6 +289,8 @@ type outFile struct {
 	Name     string                `yaml:"name,omitempty"`
 	Services map[string]outService `yaml:"services"`
 	Volumes  map[string]outVolume  `yaml:"volumes,omitempty"`
+	Configs  map[string]outTopFile `yaml:"configs,omitempty"`
+	Secrets  map[string]outTopFile `yaml:"secrets,omitempty"`
 	X        *FileExt              `yaml:"x-kipitiny,omitempty"`
 }
 
@@ -304,6 +310,8 @@ type outService struct {
 	StopGracePeriod string            `yaml:"stop_grace_period,omitempty"`
 	Healthcheck     *outHealthcheck   `yaml:"healthcheck,omitempty"`
 	Deploy          *outDeploy        `yaml:"deploy,omitempty"`
+	Configs         []outFileRef      `yaml:"configs,omitempty"`
+	Secrets         []outFileRef      `yaml:"secrets,omitempty"`
 	outRuntime      `yaml:",inline"`
 	X               *Ext `yaml:"x-kipitiny,omitempty"`
 }
@@ -381,7 +389,7 @@ func EscapeRuntime(r store.Runtime) store.Runtime {
 		return out
 	}
 	r.Command, r.Entrypoint, r.ExtraHosts = list(r.Command), list(r.Entrypoint), list(r.ExtraHosts)
-	r.Devices, r.SecurityOpt = list(r.Devices), list(r.SecurityOpt)
+	r.Devices, r.SecurityOpt, r.Binds = list(r.Devices), list(r.SecurityOpt), list(r.Binds)
 	r.User, r.WorkingDir, r.StopSignal = Escape(r.User), Escape(r.WorkingDir), Escape(r.StopSignal)
 	r.Labels, r.Tmpfs, r.Sysctls = values(r.Labels), values(r.Tmpfs), values(r.Sysctls)
 	return r
@@ -440,6 +448,10 @@ type Vars struct {
 	// environment value (service's key), e.g. a reference to a project
 	// variable.
 	Ref func(service, key, name string) string
+	// Files reads a path of the git repository, relative to the compose
+	// file: the file (Path "") or a directory's files (relative paths). nil
+	// without a repository.
+	Files func(path string) ([]store.ServiceFile, error)
 }
 
 // Parse reads a compose file. Warnings name what was dropped; an error
@@ -467,6 +479,10 @@ func Parse(data []byte, vars Vars) (File, []string, error) {
 			services = v
 		case k == "volumes":
 			p.top = p.topVolumes(v)
+		case k == "configs":
+			p.configs = p.topFiles("config", v)
+		case k == "secrets":
+			p.secrets = p.topFiles("secret", v)
 		case k == ExtKey:
 			p.strict(v, &f.X)
 		case slices.Contains(ignoredTopKeys, k):
@@ -496,13 +512,15 @@ func Parse(data []byte, vars Vars) (File, []string, error) {
 
 type parser struct {
 	vars Vars
-	// top holds the top-level volumes' options, by name.
-	top     map[string]store.Volume
-	svc     string
-	ctx     string
-	warns   []string
-	errs    []string
-	missing []string
+	// top holds the top-level volumes' options, by name; configs and
+	// secrets the top-level ones.
+	top              map[string]store.Volume
+	configs, secrets map[string]topFile
+	svc              string
+	ctx              string
+	warns            []string
+	errs             []string
+	missing          []string
 	// varEnv collects the current service's environment keys written as a
 	// whole ${NAME}.
 	varEnv []string
@@ -591,6 +609,7 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 	hasBuild := false
 	var expose []int
 	var rt store.Runtime
+	var envFile map[string]string
 	for k, v := range pairs(n) {
 		switch {
 		case k == "image":
@@ -606,7 +625,13 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 		case k == "healthcheck":
 			s.Healthcheck = p.healthcheck(v)
 		case k == "volumes":
-			s.Volumes, s.DockerSocket = p.volumes(v, &rt)
+			s.Volumes, s.DockerSocket = p.volumes(v, &rt, &s.Files)
+		case k == "configs":
+			p.fileRefs("config", v, p.configs, &s.Files)
+		case k == "secrets":
+			p.fileRefs("secret", v, p.secrets, &s.Files)
+		case k == "env_file":
+			envFile = p.envFiles(v)
 		case k == "network_mode":
 			if mode := p.str(v); mode == "host" {
 				s.HostNetwork = true
@@ -648,6 +673,11 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 	if !rt.IsZero() {
 		s.Runtime = &rt
 	}
+	if len(envFile) > 0 {
+		// environment wins over env_file, as in Compose.
+		maps.Copy(envFile, s.Environment)
+		s.Environment = envFile
+	}
 	s.VarEnv = slices.Compact(slices.Sorted(slices.Values(p.varEnv)))
 	p.varEnv = nil
 	if s.X.Kind == "" {
@@ -666,9 +696,9 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 		if s.HostNetwork || s.DockerSocket != "" {
 			p.fail("a %s service can't use the host network or the Docker socket", s.X.Kind)
 		}
-		if s.Runtime != nil {
-			p.warn("command, user, tmpfs and the like of a %s service are ignored (the manager runs it)", s.X.Kind)
-			s.Runtime = nil
+		if s.Runtime != nil || s.Files != nil {
+			p.warn("command, user, files and the like of a %s service are ignored (the manager runs it)", s.X.Kind)
+			s.Runtime, s.Files = nil, nil
 		}
 	}
 	return s
@@ -796,7 +826,7 @@ func (p *parser) ports(n *yaml.Node) []store.PublishedPort {
 
 // volumes reads named volumes, and the Docker socket's bind mount ("ro"
 // or "rw"; "" without one).
-func (p *parser) volumes(n *yaml.Node, rt *store.Runtime) ([]store.Volume, string) {
+func (p *parser) volumes(n *yaml.Node, rt *store.Runtime, files *[]store.ServiceFile) ([]store.Volume, string) {
 	var out []store.Volume
 	socket := ""
 	if n.Kind != yaml.SequenceNode {
@@ -860,8 +890,20 @@ func (p *parser) volumes(n *yaml.Node, rt *store.Runtime) ([]store.Volume, strin
 			} else if socket = "rw"; readOnly {
 				socket = "ro"
 			}
+		case typ == "bind" && isRepoPath(v.Name):
+			if readOnly {
+				// Copies: the container may change them, nothing goes back.
+				p.warn("volume %s: read-only is ignored (the files are copied into the container)", v.Name)
+			}
+			p.bindFiles(v.Name, v.Path, files)
+		case typ == "bind" && strings.HasPrefix(v.Name, "/"):
+			bind := v.Name + ":" + v.Path
+			if readOnly {
+				bind += ":ro"
+			}
+			rt.Binds = append(rt.Binds, bind)
 		case typ == "bind":
-			p.fail("volume %s: bind mounts are not supported (only %s), use a named volume", v.Name, DockerSocket)
+			p.fail("volume %s: bind mounts take a path relative to the compose file (./) or an absolute host path", v.Name)
 		case typ == "tmpfs":
 			if rt.Tmpfs == nil {
 				rt.Tmpfs = map[string]string{}

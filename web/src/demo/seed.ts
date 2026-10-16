@@ -104,6 +104,7 @@ export function service(p: Partial<Service> & Pick<Service, "id" | "name" | "kin
     hostNetwork: false,
     dockerSocket: "",
     runtime: {},
+    files: [],
     networks: [],
     currentDeploymentId: `dep-${p.id}`,
     stopped: false,

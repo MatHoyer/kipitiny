@@ -262,7 +262,7 @@ func checkServiceChange(ctx context.Context, old, svc store.Service) error {
 		return fmt.Errorf("%w: only admins give an app the host's network or Docker socket", ErrForbidden)
 	}
 	if svc.Runtime.HostAccess() && !reflect.DeepEqual(runtimeHostAccess(svc.Runtime), runtimeHostAccess(old.Runtime)) {
-		return fmt.Errorf("%w: only admins give an app capabilities, devices, privileged mode or security options", ErrForbidden)
+		return fmt.Errorf("%w: only admins give an app capabilities, devices, privileged mode, security options or host paths", ErrForbidden)
 	}
 	if hv := volumesHostAccess(svc.Volumes); len(hv) > 0 && !reflect.DeepEqual(hv, volumesHostAccess(old.Volumes)) {
 		return fmt.Errorf("%w: only admins mount external volumes or set volume driver options", ErrForbidden)

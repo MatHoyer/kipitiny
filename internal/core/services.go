@@ -72,6 +72,8 @@ type ServiceInput struct {
 	DockerSocket string `json:"dockerSocket"`
 	// Runtime holds command, entrypoint, user, tmpfs… (apps only).
 	Runtime store.Runtime `json:"runtime"`
+	// Files are written into the app's containers (apps only).
+	Files []store.ServiceFile `json:"files"`
 	// Password is a new database's password, from a compose export; empty
 	// generates one. Not settable through the API.
 	Password string `json:"-"`
@@ -108,6 +110,9 @@ type ServicePatch struct {
 	DockerSocket     *string               `json:"dockerSocket"`
 	// Runtime replaces the app's runtime settings; nil keeps them.
 	Runtime *store.Runtime `json:"runtime"`
+	// Files replaces the app's files; nil keeps them. A file without its
+	// content keeps the stored one.
+	Files []store.ServiceFile `json:"files"`
 }
 
 type ContainerView struct {
@@ -196,6 +201,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		HostNetwork:      in.HostNetwork,
 		DockerSocket:     in.DockerSocket,
 		Runtime:          normalizeRuntime(in.Runtime),
+		Files:            normalizeFiles(in.Files, nil),
 	}
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
@@ -381,6 +387,9 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 	if p.Runtime != nil {
 		svc.Runtime = normalizeRuntime(*p.Runtime)
 	}
+	if p.Files != nil {
+		svc.Files = normalizeFiles(p.Files, old.Files)
+	}
 	if p.Middlewares != nil {
 		if svc.Middlewares, err = mergeMiddlewares(*p.Middlewares, old.Middlewares); err != nil {
 			return store.Service{}, err
@@ -423,7 +432,7 @@ func (c *Core) validateIn(ctx context.Context, s store.Service, project store.Pr
 		// Each deploy resets it: a preview is a cheap copy, not a load test.
 		return fmt.Errorf("%w: previews run one replica of each service", ErrInvalid)
 	}
-	if err := c.checkSecretSchemes(ctx, s.Env); err != nil {
+	if err := c.checkSecretSchemes(ctx, refEnv(s)); err != nil {
 		return err
 	}
 	if err := c.checkBasicAuthSchemes(ctx, s.Middlewares); err != nil {
@@ -438,7 +447,7 @@ func (c *Core) validateIn(ctx context.Context, s store.Service, project store.Pr
 		return fmt.Errorf("%w: behind a Cloudflare tunnel, an app with published ports can't also route HTTP on its domain: "+
 			"its record must point at the server; clear the container port, or serve HTTP from another service", ErrInvalid)
 	}
-	return checkRefs(s.Env, envSources{project: project.Env, dbs: dbs})
+	return checkRefs(refEnv(s), envSources{project: project.Env, dbs: dbs})
 }
 
 // IconHint names the logo for svc: its icon, else its image's base name
@@ -487,8 +496,8 @@ func validateService(s store.Service) error {
 		if s.HostNetwork || s.DockerSocket != "" {
 			return fmt.Errorf("%w: databases can't use the host network or the Docker socket", ErrInvalid)
 		}
-		if !s.Runtime.IsZero() {
-			return fmt.Errorf("%w: the manager sets how a database runs (command, user…)", ErrInvalid)
+		if !s.Runtime.IsZero() || len(s.Files) > 0 {
+			return fmt.Errorf("%w: the manager sets how a database runs (command, user, files…)", ErrInvalid)
 		}
 		return validateDatabase(s)
 	}
@@ -505,6 +514,9 @@ func validateService(s store.Service) error {
 		return err
 	}
 	if err := validateRuntime(s); err != nil {
+		return err
+	}
+	if err := validateFiles(s); err != nil {
 		return err
 	}
 	if s.StopGraceSeconds < 0 || s.StopGraceSeconds > maxStopGraceSeconds {
@@ -690,6 +702,12 @@ func masked(s store.Service) store.Service {
 	if s.PublishedPorts == nil {
 		s.PublishedPorts = []store.PublishedPort{}
 	}
+	files := make([]store.ServiceFile, len(s.Files))
+	for i, f := range s.Files {
+		f.Content = nil // can be large, and secret: Size says how large
+		files[i] = f
+	}
+	s.Files = files
 	s.Middlewares = maskMiddlewares(s.Middlewares)
 	return s
 }

@@ -502,6 +502,9 @@ type Service struct {
 	// Runtime holds the rarer container settings (command, user, tmpfs…);
 	// the zero value runs the image as built. Apps only.
 	Runtime Runtime `bun:"runtime,type:text" json:"runtime"`
+	// Files are written into an app's containers before they start: compose
+	// configs, secrets and files bind-mounted from a git repository.
+	Files []ServiceFile `bun:"files" json:"files"`
 	// Networks are the IDs of the networks created by hand that the service
 	// joins besides its project network. Set on their own, never by a
 	// compose file, so a git sync keeps them.
@@ -633,6 +636,25 @@ type Runtime struct {
 	// Privileged gives the container every capability and device.
 	Privileged  bool     `json:"privileged,omitempty"`
 	SecurityOpt []string `json:"securityOpt,omitempty"`
+	// Binds mount host paths, as /host:/container[:ro].
+	Binds []string `json:"binds,omitempty"`
+}
+
+// ServiceFile is a file written into an app's containers before they start.
+type ServiceFile struct {
+	// Path is where it goes in the container (absolute).
+	Path string `json:"path"`
+	// Content is left out of API responses (see Size).
+	Content []byte `json:"content,omitempty"`
+	Size    int    `json:"size"`
+	// Mode is its permission bits; 0 is 0644.
+	Mode int64 `json:"mode,omitempty"`
+	// Secret marks a compose secret: its references ({{ project.X }}…)
+	// resolve at deploy, and an export writes it as a variable.
+	Secret bool `json:"secret,omitempty"`
+	// Source is what the compose file named: config:NAME, secret:NAME, or
+	// the bind-mounted path in the repository.
+	Source string `json:"source,omitempty"`
 }
 
 // Ulimit is a soft and hard limit; compose's single value sets both.
@@ -651,7 +673,7 @@ func (r Runtime) IsZero() bool {
 // HostAccess reports whether r loosens the container's isolation, which
 // gives control of the server, like the Docker socket.
 func (r Runtime) HostAccess() bool {
-	return len(r.CapAdd) > 0 || len(r.Devices) > 0 || r.Privileged || len(r.SecurityOpt) > 0
+	return len(r.CapAdd) > 0 || len(r.Devices) > 0 || r.Privileged || len(r.SecurityOpt) > 0 || len(r.Binds) > 0
 }
 
 // Middlewares are the Traefik middlewares on an app's router; the zero

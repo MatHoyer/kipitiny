@@ -333,6 +333,6 @@ func (c *Core) recreateReplica(ctx context.Context, project store.Project, svc s
 	if err != nil {
 		return err
 	}
-	_, err = c.runContainer(ctx, dk, replicaSpec(project, svc, src, deployID, replica, probe, c.routeFor(ctx, svc)))
+	_, err = c.runContainer(ctx, dk, replicaSpec(project, svc, src, deployID, replica, probe, c.routeFor(ctx, svc)), serviceFiles(svc, src)...)
 	return err
 }

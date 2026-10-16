@@ -128,6 +128,17 @@ func exportFile(p store.Project, svcs []store.Service, checks map[string]store.U
 			r := compose.EscapeRuntime(s.Runtime)
 			cs.Runtime = &r
 		}
+		for _, f := range s.Files {
+			if f.Secret { // written as the variable it comes from
+				name := varName(s.Name, f.Source)
+				secret(name, string(f.Content))
+				f.Content = []byte(name)
+			} else {
+				f.Content = []byte(compose.Escape(string(f.Content)))
+			}
+			f.Size = 0
+			cs.Files = append(cs.Files, f)
+		}
 		for _, v := range s.Volumes {
 			if volumeUsers[v.Name] > 1 {
 				v.Name = s.Name + "-" + v.Name
@@ -232,6 +243,9 @@ type ApplyOptions struct {
 	Deploy bool `json:"deploy"`
 	// Commit is the source revision, recorded on the deployments.
 	Commit string `json:"commit,omitempty"`
+	// files reads the git repository's files (compose.Vars.Files); nil
+	// without one.
+	files func(path string) ([]store.ServiceFile, error)
 	// afterDatabases runs once the databases deployed, before the apps,
 	// with the services created by name (a preview's seed).
 	afterDatabases func(ctx context.Context, created map[string]string)
@@ -323,9 +337,13 @@ func (c *Core) planCompose(ctx context.Context, project store.Project, existing 
 				if v, had := old.Env[key]; had {
 					return v
 				}
+				if i := slices.IndexFunc(old.Files, func(f store.ServiceFile) bool { return f.Source == key }); i >= 0 {
+					return string(old.Files[i].Content)
+				}
 			}
 			return "{{ project." + name + " }}"
 		},
+		Files: opts.files,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
@@ -526,6 +544,7 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 	if cs.Runtime != nil {
 		in.Runtime = *cs.Runtime
 	}
+	in.Files = cs.Files
 	if in.Secrets == nil {
 		// Without x-kipitiny.secrets, a value given as a whole ${NAME} is a
 		// secret, unless it became a reference (a project variable keeps
@@ -708,6 +727,7 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 		HostNetwork:      &in.HostNetwork,
 		DockerSocket:     &in.DockerSocket,
 		Runtime:          &in.Runtime,
+		Files:            in.Files,
 	}
 	if in.Image == "" { // a database on the default image
 		p.Image = nil
@@ -720,6 +740,9 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 	}
 	if p.Tags == nil {
 		p.Tags = []string{}
+	}
+	if p.Files == nil {
+		p.Files = []store.ServiceFile{}
 	}
 	if old.Kind.IsDatabase() {
 		if in.MemoryMB == 0 {
@@ -760,6 +783,7 @@ func changedFields(old, svc store.Service) []string {
 	add("hostNetwork", old.HostNetwork != svc.HostNetwork)
 	add("dockerSocket", old.DockerSocket != svc.DockerSocket)
 	add("runtime", !reflect.DeepEqual(old.Runtime, svc.Runtime))
+	add("files", !sameFiles(old.Files, svc.Files))
 	add("middlewares", !sameMiddlewares(old.Middlewares, svc.Middlewares))
 	return out
 }
