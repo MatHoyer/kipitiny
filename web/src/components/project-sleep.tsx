@@ -39,6 +39,7 @@ export function SleepCard({ project, services, disabled }: { project: Project; s
   };
   return (
     <Section
+      id="sleep"
       title={
         <span className="flex items-center gap-2">
           Sleep mode

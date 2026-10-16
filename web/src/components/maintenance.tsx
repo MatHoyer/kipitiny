@@ -104,6 +104,7 @@ export function MaintenanceCard({ project }: { project: Project }) {
   };
   return (
     <Section
+      id="maintenance"
       title={<Applies title="Maintenance" when="now" />}
       description={
         <>
@@ -258,6 +259,7 @@ export function StartingCard({ project }: { project: Project }) {
   };
   return (
     <Section
+      id="starting"
       title={<Applies title="Starting page" when="now" />}
       description={
         <>

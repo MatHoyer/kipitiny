@@ -16,7 +16,10 @@ export function Section({
   children,
   className,
   plain,
+  id,
 }: {
+  /** Anchor for links to the card, e.g. `?tab=settings#maintenance`. */
+  id?: string;
   title?: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
@@ -27,7 +30,7 @@ export function Section({
 }) {
   if (plain)
     return (
-      <section className={cn("space-y-4", className)}>
+      <section id={id} className={cn("scroll-mt-20 space-y-4", className)}>
         {(title || description || actions) && (
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div className="space-y-1">
@@ -41,7 +44,7 @@ export function Section({
       </section>
     );
   return (
-    <Card className={className}>
+    <Card id={id} className={cn("scroll-mt-20", className)}>
       {(title || description || actions) && (
         <CardHeader>
           {title && <CardTitle>{title}</CardTitle>}

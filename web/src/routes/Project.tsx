@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Box, Construction, ChevronLeft, Database, GitBranch, GitPullRequestArrow, Layers, Plus, Trash2, TriangleAlert } from "lucide-react";
-import { lazy, Suspense, useId, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { lazy, Suspense, useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { ServiceIcon, ServiceIconTile } from "@/components/service-icon";
 import { ChoiceTile, CopyButton, DangerZone, EmptyState, ErrorText, Mono, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
@@ -80,6 +80,12 @@ export function Project() {
     if (res.error) toast.warning("Some services were not backed up", { description: res.error });
   };
   const hasBackups = services.data?.some(canBackup);
+  // Links like ?tab=settings#maintenance land on their card once it renders.
+  const { hash } = useLocation();
+  const settingsReady = tab === "settings" && !!project.data && !!services.data;
+  useEffect(() => {
+    if (settingsReady && hash) document.getElementById(hash.slice(1))?.scrollIntoView({ block: "start" });
+  }, [settingsReady, hash]);
   const memory = memoryOf(useUsage().data, (u) => u.projectId === id);
   const rename = useMutation({
     meta: { error: "Couldn't rename the project" },
@@ -164,7 +170,7 @@ export function Project() {
           <p role="status" className="flex flex-wrap items-center gap-x-2 text-sm text-amber-600 dark:text-amber-400">
             <Construction className="size-4" />
             Maintenance mode: visitors of the project&apos;s apps get the maintenance page.
-            <Link to="?tab=settings" replace className="underline underline-offset-4">
+            <Link to="?tab=settings#maintenance" replace className="underline underline-offset-4">
               Settings
             </Link>
           </p>
@@ -259,17 +265,21 @@ export function Project() {
                 onSave={(tags) => setTags.mutate(tags)}
               />
             )}
-            {project.data && services.data && may("settings") && (
-              <SleepCard key={project.data.sleepAfterSeconds} project={project.data} services={services.data} />
+            {project.data && ((services.data && may("settings")) || (may("deploy") && list.some(httpRouted))) && (
+              // One card: the starting page is what a sleeping project shows.
+              <div className="divide-y overflow-hidden rounded-xl ring-1 ring-foreground/10 *:data-[slot=card]:rounded-none *:data-[slot=card]:ring-0">
+                {services.data && may("settings") && (
+                  <SleepCard key={project.data.sleepAfterSeconds} project={project.data} services={services.data} />
+                )}
+                {may("deploy") && list.some(httpRouted) && <StartingCard key={`starting-${project.data.id}`} project={project.data} />}
+              </div>
             )}
             {project.data && may("deploy") && list.some(httpRouted) && (
-              <>
-                <MaintenanceCard key={`maintenance-${project.data.id}`} project={project.data} />
-                <StartingCard key={`starting-${project.data.id}`} project={project.data} />
-              </>
+              <MaintenanceCard key={`maintenance-${project.data.id}`} project={project.data} />
             )}
             {hasBackups && may("backups") && (
               <Section
+                id="backup"
                 title="Back up data"
                 description="Back up every database and app volume of the project now, to one storage."
                 actions={

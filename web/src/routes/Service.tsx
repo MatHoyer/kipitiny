@@ -168,7 +168,7 @@ export function Service() {
           <p role="status" className="flex flex-wrap items-center gap-x-2 text-sm text-amber-600 dark:text-amber-400">
             <Construction className="size-4" />
             Maintenance mode: visitors of the project&apos;s apps get the maintenance page.
-            <Link to={`/projects/${svc.projectId}?tab=settings`} className="underline underline-offset-4">
+            <Link to={`/projects/${svc.projectId}?tab=settings#maintenance`} className="underline underline-offset-4">
               Project settings
             </Link>
           </p>
