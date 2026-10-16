@@ -724,3 +724,34 @@ networks:
 		}
 	}
 }
+
+func TestProfiles(t *testing.T) {
+	f, warns, err := Parse([]byte(`
+services:
+  web: {image: a}
+  mailpit: {image: axllent/mailpit, profiles: [preview]}
+  mailer: {image: a, x-kipitiny: {preview: skip}}
+  debug: {image: a, profiles: [debug]}
+`), Vars{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Services["mailpit"].X.Preview != "only" || f.Services["mailer"].X.Preview != "skip" || f.Services["web"].X.Preview != "" {
+		t.Errorf("services = %+v", f.Services)
+	}
+	if _, ok := f.Services["debug"]; ok || len(warns) != 1 || !strings.Contains(warns[0], "service debug: skipped") {
+		t.Errorf("debug kept or warns = %v", warns)
+	}
+	data, _ := Marshal(f)
+	if !strings.Contains(string(data), "preview: only") {
+		t.Errorf("marshal:\n%s", data)
+	}
+	for in, want := range map[string]string{
+		"services: {a: {image: a, x-kipitiny: {preview: maybe}}}":                     "preview must be only or skip",
+		"services: {a: {image: a, profiles: [preview], x-kipitiny: {preview: skip}}}": "contradict",
+	} {
+		if _, _, err := Parse([]byte(in), Vars{}); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: err = %v, want %q", in, err, want)
+		}
+	}
+}

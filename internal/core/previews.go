@@ -498,7 +498,7 @@ func previewFile(f *compose.File, parent store.Project, name string, settings st
 	var warnings []string
 	routed := 0
 	for _, s := range f.Services {
-		if s.X.Domain != "" && s.X.Port > 0 {
+		if s.X.Domain != "" && s.X.Port > 0 && s.X.Preview != "skip" {
 			routed++
 		}
 	}
@@ -510,6 +510,12 @@ func previewFile(f *compose.File, parent store.Project, name string, settings st
 			delete(f.Services, svcName)
 			continue
 		}
+		if s.X.Preview == "skip" {
+			warnings = append(warnings, fmt.Sprintf("%s left out: %s.preview is skip", svcName, compose.ExtKey))
+			delete(f.Services, svcName)
+			continue
+		}
+		s.X.Preview = "" // the preview's own service
 		if len(s.Ports) > 0 {
 			warnings = append(warnings, fmt.Sprintf("%s: published ports left out (the parent holds them)", svcName))
 			s.Ports = nil

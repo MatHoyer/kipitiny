@@ -235,3 +235,48 @@ func TestPreviewOneReplica(t *testing.T) {
 		t.Fatalf("the parent scales: %v", err)
 	}
 }
+
+func TestPreviewOnly(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := []byte(`
+services:
+  web: {image: a, x-kipitiny: {domain: shop.example.com, port: 80}}
+  mailpit: {image: axllent/mailpit, profiles: [preview], x-kipitiny: {domain: mail.example.com, port: 8025}}
+  mailer: {image: a, x-kipitiny: {preview: skip}}
+`)
+	a, err := c.applyCompose(ctx, p.ID, src, ApplyOptions{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svcs, _ := c.store.ListServices(ctx, p.ID)
+	if len(svcs) != 2 || slices.ContainsFunc(svcs, func(s store.Service) bool { return s.Name == "mailpit" }) {
+		t.Errorf("parent services = %v", svcs)
+	}
+	if !slices.ContainsFunc(a.plan.Warnings, func(w string) bool { return strings.Contains(w, "mailpit runs in previews only") }) {
+		t.Errorf("warnings = %v", a.plan.Warnings)
+	}
+	// A second sync neither creates nor prunes it.
+	if a, err = c.applyCompose(ctx, p.ID, src, ApplyOptions{Prune: true, DryRun: true}, true); err != nil || len(a.plan.Create)+len(a.plan.Delete) > 0 {
+		t.Errorf("resync: %v %+v", err, a.plan)
+	}
+
+	f, _, err := compose.Parse(src, compose.Vars{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	warnings, err := previewFile(&f, p, "pr-1", store.PreviewSettings{BaseDomain: "preview.example.com"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := f.Services["mailer"]; ok || f.Services["mailpit"].X.Preview != "" || f.Services["mailpit"].X.Domain != "pr-1-mailpit.preview.example.com" {
+		t.Errorf("preview services = %+v", f.Services)
+	}
+	if !slices.ContainsFunc(warnings, func(w string) bool { return strings.Contains(w, "mailer left out") }) {
+		t.Errorf("warnings = %v", warnings)
+	}
+}

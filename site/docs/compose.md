@@ -105,6 +105,7 @@ Each key under `services` is a service. Its name is also its hostname inside the
 | `privileged` | `true` gives the container every capability and device. See [Host access](#host-access). |
 | `security_opt` | Security options: `no-new-privileges:true`, `apparmor=unconfined`, `seccomp=unconfined`… See [Host access](#host-access). |
 | `networks` | The networks the service is on, a list or a mapping (aliases, addresses and other options are ignored). Without the key, it's on the project's network with every other service. Networks declared at the top level are the project's own: services share only the networks they're both on, so a `back` network keeps the database away from the public front. `default` is the project network. A network declared `external: true` (with `name:` when it's named otherwise) is a [network created by hand](/docs/services#networks) with that name on the project's server, shared with other projects; it must exist. A service listing networks gets exactly the networks created by hand it lists; one without the key keeps those set in the UI. A service listing only external networks stays on the project network too. Top-level options other than `external` and `name` are ignored. |
+| `profiles` | `[preview]` makes a service of [previews](/docs/previews) only (`x-kipitiny.preview: only`). A service with other profiles only is skipped, with a warning: kipitiny runs no other profile. |
 | `depends_on` | Services of the file started first, on deploy and when the project [wakes up](/docs/sleep): a list of names, or `{db: {condition: service_healthy}}`. `service_started` (the default) only orders; `service_healthy` waits until it's ready (its healthcheck, or running for 5 s); `service_completed_successfully` waits until a job exits 0. When the deploy of such a service fails, its dependents aren't deployed: their deployment shows as *skipped*, and their previous version keeps running. Databases always start first. Unknown names and cycles are errors; `required` and `restart` are ignored. Renaming a service updates the references. |
 | `restart` | `always` and `unless-stopped` are kipitiny's own behaviour: a stopped container is started again. `"no"` makes the service a **job** (a migration, a seed): a deploy waits until it exits 0 (at most 3 minutes), it isn't restarted afterwards nor when the project wakes up, and a job that exited 0 counts as healthy. `on-failure` (or `on-failure:3`, the retries) lets Docker restart it while it fails; it counts as ready once it runs like an app, or exits 0. |
 | `extends` | Starts from another service: `extends: base`, or `{service: base, file: common.yml}` from another file of the repository (git projects only). Mappings such as `environment` merge, `ports`, `volumes` and other lists add up (a volume, config or secret at the same target replaces the base's), other keys replace the base's. Relative paths in the other file stay relative to it. |
@@ -119,7 +120,7 @@ kipitiny networks services itself, so these are dropped and reported: `container
 
 ### Errors
 
-Any other key is refused, because ignoring it would run something different from what the file says: for example `profiles`, `platform`, `cgroup`, `pid`, `ipc`. So is any `network_mode` but `host`.
+Any other key is refused, because ignoring it would run something different from what the file says: for example `platform`, `cgroup`, `pid`, `ipc`. So is any `network_mode` but `host`.
 
 ### Files
 
@@ -168,6 +169,7 @@ services:
 | `pre_deploy` | shell command | apps | Runs once (`sh -c`) in a one-off container before a rollout, e.g. migrations. A failure aborts the deploy. |
 | `pre_backup` | shell command | apps | Runs in a running replica before each volume backup, e.g. to flush to disk. |
 | `icon` | name | all | Logo the UI shows (e.g. `ghost`, `n8n`). Default: from the kind or image. |
+| `preview` | `only` \| `skip` | all | `only`: the service runs in [previews](/docs/previews) alone, e.g. a mail catcher, never in the project itself (same as `profiles: [preview]`). `skip`: left out of previews, e.g. a scheduler emailing real customers. Git projects only: previews read the file. |
 | `tags` | list of names | all | [Tags](/docs/services#tags) grouping the service in the UI (up to 10, lowercased). Without it, the service has none: applying the file removes the ones set in the UI. |
 | `secrets` | list of env keys | apps | Which `environment` entries are secrets (write-only in the UI and API, masked everywhere, exported only with secrets). Without it, the values given as `${NAME}` are (see [Values](#values-references-and-secrets)). |
 | `password` | string, usually `${NAME}` | databases | The database's password at creation, to keep the credentials of a moved database. Empty generates one. It can't change afterwards. |
