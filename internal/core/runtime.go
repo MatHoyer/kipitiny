@@ -23,6 +23,7 @@ var (
 	stopSignalRe = regexp.MustCompile(`^(SIG)?[A-Z][A-Z0-9+-]*$|^[0-9]{1,2}$`)
 	sysctlRe     = regexp.MustCompile(`^[a-z0-9_]+(\.[a-z0-9_-]+)+$`)
 	labelKeyRe   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*$`)
+	capRe        = regexp.MustCompile(`^[A-Z][A-Z_]*$`)
 	ulimitNames  = []string{"core", "cpu", "data", "fsize", "locks", "memlock", "msgqueue", "nice", "nofile", "nproc", "rss", "rtprio", "rttime", "sigpending", "stack"}
 )
 
@@ -50,6 +51,20 @@ func normalizeRuntime(r store.Runtime) store.Runtime {
 	}
 	if len(r.Sysctls) == 0 {
 		r.Sysctls = nil
+	}
+	caps := func(l []string) []string {
+		var out []string
+		for _, c := range l {
+			out = append(out, strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(c)), "CAP_"))
+		}
+		return out
+	}
+	r.CapAdd, r.CapDrop = caps(r.CapAdd), caps(r.CapDrop)
+	if len(r.Devices) == 0 {
+		r.Devices = nil
+	}
+	if len(r.SecurityOpt) == 0 {
+		r.SecurityOpt = nil
 	}
 	return r
 }
@@ -111,6 +126,27 @@ func validateRuntime(s store.Service) error {
 	if r.StopSignal != "" && !stopSignalRe.MatchString(r.StopSignal) {
 		return invalid("stop signal must be a signal name (SIGINT) or number")
 	}
+	for _, c := range append(slices.Clone(r.CapAdd), r.CapDrop...) {
+		if !capRe.MatchString(c) {
+			return invalid("invalid capability %q", c)
+		}
+	}
+	for _, d := range r.Devices {
+		parts := strings.Split(d, ":")
+		perms := ""
+		if len(parts) == 3 {
+			perms = parts[2]
+		}
+		if len(parts) > 3 || !path.IsAbs(parts[0]) || (len(parts) > 1 && !path.IsAbs(parts[1])) ||
+			strings.Trim(perms, "rwm") != "" {
+			return invalid("device %q must be /dev/host[:/dev/container[:rwm]]", d)
+		}
+	}
+	for _, o := range r.SecurityOpt {
+		if o == "" || strings.ContainsAny(o, " \t\n") {
+			return invalid("invalid security option %q", o)
+		}
+	}
 	for _, h := range r.ExtraHosts {
 		host, ip, ok := strings.Cut(h, ":")
 		if !ok || host == "" || strings.ContainsAny(host, " \t") || (ip != "host-gateway" && net.ParseIP(ip) == nil) {
@@ -147,4 +183,31 @@ func applyRuntime(cfg *container.Config, host *container.HostConfig, r store.Run
 		host.Init = &r.Init
 	}
 	host.ExtraHosts = slices.Clone(r.ExtraHosts)
+	host.CapAdd = slices.Clone(r.CapAdd)
+	if slices.Contains(r.CapAdd, "NET_RAW") || slices.Contains(r.CapAdd, "ALL") || r.Privileged {
+		host.CapDrop = slices.DeleteFunc(host.CapDrop, func(c string) bool { return c == "NET_RAW" })
+	}
+	for _, c := range r.CapDrop {
+		if !slices.Contains(host.CapDrop, c) {
+			host.CapDrop = append(host.CapDrop, c)
+		}
+	}
+	host.Privileged = r.Privileged
+	host.SecurityOpt = slices.Clone(r.SecurityOpt)
+	for _, d := range r.Devices {
+		parts := append(strings.Split(d, ":"), "", "")
+		m := container.DeviceMapping{PathOnHost: parts[0], PathInContainer: parts[1], CgroupPermissions: parts[2]}
+		if m.PathInContainer == "" {
+			m.PathInContainer = m.PathOnHost
+		}
+		if m.CgroupPermissions == "" {
+			m.CgroupPermissions = "rwm"
+		}
+		host.Devices = append(host.Devices, m)
+	}
+}
+
+// runtimeHostAccess is the part of r only admins change.
+func runtimeHostAccess(r store.Runtime) store.Runtime {
+	return store.Runtime{CapAdd: r.CapAdd, Devices: r.Devices, Privileged: r.Privileged, SecurityOpt: r.SecurityOpt}
 }

@@ -261,6 +261,9 @@ func checkServiceChange(ctx context.Context, old, svc store.Service) error {
 	if (svc.HostNetwork && !old.HostNetwork) || (svc.DockerSocket != "" && svc.DockerSocket != old.DockerSocket) {
 		return fmt.Errorf("%w: only admins give an app the host's network or Docker socket", ErrForbidden)
 	}
+	if svc.Runtime.HostAccess() && !reflect.DeepEqual(runtimeHostAccess(svc.Runtime), runtimeHostAccess(old.Runtime)) {
+		return fmt.Errorf("%w: only admins give an app capabilities, devices, privileged mode or security options", ErrForbidden)
+	}
 	if !maps.Equal(svc.Env, old.Env) || !slices.Equal(svc.Secrets, old.Secrets) {
 		if err := Authorize(ctx, svc.ProjectID, PermEnv); err != nil {
 			return err

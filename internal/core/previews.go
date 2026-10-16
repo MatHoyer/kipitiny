@@ -478,7 +478,7 @@ func previewFile(f *compose.File, parent store.Project, name string, settings st
 	}
 	for _, svcName := range f.ServiceNames() {
 		s := f.Services[svcName]
-		if s.HostNetwork || s.DockerSocket != "" {
+		if s.HostNetwork || s.DockerSocket != "" || (s.Runtime != nil && s.Runtime.HostAccess()) {
 			warnings = append(warnings, fmt.Sprintf("%s left out: previews don't get host access", svcName))
 			delete(f.Services, svcName)
 			continue

@@ -86,10 +86,32 @@ func (p *parser) runtimeKey(k string, v *yaml.Node, rt *store.Runtime) bool {
 			rt.ExtraHosts = append(rt.ExtraHosts, host+":"+ip)
 		}
 		slices.Sort(rt.ExtraHosts)
+	case "cap_add":
+		rt.CapAdd = p.list(k, v)
+	case "cap_drop":
+		rt.CapDrop = p.list(k, v)
+	case "devices":
+		rt.Devices = p.list(k, v)
+	case "privileged":
+		rt.Privileged = p.bool(v)
+	case "security_opt":
+		rt.SecurityOpt = p.list(k, v)
 	default:
 		return false
 	}
 	return true
+}
+
+func (p *parser) list(k string, n *yaml.Node) []string {
+	if n.Kind != yaml.SequenceNode {
+		p.fail("%s must be a list", k)
+		return nil
+	}
+	var out []string
+	for _, item := range n.Content {
+		out = append(out, p.str(item))
+	}
+	return out
 }
 
 // command reads a command as a list, or a string split like a shell does

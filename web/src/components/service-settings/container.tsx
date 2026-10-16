@@ -85,6 +85,11 @@ function otherSettings(r: Runtime) {
   if (r.init) out.push(["init", "true"]);
   if (r.tty) out.push(["tty", "true"]);
   if (r.stdinOpen) out.push(["stdin_open", "true"]);
+  for (const c of r.capAdd ?? []) out.push(["cap_add", c]);
+  for (const c of r.capDrop ?? []) out.push(["cap_drop", c]);
+  for (const d of r.devices ?? []) out.push(["devices", d]);
+  if (r.privileged) out.push(["privileged", "true"]);
+  for (const o of r.securityOpt ?? []) out.push(["security_opt", o]);
   return out;
 }
 
