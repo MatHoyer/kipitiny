@@ -76,9 +76,15 @@ type ServiceInput struct {
 	Files []store.ServiceFile `json:"files"`
 	// DependsOn names services of the project started first (apps only).
 	DependsOn []store.Dependency `json:"dependsOn"`
+	// ProjectNetworks are the project's own networks it's on; empty is the
+	// default one.
+	ProjectNetworks []string `json:"projectNetworks"`
 	// Password is a new database's password, from a compose export; empty
 	// generates one. Not settable through the API.
 	Password string `json:"-"`
+	// networks are the networks created by hand it joins, from a compose
+	// file whose service lists networks; nil keeps them.
+	networks []string
 }
 
 // ServicePatch updates only the fields that are set. Env replaces the whole
@@ -117,6 +123,8 @@ type ServicePatch struct {
 	Files []store.ServiceFile `json:"files"`
 	// DependsOn replaces the services the app starts after; nil keeps them.
 	DependsOn []store.Dependency `json:"dependsOn"`
+	// ProjectNetworks replaces the project networks it's on; nil keeps them.
+	ProjectNetworks []string `json:"projectNetworks"`
 }
 
 type ContainerView struct {
@@ -207,6 +215,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		Runtime:          normalizeRuntime(in.Runtime),
 		Files:            normalizeFiles(in.Files, nil),
 		DependsOn:        in.DependsOn,
+		ProjectNetworks:  normalizeProjectNetworks(in.ProjectNetworks),
 	}
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
@@ -398,6 +407,9 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 	if p.DependsOn != nil {
 		svc.DependsOn = p.DependsOn
 	}
+	if p.ProjectNetworks != nil {
+		svc.ProjectNetworks = normalizeProjectNetworks(p.ProjectNetworks)
+	}
 	if p.Middlewares != nil {
 		if svc.Middlewares, err = mergeMiddlewares(*p.Middlewares, old.Middlewares); err != nil {
 			return store.Service{}, err
@@ -474,6 +486,9 @@ func IconHint(svc store.Service) string {
 }
 
 func validateService(s store.Service) error {
+	if err := validateProjectNetworks(s); err != nil {
+		return err
+	}
 	if _, err := reference.ParseNormalizedNamed(s.Image); err != nil {
 		return fmt.Errorf("%w: image: %v", ErrInvalid, err)
 	}

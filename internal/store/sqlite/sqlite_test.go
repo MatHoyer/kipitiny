@@ -100,6 +100,7 @@ func TestProjectsAndServices(t *testing.T) {
 	svc.Icon = "ghost"
 	svc.Files = []store.ServiceFile{{Path: "/etc/app.conf", Content: []byte("a=1\n"), Size: 4, Mode: 0o600, Source: "config:app"}}
 	svc.DependsOn = []store.Dependency{{Service: "db", Condition: "healthy"}}
+	svc.ProjectNetworks = []string{"back", "default"}
 	svc.Runtime = store.Runtime{Command: []string{"worker", "--queue", "a b"}, Ulimits: map[string]store.Ulimit{"nofile": {Soft: 1, Hard: 2}}}
 	svc.Middlewares = store.Middlewares{
 		BasicAuth:   []store.BasicAuthUser{{Name: "ann", Hash: "$2a$10$x"}},
@@ -116,7 +117,7 @@ func TestProjectsAndServices(t *testing.T) {
 	}
 	if got2.Replicas != 3 || got2.Env["A"] != "1" || got2.Env["B"] != "2" || got2.Domain != "shop.example.com" ||
 		!reflect.DeepEqual(got2.Volumes, svc.Volumes) || !slices.Equal(got2.PublishedPorts, svc.PublishedPorts) || got2.StopGraceSeconds != 60 || got2.Icon != "ghost" || !reflect.DeepEqual(got2.Middlewares, svc.Middlewares) ||
-		!reflect.DeepEqual(got2.Runtime, svc.Runtime) || !reflect.DeepEqual(got2.Files, svc.Files) || !reflect.DeepEqual(got2.DependsOn, svc.DependsOn) {
+		!reflect.DeepEqual(got2.Runtime, svc.Runtime) || !reflect.DeepEqual(got2.Files, svc.Files) || !reflect.DeepEqual(got2.DependsOn, svc.DependsOn) || !slices.Equal(got2.ProjectNetworks, svc.ProjectNetworks) {
 		t.Fatalf("service round-trip mismatch: %+v", got2)
 	}
 

@@ -11,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -412,7 +413,19 @@ func (c *Core) deleteProject(ctx context.Context, p store.Project) error {
 	for _, s := range svcs {
 		c.removeDeployLogs(s.ID)
 	}
-	return c.dockerFor(p.ServerID).RemoveNetwork(ctx, docker.ProjectNetwork(id))
+	dk := c.dockerFor(p.ServerID)
+	nets, err := dk.ListNetworks(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range nets { // the networks of its compose file
+		if strings.HasPrefix(n.Name, docker.ProjectNetwork(id)+"-") {
+			if err := dk.RemoveNetwork(ctx, n.Name); err != nil {
+				return err
+			}
+		}
+	}
+	return dk.RemoveNetwork(ctx, docker.ProjectNetwork(id))
 }
 
 const stopTimeout = 10 * time.Second

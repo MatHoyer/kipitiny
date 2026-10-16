@@ -445,7 +445,7 @@ func (c *Core) previewSource(ctx context.Context, parent store.Project, branch s
 	if err != nil {
 		return compose.File{}, nil, "", err
 	}
-	f, vars := exportFile(parent, svcs, nil, false)
+	f, vars := exportFile(parent, svcs, nil, nil, false)
 	// A service's secrets become the preview's project variables of the
 	// same name; only basic auth hashes stay (previews are protected the
 	// same way).

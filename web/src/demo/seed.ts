@@ -106,6 +106,7 @@ export function service(p: Partial<Service> & Pick<Service, "id" | "name" | "kin
     runtime: {},
     files: [],
     dependsOn: [],
+    projectNetworks: [],
     networks: [],
     currentDeploymentId: `dep-${p.id}`,
     stopped: false,

@@ -619,9 +619,10 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 		docker.LabelReplica: strconv.Itoa(replica),
 		docker.LabelDeploy:  deployID,
 	}
-	endpoints := map[string]*network.EndpointSettings{
+	endpoints := map[string]*network.EndpointSettings{}
+	for _, n := range projectNetworks(project, svc) {
 		// Other services of the project reach this one by its service name.
-		docker.ProjectNetwork(project.ID): {Aliases: []string{svc.Name}},
+		endpoints[n] = &network.EndpointSettings{Aliases: []string{svc.Name}}
 	}
 	for _, id := range svc.Networks {
 		endpoints[docker.CustomNetwork(id)] = &network.EndpointSettings{Aliases: []string{networkAlias(project, svc)}}

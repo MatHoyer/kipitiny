@@ -162,7 +162,7 @@ func (c *Core) renameContainers(ctx context.Context, svc store.Service, oldPrefi
 		return err
 	}
 	dk := c.dockerFor(svc.ServerID)
-	netName := docker.ProjectNetwork(svc.ProjectID)
+	prefix := docker.ProjectNetwork(svc.ProjectID)
 	var errs []error
 	for _, ct := range cts {
 		if len(ct.Names) > 0 {
@@ -172,9 +172,14 @@ func (c *Core) renameContainers(ctx context.Context, svc store.Service, oldPrefi
 				}
 			}
 		}
-		if aliases != nil && ct.State == container.StateRunning && onNetwork(ct, netName) {
-			if err := dk.SetAliases(ctx, netName, ct.ID, aliases); err != nil {
-				errs = append(errs, err)
+		if aliases == nil || ct.State != container.StateRunning || ct.NetworkSettings == nil {
+			continue
+		}
+		for netName := range ct.NetworkSettings.Networks {
+			if netName == prefix || strings.HasPrefix(netName, prefix+"-") {
+				if err := dk.SetAliases(ctx, netName, ct.ID, aliases); err != nil {
+					errs = append(errs, err)
+				}
 			}
 		}
 	}

@@ -246,6 +246,45 @@ func (c *Core) syncNetworks(ctx context.Context, project store.Project, svc stor
 	return errors.Join(errs...)
 }
 
+const maxProjectNetworks = 10
+
+// normalizeProjectNetworks sorts and dedupes; the default network alone is
+// the same as none.
+func normalizeProjectNetworks(names []string) []string {
+	out := slices.Compact(slices.Sorted(slices.Values(names)))
+	if len(out) == 0 || slices.Equal(out, []string{"default"}) {
+		return []string{}
+	}
+	return out
+}
+
+func validateProjectNetworks(s store.Service) error {
+	if len(s.ProjectNetworks) > maxProjectNetworks {
+		return fmt.Errorf("%w: at most %d project networks", ErrInvalid, maxProjectNetworks)
+	}
+	if s.HostNetwork && len(s.ProjectNetworks) > 0 {
+		return fmt.Errorf("%w: an app in the host network can't join other networks", ErrInvalid)
+	}
+	for _, n := range s.ProjectNetworks {
+		if !nameRe.MatchString(n) || len(n) > 30 {
+			return fmt.Errorf("%w: network name %q: lowercase letters, digits and dashes, at most 30", ErrInvalid, n)
+		}
+	}
+	return nil
+}
+
+// projectNetworks are the Docker names of the project networks svc is on.
+func projectNetworks(project store.Project, svc store.Service) []string {
+	if len(svc.ProjectNetworks) == 0 {
+		return []string{docker.ProjectNetwork(project.ID)}
+	}
+	out := make([]string, len(svc.ProjectNetworks))
+	for i, n := range svc.ProjectNetworks {
+		out[i] = docker.ProjectNetworkNamed(project.ID, n)
+	}
+	return out
+}
+
 // wantNetworks maps the networks a service's container should be on to its
 // aliases there, as containerSpec attaches them: the project's, the ones
 // created by hand it joins, and the proxy's when Traefik routes it.
@@ -253,7 +292,10 @@ func wantNetworks(project store.Project, svc store.Service, ct container.Summary
 	if svc.HostNetwork {
 		return nil
 	}
-	want := map[string][]string{docker.ProjectNetwork(project.ID): {svc.Name}}
+	want := map[string][]string{}
+	for _, n := range projectNetworks(project, svc) {
+		want[n] = []string{svc.Name}
+	}
 	for _, id := range svc.Networks {
 		want[docker.CustomNetwork(id)] = []string{networkAlias(project, svc)}
 	}

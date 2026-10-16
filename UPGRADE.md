@@ -24,6 +24,12 @@ release renames the section to its version.
   `restart: unless-stopped`). With `on-failure`, a container that exits isn't
   started again by kipitiny. `depends_on` naming a service missing from the
   file, or a cycle, is now an error.
+- warning: `networks` in compose files now apply. A service listing
+  networks is only on those: it no longer reaches the project's services on
+  other networks (add `default` to keep the project network), and gets
+  exactly the networks created by hand it lists as `external: true` (others
+  set in the UI are detached). An external network must exist on the
+  server, or the sync fails.
 
 ## 0.33.0
 - warning: API tokens lose their scope (read, deploy, admin): a token does what
