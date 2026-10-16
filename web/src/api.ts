@@ -133,6 +133,8 @@ export type Service = {
   hostNetwork: boolean;
   /** The host's Docker socket mounted read-only or read-write; "" when not. */
   dockerSocket: "" | "ro" | "rw";
+  /** Command, entrypoint, user, tmpfs… (apps only); empty fields keep the image's. */
+  runtime: Runtime;
   /** IDs of the networks created by hand it joins, besides its project network. */
   networks: string[];
   currentDeploymentId: string;
@@ -252,6 +254,30 @@ export type ServerTopology = {
   projects: TopoProject[];
 };
 
+/** How an app's container runs beyond its image: compose's command, user, tmpfs… */
+export type Runtime = {
+  /** Replaces the image's CMD. */
+  command?: string[];
+  /** Replaces the image's ENTRYPOINT; [""] clears it. */
+  entrypoint?: string[];
+  user?: string;
+  workingDir?: string;
+  /** Added to the container's labels; never kipitiny.* or traefik.*. */
+  labels?: Record<string, string>;
+  /** In-memory mounts: path → options (size=64m). */
+  tmpfs?: Record<string, string>;
+  shmSizeMb?: number;
+  ulimits?: Record<string, { soft: number; hard: number }>;
+  sysctls?: Record<string, string>;
+  readOnly?: boolean;
+  init?: boolean;
+  stopSignal?: string;
+  tty?: boolean;
+  stdinOpen?: boolean;
+  /** host:ip entries for /etc/hosts. */
+  extraHosts?: string[];
+};
+
 export type Topology = { servers: ServerTopology[] };
 
 export type ServiceInput = {
@@ -275,6 +301,7 @@ export type ServiceInput = {
   stopGraceSeconds?: number;
   hostNetwork?: boolean;
   dockerSocket?: "" | "ro" | "rw";
+  runtime?: Runtime;
 };
 
 export type Connection = {

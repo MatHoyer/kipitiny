@@ -674,6 +674,7 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 			// Docker's own stops (daemon shutdown, restarts) wait as long.
 			cfg.StopTimeout = &svc.StopGraceSeconds
 		}
+		applyRuntime(cfg, host, svc.Runtime)
 	}
 	name := fmt.Sprintf("%s-%s-%d", project.Name, svc.Name, replica)
 	if !svc.Kind.IsDatabase() {

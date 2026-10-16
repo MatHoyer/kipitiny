@@ -326,7 +326,7 @@ func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Ser
 		svc.Tags = []string{}
 	}
 	res, err := s.db.NewUpdate().Model(&svc).
-		Column("image", "icon", "tags", "replicas", "port", "domain", "env", "secrets", "memory_mb", "cpus", "health_path", "healthcheck", "pre_deploy", "volumes", "middlewares", "pre_backup", "published_ports", "stop_grace_seconds", "host_network", "docker_socket", "updated_at").
+		Column("image", "icon", "tags", "replicas", "port", "domain", "env", "secrets", "memory_mb", "cpus", "health_path", "healthcheck", "pre_deploy", "volumes", "middlewares", "pre_backup", "published_ports", "stop_grace_seconds", "host_network", "docker_socket", "runtime", "updated_at").
 		WherePK().Exec(ctx)
 	if err != nil {
 		return store.Service{}, mapErr(err)
