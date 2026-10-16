@@ -187,6 +187,16 @@ func (c *Core) ConnectCloudflare(ctx context.Context, token string) (CloudflareV
 	s.token, s.zones, s.zonesErr = token, zones, ""
 	s.mu.Unlock()
 	c.saveZoneNames(ctx, zones)
+	// The token's zones become domains: no need to type them in. Proxied
+	// only where the SSL/TLS mode allows it, else sites loop on HTTPS.
+	cf := cloudflare.New(token)
+	for _, z := range zones {
+		mode, _ := cf.SSLMode(ctx, z.ID)
+		d := store.Domain{Name: z.Name, Proxied: mode == "full" || mode == "strict"}
+		if _, err := c.store.CreateDomain(ctx, d); err != nil && !errors.Is(err, store.ErrConflict) {
+			c.log.Warn("cannot add Cloudflare zone as a domain", "zone", z.Name, "err", err)
+		}
+	}
 	c.kickDNS()
 	c.kick() // Traefik gets the DNS challenge
 	return c.CloudflareStatus(ctx), nil

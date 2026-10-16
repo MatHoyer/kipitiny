@@ -78,7 +78,9 @@ error until then).
 List your domains in *Infrastructure › Domains & DNS* and connect Cloudflare
 there with an API token (*My Profile › API Tokens*) allowed
 **Zone › Zone › Read** and **Zone › DNS › Edit**, plus **Account › Cloudflare
-Tunnel › Edit** with a tunnel. For every service domain in one of the token's
+Tunnel › Edit** with a tunnel. Connecting adds the token's zones to the list,
+so you don't type them in; a zone whose SSL/TLS mode is Full or Full (strict)
+comes in **Proxied**. For every service domain in one of the token's
 zones, the manager then keeps the DNS record in sync:
 
 - an **A** record to the server's public IP (detected, or set under

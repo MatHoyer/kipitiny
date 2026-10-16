@@ -351,3 +351,22 @@ func TestSyncDNS(t *testing.T) {
 		t.Error("the former tunnel should be forgotten once cleaned up")
 	}
 }
+
+func TestConnectCloudflareAddsZones(t *testing.T) {
+	ctx := context.Background()
+	srv := httptest.NewServer(&fakeCloudflare{})
+	defer srv.Close()
+	defer func(old string) { cloudflare.BaseURL = old }(cloudflare.BaseURL)
+	cloudflare.BaseURL = srv.URL
+
+	c := newTestCore(t, config.Config{})
+	for range 2 { // reconnecting keeps the listed domain
+		if _, err := c.ConnectCloudflare(ctx, "cf-token"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ds, err := c.store.ListDomains(ctx)
+	if err != nil || len(ds) != 1 || ds[0].Name != "example.com" || !ds[0].Proxied { // the fake zone is on full
+		t.Fatalf("domains = %+v, %v", ds, err)
+	}
+}
