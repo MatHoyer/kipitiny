@@ -3,6 +3,9 @@ package core
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -25,6 +28,9 @@ func normalizePorts(ports []store.PublishedPort) []store.PublishedPort {
 		if p.ContainerPort == 0 {
 			p.ContainerPort = p.HostPort
 		}
+		if p.HostIP = strings.Trim(strings.TrimSpace(p.HostIP), "[]"); p.HostIP == "0.0.0.0" {
+			p.HostIP = ""
+		}
 		out = append(out, p)
 	}
 	return out
@@ -42,19 +48,19 @@ func validatePorts(s store.Service) error {
 	if s.Replicas != 1 {
 		return fmt.Errorf("%w: an app with published ports runs a single replica: two containers can't bind the same host port", ErrInvalid)
 	}
-	seen := map[string]bool{}
-	for _, p := range s.PublishedPorts {
+	for i, p := range s.PublishedPorts {
 		if p.Protocol != "tcp" && p.Protocol != "udp" {
 			return fmt.Errorf("%w: port protocol must be tcp or udp, not %q", ErrInvalid, p.Protocol)
 		}
 		if p.HostPort < 1 || p.HostPort > 65535 || p.ContainerPort < 1 || p.ContainerPort > 65535 {
 			return fmt.Errorf("%w: published ports must be between 1 and 65535", ErrInvalid)
 		}
-		key := portKey(p)
-		if seen[key] {
-			return fmt.Errorf("%w: host port %s is published twice", ErrInvalid, key)
+		if _, err := netip.ParseAddr(p.HostIP); p.HostIP != "" && err != nil {
+			return fmt.Errorf("%w: host IP %q is not an IP address", ErrInvalid, p.HostIP)
 		}
-		seen[key] = true
+		if slices.ContainsFunc(s.PublishedPorts[:i], func(o store.PublishedPort) bool { return portsClash(o, p) }) {
+			return fmt.Errorf("%w: host port %s is published twice", ErrInvalid, portKey(p))
+		}
 	}
 	return nil
 }
@@ -65,10 +71,15 @@ func (c *Core) checkPortsFree(ctx context.Context, s store.Service) error {
 	if len(s.PublishedPorts) == 0 {
 		return nil
 	}
-	taken := map[string]string{}
+	type use struct {
+		port store.PublishedPort
+		by   string
+	}
+	var taken []use
 	if c.cfg.Traefik.Enabled {
 		for _, hp := range []string{c.cfg.Traefik.HTTPPort, c.cfg.Traefik.HTTPSPort} {
-			taken[hp+"/tcp"] = "Traefik"
+			n, _ := strconv.Atoi(hp)
+			taken = append(taken, use{store.PublishedPort{HostPort: n, Protocol: "tcp"}, "Traefik"})
 		}
 	}
 	serverID := s.ServerID
@@ -88,22 +99,35 @@ func (c *Core) checkPortsFree(ctx context.Context, s store.Service) error {
 			continue
 		}
 		for _, p := range o.PublishedPorts {
-			taken[portKey(p)] = "service " + o.Name
+			taken = append(taken, use{p, "service " + o.Name})
 		}
 	}
 	for _, p := range s.PublishedPorts {
-		if by, ok := taken[portKey(p)]; ok {
-			return fmt.Errorf("%w: host port %s is already published by %s", ErrInvalid, portKey(p), by)
+		for _, t := range taken {
+			if portsClash(t.port, p) {
+				return fmt.Errorf("%w: host port %s is already published by %s", ErrInvalid, portKey(p), t.by)
+			}
 		}
 	}
 	return nil
 }
 
-func portKey(p store.PublishedPort) string {
-	return strconv.Itoa(p.HostPort) + "/" + p.Protocol
+// portsClash reports whether two published ports bind the same host
+// socket: same port and protocol, on the same address or on every one.
+func portsClash(a, b store.PublishedPort) bool {
+	return a.HostPort == b.HostPort && a.Protocol == b.Protocol && (a.HostIP == "" || b.HostIP == "" || a.HostIP == b.HostIP)
 }
 
-// portBindings publishes the app's ports on every host address.
+func portKey(p store.PublishedPort) string {
+	key := strconv.Itoa(p.HostPort) + "/" + p.Protocol
+	if p.HostIP != "" {
+		key = net.JoinHostPort(p.HostIP, key)
+	}
+	return key
+}
+
+// portBindings publishes the app's ports, on every host address unless
+// one is given.
 func portBindings(ports []store.PublishedPort) (network.PortSet, network.PortMap) {
 	if len(ports) == 0 {
 		return nil, nil
@@ -115,7 +139,9 @@ func portBindings(ports []store.PublishedPort) (network.PortSet, network.PortMap
 			continue // validated before
 		}
 		exposed[cp] = struct{}{}
-		bindings[cp] = append(bindings[cp], network.PortBinding{HostPort: strconv.Itoa(p.HostPort)})
+		b := network.PortBinding{HostPort: strconv.Itoa(p.HostPort)}
+		b.HostIP, _ = netip.ParseAddr(p.HostIP) // validated before; empty is every address
+		bindings[cp] = append(bindings[cp], b)
 	}
 	return exposed, bindings
 }

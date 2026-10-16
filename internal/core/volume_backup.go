@@ -71,7 +71,7 @@ func helperMounts(svc store.Service, names []string, root string, readOnly bool)
 		if svc.Kind.IsDatabase() {
 			m = mount.Mount{Type: mount.TypeVolume, Source: DataVolume(svc)}
 		} else {
-			m = appVolumeMount(svc, store.Volume{Name: name})
+			m = appVolumeMount(svc, name, "")
 		}
 		m.Target, m.ReadOnly = root+"/"+name, readOnly
 		mounts = append(mounts, m)

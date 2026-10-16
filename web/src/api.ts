@@ -150,9 +150,23 @@ export type Service = {
   networkIssues?: string[];
 };
 
-export type Volume = { name: string; path: string };
+export type Volume = {
+  name: string;
+  path: string;
+  readOnly?: boolean;
+  /** An existing Docker volume mounted as is (admins only). */
+  external?: string;
+  /** The local driver's options (an NFS share…; admins only). */
+  driverOpts?: Record<string, string>;
+};
 
-export type PublishedPort = { hostPort: number; containerPort: number; protocol: "tcp" | "udp" };
+export type PublishedPort = {
+  /** The server address bound; absent is every address. */
+  hostIp?: string;
+  hostPort: number;
+  containerPort: number;
+  protocol: "tcp" | "udp";
+};
 
 export type Maintenance = {
   /** Maintenance mode: every visitor but allowIps gets the page while the replicas keep running. */

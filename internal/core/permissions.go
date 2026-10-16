@@ -264,6 +264,9 @@ func checkServiceChange(ctx context.Context, old, svc store.Service) error {
 	if svc.Runtime.HostAccess() && !reflect.DeepEqual(runtimeHostAccess(svc.Runtime), runtimeHostAccess(old.Runtime)) {
 		return fmt.Errorf("%w: only admins give an app capabilities, devices, privileged mode or security options", ErrForbidden)
 	}
+	if hv := volumesHostAccess(svc.Volumes); len(hv) > 0 && !reflect.DeepEqual(hv, volumesHostAccess(old.Volumes)) {
+		return fmt.Errorf("%w: only admins mount external volumes or set volume driver options", ErrForbidden)
+	}
 	if !maps.Equal(svc.Env, old.Env) || !slices.Equal(svc.Secrets, old.Secrets) {
 		if err := Authorize(ctx, svc.ProjectID, PermEnv); err != nil {
 			return err

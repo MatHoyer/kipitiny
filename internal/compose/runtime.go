@@ -2,6 +2,7 @@ package compose
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -222,4 +223,70 @@ func SplitCommand(s string) ([]string, error) {
 		args = append(args, cur.String())
 	}
 	return args, nil
+}
+
+var nonNameRe = regexp.MustCompile(`[^a-z0-9]+`)
+
+// anonymousName names an anonymous volume after its path (/app/node_modules
+// is app-node-modules), unique among taken.
+func anonymousName(path string, taken []store.Volume) string {
+	base := strings.Trim(nonNameRe.ReplaceAllString(strings.ToLower(path), "-"), "-")
+	if len(base) > 28 {
+		base = strings.Trim(base[len(base)-28:], "-")
+	}
+	if base == "" {
+		base = "data"
+	}
+	name := base
+	for i := 2; slices.ContainsFunc(taken, func(v store.Volume) bool { return v.Name == name }); i++ {
+		name = base + "-" + strconv.Itoa(i)
+	}
+	return name
+}
+
+// shortPorts reads a short port syntax: [ip:]host:container[/protocol],
+// where both ports may be ranges of the same length (8000-8010:8000-8010).
+func (p *parser) shortPorts(spec string) []store.PublishedPort {
+	rest, proto, _ := strings.Cut(spec, "/")
+	if proto == "" {
+		proto = "tcp"
+	}
+	ip := ""
+	if strings.HasPrefix(rest, "[") { // [::1]:5432:5432
+		if end := strings.Index(rest, "]:"); end > 0 {
+			ip, rest = rest[1:end], rest[end+2:]
+		}
+	}
+	parts := strings.Split(rest, ":")
+	if len(parts) == 3 && ip == "" {
+		ip, parts = parts[0], parts[1:]
+	}
+	if len(parts) != 2 {
+		p.warn("port %s isn't published to the host and is ignored; set x-kipitiny.port to route HTTP to it", spec)
+		return nil
+	}
+	hostFrom, hostTo, err1 := portRange(parts[0])
+	ctrFrom, ctrTo, err2 := portRange(parts[1])
+	if err1 != nil || err2 != nil || hostTo-hostFrom != ctrTo-ctrFrom {
+		p.fail("port %s: expected host:container, with ranges of the same length", spec)
+		return nil
+	}
+	var out []store.PublishedPort
+	for i := 0; i <= hostTo-hostFrom; i++ {
+		out = append(out, store.PublishedPort{HostIP: ip, HostPort: hostFrom + i, ContainerPort: ctrFrom + i, Protocol: proto})
+	}
+	return out
+}
+
+func portRange(s string) (int, int, error) {
+	from, to, isRange := strings.Cut(s, "-")
+	a, err := strconv.Atoi(from)
+	if err != nil || !isRange {
+		return a, a, err
+	}
+	b, err := strconv.Atoi(to)
+	if err == nil && b < a {
+		err = fmt.Errorf("empty range")
+	}
+	return a, b, err
 }

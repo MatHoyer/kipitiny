@@ -151,3 +151,59 @@ func TestRuntimeHostAccess(t *testing.T) {
 		t.Errorf("member changing the command of an app with host access: %v", err)
 	}
 }
+
+func TestPortsAndVolumesHostAccess(t *testing.T) {
+	app := store.Service{ID: "S1", ProjectID: "P1", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Env: map[string]string{},
+		PublishedPorts: normalizePorts([]store.PublishedPort{{HostIP: "127.0.0.1", HostPort: 5432}, {HostIP: "0.0.0.0", HostPort: 80},
+			{HostIP: "10.0.0.1", HostPort: 5432}}),
+		Volumes: normalizeVolumes([]store.Volume{{Name: "conf", Path: "/conf", ReadOnly: true}, {Name: "media", Path: "/media", External: "nas"},
+			{Name: "nfs", Path: "/nfs", DriverOpts: map[string]string{"type": "nfs", "o": "addr=10.0.0.5", "device": ":/x"}}})}
+	if err := validateService(app); err != nil {
+		t.Fatal(err)
+	}
+	if app.PublishedPorts[1].HostIP != "" {
+		t.Errorf("0.0.0.0 is every address: %+v", app.PublishedPorts[1])
+	}
+	host := containerSpec(store.Project{ID: "P1"}, app, envSources{}, "D1", 1, route{}).HostConfig
+	var ips []string
+	for _, bs := range host.PortBindings {
+		for _, b := range bs {
+			ips = append(ips, b.HostIP.String()+":"+b.HostPort)
+		}
+	}
+	slices.Sort(ips)
+	if !slices.Equal(ips, []string{"10.0.0.1:5432", "127.0.0.1:5432", "invalid IP:80"}) {
+		t.Errorf("bindings = %v", ips)
+	}
+	m := host.Mounts
+	if len(m) != 3 || !m[0].ReadOnly || m[1].Source != "nas" || m[1].VolumeOptions != nil ||
+		m[2].VolumeOptions.DriverConfig == nil || m[2].VolumeOptions.DriverConfig.Options["type"] != "nfs" {
+		t.Errorf("mounts = %+v", m)
+	}
+
+	clash := app
+	clash.PublishedPorts = append(slices.Clone(app.PublishedPorts), store.PublishedPort{HostPort: 5432, ContainerPort: 1, Protocol: "tcp"})
+	if err := validateService(clash); !errors.Is(err, ErrInvalid) {
+		t.Errorf("every address clashes with 127.0.0.1: %v", err)
+	}
+	for _, v := range []store.Volume{{Name: "a", Path: "/a", External: "bad name"}, {Name: "a", Path: "/a", DriverOpts: map[string]string{"uid": "1"}}} {
+		bad := app
+		bad.Volumes = []store.Volume{v}
+		if err := validateService(bad); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%+v: got %v", v, err)
+		}
+	}
+
+	member := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", Role: store.RoleMember})
+	plain := app
+	plain.Volumes = app.Volumes[:1]
+	if err := checkServiceChange(member, plain, app); !errors.Is(err, ErrForbidden) {
+		t.Errorf("member adding an external volume: %v", err)
+	}
+	ro := app
+	ro.Volumes = slices.Clone(app.Volumes)
+	ro.Volumes[1].ReadOnly = true
+	if err := checkServiceChange(member, app, ro); errors.Is(err, ErrForbidden) {
+		t.Errorf("member changing an external volume's mount: %v", err)
+	}
+}

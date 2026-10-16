@@ -9,6 +9,16 @@ Add a notice under `## Unreleased` in the change that causes it, as
 `- warning: …` (disruptive) or `- info: …`; continue on indented lines. The
 release renames the section to its version.
 
+## Unreleased
+- warning: Compose keys kipitiny used to drop now apply, so the next git sync
+  (or apply) of a file using them updates and redeploys those services: a
+  port's host IP (`127.0.0.1:5432:5432` was bound on every address, now only
+  on 127.0.0.1), `:ro` on volumes, `labels`, `init`, `extra_hosts`,
+  `stop_signal`, and top-level `external` volumes (the app then mounts that
+  volume instead of the one kipitiny created: its data there is no longer
+  seen) and `driver_opts`. External volumes and driver options need an admin:
+  a git project linked by a member fails to sync until they're removed.
+
 ## 0.33.0
 - warning: API tokens lose their scope (read, deploy, admin): a token does what
   its owner may, or only what it's restricted to. Read and deploy tokens

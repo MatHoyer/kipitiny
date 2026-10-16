@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"fmt"
 	"maps"
+	"net"
 	"slices"
 	"strconv"
 	"strings"
@@ -185,17 +186,31 @@ func Marshal(f File) ([]byte, error) {
 		}
 		for _, p := range s.Ports {
 			v := fmt.Sprintf("%d:%d", p.HostPort, p.ContainerPort)
+			if p.HostIP != "" {
+				v = net.JoinHostPort(p.HostIP, strconv.Itoa(p.HostPort)) + ":" + strconv.Itoa(p.ContainerPort)
+			}
 			if p.Protocol != "" && p.Protocol != "tcp" {
 				v += "/" + p.Protocol
 			}
 			o.Ports = append(o.Ports, quoted(v))
 		}
 		for _, v := range s.Volumes {
-			o.Volumes = append(o.Volumes, v.Name+":"+v.Path)
-			if out.Volumes == nil {
-				out.Volumes = map[string]struct{}{}
+			spec := v.Name + ":" + v.Path
+			if v.ReadOnly {
+				spec += ":ro"
 			}
-			out.Volumes[v.Name] = struct{}{}
+			o.Volumes = append(o.Volumes, spec)
+			if out.Volumes == nil {
+				out.Volumes = map[string]outVolume{}
+			}
+			top := outVolume{DriverOpts: v.DriverOpts}
+			if v.External != "" {
+				top.External = true
+				if v.External != v.Name {
+					top.Name = v.External
+				}
+			}
+			out.Volumes[v.Name] = top
 		}
 		if s.DockerSocket != "" {
 			v := DockerSocket + ":" + DockerSocket
@@ -269,8 +284,14 @@ func isZeroExt(x Ext) bool {
 type outFile struct {
 	Name     string                `yaml:"name,omitempty"`
 	Services map[string]outService `yaml:"services"`
-	Volumes  map[string]struct{}   `yaml:"volumes,omitempty"`
+	Volumes  map[string]outVolume  `yaml:"volumes,omitempty"`
 	X        *FileExt              `yaml:"x-kipitiny,omitempty"`
+}
+
+type outVolume struct {
+	External   bool              `yaml:"external,omitempty"`
+	Name       string            `yaml:"name,omitempty"`
+	DriverOpts map[string]string `yaml:"driver_opts,omitempty"`
 }
 
 type outService struct {
@@ -445,7 +466,7 @@ func Parse(data []byte, vars Vars) (File, []string, error) {
 		case k == "services":
 			services = v
 		case k == "volumes":
-			p.topVolumes(v)
+			p.top = p.topVolumes(v)
 		case k == ExtKey:
 			p.strict(v, &f.X)
 		case slices.Contains(ignoredTopKeys, k):
@@ -474,7 +495,9 @@ func Parse(data []byte, vars Vars) (File, []string, error) {
 }
 
 type parser struct {
-	vars    Vars
+	vars Vars
+	// top holds the top-level volumes' options, by name.
+	top     map[string]store.Volume
 	svc     string
 	ctx     string
 	warns   []string
@@ -522,12 +545,39 @@ func (p *parser) str(n *yaml.Node) string {
 	return p.interpolate(n.Value)
 }
 
-func (p *parser) topVolumes(n *yaml.Node) {
+// topVolumes reads the top-level volumes: whether each is external (and
+// its Docker name), and the local driver's options.
+func (p *parser) topVolumes(n *yaml.Node) map[string]store.Volume {
+	out := map[string]store.Volume{}
 	for name, v := range pairs(n) {
-		for k := range pairs(v) {
-			p.warn("volume %s: %s is ignored (kipitiny creates local named volumes)", name, k)
+		var vol store.Volume
+		external := false
+		for k, val := range pairs(v) {
+			switch k {
+			case "external":
+				external = p.bool(val)
+			case "name":
+				vol.External = p.str(val)
+			case "driver":
+				if d := p.str(val); d != "local" {
+					p.fail("volume %s: driver %s is not supported (only local)", name, d)
+				}
+			case "driver_opts":
+				vol.DriverOpts = p.mapping("driver_opts", val)
+			default:
+				p.warn("volume %s: %s is ignored", name, k)
+			}
 		}
+		switch {
+		case external && vol.External == "":
+			vol.External = name
+		case !external && vol.External != "":
+			p.warn("volume %s: name is ignored (kipitiny names the volumes it creates)", name)
+			vol.External = ""
+		}
+		out[name] = vol
 	}
+	return out
 }
 
 func (p *parser) service(name string, n *yaml.Node) Service {
@@ -720,33 +770,17 @@ func (p *parser) ports(n *yaml.Node) []store.PublishedPort {
 					pp.HostPort = p.int(v)
 				case "protocol":
 					pp.Protocol = p.str(v)
-				case "host_ip", "mode", "name", "app_protocol":
+				case "host_ip":
+					pp.HostIP = p.str(v)
+				case "mode", "name", "app_protocol":
 					p.warn("port %s is ignored", k)
 				default:
 					p.fail("port %s is not supported", k)
 				}
 			}
 		} else {
-			spec := p.str(item)
-			if s, proto, ok := strings.Cut(spec, "/"); ok {
-				spec, pp.Protocol = s, proto
-			}
-			parts := strings.Split(spec, ":")
-			if len(parts) == 3 {
-				p.warn("port %s: host IP is ignored (bound on every address)", spec)
-				parts = parts[1:]
-			}
-			if len(parts) != 2 {
-				p.warn("port %s isn't published to the host and is ignored; set x-kipitiny.port to route HTTP to it", spec)
-				continue
-			}
-			var err1, err2 error
-			pp.HostPort, err1 = strconv.Atoi(parts[0])
-			pp.ContainerPort, err2 = strconv.Atoi(parts[1])
-			if err1 != nil || err2 != nil {
-				p.fail("port %s: only single ports are supported, not ranges", spec)
-				continue
-			}
+			out = append(out, p.shortPorts(p.str(item))...)
+			continue
 		}
 		if pp.HostPort == 0 {
 			p.warn("port %d isn't published to the host and is ignored; set x-kipitiny.port to route HTTP to it", pp.ContainerPort)
@@ -835,12 +869,13 @@ func (p *parser) volumes(n *yaml.Node, rt *store.Runtime) ([]store.Volume, strin
 			rt.Tmpfs[v.Path] = strings.Join(tmpfsOpts, ",")
 		case typ != "volume":
 			p.fail("volume type %s is not supported", typ)
-		case v.Name == "":
-			p.fail("volume %s needs a name (anonymous volumes are not supported)", v.Path)
 		default:
-			if readOnly {
-				p.warn("volume %s: read-only is ignored", v.Name)
+			if v.Name == "" {
+				v.Name = anonymousName(v.Path, out)
+				p.warn("volume %s is anonymous: kept as the named volume %s", v.Path, v.Name)
 			}
+			top := p.top[v.Name]
+			v.ReadOnly, v.External, v.DriverOpts = readOnly, top.External, top.DriverOpts
 			out = append(out, v)
 		}
 	}

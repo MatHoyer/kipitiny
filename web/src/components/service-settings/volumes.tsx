@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Empty, Section } from "@/components/common";
 import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { api, type Service as ServiceT, type Volume } from "../../api";
 import { Applies } from "./parts";
@@ -22,7 +23,7 @@ export function VolumesCard({ svc }: { svc: ServiceT }) {
     meta: { error: "Couldn't save the volumes" },
     mutationFn: () =>
       api.updateService(svc.id, {
-        volumes: rows.map((v) => ({ name: v.name.trim(), path: v.path.trim() })),
+        volumes: rows.map((v) => ({ ...v, name: v.name.trim(), path: v.path.trim() })),
         preBackup: rows.length > 0 ? preBackup.trim() : "",
       }),
     onSuccess: (updated) => {
@@ -62,14 +63,14 @@ export function VolumesCard({ svc }: { svc: ServiceT }) {
           const badName = name !== "" && !volumeNameRe.test(name);
           const isNew = name !== "" && !svc.volumes.some((o) => o.name === name);
           return (
-            <div key={i} className="flex items-start gap-2">
+            <div key={i} className="flex flex-wrap items-start gap-2 sm:flex-nowrap">
               <FloatingInput
                 label="Name"
                 required
                 value={v.name}
                 onChange={set(i, "name")}
                 placeholder="uploads"
-                className="w-40 shrink-0 sm:w-56"
+                className="w-full sm:w-56 sm:shrink-0"
                 inputClassName="font-mono"
                 aria-invalid={badName}
                 description={badName ? "Lowercase letters, digits and dashes." : isNew ? "New volume, created empty." : undefined}
@@ -82,7 +83,18 @@ export function VolumesCard({ svc }: { svc: ServiceT }) {
                 placeholder="/app/uploads"
                 className="min-w-0 flex-1"
                 inputClassName="font-mono"
+                description={
+                  v.external
+                    ? `The existing Docker volume ${v.external}, never removed by kipitiny.`
+                    : v.driverOpts
+                      ? `Created with ${Object.entries(v.driverOpts).map(([k, o]) => `${k}=${o}`).join(", ")}.`
+                      : undefined
+                }
               />
+              <label className="mt-4 flex shrink-0 items-center gap-1.5 text-sm">
+                <Checkbox checked={!!v.readOnly} onCheckedChange={(c) => setRows(rows.map((o, j) => (j === i ? { ...o, readOnly: c === true } : o)))} />
+                Read-only
+              </label>
               <Button
                 type="button"
                 variant="ghost"

@@ -113,7 +113,7 @@ func TestProjectsAndServices(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got2.Replicas != 3 || got2.Env["A"] != "1" || got2.Env["B"] != "2" || got2.Domain != "shop.example.com" ||
-		!slices.Equal(got2.Volumes, svc.Volumes) || !slices.Equal(got2.PublishedPorts, svc.PublishedPorts) || got2.StopGraceSeconds != 60 || got2.Icon != "ghost" || !reflect.DeepEqual(got2.Middlewares, svc.Middlewares) ||
+		!reflect.DeepEqual(got2.Volumes, svc.Volumes) || !slices.Equal(got2.PublishedPorts, svc.PublishedPorts) || got2.StopGraceSeconds != 60 || got2.Icon != "ghost" || !reflect.DeepEqual(got2.Middlewares, svc.Middlewares) ||
 		!reflect.DeepEqual(got2.Runtime, svc.Runtime) {
 		t.Fatalf("service round-trip mismatch: %+v", got2)
 	}
