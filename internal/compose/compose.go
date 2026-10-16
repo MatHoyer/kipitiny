@@ -159,7 +159,7 @@ const ExtKey = "x-kipitiny"
 // supportedServiceKeys are the compose service keys Parse reads.
 var supportedServiceKeys = []string{"image", "build", "environment", "ports", "expose", "volumes", "deploy", "mem_limit", "cpus", "stop_grace_period", "network_mode", "healthcheck",
 	"command", "entrypoint", "user", "working_dir", "labels", "tmpfs", "shm_size", "ulimits", "sysctls", "read_only", "init", "stop_signal",
-	"tty", "stdin_open", "extra_hosts", "cap_add", "cap_drop", "devices", "privileged", "security_opt", "configs", "secrets", "env_file", ExtKey}
+	"tty", "stdin_open", "extra_hosts", "cap_add", "cap_drop", "devices", "privileged", "security_opt", "configs", "secrets", "env_file", "extends", ExtKey}
 
 // Keys that change nothing kipitiny can't do itself (it orders, networks
 // and restarts services on its own): dropped with a warning. Any other
@@ -456,7 +456,10 @@ type Vars struct {
 
 // Parse reads a compose file. Warnings name what was dropped; an error
 // means the file asks for something kipitiny can't run.
-func Parse(data []byte, vars Vars) (File, []string, error) {
+func Parse(data []byte, vars Vars) (File, []string, error) { return parse(data, vars, 0) }
+
+// parse reads a compose file included depth levels deep.
+func parse(data []byte, vars Vars, depth int) (File, []string, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return File{}, nil, fmt.Errorf("compose: %w", err)
@@ -470,13 +473,15 @@ func Parse(data []byte, vars Vars) (File, []string, error) {
 	}
 	p := &parser{vars: vars}
 	f := File{Services: map[string]Service{}}
-	var services *yaml.Node
+	var services, include *yaml.Node
 	for k, v := range pairs(root) {
 		switch {
 		case k == "name":
 			f.Name = p.str(v)
 		case k == "services":
 			services = v
+		case k == "include":
+			include = v
 		case k == "volumes":
 			p.top = p.topVolumes(v)
 		case k == "configs":
@@ -492,13 +497,19 @@ func Parse(data []byte, vars Vars) (File, []string, error) {
 			p.fail("top-level %s is not supported", k)
 		}
 	}
-	if services == nil || services.Kind != yaml.MappingNode || len(services.Content) == 0 {
-		p.fail("no services")
-	} else {
+	if services != nil && services.Kind == yaml.MappingNode {
+		p.resolveExtends(services)
 		for name, v := range pairs(services) {
 			p.svc = name
 			f.Services[name] = p.service(name, v)
 		}
+	}
+	p.svc = ""
+	if include != nil {
+		p.includes(include, &f, depth)
+	}
+	if len(f.Services) == 0 {
+		p.fail("no services")
 	}
 	if len(p.missing) > 0 {
 		slices.Sort(p.missing)
@@ -648,6 +659,7 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 			s.StopGraceSeconds = p.duration(v)
 		case k == ExtKey:
 			s.X = p.ext(v)
+		case k == "extends": // merged before, by resolveExtends
 		case p.runtimeKey(k, v, &rt):
 		case slices.Contains(ignoredServiceKeys, k):
 			p.warn("%s is ignored", k)

@@ -104,10 +104,11 @@ Each key under `services` is a service. Its name is also its hostname inside the
 | `devices` | Host devices mapped into the container: `/dev/net/tun`, `/dev/ttyUSB0:/dev/ttyACM0:rwm`. See [Host access](#host-access). |
 | `privileged` | `true` gives the container every capability and device. See [Host access](#host-access). |
 | `security_opt` | Security options: `no-new-privileges:true`, `apparmor=unconfined`, `seccomp=unconfined`… See [Host access](#host-access). |
+| `extends` | Starts from another service: `extends: base`, or `{service: base, file: common.yml}` from another file of the repository (git projects only). Mappings such as `environment` merge, `ports`, `volumes` and other lists add up (a volume, config or secret at the same target replaces the base's), other keys replace the base's. Relative paths in the other file stay relative to it. |
 | `build` | Ignored when `image` is set (with a warning); an error without one. |
 | `x-kipitiny` | kipitiny's settings, below. |
 
-Top level: `name` (the project name, informational), `services`, `volumes` and `x-kipitiny` (project variables). A top-level volume may be `external: true` (with `name:` when the Docker volume is named otherwise): an existing volume, mounted as is and never removed by kipitiny. Or it may set the local driver's `driver_opts` (`type`, `o`, `device`), e.g. an NFS share, used when the volume is created. Both are admin-only, see [Host access](#host-access); other drivers are refused, other options ignored.
+Top level: `name` (the project name, informational), `services`, `volumes`, `configs`, `secrets`, `include` and `x-kipitiny` (project variables). `include: [db/compose.yml]` (or `{path: …}`) adds the services of other files of the repository, each read with paths relative to itself; git projects only. A service defined in two files is an error; their project variables are added unless already set. `project_directory` and `env_file` are ignored. A top-level volume may be `external: true` (with `name:` when the Docker volume is named otherwise): an existing volume, mounted as is and never removed by kipitiny. Or it may set the local driver's `driver_opts` (`type`, `o`, `device`), e.g. an NFS share, used when the volume is created. Both are admin-only, see [Host access](#host-access); other drivers are refused, other options ignored.
 
 ### Ignored with a warning
 
@@ -115,7 +116,7 @@ kipitiny orders, networks and restarts services itself, so these are dropped and
 
 ### Errors
 
-Any other key is refused, because ignoring it would run something different from what the file says: for example `profiles`, `extends`, `platform`, `cgroup`, `pid`, `ipc`. So is any `network_mode` but `host`.
+Any other key is refused, because ignoring it would run something different from what the file says: for example `profiles`, `platform`, `cgroup`, `pid`, `ipc`. So is any `network_mode` but `host`.
 
 ### Files
 
