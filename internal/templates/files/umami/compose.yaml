@@ -40,4 +40,4 @@ services:
       icon: umami
       secrets: [APP_SECRET]
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
