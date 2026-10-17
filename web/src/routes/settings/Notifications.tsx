@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, ChevronLeft, Mail, Pencil, Plus, Send, Trash2, TriangleAlert } from "lucide-react";
+import { Bell, ChevronLeft, Mail, Pencil, Plus, Send, Smartphone, Trash2, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -28,6 +28,7 @@ import { SettingsPage } from "./page";
 const kindIcons: Record<string, ReactNode> = {
   discord: <DiscordIcon className="text-[#5865F2]" />,
   email: <Mail />,
+  push: <Smartphone />,
 };
 const kindIcon = (kind: string) => kindIcons[kind] ?? <Bell />;
 
@@ -236,7 +237,9 @@ function ChannelForm({
             ? "In Discord: channel settings › Integrations › Webhooks › New Webhook, then copy its URL."
             : form.kind === "email"
               ? "Sent through one of the email providers in Settings › Email, to every recipient (comma-separated)."
-              : "Pick the events this channel receives."}
+              : form.kind === "push"
+                ? "Sent to every browser and phone where an admin turned push notifications on, in Account."
+                : "Pick the events this channel receives."}
         </DialogDescription>
       </DialogHeader>
       {email.data && email.data.providers.length === 0 && (

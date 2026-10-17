@@ -148,6 +148,14 @@ type Store interface {
 	PasskeyUsed(ctx context.Context, id, credential string) error
 	DeletePasskey(ctx context.Context, userID, id string) error
 
+	// SavePushSubscription adds a browser, or moves its endpoint to p.UserID
+	// with the new keys when it is already known.
+	SavePushSubscription(ctx context.Context, p PushSubscription) (PushSubscription, error)
+	ListPushSubscriptions(ctx context.Context, userID string) ([]PushSubscription, error)
+	// ListAdminPushSubscriptions returns the browsers of every admin.
+	ListAdminPushSubscriptions(ctx context.Context) ([]PushSubscription, error)
+	DeletePushSubscription(ctx context.Context, userID, id string) error
+
 	CreateSession(ctx context.Context, s Session) error
 	// GetSession returns ErrNotFound for unknown or expired sessions.
 	GetSession(ctx context.Context, tokenHash string) (Session, error)
@@ -334,6 +342,21 @@ type Passkey struct {
 	Credential string     `bun:"credential" json:"-"`
 	CreatedAt  time.Time  `bun:"created_at" json:"createdAt"`
 	LastUsedAt *time.Time `bun:"last_used_at" json:"lastUsedAt,omitempty"`
+}
+
+// PushSubscription is a browser that receives push notifications.
+type PushSubscription struct {
+	bun.BaseModel `bun:"table:push_subscriptions,alias:push" json:"-"`
+
+	ID     string `bun:"id,pk" json:"id"`
+	UserID string `bun:"user_id" json:"-"`
+	// Name tells devices apart (Chrome on Linux).
+	Name string `bun:"name" json:"name"`
+	// Endpoint is the push service URL that reaches the browser.
+	Endpoint  string    `bun:"endpoint" json:"endpoint"`
+	P256dh    string    `bun:"p256dh" json:"-"`
+	Auth      string    `bun:"auth" json:"-"`
+	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 }
 
 type Session struct {

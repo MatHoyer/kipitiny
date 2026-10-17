@@ -1,5 +1,5 @@
-// Package notify delivers events to external channels (Discord, email; in-app
-// or generic webhooks later). It knows nothing about the manager: core builds
+// Package notify delivers events to external channels (Discord, email, push
+// to browsers; generic webhooks later). It knows nothing about the manager: core builds
 // an Event and hands it to the Sender of each channel, with the Deps it
 // delivers through.
 package notify
@@ -57,6 +57,9 @@ type Deps struct {
 	// Mail sends an email through one of the manager's email providers; nil
 	// when nothing is sent (validating a configuration).
 	Mail func(ctx context.Context, provider string, to []*netmail.Address, b mail.Body, subject string) error
+	// Push sends a push notification to the admins' browsers; nil when
+	// nothing is sent.
+	Push func(ctx context.Context, m PushMessage) error
 	// Brand is the manager's name senders sign with; kipitiny when empty.
 	Brand string
 }
@@ -98,7 +101,7 @@ type Option struct {
 // ErrConfig wraps every configuration error.
 var ErrConfig = errors.New("invalid notification config")
 
-var kinds = []Kind{discordKind, emailKind}
+var kinds = []Kind{discordKind, emailKind, pushKind}
 
 // Kinds lists the available delivery methods.
 func Kinds() []Kind { return slices.Clone(kinds) }

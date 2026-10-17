@@ -682,6 +682,39 @@ func (s *Store) DeletePasskey(ctx context.Context, userID, id string) error {
 	return nil
 }
 
+func (s *Store) SavePushSubscription(ctx context.Context, p store.PushSubscription) (store.PushSubscription, error) {
+	p.ID, p.CreatedAt = ids.New(), now()
+	_, err := s.db.NewInsert().Model(&p).On("CONFLICT (endpoint) DO UPDATE").
+		Set("user_id = EXCLUDED.user_id").Set("name = EXCLUDED.name").
+		Set("p256dh = EXCLUDED.p256dh").Set("auth = EXCLUDED.auth").
+		Returning("*").Exec(ctx)
+	return p, mapErr(err)
+}
+
+func (s *Store) ListPushSubscriptions(ctx context.Context, userID string) ([]store.PushSubscription, error) {
+	ps := []store.PushSubscription{}
+	err := s.db.NewSelect().Model(&ps).Where("user_id = ?", userID).Order("created_at").Scan(ctx)
+	return ps, mapErr(err)
+}
+
+func (s *Store) ListAdminPushSubscriptions(ctx context.Context) ([]store.PushSubscription, error) {
+	ps := []store.PushSubscription{}
+	err := s.db.NewSelect().Model(&ps).
+		Where("user_id IN (SELECT id FROM users WHERE role = ?)", store.RoleAdmin).Order("created_at").Scan(ctx)
+	return ps, mapErr(err)
+}
+
+func (s *Store) DeletePushSubscription(ctx context.Context, userID, id string) error {
+	res, err := s.db.NewDelete().Model((*store.PushSubscription)(nil)).Where("id = ?", id).Where("user_id = ?", userID).Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) CreateSession(ctx context.Context, sess store.Session) error {
 	sess.CreatedAt = now()
 	sess.ExpiresAt = sess.ExpiresAt.UTC().Truncate(time.Microsecond)

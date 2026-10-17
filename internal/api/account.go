@@ -170,3 +170,33 @@ func (a *API) deletePasskey(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (a *API) pushDevices(w http.ResponseWriter, r *http.Request) {
+	v, err := a.core.PushDevices(r.Context())
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+func (a *API) subscribePush(w http.ResponseWriter, r *http.Request) {
+	var body core.PushSubscribeInput
+	if !decode(w, r, &body) {
+		return
+	}
+	d, err := a.core.SubscribePush(r.Context(), body)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, d)
+}
+
+func (a *API) unsubscribePush(w http.ResponseWriter, r *http.Request) {
+	if err := a.core.UnsubscribePush(r.Context(), r.PathValue("id")); err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
