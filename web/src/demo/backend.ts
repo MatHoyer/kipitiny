@@ -1,4 +1,6 @@
 import type {
+  AnalyticsSettings,
+  AnalyticsStats,
   Account,
   Backup,
   Restore,
@@ -51,7 +53,7 @@ import type {
 } from "@/api";
 import { autoTagColor, normalizeTag, tagColors } from "@/lib/tags";
 import { files } from "./files";
-import { demoUsers, seed, service as newService, type DemoDb } from "./seed";
+import { demoUsers, rng, seed, service as newService, type DemoDb } from "./seed";
 import { demoLogos, demoTemplates } from "./templates";
 
 /*
@@ -858,6 +860,54 @@ function newBackup(s: DemoDb["services"][number] | null, targetId = "local"): Ba
     createdAt: t,
     finishedAt: t,
     verifyDetails: { tables: 0, rows: 0, dbBytes: 0, durationMs: 0 },
+  };
+}
+
+let analyticsSettings: AnalyticsSettings = { enabled: true, domain: "stats.acme.example", retentionDays: 365 };
+
+/** Plausible visits of the demo's site, the same for everyone. */
+function demoAnalytics(from: number, to: number, interval: number): AnalyticsStats {
+  const r = rng(from / interval);
+  const series = [];
+  for (let t = Math.floor(from / interval) * interval; t < to; t += interval) {
+    const hour = new Date(t * 1000).getHours();
+    const visitors = Math.round((interval >= 86400 ? 140 : 4 + 8 * Math.sin((Math.PI * hour) / 24)) * (0.6 + r()));
+    series.push({ t, visitors, pageviews: Math.round(visitors * (1.8 + r())) });
+  }
+  const visitors = series.reduce((n, p) => n + p.visitors, 0);
+  const pageviews = series.reduce((n, p) => n + p.pageviews, 0);
+  const rows = (values: string[]) => {
+    let left = visitors;
+    return values.map((value) => {
+      const n = Math.max(1, Math.round(left * (0.35 + r() * 0.2)));
+      left -= n;
+      return { value, visitors: n, count: Math.round(n * (1.2 + r())) };
+    });
+  };
+  return {
+    pageviews,
+    visitors,
+    visits: Math.round(visitors * 1.3),
+    bounces: Math.round(visitors * 0.55),
+    duration: Math.round(visitors * 1.3 * 95),
+    active: 3,
+    series,
+    breakdowns: {
+      pages: rows(["/", "/pricing", "/blog/launch", "/docs", "/signup"]),
+      entries: rows(["/", "/blog/launch", "/pricing"]),
+      exits: rows(["/", "/signup", "/pricing"]),
+      referrers: rows(["google.com", "news.ycombinator.com", "github.com", "duckduckgo.com"]),
+      countries: rows(["FR", "US", "DE", "GB", "CA"]),
+      languages: rows(["en-us", "fr-fr", "de-de"]),
+      browsers: rows(["Chrome", "Safari", "Firefox", "Edge"]),
+      os: rows(["macOS", "Windows", "iOS", "Android", "Linux"]),
+      devices: rows(["desktop", "mobile", "tablet"]),
+      screens: rows(["1920x1080", "1440x900", "390x844"]),
+      utm_source: rows(["newsletter", "twitter"]),
+      events: rows(["signup", "download"]),
+      props: rows(["signup: plan=pro", "signup: plan=free"]),
+    },
+    script: `<script defer src="https://${analyticsSettings.domain}/a.js"></script>`,
   };
 }
 
@@ -1847,6 +1897,18 @@ const routes: Route[] = [
       save();
     },
   ],
+  ["GET", /^\/analytics$/, () => analyticsSettings],
+  [
+    "PUT",
+    /^\/analytics$/,
+    ({ body, q }) => {
+      const turnedOn = body.enabled && !analyticsSettings.enabled;
+      analyticsSettings = { ...analyticsSettings, ...body };
+      return q.has("progress") ? progressed(turnedOn ? ["image", "start", "health", "sites"] : ["sites"], analyticsSettings) : analyticsSettings;
+    },
+  ],
+  ["DELETE", /^\/analytics\/data$/, () => undefined],
+  ["GET", /^\/services\/([^/]+)\/analytics$/, ({ q }) => demoAnalytics(Number(q.get("from")), Number(q.get("to")), Number(q.get("interval")))],
   ["GET", /^\/cleanup$/, () => cleanupView()],
   [
     "PUT",

@@ -1,10 +1,11 @@
-import { Bell, BookOpen, Brush, GitFork, HardDrive, Globe, Info, KeyRound, KeySquare, LogIn, Mail, Network, Package, Palette, ScrollText, Server, Users, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, ChartNoAxesColumn, Brush, GitFork, HardDrive, Globe, Info, KeyRound, KeySquare, LogIn, Mail, Network, Package, Palette, ScrollText, Server, Users, type LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 import type { Feature } from "@/api";
 import { EmptyState } from "@/components/common";
 import { useAccess } from "@/lib/access";
 import { docsUrl } from "@/lib/docs";
 import { Version } from "./About";
+import { Analytics } from "./Analytics";
 import { Appearance } from "./Appearance";
 import { Audit } from "./Audit";
 import { Cleanup } from "./Cleanup";
@@ -114,6 +115,13 @@ export const settingsPages: SettingsPage[] = [
     label: "Email",
     icon: Mail,
     page: Email,
+  },
+  {
+    slug: "analytics",
+    group: "Integrations",
+    label: "Analytics",
+    icon: ChartNoAxesColumn,
+    page: Analytics,
   },
   {
     slug: "appearance",

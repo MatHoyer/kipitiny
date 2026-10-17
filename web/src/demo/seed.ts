@@ -72,7 +72,7 @@ export type DemoDb = {
 const at = (daysAgo: number, hour = 9) => new Date(Date.UTC(2026, 8, 30, hour) - daysAgo * 86_400_000).toISOString();
 
 /** Deterministic pseudo-random numbers, so the sample data is the same for everyone. */
-function rng(seed: number) {
+export function rng(seed: number) {
   let s = seed;
   return () => {
     s = (s * 1664525 + 1013904223) % 4294967296;
@@ -90,6 +90,7 @@ export function service(p: Partial<Service> & Pick<Service, "id" | "name" | "kin
     replicas: 1,
     port: 0,
     domain: "",
+    analytics: false,
     env: {},
     secrets: [],
     memoryMb: 0,
@@ -271,7 +272,7 @@ function backups(): Backup[] {
 
 export function seed(): DemoDb {
   const services = [
-    service({ id: "web", name: "web", kind: "app", image: "nginx:1.27-alpine", domain: "acme.example", port: 80, tags: ["frontend"] }),
+    service({ id: "web", name: "web", kind: "app", image: "nginx:1.27-alpine", domain: "acme.example", port: 80, tags: ["frontend"], analytics: true }),
     service({
       id: "api",
       name: "api",

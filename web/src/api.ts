@@ -109,6 +109,8 @@ export type Service = {
   replicas: number;
   port: number;
   domain: string;
+  /** The analytics server counts the domain's visits (when analytics are on). */
+  analytics: boolean;
   env: Record<string, string>;
   /** Names of the env entries that are secrets: their values come back masked. */
   secrets: string[];
@@ -334,6 +336,7 @@ export type ServiceInput = {
   replicas?: number;
   port?: number;
   domain?: string;
+  analytics?: boolean;
   env?: Record<string, string>;
   secrets?: string[];
   memoryMb?: number;
@@ -722,6 +725,33 @@ export type SecretStep = "image" | "helper" | "login" | "verify" | "session" | "
 
 /** An item of a password manager vault, with the fields env can reference. */
 export type SecretItem = { title: string; fields: { name: string; ref: string }[] };
+
+export type AnalyticsSettings = {
+  enabled: boolean;
+  /** Serves the tracker script and receives hits. */
+  domain: string;
+  retentionDays: number;
+};
+
+/** Steps of turning analytics on, as the manager reports them. */
+export type AnalyticsStep = "image" | "start" | "health" | "sites";
+
+export type AnalyticsRow = { value: string; count: number; visitors: number };
+
+export type AnalyticsStats = {
+  pageviews: number;
+  visitors: number;
+  visits: number;
+  bounces: number;
+  /** Summed length of the visits, in seconds. */
+  duration: number;
+  /** Visitors of the last 30 minutes. */
+  active: number;
+  series: { t: number; pageviews: number; visitors: number }[];
+  breakdowns: Record<string, AnalyticsRow[]>;
+  /** The tag the app's pages include. */
+  script: string;
+};
 
 export type CleanupSettings = {
   enabled: boolean;
@@ -1550,6 +1580,14 @@ export const api = {
   setServerNetwork: (id: string, n: ServerNetwork) => request<Server>(`/servers/${id}/network`, json("PUT", n)),
   setBranding: (b: BrandingInput) => request<Branding>("/branding", json("PUT", b)),
   resetBranding: () => request<Branding>("/branding", { method: "DELETE" }),
+  analytics: () => request<AnalyticsSettings>("/analytics"),
+  setAnalytics: (s: AnalyticsSettings, onStep?: (step: AnalyticsStep) => void) =>
+    onStep
+      ? progress<AnalyticsSettings>("/analytics", json("PUT", s), (step) => onStep(step as AnalyticsStep))
+      : request<AnalyticsSettings>("/analytics", json("PUT", s)),
+  deleteAnalyticsData: () => request<void>("/analytics/data", { method: "DELETE" }),
+  serviceAnalytics: (id: string, q: { from: number; to: number; interval: number; offset: number }) =>
+    request<AnalyticsStats>(`/services/${id}/analytics?${new URLSearchParams(Object.entries(q).map(([k, v]) => [k, String(v)]))}`),
   cleanup: () => request<Cleanup>("/cleanup"),
   setCleanup: (s: CleanupSettings) => request<Cleanup>("/cleanup", json("PUT", s)),
   runCleanup: () => request<Cleanup>("/cleanup/run", { method: "POST" }),
