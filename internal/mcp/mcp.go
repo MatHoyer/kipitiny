@@ -177,6 +177,8 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 		Description: "Change a project's preview settings (see get_preview_settings); omitted fields are kept. Previews pick them up on their next deploy_preview. Needs env."}, t.setPreviewSettings)
 	addTool(s, &mcp.Tool{Name: "set_sleep",
 		Description: "Set a project's sleep mode: after this long without a request to any of its apps, every service stops, databases too, and the next request starts them again behind a \"starting\" page (503 with Retry-After for API calls). Background workers don't run while it sleeps; a deploy, a start, a backup or a data query wakes it. Needs an app with a domain, and no service with published ports or the host network; get_app_status reports sleeping services."}, t.setSleep)
+	addTool(s, &mcp.Tool{Name: "list_domains", Annotations: readOnly,
+		Description: "The base domains added to kipitiny, under which apps get their domain (app.example.com under example.com): whether a connected Cloudflare token manages their DNS, its SSL/TLS mode, and whether records are proxied."}, t.listDomains)
 	addTool(s, &mcp.Tool{Name: "sync_dns", Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
 		Description: "Sync the Cloudflare DNS records and tunnel routes of service domains now instead of waiting for the next round (every ten minutes, and seconds after a domain changes); public IPs are detected again. Returns each managed hostname's state. Needs admin and a connected Cloudflare token."}, t.syncDNS)
 	addTool(s, &mcp.Tool{Name: "list_networks", Annotations: readOnly,

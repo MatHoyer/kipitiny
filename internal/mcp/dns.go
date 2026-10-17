@@ -27,3 +27,18 @@ func (t *tools) syncDNS(ctx context.Context, _ *mcp.CallToolRequest, _ struct{})
 	})
 	return nil, out, err
 }
+
+type listDomainsOut struct {
+	Domains []core.DomainView `json:"domains"`
+}
+
+func (t *tools) listDomains(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listDomainsOut, error) {
+	if err := core.Authenticated(ctx); err != nil {
+		return nil, listDomainsOut{}, err
+	}
+	if err := core.RequireFeature(ctx, core.FeatureDomains); err != nil {
+		return nil, listDomainsOut{}, err
+	}
+	ds, err := t.c.DomainViews(ctx)
+	return nil, listDomainsOut{Domains: ds}, friendly(err)
+}
