@@ -278,3 +278,21 @@ services:
 		t.Errorf("test without CMD: %v", err)
 	}
 }
+
+func TestNeedsDeploy(t *testing.T) {
+	for _, tc := range []struct {
+		svc     store.Service
+		changed bool
+		want    bool
+	}{
+		{store.Service{CurrentDeploymentID: "d"}, true, true},
+		{store.Service{CurrentDeploymentID: "d"}, false, false},
+		{store.Service{}, false, true}, // never deployed: its first deploy failed
+		{store.Service{}, true, true},
+		{store.Service{Stopped: true}, true, false},
+	} {
+		if got := needsDeploy(tc.svc, tc.changed); got != tc.want {
+			t.Errorf("needsDeploy(%+v, %v) = %v", tc.svc, tc.changed, got)
+		}
+	}
+}
