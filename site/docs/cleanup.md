@@ -20,3 +20,5 @@ settings, kipitiny keeps database and app volumes, everything it labels
 `kipitiny.managed`, each service's image and those of its last successful
 deployments (rollback), and the current and running deployments. Health probe
 volumes left by older manager versions are removed once unused.
+
+Agents use the `get_cleanup` and `run_cleanup` [MCP](/docs/api) tools (admins only).

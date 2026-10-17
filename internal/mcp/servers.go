@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -64,4 +65,25 @@ func (t *tools) getServerStatus(ctx context.Context, _ *mcp.CallToolRequest, in 
 		return nil, getServerStatusOut{}, friendly(fmt.Errorf("%w: server %s", store.ErrNotFound, in.Server))
 	}
 	return nil, out, nil
+}
+
+func (t *tools) getCleanup(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, core.CleanupView, error) {
+	if err := core.RequireAdmin(ctx); err != nil {
+		return nil, core.CleanupView{}, err
+	}
+	return nil, t.c.Cleanup(ctx), nil
+}
+
+func (t *tools) runCleanup(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, core.CleanupView, error) {
+	out, err := mutate(ctx, t.c, "run_cleanup", "cleanup", func() (core.CleanupView, error) {
+		if err := core.RequireAdmin(ctx); err != nil {
+			return core.CleanupView{}, err
+		}
+		v, err := t.c.RunCleanup(ctx)
+		if errors.Is(err, core.ErrBusy) {
+			err = errors.New("a cleanup is already running; get_cleanup shows its step")
+		}
+		return v, err
+	})
+	return nil, out, err
 }
