@@ -504,7 +504,10 @@ func (a *applier) prepare(ctx context.Context, f compose.File) error {
 		if !ok {
 			continue
 		}
-		if err := a.prepareService(ctx, name, in, prospect, dbs); err != nil {
+		if err := a.prepareService(ctx, name, in, prospect, dbs); errors.Is(err, ErrForbidden) {
+			// The apply would be refused, not invalid: answer as it would.
+			return fmt.Errorf("%w: service %s: %s", ErrForbidden, name, strings.TrimPrefix(err.Error(), ErrForbidden.Error()+": "))
+		} else if err != nil {
 			errs = append(errs, fmt.Sprintf("service %s: %v", name, err))
 		}
 	}
@@ -655,6 +658,16 @@ func hasBasicAuthUser(s store.Service, name string) bool {
 	return slices.ContainsFunc(s.Middlewares.BasicAuth, func(u store.BasicAuthUser) bool { return u.Name == name })
 }
 
+// checkChange runs the permission checks of creating or updating a service
+// while planning, so a dry run refuses what the apply would. A template's
+// new project doesn't exist yet: its install checks them.
+func (a *applier) checkChange(ctx context.Context, old, svc store.Service) error {
+	if a.project.ID == "" {
+		return nil
+	}
+	return checkServiceChange(ctx, old, svc)
+}
+
 func (a *applier) prepareService(ctx context.Context, name string, in ServiceInput, project store.Project, dbs map[string]store.Service) error {
 	old, exists := a.byName[name]
 	if !exists {
@@ -665,6 +678,9 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		// The project may not exist yet (a template's dry run): checks
 		// find its server here, not in the store.
 		svc.ServerID = a.project.ServerID
+		if err := a.checkChange(ctx, store.Service{ProjectID: a.project.ID, Env: map[string]string{}, Secrets: []string{}}, svc); err != nil {
+			return err
+		}
 		if err := a.c.validateIn(ctx, svc, project, dbs); err != nil {
 			return err
 		}
@@ -699,6 +715,9 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 	}
 	svc, err := a.c.patched(old, patch)
 	if err != nil {
+		return err
+	}
+	if err := a.checkChange(ctx, old, svc); err != nil {
 		return err
 	}
 	if err := a.c.validateIn(ctx, svc, project, dbs); err != nil {
