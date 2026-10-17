@@ -74,6 +74,8 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 		Description: "List every project, including empty ones, with its server, tags, service names and the git compose file it follows, if any."}, t.listProjects)
 	addTool(s, &mcp.Tool{Name: "get_manager_status", Annotations: readOnly,
 		Description: "The manager's version and available update, its Docker engine, its database size, and the current CPU, memory and network use of every running service."}, t.getManagerStatus)
+	addTool(s, &mcp.Tool{Name: "get_server_status", Annotations: readOnly,
+		Description: "Each server's connection and Docker engine, its host's current CPU, load, memory, swap, disk (of Docker's data) and uptime, and for admins its last security check (firewall, SSH, updates, reboot needed) with hints. Use it when services are slow or a deploy fails for lack of space."}, t.getServerStatus)
 	addTool(s, &mcp.Tool{Name: "get_topology", Annotations: readOnly,
 		Description: "The network map of each server: entrypoints and the reverse proxy, Docker networks with subnets, and each project's containers with their IPs and aliases."}, t.getTopology)
 	addTool(s, &mcp.Tool{Name: "get_audit_log", Annotations: readOnly,

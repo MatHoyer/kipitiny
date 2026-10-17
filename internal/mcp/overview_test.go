@@ -34,6 +34,12 @@ func TestOverviewTools(t *testing.T) {
 	if out, isErr := e.call(admin, "list_domains", nil); isErr || !strings.Contains(out, `"name":"example.com"`) || !strings.Contains(out, `"cloudflare":false`) {
 		t.Errorf("list_domains: %s", out)
 	}
+	if out, isErr := e.call(admin, "get_server_status", nil); isErr || !strings.Contains(out, `"id":"`+store.LocalServerID+`"`) || !strings.Contains(out, `"security":{`) {
+		t.Errorf("get_server_status: %s", out)
+	}
+	if out, isErr := e.call(admin, "get_server_status", map[string]any{"server": "nope"}); !isErr || !strings.Contains(out, "not found") {
+		t.Errorf("get_server_status unknown server: %s", out)
+	}
 
 	// The audit log is admin only, and holds refused attempts.
 	if out, isErr := e.call(read, "get_audit_log", nil); !isErr || !strings.Contains(out, "forbidden") {
