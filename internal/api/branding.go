@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/MatHoyer/kipitiny/internal/core"
@@ -24,6 +25,13 @@ func (a *API) brandingLogo(w http.ResponseWriter, r *http.Request) {
 		h.Set("Cache-Control", "no-cache")
 	}
 	_, _ = w.Write(data)
+}
+
+// manifest is public: browsers fetch it without credentials.
+func (a *API) manifest(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Content-Type", "application/manifest+json")
+	_ = json.NewEncoder(w).Encode(a.core.Manifest(r.Context()))
 }
 
 func (a *API) setBranding(w http.ResponseWriter, r *http.Request) {

@@ -162,7 +162,7 @@ export function Appearance() {
                 Remove
               </Button>
             )}
-            <p className="w-full text-xs text-muted-foreground">Square works best: it also becomes the favicon. PNG, JPEG, WebP or SVG, up to 128 KB.</p>
+            <p className="w-full text-xs text-muted-foreground">Square works best: it also becomes the favicon and the app icon. PNG, JPEG, WebP or SVG, up to 128 KB.</p>
           </div>
         </Section>
         <Section title="Colours">

@@ -13,7 +13,7 @@ export function useBranding(): Branding {
 /** Shows a theme on the whole UI before it's saved (Settings › Appearance); null goes back to the saved one. */
 export const BrandingPreview = createContext<(b: Branding | null) => void>(() => {});
 
-/** Applies the branding to the page: theme, tab title and favicon. */
+/** Applies the branding to the page: theme, tab title, favicon and home-screen icon. */
 export function useApplyBranding(b: Branding) {
   const css = themeCSS(b);
   useEffect(() => {
@@ -37,6 +37,11 @@ export function useApplyBranding(b: Branding) {
     icon.href = b.logo || icon.dataset.default;
     if (b.logo) icon.removeAttribute("type");
     else icon.type = "image/svg+xml";
+    // iOS reads it when the app is added to the home screen
+    const touch = document.querySelector<HTMLLinkElement>("link[rel=apple-touch-icon]");
+    if (!touch) return;
+    touch.dataset.default ??= touch.href;
+    touch.href = b.logo || touch.dataset.default;
   }, [b.logo]);
 }
 

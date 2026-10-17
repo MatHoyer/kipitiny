@@ -202,6 +202,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("POST /api/secret-connections/{id}/test", a.testSecretConnection)
 	handle("GET /api/secret-connections/{id}/items", a.secretItems)
 	handle("GET /api/branding/logo", a.brandingLogo)
+	handle("GET /api/manifest.webmanifest", a.manifest)
 	handle("PUT /api/branding", a.setBranding)
 	handle("DELETE /api/branding", a.resetBranding)
 	handle("GET /api/analytics", a.getAnalytics)

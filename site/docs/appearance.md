@@ -29,11 +29,21 @@ Paper, Terminal), then adjust any part of it:
 
 - **Name**: shown in the sidebar, on the sign-in page, in the browser tab and
   in emails (invites, notifications, the test email), up to 40 characters.
-- **Logo**: next to the name and as the favicon. PNG, JPEG, WebP or SVG, up to
-  128 KB; square works best.
+- **Logo**: next to the name, as the favicon and as the app's icon. PNG, JPEG,
+  WebP or SVG, up to 128 KB; square works best.
 
 Notification emails keep their level's colour (red for a failure, green for a
 success).
+
+## Install as an app
+
+The manager can be installed like an app, in its own window without the
+browser's bars: **Install** in the address bar on Chrome and Edge, *Share ›
+Add to Home Screen* on iPhone and iPad, *Add to Home screen* on Android. The
+app takes the name, accent and logo set here. Use a PNG logo, at least 512 px
+wide, to get a sharp icon everywhere: iOS shows no SVG icon.
+
+Browsers offer this only over HTTPS (or on `localhost`).
 
 The logo is public at `/api/branding/logo`, since the sign-in page shows it.
 An SVG logo is only ever drawn as an image, and opening it directly runs no

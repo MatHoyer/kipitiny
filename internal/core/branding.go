@@ -258,3 +258,45 @@ func isSVG(data []byte) bool {
 		rest = bytes.TrimSpace(rest)
 	}
 }
+
+// Manifest is the web app manifest that makes the UI installable as an app.
+type Manifest struct {
+	Name       string         `json:"name"`
+	ShortName  string         `json:"short_name"`
+	StartURL   string         `json:"start_url"`
+	Scope      string         `json:"scope"`
+	Display    string         `json:"display"`
+	ThemeColor string         `json:"theme_color,omitempty"`
+	Icons      []ManifestIcon `json:"icons"`
+}
+
+type ManifestIcon struct {
+	Src     string `json:"src"`
+	Sizes   string `json:"sizes"`
+	Type    string `json:"type"`
+	Purpose string `json:"purpose,omitempty"`
+}
+
+// Manifest follows the branding: its name, accent and logo, else kipitiny's
+// icons (web/public).
+func (c *Core) Manifest(ctx context.Context) Manifest {
+	s := c.brandingSettings(ctx)
+	name := s.Name
+	if name == "" {
+		name = DefaultBrandName
+	}
+	icons := []ManifestIcon{
+		{Src: "/icon-192.png", Sizes: "192x192", Type: "image/png"},
+		{Src: "/icon-512.png", Sizes: "512x512", Type: "image/png"},
+		{Src: "/icon-maskable-512.png", Sizes: "512x512", Type: "image/png", Purpose: "maskable"},
+	}
+	if s.LogoHash != "" {
+		// shortcut: one icon at whatever size it was uploaded; an SVG logo shows
+		// on Chrome/Android only, iOS falls back to a screenshot.
+		icons = []ManifestIcon{{Src: "/api/branding/logo?v=" + s.LogoHash, Sizes: "any", Type: s.LogoType}}
+	}
+	return Manifest{
+		Name: name, ShortName: name, StartURL: "/", Scope: "/", Display: "standalone",
+		ThemeColor: s.Accent, Icons: icons,
+	}
+}
