@@ -8,7 +8,9 @@ import { DomainField } from "@/components/domain-field";
 import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { api, type PublishedPort, type Service as ServiceT } from "../../api";
 import { Applies } from "./parts";
 
@@ -260,6 +262,33 @@ export function NetworksCard({ svc, projectName }: { svc: ServiceT; projectName:
         )}
       </form>
       <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setSelected(svc.networks)} label="Save networks" />
+    </Section>
+  );
+}
+
+/** Whether the analytics server counts the domain's visits. */
+export function AnalyticsCard({ svc }: { svc: ServiceT }) {
+  const qc = useQueryClient();
+  const id = useId();
+  const save = useMutation({
+    meta: { error: "Couldn't change analytics" },
+    mutationFn: (analytics: boolean) => api.updateService(svc.id, { analytics }),
+    onSuccess: (updated) => qc.setQueryData(["service", svc.id], updated),
+  });
+  return (
+    <Section
+      title={<Applies title="Analytics" when="now" />}
+      description={
+        <>
+          Counts visits of <Mono>{svc.domain}</Mono> without cookies, once analytics are on in Settings › Analytics. The pages need the
+          script tag shown in the Analytics tab.
+        </>
+      }
+    >
+      <div className="flex items-center gap-3">
+        <Switch id={id} checked={svc.analytics} disabled={save.isPending} onCheckedChange={(v) => save.mutate(v)} />
+        <Label htmlFor={id}>Count visits</Label>
+      </div>
     </Section>
   );
 }

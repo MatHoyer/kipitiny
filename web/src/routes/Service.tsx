@@ -38,6 +38,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { AnalyticsTab } from "@/components/analytics-tab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAccess } from "@/lib/access";
 import { FilesTab } from "@/components/files/files-tab";
@@ -75,7 +76,7 @@ export function Service() {
   });
   const deploying = deployments.data?.some((d) => d.status === "running") ?? false;
   const [selected, setSelected] = useState<string | null>(null);
-  const [tab, setTab] = useTab(["overview", "deployments", "logs", "terminal", "data", "files", "environment", "backups", "settings"], "overview");
+  const [tab, setTab] = useTab(["overview", "deployments", "logs", "terminal", "data", "files", "environment", "backups", "analytics", "settings"], "overview");
   const git = useProjectGit(service.data?.projectId ?? "");
   const gitManaged = !!git.data;
   const { can } = useAccess();
@@ -255,6 +256,7 @@ export function Service() {
             {may("files") && <TabsTrigger value="files">Files</TabsTrigger>}
             <TabsTrigger value="environment">Environment</TabsTrigger>
             {canBackup(svc) && <TabsTrigger value="backups">Backups</TabsTrigger>}
+            {svc.analytics && <TabsTrigger value="analytics">Analytics</TabsTrigger>}
             {(may("settings") || may("delete")) && <TabsTrigger value="settings">Settings</TabsTrigger>}
           </TabsList>
           <TabsContent value="overview" className="space-y-6">
@@ -301,6 +303,11 @@ export function Service() {
           {may("files") && (
             <TabsContent value="files">
               <FilesTab svc={svc} onBackups={() => setTab("backups")} />
+            </TabsContent>
+          )}
+          {svc.analytics && (
+            <TabsContent value="analytics">
+              <AnalyticsTab svc={svc} />
             </TabsContent>
           )}
           <TabsContent value="environment" className="flex flex-col gap-6">
