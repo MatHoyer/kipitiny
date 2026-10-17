@@ -2,11 +2,14 @@ package mcp
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/MatHoyer/kipitiny/internal/core"
+	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
 type listPreviewsIn struct {
@@ -77,4 +80,86 @@ func (t *tools) closePreview(ctx context.Context, _ *mcp.CallToolRequest, in clo
 		return closePreviewOut{Closed: in.Name}, t.c.ClosePreview(ctx, p.ID, in.Name)
 	})
 	return nil, out, err
+}
+
+type getPreviewSettingsIn struct {
+	Project string `json:"project" jsonschema:"the project whose preview settings to read"`
+}
+
+func (t *tools) getPreviewSettings(ctx context.Context, _ *mcp.CallToolRequest, in getPreviewSettingsIn) (*mcp.CallToolResult, store.PreviewSettings, error) {
+	if err := core.Authenticated(ctx); err != nil {
+		return nil, store.PreviewSettings{}, err
+	}
+	p, err := t.project(ctx, in.Project, core.PermView)
+	if err != nil {
+		return nil, store.PreviewSettings{}, friendly(err)
+	}
+	ps, err := t.c.GetPreviewSettings(ctx, p.ID)
+	return nil, ps, friendly(err)
+}
+
+type setPreviewSettingsIn struct {
+	Project    string            `json:"project" jsonschema:"the project whose previews these settings apply to"`
+	BaseDomain *string           `json:"base_domain,omitempty" jsonschema:"domain hosting the previews' apps as <preview>-<service>.<base_domain>; empty removes it"`
+	Set        map[string]string `json:"set,omitempty" jsonschema:"plain preview variables to add or overwrite (readable), replacing the project's of the same name"`
+	Secrets    map[string]string `json:"secrets,omitempty" jsonschema:"preview secrets to add or overwrite (write-only)"`
+	Unset      []string          `json:"unset,omitempty" jsonschema:"preview variables or secrets to remove"`
+	Inherit    *[]string         `json:"inherit,omitempty" jsonschema:"the project's secrets previews may still use (replaces the list); the others are left out"`
+	TTL        *string           `json:"ttl,omitempty" jsonschema:"close a preview after this long unused, as a duration (168h); 0 for the default of 7 days"`
+	SleepAfter *string           `json:"sleep_after,omitempty" jsonschema:"idle time before a preview sleeps, as a duration (30m; 5 minutes to 30 days); 0 for the default"`
+	AllowSeed  *bool             `json:"allow_seed,omitempty" jsonschema:"let deploy_preview seed new previews' databases with the project's latest backups (production data)"`
+}
+
+// setPreviewSettings changes only the fields given, unlike the API's
+// replace, so an agent can't drop secrets it can't read.
+func (t *tools) setPreviewSettings(ctx context.Context, _ *mcp.CallToolRequest, in setPreviewSettingsIn) (*mcp.CallToolResult, store.PreviewSettings, error) {
+	out, err := mutate(ctx, t.c, "set_preview_settings", in.Project, func() (store.PreviewSettings, error) {
+		p, err := t.project(ctx, in.Project, core.PermEnv)
+		if err != nil {
+			return store.PreviewSettings{}, err
+		}
+		ps, err := t.c.GetPreviewSettings(ctx, p.ID) // secrets masked: unchanged ones are kept
+		if err != nil {
+			return store.PreviewSettings{}, err
+		}
+		next := core.PreviewSettingsInput{BaseDomain: ps.BaseDomain, Env: ps.Env, Inherit: ps.Inherit,
+			TTLSeconds: ps.TTLSeconds, SleepAfterSeconds: ps.SleepAfterSeconds, AllowSeed: ps.AllowSeed}
+		next.Secrets = slices.DeleteFunc(ps.Secrets, func(k string) bool { _, set := in.Set[k]; return set })
+		maps.Copy(next.Env, in.Set)
+		maps.Copy(next.Env, in.Secrets)
+		next.Secrets = append(next.Secrets, slices.Collect(maps.Keys(in.Secrets))...)
+		for _, k := range in.Unset {
+			delete(next.Env, k)
+		}
+		if in.BaseDomain != nil {
+			next.BaseDomain = *in.BaseDomain
+		}
+		if in.Inherit != nil {
+			next.Inherit = *in.Inherit
+		}
+		if in.TTL != nil {
+			if next.TTLSeconds, err = seconds(*in.TTL); err != nil {
+				return store.PreviewSettings{}, err
+			}
+		}
+		if in.SleepAfter != nil {
+			if next.SleepAfterSeconds, err = seconds(*in.SleepAfter); err != nil {
+				return store.PreviewSettings{}, err
+			}
+		}
+		if in.AllowSeed != nil {
+			next.AllowSeed = *in.AllowSeed
+		}
+		return t.c.SetPreviewSettings(ctx, p.ID, next)
+	})
+	return nil, out, err
+}
+
+// seconds parses a duration given to a tool; "0" is zero.
+func seconds(s string) (int, error) {
+	if s == "0" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(s)
+	return int(d.Seconds()), err
 }
