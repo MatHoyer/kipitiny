@@ -1399,3 +1399,43 @@ func TestTokenScopeMigration(t *testing.T) {
 		}
 	}
 }
+
+func TestPushSubscriptions(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	admin, err := s.CreateUser(ctx, store.User{Username: "admin", PasswordHash: "x", Role: store.RoleAdmin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, err := s.CreateUser(ctx, store.User{Username: "member", PasswordHash: "x", Role: store.RoleMember})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.SavePushSubscription(ctx, store.PushSubscription{UserID: admin.ID, Name: "Chrome", Endpoint: "https://e/1", P256dh: "k", Auth: "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the same browser again, signed in as someone else: moved, not duplicated
+	again, err := s.SavePushSubscription(ctx, store.PushSubscription{UserID: member.ID, Name: "Chrome", Endpoint: "https://e/1", P256dh: "k2", Auth: "a2"})
+	if err != nil || again.ID != p.ID || again.P256dh != "k2" {
+		t.Fatalf("resubscribe: %+v %v", again, err)
+	}
+	if ps, _ := s.ListAdminPushSubscriptions(ctx); len(ps) != 0 {
+		t.Fatalf("admin subscriptions after the move: %+v", ps)
+	}
+	if _, err := s.SavePushSubscription(ctx, store.PushSubscription{UserID: admin.ID, Name: "Firefox", Endpoint: "https://e/2", P256dh: "k", Auth: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if ps, _ := s.ListAdminPushSubscriptions(ctx); len(ps) != 1 || ps[0].Name != "Firefox" {
+		t.Fatalf("admin subscriptions: %+v", ps)
+	}
+	if err := s.DeletePushSubscription(ctx, admin.ID, p.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("delete someone else's: %v", err)
+	}
+	if err := s.DeletePushSubscription(ctx, member.ID, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if ps, _ := s.ListPushSubscriptions(ctx, member.ID); len(ps) != 0 {
+		t.Fatalf("member subscriptions: %+v", ps)
+	}
+}

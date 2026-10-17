@@ -73,6 +73,7 @@ type Core struct {
 	securityBusy   atomic.Bool  // a security check started by hand is running
 	notified       sync.Map     // notification key -> time.Time last sent
 	notifyHTTP     *http.Client // nil: notify's default; tests redirect it
+	pushMu         sync.Mutex   // generating the VAPID keys
 	secretKinds    []secretKind
 	secretsMu      sync.Mutex
 	analyticsMu    sync.Mutex

@@ -99,7 +99,8 @@ credentials and is never shown again.
 
 - a **Discord** webhook (`https://discord.com/api/webhooks/…`);
 - **Email** to one or more recipients (comma-separated), through one of the
-  providers set in [Email](#email). Subjects start with `[kipitiny]`.
+  providers set in [Email](#email). Subjects start with `[kipitiny]`;
+- **Push** notifications to admins' browsers and phones (see below).
 
 Each channel picks its events
 (by default problems and recoveries, restores and new versions, but not
@@ -120,6 +121,26 @@ service, is sent at most once per 15 minutes.
 | `git.sync.succeeded`, `git.sync.failed` | A git sync changed something, or failed. |
 | `cleanup.failed` | The scheduled [cleanup](/docs/cleanup) had errors. |
 | `update.available` | A new kipitiny version is published (once per version). |
+
+### Push notifications
+
+A push channel shows its events as notifications on every device where an
+admin turned them on, like an app's, even with the manager closed. Members
+get none, since events are about every project.
+
+1. In *Settings › Notifications*, add a **Push** channel and pick its events.
+2. On each device, open *Account › Push notifications*, choose **Turn on for
+   this device** and allow notifications when the browser asks.
+
+Push needs the manager over HTTPS (or at `localhost`). On iPhone and iPad
+(iOS 16.4 or later), first [install the manager](/docs/appearance#install-as-an-app)
+on the home screen, open it from there, then turn push on.
+
+Messages go through the browser's push service (Google for Chrome, Mozilla,
+Apple, Microsoft), so the manager must reach the internet. They are encrypted
+for the device: the push service sees only when a message is sent and its
+size. A device that turns notifications off is forgotten on the next message;
+*Account* lists your devices and removes any of them.
 
 The AI agents connected through [MCP](/docs/api) see the same state with
 `get_app_status` (containers, health, usage, uptime results) and

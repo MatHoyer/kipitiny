@@ -54,6 +54,8 @@ export type DemoDb = {
   ssoProviders?: SSOProvider[];
   /** Settings › Appearance; the logo is kept as a data URL. */
   branding?: Branding;
+  /** The demo phone stopped getting pushes. */
+  pushRemoved?: boolean;
   /** Added after version 3: the colors picked for tags, by name. */
   tagColors?: Record<string, string>;
   /** The SMTP servers set in Settings › Email. */

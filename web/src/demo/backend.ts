@@ -1082,6 +1082,16 @@ const routes: Route[] = [
       grants: {},
     }),
   ],
+  // A phone already gets pushes; this browser can't subscribe without a real manager's key.
+  ["GET", /^\/account\/push$/, () => ({ publicKey: "", devices: db.pushRemoved ? [] : [{ id: "push1", name: "Chrome on Android", endpoint: "https://fcm.googleapis.com/fcm/send/demo", createdAt: now() }] })],
+  [
+    "POST",
+    /^\/account\/push$/,
+    () => {
+      throw invalid("this is a demo: push notifications need a real manager");
+    },
+  ],
+  ["DELETE", /^\/account\/push\/[^/]+$/, () => ((db.pushRemoved = true), save())],
   [
     "GET",
     /^\/status$/,
@@ -1781,6 +1791,7 @@ const routes: Route[] = [
             { key: "provider", label: "Send through", required: true, secret: false, options: emailOptions() },
           ],
         },
+        { name: "push", label: "Push", fields: [] },
       ],
       events: EVENTS,
     }),
@@ -1790,7 +1801,8 @@ const routes: Route[] = [
     /^\/notifications\/channels$/,
     ({ body }) => {
       const kind = String(body.kind || "discord");
-      const config: Record<string, string> = kind === "email" ? emailConfig(body.config as Record<string, string>) : { webhookUrl: MASK };
+      const config: Record<string, string> =
+        kind === "email" ? emailConfig(body.config as Record<string, string>) : kind === "push" ? {} : { webhookUrl: MASK };
       const ch = { id: newId("ch"), name: String(body.name || "Discord"), kind, config, events: body.events ?? [], enabled: body.enabled ?? true, createdAt: now() };
       db.channels.push(ch);
       save();

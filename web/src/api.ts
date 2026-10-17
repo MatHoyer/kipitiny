@@ -606,6 +606,9 @@ export type InviteInfo = { role: Role; expiresAt: string; projects: string[]; ss
 /** A password sign-in that still needs a TOTP or recovery code. */
 export type MfaChallenge = { mfaRequired: true; ticket: string };
 
+/** A browser that receives push notifications. */
+export type PushDevice = { id: string; name: string; endpoint: string; createdAt: string };
+
 export type Passkey = { id: string; name: string; createdAt: string; lastUsedAt?: string };
 
 /** A provider offered on the sign-in page. */
@@ -1326,6 +1329,12 @@ export const api = {
     return request<Passkey>("/account/passkeys", json("POST", { ceremony, name, credential }));
   },
   deletePasskey: (id: string) => request<void>(`/account/passkeys/${id}`, { method: "DELETE" }),
+  /** publicKey: the applicationServerKey browsers subscribe with. */
+  pushDevices: () => request<{ publicKey: string; devices: PushDevice[] }>("/account/push"),
+  /** sub: the browser's PushSubscription.toJSON(). */
+  subscribePush: (name: string, { endpoint, keys }: PushSubscriptionJSON) =>
+    request<PushDevice>("/account/push", json("POST", { name, endpoint, keys })),
+  unsubscribePush: (id: string) => request<void>(`/account/push/${id}`, { method: "DELETE" }),
   /** The provider's sign-in page, to link the identity signed in there. */
   connectSSO: (id: string, password: string) => request<{ url: string }>(`/account/sso/${id}/connect`, json("POST", { password })),
   unlinkSSO: (id: string) => request<void>(`/account/sso/${id}`, { method: "DELETE" }),

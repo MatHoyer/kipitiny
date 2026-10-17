@@ -1,7 +1,7 @@
 // Bridges the server's WebAuthn JSON (binary fields as base64url) and the
 // browser's navigator.credentials API (ArrayBuffers).
 
-const fromB64 = (s: string) => {
+export const fromB64 = (s: string) => {
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(s.length / 4) * 4, "=");
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 };

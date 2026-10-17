@@ -315,7 +315,8 @@ Later: optional VictoriaLogs or Loki, opt-in.
 ### Notifications
 
 - `internal/notify` is transport-agnostic: an `Event` (type, level, title, message, fields, link) and a `Sender` per channel kind. Each kind declares its config fields (secret or not, free text or a choice whose options core fills in, like the email providers), so the UI renders new kinds without changes.
-- Kinds: Discord webhook and email (recipients and an email provider of §Email per channel) now; in-app and generic webhooks later. A sender gets its transports as `notify.Deps` (HTTP client, mail func), so `notify` stays ignorant of settings.
+- Kinds: Discord webhook, email (recipients and an email provider of §Email per channel) and push; generic webhooks later. A sender gets its transports as `notify.Deps` (HTTP client, mail func), so `notify` stays ignorant of settings.
+- Push (Web Push, `internal/notify/webpush.go`, stdlib crypto + `golang-jwt`, no push library): the payload is encrypted for the browser (RFC 8291 aes128gcm) and signed with the manager's VAPID key (RFC 8292, generated on first use, setting `webpush`). Admins only (events cover every project): `push_subscriptions` holds each admin's browsers (Account), endpoints limited to known push services' hosts so a subscription can't make the manager call anything else; a push channel delivers to all of them, deleting those the push service answers 404/410 for. `web/public/sw.js` handles only `push` and `notificationclick`: no fetch handler, nothing cached, so the UI never outlives an upgrade. The UI is installable: `/api/manifest.webmanifest` (public) follows the branding.
 
 ### Email
 
