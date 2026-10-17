@@ -171,6 +171,10 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 		Description: "Create or update a preview environment of a project: a copy with fresh databases, its apps on the preview base domain (asleep when unused), the project variables of its preview settings instead of production's secrets, and the given image tags. Changed services deploy in the background; list_previews and get_app_status show the outcome. Refused when a value it needs is missing or points at production. Needs deploy."}, t.deployPreview)
 	addTool(s, &mcp.Tool{Name: "close_preview", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Close a preview environment: delete its containers, volumes and databases. Needs deploy."}, t.closePreview)
+	addTool(s, &mcp.Tool{Name: "get_preview_settings", Annotations: readOnly,
+		Description: "A project's preview settings (secrets masked): the base domain of previews' apps, the preview variables and secrets replacing production's, the production secrets previews still inherit, the time to live, sleep delay and whether seeding with production data is allowed."}, t.getPreviewSettings)
+	addTool(s, &mcp.Tool{Name: "set_preview_settings",
+		Description: "Change a project's preview settings (see get_preview_settings); omitted fields are kept. Previews pick them up on their next deploy_preview. Needs env."}, t.setPreviewSettings)
 	addTool(s, &mcp.Tool{Name: "set_sleep",
 		Description: "Set a project's sleep mode: after this long without a request to any of its apps, every service stops, databases too, and the next request starts them again behind a \"starting\" page (503 with Retry-After for API calls). Background workers don't run while it sleeps; a deploy, a start, a backup or a data query wakes it. Needs an app with a domain, and no service with published ports or the host network; get_app_status reports sleeping services."}, t.setSleep)
 	addTool(s, &mcp.Tool{Name: "sync_dns", Annotations: &mcp.ToolAnnotations{IdempotentHint: true},

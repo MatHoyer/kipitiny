@@ -107,7 +107,8 @@ kipitiny preview --url https://kipitiny.example.com --project shop --name pr-12 
 The API is `PUT /api/projects/{id}/previews/{name}` (same fields as JSON:
 `tags`, `env`, `branch`, `commit`, `seed`, `ttlSeconds`) and
 `DELETE /api/projects/{id}/previews/{name}`; agents use `deploy_preview`,
-`list_previews` and `close_preview`.
+`list_previews`, `close_preview`, and `get_preview_settings` and
+`set_preview_settings` for the settings.
 
 ## One preview per stack of pull requests
 
