@@ -75,6 +75,8 @@ type Core struct {
 	notifyHTTP     *http.Client // nil: notify's default; tests redirect it
 	secretKinds    []secretKind
 	secretsMu      sync.Mutex
+	analyticsMu    sync.Mutex
+	analyticsSites string                      // container ID and hostnames last sent to the analytics server
 	secrets        map[string]secrets.Provider // by kind + "\x00" + connection name
 	secretListings secretListings
 	mfaTickets     pending[mfaTicket]

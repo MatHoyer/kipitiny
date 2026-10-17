@@ -92,6 +92,9 @@ type Ext struct {
 	PreDeploy  string `yaml:"pre_deploy,omitempty"`
 	PreBackup  string `yaml:"pre_backup,omitempty"`
 	Icon       string `yaml:"icon,omitempty"`
+	// Analytics counts the domain's visits. Tagged so the hash of a service
+	// without it stays the same.
+	Analytics bool `yaml:"analytics,omitempty" json:",omitempty"`
 	// Preview is "only" (a service of previews alone, e.g. a mail catcher)
 	// or "skip" (left out of previews). Tagged so the hash of a service
 	// without it stays the same.
@@ -303,7 +306,7 @@ func Escape(s string) string {
 
 func isZeroExt(x Ext) bool {
 	return x.Kind == "" && x.Domain == "" && x.Port == 0 && x.HealthPath == "" && x.PreDeploy == "" &&
-		x.PreBackup == "" && x.Icon == "" && x.Preview == "" && len(x.Tags) == 0 && len(x.Secrets) == 0 && x.Password == "" && x.Middlewares == nil &&
+		x.PreBackup == "" && x.Icon == "" && !x.Analytics && x.Preview == "" && len(x.Tags) == 0 && len(x.Secrets) == 0 && x.Password == "" && x.Middlewares == nil &&
 		x.Uptime == nil
 }
 

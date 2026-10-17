@@ -146,6 +146,9 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 		Description: "Restore-test a successful backup in a throwaway, network-less container; list_backups then shows the result."}, t.verifyBackup)
 	addTool(s, &mcp.Tool{Name: "delete_backup", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Delete a backup and its file from storage."}, t.deleteBackup)
+	addTool(s, &mcp.Tool{Name: "get_analytics", Annotations: readOnly,
+		Description: "Cookieless web analytics of an app: pageviews, visitors, visits, bounces, time on site, daily series, " +
+			"and top pages, referrers, UTM, browsers, OS, devices, countries and custom events."}, t.getAnalytics)
 	addTool(s, &mcp.Tool{Name: "list_restores", Annotations: readOnly,
 		Description: "Restores of a service: which backup, when and the outcome."}, t.listRestores)
 	addTool(s, &mcp.Tool{Name: "list_deployments", Annotations: readOnly,

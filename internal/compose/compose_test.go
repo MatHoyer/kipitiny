@@ -815,3 +815,21 @@ services:
 		t.Errorf("read back: %v\n%s", err, data)
 	}
 }
+
+func TestAnalyticsRoundTrip(t *testing.T) {
+	src := "services:\n  web:\n    image: nginx\n    x-kipitiny: {domain: shop.example.com, port: 80, analytics: true}\n"
+	f, _, err := Parse([]byte(src), Vars{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !f.Services["web"].X.Analytics {
+		t.Fatal("analytics not read")
+	}
+	out, err := Marshal(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "analytics: true") {
+		t.Errorf("not written:\n%s", out)
+	}
+}

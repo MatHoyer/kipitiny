@@ -169,6 +169,7 @@ services:
 | `pre_deploy` | shell command | apps | Runs once (`sh -c`) in a one-off container before a rollout, e.g. migrations. A failure aborts the deploy. |
 | `pre_backup` | shell command | apps | Runs in a running replica before each volume backup, e.g. to flush to disk. |
 | `icon` | name | all | Logo the UI shows (e.g. `ghost`, `n8n`). Default: from the kind or image. |
+| `analytics` | boolean | public apps | Count the domain's visits with [analytics](/docs/analytics), once they're on in Settings. Applies without a deploy; left out of previews. |
 | `preview` | `only` \| `skip` | all | `only`: the service runs in [previews](/docs/previews) alone, e.g. a mail catcher, never in the project itself (same as `profiles: [preview]`). `skip`: left out of previews, e.g. a scheduler emailing real customers. Git projects only: previews read the file. |
 | `tags` | list of names | all | [Tags](/docs/services#tags) grouping the service in the UI (up to 10, lowercased). Without it, the service has none: applying the file removes the ones set in the UI. |
 | `secrets` | list of env keys | apps | Which `environment` entries are secrets (write-only in the UI and API, masked everywhere, exported only with secrets). Without it, the values given as `${NAME}` are (see [Values](#values-references-and-secrets)). |

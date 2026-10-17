@@ -459,8 +459,10 @@ type Service struct {
 	// Port is the container port Traefik routes to; 0 when not public.
 	Port int `bun:"port" json:"port"`
 	// Domain is the public hostname; empty when not public.
-	Domain string            `bun:"domain" json:"domain"`
-	Env    map[string]string `bun:"env" json:"env"`
+	Domain string `bun:"domain" json:"domain"`
+	// Analytics: the analytics server counts visits of Domain.
+	Analytics bool              `bun:"analytics" json:"analytics"`
+	Env       map[string]string `bun:"env" json:"env"`
 	// Secrets names the Env entries that are write-only; the others are
 	// plain variables.
 	Secrets []string `bun:"secrets" json:"secrets"`
