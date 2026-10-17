@@ -256,7 +256,7 @@ A variable whose value is a missing `${NAME}` keeps its current value; on a proj
 1. The whole file is parsed and every service validated against the project as it will be (variables, databases, ports, domains). Any error stops everything: nothing has changed.
 2. Project variables are set; services are created (databases first) and updated where something differs.
 3. With pruning (always with git, an option on import), apps the file doesn't list are deleted with their volumes. Databases the file doesn't list are only reported, and kept until deleted by hand.
-4. Created services, and services whose change needs it (anything but `replicas`, `icon` and `tags`), are deployed: databases first, then apps once the databases are up, each after the deploys of the services it [`depends_on`](#compose-keys-kipitiny-reads). Scaling and `depends_on` apply at once.
+4. Created services, services whose change needs it (anything but `replicas`, `icon` and `tags`), and services that never deployed successfully (a first deploy that failed) are deployed: databases first, then apps once the databases are up, each after the deploys of the services it [`depends_on`](#compose-keys-kipitiny-reads). Scaling and `depends_on` apply at once.
 
 A service can't change kind (an app into a database): delete it first.
 

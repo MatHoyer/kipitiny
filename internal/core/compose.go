@@ -910,8 +910,13 @@ func (a *applier) apply(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("update %s: %w", u.name, err)
 		}
-		if u.deploy && !svc.Stopped && svc.CurrentDeploymentID != "" {
+		if needsDeploy(svc, u.deploy) {
 			queue(svc.ID, svc.Kind)
+		}
+	}
+	for _, name := range a.plan.Unchanged {
+		if s, ok := a.byName[name]; ok && needsDeploy(s, false) {
+			queue(s.ID, s.Kind)
 		}
 	}
 	for _, op := range a.networkOps {
@@ -1055,6 +1060,13 @@ func (c *Core) deployInOrder(dbs, apps []string, commit string, between func()) 
 		}
 		deployed[svc.Name] = d.ID
 	}
+}
+
+// needsDeploy reports whether an apply deploys an existing service: when
+// its change needs it, or when it never deployed successfully (its first
+// deploy failed, or a failed apply created it) even if its block is unchanged.
+func needsDeploy(svc store.Service, changed bool) bool {
+	return !svc.Stopped && (changed || svc.CurrentDeploymentID == "")
 }
 
 // waitDeployments waits until deployments are over, at most
