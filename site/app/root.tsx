@@ -13,6 +13,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+        {import.meta.env.PROD && (
+          <script defer src="/u/s.js" data-website-id="3c9542c0-148b-4bee-9382-a4bdcd878a2c" data-domains="kipitiny.mathieuhoyer.fr" />
+        )}
       </head>
       <body>
         {children}
