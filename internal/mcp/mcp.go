@@ -76,6 +76,10 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 		Description: "The manager's version and available update, its Docker engine, its database size, and the current CPU, memory and network use of every running service."}, t.getManagerStatus)
 	addTool(s, &mcp.Tool{Name: "get_server_status", Annotations: readOnly,
 		Description: "Each server's connection and Docker engine, its host's current CPU, load, memory, swap, disk (of Docker's data) and uptime, and for admins its last security check (firewall, SSH, updates, reboot needed) with hints. Use it when services are slow or a deploy fails for lack of space."}, t.getServerStatus)
+	addTool(s, &mcp.Tool{Name: "get_cleanup", Annotations: readOnly,
+		Description: "The disk cleanup's settings (what it removes from every server: unused images, volumes, build cache, stopped containers, old deployments), its schedule, whether one is running and the last run's result with the space reclaimed. Needs admin."}, t.getCleanup)
+	addTool(s, &mcp.Tool{Name: "run_cleanup",
+		Description: "Free disk space on every server now with the cleanup's saved settings (see get_cleanup), even if its schedule is off. It runs in the background; get_cleanup shows its progress and result. Database and app volumes, each service's image and those of its recent deployments are always kept. Needs admin."}, t.runCleanup)
 	addTool(s, &mcp.Tool{Name: "get_topology", Annotations: readOnly,
 		Description: "The network map of each server: entrypoints and the reverse proxy, Docker networks with subnets, and each project's containers with their IPs and aliases."}, t.getTopology)
 	addTool(s, &mcp.Tool{Name: "get_audit_log", Annotations: readOnly,

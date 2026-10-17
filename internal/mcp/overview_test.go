@@ -40,6 +40,14 @@ func TestOverviewTools(t *testing.T) {
 	if out, isErr := e.call(admin, "get_server_status", map[string]any{"server": "nope"}); !isErr || !strings.Contains(out, "not found") {
 		t.Errorf("get_server_status unknown server: %s", out)
 	}
+	for _, name := range []string{"get_cleanup", "run_cleanup"} {
+		if out, isErr := e.call(read, name, nil); !isErr || !strings.Contains(out, "forbidden") {
+			t.Errorf("%s with a read token: %s", name, out)
+		}
+	}
+	if out, isErr := e.call(admin, "get_cleanup", nil); isErr || !strings.Contains(out, `"running":false`) || !strings.Contains(out, `"minAgeHours":24`) {
+		t.Errorf("get_cleanup: %s", out)
+	}
 
 	// The audit log is admin only, and holds refused attempts.
 	if out, isErr := e.call(read, "get_audit_log", nil); !isErr || !strings.Contains(out, "forbidden") {
