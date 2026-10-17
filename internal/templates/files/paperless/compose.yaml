@@ -47,7 +47,7 @@ x-template:
 name: paperless
 services:
   webserver:
-    image: ghcr.io/paperless-ngx/paperless-ngx:3.3.0
+    image: ghcr.io/paperless-ngx/paperless-ngx:3.3.2
     expose: ["8000"]
     environment:
       PAPERLESS_URL: https://${DOMAIN}
