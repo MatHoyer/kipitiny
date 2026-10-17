@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/netip"
 	"slices"
@@ -323,6 +324,9 @@ func (c *Core) checkSecurity(ctx context.Context, sv store.Server) SecurityRepor
 func (c *Core) securityReport(ctx context.Context, serverID string) (SecurityReport, error) {
 	var r SecurityReport
 	v, err := c.store.GetSetting(ctx, securitySetting(serverID))
+	if errors.Is(err, store.ErrNotFound) {
+		return r, nil // not checked yet
+	}
 	if err != nil || v == "" {
 		return r, err
 	}
