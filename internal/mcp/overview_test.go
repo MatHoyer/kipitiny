@@ -30,6 +30,10 @@ func TestOverviewTools(t *testing.T) {
 	if out, isErr := e.call(read, "get_manager_status", nil); isErr || !strings.Contains(out, `"usage":{}`) || !strings.Contains(out, `"update"`) {
 		t.Errorf("get_manager_status: %s", out)
 	}
+	e.st.CreateDomain(context.Background(), store.Domain{Name: "example.com"})
+	if out, isErr := e.call(admin, "list_domains", nil); isErr || !strings.Contains(out, `"name":"example.com"`) || !strings.Contains(out, `"cloudflare":false`) {
+		t.Errorf("list_domains: %s", out)
+	}
 
 	// The audit log is admin only, and holds refused attempts.
 	if out, isErr := e.call(read, "get_audit_log", nil); !isErr || !strings.Contains(out, "forbidden") {
