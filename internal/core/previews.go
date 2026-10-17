@@ -522,7 +522,8 @@ func previewFile(f *compose.File, parent store.Project, name string, settings st
 		}
 		s.Replicas = 0
 		s.X.Uptime = nil
-		s.X.Password = "" // a fresh database
+		s.X.Analytics = false // prod's numbers only
+		s.X.Password = ""     // a fresh database
 		if s.X.Port == 0 {
 			s.X.Domain = ""
 		}

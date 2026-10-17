@@ -48,7 +48,9 @@ type ServiceInput struct {
 	Replicas int               `json:"replicas"`
 	Port     int               `json:"port"`
 	Domain   string            `json:"domain"`
-	Env      map[string]string `json:"env"`
+	// Analytics counts the domain's visits (apps with a domain only).
+	Analytics bool              `json:"analytics"`
+	Env       map[string]string `json:"env"`
 	// Secrets names the write-only Env entries; nil makes them all secrets.
 	Secrets    []string `json:"secrets"`
 	MemoryMB   int      `json:"memoryMb"`
@@ -98,6 +100,7 @@ type ServicePatch struct {
 	Replicas   *int              `json:"replicas"`
 	Port       *int              `json:"port"`
 	Domain     *string           `json:"domain"`
+	Analytics  *bool             `json:"analytics"`
 	Env        map[string]string `json:"env"`
 	Secrets    []string          `json:"secrets"`
 	MemoryMB   *int              `json:"memoryMb"`
@@ -200,6 +203,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		Replicas:         in.Replicas,
 		Port:             in.Port,
 		Domain:           strings.ToLower(strings.TrimSpace(in.Domain)),
+		Analytics:        in.Analytics,
 		Env:              in.Env,
 		MemoryMB:         in.MemoryMB,
 		CPUs:             in.CPUs,
@@ -335,6 +339,9 @@ func (c *Core) updateService(ctx context.Context, id string, p ServicePatch) (st
 	if svc.Domain != old.Domain {
 		c.kickDNS()
 	}
+	if svc.Analytics != old.Analytics || svc.Analytics && svc.Domain != old.Domain {
+		c.kick() // the reconciler sends the analytics server its hostnames
+	}
 	return svc, nil
 }
 
@@ -356,6 +363,9 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 	}
 	if p.Replicas != nil {
 		svc.Replicas = *p.Replicas
+	}
+	if p.Analytics != nil {
+		svc.Analytics = *p.Analytics
 	}
 	if p.Port != nil {
 		svc.Port = *p.Port
@@ -452,6 +462,12 @@ func (c *Core) validateIn(ctx context.Context, s store.Service, project store.Pr
 	if s.Domain != "" && s.Domain == c.cfg.Domain {
 		return fmt.Errorf("%w: domain %q is the manager's own", ErrInvalid, s.Domain)
 	}
+	if s.Analytics && project.ParentID != "" {
+		return fmt.Errorf("%w: previews aren't counted by analytics", ErrInvalid)
+	}
+	if s.Analytics && project.ServerID != store.LocalServerID {
+		return fmt.Errorf("%w: analytics only run on the manager's server for now", ErrInvalid)
+	}
 	if project.SleepAfterSeconds != 0 && (len(s.PublishedPorts) > 0 || s.HostNetwork) {
 		return fmt.Errorf("%w: %s sleeps, and traffic that goes around Traefik can't wake it: turn sleep mode off first", ErrInvalid, project.Name)
 	}
@@ -501,6 +517,9 @@ func validateService(s store.Service) error {
 	}
 	if !iconRe.MatchString(s.Icon) {
 		return fmt.Errorf("%w: icon must be lowercase letters, digits and dashes", ErrInvalid)
+	}
+	if s.Analytics && (s.Kind.IsDatabase() || !httpRouted(s)) {
+		return fmt.Errorf("%w: analytics count the visits of an app's domain: set a domain and a container port", ErrInvalid)
 	}
 	for k := range s.Env {
 		if !envKeyRe.MatchString(k) {

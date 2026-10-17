@@ -527,6 +527,9 @@ func (c *Core) wantedRecords(ctx context.Context, zones []cloudflare.Zone) (map[
 	if c.cfg.Domain != "" && c.cfg.Traefik.Enabled {
 		add(c.cfg.Domain, store.LocalServerID, false)
 	}
+	if a := c.Analytics(ctx); a.Enabled && c.cfg.Traefik.Enabled {
+		add(a.Domain, store.LocalServerID, false)
+	}
 	return wants, nil
 }
 

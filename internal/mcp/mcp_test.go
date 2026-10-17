@@ -94,7 +94,7 @@ func TestTools(t *testing.T) {
 		"backup_database", "list_backups", "list_storage", "restore_database", "list_databases", "create_database", "list_tables", "read_table",
 		"scan_redis_keys", "get_redis_key", "query_database", "get_connection", "delete_service", "delete_project", "list_backup_schedules",
 		"set_backup_schedule", "delete_backup_schedule", "set_uptime_check", "delete_uptime_check", "backup_project", "verify_backup",
-		"delete_backup", "list_restores", "list_deployments", "list_git_repos", "list_git_branches", "get_manager_status", "get_topology",
+		"delete_backup", "list_restores", "get_analytics", "list_deployments", "list_git_repos", "list_git_branches", "get_manager_status", "get_topology",
 		"get_audit_log", "list_networks", "create_network", "delete_network", "set_service_networks",
 		"list_volume_files", "read_volume_file", "write_volume_file", "make_volume_dir", "move_volume_path", "delete_volume_paths"} {
 		if !strings.Contains(strings.Join(names, ","), want) {

@@ -120,6 +120,7 @@ func exportFile(p store.Project, svcs []store.Service, checks map[string]store.U
 				PreBackup:  s.PreBackup,
 				Icon:       s.Icon,
 				Tags:       s.Tags,
+				Analytics:  s.Analytics,
 			},
 		}
 		if s.Replicas > 1 {
@@ -575,6 +576,7 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 		Replicas:         cs.Replicas,
 		Port:             cs.X.Port,
 		Domain:           cs.X.Domain,
+		Analytics:        cs.X.Analytics,
 		Env:              cs.Environment,
 		Secrets:          cs.X.Secrets,
 		MemoryMB:         cs.MemoryMB,
@@ -737,10 +739,10 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		return nil
 	}
 	if len(fields) > 0 {
-		// Scaling, the icon, sleep mode and the start order apply without a
+		// Scaling, the icon, analytics, sleep mode and the start order apply without a
 		// deploy.
 		needsDeploy := slices.ContainsFunc(fields, func(f string) bool {
-			return f != "replicas" && f != "icon" && f != "tags" && f != "sleepAfter" && f != "dependsOn" && f != "networks" &&
+			return f != "replicas" && f != "icon" && f != "tags" && f != "analytics" && f != "sleepAfter" && f != "dependsOn" && f != "networks" &&
 				!(f == "files" && old.Kind.IsDatabase()) // init scripts run on an empty database only
 		})
 		a.updates = append(a.updates, pendingUpdate{id: old.ID, name: name, patch: patch, deploy: needsDeploy})
@@ -802,6 +804,7 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 		Replicas:         &in.Replicas,
 		Port:             &in.Port,
 		Domain:           &in.Domain,
+		Analytics:        &in.Analytics,
 		MemoryMB:         &in.MemoryMB,
 		CPUs:             &in.CPUs,
 		HealthPath:       &in.HealthPath,
@@ -864,6 +867,7 @@ func changedFields(old, svc store.Service) []string {
 	add("replicas", old.Replicas != svc.Replicas)
 	add("port", old.Port != svc.Port)
 	add("domain", old.Domain != svc.Domain)
+	add("analytics", old.Analytics != svc.Analytics)
 	add("env", !maps.Equal(old.Env, svc.Env) || !slices.Equal(old.Secrets, svc.Secrets))
 	add("memory", old.MemoryMB != svc.MemoryMB)
 	add("cpus", old.CPUs != svc.CPUs)

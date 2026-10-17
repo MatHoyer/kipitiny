@@ -157,6 +157,11 @@ func (c *Core) reconcileServer(ctx context.Context, sv store.Server, svcs []stor
 		if err := c.ensureTunnel(ctx, sv); err != nil {
 			c.log.Warn("reconcile: cloudflared", "server", sv.Name, "err", err)
 		}
+		if sv.Kind == store.ServerLocal {
+			if err := c.ensureAnalytics(ctx); err != nil {
+				c.log.Warn("reconcile: analytics", "err", err)
+			}
+		}
 	}
 	if sv.Kind == store.ServerLocal {
 		c.cleanupUpdater(ctx, dk)
