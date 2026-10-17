@@ -15,6 +15,7 @@ services:
     x-kipitiny:
       domain: kipitiny.mathieuhoyer.fr
       icon: nginx
+      analytics: true
       middlewares:
         headers:
           Referrer-Policy: strict-origin-when-cross-origin
