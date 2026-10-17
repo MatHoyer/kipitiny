@@ -5,6 +5,7 @@ import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { PlanView } from "@/components/compose-dialog";
 import { CheckboxField, EmptyState, ErrorText, Loading } from "@/components/common";
+import { DomainField } from "@/components/domain-field";
 import { ServiceIconTile } from "@/components/service-icon";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -257,6 +258,18 @@ function InstallForm({
                 changed();
               }}
               options={(i.options ?? []).map((o) => ({ value: o, label: o }))}
+            />
+          ) : i.type === "domain" ? (
+            <DomainField
+              key={i.name}
+              label={i.required || i.default ? i.label : `${i.label} (optional)`}
+              emptyLabel={i.required ? "Pick a domain" : "None"}
+              emptyText={i.help}
+              value={values[i.name] ?? ""}
+              onChange={(domain) => {
+                setValues((v) => ({ ...v, [i.name]: domain }));
+                changed();
+              }}
             />
           ) : (
             <FloatingInput
