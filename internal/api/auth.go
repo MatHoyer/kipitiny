@@ -21,6 +21,7 @@ var publicRoutes = map[string]bool{
 	"GET /api/auth/state": true,
 	// The logo shows on the sign-in page and as the favicon.
 	"GET /api/branding/logo":         true,
+	"GET /api/manifest.webmanifest":  true,
 	"POST /api/auth/setup":           true,
 	"POST /api/auth/login":           true,
 	"POST /api/auth/login/mfa":       true,
