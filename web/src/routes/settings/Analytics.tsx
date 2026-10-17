@@ -4,6 +4,7 @@ import { useEffect, useId, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { CopyField, ErrorText, Loading, Mono, Section } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DomainField } from "@/components/domain-field";
 import { SaveBar } from "@/components/save-bar";
 import { StepsProgress, type PlannedStep } from "@/components/test-dialog";
 import { Button } from "@/components/ui/button";
@@ -126,27 +127,25 @@ export function Analytics() {
 
 function SettingsFields({ value, onChange, disabled }: { value: AnalyticsSettings; onChange: (v: AnalyticsSettings) => void; disabled?: boolean }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <FloatingInput
-        label="Domain"
-        placeholder="stats.example.com"
-        required
-        disabled={disabled}
+    <fieldset disabled={disabled} className="grid gap-4 sm:grid-cols-2">
+      <DomainField
         value={value.domain}
-        onChange={(e) => onChange({ ...value, domain: e.target.value })}
-        description="Serves the tracker script and receives visits. Point its DNS at this server (synced with Cloudflare connected)."
+        onChange={(domain) => onChange({ ...value, domain })}
+        emptyLabel="Pick a domain"
+        emptyText="Serves the tracker script and receives visits."
+        note="Serves the tracker script and receives visits. Point its DNS at this server (synced with Cloudflare connected)."
+        className="sm:col-span-2"
       />
       <FloatingInput
         label="Keep (days)"
         type="number"
         min={1}
         max={3650}
-        disabled={disabled}
         value={String(value.retentionDays)}
         onChange={(e) => onChange({ ...value, retentionDays: Number(e.target.value) || 0 })}
         description="Older visits are deleted."
       />
-    </div>
+    </fieldset>
   );
 }
 
