@@ -9,7 +9,7 @@ Add a notice under `## Unreleased` in the change that causes it, as
 `- warning: …` (disruptive) or `- info: …`; continue on indented lines. The
 release renames the section to its version.
 
-## Unreleased
+## 0.35.0
 - warning: Compose keys kipitiny used to drop now apply, so the next git sync
   (or apply) of a file using them updates and redeploys those services: a
   port's host IP (`127.0.0.1:5432:5432` was bound on every address, now only
@@ -37,6 +37,12 @@ release renames the section to its version.
   exactly the networks created by hand it lists as `external: true` (others
   set in the UI are detached). An external network must exist on the
   server, or the sync fails.
+- info: A compose apply or git sync now also deploys the file's services
+  that never deployed successfully (a first deploy that failed), even when
+  their block is unchanged, so the next sync after the upgrade may start
+  them. When a dependency waited on as healthy or completed fails to deploy,
+  its dependents are now skipped (new `skipped` deployment status) instead
+  of deployed.
 
 ## 0.33.0
 - warning: API tokens lose their scope (read, deploy, admin): a token does what
