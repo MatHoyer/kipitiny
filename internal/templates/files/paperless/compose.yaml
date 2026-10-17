@@ -74,7 +74,7 @@ services:
       icon: paperless
       secrets: [PAPERLESS_SECRET_KEY, PAPERLESS_ADMIN_PASSWORD]
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
   broker:
     image: redis:8-alpine
 volumes:
