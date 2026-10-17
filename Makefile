@@ -4,7 +4,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 export CGO_ENABLED := 0
 DEV_ENV := KIPITINY_ADDR=:8080 KIPITINY_DATA_DIR=./data KIPITINY_LOG_LEVEL=debug
 
-.PHONY: all build ui ui-stub dev-api dev-ui dev-site site site-demo test lint docker clean
+.PHONY: all build ui ui-stub dev-api dev-ui dev-site site site-demo test lint docker docker-analytics clean
 
 all: build
 
@@ -52,6 +52,10 @@ lint: ui-stub
 
 docker:
 	docker build --build-arg VERSION=$(VERSION) -t kipitiny -t ghcr.io/mathoyer/kipitiny:dev .
+
+# The analytics server; a dev manager runs ghcr.io/mathoyer/kipitiny-analytics:dev.
+docker-analytics:
+	docker build -f images/analytics/Dockerfile -t ghcr.io/mathoyer/kipitiny-analytics:dev .
 
 clean:
 	rm -rf bin web/dist
