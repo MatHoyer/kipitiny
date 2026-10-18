@@ -57,6 +57,7 @@ func TestValidatePostgres(t *testing.T) {
 
 func TestCheckDatabaseUpdate(t *testing.T) {
 	old := pgService()
+	old.Image = "postgres:17-alpine"
 
 	minor := old
 	minor.Image = "postgres:17.2-alpine"

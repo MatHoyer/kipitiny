@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	DefaultPostgresImage    = "postgres:17-alpine"
+	DefaultPostgresImage    = "postgres:18-alpine"
 	defaultPostgresMemoryMB = 512
 	minPostgresMemoryMB     = 128
 
