@@ -1595,8 +1595,12 @@ export const api = {
       ? progress<AnalyticsSettings>("/analytics", json("PUT", s), (step) => onStep(step as AnalyticsStep))
       : request<AnalyticsSettings>("/analytics", json("PUT", s)),
   deleteAnalyticsData: () => request<void>("/analytics/data", { method: "DELETE" }),
-  serviceAnalytics: (id: string, q: { from: number; to: number; interval: number; offset: number }) =>
-    request<AnalyticsStats>(`/services/${id}/analytics?${new URLSearchParams(Object.entries(q).map(([k, v]) => [k, String(v)]))}`),
+  /** filters are "<breakdown>:<value>". */
+  serviceAnalytics: (id: string, { filters = [], ...q }: { from: number; to: number; interval: number; offset: number; filters?: string[] }) => {
+    const p = new URLSearchParams(Object.entries(q).map(([k, v]) => [k, String(v)]));
+    for (const f of filters) p.append("filter", f);
+    return request<AnalyticsStats>(`/services/${id}/analytics?${p}`);
+  },
   cleanup: () => request<Cleanup>("/cleanup"),
   setCleanup: (s: CleanupSettings) => request<Cleanup>("/cleanup", json("PUT", s)),
   runCleanup: () => request<Cleanup>("/cleanup/run", { method: "POST" }),

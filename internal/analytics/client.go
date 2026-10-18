@@ -65,6 +65,9 @@ func (c *Client) Stats(ctx context.Context, q Query) (Stats, error) {
 	v.Set("to", strconv.FormatInt(q.To.Unix(), 10))
 	v.Set("interval", strconv.FormatInt(int64(q.Interval.Seconds()), 10))
 	v.Set("offset", strconv.Itoa(q.Offset))
+	for _, f := range q.Filters {
+		v.Add("filter", f.Key+":"+f.Value)
+	}
 	var s Stats
 	err := c.do(ctx, http.MethodGet, "/api/stats?"+v.Encode(), nil, &s)
 	return s, err
