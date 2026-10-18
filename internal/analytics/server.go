@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -28,6 +29,8 @@ type Hit struct {
 	Language string         `json:"l"`
 	Name     string         `json:"n"`
 	Props    map[string]any `json:"p"`
+	// Identity is what the page passed to kipitiny.identify.
+	Identity string `json:"i"`
 }
 
 // maxHit caps a hit's body.
@@ -93,7 +96,7 @@ func eventOf(h Hit, r *http.Request) (Event, bool) {
 		Hostname: host, Name: h.Name, Path: cut(u.Path, 512), Title: cut(h.Title, 256),
 		IP: clientIP(r), UserAgent: ua,
 		Browser: first(ua, browsers), OS: first(ua, systems),
-		Language: cut(strings.ToLower(h.Language), 35),
+		Language: cut(strings.ToLower(h.Language), 35), Identity: cut(h.Identity, 128),
 	}
 	if e.Path == "" {
 		e.Path = "/"
@@ -179,6 +182,34 @@ func Private(st *Store, token string) http.Handler {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("GET /api/visits", func(w http.ResponseWriter, r *http.Request) {
+		q, err := parseQuery(r.URL.Query())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		vs, err := st.Visits(r.Context(), q, r.URL.Query().Get("before"), limit)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(vs)
+	})
+	mux.HandleFunc("GET /api/visits/{id}", func(w http.ResponseWriter, r *http.Request) {
+		d, err := st.Visit(r.Context(), r.URL.Query()["host"], r.PathValue("id"))
+		if errors.Is(err, ErrNotFound) {
+			http.Error(w, "no such visit", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(d)
 	})
 	mux.HandleFunc("GET /api/stats", func(w http.ResponseWriter, r *http.Request) {
 		q, err := parseQuery(r.URL.Query())

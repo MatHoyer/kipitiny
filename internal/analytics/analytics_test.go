@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -164,6 +165,71 @@ func TestRecordAndStats(t *testing.T) {
 	s, _ = st.Stats(ctx, Query{Hosts: []string{"shop.example.com"}, From: now.Add(-48 * time.Hour), To: now.Add(time.Minute), Interval: 24 * time.Hour})
 	if s.Pageviews != 1 || s.Visits != 1 {
 		t.Errorf("after prune = %+v", s)
+	}
+}
+
+func TestVisits(t *testing.T) {
+	ctx := context.Background()
+	st, now := open(t)
+	pub := Public(st, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	send := func(ip, body string) {
+		t.Helper()
+		hit(t, pub, chromeUA, ip, body)
+		*now = now.Add(10 * time.Second)
+	}
+	send("1.1.1.1", `{"u":"https://shop.example.com/?utm_source=news","r":"https://google.com/","s":"1920x1080"}`)
+	// Identify before it's sent with hits: names the current visit.
+	send("1.1.1.1", `{"u":"https://shop.example.com/","n":"$identify","i":"user-42","p":{"plan":"pro"}}`)
+	send("1.1.1.1", `{"u":"https://shop.example.com/cart","i":"user-42"}`)
+	send("1.1.1.1", `{"u":"https://shop.example.com/cart","n":"checkout","p":{"total":12},"i":"user-42"}`)
+	send("2.2.2.2", `{"u":"https://shop.example.com/about"}`)
+	// Identify with no visit yet is dropped.
+	send("3.3.3.3", `{"u":"https://shop.example.com/","n":"$identify","i":"ghost"}`)
+
+	q := Query{Hosts: []string{"shop.example.com"}, From: now.Add(-time.Hour), To: now.Add(time.Minute), Interval: time.Hour}
+	vs, err := st.Visits(ctx, q, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(vs) != 2 || vs[0].Entry != "/about" {
+		t.Fatalf("visits = %+v", vs)
+	}
+	a := vs[1]
+	if a.Identity != "user-42" || a.Props["plan"] != "pro" || a.Pageviews != 2 || a.Events != 1 || a.Referrer != "google.com" ||
+		a.UTMSource != "news" || a.Country != "FR" || a.Browser != "Chrome" || a.Entry != "/" || a.Exit != "/cart" {
+		t.Errorf("visit = %+v", a)
+	}
+	if page, _ := st.Visits(ctx, q, vs[0].ID, 10); len(page) != 1 || page[0].ID != a.ID {
+		t.Errorf("before = %+v", page)
+	}
+	f, _ := ParseFilters([]string{"identities:user-42"})
+	if got, _ := st.Visits(ctx, Query{Hosts: q.Hosts, From: q.From, To: q.To, Filters: f}, "", 0); len(got) != 1 || got[0].ID != a.ID {
+		t.Errorf("identity filter = %+v", got)
+	}
+	s, _ := st.Stats(ctx, q)
+	if s.Pageviews != 3 || len(s.Breakdowns["events"]) != 1 || s.Breakdowns["identities"][0].Value != "user-42" {
+		t.Errorf("identify counted as an event, or no identities: %+v", s)
+	}
+
+	d, err := st.Visit(ctx, q.Hosts, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Journey) != 3 || d.Journey[0].Path != "/" || d.Journey[2].Name != "checkout" || d.Journey[2].Props["total"] != float64(12) {
+		t.Errorf("journey = %+v", d.Journey)
+	}
+	if _, err := st.Visit(ctx, []string{"other.example.com"}, a.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("visit of another host: %v", err)
+	}
+
+	srv := httptest.NewServer(Private(st, "secret"))
+	defer srv.Close()
+	c := &Client{BaseURL: srv.URL, Token: "secret"}
+	if got, err := c.Visits(ctx, q, "", 0); err != nil || len(got) != 2 {
+		t.Errorf("client visits = %v, %v", got, err)
+	}
+	if _, err := c.Visit(ctx, []string{"other.example.com"}, a.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("client visit of another host: %v", err)
 	}
 }
 

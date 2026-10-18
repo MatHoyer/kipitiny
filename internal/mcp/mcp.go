@@ -154,7 +154,13 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 		Description: "Delete a backup and its file from storage."}, t.deleteBackup)
 	addTool(s, &mcp.Tool{Name: "get_analytics", Annotations: readOnly,
 		Description: "Cookieless web analytics of an app: pageviews, visitors, visits, bounces, time on site, daily series, " +
-			"and top pages, referrers, UTM, browsers, OS, devices, countries and custom events."}, t.getAnalytics)
+			"and top pages, referrers, UTM, browsers, OS, devices, countries, custom events and identified users; filters narrow it to a value."}, t.getAnalytics)
+	addTool(s, &mcp.Tool{Name: "list_visits", Annotations: readOnly,
+		Description: "Recent visits of an app with analytics on, newest first: pages and events counts, entry/exit, referrer, UTM, " +
+			"country, browser, OS, device, and the identity the app gave (kipitiny.identify). A visitor without identity is only " +
+			"recognized within a day."}, t.listVisits)
+	addTool(s, &mcp.Tool{Name: "get_visit", Annotations: readOnly,
+		Description: "One visit of an app: its journey (pages in order with times, custom events with their properties)."}, t.getVisit)
 	addTool(s, &mcp.Tool{Name: "list_restores", Annotations: readOnly,
 		Description: "Restores of a service: which backup, when and the outcome."}, t.listRestores)
 	addTool(s, &mcp.Tool{Name: "list_deployments", Annotations: readOnly,

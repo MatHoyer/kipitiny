@@ -89,7 +89,7 @@ func TestMemberTools(t *testing.T) {
 			"name": "x", "confirm": "db", "image": "nginx", "action": "restart", "compose": "services: {}\n", "template": e.c.ListTemplates()[0].ID,
 			"network": "x", "networks": []string{}, "path": "data/x", "paths": []string{"data/x"}, "from": "data/x", "to": "data/y",
 			"query": "select 1", "table": "x", "collection": "x", "key": "x", "provider": "x", "repo": "x/y", "repo_url": "https://example.com/x.git", "after": "0",
-			"tags": []string{"x"},
+			"tags": []string{"x"}, "visit": "x",
 		}
 		out := map[string]any{}
 		for k := range schema.Properties {

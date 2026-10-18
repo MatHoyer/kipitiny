@@ -105,8 +105,14 @@ type Event struct {
 	Hostname, Name, Path, Query, Title, Referrer           string
 	UTMSource, UTMMedium, UTMCampaign, UTMTerm, UTMContent string
 	Browser, OS, Device, Screen, Language, Country, Props  string
-	IP, UserAgent                                          string // hashed into the visitor, never stored
+	// Identity is what the page passed to kipitiny.identify, kept on the visit.
+	Identity      string
+	IP, UserAgent string // hashed into the visitor, never stored
 }
+
+// IdentifyEvent is the hit of kipitiny.identify: it names the visit's
+// visitor (its props kept with it) instead of being counted.
+const IdentifyEvent = "$identify"
 
 // visitorSalt is today's (UTC) salt, created on the first event of the day;
 // older ones are deleted.
@@ -149,6 +155,13 @@ func (s *Store) Record(ctx context.Context, e Event) error {
 	if e.Name == "" {
 		pageview = 1
 	}
+	if e.Name == IdentifyEvent {
+		// No visit yet (the pageview not in): the next hits carry the identity.
+		_, err := s.db.NewRaw(`UPDATE visits SET identity = ?, identity_props = ? WHERE id = (SELECT id FROM visits
+			WHERE visitor = ? AND hostname = ? AND last_at > ? ORDER BY last_at DESC LIMIT 1)`,
+			e.Identity, e.Props, visitor, e.Hostname, now-visitGap).Exec(ctx)
+		return err
+	}
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		var visit string
 		err := tx.NewRaw("SELECT id FROM visits WHERE visitor = ? AND hostname = ? AND last_at > ? ORDER BY last_at DESC LIMIT 1",
@@ -156,12 +169,15 @@ func (s *Store) Record(ctx context.Context, e Event) error {
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			visit = ids.New()
-			_, err = tx.NewRaw("INSERT INTO visits (id, hostname, visitor, started_at, last_at, pageviews, entry, exit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-				visit, e.Hostname, visitor, now, now, pageview, e.Path, e.Path).Exec(ctx)
+			_, err = tx.NewRaw(`INSERT INTO visits (id, hostname, visitor, started_at, last_at, pageviews, entry, exit, identity)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, visit, e.Hostname, visitor, now, now, pageview, e.Path, e.Path, e.Identity).Exec(ctx)
 		case err == nil && pageview == 1:
 			_, err = tx.NewRaw("UPDATE visits SET last_at = ?, pageviews = pageviews + 1, exit = ? WHERE id = ?", now, e.Path, visit).Exec(ctx)
 		case err == nil:
 			_, err = tx.NewRaw("UPDATE visits SET last_at = ? WHERE id = ?", now, visit).Exec(ctx)
+		}
+		if err == nil && e.Identity != "" {
+			_, err = tx.NewRaw("UPDATE visits SET identity = ? WHERE id = ?", e.Identity, visit).Exec(ctx)
 		}
 		if err != nil {
 			return err
@@ -202,7 +218,7 @@ type Query struct {
 type Filter struct{ Key, Value string }
 
 // visitFilters are on the visits' own columns.
-var visitFilters = map[string]string{"entries": "entry", "exits": "exit"}
+var visitFilters = map[string]string{"entries": "entry", "exits": "exit", "identities": "identity"}
 
 // ParseFilters reads "<breakdown>:<value>" filters.
 func ParseFilters(vs []string) ([]Filter, error) {
@@ -239,13 +255,13 @@ func (q Query) filters() (ev, vi cond) {
 	for _, f := range q.Filters {
 		if col, ok := pageviewBreakdowns[f.Key]; ok {
 			ev.add(col+" = ?", f.Value)
-			vi.add("id IN (SELECT visit_id FROM events WHERE hostname IN (?) AND "+col+" = ?)", hosts, f.Value)
+			vi.add("visits.id IN (SELECT visit_id FROM events WHERE hostname IN (?) AND "+col+" = ?)", hosts, f.Value)
 		} else if col, ok := visitFilters[f.Key]; ok {
 			ev.add("visit_id IN (SELECT id FROM visits WHERE hostname IN (?) AND "+col+" = ?)", hosts, f.Value)
 			vi.add(col+" = ?", f.Value)
 		} else if f.Key == "events" {
 			ev.add("visit_id IN (SELECT visit_id FROM events WHERE hostname IN (?) AND name = ?)", hosts, f.Value)
-			vi.add("id IN (SELECT visit_id FROM events WHERE hostname IN (?) AND name = ?)", hosts, f.Value)
+			vi.add("visits.id IN (SELECT visit_id FROM events WHERE hostname IN (?) AND name = ?)", hosts, f.Value)
 		}
 	}
 	return ev, vi
@@ -404,4 +420,115 @@ func (s *Store) props(ctx context.Context, where string, args []any) ([]Row, err
 		return strings.Compare(a.Value, b.Value)
 	})
 	return rows[:min(len(rows), topN)], nil
+}
+
+// Visit is one visit, as its first event saw the visitor.
+type Visit struct {
+	ID        string `json:"id"`
+	StartedAt int64  `json:"startedAt"`
+	LastAt    int64  `json:"lastAt"`
+	Pageviews int    `json:"pageviews"`
+	// Events counts the custom events.
+	Events      int            `json:"events"`
+	Entry       string         `json:"entry"`
+	Exit        string         `json:"exit"`
+	Referrer    string         `json:"referrer"`
+	UTMSource   string         `json:"utmSource"`
+	UTMMedium   string         `json:"utmMedium"`
+	UTMCampaign string         `json:"utmCampaign"`
+	Country     string         `json:"country"`
+	Browser     string         `json:"browser"`
+	OS          string         `json:"os"`
+	Device      string         `json:"device"`
+	Screen      string         `json:"screen"`
+	Language    string         `json:"language"`
+	Identity    string         `json:"identity"`
+	IdentityRaw string         `json:"-" bun:"identity_props"`
+	Props       map[string]any `json:"identityProps,omitempty" bun:"-"`
+}
+
+// VisitEvent is a step of a visit's journey: a pageview (Name empty) or a
+// custom event.
+type VisitEvent struct {
+	At    int64          `json:"at"`
+	Name  string         `json:"name"`
+	Path  string         `json:"path"`
+	Query string         `json:"query"`
+	Title string         `json:"title"`
+	Raw   string         `json:"-" bun:"props"`
+	Props map[string]any `json:"props,omitempty" bun:"-"`
+}
+
+type VisitDetail struct {
+	Visit
+	Journey []VisitEvent `json:"journey"`
+}
+
+// visitCols select a Visit from visits v and its first event f.
+const visitCols = `visits.id, visits.started_at, visits.last_at, visits.pageviews, visits.entry, visits.exit,
+	visits.identity, visits.identity_props, (SELECT COUNT(*) FROM events WHERE visit_id = visits.id AND name <> '') AS events,
+	f.referrer, f.utm_source, f.utm_medium, f.utm_campaign, f.country, f.browser, f.os, f.device, f.screen, f.language
+	FROM visits JOIN events f ON f.id = (SELECT MIN(id) FROM events WHERE visit_id = visits.id)`
+
+func decodeProps(raw string) map[string]any {
+	var m map[string]any
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &m)
+	}
+	return m
+}
+
+// maxVisits caps a page of Visits.
+const maxVisits = 100
+
+// Visits lists q's visits, newest first, limit of them started before the
+// visit before (all when empty).
+func (s *Store) Visits(ctx context.Context, q Query, before string, limit int) ([]Visit, error) {
+	out := []Visit{}
+	if len(q.Hosts) == 0 {
+		return out, nil
+	}
+	if limit <= 0 || limit > maxVisits {
+		limit = maxVisits
+	}
+	_, vif := q.filters()
+	where := "visits.hostname IN (?) AND visits.started_at >= ? AND visits.started_at < ?" + vif.sql
+	args := append([]any{bun.In(q.Hosts), q.From.Unix(), q.To.Unix()}, vif.args...)
+	if before != "" {
+		where += " AND visits.id < ?"
+		args = append(args, before)
+	}
+	err := s.db.NewRaw("SELECT "+visitCols+" WHERE "+where+" ORDER BY visits.id DESC LIMIT ?", append(args, limit)...).Scan(ctx, &out)
+	for i := range out {
+		out[i].Props = decodeProps(out[i].IdentityRaw)
+	}
+	return out, err
+}
+
+// ErrNotFound is a visit that isn't there, or not on the hosts asked.
+var ErrNotFound = errors.New("not found")
+
+// Visit is one of hosts' visits, with its journey.
+func (s *Store) Visit(ctx context.Context, hosts []string, id string) (VisitDetail, error) {
+	var d VisitDetail
+	if len(hosts) == 0 {
+		return d, ErrNotFound
+	}
+	err := s.db.NewRaw("SELECT "+visitCols+" WHERE visits.id = ? AND visits.hostname IN (?)", id, bun.In(hosts)).Scan(ctx, &d.Visit)
+	if errors.Is(err, sql.ErrNoRows) {
+		return d, ErrNotFound
+	}
+	if err != nil {
+		return d, err
+	}
+	d.Props = decodeProps(d.IdentityRaw)
+	d.Journey = []VisitEvent{}
+	if err := s.db.NewRaw(`SELECT created_at AS at, name, path, query, title, props FROM events WHERE visit_id = ?
+		ORDER BY created_at, id`, id).Scan(ctx, &d.Journey); err != nil {
+		return d, err
+	}
+	for i := range d.Journey {
+		d.Journey[i].Props = decodeProps(d.Journey[i].Raw)
+	}
+	return d, nil
 }

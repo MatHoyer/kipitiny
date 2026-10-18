@@ -346,34 +346,77 @@ type AnalyticsView struct {
 	Script string `json:"script"`
 }
 
-func (c *Core) ServiceAnalytics(ctx context.Context, serviceID string, q AnalyticsQuery) (AnalyticsView, error) {
+// serviceAnalytics checks the app's analytics are on and returns its
+// domain's client.
+func (c *Core) serviceAnalytics(ctx context.Context, serviceID string) (store.Service, *analytics.Client, analyticsState, error) {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
-		return AnalyticsView{}, err
+		return svc, nil, analyticsState{}, err
 	}
 	st := c.analyticsState(ctx)
 	if !st.Enabled {
-		return AnalyticsView{}, fmt.Errorf("%w: analytics are off (Settings › Analytics)", ErrInvalid)
+		return svc, nil, st, fmt.Errorf("%w: analytics are off (Settings › Analytics)", ErrInvalid)
 	}
 	if !svc.Analytics || svc.Domain == "" {
-		return AnalyticsView{}, fmt.Errorf("%w: analytics are off for %s (its settings)", ErrInvalid, svc.Name)
-	}
-	filters, err := analytics.ParseFilters(q.Filters)
-	if err != nil {
-		return AnalyticsView{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+		return svc, nil, st, fmt.Errorf("%w: analytics are off for %s (its settings)", ErrInvalid, svc.Name)
 	}
 	cl, err := c.analyticsClient(ctx, st.Token)
+	return svc, cl, st, err
+}
+
+func (q AnalyticsQuery) query(hosts ...string) (analytics.Query, error) {
+	filters, err := analytics.ParseFilters(q.Filters)
+	if err != nil {
+		return analytics.Query{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	return analytics.Query{
+		Hosts: hosts, From: q.From, To: q.To,
+		Interval: time.Duration(q.Interval) * time.Second, Offset: q.Offset, Filters: filters,
+	}, nil
+}
+
+func (c *Core) ServiceAnalytics(ctx context.Context, serviceID string, q AnalyticsQuery) (AnalyticsView, error) {
+	svc, cl, st, err := c.serviceAnalytics(ctx, serviceID)
 	if err != nil {
 		return AnalyticsView{}, err
 	}
-	s, err := cl.Stats(ctx, analytics.Query{
-		Hosts: []string{svc.Domain}, From: q.From, To: q.To,
-		Interval: time.Duration(q.Interval) * time.Second, Offset: q.Offset, Filters: filters,
-	})
+	aq, err := q.query(svc.Domain)
+	if err != nil {
+		return AnalyticsView{}, err
+	}
+	s, err := cl.Stats(ctx, aq)
 	if err != nil {
 		return AnalyticsView{}, err
 	}
 	return AnalyticsView{Stats: s, Script: AnalyticsScript(st.Domain)}, nil
+}
+
+// ServiceVisits lists the app's visits started in q's range, newest first:
+// limit (at most 100) of them, started before the visit before when set.
+func (c *Core) ServiceVisits(ctx context.Context, serviceID string, q AnalyticsQuery, before string, limit int) ([]analytics.Visit, error) {
+	svc, cl, _, err := c.serviceAnalytics(ctx, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	q.Interval = 86400 // only checked by the server
+	aq, err := q.query(svc.Domain)
+	if err != nil {
+		return nil, err
+	}
+	return cl.Visits(ctx, aq, before, limit)
+}
+
+// ServiceVisit is one of the app's visits, with its journey.
+func (c *Core) ServiceVisit(ctx context.Context, serviceID, visitID string) (analytics.VisitDetail, error) {
+	svc, cl, _, err := c.serviceAnalytics(ctx, serviceID)
+	if err != nil {
+		return analytics.VisitDetail{}, err
+	}
+	d, err := cl.Visit(ctx, []string{svc.Domain}, visitID)
+	if errors.Is(err, analytics.ErrNotFound) {
+		return d, fmt.Errorf("%w: visit %s", store.ErrNotFound, visitID)
+	}
+	return d, err
 }
 
 // AnalyticsScript is the tag a tracked app's pages include.

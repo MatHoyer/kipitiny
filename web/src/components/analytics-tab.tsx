@@ -5,6 +5,7 @@ import { CopyField, Empty, ErrorText, Loading, Mono, Section, StatCard } from "@
 import { Button } from "@/components/ui/button";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { cn } from "@/lib/utils";
+import { countryLabel, duration, Visits } from "./analytics-visits";
 import { api, type AnalyticsRow, type AnalyticsStats, type Service } from "../api";
 
 const HOUR = 3600;
@@ -36,21 +37,9 @@ const breakdowns: { key: string; title: string; column: string }[] = [
   { key: "utm_campaign", title: "UTM campaign", column: "Campaign" },
   { key: "queries", title: "Query parameters", column: "Keys" },
   { key: "events", title: "Events", column: "Name" },
+  { key: "identities", title: "Identified users", column: "Identity" },
   { key: "props", title: "Event properties", column: "Event: property" },
 ];
-
-const regionNames = typeof Intl.DisplayNames === "function" ? new Intl.DisplayNames(undefined, { type: "region" }) : null;
-
-function countryLabel(code: string) {
-  const flag = String.fromCodePoint(...[...code].map((c) => 0x1f1a5 + c.charCodeAt(0)));
-  return `${flag} ${regionNames?.of(code) ?? code}`;
-}
-
-function duration(seconds: number) {
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  const m = Math.floor(seconds / 60);
-  return m < 60 ? `${m}m ${Math.round(seconds % 60)}s` : `${Math.floor(m / 60)}h ${m % 60}m`;
-}
 
 /** Cookieless visits of an app's domain, from the analytics server. */
 export function AnalyticsTab({ svc }: { svc: Service }) {
@@ -58,6 +47,7 @@ export function AnalyticsTab({ svc }: { svc: Service }) {
   // "<breakdown>:<value>", as the API takes them.
   const [filters, setFilters] = useState<string[]>([]);
   const r = ranges[range];
+  const addFilter = (f: string) => !filters.includes(f) && setFilters([...filters, f]);
   const stats = useQuery({
     queryKey: ["service-analytics", svc.id, range, filters],
     queryFn: () => {
@@ -104,9 +94,10 @@ export function AnalyticsTab({ svc }: { svc: Service }) {
           span={r.span}
           interval={r.interval}
           filtered={filters.length > 0}
-          onFilter={(f) => !filters.includes(f) && setFilters([...filters, f])}
+          onFilter={addFilter}
         />
       )}
+      <Visits svc={svc} span={r.span} filters={filters} onFilter={addFilter} />
     </div>
   );
 }

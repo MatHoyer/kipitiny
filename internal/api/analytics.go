@@ -38,10 +38,10 @@ func (a *API) deleteAnalyticsData(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// serviceAnalytics takes from and to (unix seconds, default the last 24
-// hours, to included), interval (seconds, default an hour), offset (seconds east of
-// UTC, for day buckets) and filter (<breakdown>:<value>, repeated).
-func (a *API) serviceAnalytics(w http.ResponseWriter, r *http.Request) {
+// analyticsQuery reads from and to (unix seconds, default the last 24
+// hours, to included), interval (seconds, default an hour), offset (seconds
+// east of UTC, for day buckets) and filter (<breakdown>:<value>, repeated).
+func analyticsQuery(r *http.Request) core.AnalyticsQuery {
 	v := r.URL.Query()
 	num := func(k string, def int64) int64 {
 		n, err := strconv.ParseInt(v.Get(k), 10, 64)
@@ -51,14 +51,38 @@ func (a *API) serviceAnalytics(w http.ResponseWriter, r *http.Request) {
 		return n
 	}
 	now := time.Now().Unix() + 1 // to is exclusive: this second's visits count
-	q := core.AnalyticsQuery{
+	return core.AnalyticsQuery{
 		From:     time.Unix(num("from", now-86400), 0),
 		To:       time.Unix(num("to", now), 0),
 		Interval: int(num("interval", 3600)),
 		Offset:   int(num("offset", 0)),
 		Filters:  v["filter"],
 	}
-	res, err := a.core.ServiceAnalytics(r.Context(), r.PathValue("id"), q)
+}
+
+func (a *API) serviceAnalytics(w http.ResponseWriter, r *http.Request) {
+	res, err := a.core.ServiceAnalytics(r.Context(), r.PathValue("id"), analyticsQuery(r))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+// serviceVisits takes the range and filters of analyticsQuery, and before
+// (a visit id) and limit to page.
+func (a *API) serviceVisits(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	res, err := a.core.ServiceVisits(r.Context(), r.PathValue("id"), analyticsQuery(r), r.URL.Query().Get("before"), limit)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (a *API) serviceVisit(w http.ResponseWriter, r *http.Request) {
+	res, err := a.core.ServiceVisit(r.Context(), r.PathValue("id"), r.PathValue("visit"))
 	if err != nil {
 		a.fail(w, err)
 		return

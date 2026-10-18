@@ -104,6 +104,8 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("GET /api/services/{id}/stats", a.serviceStats)
 	handle("GET /api/services/{id}/uptime", a.uptime)
 	handle("GET /api/services/{id}/analytics", a.serviceAnalytics)
+	handle("GET /api/services/{id}/analytics/visits", a.serviceVisits)
+	handle("GET /api/services/{id}/analytics/visits/{visit}", a.serviceVisit)
 	handle("PUT /api/services/{id}/uptime", a.setUptime)
 	handle("DELETE /api/services/{id}/uptime", a.deleteUptime)
 	handle("GET /api/stats", a.usage)
