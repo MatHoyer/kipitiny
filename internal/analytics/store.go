@@ -36,10 +36,11 @@ type Store struct {
 	db  *bun.DB
 	now func() time.Time
 
-	mu    sync.Mutex
-	sites map[string]bool
-	day   int64
-	salt  []byte
+	mu       sync.Mutex
+	sites    map[string]bool
+	trackers map[string]Tracker // by slug
+	day      int64
+	salt     []byte
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
@@ -58,6 +59,10 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		return nil, err
 	}
 	s.sites = setOf(hosts)
+	if err := s.loadTrackers(ctx); err != nil {
+		s.db.Close()
+		return nil, err
+	}
 	return s, nil
 }
 

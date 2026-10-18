@@ -102,6 +102,36 @@ or, without code, on what gets clicked:
 Up to 20 properties per event, strings, numbers or booleans. Events and their
 properties have their own lists in the Analytics tab.
 
+## Pixels and links
+
+For what the script can't see, **Settings › Analytics › Pixels and links**
+(admins):
+
+- A **pixel** is a transparent 1x1 image,
+  `https://stats.example.com/p/<slug>.gif`: each load counts a view. Put it in
+  an email, a README badge, or a page you don't control:
+
+  ```html
+  <img src="https://stats.example.com/p/k3xa9qpz.gif" width="1" height="1" alt="">
+  ```
+
+  Mail apps that load images through a proxy (Gmail) or block them by default
+  count fewer, or only the proxy's country.
+- A **link**, `https://stats.example.com/l/<slug>`, redirects to its target
+  and counts the click, with the referrer, country, browser and device. UTM
+  tags in the dialog are added to the target; UTM tags on the link itself
+  (`/l/launch?utm_source=twitter`) are counted as its own source.
+
+The slug is random (8 characters) unless you choose one, like `launch`.
+Bots and link previews (Slack, social networks) are redirected but not
+counted. Each one's stats open from its row, with the same lists and filters
+as an app's. Deleting one deletes its counts; a deleted link answers 404.
+
+They live in the analytics server's data, so **Delete analytics data**
+removes them too, and they can only be managed while analytics are on. The
+MCP tools `list_trackers`, `create_tracker` and `delete_tracker` manage them,
+and `get_analytics` with `tracker` reads their stats (admin tokens).
+
 ## Privacy
 
 No cookie, no `localStorage`, no fingerprinting script. A visitor is a hash of
@@ -116,7 +146,8 @@ addresses are never stored. Visits older than the retention
 Anyone who can view a project sees its apps' analytics. Turning an app's
 analytics on or off needs the *settings* permission; the server's settings are
 admin-only. The [MCP](/docs/api) tools `get_analytics`, `list_visits` and
-`get_visit` return the same numbers and journeys to agents.
+`get_visit` return the same numbers and journeys to agents. Pixels and links
+are admin-only.
 
 ## Limits
 

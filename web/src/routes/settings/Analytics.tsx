@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { api, type AnalyticsSettings, type AnalyticsStep } from "@/api";
+import { Trackers } from "./analytics-trackers";
 import { SettingsPage } from "./page";
 
 /** What turning analytics on does, as the manager reports it. */
@@ -96,6 +97,7 @@ export function Analytics() {
               </div>
             </Section>
           </form>
+          <Trackers />
           <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setForm(data)} />
         </>
       ) : (

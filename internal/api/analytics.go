@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/MatHoyer/kipitiny/internal/analytics"
 	"github.com/MatHoyer/kipitiny/internal/core"
 )
 
@@ -83,6 +84,60 @@ func (a *API) serviceVisits(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) serviceVisit(w http.ResponseWriter, r *http.Request) {
 	res, err := a.core.ServiceVisit(r.Context(), r.PathValue("id"), r.PathValue("visit"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (a *API) trackers(w http.ResponseWriter, r *http.Request) {
+	ts, err := a.core.Trackers(r.Context())
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ts)
+}
+
+func (a *API) createTracker(w http.ResponseWriter, r *http.Request) {
+	var body analytics.Tracker
+	if !decode(w, r, &body) {
+		return
+	}
+	t, err := a.core.CreateTracker(r.Context(), body)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, t)
+}
+
+func (a *API) updateTracker(w http.ResponseWriter, r *http.Request) {
+	var body analytics.Tracker
+	if !decode(w, r, &body) {
+		return
+	}
+	body.ID = r.PathValue("id")
+	t, err := a.core.UpdateTracker(r.Context(), body)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, t)
+}
+
+func (a *API) deleteTracker(w http.ResponseWriter, r *http.Request) {
+	if err := a.core.DeleteTracker(r.Context(), r.PathValue("id")); err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// trackerAnalytics takes the range and filters of analyticsQuery.
+func (a *API) trackerAnalytics(w http.ResponseWriter, r *http.Request) {
+	res, err := a.core.TrackerAnalytics(r.Context(), r.PathValue("id"), analyticsQuery(r))
 	if err != nil {
 		a.fail(w, err)
 		return

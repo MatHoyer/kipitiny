@@ -785,6 +785,27 @@ export type AnalyticsVisitDetail = AnalyticsVisit & {
   journey: { at: number; name: string; path: string; query: string; title: string; props?: Record<string, unknown> }[];
 };
 
+export type TrackerKind = "pixel" | "link";
+
+/** A pixel (1x1 GIF counting views) or a tracked link (redirect counting clicks). */
+export type Tracker = {
+  id: string;
+  kind: TrackerKind;
+  /** The URL's last part. */
+  slug: string;
+  name: string;
+  /** A link's destination. */
+  target?: string;
+  createdAt: number;
+  /** Views or clicks of the last 30 days. */
+  hits: number;
+  url: string;
+};
+
+export type TrackerInput = { kind: TrackerKind; name: string; slug: string; target?: string };
+
+export type TrackerStats = Omit<AnalyticsStats, "script"> & { tracker: Tracker };
+
 export type CleanupSettings = {
   enabled: boolean;
   cron: string;
@@ -1634,6 +1655,15 @@ export const api = {
     const p = new URLSearchParams(Object.entries(q).map(([k, v]) => [k, String(v)]));
     for (const f of filters) p.append("filter", f);
     return request<AnalyticsVisit[]>(`/services/${id}/analytics/visits?${p}`);
+  },
+  trackers: () => request<Tracker[]>("/analytics/trackers"),
+  createTracker: (t: TrackerInput) => request<Tracker>("/analytics/trackers", json("POST", t)),
+  updateTracker: (id: string, t: TrackerInput) => request<Tracker>(`/analytics/trackers/${id}`, json("PUT", t)),
+  deleteTracker: (id: string) => request<void>(`/analytics/trackers/${id}`, { method: "DELETE" }),
+  trackerAnalytics: (id: string, { filters = [], ...q }: { from: number; to: number; interval: number; offset: number; filters?: string[] }) => {
+    const p = new URLSearchParams(Object.entries(q).map(([k, v]) => [k, String(v)]));
+    for (const f of filters) p.append("filter", f);
+    return request<TrackerStats>(`/analytics/trackers/${id}/stats?${p}`);
   },
   serviceVisit: (id: string, visit: string) => request<AnalyticsVisitDetail>(`/services/${id}/analytics/visits/${visit}`),
   cleanup: () => request<Cleanup>("/cleanup"),

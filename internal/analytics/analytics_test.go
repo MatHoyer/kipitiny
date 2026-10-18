@@ -233,6 +233,94 @@ func TestVisits(t *testing.T) {
 	}
 }
 
+func TestTrackers(t *testing.T) {
+	ctx := context.Background()
+	st, now := open(t)
+	pub := Public(st, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	priv := httptest.NewServer(Private(st, "secret"))
+	defer priv.Close()
+	c := &Client{BaseURL: priv.URL, Token: "secret"}
+
+	px, err := c.CreateTracker(ctx, Tracker{Kind: KindPixel, Name: "Newsletter", Target: "https://ignored.example"})
+	if err != nil || len(px.Slug) != 8 || px.Target != "" {
+		t.Fatalf("pixel = %+v, %v", px, err)
+	}
+	ln, err := c.CreateTracker(ctx, Tracker{Kind: KindLink, Name: "Launch", Slug: "Launch", Target: "https://shop.example.com/?utm_source=x"})
+	if err != nil || ln.Slug != "launch" {
+		t.Fatalf("link = %+v, %v", ln, err)
+	}
+	for _, bad := range []Tracker{
+		{Kind: KindLink, Name: "dup", Slug: "launch", Target: "https://a.example"},
+		{Kind: KindLink, Name: "no target"},
+		{Kind: KindLink, Name: "js", Target: "javascript:alert(1)"},
+		{Kind: KindPixel, Name: "bad slug", Slug: "no spaces"},
+		{Kind: "badge", Name: "x"},
+	} {
+		if _, err := c.CreateTracker(ctx, bad); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%+v: %v", bad, err)
+		}
+	}
+
+	get := func(path, ua string) *http.Response {
+		req := httptest.NewRequest("GET", path, nil)
+		req.Header.Set("User-Agent", ua)
+		req.Header.Set("X-Real-Ip", "1.1.1.1")
+		req.Header.Set("Referer", "https://www.mail.example/inbox")
+		req.Header.Set("Accept-Language", "fr-FR,fr;q=0.9")
+		rec := httptest.NewRecorder()
+		pub.ServeHTTP(rec, req)
+		*now = now.Add(time.Second)
+		return rec.Result()
+	}
+	if res := get("/p/"+px.Slug+".gif", chromeUA); res.StatusCode != 200 || res.Header.Get("Content-Type") != "image/gif" || res.Header.Get("Cache-Control") == "" {
+		t.Errorf("pixel: %d %v", res.StatusCode, res.Header)
+	}
+	get("/p/"+px.Slug+".gif", chromeUA)
+	get("/p/"+px.Slug+".gif", "Slackbot-LinkExpanding 1.0")
+	if res := get("/p/nope.gif", chromeUA); res.StatusCode != 200 {
+		t.Errorf("unknown pixel: %d (same GIF)", res.StatusCode)
+	}
+	res := get("/l/launch?utm_source=twitter", chromeUA)
+	if res.StatusCode != http.StatusFound || res.Header.Get("Location") != ln.Target {
+		t.Errorf("link: %d %s", res.StatusCode, res.Header.Get("Location"))
+	}
+	if res := get("/l/launch", "facebookexternalhit/1.1"); res.StatusCode != http.StatusFound {
+		t.Errorf("link for a bot: %d (redirected, not counted)", res.StatusCode)
+	}
+	if res := get("/l/"+px.Slug, chromeUA); res.StatusCode != http.StatusNotFound {
+		t.Errorf("pixel slug as a link: %d", res.StatusCode)
+	}
+
+	ts, _ := c.Trackers(ctx)
+	if len(ts) != 2 || ts[0].ID != ln.ID || ts[0].Hits != 1 || ts[1].Hits != 2 {
+		t.Errorf("trackers = %+v", ts)
+	}
+	s, _ := c.Stats(ctx, Query{Hosts: []string{px.Host()}, From: now.Add(-time.Hour), To: now.Add(time.Minute), Interval: time.Hour})
+	if s.Pageviews != 2 || s.Visitors != 1 || s.Breakdowns["referrers"][0].Value != "mail.example" || s.Breakdowns["languages"][0].Value != "fr-fr" {
+		t.Errorf("pixel stats = %+v", s)
+	}
+	s, _ = c.Stats(ctx, Query{Hosts: []string{ln.Host()}, From: now.Add(-time.Hour), To: now.Add(time.Minute), Interval: time.Hour})
+	if s.Pageviews != 1 || s.Breakdowns["utm_source"][0].Value != "twitter" {
+		t.Errorf("link stats = %+v", s)
+	}
+
+	ln.Slug, ln.Name = "", "Launch day"
+	if up, err := c.UpdateTracker(ctx, ln); err != nil || up.Slug != "launch" || up.Name != "Launch day" || up.Kind != KindLink {
+		t.Errorf("update = %+v, %v", up, err)
+	}
+	if err := c.DeleteTracker(ctx, px.ID); err != nil {
+		t.Fatal(err)
+	}
+	if res := get("/p/"+px.Slug+".gif", chromeUA); res.StatusCode != 200 {
+		t.Errorf("deleted pixel: %d", res.StatusCode)
+	}
+	var left int
+	st.db.NewRaw("SELECT COUNT(*) FROM events WHERE hostname = ?", px.Host()).Scan(ctx, &left)
+	if _, err := c.Tracker(ctx, px.ID); !errors.Is(err, ErrNotFound) || left != 0 {
+		t.Errorf("after delete: %v, %d events left", err, left)
+	}
+}
+
 func TestPrivateNeedsToken(t *testing.T) {
 	st, _ := open(t)
 	srv := httptest.NewServer(Private(st, "secret"))
