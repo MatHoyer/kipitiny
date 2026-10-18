@@ -62,7 +62,15 @@ func (c *Core) ExportCompose(ctx context.Context, projectID string, opts ExportO
 	if err != nil {
 		return Export{}, err
 	}
-	f, env := exportFile(p, svcs, byService, nets, opts.Service == "")
+	all, err := c.store.ListJobs(ctx, "")
+	if err != nil {
+		return Export{}, err
+	}
+	jobs := map[string][]store.Job{}
+	for _, j := range all {
+		jobs[j.ServiceID] = append(jobs[j.ServiceID], j)
+	}
+	f, env := exportFile(p, svcs, byService, jobs, nets, opts.Service == "")
 	data, err := compose.Marshal(f)
 	if err != nil {
 		return Export{}, err
@@ -74,11 +82,12 @@ func (c *Core) ExportCompose(ctx context.Context, projectID string, opts ExportO
 	return out, nil
 }
 
-// exportFile maps the services and their uptime checks (by service ID) to
-// compose, with the variables their secrets became. Networks created by
+// exportFile maps the services, their uptime checks and jobs (by service
+// ID) to compose, with the variables their secrets became. Networks created by
 // hand (nets) become external networks. withProject adds the project's
 // shared variables.
-func exportFile(p store.Project, svcs []store.Service, checks map[string]store.UptimeCheck, nets []store.Network, withProject bool) (compose.File, map[string]string) {
+func exportFile(p store.Project, svcs []store.Service, checks map[string]store.UptimeCheck, jobs map[string][]store.Job, nets []store.Network,
+	withProject bool) (compose.File, map[string]string) {
 	f := compose.File{Name: p.Name, Services: map[string]compose.Service{}}
 	env := map[string]string{}
 	secret := func(name, value string) string {
@@ -215,6 +224,16 @@ func exportFile(p store.Project, svcs []store.Service, checks map[string]store.U
 		}
 		if chk, ok := checks[s.ID]; ok {
 			cs.X.Uptime = composeUptime(chk)
+		}
+		for _, j := range jobs[s.ID] {
+			if cs.X.Jobs == nil {
+				cs.X.Jobs = map[string]compose.Job{}
+			}
+			cj := compose.Job{Command: j.Command, Schedule: j.Cron, Paused: !j.Enabled}
+			if j.TimeoutSec != defaultJobTimeout {
+				cj.Timeout = compose.Seconds(j.TimeoutSec)
+			}
+			cs.X.Jobs[j.Name] = cj
 		}
 		f.Services[s.Name] = cs
 	}
@@ -379,7 +398,7 @@ func (c *Core) planCompose(ctx context.Context, project store.Project, existing 
 		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	a := &applier{c: c, project: project, opts: opts, git: git, byName: byName,
-		hashes: map[string]string{}, images: map[string]string{}, created: map[string]string{}, uptimes: map[string]*compose.Uptime{}, plan: ComposePlan{
+		hashes: map[string]string{}, images: map[string]string{}, created: map[string]string{}, uptimes: map[string]*compose.Uptime{}, jobs: map[string]map[string]compose.Job{}, plan: ComposePlan{
 			Create: []string{}, Update: []ServiceChange{}, Unchanged: []string{}, Delete: []string{}, Orphaned: []string{},
 			Variables: []string{}, Warnings: append([]string{}, warns...), Deploying: []string{},
 		}}
@@ -411,6 +430,10 @@ type applier struct {
 	// checks to save or delete.
 	uptimes   map[string]*compose.Uptime
 	uptimeOps []uptimeOp
+	// jobs are the listed services' jobs in the file; jobOps the jobs to
+	// save or delete.
+	jobs   map[string]map[string]compose.Job
+	jobOps []jobOp
 	// networkOps set the networks created by hand of existing services.
 	networkOps []networkOp
 }
@@ -418,6 +441,13 @@ type applier struct {
 type networkOp struct {
 	id, name string
 	ids      []string
+}
+
+// jobOp saves a service's job (an update when it has an ID), or deletes it.
+type jobOp struct {
+	name string
+	job  store.Job
+	del  bool
 }
 
 // uptimeOp saves a service's check, or deletes it when check is nil.
@@ -494,6 +524,11 @@ func (a *applier) prepare(ctx context.Context, f compose.File) error {
 		a.hashes[name] = specHash(f.Services[name])
 		a.images[name] = in.Image
 		a.uptimes[name] = f.Services[name].X.Uptime
+		a.jobs[name] = f.Services[name].X.Jobs
+		if len(a.jobs[name]) > 0 && a.project.ParentID != "" {
+			a.warn("service %s: jobs don't run in previews", name)
+			a.jobs[name] = nil
+		}
 		if in.Kind.IsDatabase() {
 			if _, ok := dbs[name]; !ok {
 				dbs[name] = store.Service{Name: name, Kind: in.Kind, Env: map[string]string{}}
@@ -693,6 +728,9 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 			}
 			a.uptimeOps = append(a.uptimeOps, uptimeOp{name: name, check: &chk})
 		}
+		if _, err := a.prepareJobs(ctx, name, svc, nil); err != nil {
+			return err
+		}
 		a.plan.Create = append(a.plan.Create, name)
 		a.creates = append(a.creates, in)
 		return nil
@@ -734,7 +772,15 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 	if err != nil {
 		return err
 	}
-	if len(fields) == 0 && !uptimeChanged {
+	cur, err := a.c.store.ListJobs(ctx, old.ID)
+	if err != nil {
+		return err
+	}
+	jobsChanged, err := a.prepareJobs(ctx, name, svc, cur)
+	if err != nil {
+		return err
+	}
+	if len(fields) == 0 && !uptimeChanged && !jobsChanged {
 		a.plan.Unchanged = append(a.plan.Unchanged, name)
 		return nil
 	}
@@ -749,6 +795,9 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 	}
 	if uptimeChanged {
 		fields = append(fields, "uptime")
+	}
+	if jobsChanged {
+		fields = append(fields, "jobs")
 	}
 	a.plan.Update = append(a.plan.Update, ServiceChange{Name: name, Fields: fields})
 	return nil
@@ -778,6 +827,39 @@ func (a *applier) prepareUptime(ctx context.Context, name string, svc store.Serv
 	}
 	a.uptimeOps = append(a.uptimeOps, uptimeOp{name: name, check: &chk})
 	return true, nil
+}
+
+// prepareJobs plans the jobs of a service, as svc will be, from the file's
+// and the current ones (cur): the file's replace them. It reports a change.
+func (a *applier) prepareJobs(_ context.Context, name string, svc store.Service, cur []store.Job) (bool, error) {
+	want := a.jobs[name]
+	if len(want) > 0 && svc.Kind != store.ServiceKindApp {
+		return false, fmt.Errorf("%w: service %s: only apps run jobs", ErrInvalid, name)
+	}
+	changed := false
+	for _, jobName := range slices.Sorted(maps.Keys(want)) {
+		cj := want[jobName]
+		j := store.Job{ServiceID: svc.ID}
+		if i := slices.IndexFunc(cur, func(j store.Job) bool { return j.Name == jobName }); i >= 0 {
+			j = cur[i]
+		}
+		was := j
+		in := JobInput{Name: jobName, Command: cj.Command, Cron: cj.Schedule, TimeoutSec: int(cj.Timeout), Enabled: !cj.Paused}
+		if err := applyJobInput(&j, in); err != nil {
+			return false, fmt.Errorf("service %s: job %s: %w", name, jobName, err)
+		}
+		if j.ID == "" || j != was {
+			a.jobOps = append(a.jobOps, jobOp{name: name, job: j})
+			changed = true
+		}
+	}
+	for _, j := range cur {
+		if _, ok := want[j.Name]; !ok {
+			a.jobOps = append(a.jobOps, jobOp{name: name, job: j, del: true})
+			changed = true
+		}
+	}
+	return changed, nil
 }
 
 // databasePasswordKey is the env key of the password apps connect with.
@@ -962,6 +1044,28 @@ func (a *applier) apply(ctx context.Context) error {
 		chk.ServiceID = id
 		if err := c.saveUptime(ctx, chk); err != nil {
 			return fmt.Errorf("uptime check of %s: %w", op.name, err)
+		}
+	}
+	for _, op := range a.jobOps {
+		var err error
+		switch j := op.job; {
+		case op.del:
+			err = c.deleteJob(ctx, j)
+		case j.ID != "":
+			_, err = c.store.UpdateJob(ctx, j)
+		default:
+			if j.ServiceID == "" {
+				j.ServiceID = a.created[op.name]
+			}
+			_, err = c.store.CreateJob(ctx, j)
+		}
+		if err != nil {
+			return fmt.Errorf("job %s of %s: %w", op.job.Name, op.name, err)
+		}
+	}
+	if len(a.jobOps) > 0 {
+		if err := c.reloadJobs(ctx); err != nil {
+			return err
 		}
 	}
 	for _, s := range a.deletes {

@@ -330,7 +330,7 @@ export function Service() {
           </TabsContent>
           {svc.kind === "app" && (
             <TabsContent value="jobs">
-              <JobsTab svc={svc} canEdit={may("settings")} canRun={may("deploy")} />
+              <JobsTab svc={svc} canEdit={may("settings")} canRun={may("deploy")} gitPath={git.data?.path} />
             </TabsContent>
           )}
           {canBackup(svc) && (

@@ -32,7 +32,7 @@ func TestExportFile(t *testing.T) {
 			Env: map[string]string{pgUser: "app", pgPassword: "pw", pgDatabase: "app"}, Secrets: []string{pgPassword}},
 	}
 	checks := map[string]store.UptimeCheck{"w1": {ServiceID: "w1", Path: "/health", IntervalSec: 60, TimeoutSec: 10, Enabled: true}}
-	f, env := exportFile(p, svcs, checks, nil, true)
+	f, env := exportFile(p, svcs, checks, nil, nil, true)
 	web := f.Services["web"]
 	if u := web.X.Uptime; u == nil || *u != (compose.Uptime{Path: "/health"}) {
 		t.Errorf("uptime = %+v", u)

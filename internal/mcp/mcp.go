@@ -181,9 +181,9 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 	addTool(s, &mcp.Tool{Name: "list_jobs", Annotations: readOnly,
 		Description: "An app's scheduled jobs: command, cron (UTC), timeout, next run and the last run's outcome."}, t.listJobs)
 	addTool(s, &mcp.Tool{Name: "set_job",
-		Description: "Add a scheduled job to an app, or change one by name (omitted fields are kept): a shell command run on a cron schedule in a one-off container of the app's deployed image, with its env, networks and volumes. A run that exits non-zero or times out notifies job.failed."}, t.setJob)
+		Description: "Add a scheduled job to an app, or change one by name (omitted fields are kept): a shell command run on a cron schedule in a one-off container of the app's deployed image, with its env, networks and volumes. A run that exits non-zero or times out notifies job.failed. A git project's jobs are in its compose file (x-kipitiny.jobs) instead."}, t.setJob)
 	addTool(s, &mcp.Tool{Name: "delete_job",
-		Description: "Delete one of an app's scheduled jobs, its run history and logs; a run in progress is stopped."}, t.deleteJob)
+		Description: "Delete one of an app's scheduled jobs, its run history and logs; a run in progress is stopped. Not for a git project: remove it from x-kipitiny.jobs."}, t.deleteJob)
 	addTool(s, &mcp.Tool{Name: "run_job",
 		Description: "Run one of an app's jobs now, in the background (refused while it runs); list_job_runs shows the outcome and log. Needs deploy."}, t.runJob)
 	addTool(s, &mcp.Tool{Name: "list_job_runs", Annotations: readOnly,

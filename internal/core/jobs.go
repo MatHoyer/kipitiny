@@ -150,6 +150,9 @@ func (c *Core) CreateJob(ctx context.Context, serviceID string, in JobInput) (Jo
 	if svc.Kind != store.ServiceKindApp {
 		return JobView{}, fmt.Errorf("%w: only apps run jobs", ErrInvalid)
 	}
+	if err := c.checkGitOwned(ctx, svc.ProjectID); err != nil {
+		return JobView{}, err
+	}
 	j := store.Job{ServiceID: serviceID}
 	if err := applyJobInput(&j, in); err != nil {
 		return JobView{}, err
@@ -166,6 +169,9 @@ func (c *Core) CreateJob(ctx context.Context, serviceID string, in JobInput) (Jo
 func (c *Core) UpdateJob(ctx context.Context, id string, in JobInput) (JobView, error) {
 	j, err := c.store.GetJob(ctx, id)
 	if err != nil {
+		return JobView{}, err
+	}
+	if err := c.checkJobGitOwned(ctx, j); err != nil {
 		return JobView{}, err
 	}
 	if err := applyJobInput(&j, in); err != nil {
@@ -186,18 +192,40 @@ func (c *Core) DeleteJob(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	runs, err := c.store.ListJobRuns(ctx, id, 0)
+	if err := c.checkJobGitOwned(ctx, j); err != nil {
+		return err
+	}
+	if err := c.deleteJob(ctx, j); err != nil {
+		return err
+	}
+	return c.reloadJobs(ctx)
+}
+
+// checkJobGitOwned refuses changes to the jobs of a git project: they are
+// in its compose file.
+func (c *Core) checkJobGitOwned(ctx context.Context, j store.Job) error {
+	svc, err := c.store.GetService(ctx, j.ServiceID)
 	if err != nil {
 		return err
 	}
-	if err := c.store.DeleteJob(ctx, id); err != nil {
+	return c.checkGitOwned(ctx, svc.ProjectID)
+}
+
+// deleteJob deletes j and its runs, stopping the one in progress; the
+// caller reloads the schedule.
+func (c *Core) deleteJob(ctx context.Context, j store.Job) error {
+	runs, err := c.store.ListJobRuns(ctx, j.ID, 0)
+	if err != nil {
 		return err
 	}
-	c.cancelJobRuns(func(jobID string, _ jobRunning) bool { return jobID == id })
+	if err := c.store.DeleteJob(ctx, j.ID); err != nil {
+		return err
+	}
+	c.cancelJobRuns(func(jobID string, _ jobRunning) bool { return jobID == j.ID })
 	for _, r := range runs {
 		_ = os.Remove(c.jobLogPath(j.ServiceID, r.ID))
 	}
-	return c.reloadJobs(ctx)
+	return nil
 }
 
 // forgetServiceJobs stops the runs of a deleted service's jobs (the store
