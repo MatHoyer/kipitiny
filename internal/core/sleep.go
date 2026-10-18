@@ -270,6 +270,9 @@ func (c *Core) sleepIdle(ctx context.Context) error {
 // deployed or backed up is left for next time.
 func (c *Core) putToSleep(ctx context.Context, projectID string) error {
 	defer c.sleep.lock(projectID)()
+	if c.jobRunningIn(projectID) { // it may need the project's databases
+		return nil
+	}
 	svcs, err := c.store.ListServices(ctx, projectID)
 	if err != nil {
 		return err

@@ -142,6 +142,13 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("POST /api/services/{id}/schedules", a.createSchedule)
 	handle("PUT /api/schedules/{id}", a.updateSchedule)
 	handle("DELETE /api/schedules/{id}", a.deleteSchedule)
+	handle("GET /api/services/{id}/jobs", a.listJobs)
+	handle("POST /api/services/{id}/jobs", a.createJob)
+	handle("PUT /api/jobs/{id}", a.updateJob)
+	handle("DELETE /api/jobs/{id}", a.deleteJob)
+	handle("POST /api/jobs/{id}/run", a.runJob)
+	handle("GET /api/jobs/{id}/runs", a.listJobRuns)
+	handle("GET /api/jobs/{id}/runs/{run}/log", a.jobRunLog)
 	handle("POST /api/projects/{id}/backups", a.backupProject)
 	handle("GET /api/backups", a.listBackups)
 	handle("GET /api/backups/{id}", a.getBackup)
@@ -473,7 +480,11 @@ func (a *API) failure(err error) (int, string) {
 		}
 		return http.StatusConflict, msg
 	case errors.Is(err, core.ErrBusy):
-		return http.StatusConflict, "another operation is in progress for this service"
+		msg := "another operation is in progress for this service"
+		if strings.Contains(err.Error(), core.ErrBusy.Error()+": ") {
+			msg = reason(err, core.ErrBusy)
+		}
+		return http.StatusConflict, msg
 	default:
 		a.log.Error("request failed", "err", err)
 		return http.StatusInternalServerError, "internal error"

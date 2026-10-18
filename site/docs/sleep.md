@@ -43,10 +43,12 @@ outside the project.
   app couldn't start after two minutes. API calls (requests that don't
   accept HTML) get `503 Service Unavailable` with `Retry-After` instead, so
   clients retry.
-- Background workers and scheduled jobs inside the project don't run while
-  it sleeps. Keep sleep for projects where that's fine.
-- A deploy, a rollback, a start, a database backup or restore, a data query
-  and a terminal wake the project. It falls asleep again after its idle
+- Background workers and cron daemons inside the project don't run while
+  it sleeps. Keep sleep for projects where that's fine, or use
+  [scheduled jobs](/docs/jobs) instead.
+- A deploy, a rollback, a start, a database backup or restore, a data query,
+  a terminal and a [scheduled job](/docs/jobs) wake the project (a job keeps
+  it awake while it runs). It falls asleep again after its idle
   time. A stop wins: a stopped service stays stopped, requests don't wake
   it.
 - A sleeping service raises no "down" alert, and its [uptime

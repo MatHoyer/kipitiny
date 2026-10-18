@@ -808,6 +808,7 @@ func (c *Core) DeleteService(ctx context.Context, id, confirm string) error {
 	}
 	c.kickDNS()
 	c.removeDeployLogs(id)
+	c.forgetServiceJobs(id)
 	return nil
 }
 
@@ -822,6 +823,9 @@ func (c *Core) removeServiceContainers(ctx context.Context, svc store.Service) e
 		if err := dk.RemoveContainer(ctx, ct.ID, stopTimeoutFor(svc)); err != nil {
 			return err
 		}
+	}
+	if err := c.removeJobContainers(ctx, dk, svc.ID); err != nil {
+		return err
 	}
 	c.closeFilesHelper(svc.ID) // it holds the volumes
 	return removeServiceVolumes(ctx, dk, svc)

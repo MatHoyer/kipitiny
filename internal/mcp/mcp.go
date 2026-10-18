@@ -178,6 +178,16 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 		Description: "Add a backup schedule to a service, or change one (schedule_id; omitted fields are kept). Each schedule prunes its own backups by its retention."}, t.setBackupSchedule)
 	addTool(s, &mcp.Tool{Name: "delete_backup_schedule",
 		Description: "Delete one of a service's backup schedules; the backups it made are kept."}, t.deleteBackupSchedule)
+	addTool(s, &mcp.Tool{Name: "list_jobs", Annotations: readOnly,
+		Description: "An app's scheduled jobs: command, cron (UTC), timeout, next run and the last run's outcome."}, t.listJobs)
+	addTool(s, &mcp.Tool{Name: "set_job",
+		Description: "Add a scheduled job to an app, or change one by name (omitted fields are kept): a shell command run on a cron schedule in a one-off container of the app's deployed image, with its env, networks and volumes. A run that exits non-zero or times out notifies job.failed."}, t.setJob)
+	addTool(s, &mcp.Tool{Name: "delete_job",
+		Description: "Delete one of an app's scheduled jobs, its run history and logs; a run in progress is stopped."}, t.deleteJob)
+	addTool(s, &mcp.Tool{Name: "run_job",
+		Description: "Run one of an app's jobs now, in the background (refused while it runs); list_job_runs shows the outcome and log. Needs deploy."}, t.runJob)
+	addTool(s, &mcp.Tool{Name: "list_job_runs", Annotations: readOnly,
+		Description: "A job's last runs, newest first (status, exit code, error, who ran it), with the log of the latest run or of run_id."}, t.listJobRuns)
 	addTool(s, &mcp.Tool{Name: "set_uptime_check",
 		Description: "Create or replace the uptime check of an app with a public domain: an HTTPS request to a path at an interval, notifying when it goes down. It runs right away; get_app_status shows its results. A git project's checks are in its compose file (x-kipitiny.uptime) instead."}, t.setUptimeCheck)
 	addTool(s, &mcp.Tool{Name: "delete_uptime_check",
