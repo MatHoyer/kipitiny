@@ -158,6 +158,14 @@ func TestRecordAndStats(t *testing.T) {
 	if s.Visitors != 3 {
 		t.Errorf("visitors over two days = %d, want 3", s.Visitors)
 	}
+	s, _ = st.Stats(ctx, Query{Hosts: []string{"shop.example.com"}, From: now.Add(-time.Hour), To: now.Add(time.Minute), Interval: time.Hour})
+	if s.Pageviews != 1 || s.Previous.Pageviews != 0 {
+		t.Errorf("today = %+v", s.Summary)
+	}
+	s, _ = st.Stats(ctx, Query{Hosts: []string{"shop.example.com"}, From: now.Add(-23 * time.Hour), To: now.Add(time.Minute), Interval: time.Hour})
+	if s.Pageviews != 1 || s.Previous.Pageviews != 4 || s.Previous.Visits != 3 || s.Previous.Visitors != 2 {
+		t.Errorf("previous day = %+v", s.Previous)
+	}
 
 	if err := st.Prune(ctx, 12*time.Hour); err != nil {
 		t.Fatal(err)

@@ -12,6 +12,7 @@ const HOUR = 3600;
 const DAY = 86400;
 
 const ranges = {
+  live: { label: "Live", span: 1800, interval: 60 },
   "24h": { label: "24 hours", span: DAY, interval: HOUR },
   "7d": { label: "7 days", span: 7 * DAY, interval: DAY },
   "30d": { label: "30 days", span: 30 * DAY, interval: DAY },
@@ -52,7 +53,7 @@ export function AnalyticsTab({ svc }: { svc: Service }) {
           Visits of <Mono>{svc.domain}</Mono>, counted without cookies.
         </>
       }
-      below={(span, filters, addFilter) => <Visits svc={svc} span={span} filters={filters} onFilter={addFilter} />}
+      below={(span, filters, addFilter, live) => <Visits svc={svc} span={span} filters={filters} onFilter={addFilter} live={live} />}
     />
   );
 }
@@ -71,7 +72,7 @@ export function AnalyticsPanel({
   load: (q: StatsQuery) => Promise<Omit<AnalyticsStats, "script"> & { script?: string }>;
   intro: ReactNode;
   kind?: TrackerKind;
-  below?: (span: number, filters: string[], addFilter: (f: string) => void) => ReactNode;
+  below?: (span: number, filters: string[], addFilter: (f: string) => void, live: boolean) => ReactNode;
 }) {
   const [range, setRange] = useState<Range>("7d");
   // "<breakdown>:<value>", as the API takes them.
@@ -85,7 +86,7 @@ export function AnalyticsPanel({
       return load({ from: to - r.span, to, interval: r.interval, offset: -new Date().getTimezoneOffset() * 60, filters });
     },
     placeholderData: (prev) => prev,
-    refetchInterval: 60_000,
+    refetchInterval: range === "live" ? 5_000 : 60_000,
   });
 
   return (
@@ -117,9 +118,17 @@ export function AnalyticsPanel({
       ) : stats.error ? (
         <ErrorText error={stats.error} />
       ) : (
-        <Stats stats={stats.data} span={r.span} interval={r.interval} filtered={filters.length > 0} kind={kind} onFilter={addFilter} />
+        <Stats
+          stats={stats.data}
+          span={r.span}
+          interval={r.interval}
+          versus={range === "live" ? "the 30 minutes before" : `the ${r.label} before`}
+          filtered={filters.length > 0}
+          kind={kind}
+          onFilter={addFilter}
+        />
       )}
-      {below?.(r.span, filters, addFilter)}
+      {below?.(r.span, filters, addFilter, range === "live")}
     </div>
   );
 }
@@ -140,10 +149,27 @@ function FilterChip({ filter, onRemove }: { filter: string; onRemove: () => void
   );
 }
 
+/** The change from the previous span, colored by whether it's better (lower is for invert). */
+function Delta({ now, before, versus, invert }: { now: number; before: number; versus: string; invert?: boolean }) {
+  if (!before) return null;
+  const pct = Math.round(((now - before) / before) * 100);
+  const better = invert ? pct < 0 : pct > 0;
+  return (
+    <span
+      title={`vs ${versus}`}
+      className={cn("mr-1 font-medium", pct !== 0 && (better ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"))}
+    >
+      {pct > 0 ? "▲" : pct < 0 ? "▼" : "±"}
+      {Math.abs(pct)}%
+    </span>
+  );
+}
+
 function Stats({
   stats,
   span,
   interval,
+  versus,
   filtered,
   kind,
   onFilter,
@@ -151,27 +177,40 @@ function Stats({
   stats: Omit<AnalyticsStats, "script"> & { script?: string };
   span: number;
   interval: number;
+  versus: string;
   filtered: boolean;
   kind?: TrackerKind;
   onFilter: (filter: string) => void;
 }) {
   const bounce = stats.visits ? Math.round((stats.bounces / stats.visits) * 100) : 0;
   const hits = kind === "link" ? "Clicks" : "Views";
+  const p = stats.previous;
+  const delta = (now: number, before: number, invert?: boolean) => <Delta now={now} before={before} versus={versus} invert={invert} />;
   return (
     <>
       {kind ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          <StatCard icon={kind === "link" ? MousePointerClick : Eye} label={hits} value={stats.pageviews} />
-          <StatCard icon={Users} label="Visitors" value={stats.visitors} hint="Unique per day" />
+          <StatCard icon={kind === "link" ? MousePointerClick : Eye} label={hits} value={stats.pageviews} hint={delta(stats.pageviews, p.pageviews)} />
+          <StatCard icon={Users} label="Visitors" value={stats.visitors} hint={<>{delta(stats.visitors, p.visitors)}Unique per day</>} />
           <StatCard icon={Activity} label="Active" value={stats.active} hint="Last 30 minutes" tone={stats.active > 0 ? "good" : undefined} />
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-          <StatCard icon={Users} label="Visitors" value={stats.visitors} hint="Unique per day" />
-          <StatCard icon={MousePointerClick} label="Visits" value={stats.visits} hint="30 min idle ends one" />
-          <StatCard icon={Eye} label="Pageviews" value={stats.pageviews} />
-          <StatCard icon={LogOut} label="Bounce rate" value={stats.visits ? `${bounce}%` : "—"} hint="One-page visits" />
-          <StatCard icon={Clock} label="Visit duration" value={stats.visits ? duration(stats.duration / stats.visits) : "—"} hint="Average" />
+          <StatCard icon={Users} label="Visitors" value={stats.visitors} hint={<>{delta(stats.visitors, p.visitors)}Unique per day</>} />
+          <StatCard icon={MousePointerClick} label="Visits" value={stats.visits} hint={<>{delta(stats.visits, p.visits)}30 min idle ends one</>} />
+          <StatCard icon={Eye} label="Pageviews" value={stats.pageviews} hint={delta(stats.pageviews, p.pageviews)} />
+          <StatCard
+            icon={LogOut}
+            label="Bounce rate"
+            value={stats.visits ? `${bounce}%` : "—"}
+            hint={<>{stats.visits > 0 && delta(stats.bounces / stats.visits, p.visits && p.bounces / p.visits, true)}One-page visits</>}
+          />
+          <StatCard
+            icon={Clock}
+            label="Visit duration"
+            value={stats.visits ? duration(stats.duration / stats.visits) : "—"}
+            hint={<>{stats.visits > 0 && delta(stats.duration / stats.visits, p.visits && p.duration / p.visits)}Average</>}
+          />
           <StatCard icon={Activity} label="Active" value={stats.active} hint="Last 30 minutes" tone={stats.active > 0 ? "good" : undefined} />
         </div>
       )}
