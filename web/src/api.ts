@@ -469,6 +469,37 @@ export type Schedule = ScheduleInput & {
   nextRun?: string;
 };
 
+export type JobInput = {
+  name: string;
+  /** Run with sh -c in the app's image. */
+  command: string;
+  cron: string;
+  /** 0: one hour. */
+  timeoutSec: number;
+  enabled: boolean;
+};
+
+export type JobRun = {
+  id: string;
+  jobId: string;
+  status: OpStatus;
+  /** Missing when the command never ran or was killed. */
+  exitCode?: number;
+  /** Empty for the schedule. */
+  triggeredBy?: string;
+  error?: string;
+  createdAt: string;
+  finishedAt?: string;
+};
+
+export type Job = JobInput & {
+  id: string;
+  serviceId: string;
+  createdAt: string;
+  nextRun?: string;
+  lastRun?: JobRun;
+};
+
 export type Restore = {
   id: string;
   backupId: string;
@@ -1572,6 +1603,13 @@ export const api = {
   createManagerSchedule: (s: ScheduleInput) => request<Schedule>("/manager/schedules", json("POST", s)),
   updateSchedule: (id: string, s: ScheduleInput) => request<Schedule>(`/schedules/${id}`, json("PUT", s)),
   deleteSchedule: (id: string) => request<void>(`/schedules/${id}`, { method: "DELETE" }),
+  jobs: (serviceId: string) => request<Job[]>(`/services/${serviceId}/jobs`),
+  createJob: (serviceId: string, j: JobInput) => request<Job>(`/services/${serviceId}/jobs`, json("POST", j)),
+  updateJob: (id: string, j: JobInput) => request<Job>(`/jobs/${id}`, json("PUT", j)),
+  deleteJob: (id: string) => request<void>(`/jobs/${id}`, { method: "DELETE" }),
+  runJob: (id: string) => request<JobRun>(`/jobs/${id}/run`, { method: "POST" }),
+  jobRuns: (id: string) => request<JobRun[]>(`/jobs/${id}/runs`),
+  jobRunLog: (id: string, runId: string) => request<string>(`/jobs/${id}/runs/${runId}/log`),
   backupProject: (projectId: string, targetId = "") =>
     request<{ backups: Backup[]; error?: string }>(`/projects/${projectId}/backups`, json("POST", { targetId })),
   restores: (serviceId: string) => request<Restore[]>(`/services/${serviceId}/restores`),

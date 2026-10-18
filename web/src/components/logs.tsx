@@ -99,7 +99,7 @@ function JumpToLatest({ onClick, label = "Latest" }: { onClick: () => void; labe
   );
 }
 
-/** The output of a deployment: its own step lines, the build's and the containers'. */
+/** The output of a deployment or a job run: its own step lines, the build's and the containers'. */
 export function DeploymentLogView({ text, pending, className }: { text?: string; pending?: boolean; className?: string }) {
   const lines = useMemo(
     () =>
@@ -111,8 +111,9 @@ export function DeploymentLogView({ text, pending, className }: { text?: string;
           // Step lines are "[HH:MM:SS] message", in UTC.
           const step = /^\[(\d{2}:\d{2}:\d{2})\] (.*)$/s.exec(plain);
           let tone: Level | "none" | "success" = logLevel(plain) ?? "none";
-          if (step?.[2].startsWith("Deployment failed")) tone = "error";
-          else if (step?.[2].startsWith("Deployment succeeded")) tone = "success";
+          // A job run's log ends with "Failed: …" or "Succeeded in …".
+          if (/^(Deployment failed|Failed: )/.test(step?.[2] ?? "")) tone = "error";
+          else if (/^(Deployment succeeded|Succeeded in )/.test(step?.[2] ?? "")) tone = "success";
           return { raw, step, tone, header: plain.startsWith("--- ") && plain.endsWith(" ---") };
         }),
     [text],

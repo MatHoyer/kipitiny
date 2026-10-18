@@ -8,6 +8,8 @@ import type {
   Deployment,
   Domain,
   Invite,
+  Job,
+  JobRun,
   Network,
   NotificationChannel,
   Project,
@@ -43,6 +45,9 @@ export type DemoDb = {
   backups: Backup[];
   schedules: Schedule[];
   uptime: UptimeCheck[];
+  /** Added after version 3: seeded with demoJobs on first use. */
+  jobs?: Job[];
+  jobRuns?: JobRun[];
   /** IDs of the connected password managers, before connections: seeds secretConnections. */
   passwordManagers: string[];
   /** Added after version 3: seeded from passwordManagers on first use. */
@@ -376,4 +381,34 @@ export function demoUsers(): UserView[] {
       createdAt: at(12),
     },
   ];
+}
+
+/** Two scheduled jobs of the API, with recent runs (relative to now, so they look alive). */
+export function demoJobs(): { jobs: Job[]; runs: JobRun[] } {
+  const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+  const run = (jobId: string, min: number, secs: number, status: JobRun["status"], exitCode: number, triggeredBy?: string): JobRun => ({
+    id: `run-${jobId}-${min}`,
+    jobId,
+    status,
+    exitCode,
+    triggeredBy,
+    error: status === "failed" ? `exited with code ${exitCode}` : undefined,
+    createdAt: ago(min),
+    finishedAt: new Date(Date.parse(ago(min)) + secs * 1000).toISOString(),
+  });
+  const quarter = (Math.floor(Date.now() / 900_000) + 1) * 900_000;
+  return {
+    jobs: [
+      { id: "job-purge", serviceId: "api", name: "purge-sessions", command: "node scripts/purge-sessions.js", cron: "*/15 * * * *", timeoutSec: 300, enabled: true, createdAt: at(20), nextRun: new Date(quarter).toISOString() },
+      { id: "job-report", serviceId: "api", name: "nightly-report", command: "node scripts/report.js --email ops@acme.example", cron: "0 3 * * *", timeoutSec: 3600, enabled: true, createdAt: at(20), nextRun: at(-1, 3) },
+    ],
+    runs: [
+      run("job-purge", 7, 2, "succeeded", 0),
+      run("job-purge", 22, 3, "succeeded", 0),
+      run("job-purge", 37, 2, "succeeded", 0),
+      run("job-report", 400, 41, "failed", 1),
+      run("job-report", 1840, 38, "succeeded", 0),
+      run("job-report", 1900, 40, "succeeded", 0, "user:demo"),
+    ],
+  };
 }

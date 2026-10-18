@@ -1,4 +1,4 @@
-import { CheckIcon, CopyIcon, type LucideIcon } from "lucide-react";
+import { CheckIcon, CircleCheck, CircleSlash, CircleX, CopyIcon, type LucideIcon } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -334,4 +334,20 @@ export function ChoiceTile({
 /** Renders `code` spans of plain text (e.g. help from the API) as Mono. */
 export function withCode(text: string) {
   return text.split("`").map((part, i) => (i % 2 ? <Mono key={i}>{part}</Mono> : part));
+}
+
+/** The icon of an operation's status: a deployment's or a job run's. */
+export const statusIcon = {
+  succeeded: <CircleCheck className="size-4.5 text-emerald-600 dark:text-emerald-400" />,
+  failed: <CircleX className="size-4.5 text-destructive" />,
+  skipped: <CircleSlash className="size-4.5 text-pink-500" />,
+  running: <Spinner className="size-4.5 text-sky-500" />,
+} satisfies Record<string, ReactNode>;
+
+/** Who started an operation, from user:<name> or token:<name>. */
+export function triggeredBy(t?: string) {
+  if (!t) return "";
+  const [kind, name] = [t.slice(0, t.indexOf(":")), t.slice(t.indexOf(":") + 1)];
+  if (kind === "token") return `token ${name}`;
+  return name;
 }
