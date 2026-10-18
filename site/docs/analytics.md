@@ -47,13 +47,44 @@ same version as the manager), a container of a few MB of memory.
 
 Bots, crawlers, link previews and scripts are left out by their user agent.
 
+### Visits
+
+Under the lists, **Visits** shows the range's visits, newest first: when,
+who (country, browser, OS and device, or the identity below), where they came
+from, pages, events and duration. Click one to see its journey: the pages in
+order with their times and titles, and the custom events with their
+properties.
+
+A visitor is only recognized **within a day** (see [Privacy](#privacy)): the
+same person tomorrow is a new visitor, and their visits aren't linked.
+
+### Identifying users
+
+An app that already knows who is signed in can name the visitor:
+
+```js
+kipitiny.identify("user-42", { plan: "pro" });
+```
+
+The id (up to 128 characters) is kept on the visit, with its properties, and
+sent with every hit of the page after it. It shows in **Visits** and in the
+**Identified users** list; clicking one filters the tab to that user's
+visits, across days.
+
+This links one person's visits over time, which the cookieless counting
+otherwise never does: whether your users agreed to it is your app's question,
+as for any data you keep about them. Prefer an opaque id over an email. It's
+stored in the analytics volume only, and deleted with the visit after the
+retention.
+
 ### Filters
 
 Click a value in any list (a page, a referrer, a country…) to narrow the whole
 tab to it; filters add up, and each chip removes its own. A filter on a page,
 referrer, UTM tag, query key, browser, OS, device, screen, language or country
-keeps the matching pageviews and events; one on an entry or exit page or a
-custom event keeps the visits that have it. `get_analytics` takes the same
+keeps the matching pageviews and events; one on an entry or exit page, a
+custom event or an identified user keeps the visits that have it. Filters
+apply to **Visits** too. `get_analytics` and `list_visits` take the same
 filters, as `filters: ["countries:FR", "pages:/pricing"]`.
 
 ### Custom events
@@ -76,15 +107,16 @@ properties have their own lists in the Analytics tab.
 No cookie, no `localStorage`, no fingerprinting script. A visitor is a hash of
 the site, the IP address and the user agent with a **salt that changes every
 day**: the same browser counts once per day, and can't be followed from one day
-to the next. IP addresses are never stored. Visits older than the retention
+to the next (unless the app [identifies](#identifying-users) them). IP
+addresses are never stored. Visits older than the retention
 (**365 days** by default, Settings › Analytics) are deleted every hour.
 
 ## Who sees what
 
 Anyone who can view a project sees its apps' analytics. Turning an app's
 analytics on or off needs the *settings* permission; the server's settings are
-admin-only. The [MCP](/docs/api) tool `get_analytics` returns the same numbers
-to agents.
+admin-only. The [MCP](/docs/api) tools `get_analytics`, `list_visits` and
+`get_visit` return the same numbers and journeys to agents.
 
 ## Limits
 

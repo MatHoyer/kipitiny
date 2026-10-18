@@ -44,7 +44,11 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	defer res.Body.Close()
 	if res.StatusCode >= 300 {
 		msg, _ := io.ReadAll(io.LimitReader(res.Body, 512))
-		return fmt.Errorf("analytics: %s: %s", res.Status, bytes.TrimSpace(msg))
+		err := fmt.Errorf("analytics: %s: %s", res.Status, bytes.TrimSpace(msg))
+		if res.StatusCode == http.StatusNotFound {
+			err = fmt.Errorf("%w: %v", ErrNotFound, err)
+		}
+		return err
 	}
 	if out == nil {
 		return nil
@@ -59,7 +63,7 @@ func (c *Client) SetSites(ctx context.Context, hosts []string) error {
 	return c.do(ctx, http.MethodPut, "/api/sites", map[string][]string{"hostnames": hosts}, nil)
 }
 
-func (c *Client) Stats(ctx context.Context, q Query) (Stats, error) {
+func (q Query) values() url.Values {
 	v := url.Values{"host": q.Hosts}
 	v.Set("from", strconv.FormatInt(q.From.Unix(), 10))
 	v.Set("to", strconv.FormatInt(q.To.Unix(), 10))
@@ -68,7 +72,27 @@ func (c *Client) Stats(ctx context.Context, q Query) (Stats, error) {
 	for _, f := range q.Filters {
 		v.Add("filter", f.Key+":"+f.Value)
 	}
+	return v
+}
+
+func (c *Client) Stats(ctx context.Context, q Query) (Stats, error) {
 	var s Stats
-	err := c.do(ctx, http.MethodGet, "/api/stats?"+v.Encode(), nil, &s)
+	err := c.do(ctx, http.MethodGet, "/api/stats?"+q.values().Encode(), nil, &s)
 	return s, err
+}
+
+// Visits lists q's visits (q.Interval only checked): see Store.Visits.
+func (c *Client) Visits(ctx context.Context, q Query, before string, limit int) ([]Visit, error) {
+	v := q.values()
+	v.Set("before", before)
+	v.Set("limit", strconv.Itoa(limit))
+	var vs []Visit
+	err := c.do(ctx, http.MethodGet, "/api/visits?"+v.Encode(), nil, &vs)
+	return vs, err
+}
+
+func (c *Client) Visit(ctx context.Context, hosts []string, id string) (VisitDetail, error) {
+	var d VisitDetail
+	err := c.do(ctx, http.MethodGet, "/api/visits/"+url.PathEscape(id)+"?"+url.Values{"host": hosts}.Encode(), nil, &d)
+	return d, err
 }

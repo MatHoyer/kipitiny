@@ -756,6 +756,35 @@ export type AnalyticsStats = {
   script: string;
 };
 
+export type AnalyticsVisit = {
+  id: string;
+  startedAt: number;
+  lastAt: number;
+  pageviews: number;
+  /** Custom events. */
+  events: number;
+  entry: string;
+  exit: string;
+  referrer: string;
+  utmSource: string;
+  utmMedium: string;
+  utmCampaign: string;
+  country: string;
+  browser: string;
+  os: string;
+  device: string;
+  screen: string;
+  language: string;
+  /** What the app passed to kipitiny.identify. */
+  identity: string;
+  identityProps?: Record<string, unknown>;
+};
+
+export type AnalyticsVisitDetail = AnalyticsVisit & {
+  /** Pageviews (name empty) and custom events, in order. */
+  journey: { at: number; name: string; path: string; query: string; title: string; props?: Record<string, unknown> }[];
+};
+
 export type CleanupSettings = {
   enabled: boolean;
   cron: string;
@@ -1601,6 +1630,12 @@ export const api = {
     for (const f of filters) p.append("filter", f);
     return request<AnalyticsStats>(`/services/${id}/analytics?${p}`);
   },
+  serviceVisits: (id: string, { filters = [], ...q }: { from: number; to: number; before: string; limit: number; filters?: string[] }) => {
+    const p = new URLSearchParams(Object.entries(q).map(([k, v]) => [k, String(v)]));
+    for (const f of filters) p.append("filter", f);
+    return request<AnalyticsVisit[]>(`/services/${id}/analytics/visits?${p}`);
+  },
+  serviceVisit: (id: string, visit: string) => request<AnalyticsVisitDetail>(`/services/${id}/analytics/visits/${visit}`),
   cleanup: () => request<Cleanup>("/cleanup"),
   setCleanup: (s: CleanupSettings) => request<Cleanup>("/cleanup", json("PUT", s)),
   runCleanup: () => request<Cleanup>("/cleanup/run", { method: "POST" }),

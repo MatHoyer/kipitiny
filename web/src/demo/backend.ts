@@ -1,6 +1,8 @@
 import type {
   AnalyticsSettings,
   AnalyticsStats,
+  AnalyticsVisit,
+  AnalyticsVisitDetail,
   Account,
   Backup,
   Restore,
@@ -863,6 +865,51 @@ function newBackup(s: DemoDb["services"][number] | null, targetId = "local"): Ba
   };
 }
 
+/** A dozen recent visits; the demo's journeys are made up from their id. */
+function demoVisits(to: number): AnalyticsVisit[] {
+  const r = rng(7);
+  const pages = ["/", "/pricing", "/blog/launch", "/docs", "/signup"];
+  return Array.from({ length: 12 }, (_, i) => {
+    const startedAt = to - 600 - i * 2700;
+    const pageviews = 1 + Math.floor(r() * 5);
+    return {
+      id: `visit-${i}`,
+      startedAt,
+      lastAt: startedAt + (pageviews - 1) * 70,
+      pageviews,
+      events: i % 3 === 0 ? 1 : 0,
+      entry: pages[i % 3],
+      exit: pages[(i + pageviews) % pages.length],
+      referrer: ["google.com", "", "news.ycombinator.com", "github.com"][i % 4],
+      utmSource: i % 5 === 1 ? "newsletter" : "",
+      utmMedium: "",
+      utmCampaign: "",
+      country: ["FR", "US", "DE", "GB"][i % 4],
+      browser: ["Chrome", "Safari", "Firefox"][i % 3],
+      os: ["macOS", "Windows", "iOS"][i % 3],
+      device: ["desktop", "desktop", "mobile"][i % 3],
+      screen: ["1920x1080", "1440x900", "390x844"][i % 3],
+      language: "en-us",
+      identity: i === 0 ? "ada@acme.example" : "",
+      identityProps: i === 0 ? { plan: "pro" } : undefined,
+    };
+  });
+}
+
+function demoVisit(id: string): AnalyticsVisitDetail {
+  const v = demoVisits(Math.ceil(Date.now() / 60000) * 60).find((v) => v.id === id) ?? demoVisits(0)[0];
+  const pages = ["/", "/pricing", "/docs", "/signup", "/blog/launch"];
+  const journey: AnalyticsVisitDetail["journey"] = Array.from({ length: v.pageviews }, (_, i) => ({
+    at: v.startedAt + i * 70,
+    name: "",
+    path: i === 0 ? v.entry : pages[i % pages.length],
+    query: "",
+    title: "Acme",
+  }));
+  if (v.events) journey.push({ at: v.lastAt, name: "signup", path: "/signup", query: "", title: "Acme", props: { plan: "pro" } });
+  return { ...v, journey };
+}
+
 let analyticsSettings: AnalyticsSettings = { enabled: true, domain: "stats.acme.example", retentionDays: 365 };
 
 /** Plausible visits of the demo's site, the same for everyone. */
@@ -905,6 +952,7 @@ function demoAnalytics(from: number, to: number, interval: number): AnalyticsSta
       screens: rows(["1920x1080", "1440x900", "390x844"]),
       utm_source: rows(["newsletter", "twitter"]),
       events: rows(["signup", "download"]),
+      identities: rows(["ada@acme.example", "grace@acme.example"]),
       props: rows(["signup: plan=pro", "signup: plan=free"]),
     },
     script: `<script defer src="https://${analyticsSettings.domain}/a.js"></script>`,
@@ -1920,6 +1968,8 @@ const routes: Route[] = [
     },
   ],
   ["DELETE", /^\/analytics\/data$/, () => undefined],
+  ["GET", /^\/services\/([^/]+)\/analytics\/visits$/, ({ q }) => (q.get("before") ? [] : demoVisits(Number(q.get("to"))))],
+  ["GET", /^\/services\/([^/]+)\/analytics\/visits\/([^/]+)$/, ({ m }) => demoVisit(m[2])],
   ["GET", /^\/services\/([^/]+)\/analytics$/, ({ q }) => demoAnalytics(Number(q.get("from")), Number(q.get("to")), Number(q.get("interval")))],
   ["GET", /^\/cleanup$/, () => cleanupView()],
   [
