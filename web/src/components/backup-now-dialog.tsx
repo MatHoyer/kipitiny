@@ -75,7 +75,7 @@ export function BackupNowDialog({
           Back up now
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         {started ? (
           <BackupProgress id={started} what={what} onClose={() => onOpenChange(false)} />
         ) : !target ? (

@@ -444,7 +444,7 @@ function NewServerDialog() {
           Add server
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <form onSubmit={onSubmit} className="contents">
           <DialogHeader>
             <DialogTitle>New server</DialogTitle>

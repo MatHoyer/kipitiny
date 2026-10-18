@@ -25,7 +25,7 @@ export function ComposeDialog({ projectId, service, canImport = false }: { proje
           Compose
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{service ? `${service} as compose` : "Project as compose"}</DialogTitle>
           <DialogDescription>
