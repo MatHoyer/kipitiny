@@ -39,8 +39,8 @@ func (a *API) deleteAnalyticsData(w http.ResponseWriter, r *http.Request) {
 }
 
 // serviceAnalytics takes from and to (unix seconds, default the last 24
-// hours, to included), interval (seconds, default an hour) and offset (seconds east of
-// UTC, for day buckets).
+// hours, to included), interval (seconds, default an hour), offset (seconds east of
+// UTC, for day buckets) and filter (<breakdown>:<value>, repeated).
 func (a *API) serviceAnalytics(w http.ResponseWriter, r *http.Request) {
 	v := r.URL.Query()
 	num := func(k string, def int64) int64 {
@@ -56,6 +56,7 @@ func (a *API) serviceAnalytics(w http.ResponseWriter, r *http.Request) {
 		To:       time.Unix(num("to", now), 0),
 		Interval: int(num("interval", 3600)),
 		Offset:   int(num("offset", 0)),
+		Filters:  v["filter"],
 	}
 	res, err := a.core.ServiceAnalytics(r.Context(), r.PathValue("id"), q)
 	if err != nil {

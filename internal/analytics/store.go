@@ -194,6 +194,61 @@ type Query struct {
 	// day buckets to the viewer's midnight.
 	Interval time.Duration
 	Offset   int
+	Filters  []Filter
+}
+
+// Filter narrows stats to a value of a breakdown (props aside): the
+// matching events for a pageview column, the visits with it otherwise.
+type Filter struct{ Key, Value string }
+
+// visitFilters are on the visits' own columns.
+var visitFilters = map[string]string{"entries": "entry", "exits": "exit"}
+
+// ParseFilters reads "<breakdown>:<value>" filters.
+func ParseFilters(vs []string) ([]Filter, error) {
+	if len(vs) > 10 {
+		return nil, errors.New("at most 10 filters")
+	}
+	fs := []Filter{}
+	for _, v := range vs {
+		k, val, ok := strings.Cut(v, ":")
+		_, pv := pageviewBreakdowns[k]
+		_, vi := visitFilters[k]
+		if !ok || !(pv || vi || k == "events") || len(val) > 512 {
+			return nil, fmt.Errorf("filter %q: want <breakdown>:<value>", v)
+		}
+		fs = append(fs, Filter{k, val})
+	}
+	return fs, nil
+}
+
+// cond is SQL appended to a WHERE, with its args.
+type cond struct {
+	sql  string
+	args []any
+}
+
+func (c *cond) add(sql string, args ...any) {
+	c.sql += " AND " + sql
+	c.args = append(c.args, args...)
+}
+
+// filters are the conditions of q.Filters on events and on visits.
+func (q Query) filters() (ev, vi cond) {
+	hosts := bun.In(q.Hosts)
+	for _, f := range q.Filters {
+		if col, ok := pageviewBreakdowns[f.Key]; ok {
+			ev.add(col+" = ?", f.Value)
+			vi.add("id IN (SELECT visit_id FROM events WHERE hostname IN (?) AND "+col+" = ?)", hosts, f.Value)
+		} else if col, ok := visitFilters[f.Key]; ok {
+			ev.add("visit_id IN (SELECT id FROM visits WHERE hostname IN (?) AND "+col+" = ?)", hosts, f.Value)
+			vi.add(col+" = ?", f.Value)
+		} else if f.Key == "events" {
+			ev.add("visit_id IN (SELECT visit_id FROM events WHERE hostname IN (?) AND name = ?)", hosts, f.Value)
+			vi.add("id IN (SELECT visit_id FROM events WHERE hostname IN (?) AND name = ?)", hosts, f.Value)
+		}
+	}
+	return ev, vi
 }
 
 type Stats struct {
@@ -241,46 +296,50 @@ func (s *Store) Stats(ctx context.Context, q Query) (Stats, error) {
 	}
 	hosts := bun.In(q.Hosts)
 	from, to := q.From.Unix(), q.To.Unix()
-	err := s.db.NewRaw(`SELECT COUNT(CASE WHEN name = '' THEN 1 END), COUNT(DISTINCT visitor) FROM events
-		WHERE hostname IN (?) AND created_at >= ? AND created_at < ?`, hosts, from, to).Scan(ctx, &st.Pageviews, &st.Visitors)
+	evf, vif := q.filters()
+	// ev and vi select the range's events and visits, filtered; args go first.
+	ev := "hostname IN (?) AND created_at >= ? AND created_at < ?" + evf.sql
+	vi := "hostname IN (?) AND started_at >= ? AND started_at < ?" + vif.sql
+	evArgs := func(more ...any) []any { return append(append([]any{hosts, from, to}, evf.args...), more...) }
+	viArgs := func(more ...any) []any { return append(append([]any{hosts, from, to}, vif.args...), more...) }
+
+	err := s.db.NewRaw(`SELECT COUNT(CASE WHEN name = '' THEN 1 END), COUNT(DISTINCT visitor) FROM events WHERE `+ev,
+		evArgs()...).Scan(ctx, &st.Pageviews, &st.Visitors)
 	if err != nil {
 		return st, err
 	}
-	err = s.db.NewRaw(`SELECT COUNT(*), COUNT(CASE WHEN pageviews <= 1 THEN 1 END), COALESCE(SUM(last_at - started_at), 0) FROM visits
-		WHERE hostname IN (?) AND started_at >= ? AND started_at < ?`, hosts, from, to).Scan(ctx, &st.Visits, &st.Bounces, &st.Duration)
+	err = s.db.NewRaw(`SELECT COUNT(*), COUNT(CASE WHEN pageviews <= 1 THEN 1 END), COALESCE(SUM(last_at - started_at), 0) FROM visits WHERE `+vi,
+		viArgs()...).Scan(ctx, &st.Visits, &st.Bounces, &st.Duration)
 	if err != nil {
 		return st, err
 	}
-	err = s.db.NewRaw("SELECT COUNT(DISTINCT visitor) FROM events WHERE hostname IN (?) AND created_at >= ?",
-		hosts, s.now().Unix()-visitGap).Scan(ctx, &st.Active)
+	err = s.db.NewRaw("SELECT COUNT(DISTINCT visitor) FROM events WHERE hostname IN (?) AND created_at >= ?"+evf.sql,
+		append([]any{hosts, s.now().Unix() - visitGap}, evf.args...)...).Scan(ctx, &st.Active)
 	if err != nil {
 		return st, err
 	}
 	iv, off := max(int64(q.Interval.Seconds()), 60), int64(q.Offset)
 	err = s.db.NewRaw(`SELECT (created_at + ?) / ? * ? - ? AS t, COUNT(CASE WHEN name = '' THEN 1 END) AS pageviews,
-		COUNT(DISTINCT visitor) AS visitors
-		FROM events WHERE hostname IN (?) AND created_at >= ? AND created_at < ? GROUP BY t ORDER BY t`,
-		off, iv, iv, off, hosts, from, to).Scan(ctx, &st.Series)
+		COUNT(DISTINCT visitor) AS visitors FROM events WHERE `+ev+` GROUP BY t ORDER BY t`,
+		append([]any{off, iv, iv, off}, evArgs()...)...).Scan(ctx, &st.Series)
 	if err != nil {
 		return st, err
 	}
 	for key, col := range pageviewBreakdowns {
 		rows := []Row{}
 		err := s.db.NewRaw(`SELECT ? AS value, COUNT(*) AS count, COUNT(DISTINCT visitor) AS visitors FROM events
-			WHERE hostname IN (?) AND created_at >= ? AND created_at < ? AND name = '' AND ? <> ''
-			GROUP BY value ORDER BY count DESC, value LIMIT ?`,
-			bun.Ident(col), hosts, from, to, bun.Ident(col), topN).Scan(ctx, &rows)
+			WHERE `+ev+` AND name = '' AND ? <> '' GROUP BY value ORDER BY count DESC, value LIMIT ?`,
+			append([]any{bun.Ident(col)}, evArgs(bun.Ident(col), topN)...)...).Scan(ctx, &rows)
 		if err != nil {
 			return st, err
 		}
 		st.Breakdowns[key] = rows
 	}
-	for key, col := range map[string]string{"entries": "entry", "exits": "exit"} {
+	for key, col := range visitFilters {
 		rows := []Row{}
 		err := s.db.NewRaw(`SELECT ? AS value, COUNT(*) AS count, COUNT(DISTINCT visitor) AS visitors FROM visits
-			WHERE hostname IN (?) AND started_at >= ? AND started_at < ? AND ? <> ''
-			GROUP BY value ORDER BY count DESC, value LIMIT ?`,
-			bun.Ident(col), hosts, from, to, bun.Ident(col), topN).Scan(ctx, &rows)
+			WHERE `+vi+` AND ? <> '' GROUP BY value ORDER BY count DESC, value LIMIT ?`,
+			append([]any{bun.Ident(col)}, viArgs(bun.Ident(col), topN)...)...).Scan(ctx, &rows)
 		if err != nil {
 			return st, err
 		}
@@ -288,13 +347,12 @@ func (s *Store) Stats(ctx context.Context, q Query) (Stats, error) {
 	}
 	rows := []Row{}
 	err = s.db.NewRaw(`SELECT name AS value, COUNT(*) AS count, COUNT(DISTINCT visitor) AS visitors FROM events
-		WHERE hostname IN (?) AND created_at >= ? AND created_at < ? AND name <> ''
-		GROUP BY value ORDER BY count DESC, value LIMIT ?`, hosts, from, to, topN).Scan(ctx, &rows)
+		WHERE `+ev+` AND name <> '' GROUP BY value ORDER BY count DESC, value LIMIT ?`, evArgs(topN)...).Scan(ctx, &rows)
 	if err != nil {
 		return st, err
 	}
 	st.Breakdowns["events"] = rows
-	st.Breakdowns["props"], err = s.props(ctx, hosts, from, to)
+	st.Breakdowns["props"], err = s.props(ctx, ev, evArgs())
 	return st, err
 }
 
@@ -305,13 +363,12 @@ func (s *Store) Stats(ctx context.Context, q Query) (Stats, error) {
 const propsScan = 10000
 
 // props counts "event: key=value" over the custom events' props.
-func (s *Store) props(ctx context.Context, hosts any, from, to int64) ([]Row, error) {
+func (s *Store) props(ctx context.Context, where string, args []any) ([]Row, error) {
 	var evs []struct {
 		Name, Visitor, Props string
 	}
-	err := s.db.NewRaw(`SELECT name, visitor, props FROM events
-		WHERE hostname IN (?) AND created_at >= ? AND created_at < ? AND name <> '' AND props <> ''
-		ORDER BY created_at DESC LIMIT ?`, hosts, from, to, propsScan).Scan(ctx, &evs)
+	err := s.db.NewRaw(`SELECT name, visitor, props FROM events WHERE `+where+` AND name <> '' AND props <> ''
+		ORDER BY created_at DESC LIMIT ?`, append(args, propsScan)...).Scan(ctx, &evs)
 	if err != nil {
 		return nil, err
 	}

@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Clock, Eye, LogOut, MousePointerClick, Users } from "lucide-react";
+import { Activity, Clock, Eye, LogOut, MousePointerClick, Users, X } from "lucide-react";
 import { useState } from "react";
 import { CopyField, Empty, ErrorText, Loading, Mono, Section, StatCard } from "@/components/common";
+import { Button } from "@/components/ui/button";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { cn } from "@/lib/utils";
 import { api, type AnalyticsRow, type AnalyticsStats, type Service } from "../api";
@@ -54,13 +55,16 @@ function duration(seconds: number) {
 /** Cookieless visits of an app's domain, from the analytics server. */
 export function AnalyticsTab({ svc }: { svc: Service }) {
   const [range, setRange] = useState<Range>("7d");
+  // "<breakdown>:<value>", as the API takes them.
+  const [filters, setFilters] = useState<string[]>([]);
   const r = ranges[range];
   const stats = useQuery({
-    queryKey: ["service-analytics", svc.id, range],
+    queryKey: ["service-analytics", svc.id, range, filters],
     queryFn: () => {
       const to = Math.ceil(Date.now() / 1000 / 60) * 60;
-      return api.serviceAnalytics(svc.id, { from: to - r.span, to, interval: r.interval, offset: -new Date().getTimezoneOffset() * 60 });
+      return api.serviceAnalytics(svc.id, { from: to - r.span, to, interval: r.interval, offset: -new Date().getTimezoneOffset() * 60, filters });
     },
+    placeholderData: (prev) => prev,
     refetchInterval: 60_000,
   });
 
@@ -78,12 +82,64 @@ export function AnalyticsTab({ svc }: { svc: Service }) {
           ))}
         </Segmented>
       </div>
-      {stats.isPending ? <Loading /> : stats.error ? <ErrorText error={stats.error} /> : <Stats stats={stats.data} span={r.span} interval={r.interval} />}
+      {filters.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {filters.map((f) => (
+            <FilterChip key={f} filter={f} onRemove={() => setFilters(filters.filter((x) => x !== f))} />
+          ))}
+          {filters.length > 1 && (
+            <Button variant="ghost" size="sm" onClick={() => setFilters([])}>
+              Clear filters
+            </Button>
+          )}
+        </div>
+      )}
+      {stats.isPending ? (
+        <Loading />
+      ) : stats.error ? (
+        <ErrorText error={stats.error} />
+      ) : (
+        <Stats
+          stats={stats.data}
+          span={r.span}
+          interval={r.interval}
+          filtered={filters.length > 0}
+          onFilter={(f) => !filters.includes(f) && setFilters([...filters, f])}
+        />
+      )}
     </div>
   );
 }
 
-function Stats({ stats, span, interval }: { stats: AnalyticsStats; span: number; interval: number }) {
+function FilterChip({ filter, onRemove }: { filter: string; onRemove: () => void }) {
+  const i = filter.indexOf(":");
+  const key = filter.slice(0, i);
+  const value = filter.slice(i + 1);
+  const b = breakdowns.find((b) => b.key === key);
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md border bg-muted/40 py-0.5 pr-0.5 pl-2 text-sm">
+      <span className="text-muted-foreground">{b?.title ?? key}:</span>
+      <span className="max-w-64 truncate">{key === "countries" ? countryLabel(value) : value}</span>
+      <Button variant="ghost" size="icon-xs" aria-label={`Remove filter ${b?.title ?? key}`} onClick={onRemove}>
+        <X />
+      </Button>
+    </span>
+  );
+}
+
+function Stats({
+  stats,
+  span,
+  interval,
+  filtered,
+  onFilter,
+}: {
+  stats: AnalyticsStats;
+  span: number;
+  interval: number;
+  filtered: boolean;
+  onFilter: (filter: string) => void;
+}) {
   const bounce = stats.visits ? Math.round((stats.bounces / stats.visits) * 100) : 0;
   return (
     <>
@@ -98,7 +154,7 @@ function Stats({ stats, span, interval }: { stats: AnalyticsStats; span: number;
       <Section title="Traffic">
         <Chart series={stats.series} span={span} interval={interval} />
       </Section>
-      {stats.pageviews === 0 && stats.visits === 0 && (
+      {!filtered && stats.pageviews === 0 && stats.visits === 0 && (
         <Section title="Start counting" description="No visit in this range yet. Add the script to the app's pages, e.g. in the <head>:">
           <CopyField value={stats.script} />
           <p className="text-sm text-muted-foreground">
@@ -111,7 +167,15 @@ function Stats({ stats, span, interval }: { stats: AnalyticsStats; span: number;
         {breakdowns
           .filter((b) => (stats.breakdowns[b.key]?.length ?? 0) > 0)
           .map((b) => (
-            <Breakdown key={b.key} title={b.title} column={b.column} rows={stats.breakdowns[b.key]} label={b.key === "countries" ? countryLabel : undefined} />
+            <Breakdown
+              key={b.key}
+              title={b.title}
+              column={b.column}
+              rows={stats.breakdowns[b.key]}
+              label={b.key === "countries" ? countryLabel : undefined}
+              // Props mix the event and the property: not one column to filter on.
+              onPick={b.key === "props" ? undefined : (v) => onFilter(`${b.key}:${v}`)}
+            />
           ))}
       </div>
       {stats.pageviews + stats.visits > 0 && (
@@ -175,7 +239,19 @@ function Chart({ series, span, interval }: { series: AnalyticsStats["series"]; s
   );
 }
 
-function Breakdown({ title, column, rows, label }: { title: string; column: string; rows: AnalyticsRow[]; label?: (v: string) => string }) {
+function Breakdown({
+  title,
+  column,
+  rows,
+  label,
+  onPick,
+}: {
+  title: string;
+  column: string;
+  rows: AnalyticsRow[];
+  label?: (v: string) => string;
+  onPick?: (value: string) => void;
+}) {
   const top = Math.max(1, ...rows.map((r) => r.count));
   return (
     <Section title={title}>
@@ -192,9 +268,20 @@ function Breakdown({ title, column, rows, label }: { title: string; column: stri
             <tr key={r.value}>
               <td className="relative py-1 pr-2">
                 <span className="absolute inset-y-0.5 left-0 rounded-sm bg-primary/10" style={{ width: `${(r.count / top) * 100}%` }} />
-                <span className="relative block truncate px-1.5" title={r.value}>
-                  {label ? label(r.value) : r.value}
-                </span>
+                {onPick ? (
+                  <button
+                    type="button"
+                    className="relative block w-full truncate rounded-sm px-1.5 text-left hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    title={`Filter by ${r.value}`}
+                    onClick={() => onPick(r.value)}
+                  >
+                    {label ? label(r.value) : r.value}
+                  </button>
+                ) : (
+                  <span className="relative block truncate px-1.5" title={r.value}>
+                    {label ? label(r.value) : r.value}
+                  </span>
+                )}
               </td>
               <td className="py-1 text-right tabular-nums">{r.visitors}</td>
               <td className="py-1 text-right text-muted-foreground tabular-nums">{r.count}</td>

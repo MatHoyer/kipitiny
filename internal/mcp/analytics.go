@@ -10,8 +10,9 @@ import (
 )
 
 type analyticsIn struct {
-	Service string `json:"service" jsonschema:"project/service of an app with analytics on"`
-	Days    int    `json:"days,omitempty" jsonschema:"how many days back, default 7, at most 730"`
+	Service string   `json:"service" jsonschema:"project/service of an app with analytics on"`
+	Days    int      `json:"days,omitempty" jsonschema:"how many days back, default 7, at most 730"`
+	Filters []string `json:"filters,omitempty" jsonschema:"narrow to breakdown values, as <breakdown>:<value>, e.g. countries:FR, pages:/pricing, referrers:google.com, events:signup, entries:/"`
 }
 
 func (t *tools) getAnalytics(ctx context.Context, _ *mcp.CallToolRequest, in analyticsIn) (*mcp.CallToolResult, core.AnalyticsView, error) {
@@ -28,6 +29,6 @@ func (t *tools) getAnalytics(ctx context.Context, _ *mcp.CallToolRequest, in ana
 	}
 	days = min(days, 730)
 	now := time.Now()
-	out, err := t.c.ServiceAnalytics(ctx, svc.ID, core.AnalyticsQuery{From: now.AddDate(0, 0, -days), To: now, Interval: 86400})
+	out, err := t.c.ServiceAnalytics(ctx, svc.ID, core.AnalyticsQuery{From: now.AddDate(0, 0, -days), To: now, Interval: 86400, Filters: in.Filters})
 	return nil, out, friendly(err)
 }

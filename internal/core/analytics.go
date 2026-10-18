@@ -331,11 +331,13 @@ func (c *Core) analyticsClient(ctx context.Context, token string) (*analytics.Cl
 }
 
 // AnalyticsQuery is a range of an app's stats: [From, To), in buckets of
-// Interval seconds aligned with Offset (seconds east of UTC).
+// Interval seconds aligned with Offset (seconds east of UTC), narrowed by
+// "<breakdown>:<value>" filters.
 type AnalyticsQuery struct {
 	From, To time.Time
 	Interval int
 	Offset   int
+	Filters  []string
 }
 
 // AnalyticsView is an app's stats, and the snippet its pages include.
@@ -356,13 +358,17 @@ func (c *Core) ServiceAnalytics(ctx context.Context, serviceID string, q Analyti
 	if !svc.Analytics || svc.Domain == "" {
 		return AnalyticsView{}, fmt.Errorf("%w: analytics are off for %s (its settings)", ErrInvalid, svc.Name)
 	}
+	filters, err := analytics.ParseFilters(q.Filters)
+	if err != nil {
+		return AnalyticsView{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
 	cl, err := c.analyticsClient(ctx, st.Token)
 	if err != nil {
 		return AnalyticsView{}, err
 	}
 	s, err := cl.Stats(ctx, analytics.Query{
 		Hosts: []string{svc.Domain}, From: q.From, To: q.To,
-		Interval: time.Duration(q.Interval) * time.Second, Offset: q.Offset,
+		Interval: time.Duration(q.Interval) * time.Second, Offset: q.Offset, Filters: filters,
 	})
 	if err != nil {
 		return AnalyticsView{}, err

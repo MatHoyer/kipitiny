@@ -47,6 +47,15 @@ same version as the manager), a container of a few MB of memory.
 
 Bots, crawlers, link previews and scripts are left out by their user agent.
 
+### Filters
+
+Click a value in any list (a page, a referrer, a country…) to narrow the whole
+tab to it; filters add up, and each chip removes its own. A filter on a page,
+referrer, UTM tag, query key, browser, OS, device, screen, language or country
+keeps the matching pageviews and events; one on an entry or exit page or a
+custom event keeps the visits that have it. `get_analytics` takes the same
+filters, as `filters: ["countries:FR", "pages:/pricing"]`.
+
 ### Custom events
 
 ```js

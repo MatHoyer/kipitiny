@@ -233,6 +233,9 @@ func parseQuery(v url.Values) (Query, error) {
 		}
 		q.Offset = off
 	}
+	if q.Filters, err = ParseFilters(v["filter"]); err != nil {
+		return q, err
+	}
 	if to <= from || to-from > 2*366*86400 || iv < 60 || (to-from)/iv > 1000 {
 		return q, fmt.Errorf("range: from < to, at most 2 years and 1000 buckets of at least a minute")
 	}

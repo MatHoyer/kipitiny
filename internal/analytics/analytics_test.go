@@ -110,6 +110,41 @@ func TestRecordAndStats(t *testing.T) {
 		t.Errorf("series = %+v", s.Series)
 	}
 
+	// Filters: pageview columns keep their events, the others the visits with them.
+	filtered := func(fs ...string) Stats {
+		t.Helper()
+		f, err := ParseFilters(fs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s, err := st.Stats(ctx, Query{Hosts: []string{"shop.example.com"}, From: now.Add(-time.Hour), To: now.Add(time.Minute),
+			Interval: 30 * time.Minute, Filters: f})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	if f := filtered("pages:/cart"); f.Pageviews != 1 || f.Visitors != 1 || f.Visits != 1 || len(f.Breakdowns["events"]) != 1 {
+		t.Errorf("pages:/cart = %+v", f)
+	}
+	if f := filtered("devices:mobile"); f.Pageviews != 1 || f.Visits != 1 || len(f.Breakdowns["browsers"]) != 1 || f.Breakdowns["browsers"][0].Value != "Safari" {
+		t.Errorf("devices:mobile = %+v", f)
+	}
+	if f := filtered("events:checkout"); f.Pageviews != 2 || f.Visits != 1 || f.Bounces != 0 {
+		t.Errorf("events:checkout = %+v (the visit's pageviews)", f)
+	}
+	if f := filtered("exits:/cart", "countries:FR"); f.Visits != 1 || f.Pageviews != 2 {
+		t.Errorf("exits:/cart = %+v", f)
+	}
+	if f := filtered("countries:DE"); f.Pageviews != 0 || f.Visits != 0 || len(f.Series) != 0 {
+		t.Errorf("countries:DE = %+v", f)
+	}
+	for _, bad := range []string{"props:x", "nokey", "drop:1"} {
+		if _, err := ParseFilters([]string{bad}); err == nil {
+			t.Errorf("filter %q accepted", bad)
+		}
+	}
+
 	// Next day: new salt, so the same browser is a new visitor; old salts go.
 	*now = now.Add(24 * time.Hour)
 	pv(chromeUA, "1.1.1.1", "https://shop.example.com/", "")
