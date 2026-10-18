@@ -154,7 +154,14 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 		Description: "Delete a backup and its file from storage."}, t.deleteBackup)
 	addTool(s, &mcp.Tool{Name: "get_analytics", Annotations: readOnly,
 		Description: "Cookieless web analytics of an app: pageviews, visitors, visits, bounces, time on site, daily series, " +
-			"and top pages, referrers, UTM, browsers, OS, devices, countries, custom events and identified users; filters narrow it to a value."}, t.getAnalytics)
+			"and top pages, referrers, UTM, browsers, OS, devices, countries, custom events and identified users; filters narrow it to a value. With tracker instead of service, a pixel's views or a link's clicks."}, t.getAnalytics)
+	addTool(s, &mcp.Tool{Name: "list_trackers", Annotations: readOnly,
+		Description: "Pixels (1x1 GIFs counting views, for emails and pages without the script) and tracked links (redirects counting " +
+			"clicks), with their URL and last 30 days' hits. Needs admin and analytics on."}, t.listTrackers)
+	addTool(s, &mcp.Tool{Name: "create_tracker",
+		Description: "Create a pixel or a tracked link on the analytics domain; returns its URL. Needs admin."}, t.createTracker)
+	addTool(s, &mcp.Tool{Name: "delete_tracker", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+		Description: "Delete a pixel or a tracked link and its counted hits; its URL stops counting (a link then answers 404). Needs admin."}, t.deleteTracker)
 	addTool(s, &mcp.Tool{Name: "list_visits", Annotations: readOnly,
 		Description: "Recent visits of an app with analytics on, newest first: pages and events counts, entry/exit, referrer, UTM, " +
 			"country, browser, OS, device, and the identity the app gave (kipitiny.identify). A visitor without identity is only " +

@@ -68,8 +68,60 @@ func Public(st *Store, log *slog.Logger) http.Handler {
 		// Same answer either way: a page can't probe what is tracked.
 		w.WriteHeader(http.StatusNoContent)
 	})
+	mux.HandleFunc("GET /p/{file}", func(w http.ResponseWriter, r *http.Request) {
+		if slug, ok := strings.CutSuffix(r.PathValue("file"), ".gif"); ok {
+			if t, ok := st.tracker(KindPixel, slug); ok {
+				recordTracker(st, log, t, r)
+			}
+		}
+		// The same GIF whatever the slug, never cached so each load counts.
+		w.Header().Set("Content-Type", "image/gif")
+		w.Header().Set("Cache-Control", "no-store, max-age=0")
+		w.Write(pixelGIF)
+	})
+	mux.HandleFunc("GET /l/{slug}", func(w http.ResponseWriter, r *http.Request) {
+		t, ok := st.tracker(KindLink, r.PathValue("slug"))
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		recordTracker(st, log, t, r)
+		w.Header().Set("Cache-Control", "no-store")
+		http.Redirect(w, r, t.Target, http.StatusFound)
+	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {})
 	return mux
+}
+
+// pixelGIF is a transparent 1x1 GIF.
+var pixelGIF = []byte("GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
+
+// recordTracker counts a pixel's view or a link's click, from the request
+// itself: no script ran, so no screen size or title.
+func recordTracker(st *Store, log *slog.Logger, t Tracker, r *http.Request) {
+	ua := r.UserAgent()
+	if isBot(ua) || r.Method != http.MethodGet {
+		return
+	}
+	lang, _, _ := strings.Cut(r.Header.Get("Accept-Language"), ",")
+	lang, _, _ = strings.Cut(lang, ";")
+	e := Event{
+		Hostname: t.Host(), Path: "/", IP: clientIP(r), UserAgent: ua,
+		Browser: first(ua, browsers), OS: first(ua, systems), Device: device(ua, 0),
+		Language: cut(strings.ToLower(strings.TrimSpace(lang)), 35),
+	}
+	if c := r.Header.Get("CF-IPCountry"); countryRe.MatchString(c) && c != "XX" {
+		e.Country = c
+	}
+	if ref, err := url.Parse(r.Referer()); err == nil && ref.Hostname() != "" {
+		e.Referrer = strings.TrimPrefix(strings.ToLower(ref.Hostname()), "www.")
+	}
+	q := r.URL.Query()
+	e.UTMSource, e.UTMMedium, e.UTMCampaign = cut(q.Get("utm_source"), 128), cut(q.Get("utm_medium"), 128), cut(q.Get("utm_campaign"), 128)
+	e.UTMTerm, e.UTMContent = cut(q.Get("utm_term"), 128), cut(q.Get("utm_content"), 128)
+	if err := st.Record(r.Context(), e); err != nil {
+		log.Error("record "+t.Kind, "err", err)
+	}
 }
 
 var (
@@ -225,6 +277,36 @@ func Private(st *Store, token string) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(s)
 	})
+	mux.HandleFunc("GET /api/trackers", func(w http.ResponseWriter, r *http.Request) {
+		ts, err := st.Trackers(r.Context())
+		reply(w, ts, err)
+	})
+	mux.HandleFunc("GET /api/trackers/{id}", func(w http.ResponseWriter, r *http.Request) {
+		t, err := st.Tracker(r.Context(), r.PathValue("id"))
+		reply(w, t, err)
+	})
+	mux.HandleFunc("POST /api/trackers", func(w http.ResponseWriter, r *http.Request) {
+		var t Tracker
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&t); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		t, err := st.CreateTracker(r.Context(), t)
+		reply(w, t, err)
+	})
+	mux.HandleFunc("PUT /api/trackers/{id}", func(w http.ResponseWriter, r *http.Request) {
+		var t Tracker
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&t); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		t.ID = r.PathValue("id")
+		t, err := st.UpdateTracker(r.Context(), t)
+		reply(w, t, err)
+	})
+	mux.HandleFunc("DELETE /api/trackers/{id}", func(w http.ResponseWriter, r *http.Request) {
+		reply(w, nil, st.DeleteTracker(r.Context(), r.PathValue("id")))
+	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if token == "" || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
@@ -233,6 +315,24 @@ func Private(st *Store, token string) http.Handler {
 		}
 		mux.ServeHTTP(w, r)
 	})
+}
+
+// reply writes v as JSON (nothing when nil), or err: 404 and 400 for the
+// store's ErrNotFound and ErrInvalid, with ErrInvalid's reason only.
+func reply(w http.ResponseWriter, v any, err error) {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		http.Error(w, err.Error(), http.StatusNotFound)
+	case errors.Is(err, ErrInvalid):
+		http.Error(w, strings.TrimPrefix(err.Error(), ErrInvalid.Error()+": "), http.StatusBadRequest)
+	case err != nil:
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	case v == nil:
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(v)
+	}
 }
 
 func parseQuery(v url.Values) (Query, error) {

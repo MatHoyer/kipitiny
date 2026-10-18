@@ -1,12 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, Clock, Eye, LogOut, MousePointerClick, Users, X } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { CopyField, Empty, ErrorText, Loading, Mono, Section, StatCard } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { cn } from "@/lib/utils";
 import { countryLabel, duration, Visits } from "./analytics-visits";
-import { api, type AnalyticsRow, type AnalyticsStats, type Service } from "../api";
+import { api, type AnalyticsRow, type AnalyticsStats, type Service, type TrackerKind } from "../api";
 
 const HOUR = 3600;
 const DAY = 86400;
@@ -43,16 +43,46 @@ const breakdowns: { key: string; title: string; column: string }[] = [
 
 /** Cookieless visits of an app's domain, from the analytics server. */
 export function AnalyticsTab({ svc }: { svc: Service }) {
+  return (
+    <AnalyticsPanel
+      queryKey={["service-analytics", svc.id]}
+      load={(q) => api.serviceAnalytics(svc.id, q)}
+      intro={
+        <>
+          Visits of <Mono>{svc.domain}</Mono>, counted without cookies.
+        </>
+      }
+      below={(span, filters, addFilter) => <Visits svc={svc} span={span} filters={filters} onFilter={addFilter} />}
+    />
+  );
+}
+
+export type StatsQuery = { from: number; to: number; interval: number; offset: number; filters: string[] };
+
+/** A range picker, filters, and the stats load returns: an app's, or a pixel's or link's (kind). */
+export function AnalyticsPanel({
+  queryKey,
+  load,
+  intro,
+  kind,
+  below,
+}: {
+  queryKey: unknown[];
+  load: (q: StatsQuery) => Promise<Omit<AnalyticsStats, "script"> & { script?: string }>;
+  intro: ReactNode;
+  kind?: TrackerKind;
+  below?: (span: number, filters: string[], addFilter: (f: string) => void) => ReactNode;
+}) {
   const [range, setRange] = useState<Range>("7d");
   // "<breakdown>:<value>", as the API takes them.
   const [filters, setFilters] = useState<string[]>([]);
   const r = ranges[range];
   const addFilter = (f: string) => !filters.includes(f) && setFilters([...filters, f]);
   const stats = useQuery({
-    queryKey: ["service-analytics", svc.id, range, filters],
+    queryKey: [...queryKey, range, filters],
     queryFn: () => {
       const to = Math.ceil(Date.now() / 1000 / 60) * 60;
-      return api.serviceAnalytics(svc.id, { from: to - r.span, to, interval: r.interval, offset: -new Date().getTimezoneOffset() * 60, filters });
+      return load({ from: to - r.span, to, interval: r.interval, offset: -new Date().getTimezoneOffset() * 60, filters });
     },
     placeholderData: (prev) => prev,
     refetchInterval: 60_000,
@@ -61,9 +91,7 @@ export function AnalyticsTab({ svc }: { svc: Service }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">
-          Visits of <Mono>{svc.domain}</Mono>, counted without cookies.
-        </p>
+        <p className="text-sm text-muted-foreground">{intro}</p>
         <Segmented size="sm" value={range} onValueChange={(v) => setRange(v as Range)} aria-label="Range">
           {Object.entries(ranges).map(([k, v]) => (
             <SegmentedItem key={k} value={k}>
@@ -89,15 +117,9 @@ export function AnalyticsTab({ svc }: { svc: Service }) {
       ) : stats.error ? (
         <ErrorText error={stats.error} />
       ) : (
-        <Stats
-          stats={stats.data}
-          span={r.span}
-          interval={r.interval}
-          filtered={filters.length > 0}
-          onFilter={addFilter}
-        />
+        <Stats stats={stats.data} span={r.span} interval={r.interval} filtered={filters.length > 0} kind={kind} onFilter={addFilter} />
       )}
-      <Visits svc={svc} span={r.span} filters={filters} onFilter={addFilter} />
+      {below?.(r.span, filters, addFilter)}
     </div>
   );
 }
@@ -123,29 +145,40 @@ function Stats({
   span,
   interval,
   filtered,
+  kind,
   onFilter,
 }: {
-  stats: AnalyticsStats;
+  stats: Omit<AnalyticsStats, "script"> & { script?: string };
   span: number;
   interval: number;
   filtered: boolean;
+  kind?: TrackerKind;
   onFilter: (filter: string) => void;
 }) {
   const bounce = stats.visits ? Math.round((stats.bounces / stats.visits) * 100) : 0;
+  const hits = kind === "link" ? "Clicks" : "Views";
   return (
     <>
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard icon={Users} label="Visitors" value={stats.visitors} hint="Unique per day" />
-        <StatCard icon={MousePointerClick} label="Visits" value={stats.visits} hint="30 min idle ends one" />
-        <StatCard icon={Eye} label="Pageviews" value={stats.pageviews} />
-        <StatCard icon={LogOut} label="Bounce rate" value={stats.visits ? `${bounce}%` : "—"} hint="One-page visits" />
-        <StatCard icon={Clock} label="Visit duration" value={stats.visits ? duration(stats.duration / stats.visits) : "—"} hint="Average" />
-        <StatCard icon={Activity} label="Active" value={stats.active} hint="Last 30 minutes" tone={stats.active > 0 ? "good" : undefined} />
-      </div>
+      {kind ? (
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          <StatCard icon={kind === "link" ? MousePointerClick : Eye} label={hits} value={stats.pageviews} />
+          <StatCard icon={Users} label="Visitors" value={stats.visitors} hint="Unique per day" />
+          <StatCard icon={Activity} label="Active" value={stats.active} hint="Last 30 minutes" tone={stats.active > 0 ? "good" : undefined} />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+          <StatCard icon={Users} label="Visitors" value={stats.visitors} hint="Unique per day" />
+          <StatCard icon={MousePointerClick} label="Visits" value={stats.visits} hint="30 min idle ends one" />
+          <StatCard icon={Eye} label="Pageviews" value={stats.pageviews} />
+          <StatCard icon={LogOut} label="Bounce rate" value={stats.visits ? `${bounce}%` : "—"} hint="One-page visits" />
+          <StatCard icon={Clock} label="Visit duration" value={stats.visits ? duration(stats.duration / stats.visits) : "—"} hint="Average" />
+          <StatCard icon={Activity} label="Active" value={stats.active} hint="Last 30 minutes" tone={stats.active > 0 ? "good" : undefined} />
+        </div>
+      )}
       <Section title="Traffic">
-        <Chart series={stats.series} span={span} interval={interval} />
+        <Chart series={stats.series} span={span} interval={interval} hits={kind ? hits : "Pageviews"} />
       </Section>
-      {!filtered && stats.pageviews === 0 && stats.visits === 0 && (
+      {stats.script && !filtered && stats.pageviews === 0 && stats.visits === 0 && (
         <Section title="Start counting" description="No visit in this range yet. Add the script to the app's pages, e.g. in the <head>:">
           <CopyField value={stats.script} />
           <p className="text-sm text-muted-foreground">
@@ -156,7 +189,8 @@ function Stats({
       )}
       <div className="grid gap-4 lg:grid-cols-2">
         {breakdowns
-          .filter((b) => (stats.breakdowns[b.key]?.length ?? 0) > 0)
+          // A pixel's or link's hits are all on "/".
+          .filter((b) => (stats.breakdowns[b.key]?.length ?? 0) > 0 && !(kind && ["pages", "entries", "exits"].includes(b.key)))
           .map((b) => (
             <Breakdown
               key={b.key}
@@ -169,7 +203,7 @@ function Stats({
             />
           ))}
       </div>
-      {stats.pageviews + stats.visits > 0 && (
+      {stats.script && stats.pageviews + stats.visits > 0 && (
         <Section title="Tracking script" description="On every page that should be counted.">
           <CopyField value={stats.script} />
         </Section>
@@ -179,7 +213,7 @@ function Stats({
 }
 
 /** Pageviews and visitors per bucket, missing buckets as zero. */
-function Chart({ series, span, interval }: { series: AnalyticsStats["series"]; span: number; interval: number }) {
+function Chart({ series, span, interval, hits }: { series: AnalyticsStats["series"]; span: number; interval: number; hits: string }) {
   const [hover, setHover] = useState<number | null>(null);
   const byT = new Map(series.map((p) => [p.t, p]));
   const offset = -new Date().getTimezoneOffset() * 60;
@@ -199,18 +233,18 @@ function Chart({ series, span, interval }: { series: AnalyticsStats["series"]; s
     <div className="space-y-2">
       <div className="flex h-5 items-center gap-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-sm bg-primary/25" /> Pageviews
+          <span className="size-2.5 rounded-sm bg-primary/25" /> {hits}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="size-2.5 rounded-sm bg-primary" /> Visitors
         </span>
         {h && (
           <span className="ml-auto text-foreground tabular-nums">
-            {fmt(h.t)} · {h.pageviews} pageviews · {h.visitors} visitors
+            {fmt(h.t)} · {h.pageviews} {hits.toLowerCase()} · {h.visitors} visitors
           </span>
         )}
       </div>
-      <div className="flex h-40 items-end gap-px" role="img" aria-label="Pageviews and visitors over time" onPointerLeave={() => setHover(null)}>
+      <div className="flex h-40 items-end gap-px" role="img" aria-label={`${hits} and visitors over time`} onPointerLeave={() => setHover(null)}>
         {points.map((p, i) => (
           <div
             key={p.t}

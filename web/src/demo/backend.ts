@@ -3,6 +3,7 @@ import type {
   AnalyticsStats,
   AnalyticsVisit,
   AnalyticsVisitDetail,
+  Tracker,
   Account,
   Backup,
   Restore,
@@ -909,6 +910,13 @@ function demoVisit(id: string): AnalyticsVisitDetail {
   if (v.events) journey.push({ at: v.lastAt, name: "signup", path: "/signup", query: "", title: "Acme", props: { plan: "pro" } });
   return { ...v, journey };
 }
+
+let trackers: Tracker[] = [
+  { id: "trk-1", kind: "link", slug: "launch", name: "Launch post", target: "https://acme.example/blog/launch?utm_source=twitter", createdAt: 1790000000, hits: 312, url: "" },
+  { id: "trk-2", kind: "pixel", slug: "k3xa9qpz", name: "October newsletter", createdAt: 1790500000, hits: 1240, url: "" },
+];
+const trackerURL = (t: Tracker) =>
+  ({ ...t, url: `https://${analyticsSettings.domain}/${t.kind === "pixel" ? `p/${t.slug}.gif` : `l/${t.slug}`}` }) as Tracker;
 
 let analyticsSettings: AnalyticsSettings = { enabled: true, domain: "stats.acme.example", retentionDays: 365 };
 
@@ -1968,6 +1976,33 @@ const routes: Route[] = [
     },
   ],
   ["DELETE", /^\/analytics\/data$/, () => undefined],
+  ["GET", /^\/analytics\/trackers$/, () => trackers.map(trackerURL)],
+  [
+    "POST",
+    /^\/analytics\/trackers$/,
+    ({ body }) => {
+      const t: Tracker = { ...body, id: `trk-${Date.now()}`, slug: body.slug || Math.random().toString(36).slice(2, 10), createdAt: Date.now() / 1000, hits: 0, url: "" };
+      trackers = [t, ...trackers];
+      return trackerURL(t);
+    },
+  ],
+  [
+    "PUT",
+    /^\/analytics\/trackers\/([^/]+)$/,
+    ({ m, body }) => {
+      trackers = trackers.map((t) => (t.id === m[1] ? { ...t, name: body.name, slug: body.slug || t.slug, target: body.target } : t));
+      return trackerURL(trackers.find((t) => t.id === m[1])!);
+    },
+  ],
+  ["DELETE", /^\/analytics\/trackers\/([^/]+)$/, ({ m }) => void (trackers = trackers.filter((t) => t.id !== m[1]))],
+  [
+    "GET",
+    /^\/analytics\/trackers\/([^/]+)\/stats$/,
+    ({ m, q }) => ({
+      ...demoAnalytics(Number(q.get("from")), Number(q.get("to")), Number(q.get("interval"))),
+      tracker: trackerURL(trackers.find((t) => t.id === m[1])!),
+    }),
+  ],
   ["GET", /^\/services\/([^/]+)\/analytics\/visits$/, ({ q }) => (q.get("before") ? [] : demoVisits(Number(q.get("to"))))],
   ["GET", /^\/services\/([^/]+)\/analytics\/visits\/([^/]+)$/, ({ m }) => demoVisit(m[2])],
   ["GET", /^\/services\/([^/]+)\/analytics$/, ({ q }) => demoAnalytics(Number(q.get("from")), Number(q.get("to")), Number(q.get("interval")))],

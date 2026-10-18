@@ -231,6 +231,11 @@ var routeAccess = map[string]access{
 
 	"GET /api/services/{id}/analytics/visits":         onService(core.PermView),
 	"GET /api/services/{id}/analytics/visits/{visit}": onService(core.PermView),
+	"GET /api/analytics/trackers":                     admin,
+	"POST /api/analytics/trackers":                    admin,
+	"PUT /api/analytics/trackers/{id}":                admin,
+	"DELETE /api/analytics/trackers/{id}":             admin,
+	"GET /api/analytics/trackers/{id}/stats":          admin,
 }
 
 // dataRoute is the data browser's or a volume files route: core checks

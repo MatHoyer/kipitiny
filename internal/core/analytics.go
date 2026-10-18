@@ -353,15 +353,36 @@ func (c *Core) serviceAnalytics(ctx context.Context, serviceID string) (store.Se
 	if err != nil {
 		return svc, nil, analyticsState{}, err
 	}
-	st := c.analyticsState(ctx)
-	if !st.Enabled {
-		return svc, nil, st, fmt.Errorf("%w: analytics are off (Settings › Analytics)", ErrInvalid)
+	cl, st, err := c.analyticsOn(ctx)
+	if err != nil {
+		return svc, nil, st, err
 	}
 	if !svc.Analytics || svc.Domain == "" {
 		return svc, nil, st, fmt.Errorf("%w: analytics are off for %s (its settings)", ErrInvalid, svc.Name)
 	}
+	return svc, cl, st, nil
+}
+
+// analyticsOn returns the server's client while analytics are on.
+func (c *Core) analyticsOn(ctx context.Context) (*analytics.Client, analyticsState, error) {
+	st := c.analyticsState(ctx)
+	if !st.Enabled {
+		return nil, st, fmt.Errorf("%w: analytics are off (Settings › Analytics)", ErrInvalid)
+	}
 	cl, err := c.analyticsClient(ctx, st.Token)
-	return svc, cl, st, err
+	return cl, st, err
+}
+
+// analyticsErr turns the server's refusals into core's errors; what names
+// what wasn't found.
+func analyticsErr(err error, what string) error {
+	switch {
+	case errors.Is(err, analytics.ErrInvalid):
+		return fmt.Errorf("%w: %s", ErrInvalid, strings.TrimPrefix(err.Error(), analytics.ErrInvalid.Error()+": "))
+	case errors.Is(err, analytics.ErrNotFound):
+		return fmt.Errorf("%w: %s", store.ErrNotFound, what)
+	}
+	return err
 }
 
 func (q AnalyticsQuery) query(hosts ...string) (analytics.Query, error) {
@@ -413,10 +434,84 @@ func (c *Core) ServiceVisit(ctx context.Context, serviceID, visitID string) (ana
 		return analytics.VisitDetail{}, err
 	}
 	d, err := cl.Visit(ctx, []string{svc.Domain}, visitID)
-	if errors.Is(err, analytics.ErrNotFound) {
-		return d, fmt.Errorf("%w: visit %s", store.ErrNotFound, visitID)
+	return d, analyticsErr(err, "visit "+visitID)
+}
+
+// withURL sets t's public URL on the analytics domain.
+func withURL(t analytics.Tracker, domain string) analytics.Tracker {
+	if t.Kind == analytics.KindPixel {
+		t.URL = "https://" + domain + "/p/" + t.Slug + ".gif"
+	} else {
+		t.URL = "https://" + domain + "/l/" + t.Slug
 	}
-	return d, err
+	return t
+}
+
+// Trackers are the pixels and tracked links, newest first.
+func (c *Core) Trackers(ctx context.Context) ([]analytics.Tracker, error) {
+	cl, st, err := c.analyticsOn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ts, err := cl.Trackers(ctx)
+	for i := range ts {
+		ts[i] = withURL(ts[i], st.Domain)
+	}
+	return ts, analyticsErr(err, "trackers")
+}
+
+// CreateTracker adds a pixel or a link (Kind, Name, optional Slug, a
+// link's Target).
+func (c *Core) CreateTracker(ctx context.Context, t analytics.Tracker) (analytics.Tracker, error) {
+	cl, st, err := c.analyticsOn(ctx)
+	if err != nil {
+		return t, err
+	}
+	t, err = cl.CreateTracker(ctx, t)
+	return withURL(t, st.Domain), analyticsErr(err, "tracker")
+}
+
+// UpdateTracker changes a tracker's name, slug (kept when empty) and target.
+func (c *Core) UpdateTracker(ctx context.Context, t analytics.Tracker) (analytics.Tracker, error) {
+	cl, st, err := c.analyticsOn(ctx)
+	if err != nil {
+		return t, err
+	}
+	id := t.ID
+	t, err = cl.UpdateTracker(ctx, t)
+	return withURL(t, st.Domain), analyticsErr(err, "tracker "+id)
+}
+
+// DeleteTracker removes a tracker and its hits.
+func (c *Core) DeleteTracker(ctx context.Context, id string) error {
+	cl, _, err := c.analyticsOn(ctx)
+	if err != nil {
+		return err
+	}
+	return analyticsErr(cl.DeleteTracker(ctx, id), "tracker "+id)
+}
+
+// TrackerView is a pixel's or link's stats.
+type TrackerView struct {
+	analytics.Stats
+	Tracker analytics.Tracker `json:"tracker"`
+}
+
+func (c *Core) TrackerAnalytics(ctx context.Context, id string, q AnalyticsQuery) (TrackerView, error) {
+	cl, st, err := c.analyticsOn(ctx)
+	if err != nil {
+		return TrackerView{}, err
+	}
+	t, err := cl.Tracker(ctx, id)
+	if err != nil {
+		return TrackerView{}, analyticsErr(err, "tracker "+id)
+	}
+	aq, err := q.query(t.Host())
+	if err != nil {
+		return TrackerView{}, err
+	}
+	s, err := cl.Stats(ctx, aq)
+	return TrackerView{Stats: s, Tracker: withURL(t, st.Domain)}, analyticsErr(err, "tracker "+id)
 }
 
 // AnalyticsScript is the tag a tracked app's pages include.

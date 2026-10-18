@@ -45,8 +45,11 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	if res.StatusCode >= 300 {
 		msg, _ := io.ReadAll(io.LimitReader(res.Body, 512))
 		err := fmt.Errorf("analytics: %s: %s", res.Status, bytes.TrimSpace(msg))
-		if res.StatusCode == http.StatusNotFound {
+		switch res.StatusCode {
+		case http.StatusNotFound:
 			err = fmt.Errorf("%w: %v", ErrNotFound, err)
+		case http.StatusBadRequest:
+			err = fmt.Errorf("%w: %s", ErrInvalid, bytes.TrimSpace(msg))
 		}
 		return err
 	}
@@ -95,4 +98,32 @@ func (c *Client) Visit(ctx context.Context, hosts []string, id string) (VisitDet
 	var d VisitDetail
 	err := c.do(ctx, http.MethodGet, "/api/visits/"+url.PathEscape(id)+"?"+url.Values{"host": hosts}.Encode(), nil, &d)
 	return d, err
+}
+
+func (c *Client) Trackers(ctx context.Context) ([]Tracker, error) {
+	var ts []Tracker
+	err := c.do(ctx, http.MethodGet, "/api/trackers", nil, &ts)
+	return ts, err
+}
+
+func (c *Client) Tracker(ctx context.Context, id string) (Tracker, error) {
+	var t Tracker
+	err := c.do(ctx, http.MethodGet, "/api/trackers/"+url.PathEscape(id), nil, &t)
+	return t, err
+}
+
+func (c *Client) CreateTracker(ctx context.Context, t Tracker) (Tracker, error) {
+	var out Tracker
+	err := c.do(ctx, http.MethodPost, "/api/trackers", t, &out)
+	return out, err
+}
+
+func (c *Client) UpdateTracker(ctx context.Context, t Tracker) (Tracker, error) {
+	var out Tracker
+	err := c.do(ctx, http.MethodPut, "/api/trackers/"+url.PathEscape(t.ID), t, &out)
+	return out, err
+}
+
+func (c *Client) DeleteTracker(ctx context.Context, id string) error {
+	return c.do(ctx, http.MethodDelete, "/api/trackers/"+url.PathEscape(id), nil, nil)
 }
