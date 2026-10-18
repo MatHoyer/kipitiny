@@ -741,13 +741,18 @@ export type AnalyticsStep = "image" | "start" | "health" | "sites";
 
 export type AnalyticsRow = { value: string; count: number; visitors: number };
 
-export type AnalyticsStats = {
+export type AnalyticsSummary = {
   pageviews: number;
   visitors: number;
   visits: number;
   bounces: number;
   /** Summed length of the visits, in seconds. */
   duration: number;
+};
+
+export type AnalyticsStats = AnalyticsSummary & {
+  /** The same span just before. */
+  previous: AnalyticsSummary;
   /** Visitors of the last 30 minutes. */
   active: number;
   series: { t: number; pageviews: number; visitors: number }[];

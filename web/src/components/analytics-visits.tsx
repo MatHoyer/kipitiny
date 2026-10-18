@@ -27,7 +27,19 @@ const source = (v: AnalyticsVisit) => v.referrer || v.utmSource || "Direct";
 const PAGE = 25;
 
 /** The range's visits, newest first; one opens to its journey. */
-export function Visits({ svc, span, filters, onFilter }: { svc: Service; span: number; filters: string[]; onFilter: (filter: string) => void }) {
+export function Visits({
+  svc,
+  span,
+  filters,
+  live,
+  onFilter,
+}: {
+  svc: Service;
+  span: number;
+  filters: string[];
+  live: boolean;
+  onFilter: (filter: string) => void;
+}) {
   const [open, setOpen] = useState<string | null>(null);
   const visits = useInfiniteQuery({
     queryKey: ["service-visits", svc.id, span, filters],
@@ -37,7 +49,7 @@ export function Visits({ svc, span, filters, onFilter }: { svc: Service; span: n
     },
     initialPageParam: "",
     getNextPageParam: (last) => (last.length === PAGE ? last[last.length - 1].id : undefined),
-    refetchInterval: 60_000,
+    refetchInterval: live ? 5_000 : 60_000,
   });
   const rows = visits.data?.pages.flat() ?? [];
   return (

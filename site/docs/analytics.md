@@ -47,6 +47,16 @@ same version as the manager), a container of a few MB of memory.
 
 Bots, crawlers, link previews and scripts are left out by their user agent.
 
+### Comparing and live
+
+Each number shows its change from the same span just before (the 7 days
+before the last 7 days, say), green when it's better: more visitors, a lower
+bounce rate. Hover it to see the span.
+
+**Live** shows the last 30 minutes, minute by minute, refreshed every few
+seconds: the visitors active now, the pages they're on and where they came
+from, and their visits as they happen.
+
 ### Visits
 
 Under the lists, **Visits** shows the range's visits, newest first: when,

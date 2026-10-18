@@ -272,13 +272,20 @@ func (q Query) filters() (ev, vi cond) {
 	return ev, vi
 }
 
-type Stats struct {
+// Summary is a range's totals.
+type Summary struct {
 	Pageviews int `json:"pageviews"`
 	Visitors  int `json:"visitors"`
 	Visits    int `json:"visits"`
 	Bounces   int `json:"bounces"`
 	// Duration sums the visits' lengths, in seconds.
 	Duration int64 `json:"duration"`
+}
+
+type Stats struct {
+	Summary
+	// Previous is the same span just before, to compare with.
+	Previous Summary `json:"previous"`
 	// Active counts visitors of the last 30 minutes, whatever the range.
 	Active     int              `json:"active"`
 	Series     []Point          `json:"series"`
@@ -324,14 +331,23 @@ func (s *Store) Stats(ctx context.Context, q Query) (Stats, error) {
 	evArgs := func(more ...any) []any { return append(append([]any{hosts, from, to}, evf.args...), more...) }
 	viArgs := func(more ...any) []any { return append(append([]any{hosts, from, to}, vif.args...), more...) }
 
-	err := s.db.NewRaw(`SELECT COUNT(CASE WHEN name = '' THEN 1 END), COUNT(DISTINCT visitor) FROM events WHERE `+ev,
-		evArgs()...).Scan(ctx, &st.Pageviews, &st.Visitors)
-	if err != nil {
+	summary := func(from, to int64) (Summary, error) {
+		var sm Summary
+		args := func(f cond) []any { return append([]any{hosts, from, to}, f.args...) }
+		err := s.db.NewRaw(`SELECT COUNT(CASE WHEN name = '' THEN 1 END), COUNT(DISTINCT visitor) FROM events WHERE `+ev,
+			args(evf)...).Scan(ctx, &sm.Pageviews, &sm.Visitors)
+		if err != nil {
+			return sm, err
+		}
+		err = s.db.NewRaw(`SELECT COUNT(*), COUNT(CASE WHEN pageviews <= 1 THEN 1 END), COALESCE(SUM(last_at - started_at), 0) FROM visits WHERE `+vi,
+			args(vif)...).Scan(ctx, &sm.Visits, &sm.Bounces, &sm.Duration)
+		return sm, err
+	}
+	var err error
+	if st.Summary, err = summary(from, to); err != nil {
 		return st, err
 	}
-	err = s.db.NewRaw(`SELECT COUNT(*), COUNT(CASE WHEN pageviews <= 1 THEN 1 END), COALESCE(SUM(last_at - started_at), 0) FROM visits WHERE `+vi,
-		viArgs()...).Scan(ctx, &st.Visits, &st.Bounces, &st.Duration)
-	if err != nil {
+	if st.Previous, err = summary(2*from-to, from); err != nil {
 		return st, err
 	}
 	err = s.db.NewRaw("SELECT COUNT(DISTINCT visitor) FROM events WHERE hostname IN (?) AND created_at >= ?"+evf.sql,

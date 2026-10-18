@@ -942,6 +942,13 @@ function demoAnalytics(from: number, to: number, interval: number): AnalyticsSta
   return {
     pageviews,
     visitors,
+    previous: {
+      pageviews: Math.round(pageviews * 0.9),
+      visitors: Math.round(visitors * 1.05),
+      visits: Math.round(visitors * 1.25),
+      bounces: Math.round(visitors * 0.6),
+      duration: Math.round(visitors * 1.25 * 88),
+    },
     visits: Math.round(visitors * 1.3),
     bounces: Math.round(visitors * 0.55),
     duration: Math.round(visitors * 1.3 * 95),
