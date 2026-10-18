@@ -24,6 +24,11 @@ On an app's **Jobs** tab, **New job** asks for:
 A paused job keeps its history but isn't scheduled; **Run now** still runs it.
 Only apps have jobs, and only once deployed.
 
+Jobs can also be written in the compose file, as
+[`x-kipitiny.jobs`](/docs/compose#x-kipitiny-per-service). A project synced
+from git can only set them there (**Run now** still works); jobs of a git
+project don't run in its [previews](/docs/previews).
+
 ## What a run gets
 
 Each run starts a new container from the app's **current deployment**: the

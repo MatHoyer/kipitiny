@@ -110,6 +110,17 @@ type Ext struct {
 	// Uptime is an app's uptime check; nil has none. Tagged so the hash of a
 	// service without one stays the same.
 	Uptime *Uptime `yaml:"uptime,omitempty" json:",omitempty"`
+	// Jobs are an app's scheduled jobs, by name. Tagged so the hash of a
+	// service without any stays the same.
+	Jobs map[string]Job `yaml:"jobs,omitempty" json:",omitempty"`
+}
+
+// Job is a scheduled job: a command run with sh -c on a cron schedule.
+type Job struct {
+	Command  string  `yaml:"command"`
+	Schedule string  `yaml:"schedule"`
+	Timeout  Seconds `yaml:"timeout,omitempty"`
+	Paused   bool    `yaml:"paused,omitempty"`
 }
 
 // Uptime is an uptime check: zero values take kipitiny's defaults.
@@ -307,7 +318,7 @@ func Escape(s string) string {
 func isZeroExt(x Ext) bool {
 	return x.Kind == "" && x.Domain == "" && x.Port == 0 && x.HealthPath == "" && x.PreDeploy == "" &&
 		x.PreBackup == "" && x.Icon == "" && !x.Analytics && x.Preview == "" && len(x.Tags) == 0 && len(x.Secrets) == 0 && x.Password == "" && x.Middlewares == nil &&
-		x.Uptime == nil
+		x.Uptime == nil && len(x.Jobs) == 0
 }
 
 type outFile struct {

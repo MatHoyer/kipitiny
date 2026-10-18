@@ -16,8 +16,12 @@ import { api, type Job, type JobRun, type Service } from "../api";
 
 const took = (r: JobRun) => formatDuration(Math.max(0, (r.finishedAt ? new Date(r.finishedAt).getTime() : Date.now()) - new Date(r.createdAt).getTime()));
 
-/** An app's scheduled jobs: commands run on a cron schedule in a one-off container of its image. */
-export function JobsTab({ svc, canEdit, canRun }: { svc: Service; canEdit: boolean; canRun: boolean }) {
+/**
+ * An app's scheduled jobs: commands run on a cron schedule in a one-off container of its image. A git project's jobs
+ * come from its compose file (gitPath), so they can only be run here.
+ */
+export function JobsTab({ svc, canEdit: mayEdit, canRun, gitPath }: { svc: Service; canEdit: boolean; canRun: boolean; gitPath?: string }) {
+  const canEdit = mayEdit && !gitPath;
   const qc = useQueryClient();
   const key = ["jobs", svc.id];
   const jobs = useQuery({
@@ -36,7 +40,7 @@ export function JobsTab({ svc, canEdit, canRun }: { svc: Service; canEdit: boole
     >
       {!deployed && <p className="mb-3 text-sm text-muted-foreground">Deploy the app before its jobs can run.</p>}
       {svc.stopped && <p className="mb-3 text-sm text-muted-foreground">The app is stopped: its jobs don't run.</p>}
-      {jobs.data?.length === 0 && <Empty>No job yet.</Empty>}
+      {jobs.data?.length === 0 && <Empty>{gitPath ? <>No job: set x-kipitiny.jobs in {gitPath}.</> : "No job yet."}</Empty>}
       <ul className="-mx-3 -my-2 divide-y">
         {jobs.data?.map((j) => (
           <JobRow

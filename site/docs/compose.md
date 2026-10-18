@@ -176,6 +176,7 @@ services:
 | `password` | string, usually `${NAME}` | databases | The database's password at creation, to keep the credentials of a moved database. Empty generates one. It can't change afterwards. |
 | `middlewares` | mapping | public apps | Applied by Traefik to every request, below. |
 | `uptime` | mapping | public apps | An [uptime check](/docs/monitoring#uptime-checks) of the domain, below. `uptime: {}` checks `/` with the defaults. Without it, the app has no check: applying the file removes one set in the UI. |
+| `jobs` | mapping of names | apps | [Scheduled jobs](/docs/jobs), below. Without it, the app has none: applying the file removes the ones set in the UI. Left out of previews. |
 
 `middlewares`:
 
@@ -195,6 +196,25 @@ services:
 | `timeout` | 1 to 60 s, shorter than the interval. Default 10 s. |
 | `expected_status` | The HTTP status that means up. Default: any below 400. |
 | `paused` | `true` keeps the check and its history without running it. |
+
+`jobs`, each under its name (lowercase letters, digits, dashes):
+
+```yaml
+x-kipitiny:
+  jobs:
+    purge-sessions: {command: node scripts/purge.js, schedule: "*/15 * * * *"}
+    nightly-report:
+      command: node scripts/report.js --to $REPORT_TO   # x-kipitiny isn't interpolated: the shell reads it
+      schedule: CRON_TZ=Europe/Paris 0 7 * * 1-5
+      timeout: 10m
+```
+
+| Field | Meaning |
+|---|---|
+| `command` | Run with `sh -c` in a one-off container of the app's deployed image. Required. |
+| `schedule` | Cron, UTC unless prefixed with `CRON_TZ=<zone>`, or `@hourly`, `@daily`... Required. |
+| `timeout` | 1 s to 24 h (`90s`, `10m`, or seconds). Default 1 h. |
+| `paused` | `true` keeps the job and its runs without scheduling it. |
 
 ### Databases
 
@@ -266,7 +286,7 @@ A service can't change kind (an app into a database): delete it first.
 Project › **Git**: the repository, a branch (default `main`) and the file's path (default `compose.yaml`). A public repository is just its HTTPS URL; a private one is picked from a [git provider](#git-providers). Linking shows what the first sync will change.
 
 - The branch is checked every 5 minutes by default (60 s to 24 h, or never with auto sync off). A push webhook syncs at once. Through a GitHub provider whose app has webhooks, there's nothing to set up. Otherwise the URL and secret are on the Git tab: GitHub and Gitea sign with the secret, GitLab sends it as a token, anything else as `Authorization: Bearer <secret>`. **Sync now** applies the file by hand, **Preview** shows what it would change.
-- The file owns the services and their uptime checks. Creating, editing or deleting them any other way (UI, API, MCP) is refused; edit the file. A database the file dropped can still be deleted by hand. Project variables, backups and schedules stay editable: they are not in the file.
+- The file owns the services, their uptime checks and their jobs. Creating, editing or deleting them any other way (UI, API, MCP) is refused; edit the file. A database the file dropped can still be deleted by hand. Project variables, backups and schedules stay editable: they are not in the file.
 - CI can still deploy another tag of an app's image (`kipitiny deploy --tag`). The service keeps it until a commit changes that service's block in the file; the Git tab lists the services that run another image than the file's.
 - A failed sync is notified (`git.sync.failed`) and retried; a sync that changed something can be notified too (`git.sync.succeeded`).
 - A sync acts with the permissions of the user who linked the repository. When an admin linked it, **anyone who can push to the branch can do what that admin can**, including giving an app [host access](#host-access), which is control of the server. Link as an admin only repositories whose push access you'd trust with the server, or protect the branch.
