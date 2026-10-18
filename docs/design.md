@@ -171,7 +171,8 @@ Projects may set `sleep_after_seconds` (5 min–30 days; set on its own, not in 
 - **Stateless:** sessions in DB/Redis/signed cookies.
 - **Files:** S3 or an app **volume**: a named volume (`kipitiny-vol-<service>-<name>`, labelled with project and service) mounted at a path in every replica and the pre-deploy container. Replicas share it, so concurrent writers must cope. Docker creates it on first use; it survives deploys and goes away with the service (delete confirms with the name). A volume removed from the settings keeps its data until then.
 - **Migrations:** run once via a **pre-deploy command** in a one-off container.
-- **Cron/background jobs:** separate service with 1 replica.
+- **Background workers:** separate service with 1 replica.
+- **Cron:** scheduled jobs (`jobs` table, per app): the backup scheduler runs the command (`sh -c`, entrypoint cleared) in a one-off container built like the pre-deploy one from the current deployment's snapshot (pinned image, env, networks, volumes; no proxy network, no ports, `restart: no`), labelled `kipitiny.component=job` + `kipitiny.job`. One run at a time per job (in memory), timeout kills it, last 2000 log lines kept in `data/jobs/<service>/<run>.log`, last 50 runs per job. A run wakes a sleeping project and keeps it awake; a stopped app's jobs don't run. Shutdown cancels runs (`interrupted`); the reconciler removes job containers no run owns. `job.failed` (cooldown per job) / `job.succeeded`.
 - **Postgres services are always 1 replica.**
 
 ## 9. Deployments (zero downtime, no Swarm)

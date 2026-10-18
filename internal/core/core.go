@@ -90,6 +90,7 @@ type Core struct {
 	stats          statsState
 	sleep          sleepState
 	uptime         uptimeState
+	jobs           jobsState
 	health         healthState
 	uptimeHTTP     *http.Client // nil: probe's default; tests redirect it
 	files          filesState
@@ -415,6 +416,7 @@ func (c *Core) deleteProject(ctx context.Context, p store.Project) error {
 	}
 	for _, s := range svcs {
 		c.removeDeployLogs(s.ID)
+		c.forgetServiceJobs(s.ID)
 	}
 	dk := c.dockerFor(p.ServerID)
 	nets, err := dk.ListNetworks(ctx)

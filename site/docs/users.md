@@ -85,9 +85,9 @@ A member's access is set per project. Any permission includes **view**.
 
 | Permission | Allows |
 | --- | --- |
-| View | Services, logs, stats, deployments, uptime, backups list, the compose export (secrets masked) |
-| Deploy | Deploy, roll back, start, stop, restart, maintenance mode |
-| Settings | Create and edit services, apply compose files, rename, networks, uptime checks |
+| View | Services, logs, stats, deployments, uptime, jobs and their runs, backups list, the compose export (secrets masked) |
+| Deploy | Deploy, roll back, start, stop, restart, maintenance mode, run a job now |
+| Settings | Create and edit services, apply compose files, rename, networks, uptime checks, scheduled jobs |
 | Env | Variables and secrets of the services and the project, database connection strings |
 | Domains | Public domains and their middlewares |
 | Backups | Back up now, verify, schedules, delete backups |

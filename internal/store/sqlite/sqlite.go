@@ -924,6 +924,84 @@ func (s *Store) DeleteBackupSchedule(ctx context.Context, id string) error {
 	return deleteByID(ctx, s.db, "backup_schedules", id)
 }
 
+func (s *Store) ListJobs(ctx context.Context, serviceID string) ([]store.Job, error) {
+	js := []store.Job{}
+	q := s.db.NewSelect().Model(&js).Order("name")
+	if serviceID != "" {
+		q = q.Where("service_id = ?", serviceID)
+	}
+	return js, mapErr(q.Scan(ctx))
+}
+
+func (s *Store) GetJob(ctx context.Context, id string) (store.Job, error) {
+	var j store.Job
+	err := s.db.NewSelect().Model(&j).Where("id = ?", id).Scan(ctx)
+	return j, mapErr(err)
+}
+
+func (s *Store) CreateJob(ctx context.Context, j store.Job) (store.Job, error) {
+	j.ID, j.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&j).Exec(ctx); err != nil {
+		return store.Job{}, mapErr(err)
+	}
+	return j, nil
+}
+
+func (s *Store) UpdateJob(ctx context.Context, j store.Job) (store.Job, error) {
+	res, err := s.db.NewUpdate().Model(&j).
+		Column("name", "command", "cron", "timeout_sec", "enabled").
+		WherePK().Exec(ctx)
+	if err != nil {
+		return store.Job{}, mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.Job{}, store.ErrNotFound
+	}
+	return j, nil
+}
+
+func (s *Store) DeleteJob(ctx context.Context, id string) error {
+	return deleteByID(ctx, s.db, "jobs", id)
+}
+
+func (s *Store) CreateJobRun(ctx context.Context, r store.JobRun) (store.JobRun, error) {
+	r.ID, r.CreatedAt = ids.New(), now()
+	if _, err := s.db.NewInsert().Model(&r).Exec(ctx); err != nil {
+		return store.JobRun{}, mapErr(err)
+	}
+	return r, nil
+}
+
+func (s *Store) GetJobRun(ctx context.Context, id string) (store.JobRun, error) {
+	var r store.JobRun
+	err := s.db.NewSelect().Model(&r).Where("id = ?", id).Scan(ctx)
+	return r, mapErr(err)
+}
+
+func (s *Store) ListJobRuns(ctx context.Context, jobID string, limit int) ([]store.JobRun, error) {
+	rs := []store.JobRun{}
+	err := s.db.NewSelect().Model(&rs).Where("job_id = ?", jobID).
+		Order("created_at DESC").Limit(limit).Scan(ctx)
+	return rs, mapErr(err)
+}
+
+func (s *Store) FinishJobRun(ctx context.Context, r store.JobRun) error {
+	t := now()
+	r.FinishedAt = &t
+	res, err := s.db.NewUpdate().Model(&r).Column("status", "exit_code", "error", "finished_at").WherePK().Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) DeleteJobRun(ctx context.Context, id string) error {
+	return deleteByID(ctx, s.db, "job_runs", id)
+}
+
 func (s *Store) CreateRestore(ctx context.Context, r store.Restore) (store.Restore, error) {
 	r.ID, r.CreatedAt = ids.New(), now()
 	if _, err := s.db.NewInsert().Model(&r).Exec(ctx); err != nil {
@@ -954,7 +1032,7 @@ func (s *Store) FinishRestore(ctx context.Context, id string, status store.OpSta
 
 func (s *Store) FailRunningOperations(ctx context.Context, errMsg string) error {
 	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		for _, model := range []any{(*store.Backup)(nil), (*store.Restore)(nil)} {
+		for _, model := range []any{(*store.Backup)(nil), (*store.Restore)(nil), (*store.JobRun)(nil)} {
 			_, err := tx.NewUpdate().Model(model).
 				Set("status = ?", store.OpFailed).Set("error = ?", errMsg).Set("finished_at = ?", now()).
 				Where("status = ?", store.OpRunning).Exec(ctx)

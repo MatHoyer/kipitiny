@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"time"
 
@@ -361,21 +362,26 @@ func (t *tools) getDeploymentLog(ctx context.Context, _ *mcp.CallToolRequest, in
 		return nil, getDeploymentLogOut{}, err
 	}
 	defer r.Close()
-	n := in.Lines
+	lines, err := tailLines(r, in.Lines)
+	return nil, getDeploymentLogOut{Deployment: dep, Lines: lines}, err
+}
+
+// tailLines returns the last n lines of r: 200 when n is 0, at most 2000.
+func tailLines(r io.Reader, n int) ([]string, error) {
 	if n <= 0 {
 		n = 200
 	}
 	n = min(n, 2000)
-	out := getDeploymentLogOut{Deployment: dep, Lines: []string{}}
+	lines := []string{}
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64*1024), 1<<20)
 	for sc.Scan() {
-		out.Lines = append(out.Lines, sc.Text())
-		if len(out.Lines) > n {
-			out.Lines = out.Lines[1:]
+		lines = append(lines, sc.Text())
+		if len(lines) > n {
+			lines = lines[1:]
 		}
 	}
-	return nil, out, sc.Err()
+	return lines, sc.Err()
 }
 
 type deleteServiceIn struct {

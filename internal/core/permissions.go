@@ -18,8 +18,8 @@ const (
 	// PermView reads the project: services, logs, stats, deployments, uptime.
 	// Any other permission implies it.
 	PermView      Perm = "view"
-	PermDeploy    Perm = "deploy"   // deploy, rollback, start/stop/restart, maintenance
-	PermSettings  Perm = "settings" // create and edit services, compose, networks, uptime checks
+	PermDeploy    Perm = "deploy"   // deploy, rollback, start/stop/restart, maintenance, run a job
+	PermSettings  Perm = "settings" // create and edit services, compose, networks, uptime checks, jobs
 	PermEnv       Perm = "env"      // env and secrets, connection strings
 	PermDomains   Perm = "domains"
 	PermBackups   Perm = "backups" // back up now, verify, schedules
@@ -157,6 +157,7 @@ const (
 	IDBackup     IDKind = "backup"
 	IDDeployment IDKind = "deployment"
 	IDSchedule   IDKind = "schedule"
+	IDJob        IDKind = "job"
 )
 
 // ProjectOf returns the project the resource belongs to. Manager backups
@@ -184,6 +185,12 @@ func (c *Core) ProjectOf(ctx context.Context, kind IDKind, id string) (string, e
 			return "", err
 		}
 		return c.ProjectOf(ctx, IDService, s.ServiceID)
+	case IDJob:
+		j, err := c.store.GetJob(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		return c.ProjectOf(ctx, IDService, j.ServiceID)
 	}
 	return "", errors.New("unknown resource kind " + string(kind))
 }

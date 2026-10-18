@@ -31,6 +31,8 @@ const (
 	EventUptimeUp         = "uptime.up"
 	EventServerUpdates    = "server.updates_pending"
 	EventServerReboot     = "server.reboot_required"
+	EventJobFailed        = "job.failed"
+	EventJobSucceeded     = "job.succeeded"
 )
 
 // EventType describes an event a channel can subscribe to.
@@ -51,6 +53,8 @@ var eventTypes = []EventType{
 	{EventServiceHealthy, "Service healthy again", true},
 	{EventUptimeDown, "Uptime check failing", true},
 	{EventUptimeUp, "Uptime check recovered", true},
+	{EventJobFailed, "Scheduled job failed", true},
+	{EventJobSucceeded, "Scheduled job succeeded", false},
 	{EventBackupFailed, "Backup failed", true},
 	{EventBackupSucceeded, "Backup succeeded", false},
 	{EventVerifyFailed, "Restore test failed", true},

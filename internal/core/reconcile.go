@@ -173,6 +173,7 @@ func (c *Core) reconcileServer(ctx context.Context, sv store.Server, svcs []stor
 	if err != nil {
 		return err
 	}
+	c.removeStaleJobContainers(ctx, dk, all)
 	byService := map[string][]container.Summary{}
 	for _, ct := range all {
 		if sid := ct.Labels[docker.LabelService]; sid != "" {

@@ -32,6 +32,7 @@ const (
 	LabelService   = "kipitiny.service"
 	LabelReplica   = "kipitiny.replica"
 	LabelDeploy    = "kipitiny.deploy"
+	LabelJob       = "kipitiny.job"
 	// LabelConfigHash lets the manager detect when a container it owns needs
 	// to be recreated because its desired configuration changed.
 	LabelConfigHash = "kipitiny.config-hash"

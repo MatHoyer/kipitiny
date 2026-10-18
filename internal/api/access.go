@@ -28,6 +28,7 @@ func onService(p core.Perm) access    { return access{perm: p, kind: core.IDServ
 func onBackup(p core.Perm) access     { return access{perm: p, kind: core.IDBackup} }
 func onDeployment(p core.Perm) access { return access{perm: p, kind: core.IDDeployment} }
 func onSchedule(p core.Perm) access   { return access{perm: p, kind: core.IDSchedule} }
+func onJob(p core.Perm) access        { return access{perm: p, kind: core.IDJob} }
 func feature(f core.Feature) access   { return access{feature: f} }
 
 // routeAccess lists every authenticated route (TestRouteAccess checks it);
@@ -123,6 +124,13 @@ var routeAccess = map[string]access{
 	"POST /api/services/{id}/schedules":         onService(core.PermBackups),
 	"PUT /api/schedules/{id}":                   onSchedule(core.PermBackups),
 	"DELETE /api/schedules/{id}":                onSchedule(core.PermBackups),
+	"GET /api/services/{id}/jobs":               onService(core.PermView),
+	"POST /api/services/{id}/jobs":              onService(core.PermSettings),
+	"PUT /api/jobs/{id}":                        onJob(core.PermSettings),
+	"DELETE /api/jobs/{id}":                     onJob(core.PermSettings),
+	"POST /api/jobs/{id}/run":                   onJob(core.PermDeploy),
+	"GET /api/jobs/{id}/runs":                   onJob(core.PermView),
+	"GET /api/jobs/{id}/runs/{run}/log":         onJob(core.PermView),
 	"GET /api/backups/{id}":                     onBackup(core.PermView),
 	"DELETE /api/backups/{id}":                  onBackup(core.PermBackups),
 	"GET /api/backups/{id}/download":            onBackup(core.PermDownload),

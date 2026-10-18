@@ -31,6 +31,7 @@ type scheduler struct {
 	mu      sync.Mutex
 	cron    *cron.Cron
 	entries map[string]cron.EntryID // schedule ID -> entry
+	jobs    map[string]cron.EntryID // job ID -> entry
 	cleanup cron.EntryID            // 0 when cleanup is off
 }
 
@@ -60,11 +61,15 @@ func (c *Core) StartScheduler(ctx context.Context) error {
 	c.sched.mu.Lock()
 	c.sched.cron = cron.New(cron.WithParser(cronParser), cron.WithLocation(time.UTC))
 	c.sched.entries = map[string]cron.EntryID{}
+	c.sched.jobs = map[string]cron.EntryID{}
 	c.sched.mu.Unlock()
 	if err := c.seedManagerSchedule(ctx); err != nil {
 		return err
 	}
 	if err := c.reloadSchedules(ctx); err != nil {
+		return err
+	}
+	if err := c.reloadJobs(ctx); err != nil {
 		return err
 	}
 	if err := c.scheduleCleanup(ctx); err != nil {

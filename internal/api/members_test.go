@@ -76,8 +76,12 @@ func newMembers(t *testing.T) members {
 		if err != nil {
 			t.Fatal(err)
 		}
+		job, err := st.CreateJob(ctx, store.Job{ServiceID: svc.ID, Name: "nightly", Command: "true", Cron: "@daily", TimeoutSec: 60})
+		if err != nil {
+			t.Fatal(err)
+		}
 		return map[core.IDKind]string{core.IDProject: p.ID, core.IDService: svc.ID, core.IDDeployment: d.ID,
-			core.IDBackup: b.ID, core.IDSchedule: sc.ID}
+			core.IDBackup: b.ID, core.IDSchedule: sc.ID, core.IDJob: job.ID}
 	}
 	m.shop, m.other = seed("shop"), seed("other")
 	return m
