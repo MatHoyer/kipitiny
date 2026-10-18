@@ -182,7 +182,7 @@ const isDb = (s: { kind: string }) => s.kind !== "app";
 
 /** How the demo's databases are reached, per kind. */
 const dbDemo: Record<string, { image: string; port: number; url: (name: string, password: string) => string; user: string; database?: string }> = {
-  postgres: { image: "postgres:17-alpine", port: 5432, user: "app", database: "postgres", url: (n, pw) => `postgres://app:${pw}@${n}:5432/postgres` },
+  postgres: { image: "postgres:18-alpine", port: 5432, user: "app", database: "postgres", url: (n, pw) => `postgres://app:${pw}@${n}:5432/postgres` },
   redis: { image: "redis:8-alpine", port: 6379, user: "", url: (n, pw) => `redis://:${pw}@${n}:6379` },
   mysql: { image: "mysql:8.4", port: 3306, user: "app", database: "app", url: (n, pw) => `mysql://app:${pw}@${n}:3306/app` },
   mariadb: { image: "mariadb:11.8", port: 3306, user: "app", database: "app", url: (n, pw) => `mysql://app:${pw}@${n}:3306/app` },
