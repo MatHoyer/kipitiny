@@ -5,7 +5,7 @@
 name: kipitiny-site
 services:
   homepage:
-    image: ghcr.io/mathoyer/kipitiny-homepage:0.37.0
+    image: ghcr.io/mathoyer/kipitiny-homepage:0.38.0
     expose:
       - "80"
     deploy:
