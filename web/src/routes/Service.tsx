@@ -2,9 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   ChevronRight,
-  CircleCheck,
-  CircleSlash,
-  CircleX,
   Construction,
   ExternalLink,
   GitCommitHorizontal,
@@ -20,16 +17,32 @@ import {
   TriangleAlert,
   Workflow,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { portLabel } from "@/components/reach";
 import { ServiceIcon } from "@/components/service-icon";
-import { CopyButton, DangerZone, Empty, EmptyState, ErrorText, Mono, SecretList, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
+import {
+  CopyButton,
+  DangerZone,
+  Empty,
+  EmptyState,
+  ErrorText,
+  Mono,
+  SecretList,
+  Section,
+  StatCard,
+  StateBadge,
+  statusIcon,
+  Tag,
+  Loading,
+  triggeredBy,
+} from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DataTab } from "@/components/data/data-tab";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
+import { JobsTab } from "@/components/jobs";
 import { DeploymentLogView, LiveLogs } from "@/components/logs";
 import { SaveBar } from "@/components/save-bar";
 import { UptimeSection } from "@/components/uptime";
@@ -76,7 +89,7 @@ export function Service() {
   });
   const deploying = deployments.data?.some((d) => d.status === "running") ?? false;
   const [selected, setSelected] = useState<string | null>(null);
-  const [tab, setTab] = useTab(["overview", "deployments", "logs", "terminal", "data", "files", "environment", "backups", "analytics", "settings"], "overview");
+  const [tab, setTab] = useTab(["overview", "deployments", "logs", "terminal", "data", "files", "environment", "jobs", "backups", "analytics", "settings"], "overview");
   const git = useProjectGit(service.data?.projectId ?? "");
   const gitManaged = !!git.data;
   const { can } = useAccess();
@@ -255,6 +268,7 @@ export function Service() {
             {isDb && may("data") && <TabsTrigger value="data">Data</TabsTrigger>}
             {may("files") && <TabsTrigger value="files">Files</TabsTrigger>}
             <TabsTrigger value="environment">Environment</TabsTrigger>
+            {svc.kind === "app" && <TabsTrigger value="jobs">Jobs</TabsTrigger>}
             {canBackup(svc) && <TabsTrigger value="backups">Backups</TabsTrigger>}
             {svc.analytics && <TabsTrigger value="analytics">Analytics</TabsTrigger>}
             {(may("settings") || may("delete")) && <TabsTrigger value="settings">Settings</TabsTrigger>}
@@ -314,6 +328,11 @@ export function Service() {
             {gitManaged && <GitManagedNote path={git.data!.path} />}
             <EnvironmentCard key={svc.id} svc={svc} gitManaged={gitManaged} canEdit={may("env")} />
           </TabsContent>
+          {svc.kind === "app" && (
+            <TabsContent value="jobs">
+              <JobsTab svc={svc} canEdit={may("settings")} canRun={may("deploy")} />
+            </TabsContent>
+          )}
           {canBackup(svc) && (
             <TabsContent value="backups">
               <BackupsCard
@@ -575,13 +594,6 @@ function shortImage(image: string) {
 }
 
 /** Who started a deployment, for display. */
-function triggeredBy(t?: string) {
-  if (!t) return "";
-  const [kind, name] = [t.slice(0, t.indexOf(":")), t.slice(t.indexOf(":") + 1)];
-  if (kind === "token") return `token ${name}`;
-  return name;
-}
-
 function ConnectionCard({ serviceId, host, kind }: { serviceId: string; host: string; kind: DatabaseKind }) {
   const [conn, setConn] = useState<Connection | null>(null);
   const reveal = useMutation({ meta: { error: "Couldn't show the connection details" }, mutationFn: () => api.connection(serviceId), onSuccess: setConn });
@@ -686,13 +698,6 @@ function Deployments({
     </div>
   );
 }
-
-const statusIcon = {
-  succeeded: <CircleCheck className="size-4.5 text-emerald-600 dark:text-emerald-400" />,
-  failed: <CircleX className="size-4.5 text-destructive" />,
-  skipped: <CircleSlash className="size-4.5 text-pink-500" />,
-  running: <Spinner className="size-4.5 text-sky-500" />,
-} satisfies Record<Deployment["status"], ReactNode>;
 
 function DeploymentRow({
   deployment: d,

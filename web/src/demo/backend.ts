@@ -53,10 +53,13 @@ import type {
   UptimeInput,
   UptimeResult,
   Usage,
+  Job,
+  JobInput,
+  JobRun,
 } from "@/api";
 import { autoTagColor, normalizeTag, tagColors } from "@/lib/tags";
 import { files } from "./files";
-import { demoUsers, rng, seed, service as newService, type DemoDb } from "./seed";
+import { demoJobs, demoUsers, rng, seed, service as newService, type DemoDb } from "./seed";
 import { demoLogos, demoTemplates } from "./templates";
 
 /*
@@ -180,6 +183,47 @@ const SERVER: Server = {
 } as Server;
 
 const projectOf = (id: string) => db.projects.find((p) => p.id === id) ?? (() => { throw notFound(); })();
+/** The jobs and their runs; a demo run takes 3 seconds and succeeds. */
+function jobState() {
+  if (!db.jobs || !db.jobRuns) ({ jobs: db.jobs, runs: db.jobRuns } = demoJobs());
+  for (const r of db.jobRuns!) {
+    if (r.status === "running" && Date.now() - Date.parse(r.createdAt) > 3_000) {
+      Object.assign(r, { status: "succeeded", exitCode: 0, finishedAt: new Date(Date.parse(r.createdAt) + 3_000).toISOString() });
+    }
+  }
+  return { jobs: db.jobs!, runs: db.jobRuns! };
+}
+
+function jobView(j: Job): Job {
+  return { ...j, lastRun: jobState().runs.find((r) => r.jobId === j.id), nextRun: j.enabled ? j.nextRun : undefined };
+}
+
+function jobFrom(body: unknown, base: Partial<Job>): Job {
+  const b = body as JobInput;
+  if (!nameRe.test(b.name ?? "")) throw invalid("job name must be lowercase letters, digits and dashes");
+  if (!b.command?.trim()) throw invalid("a job needs a command");
+  if (!b.cron?.trim()) throw invalid("schedule: empty spec string");
+  const { jobs } = jobState();
+  if (jobs.some((j) => j.serviceId === base.serviceId && j.name === b.name && j.id !== base.id)) {
+    throw invalid(`the service already has a job named ${b.name}`);
+  }
+  return {
+    id: base.id ?? newId("job"),
+    serviceId: base.serviceId!,
+    createdAt: base.createdAt ?? now(),
+    nextRun: base.nextRun ?? new Date(Date.now() + 3_600_000).toISOString(),
+    name: b.name,
+    command: b.command.trim(),
+    cron: b.cron.trim(),
+    timeoutSec: b.timeoutSec || 3600,
+    enabled: b.enabled,
+  };
+}
+
+const took = (r: JobRun) => `${Math.round((Date.parse(r.finishedAt!) - Date.parse(r.createdAt)) / 1000)}s`;
+
+const jobOf = (id: string) => jobState().jobs.find((j) => j.id === id) ?? (() => { throw notFound(); })();
+
 const serviceOf = (id: string) => db.services.find((s) => s.id === id) ?? (() => { throw notFound(); })();
 const isDb = (s: { kind: string }) => s.kind !== "app";
 
@@ -617,6 +661,8 @@ const EVENTS: Notifications["events"] = [
   { type: "service.healthy", label: "Service healthy again", default: true },
   { type: "uptime.down", label: "Uptime check failing", default: true },
   { type: "uptime.up", label: "Uptime check recovered", default: true },
+  { type: "job.failed", label: "Scheduled job failed", default: true },
+  { type: "job.succeeded", label: "Scheduled job succeeded", default: false },
   { type: "backup.failed", label: "Backup failed", default: true },
   { type: "backup.succeeded", label: "Backup succeeded", default: false },
   { type: "verify.failed", label: "Restore test failed", default: true },
@@ -1658,6 +1704,68 @@ const routes: Route[] = [
     },
   ],
   ["GET", /^\/services\/([^/]+)\/restores$/, ({ m }) => db.restores.filter((r) => r.serviceId === m[1]).map(restoring)],
+  ["GET", /^\/services\/([^/]+)\/jobs$/, ({ m }) => jobState().jobs.filter((j) => j.serviceId === serviceOf(m[1]).id).map(jobView)],
+  [
+    "POST",
+    /^\/services\/([^/]+)\/jobs$/,
+    ({ m, body }) => {
+      const svc = serviceOf(m[1]);
+      if (svc.kind !== "app") throw invalid("only apps run jobs");
+      const j = jobFrom(body, { serviceId: svc.id });
+      jobState().jobs.push(j);
+      save();
+      return jobView(j);
+    },
+  ],
+  [
+    "PUT",
+    /^\/jobs\/([^/]+)$/,
+    ({ m, body }) => {
+      const { jobs } = jobState();
+      const i = jobs.indexOf(jobOf(m[1]));
+      jobs[i] = jobFrom(body, jobs[i]);
+      save();
+      return jobView(jobs[i]);
+    },
+  ],
+  [
+    "DELETE",
+    /^\/jobs\/([^/]+)$/,
+    ({ m }) => {
+      jobOf(m[1]);
+      db.jobs = db.jobs!.filter((j) => j.id !== m[1]);
+      db.jobRuns = db.jobRuns!.filter((r) => r.jobId !== m[1]);
+      save();
+    },
+  ],
+  [
+    "POST",
+    /^\/jobs\/([^/]+)\/run$/,
+    ({ m }) => {
+      const j = jobOf(m[1]);
+      const { runs } = jobState();
+      if (runs.some((r) => r.jobId === j.id && r.status === "running")) throw new HttpError(409, `operation in progress: job ${j.name} is running`);
+      const r: JobRun = { id: newId("run"), jobId: j.id, status: "running", triggeredBy: "user:demo", createdAt: now() };
+      runs.unshift(r);
+      save();
+      return r;
+    },
+  ],
+  ["GET", /^\/jobs\/([^/]+)\/runs$/, ({ m }) => jobState().runs.filter((r) => r.jobId === jobOf(m[1]).id)],
+  [
+    "GET",
+    /^\/jobs\/([^/]+)\/runs\/([^/]+)\/log$/,
+    ({ m }) => {
+      const j = jobOf(m[1]);
+      const r = jobState().runs.find((r) => r.id === m[2] && r.jobId === j.id) ?? (() => { throw notFound(); })();
+      const t = (iso: string) => `[${iso.slice(11, 19)}]`;
+      const lines = [`${t(r.createdAt)} Running ${j.command} in ghcr.io/acme/api@sha256:4f1c…`];
+      if (r.status === "running") return lines.join("\n") + "\n";
+      lines.push(...(r.status === "failed" ? ["Error: SMTP connection refused (smtp.acme.example:587)", "    at report.js:42:11"] : ["done in 1.8s"]));
+      lines.push(r.status === "failed" ? `${t(r.finishedAt!)} Failed: ${r.error}` : `${t(r.finishedAt!)} Succeeded in ${took(r)}`);
+      return lines.join("\n") + "\n";
+    },
+  ],
   ["GET", /^\/services\/([^/]+)\/schedules$/, ({ m }) => db.schedules.filter((s) => s.serviceId === m[1])],
   [
     "POST",

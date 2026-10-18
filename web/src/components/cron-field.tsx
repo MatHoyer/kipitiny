@@ -13,6 +13,15 @@ export const backupPresets: CronPreset[] = [
   ["0 3 1 * *", "Monthly, on the 1st at 03:00 UTC"],
 ];
 
+export const jobPresets: CronPreset[] = [
+  ["* * * * *", "Every minute"],
+  ["*/5 * * * *", "Every 5 minutes"],
+  ["*/15 * * * *", "Every 15 minutes"],
+  ["0 * * * *", "Every hour"],
+  ["0 3 * * *", "Daily at 03:00 UTC"],
+  ["0 3 * * 0", "Weekly, Sunday 03:00 UTC"],
+];
+
 export const cleanupPresets: CronPreset[] = [
   ["0 5 * * *", "Daily at 05:00 UTC"],
   ["0 5 * * 0", "Weekly, Sunday 05:00 UTC"],
