@@ -36,7 +36,7 @@ export function TemplateDialog({ projectId }: { projectId?: string }) {
           {projectId ? "Add an app" : "From a template"}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         {picked ? (
           <InstallForm key={picked.id} template={picked} projectId={projectId} onBack={() => setPicked(null)} onDone={() => setOpen(false)} />
         ) : (

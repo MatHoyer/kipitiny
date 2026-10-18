@@ -253,7 +253,7 @@ function JobDialog({ serviceId, job }: { serviceId: string; job?: Job }) {
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <form onSubmit={onSubmit} className="contents">
           <DialogHeader>
             <DialogTitle>{job ? `Edit job ${job.name}` : "New job"}</DialogTitle>

@@ -131,7 +131,7 @@ export function Storage() {
         ))}
       </div>
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           {editing?.step === "pick" && (
             <>
               <DialogHeader>

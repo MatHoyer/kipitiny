@@ -95,7 +95,7 @@ export function BasicAuthUsers({ rows, onChange }: { rows: BasicAuthRow[]; onCha
         </ul>
       )}
       <Dialog open={dialog.open} onOpenChange={(open) => setDialog((d) => ({ ...d, open }))}>
-        <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <UserForm
             key={dialog.n}
             user={editing}

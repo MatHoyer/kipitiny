@@ -680,7 +680,7 @@ export function NewServiceDialog({ projectId, trigger, stay }: { projectId: stri
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         {!choice ? (
           <>
             <DialogHeader>
