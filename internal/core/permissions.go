@@ -279,11 +279,12 @@ func checkServiceChange(ctx context.Context, old, svc store.Service) error {
 			return fmt.Errorf("%w: only admins make volume %s writable: it reaches outside the project", ErrForbidden, v.Name)
 		}
 	}
-	if !maps.Equal(svc.Env, old.Env) || !slices.Equal(svc.Secrets, old.Secrets) {
+	// Secret files resolve references like env vars do.
+	if env, oldEnv := refEnv(svc), refEnv(old); !maps.Equal(env, oldEnv) || !slices.Equal(svc.Secrets, old.Secrets) {
 		if err := Authorize(ctx, svc.ProjectID, PermEnv); err != nil {
 			return err
 		}
-		if err := checkSecretRefs(ctx, old.Env, svc.Env); err != nil {
+		if err := checkSecretRefs(ctx, oldEnv, env); err != nil {
 			return err
 		}
 	}
@@ -291,8 +292,23 @@ func checkServiceChange(ctx context.Context, old, svc store.Service) error {
 		if err := Authorize(ctx, svc.ProjectID, PermDomains); err != nil {
 			return err
 		}
+		if err := checkSecretRefs(ctx, basicAuthRefs(old.Middlewares), basicAuthRefs(svc.Middlewares)); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// basicAuthRefs holds m's basic auth password references, in the shape
+// checkSecretRefs reads.
+func basicAuthRefs(m store.Middlewares) map[string]string {
+	out := map[string]string{}
+	for _, u := range m.BasicAuth {
+		if u.Ref != "" {
+			out[u.Name] = u.Ref
+		}
+	}
+	return out
 }
 
 // checkSecretRefs fails when a member references a password manager item

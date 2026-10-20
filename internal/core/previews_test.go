@@ -176,6 +176,21 @@ func TestPreviewSettings(t *testing.T) {
 	if _, err := c.DeployPreview(ctx, parent.ID, "Bad_Name", PreviewOptions{}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("bad preview name: %v", err)
 	}
+
+	// Password manager references need the secret-providers feature.
+	useSecretProvider(t, c, &fakeProvider{})("")
+	member := WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: store.RoleMember,
+		Grants: map[string][]string{parent.ID: {string(PermView), string(PermSettings), string(PermEnv)}}})
+	ref := PreviewSettingsInput{Env: map[string]string{"KEY": "{{ fake://prod/key }}"}}
+	if _, err := c.SetPreviewSettings(member, parent.ID, ref); !errors.Is(err, ErrForbidden) {
+		t.Errorf("member referencing a password manager item: %v", err)
+	}
+	if _, err := c.SetPreviewSettings(ctx, parent.ID, ref); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.SetPreviewSettings(member, parent.ID, ref); err != nil {
+		t.Errorf("member keeping a reference: %v", err)
+	}
 }
 
 func TestPreviewSeedBackups(t *testing.T) {

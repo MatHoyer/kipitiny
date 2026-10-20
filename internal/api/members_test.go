@@ -223,8 +223,9 @@ func TestMemberRequests(t *testing.T) {
 	// settings without env or domains: those parts of a change are refused.
 	settings := m.token(t, core.PermSettings)
 	for name, patch := range map[string]string{
-		"env":    `{"env":{"A":"2"}}`,
-		"domain": `{"domain":"shop.example.com"}`,
+		"env":         `{"env":{"A":"2"}}`,
+		"domain":      `{"domain":"shop.example.com"}`,
+		"secret file": `{"files":[{"path":"/run/a","secret":true,"content":"e3sgcHJvamVjdC5BIH19"}]}`,
 	} {
 		if code, body := do(settings, "PATCH", "/api/services/"+shopSvc, patch); code != http.StatusForbidden {
 			t.Errorf("%s without its permission: %d %s", name, code, body)
@@ -248,6 +249,14 @@ func TestMemberRequests(t *testing.T) {
 	// Password manager references need the secret-providers feature.
 	if code, body := do(all, "PATCH", "/api/services/"+shopSvc, `{"env":{"A":"{{ op://vault/item/field }}"}}`); code != http.StatusForbidden {
 		t.Errorf("password manager reference without the feature: %d %s", code, body)
+	}
+	for name, patch := range map[string]string{
+		"secret file": `{"files":[{"path":"/run/a","secret":true,"content":"e3sgb3A6Ly92YXVsdC9pdGVtL2ZpZWxkIH19"}]}`,
+		"basic auth":  `{"middlewares":{"basicAuth":[{"name":"u","password":"{{ op://vault/item/field }}"}]}}`,
+	} {
+		if code, body := do(all, "PATCH", "/api/services/"+shopSvc, patch); code != http.StatusForbidden {
+			t.Errorf("password manager reference in a %s without the feature: %d %s", name, code, body)
+		}
 	}
 
 	// Server resources a member may see come without how they connect.

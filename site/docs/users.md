@@ -88,7 +88,7 @@ A member's access is set per project. Any permission includes **view**.
 | View | Services, logs, stats, deployments, uptime, jobs and their runs, backups list, the compose export (secrets masked) |
 | Deploy | Deploy, roll back, start, stop, restart, maintenance mode, run a job now |
 | Settings | Create and edit services, apply compose files, rename, networks, uptime checks, scheduled jobs |
-| Env | Variables and secrets of the services and the project, database connection strings |
+| Env | Variables and secrets of the services and the project (secret files too), database connection strings |
 | Domains | Public domains and their middlewares |
 | Backups | Back up now, verify, schedules, delete backups |
 | Restore | Replace a service's data with a backup (both the backup's project and the target's need it) |
@@ -121,7 +121,7 @@ they connect (hosts, accounts, keys, URLs), to use them in their projects:
 | Storage | Pick where backups go |
 | Registries | See which registries pulls can use |
 | Git providers | Pick a provider when linking a repository |
-| Password managers | Reference their items (`{{ pass://… }}`) in env: the app could read them, so it needs this |
+| Password managers | Reference their items (`{{ pass://… }}`) in env, secret files, basic auth passwords or preview settings: the app could read them, so it needs this |
 | Servers | See the servers |
 | Networks | See the networks created by hand |
 | Notifications | See the channels |
