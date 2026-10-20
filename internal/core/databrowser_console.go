@@ -104,9 +104,14 @@ func (c *Core) DataConsole(ctx context.Context, id, database, query string, writ
 
 // pgConsole runs sql as one psql command, so only the last statement's
 // result shows and write mode runs the whole of it in one transaction.
-// Read-only mode is a guard against mistakes, not a security boundary: the
-// admin can switch to write mode anyway.
+//
+// psql runs a -c string starting with a backslash as a meta-command (\! is
+// a shell in the database's container, \o |cmd too): refused, the console
+// is for SQL.
 func (t dataTarget) pgConsole(ctx context.Context, sql string, write bool) (ConsoleResult, error) {
+	if strings.HasPrefix(strings.TrimLeft(sql, " \t\r\n\f\v"), `\`) {
+		return ConsoleResult{}, fmt.Errorf("%w: psql meta-commands (starting with \\) don't run here; use SQL", ErrInvalid)
+	}
 	cmd := []string{
 		"psql", "-X", "--csv", "-v", "ON_ERROR_STOP=1", "-v", "SHOW_ALL_RESULTS=off", "-P", "null=" + pgNull,
 		"-U", t.svc.Env[pgUser], "-d", t.db,

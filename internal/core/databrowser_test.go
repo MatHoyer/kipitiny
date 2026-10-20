@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"strings"
@@ -123,5 +124,16 @@ func TestCapWriter(t *testing.T) {
 	}
 	if w.b.String() != "abcde" || !w.dropped {
 		t.Errorf("got %q dropped %v", w.b.String(), w.dropped)
+	}
+}
+
+// psql meta-commands are refused before anything runs: \! is a shell.
+func TestPgConsoleMetaCommands(t *testing.T) {
+	for _, q := range []string{`\! id`, "  \n\\o |id", `\copy t to program 'id'`} {
+		for _, write := range []bool{false, true} {
+			if _, err := (dataTarget{}).pgConsole(context.Background(), q, write); !errors.Is(err, ErrInvalid) {
+				t.Errorf("%q (write %v): %v", q, write, err)
+			}
+		}
 	}
 }
