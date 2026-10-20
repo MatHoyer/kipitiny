@@ -1,7 +1,6 @@
-# Keeps the images the app templates pin up to date
-# (internal/templates/files/<id>/compose.yaml): one pull request per image,
-# or per group of images that must move together, checked by CI like any
-# change to a template.
+# Template images (internal/templates/files/<id>/compose.yaml): one pull
+# request per image, or per group of images that must move together, checked
+# by CI like any change to a template. Go and npm: security updates only.
 version: 2
 updates:
   - package-ecosystem: docker-compose
@@ -15,3 +14,19 @@ updates:
       # The Beszel hub and agent talk to each other: same version.
       beszel:
         patterns: ["henrygd/beszel*"]
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: "fix(deps)"
+    labels: []
+  - package-ecosystem: npm
+    directories: ["/web", "/site"]
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: "fix(deps)"
+    labels: []

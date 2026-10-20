@@ -1,0 +1,26 @@
+# Known Go vulnerabilities in code the binary actually calls. Weekly as well,
+# since advisories get published without any change here.
+name: vulncheck
+
+on:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # The images build on golang:1.26-alpine, the latest patch: scan with
+      # it, not go.mod's minimum, whose standard library is what's fixed.
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          check-latest: true
+      - run: make ui-stub
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
