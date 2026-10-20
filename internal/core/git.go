@@ -253,7 +253,7 @@ func checkRepoHost(ctx context.Context, g store.ProjectGit) error {
 		return fmt.Errorf("%w: cannot resolve %s", ErrInvalid, u.Hostname())
 	}
 	for _, ip := range ips {
-		if ip = ip.Unmap(); ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
+		if privateAddr(ip) {
 			return fmt.Errorf("%w: %s is a private address; only admins link repositories there", ErrForbidden, u.Hostname())
 		}
 	}
@@ -470,7 +470,7 @@ func (c *Core) gitHead(ctx context.Context, g store.ProjectGit) (string, error) 
 		return "", err
 	}
 	rem := git.NewRemote(memory.NewStorage(), &gitconfig.RemoteConfig{Name: "origin", URLs: []string{g.RepoURL}})
-	refs, err := rem.ListContext(ctx, &git.ListOptions{Auth: auth})
+	refs, err := rem.ListContext(guardRepo(ctx, g), &git.ListOptions{Auth: auth})
 	if err != nil {
 		return "", gitAccessError(g, "list", err)
 	}
@@ -525,7 +525,7 @@ func (c *Core) withGitFile(ctx context.Context, g store.ProjectGit, fn func(data
 		runtime.GC() // go-git's pooled buffers only go on the second cycle
 		debug.FreeOSMemory()
 	}()
-	repo, err := git.PlainCloneContext(ctx, dir, true, &git.CloneOptions{
+	repo, err := git.PlainCloneContext(guardRepo(ctx, g), dir, true, &git.CloneOptions{
 		URL:           g.RepoURL,
 		Auth:          auth,
 		ReferenceName: plumbing.NewBranchReferenceName(g.Branch),

@@ -140,8 +140,10 @@ within the token's restriction when a restricted token linked it. A sync that
 changes services needs the settings permission (and deploy to deploy them), as
 applying the file by hand would. If that user or token is removed, syncs stop
 until someone links the repository again.
-Members can't link a repository by URL on a loopback, private or link-local
-address (the manager would fetch it from inside your network); a repository
+Members can't link a repository by URL on a loopback, private, link-local or
+carrier-grade NAT address (the manager would fetch it from inside your
+network), nor fetch from one later through a redirect or a name that resolves
+again; a repository
 from a [git provider](/docs/compose#git-providers) is fine.
 
 ## Locked out
