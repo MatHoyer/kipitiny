@@ -206,4 +206,17 @@ func TestPortsAndVolumesHostAccess(t *testing.T) {
 	if err := checkServiceChange(member, app, ro); errors.Is(err, ErrForbidden) {
 		t.Errorf("member changing an external volume's mount: %v", err)
 	}
+	if err := checkServiceChange(member, ro, app); !errors.Is(err, ErrForbidden) {
+		t.Errorf("member making a read-only external volume writable: %v", err)
+	}
+	admin := WithActor(context.Background(), Actor{Kind: "user", Name: "root", Role: store.RoleAdmin})
+	if err := checkServiceChange(admin, ro, app); err != nil {
+		t.Errorf("admin making a read-only external volume writable: %v", err)
+	}
+	conf := app
+	conf.Volumes = slices.Clone(app.Volumes)
+	conf.Volumes[0].ReadOnly = false
+	if err := checkServiceChange(member, app, conf); err != nil {
+		t.Errorf("member making their own volume writable: %v", err)
+	}
 }

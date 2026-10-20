@@ -1,10 +1,13 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -105,8 +108,60 @@ func TestBackupKind(t *testing.T) {
 		m[0].VolumeOptions.Labels[docker.LabelService] != "01APP" {
 		t.Errorf("app helper mounts = %+v", m)
 	}
+	ro := app
+	ro.Volumes = slices.Clone(app.Volumes)
+	for i := range ro.Volumes {
+		ro.Volumes[i].ReadOnly = true
+	}
+	if m := helperMounts(ro, []string{"cache"}, "/v", false); !m[0].ReadOnly {
+		t.Errorf("a read-only volume stays read-only in helpers: %+v", m)
+	}
+	if _, _, _, err := writableEntry(ro, "cache/a"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("writing a read-only volume: %v", err)
+	}
+	if _, _, _, err := writableEntry(app, "cache/a"); err != nil {
+		t.Errorf("writing a volume: %v", err)
+	}
 	m = helperMounts(redis, []string{"data"}, "/v", false)
 	if len(m) != 1 || m[0].Source != RedisVolume("01RED") || m[0].Target != "/v/data" || m[0].ReadOnly {
 		t.Errorf("redis helper mounts = %+v", m)
+	}
+}
+
+// A member with restore doesn't overwrite a volume an admin attached
+// read-only; an admin does.
+func TestRestoreReadOnlyHostVolume(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
+	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, ServerID: store.LocalServerID, Image: "busybox",
+		Volumes: []store.Volume{{Name: "shared", Path: "/data", ReadOnly: true, External: "other-data"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tg, err := c.store.CreateBackupTarget(ctx, store.BackupTarget{Name: "t", Kind: "local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := c.store.CreateBackup(ctx, store.Backup{Kind: store.BackupKindVolume, ServiceID: svc.ID, ProjectID: p.ID, TargetID: tg.ID, Status: store.OpRunning, Volumes: []string{"shared"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.Status = store.OpSucceeded
+	if err := c.store.FinishBackup(ctx, b); err != nil {
+		t.Fatal(err)
+	}
+	member := WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: store.RoleMember,
+		Grants: map[string][]string{p.ID: {string(PermView), string(PermRestore)}}})
+	if _, err := c.RestoreBackup(member, b.ID, "", "web"); !errors.Is(err, ErrForbidden) {
+		t.Errorf("member restoring a read-only external volume: %v", err)
+	}
+	// The wrong name stops the admin before any Docker work.
+	admin := WithActor(ctx, Actor{Kind: "user", Name: "root", Role: store.RoleAdmin})
+	if _, err := c.RestoreBackup(admin, b.ID, "", "wrong"); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "confirm") {
+		t.Errorf("admin restoring a read-only external volume: %v", err)
 	}
 }

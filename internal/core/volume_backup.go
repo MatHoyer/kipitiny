@@ -63,7 +63,8 @@ func backupKind(svc store.Service) (store.BackupKind, error) {
 	return "", fmt.Errorf("%w: %s has no volumes to back up", ErrInvalid, svc.Name)
 }
 
-// helperMounts mounts the named volumes of svc under root/<name>.
+// helperMounts mounts the named volumes of svc under root/<name>, read-only
+// if readOnly or if the app mounts the volume read-only.
 func helperMounts(svc store.Service, names []string, root string, readOnly bool) []mount.Mount {
 	mounts := make([]mount.Mount, 0, len(names))
 	for _, name := range names {
@@ -73,7 +74,7 @@ func helperMounts(svc store.Service, names []string, root string, readOnly bool)
 		} else {
 			m = appVolumeMount(svc, name, "")
 		}
-		m.Target, m.ReadOnly = root+"/"+name, readOnly
+		m.Target, m.ReadOnly = root+"/"+name, readOnly || m.ReadOnly
 		mounts = append(mounts, m)
 	}
 	return mounts
@@ -169,6 +170,14 @@ func (c *Core) restoreVolumeBackup(ctx context.Context, b store.Backup, svc stor
 			return store.Restore{}, fmt.Errorf("%w: %s has no volume %q", ErrInvalid, svc.Name, name)
 		}
 	}
+	// An admin attaches host data read-only on purpose: only an admin overwrites it.
+	for _, v := range svc.Volumes {
+		if v.ReadOnly && v.HostAccess() && slices.Contains(b.Volumes, v.Name) {
+			if err := RequireAdmin(ctx); err != nil {
+				return store.Restore{}, fmt.Errorf("%w: volume %s is attached read-only; only an admin restores it", ErrForbidden, v.Name)
+			}
+		}
+	}
 	if confirm != svc.Name {
 		return store.Restore{}, fmt.Errorf("%w: restoring overwrites the volumes of %s; confirm with its name", ErrInvalid, svc.Name)
 	}
@@ -234,8 +243,11 @@ func (c *Core) restoreVolumes(ctx context.Context, svc store.Service, st storage
 			c.log.Warn("cannot remove staging volume", "volume", stage, "err", err)
 		}
 	}()
-	mounts := append(helperMounts(svc, b.Volumes, helperVolumeRoot, false),
-		mount.Mount{Type: mount.TypeVolume, Source: stage, Target: helperStageRoot})
+	mounts := helperMounts(svc, b.Volumes, helperVolumeRoot, false)
+	for i := range mounts {
+		mounts[i].ReadOnly = false // a restore writes read-only volumes too (restoreVolumeBackup checked who may)
+	}
+	mounts = append(mounts, mount.Mount{Type: mount.TypeVolume, Source: stage, Target: helperStageRoot})
 	id, err := startVolumeHelper(ctx, dk, "kipitiny-restore-"+strings.ToLower(r.ID), mounts)
 	if err != nil {
 		return false, err

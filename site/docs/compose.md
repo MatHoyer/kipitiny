@@ -154,7 +154,7 @@ services:
 - **The Docker socket** is mounted at `/var/run/docker.sock`, from the server's own socket. `:ro` only stops the app from replacing the socket file, not from using it: the app can still create, change and remove containers, so read-only gives no protection.
 - **Capabilities, devices, privileged mode and security options** (`cap_add`, `devices`, `privileged`, `security_opt`) are for VPNs, network tools and hardware (a Zigbee stick, a GPU, `/dev/net/tun`). `privileged` and most capabilities let the app escape its container.
 - **Absolute bind mounts** (`/srv/media:/media`) mount a path of the server, `:ro` for read-only.
-- **External volumes and driver options** reach data beyond the app's own: another volume on the server, a network share, or (with `o: bind`) any path of the host.
+- **External volumes and driver options** reach data beyond the app's own: another volume on the server, a network share, or (with `o: bind`) any path of the host. When an admin mounts one `:ro`, only an admin makes it writable or restores a backup into it.
 - Any of these gives the app control of the server: only use images you trust. Databases can't have them, previews leave such services out, and only admins can turn them on (a member may still change the app's other settings, or remove them).
 - A service runs on its project's server: to monitor several servers, make one project per server. The Beszel hub itself is a normal app (`henrygd/beszel`, port 8090, a volume at `/beszel_data`). Both are also [one-click templates](/docs/templates).
 
