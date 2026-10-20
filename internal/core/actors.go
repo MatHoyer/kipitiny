@@ -29,6 +29,8 @@ type Actor struct {
 	Grants map[string][]string `json:"-"`
 	// Session is the hash of the session's token; empty for tokens.
 	Session string `json:"-"`
+	// TokenID is the restricted token's that acts; empty otherwise.
+	TokenID string `json:"-"`
 }
 
 func (a Actor) String() string { return a.Kind + ":" + a.Name }
@@ -226,7 +228,7 @@ func (c *Core) restricted(ctx context.Context, a Actor, t store.APIToken) (Actor
 		return Actor{}, err
 	}
 	out := a
-	out.Role, out.Features, out.Grants = store.RoleMember, []string{}, map[string][]string{}
+	out.Role, out.Features, out.Grants, out.TokenID = store.RoleMember, []string{}, map[string][]string{}, t.ID
 	for _, f := range t.Features {
 		if a.Has(Feature(f)) {
 			out.Features = append(out.Features, f)

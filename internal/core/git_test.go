@@ -241,3 +241,48 @@ func TestPreviewRefusesGit(t *testing.T) {
 		t.Fatalf("linked a preview: %v", err)
 	}
 }
+
+// A sync runs within what linked the repository: a restricted token's
+// restriction stays, and a member with only git can't change services.
+func TestGitSyncAuthority(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin, err := c.store.CreateUser(ctx, store.User{Username: "root", Role: store.RoleAdmin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := c.store.CreateAPIToken(ctx, store.APIToken{Name: "agent", UserID: admin.ID, TokenHash: "h", Restricted: true,
+		Features: []string{}, Grants: map[string][]string{p.ID: {string(PermView), string(PermGit)}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := store.ProjectGit{ProjectID: p.ID, LinkedBy: admin.ID, LinkedToken: tok.ID}
+	linker, err := c.asLinker(ctx, g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := ActorFrom(linker); a.Admin() || a.Can(p.ID, PermSettings) || !a.Can(p.ID, PermGit) {
+		t.Errorf("sync actor of a restricted token = %+v", a)
+	}
+	file := []byte("services:\n  web: {image: 'nginx'}\n")
+	if _, err := c.applyCompose(fromGitSync(linker), p.ID, file, ApplyOptions{DryRun: true}, true); !errors.Is(err, ErrForbidden) {
+		t.Errorf("git-only sync adding a service: %v", err)
+	}
+	if err := c.store.DeleteAPIToken(ctx, tok.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.asLinker(ctx, g); !errors.Is(err, ErrForbidden) {
+		t.Errorf("sync after the token was deleted: %v", err)
+	}
+	g.LinkedToken = ""
+	if linker, err = c.asLinker(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.applyCompose(fromGitSync(linker), p.ID, file, ApplyOptions{DryRun: true}, true); err != nil {
+		t.Errorf("admin sync: %v", err)
+	}
+}
