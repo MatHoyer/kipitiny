@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/distribution/reference"
 	"github.com/moby/moby/api/types/container"
@@ -175,6 +176,9 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 	if err := c.validate(ctx, svc); err != nil {
 		return ServiceView{}, err
 	}
+	if svc.Analytics && svc.Domain != "" {
+		svc.AnalyticsSince = time.Now().UTC().Truncate(time.Microsecond) // as stored
+	}
 	svc, err = c.store.CreateService(ctx, svc)
 	if err != nil {
 		return ServiceView{}, err
@@ -329,6 +333,9 @@ func (c *Core) updateService(ctx context.Context, id string, p ServicePatch) (st
 	}
 	if err := c.validate(ctx, svc); err != nil {
 		return store.Service{}, err
+	}
+	if svc.Domain != old.Domain || svc.Analytics && !old.Analytics {
+		svc.AnalyticsSince = time.Now().UTC().Truncate(time.Microsecond) // as stored
 	}
 	if svc, err = c.store.UpdateService(ctx, svc); err != nil {
 		return store.Service{}, err

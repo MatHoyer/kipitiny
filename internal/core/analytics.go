@@ -385,6 +385,18 @@ func analyticsErr(err error, what string) error {
 	return err
 }
 
+// since keeps q to what svc collected: a hostname it took over brings no
+// earlier visits.
+func (q AnalyticsQuery) since(svc store.Service) AnalyticsQuery {
+	if q.From.Before(svc.AnalyticsSince) {
+		q.From = svc.AnalyticsSince
+	}
+	if !q.To.IsZero() && q.To.Before(q.From) {
+		q.To = q.From
+	}
+	return q
+}
+
 func (q AnalyticsQuery) query(hosts ...string) (analytics.Query, error) {
 	filters, err := analytics.ParseFilters(q.Filters)
 	if err != nil {
@@ -401,7 +413,7 @@ func (c *Core) ServiceAnalytics(ctx context.Context, serviceID string, q Analyti
 	if err != nil {
 		return AnalyticsView{}, err
 	}
-	aq, err := q.query(svc.Domain)
+	aq, err := q.since(svc).query(svc.Domain)
 	if err != nil {
 		return AnalyticsView{}, err
 	}
@@ -420,7 +432,7 @@ func (c *Core) ServiceVisits(ctx context.Context, serviceID string, q AnalyticsQ
 		return nil, err
 	}
 	q.Interval = 86400 // only checked by the server
-	aq, err := q.query(svc.Domain)
+	aq, err := q.since(svc).query(svc.Domain)
 	if err != nil {
 		return nil, err
 	}
@@ -434,6 +446,9 @@ func (c *Core) ServiceVisit(ctx context.Context, serviceID, visitID string) (ana
 		return analytics.VisitDetail{}, err
 	}
 	d, err := cl.Visit(ctx, []string{svc.Domain}, visitID)
+	if err == nil && d.StartedAt < svc.AnalyticsSince.Unix() {
+		return analytics.VisitDetail{}, fmt.Errorf("%w: visit %s", store.ErrNotFound, visitID)
+	}
 	return d, analyticsErr(err, "visit "+visitID)
 }
 
