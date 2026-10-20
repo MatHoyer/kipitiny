@@ -156,16 +156,42 @@ func TestClientIP(t *testing.T) {
 func TestFailLimiterBounded(t *testing.T) {
 	l := newFailLimiter(3, time.Minute)
 	for i := range maxTrackedIPs + 500 {
-		l.fail(fmt.Sprintf("2001:db8::%x", i))
+		l.fail(context.Background(), fmt.Sprintf("2001:db8::%x", i))
 	}
 	if n := len(l.fails); n > maxTrackedIPs {
 		t.Errorf("tracks %d addresses, max %d", n, maxTrackedIPs)
 	}
 	ip := "203.0.113.7"
 	for range 3 {
-		l.fail(ip)
+		l.fail(context.Background(), ip)
 	}
-	if l.allow(ip) {
+	if l.allow(context.Background(), ip) {
 		t.Error("allowed after 3 failures with a full map")
+	}
+}
+
+// Concurrent attempts count before they fail: they can't all pass the check.
+func TestFailLimiterConcurrent(t *testing.T) {
+	l := newFailLimiter(3, time.Minute)
+	ctx, done := context.WithCancel(context.Background())
+	for i := range 5 {
+		req, end := context.WithCancel(ctx) // one request each, ending with ctx
+		defer end()
+		if got := l.allow(req, "ip"); got != (i < 3) {
+			t.Errorf("attempt %d running: allowed %v", i, got)
+		}
+	}
+	done() // the requests end without failing
+	for range 100 {
+		l.mu.Lock()
+		n := len(l.busy["ip"])
+		l.mu.Unlock()
+		if n == 0 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if !l.allow(context.Background(), "ip") {
+		t.Error("refused once the attempts ended")
 	}
 }

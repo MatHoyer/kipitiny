@@ -71,7 +71,7 @@ func (a *API) deleteInvite(w http.ResponseWriter, r *http.Request) {
 // counts like failed logins.
 func (a *API) invite(w http.ResponseWriter, r *http.Request) {
 	ip := a.clientIP(r)
-	if !a.limiter.allow(ip) {
+	if !a.limiter.allow(r.Context(), ip) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return
 	}
@@ -83,7 +83,7 @@ func (a *API) invite(w http.ResponseWriter, r *http.Request) {
 	}
 	info, err := a.core.Invite(r.Context(), body.Token)
 	if err != nil {
-		a.limiter.fail(ip)
+		a.limiter.fail(r.Context(), ip)
 		a.fail(w, err)
 		return
 	}
@@ -93,7 +93,7 @@ func (a *API) invite(w http.ResponseWriter, r *http.Request) {
 // acceptInvite creates the invited account and signs it in.
 func (a *API) acceptInvite(w http.ResponseWriter, r *http.Request) {
 	ip := a.clientIP(r)
-	if !a.limiter.allow(ip) {
+	if !a.limiter.allow(r.Context(), ip) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return
 	}
@@ -107,7 +107,7 @@ func (a *API) acceptInvite(w http.ResponseWriter, r *http.Request) {
 	}
 	u, token, err := a.core.AcceptInvite(r.Context(), body.Token, body.Username, body.Password)
 	if err != nil {
-		a.limiter.fail(ip)
+		a.limiter.fail(r.Context(), ip)
 		a.fail(w, err)
 		return
 	}
