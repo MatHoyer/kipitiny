@@ -497,8 +497,12 @@ type Service struct {
 	// Domain is the public hostname; empty when not public.
 	Domain string `bun:"domain" json:"domain"`
 	// Analytics: the analytics server counts visits of Domain.
-	Analytics bool              `bun:"analytics" json:"analytics"`
-	Env       map[string]string `bun:"env" json:"env"`
+	Analytics bool `bun:"analytics" json:"analytics"`
+	// AnalyticsSince is when Domain started being counted for this service:
+	// the hostname's earlier visits were someone else's. Zero for a domain
+	// set before it was recorded.
+	AnalyticsSince time.Time         `bun:"analytics_since,nullzero" json:"-"`
+	Env            map[string]string `bun:"env" json:"env"`
 	// Secrets names the Env entries that are write-only; the others are
 	// plain variables.
 	Secrets []string `bun:"secrets" json:"secrets"`

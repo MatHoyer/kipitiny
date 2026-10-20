@@ -87,6 +87,9 @@ as for any data you keep about them. Prefer an opaque id over an email. It's
 stored in the analytics volume only, and deleted with the visit after the
 retention.
 
+An app's stats start when it got its domain (or turned analytics on): a
+domain another app used before brings none of that app's visits.
+
 ### Filters
 
 Click a value in any list (a page, a referrer, a country…) to narrow the whole

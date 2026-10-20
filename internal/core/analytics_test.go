@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/store"
@@ -71,5 +72,38 @@ func TestAnalyticsImageRef(t *testing.T) {
 	c.cfg.Analytics.Image = "registry.local/a:1"
 	if got := c.analyticsImageRef(); got != "registry.local/a:1" {
 		t.Errorf("override: %s", got)
+	}
+}
+
+// A service sees only the visits of its domain since it took it: a
+// hostname released by another project brings none of its history.
+func TestAnalyticsSince(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := c.CreateService(ctx, p.ID, ServiceInput{Name: "web", Image: "nginx", Domain: "shop.example.com", Port: 80, Analytics: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, _ := c.store.GetService(ctx, v.ID)
+	if svc.AnalyticsSince.IsZero() {
+		t.Fatal("no start recorded")
+	}
+	start := svc.AnalyticsSince
+	time.Sleep(time.Millisecond)
+	other := "other.example.com"
+	if svc, err = c.updateService(ctx, svc.ID, ServicePatch{Domain: &other}); err != nil || !svc.AnalyticsSince.After(start) {
+		t.Fatalf("after a domain change: %v, %v", svc.AnalyticsSince, err)
+	}
+	stored, _ := c.store.GetService(ctx, svc.ID)
+	if !stored.AnalyticsSince.Equal(svc.AnalyticsSince) {
+		t.Errorf("stored %v, want %v", stored.AnalyticsSince, svc.AnalyticsSince)
+	}
+	q := AnalyticsQuery{From: start.Add(-time.Hour), To: start.Add(-time.Minute)}.since(svc)
+	if !q.From.Equal(svc.AnalyticsSince) || q.To.Before(q.From) {
+		t.Errorf("query = %+v", q)
 	}
 }
