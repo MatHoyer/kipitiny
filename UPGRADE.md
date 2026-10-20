@@ -9,7 +9,7 @@ Add a notice under `## Unreleased` in the change that causes it, as
 `- warning: …` (disruptive) or `- info: …`; continue on indented lines. The
 release renames the section to its version.
 
-## Unreleased
+## 0.39.2
 - warning: A git sync that creates or changes services now needs the settings
   permission of whoever linked the repository (and deploy to deploy them). A
   project linked by a member with only the git permission stops syncing such
