@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -179,7 +180,7 @@ type credentials struct {
 }
 
 func (a *API) setup(w http.ResponseWriter, r *http.Request) {
-	if !a.limiter.allow(a.clientIP(r)) {
+	if !a.limiter.allow(r.Context(), a.clientIP(r)) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return
 	}
@@ -189,7 +190,7 @@ func (a *API) setup(w http.ResponseWriter, r *http.Request) {
 	}
 	u, token, err := a.core.Setup(r.Context(), c.SetupToken, c.Username, c.Password)
 	if err != nil {
-		a.limiter.fail(a.clientIP(r))
+		a.limiter.fail(r.Context(), a.clientIP(r))
 		a.fail(w, err)
 		return
 	}
@@ -199,7 +200,7 @@ func (a *API) setup(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) login(w http.ResponseWriter, r *http.Request) {
 	ip := a.clientIP(r)
-	if !a.limiter.allow(ip) {
+	if !a.limiter.allow(r.Context(), ip) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return
 	}
@@ -209,7 +210,7 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := a.core.Login(r.Context(), c.Username, c.Password)
 	if err != nil {
-		a.limiter.fail(ip)
+		a.limiter.fail(r.Context(), ip)
 		a.fail(w, err)
 		return
 	}
@@ -226,7 +227,7 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) loginMFA(w http.ResponseWriter, r *http.Request) {
 	ip := a.clientIP(r)
-	if !a.limiter.allow(ip) {
+	if !a.limiter.allow(r.Context(), ip) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return
 	}
@@ -239,7 +240,7 @@ func (a *API) loginMFA(w http.ResponseWriter, r *http.Request) {
 	}
 	u, token, err := a.core.LoginMFA(r.Context(), body.Ticket, body.Code)
 	if err != nil {
-		a.limiter.fail(ip)
+		a.limiter.fail(r.Context(), ip)
 		a.fail(w, err)
 		return
 	}
@@ -250,11 +251,11 @@ func (a *API) loginMFA(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) beginPasskeyLogin(w http.ResponseWriter, r *http.Request) {
 	ip := a.clientIP(r)
-	if !a.begins.allow(ip) {
+	if !a.begins.allow(r.Context(), ip) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return
 	}
-	a.begins.fail(ip) // every start counts: each one holds server memory
+	a.begins.fail(r.Context(), ip) // every start counts: each one holds server memory
 	opts, err := a.core.BeginPasskeyLogin(r.Context(), relyingParty(r))
 	if err != nil {
 		a.fail(w, err)
@@ -265,7 +266,7 @@ func (a *API) beginPasskeyLogin(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) finishPasskeyLogin(w http.ResponseWriter, r *http.Request) {
 	ip := a.clientIP(r)
-	if !a.limiter.allow(ip) {
+	if !a.limiter.allow(r.Context(), ip) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return
 	}
@@ -278,7 +279,7 @@ func (a *API) finishPasskeyLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	u, token, err := a.core.FinishPasskeyLogin(r.Context(), body.Ceremony, body.Credential)
 	if err != nil {
-		a.limiter.fail(ip)
+		a.limiter.fail(r.Context(), ip)
 		a.fail(w, err)
 		return
 	}
@@ -355,30 +356,56 @@ func clientIP(r *http.Request, trusted func(netip.Addr) bool, tunnel bool) strin
 const maxTrackedIPs = 10_000
 
 // failLimiter blocks an IP after too many failed attempts within a window.
+// Attempts still running count too: concurrent requests would otherwise all
+// pass the check before any of them fails.
 type failLimiter struct {
 	mu     sync.Mutex
 	max    int
 	window time.Duration
 	fails  map[string][]time.Time
+	busy   map[string]map[context.Context]bool // attempts running, by request
 }
 
 func newFailLimiter(max int, window time.Duration) *failLimiter {
-	return &failLimiter{max: max, window: window, fails: map[string][]time.Time{}}
+	return &failLimiter{max: max, window: window, fails: map[string][]time.Time{}, busy: map[string]map[context.Context]bool{}}
 }
 
-func (l *failLimiter) allow(ip string) bool {
+// allow reports whether ip may make an attempt, which then counts until it
+// fails or ctx (the request's) ends.
+func (l *failLimiter) allow(ctx context.Context, ip string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return len(l.recent(ip)) < l.max
+	if len(l.recent(ip))+len(l.busy[ip]) >= l.max {
+		return false
+	}
+	if l.busy[ip] == nil {
+		l.busy[ip] = map[context.Context]bool{}
+	}
+	l.busy[ip][ctx] = true
+	context.AfterFunc(ctx, func() {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.done(ctx, ip)
+	})
+	return true
 }
 
-func (l *failLimiter) fail(ip string) {
+// fail records ctx's attempt as failed.
+func (l *failLimiter) fail(ctx context.Context, ip string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.done(ctx, ip)
 	if _, ok := l.fails[ip]; !ok && len(l.fails) >= maxTrackedIPs {
 		l.evict()
 	}
 	l.fails[ip] = append(l.recent(ip), time.Now())
+}
+
+// done stops counting ctx's attempt as running; callers hold mu.
+func (l *failLimiter) done(ctx context.Context, ip string) {
+	if delete(l.busy[ip], ctx); len(l.busy[ip]) == 0 {
+		delete(l.busy, ip)
+	}
 }
 
 // evict drops every expired entry, then arbitrary ones if the map is still

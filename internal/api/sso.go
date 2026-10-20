@@ -81,11 +81,11 @@ func (a *API) startSSO(w http.ResponseWriter, r *http.Request, start core.SSOSta
 
 func (a *API) beginSSOLogin(w http.ResponseWriter, r *http.Request) {
 	ip := a.clientIP(r)
-	if !a.begins.allow(ip) {
+	if !a.begins.allow(r.Context(), ip) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return
 	}
-	a.begins.fail(ip) // every start holds server memory
+	a.begins.fail(r.Context(), ip) // every start holds server memory
 	var body struct {
 		ReturnTo string `json:"returnTo"`
 	}
@@ -102,11 +102,11 @@ func (a *API) beginSSOLogin(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) beginSSOInvite(w http.ResponseWriter, r *http.Request) {
 	ip := a.clientIP(r)
-	if !a.begins.allow(ip) {
+	if !a.begins.allow(r.Context(), ip) {
 		writeError(w, http.StatusTooManyRequests, "too many attempts, try again later")
 		return
 	}
-	a.begins.fail(ip)
+	a.begins.fail(r.Context(), ip)
 	var body struct {
 		Token    string `json:"token"`
 		Username string `json:"username"`
