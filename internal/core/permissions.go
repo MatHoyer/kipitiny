@@ -274,6 +274,11 @@ func checkServiceChange(ctx context.Context, old, svc store.Service) error {
 	if hv := volumesHostAccess(svc.Volumes); len(hv) > 0 && !reflect.DeepEqual(hv, volumesHostAccess(old.Volumes)) {
 		return fmt.Errorf("%w: only admins mount external volumes or set volume driver options", ErrForbidden)
 	}
+	for _, v := range svc.Volumes {
+		if i := slices.IndexFunc(old.Volumes, func(o store.Volume) bool { return o.Name == v.Name }); v.HostAccess() && !v.ReadOnly && i >= 0 && old.Volumes[i].ReadOnly {
+			return fmt.Errorf("%w: only admins make volume %s writable: it reaches outside the project", ErrForbidden, v.Name)
+		}
+	}
 	if !maps.Equal(svc.Env, old.Env) || !slices.Equal(svc.Secrets, old.Secrets) {
 		if err := Authorize(ctx, svc.ProjectID, PermEnv); err != nil {
 			return err

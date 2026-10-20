@@ -20,7 +20,8 @@ The tab starts by listing where files live:
 
 A database's files are read-only, volume and container alike. The database writes
 them while it runs, so a download isn't a consistent copy: use a
-[backup](/docs/backups) for that.
+[backup](/docs/backups) for that. A volume the app mounts read-only (`:ro`) is
+read-only here too.
 
 ## Browse
 

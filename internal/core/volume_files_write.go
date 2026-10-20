@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -70,6 +71,19 @@ func volumeEntry(svc store.Service, p string) (vol fileVolume, abs string, rel [
 	return vol, abs, strings.Split(strings.TrimPrefix(abs, vol.root()+"/"), "/"), nil
 }
 
+// writableEntry is volumeEntry for a path that is written: a volume the app
+// mounts read-only stays read-only here.
+func writableEntry(svc store.Service, p string) (vol fileVolume, abs string, rel []string, err error) {
+	vol, abs, rel, err = volumeEntry(svc, p)
+	if err != nil {
+		return vol, "", nil, err
+	}
+	if i := slices.IndexFunc(svc.Volumes, func(v store.Volume) bool { return v.Name == vol.name }); !vol.container && i >= 0 && svc.Volumes[i].ReadOnly {
+		return vol, "", nil, fmt.Errorf("%w: volume %s is mounted read-only", ErrInvalid, vol.name)
+	}
+	return vol, abs, rel, nil
+}
+
 // writableService loads a service whose volumes may be written.
 func (c *Core) writableService(ctx context.Context, id string) (store.Service, error) {
 	if err := c.requireOn(ctx, id, PermFilesEdit); err != nil {
@@ -110,7 +124,7 @@ func (c *Core) MakeVolumeDir(ctx context.Context, serviceID, p string) (err erro
 	if err != nil {
 		return err
 	}
-	vol, _, rel, err := volumeEntry(svc, p)
+	vol, _, rel, err := writableEntry(svc, p)
 	if err != nil {
 		return err
 	}
@@ -133,7 +147,7 @@ func (c *Core) WriteVolumeFile(ctx context.Context, serviceID, p string, r io.Re
 	if err != nil {
 		return VolumeEntry{}, err
 	}
-	vol, _, rel, err := volumeEntry(svc, p)
+	vol, _, rel, err := writableEntry(svc, p)
 	if err != nil {
 		return VolumeEntry{}, err
 	}
@@ -223,26 +237,31 @@ func (c *countingReader) Read(p []byte) (int, error) {
 // destination must not.
 func (c *Core) MoveVolumePath(ctx context.Context, serviceID, from, to string) (err error) {
 	defer func() { c.auditFiles(ctx, "move", serviceID, from+" -> "+to, err) }()
-	return c.transferVolumePath(ctx, serviceID, from, to, `mv "$src" "$e"`)
+	return c.transferVolumePath(ctx, serviceID, from, to, true, `mv "$src" "$e"`)
 }
 
 // CopyVolumePath copies an entry of svc's volumes (a folder recursively,
 // owners and modes kept), possibly to another of its volumes.
 func (c *Core) CopyVolumePath(ctx context.Context, serviceID, from, to string) (err error) {
 	defer func() { c.auditFiles(ctx, "copy", serviceID, from+" -> "+to, err) }()
-	return c.transferVolumePath(ctx, serviceID, from, to, `cp -a "$src" "$e"`)
+	return c.transferVolumePath(ctx, serviceID, from, to, false, `cp -a "$src" "$e"`)
 }
 
-func (c *Core) transferVolumePath(ctx context.Context, serviceID, from, to, op string) error {
+// move says op removes the source, which must then be writable too.
+func (c *Core) transferVolumePath(ctx context.Context, serviceID, from, to string, move bool, op string) error {
 	svc, err := c.writableService(ctx, serviceID)
 	if err != nil {
 		return err
 	}
-	fromVol, fromAbs, _, err := volumeEntry(svc, from)
+	entry := volumeEntry
+	if move {
+		entry = writableEntry
+	}
+	fromVol, fromAbs, _, err := entry(svc, from)
 	if err != nil {
 		return err
 	}
-	toVol, toAbs, _, err := volumeEntry(svc, to)
+	toVol, toAbs, _, err := writableEntry(svc, to)
 	if err != nil {
 		return err
 	}
@@ -282,7 +301,7 @@ func (c *Core) DeleteVolumePaths(ctx context.Context, serviceID string, paths []
 	args := make([]string, 0, 2*len(paths))
 	var where fileVolume // where the script runs: the helper, or one container
 	for i, p := range paths {
-		vol, abs, _, err := volumeEntry(svc, p)
+		vol, abs, _, err := writableEntry(svc, p)
 		if err != nil {
 			return err
 		}
