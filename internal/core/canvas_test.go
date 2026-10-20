@@ -34,6 +34,11 @@ func TestCanvasLayout(t *testing.T) {
 		t.Fatalf("layout = %v", got)
 	}
 
+	// A member sees no position of a project they can't see, nor of its map.
+	if got, err := c.CanvasLayout(WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: store.RoleMember})); err != nil || len(got) != 1 {
+		t.Errorf("member's layout = %v, %v", got, err)
+	}
+
 	for name, bad := range map[string]map[string]Point{
 		"unknown node": {"svc:nope": {}},
 		"bad kind":     {"thing:local": {}},

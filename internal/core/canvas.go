@@ -88,7 +88,8 @@ func (c *Core) CanvasLayout(ctx context.Context) (map[string]Point, error) {
 		return nil, err
 	}
 	for _, p := range ps {
-		if knownNode(known, p.Node) && !hidden[p.Node] {
+		view, _ := strings.CutPrefix(p.Node, "in:") // a project's map: hidden with the project
+		if project, _, _ := strings.Cut(view, "/"); knownNode(known, p.Node) && !hidden[p.Node] && !hidden["project:"+project] {
 			out[p.Node] = Point{X: p.X, Y: p.Y}
 		}
 	}
