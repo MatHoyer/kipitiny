@@ -295,3 +295,23 @@ services:
 		t.Errorf("warnings = %v", warnings)
 	}
 }
+
+// A branch's password manager references are left out of the preview: a
+// caller with deploy picks the branch.
+func TestPreviewSourceBranchRefs(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
+	parent := previewParent(t, c)
+	dir, commit := localRepo(t)
+	commit("services:\n  web:\n    image: nginx\n    environment:\n      LEAK: '{{ fake://Prod/billing/apikey }}'\n      PLAIN: plain\n")
+	if _, err := c.store.SaveProjectGit(ctx, store.ProjectGit{ProjectID: parent.ID, RepoURL: dir, Branch: "main", Path: "deploy/compose.yaml"}); err != nil {
+		t.Fatal(err)
+	}
+	f, _, _, err := c.previewSource(ctx, parent, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env := f.Services["web"].Environment; env["LEAK"] != "{{ project.LEAK }}" || env["PLAIN"] != "plain" {
+		t.Errorf("env = %v", env)
+	}
+}

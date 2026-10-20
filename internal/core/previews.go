@@ -423,10 +423,18 @@ func (c *Core) previewSource(ctx context.Context, parent store.Project, branch s
 		if err != nil {
 			return compose.File{}, nil, "", fmt.Errorf("%w: %s at %s: %v", ErrInvalid, g.Path, g.Branch, err)
 		}
+		// Password manager references are left out, as from an exported
+		// file: the branch is the caller's, and its value takes the
+		// preview variable of the same name.
+		hasRef := func(v string) bool { return len(secretRefs(map[string]string{"": v}, nil)) > 0 }
 		vars := map[string]string{}
 		for name, s := range f.Services {
 			for k, v := range s.Environment {
-				s.Environment[k] = compose.Escape(v)
+				if hasRef(v) {
+					s.Environment[k] = "{{ project." + k + " }}"
+				} else {
+					s.Environment[k] = compose.Escape(v)
+				}
 			}
 			// Marshal writes a secret file as the variable giving it: its
 			// content, from the repository or a {{ project.NAME }}.
@@ -434,6 +442,9 @@ func (c *Core) previewSource(ctx context.Context, parent store.Project, branch s
 				if file.Secret {
 					v := varName(name, file.Source)
 					vars[v], s.Files[i].Content = string(file.Content), []byte(v)
+					if hasRef(vars[v]) {
+						vars[v] = "{{ project." + nonVarRe.ReplaceAllString(strings.ToUpper(strings.TrimPrefix(file.Source, "secret:")), "_") + " }}"
+					}
 				} else {
 					s.Files[i].Content = []byte(compose.Escape(string(file.Content)))
 				}
