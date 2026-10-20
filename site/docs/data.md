@@ -120,7 +120,8 @@ or export the table).
 columns' names; results can be copied as CSV or JSON. The Redis console works like
 `redis-cli`, and MongoDB's like `mongosh`: a transcript of commands and their
 printout, ↑ for past commands. Past
-queries are kept per database in this browser only (*History*).
+queries are kept per database in this browser only (*History*). `psql`
+meta-commands (`\dt`, `\!`…) don't run: query `information_schema` instead.
 
 - By default the console is **read-only**: the PostgreSQL session refuses writes,
   MySQL, MariaDB and MongoDB run as the read-only user, and Redis commands that
