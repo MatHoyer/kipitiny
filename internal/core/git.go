@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"time"
 
@@ -179,7 +180,7 @@ func (c *Core) gitFromInput(ctx context.Context, projectID string, in GitInput) 
 		WebhookSecret: old.WebhookSecret,
 	}
 	if a, ok := ActorFrom(ctx); ok {
-		g.LinkedBy = a.UserID
+		g.LinkedBy, g.LinkedToken = a.UserID, a.TokenID
 	}
 	if g.Branch == "" {
 		g.Branch = "main"
@@ -331,7 +332,8 @@ func (c *Core) syncGit(ctx context.Context, g store.ProjectGit, force, dryRun bo
 }
 
 // asLinker runs a sync without an actor (the poll loop, a webhook) as the
-// user who linked the repository.
+// user who linked the repository, within the restriction of the token that
+// did if it was a restricted one.
 func (c *Core) asLinker(ctx context.Context, g store.ProjectGit) (context.Context, error) {
 	if _, ok := ActorFrom(ctx); ok || g.LinkedBy == "" {
 		return ctx, nil
@@ -345,6 +347,21 @@ func (c *Core) asLinker(ctx context.Context, g store.ProjectGit) (context.Contex
 	a, err := c.UserActor(ctx, u)
 	if err != nil {
 		return ctx, err
+	}
+	if g.LinkedToken != "" {
+		ts, err := c.store.ListAPITokens(ctx, u.ID)
+		if err != nil {
+			return ctx, err
+		}
+		i := slices.IndexFunc(ts, func(t store.APIToken) bool { return t.ID == g.LinkedToken })
+		if i < 0 {
+			return ctx, fmt.Errorf("%w: the token that linked this repository was removed; link it again", ErrForbidden)
+		}
+		if ts[i].Restricted {
+			if a, err = c.restricted(ctx, a, ts[i]); err != nil {
+				return ctx, err
+			}
+		}
 	}
 	return WithActor(ctx, a), nil
 }

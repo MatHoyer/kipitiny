@@ -596,8 +596,11 @@ type ProjectGit struct {
 	Applied map[string]string `bun:"applied" json:"applied"`
 	// LinkedBy is the user whose permissions syncs run with; empty for links
 	// made before there were members.
-	LinkedBy  string    `bun:"linked_by" json:"linkedBy,omitempty"`
-	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
+	LinkedBy string `bun:"linked_by" json:"linkedBy,omitempty"`
+	// LinkedToken is the restricted token that linked it, whose restriction
+	// syncs keep; empty when a user or an unrestricted token did.
+	LinkedToken string    `bun:"linked_token" json:"-"`
+	CreatedAt   time.Time `bun:"created_at" json:"createdAt"`
 }
 
 // Volume is a named volume mounted at Path in every replica of an app.

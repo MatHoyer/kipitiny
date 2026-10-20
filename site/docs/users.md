@@ -135,8 +135,11 @@ their access as you change it. Removing a user revokes their tokens. A
 [restricted token](/docs/api#restricted-tokens) gets only some of its owner's
 projects and permissions.
 
-A git-linked project syncs with the permissions of the user who linked it. If
-that user is removed, syncs stop until someone links the repository again.
+A git-linked project syncs with the permissions of the user who linked it,
+within the token's restriction when a restricted token linked it. A sync that
+changes services needs the settings permission (and deploy to deploy them), as
+applying the file by hand would. If that user or token is removed, syncs stop
+until someone links the repository again.
 Members can't link a repository by URL on a loopback, private or link-local
 address (the manager would fetch it from inside your network); a repository
 from a [git provider](/docs/compose#git-providers) is fine.

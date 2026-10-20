@@ -1208,6 +1208,7 @@ func (s *Store) SaveProjectGit(ctx context.Context, g store.ProjectGit) (store.P
 		Set("auto_sync = EXCLUDED.auto_sync").
 		Set("poll_seconds = EXCLUDED.poll_seconds").
 		Set("linked_by = EXCLUDED.linked_by").
+		Set("linked_token = EXCLUDED.linked_token").
 		Exec(ctx)
 	if err != nil {
 		return store.ProjectGit{}, mapErr(err)

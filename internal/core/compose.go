@@ -359,8 +359,23 @@ func (c *Core) applyCompose(ctx context.Context, projectID string, data []byte, 
 		return nil, err
 	}
 	a, err := c.planCompose(ctx, project, existing, data, opts, git)
-	if err != nil || opts.DryRun {
+	if err != nil {
 		return a, err
+	}
+	// The compose route needs settings; a sync, run with the git permission,
+	// needs what applying the file by hand would.
+	if git && (len(a.plan.Create) > 0 || len(a.plan.Update) > 0) {
+		if err := check(ctx, projectID, PermSettings); err != nil {
+			return a, err
+		}
+		if opts.Deploy {
+			if err := check(ctx, projectID, PermDeploy); err != nil {
+				return a, err
+			}
+		}
+	}
+	if opts.DryRun {
+		return a, nil
 	}
 	if len(a.deletes) > 0 { // pruning deletes apps with their data
 		if err := check(ctx, projectID, PermDelete); err != nil {
