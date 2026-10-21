@@ -22,6 +22,9 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags=
 # Runs as root: it needs the host Docker socket, which is root-equivalent anyway.
 FROM gcr.io/distroless/static-debian12
 COPY --from=build /out/kipitiny /kipitiny
+# Owned by nonroot for `kipitiny analytics`, which runs as 65532 with its own
+# volume here: a new volume takes this ownership. The manager, root, doesn't mind.
+COPY --from=build --chown=65532:65532 /tmp /data
 ENV KIPITINY_DATA_DIR=/data
 VOLUME /data
 EXPOSE 3000

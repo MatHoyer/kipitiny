@@ -28,8 +28,8 @@ stores none of it.
 
 The app's **Analytics** tab shows the numbers, and the exact tag to copy.
 
-The first time, the manager pulls `ghcr.io/mathoyer/kipitiny-analytics` (the
-same version as the manager), a container of a few MB of memory.
+The server runs from the manager's own image, so there's nothing to pull: a
+container of a few MB of memory, and none while analytics are off.
 
 ## What is counted
 

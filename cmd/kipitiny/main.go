@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/MatHoyer/kipitiny/internal/analytics"
 	"github.com/MatHoyer/kipitiny/internal/api"
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/core"
@@ -54,6 +55,16 @@ func main() {
 		case "preview":
 			// Run from CI against a manager's API (previewCmd).
 			run = previewCmd
+		case "analytics":
+			// The analytics server's container, started by the manager from
+			// its own image (core.ensureAnalytics).
+			if len(os.Args) == 3 && os.Args[2] == "healthcheck" {
+				if analytics.Healthcheck() != nil {
+					os.Exit(1)
+				}
+				os.Exit(0)
+			}
+			run = serveAnalytics
 		case "healthcheck":
 			// Docker HEALTHCHECK for the manager image, which has no curl.
 			if probe.Check(healthURL(config.Load().Addr)) != nil {
@@ -61,7 +72,7 @@ func main() {
 			}
 			os.Exit(0)
 		default:
-			fmt.Fprintf(os.Stderr, "usage: %s [reset-password <username> | disable-2fa <username> | make-admin <username> | allow-password-login | deploy --service <project/service> [--tag <tag>] | preview --project <project> --name <name> [--tag <service>=<tag>] [--close] | healthcheck]\n", os.Args[0])
+			fmt.Fprintf(os.Stderr, "usage: %s [reset-password <username> | disable-2fa <username> | make-admin <username> | allow-password-login | analytics [healthcheck] | deploy --service <project/service> [--tag <tag>] | preview --project <project> --name <name> [--tag <service>=<tag>] [--close] | healthcheck]\n", os.Args[0])
 			os.Exit(2)
 		}
 	}
@@ -187,6 +198,12 @@ func serve() error {
 }
 
 // selfUpdate replaces the manager container os.Args[2] with image os.Args[3].
+func serveAnalytics() error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return analytics.Serve(ctx, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+}
+
 func selfUpdate() error {
 	if len(os.Args) != 4 {
 		return errors.New("usage: self-update <container> <image>")

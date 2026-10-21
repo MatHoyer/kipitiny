@@ -46,16 +46,6 @@ jobs:
           push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      # Same version as the manager, which runs the tag matching its own.
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: images/analytics/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          tags: ghcr.io/mathoyer/kipitiny-analytics:${{ github.ref_name }}
-          push: true
-          cache-from: type=gha,scope=analytics
-          cache-to: type=gha,mode=max,scope=analytics
       - name: GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
