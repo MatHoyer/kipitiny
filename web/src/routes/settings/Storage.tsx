@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, KeyRound, Lock, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, FolderSearch, KeyRound, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { CheckboxField, ChoiceTile, CopyField, ErrorText, Mono, Tag } from "@/components/common";
 import { TestDialog, type PlannedStep } from "@/components/test-dialog";
@@ -18,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
-import { api, type BackupTarget, type TargetInput } from "@/api";
+import { api, type BackupTarget, type ScanResult, type TargetInput } from "@/api";
 import {
   storageForm,
   storageIcon,
@@ -78,6 +79,7 @@ export function Storage() {
                 plan={storageTestPlan(t)}
                 run={(onStep) => api.testBackupTarget(t.id, onStep)}
               />
+              <ScanButton target={t} />
               {t.ageRecipient ? (
                 <KeyButton targetId={t.id} name={t.name} />
               ) : (
@@ -151,6 +153,77 @@ export function Storage() {
         </DialogContent>
       </Dialog>
     </SettingsPage>
+  );
+}
+
+/** Adopts the backups another manager left on the storage, and says what was found. */
+function ScanButton({ target }: { target: BackupTarget }) {
+  const qc = useQueryClient();
+  const [result, setResult] = useState<ScanResult | null>(null);
+  const scan = useMutation({
+    meta: { error: `Couldn't scan ${target.name}` },
+    mutationFn: () => api.scanBackupTarget(target.id),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["backups"] });
+      setResult(r);
+    },
+  });
+  const n = result?.adopted.length ?? 0;
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        title="Find backups from another manager"
+        aria-label="Find backups from another manager"
+        loading={scan.isPending}
+        onClick={() => scan.mutate()}
+      >
+        <FolderSearch />
+      </Button>
+      <Dialog open={result !== null} onOpenChange={(o) => !o && setResult(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{n === 0 ? `No new backups on ${target.name}` : `${n} backup${n === 1 ? "" : "s"} added`}</DialogTitle>
+            <DialogDescription>
+              Backups another manager left here, with their record, are added to the history. They belong to no schedule, so
+              retention never deletes them.
+            </DialogDescription>
+          </DialogHeader>
+          {result && (
+            <ul className="flex flex-col gap-1.5 text-sm">
+              {n > 0 && (
+                <li>
+                  {n - result.orphans} attached to their service here
+                  {result.orphans > 0 && (
+                    <>
+                      , {result.orphans} with no matching service: open one in{" "}
+                      <Link className="font-medium hover:underline" to="/backups" onClick={() => setResult(null)}>
+                        Backups
+                      </Link>{" "}
+                      to restore it into a service you pick
+                    </>
+                  )}
+                  .
+                </li>
+              )}
+              {result.known > 0 && <li className="text-muted-foreground">{result.known} already in the history.</li>}
+              {result.noRecord > 0 && (
+                <li className="text-muted-foreground">
+                  {result.noRecord} file{result.noRecord === 1 ? "" : "s"} without a record left alone (backups made before 0.40,
+                  manager snapshots).
+                </li>
+              )}
+              {result.unreadable.map((u) => (
+                <li key={u.key} className="text-destructive">
+                  <Mono>{u.key}</Mono>: {u.error}
+                </li>
+              ))}
+            </ul>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

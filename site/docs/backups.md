@@ -85,6 +85,28 @@ age -d -i key.txt sql-20260930T030000Z-xxxx.sql.gz.age | gunzip | mysql -h 127.0
 age -d -i key.txt docs-20260930T030000Z-xxxx.archive.gz.age | mongorestore --archive --gzip --uri "$MONGO_URL"
 ```
 
+## Moving to another manager
+
+A manager only lists the backups it made. To take a project's history along
+(a project moved with *Export with secrets* → *Import*, a rebuilt server), give
+the new manager the same storage: same bucket and prefix, and if it is
+encrypted, the old manager's key in *Use an existing key*. Then Settings ›
+Storage › *Find backups from another manager* (folder icon; MCP `scan_storage`)
+reads the record next to each backup and adds the ones this manager doesn't
+know to Backups:
+
+- A backup goes to the service with the same project and service name, if it
+  can restore into it (a PostgreSQL dump into PostgreSQL, a MySQL dump into
+  MySQL…). The others are listed without a service: open one and *Restore
+  into…* a service you pick.
+- They keep their date, size, checksum and versions, but belong to no
+  schedule: retention never deletes them. Delete them by hand.
+- Only backups with a record are found: those made since 0.40. Older ones and
+  manager snapshots are left alone; restore them [by hand](#encryption).
+- Both managers then see the same files: one deleting a backup (by hand or by
+  its retention) deletes it for the other too, which then fails to restore it.
+  Scanning again only adds what's new.
+
 ## Manager state
 
 The manager's own SQLite file (projects, services, schedules, credentials, keys)

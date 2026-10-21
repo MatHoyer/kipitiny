@@ -405,6 +405,17 @@ export type TargetInput = Omit<BackupTarget, "id" | "kind" | "createdAt" | "ageR
   ageIdentity?: string;
 };
 
+/** What scanning a storage for another manager's backups found. */
+export type ScanResult = {
+  adopted: Backup[];
+  /** Adopted backups with no service of the same project, name and kind here. */
+  orphans: number;
+  known: number;
+  /** Files without a record: older backups, manager snapshots, anything else. */
+  noRecord: number;
+  unreadable: { key: string; error: string }[];
+};
+
 /** dump: a MySQL, MariaDB or MongoDB dump (serviceKind tells which). */
 export type BackupKind = "postgres" | "dump" | "volume" | "manager";
 
@@ -1520,6 +1531,7 @@ export const api = {
   deleteBackupTarget: (id: string) => request<void>(`/storage/${id}`, { method: "DELETE" }),
   encryptBackupTarget: (id: string, ageIdentity = "") =>
     request<BackupTarget>(`/storage/${id}/encrypt`, json("POST", { ageIdentity })),
+  scanBackupTarget: (id: string) => request<ScanResult>(`/storage/${id}/scan`, { method: "POST" }),
   testBackupTarget: (id: string, onStep?: (step: string) => void) => test(`/storage/${id}/test`, onStep),
 
   backups: (projectId?: string) => request<Backup[]>(`/backups${projectId ? `?projectId=${projectId}` : ""}`),

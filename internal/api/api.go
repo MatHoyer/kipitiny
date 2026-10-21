@@ -163,6 +163,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("GET /api/storage/{id}/key", a.storageKey)
 	handle("POST /api/storage/{id}/test", a.testStorage)
 	handle("POST /api/storage/{id}/encrypt", a.encryptStorage)
+	handle("POST /api/storage/{id}/scan", a.scanStorage)
 	handle("POST /api/manager/backups", a.backupManager)
 	handle("GET /api/manager/schedules", a.listManagerSchedules)
 	handle("POST /api/manager/schedules", a.createManagerSchedule)

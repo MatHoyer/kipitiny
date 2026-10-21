@@ -801,7 +801,10 @@ func (s *Store) DeleteBackupTarget(ctx context.Context, id string) error {
 }
 
 func (s *Store) CreateBackup(ctx context.Context, b store.Backup) (store.Backup, error) {
-	b.ID, b.CreatedAt = ids.New(), now()
+	b.ID = ids.New()
+	if b.CreatedAt.IsZero() { // set when adopting another manager's backup
+		b.CreatedAt = now()
+	}
 	if b.Kind == "" {
 		b.Kind = store.BackupKindPostgres
 	}

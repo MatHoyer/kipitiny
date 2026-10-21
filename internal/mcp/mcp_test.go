@@ -91,7 +91,7 @@ func TestTools(t *testing.T) {
 	}
 	for _, want := range []string{"list_projects", "list_services", "get_app_status", "get_logs", "get_deployment_log", "deploy", "deploy_image", "rollback",
 		"service_action", "create_project", "rename_project", "rename_service", "set_project_tags", "set_service_tags", "get_project_git", "link_project_git", "sync_project_git",
-		"backup_database", "list_backups", "list_storage", "restore_database", "list_databases", "create_database", "list_tables", "read_table",
+		"backup_database", "list_backups", "list_storage", "scan_storage", "restore_database", "list_databases", "create_database", "list_tables", "read_table",
 		"scan_redis_keys", "get_redis_key", "query_database", "get_connection", "delete_service", "delete_project", "list_backup_schedules",
 		"set_backup_schedule", "delete_backup_schedule", "set_uptime_check", "delete_uptime_check", "backup_project", "verify_backup",
 		"delete_backup", "list_restores", "get_analytics", "list_deployments", "list_git_repos", "list_git_branches", "get_manager_status", "get_topology",

@@ -143,6 +143,8 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 		Description: "Backups of a service with status, size, storage (targetId) and restore-test result."}, t.listBackups)
 	addTool(s, &mcp.Tool{Name: "list_storage", Annotations: readOnly,
 		Description: "Where kipitiny can store files (local disk, S3, drives), with their IDs and whether files are encrypted."}, t.listStorage)
+	addTool(s, &mcp.Tool{Name: "scan_storage",
+		Description: "Adopt the backups another kipitiny manager left on a storage (a moved project, a rebuilt server): each one with a record (<backup>.json, written since 0.40) not yet in the history is added, attached to the service with the same project, name and kind, else listed as an orphan to restore into a service picked by hand. Encrypted ones need the storage encrypted with that manager's key (Settings › Storage). Adopted backups are never pruned. Needs admin."}, t.scanStorage)
 	addTool(s, &mcp.Tool{Name: "restore_database", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Replace a service's data with a backup. Destructive: confirm must repeat the service name. For a PostgreSQL dump, apps referencing the database are stopped meanwhile; for a volume archive, the service itself is."}, t.restoreDatabase)
 
@@ -748,6 +750,20 @@ func (t *tools) listStorage(ctx context.Context, _ *mcp.CallToolRequest, _ struc
 		out.Storage[i] = StorageSummary{ID: s.ID, Name: s.Name, Kind: string(s.Kind), Encrypted: s.Encrypted()}
 	}
 	return nil, out, nil
+}
+
+type scanStorageIn struct {
+	Storage string `json:"storage" jsonschema:"storage ID (see list_storage)"`
+}
+
+func (t *tools) scanStorage(ctx context.Context, _ *mcp.CallToolRequest, in scanStorageIn) (*mcp.CallToolResult, core.ScanResult, error) {
+	out, err := mutate(ctx, t.c, "scan_storage", in.Storage, func() (core.ScanResult, error) {
+		if err := core.RequireAdmin(ctx); err != nil {
+			return core.ScanResult{}, err
+		}
+		return t.c.ScanBackupTarget(ctx, in.Storage)
+	})
+	return nil, out, err
 }
 
 type listBackupsIn struct {
