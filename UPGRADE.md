@@ -9,6 +9,12 @@ Add a notice under `## Unreleased` in the change that causes it, as
 `- warning: …` (disruptive) or `- info: …`; continue on indented lines. The
 release renames the section to its version.
 
+## Unreleased
+- info: The analytics server now runs from the manager's image
+  (`ghcr.io/mathoyer/kipitiny-analytics` is no longer released): with analytics
+  on, its container is recreated once, missing a few seconds of hits; the
+  data is kept. `KIPITINY_ANALYTICS_IMAGE` is ignored.
+
 ## 0.39.2
 - warning: A git sync that creates or changes services now needs the settings
   permission of whoever linked the repository (and deploy to deploy them). A

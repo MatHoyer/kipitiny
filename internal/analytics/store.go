@@ -1,5 +1,5 @@
 // Package analytics is kipitiny's cookieless web analytics: the server run
-// as its own container (cmd/kipitiny-analytics), with its events in its own
+// as its own container (`kipitiny analytics`), with its events in its own
 // SQLite file, and the client the manager reads stats through.
 package analytics
 

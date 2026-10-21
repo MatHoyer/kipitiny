@@ -35,18 +35,11 @@ type Config struct {
 	Tunnel        Tunnel
 	ManagerBackup ManagerBackup
 	ProtonPass    ProtonPass
-	Analytics     Analytics
 }
 
 // ProtonPass is the helper image the manager runs pass-cli from, pulled on
 // first use.
 type ProtonPass struct {
-	Image string
-}
-
-type Analytics struct {
-	// Image overrides the analytics server's (default: the one released
-	// with this version).
 	Image string
 }
 
@@ -115,7 +108,6 @@ func Load() Config {
 		ProtonPass: ProtonPass{
 			Image: env("KIPITINY_PROTONPASS_IMAGE", "ghcr.io/mathoyer/kipitiny-protonpass:2.4.2"),
 		},
-		Analytics: Analytics{Image: env("KIPITINY_ANALYTICS_IMAGE", "")},
 		ManagerBackup: ManagerBackup{
 			Cron:     managerCron(env("KIPITINY_MANAGER_BACKUP_CRON", "@daily")),
 			TargetID: env("KIPITINY_MANAGER_BACKUP_TARGET", "local"),

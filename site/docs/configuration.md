@@ -21,7 +21,6 @@ order: 15
 | `KIPITINY_CLOUDFLARE_TUNNEL_TOKEN` | — | Receive traffic through a Cloudflare Tunnel instead of ports 80/443 |
 | `KIPITINY_CLOUDFLARED_IMAGE` | `cloudflare/cloudflared:2026.9.3` | |
 | `KIPITINY_PROTONPASS_IMAGE` | `ghcr.io/mathoyer/kipitiny-protonpass:2.4.2` | Proton Pass CLI image, pulled on first connect ([Password managers](/docs/services#password-managers)) |
-| `KIPITINY_ANALYTICS_IMAGE` | `ghcr.io/mathoyer/kipitiny-analytics:<version>` | The [analytics](/docs/analytics) server's image, when analytics are on. |
 | `KIPITINY_MANAGER_BACKUP_CRON` | `@daily` | First-start schedule for snapshots of the manager's state (`off` for none) |
 | `KIPITINY_MANAGER_BACKUP_TARGET` | `local` | Storage ID for that schedule |
 | `KIPITINY_MANAGER_BACKUP_KEEP` | `14` | Snapshots that schedule keeps |

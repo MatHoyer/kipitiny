@@ -29,7 +29,6 @@ const (
 	analyticsName      = "kipitiny-analytics"
 	analyticsVolume    = "kipitiny-analytics"
 	analyticsComponent = "analytics"
-	analyticsImage     = "ghcr.io/mathoyer/kipitiny-analytics"
 	analyticsRouter    = "kipitiny-analytics"
 
 	defaultAnalyticsRetention = 365
@@ -157,17 +156,14 @@ func (c *Core) DeleteAnalyticsData(ctx context.Context) error {
 
 var releaseRe = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
-// analyticsImageRef is KIPITINY_ANALYTICS_IMAGE, else the image released
-// with this version (:dev for builds between releases, `make
-// docker-analytics`).
+// analyticsImageRef is the manager's own image at this version (:dev for
+// builds between releases, `make docker`): the server is its `analytics`
+// command.
 func (c *Core) analyticsImageRef() string {
-	if c.cfg.Analytics.Image != "" {
-		return c.cfg.Analytics.Image
-	}
 	if releaseRe.MatchString(c.cfg.Version) {
-		return analyticsImage + ":" + c.cfg.Version
+		return c.cfg.Update.Image + ":" + c.cfg.Version
 	}
-	return analyticsImage + ":dev"
+	return c.cfg.Update.Image + ":dev"
 }
 
 func (c *Core) analyticsSpec(ctx context.Context, st analyticsState) client.ContainerCreateOptions {
@@ -190,6 +186,15 @@ func (c *Core) analyticsSpec(ctx context.Context, st analyticsState) client.Cont
 		Name: analyticsName,
 		Config: &container.Config{
 			Image: c.analyticsImageRef(),
+			Cmd:   []string{"analytics"},
+			// The image runs the manager as root; the server needs none of it
+			// (its volume is owned by nonroot, see the Dockerfile).
+			User: "65532:65532",
+			// The image's own checks the manager's port.
+			Healthcheck: &container.HealthConfig{
+				Test:     []string{"CMD", "/kipitiny", "analytics", "healthcheck"},
+				Interval: 30 * time.Second, Timeout: 5 * time.Second, StartPeriod: 10 * time.Second, Retries: 3,
+			},
 			// The token in the environment keeps it out of `ps`.
 			Env: []string{
 				"KIPITINY_ANALYTICS_TOKEN=" + st.Token,
