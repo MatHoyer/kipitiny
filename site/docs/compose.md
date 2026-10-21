@@ -306,4 +306,4 @@ Settings › **Git providers** gives the manager read access to private reposito
 
 1. On the old manager: project › **Compose** › **Export with secrets** (your password is asked again). Keep the zip safe: its `.env` holds every credential of the project.
 2. On the new one: create the project, then **Compose** › **Import** with `compose.yaml` and `.env`.
-3. Data moves with backups: back up the databases and volumes to a storage both managers reach, and restore them on the new services.
+3. Data moves with backups: back up the databases and volumes to a storage both managers reach, add that storage on the new manager (with the old one's key if it is encrypted) and [find its backups](/docs/backups#moving-to-another-manager), then restore them on the new services.

@@ -164,6 +164,7 @@ var routeAccess = map[string]access{
 	"GET /api/storage/{id}/key":                  admin,
 	"POST /api/storage/{id}/test":                admin,
 	"POST /api/storage/{id}/encrypt":             admin,
+	"POST /api/storage/{id}/scan":                admin,
 	"POST /api/manager/backups":                  admin,
 	"GET /api/manager/schedules":                 admin,
 	"POST /api/manager/schedules":                admin,

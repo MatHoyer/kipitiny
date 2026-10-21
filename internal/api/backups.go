@@ -125,6 +125,15 @@ func (a *API) encryptStorage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, t)
 }
 
+func (a *API) scanStorage(w http.ResponseWriter, r *http.Request) {
+	res, err := a.core.ScanBackupTarget(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
 func (a *API) listStorage(w http.ResponseWriter, r *http.Request) {
 	ts, err := a.core.ListBackupTargets(r.Context())
 	if err != nil {

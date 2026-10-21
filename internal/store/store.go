@@ -172,6 +172,7 @@ type Store interface {
 	// DeleteBackupTarget returns ErrConflict while backups reference it.
 	DeleteBackupTarget(ctx context.Context, id string) error
 
+	// CreateBackup keeps b.CreatedAt when set (an adopted backup).
 	CreateBackup(ctx context.Context, b Backup) (Backup, error)
 	GetBackup(ctx context.Context, id string) (Backup, error)
 	ListBackups(ctx context.Context, f BackupFilter) ([]Backup, error)
