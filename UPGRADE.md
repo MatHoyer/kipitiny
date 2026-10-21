@@ -9,7 +9,7 @@ Add a notice under `## Unreleased` in the change that causes it, as
 `- warning: …` (disruptive) or `- info: …`; continue on indented lines. The
 release renames the section to its version.
 
-## Unreleased
+## 0.41.0
 - info: The analytics server now runs from the manager's image
   (`ghcr.io/mathoyer/kipitiny-analytics` is no longer released): with analytics
   on, its container is recreated once, missing a few seconds of hits; the
