@@ -61,6 +61,16 @@ func TestLocal(t *testing.T) {
 		}
 	}
 
+	if got := listKeys(t, l, ""); !slices.Equal(got, []string{"escape", "etc/passwd", "shop/db/a.dump"}) {
+		t.Errorf("list = %q", got)
+	}
+	if got := listKeys(t, l, "shop/"); !slices.Equal(got, []string{"shop/db/a.dump"}) {
+		t.Errorf("list shop/ = %q", got)
+	}
+	if got := listKeys(t, l, "nowhere/"); len(got) != 0 {
+		t.Errorf("list nowhere/ = %q", got)
+	}
+
 	if err := l.Delete(ctx, "shop/db/a.dump"); err != nil {
 		t.Fatal(err)
 	}
@@ -81,4 +91,17 @@ func TestLocalCheckSteps(t *testing.T) {
 	if want := []string{StepWrite, StepDelete}; !slices.Equal(steps, want) {
 		t.Errorf("steps = %q, want %q", steps, want)
 	}
+}
+
+func listKeys(t *testing.T, st Storage, prefix string) []string {
+	t.Helper()
+	var keys []string
+	for obj, err := range st.List(context.Background(), prefix) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		keys = append(keys, obj.Key)
+	}
+	slices.Sort(keys)
+	return keys
 }

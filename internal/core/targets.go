@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"filippo.io/age"
+
 	"github.com/MatHoyer/kipitiny/internal/storage"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -26,6 +28,9 @@ type TargetInput struct {
 	// Encrypt generates an age key for a new target; existing ones use
 	// EncryptBackupTarget.
 	Encrypt bool `json:"encrypt"`
+	// AgeIdentity, when set, encrypts with this existing key instead (an
+	// AGE-SECRET-KEY-1… line): another manager's, to read its backups.
+	AgeIdentity string `json:"ageIdentity"`
 }
 
 func (c *Core) openStorage(t store.BackupTarget) (storage.Storage, error) {
@@ -54,9 +59,9 @@ func (c *Core) CreateBackupTarget(ctx context.Context, in TargetInput) (store.Ba
 	if err := c.checkTarget(ctx, &t); err != nil {
 		return store.BackupTarget{}, err
 	}
-	if in.Encrypt {
+	if in.Encrypt || in.AgeIdentity != "" {
 		var err error
-		if t.AgeIdentity, t.AgeRecipient, err = newAgeKey(); err != nil {
+		if t.AgeIdentity, t.AgeRecipient, err = c.targetKey(ctx, t, in.AgeIdentity); err != nil {
 			return store.BackupTarget{}, err
 		}
 	}
@@ -93,11 +98,19 @@ func (c *Core) DeleteBackupTarget(ctx context.Context, id string) error {
 	return err
 }
 
-// EncryptBackupTarget gives a target (the local one too) an age key: backups
-// made from now on are encrypted, earlier ones stay readable as they are.
-// It can't be turned off: the key must outlive the backups it encrypted.
-func (c *Core) EncryptBackupTarget(ctx context.Context, id string) (store.BackupTarget, error) {
-	identity, recipient, err := newAgeKey()
+// EncryptBackupTarget gives a target (the local one too) an age key, a new
+// one or identity: backups made from now on are encrypted, earlier ones
+// stay readable as they are. It can't be turned off: the key must outlive
+// the backups it encrypted.
+func (c *Core) EncryptBackupTarget(ctx context.Context, id, identity string) (store.BackupTarget, error) {
+	t, err := c.store.GetBackupTarget(ctx, id)
+	if err != nil {
+		return store.BackupTarget{}, err
+	}
+	if t.Encrypted() {
+		return store.BackupTarget{}, fmt.Errorf("%w: this storage is already encrypted", ErrInvalid)
+	}
+	identity, recipient, err := c.targetKey(ctx, t, identity)
 	if err != nil {
 		return store.BackupTarget{}, err
 	}
@@ -106,8 +119,47 @@ func (c *Core) EncryptBackupTarget(ctx context.Context, id string) (store.Backup
 	} else if err != nil {
 		return store.BackupTarget{}, err
 	}
-	t, err := c.store.GetBackupTarget(ctx, id)
+	t, err = c.store.GetBackupTarget(ctx, id)
 	return maskedTarget(t), err
+}
+
+// targetKey returns a new age key, or identity's once it opens the encrypted
+// objects already on t: a wrong key would only show at the first restore.
+func (c *Core) targetKey(ctx context.Context, t store.BackupTarget, identity string) (string, string, error) {
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		return newAgeKey()
+	}
+	id, err := age.ParseX25519Identity(identity)
+	if err != nil {
+		return "", "", fmt.Errorf("%w: not an age key (AGE-SECRET-KEY-1…): %v", ErrInvalid, err)
+	}
+	st, err := c.openStorage(t)
+	if err != nil {
+		return "", "", fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	for obj, err := range st.List(ctx, "") {
+		if err != nil {
+			return "", "", fmt.Errorf("%w: cannot list the storage to check the key: %v", ErrInvalid, err)
+		}
+		if !strings.HasSuffix(obj.Key, ".age") {
+			continue
+		}
+		rc, err := st.Get(ctx, obj.Key)
+		if err != nil {
+			return "", "", fmt.Errorf("%w: cannot read %s to check the key: %v", ErrInvalid, obj.Key, err)
+		}
+		// Decrypt unwraps the file key from the header: nothing more is read.
+		_, err = age.Decrypt(rc, id)
+		rc.Close()
+		if err != nil {
+			return "", "", fmt.Errorf("%w: this key doesn't open %s, already on this storage: %v", ErrInvalid, obj.Key, err)
+		}
+		break
+	}
+	return id.String(), id.Recipient().String(), nil
 }
 
 type TargetKey struct {

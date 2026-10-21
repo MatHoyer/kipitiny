@@ -43,15 +43,6 @@ export function Storage() {
     mutationFn: api.deleteBackupTarget,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["storage"] }),
   });
-  const encrypt = useMutation({
-    meta: { error: "Couldn't encrypt the storage" },
-    mutationFn: api.encryptBackupTarget,
-    onSuccess: (t) => {
-      qc.invalidateQueries({ queryKey: ["storage"] });
-      toast.success(`${t.name} is encrypted`, { description: "Copy its key (key icon) somewhere safe, away from this server." });
-    },
-  });
-
   return (
     <SettingsPage
       actions={
@@ -90,18 +81,7 @@ export function Storage() {
               {t.ageRecipient ? (
                 <KeyButton targetId={t.id} name={t.name} />
               ) : (
-                <ConfirmDialog
-                  trigger={
-                    <Button variant="ghost" size="icon-sm" title="Encrypt" loading={encrypt.isPending && encrypt.variables === t.id}>
-                      <Lock />
-                    </Button>
-                  }
-                  title={`Encrypt backups on ${t.name}?`}
-                  description="An age key is generated for this storage. Backups made from now on are encrypted with it; existing ones stay as they are. It can't be turned off, and without the key (copy it after) encrypted backups are unreadable if this server is lost."
-                  confirmLabel="Encrypt"
-                  destructive={false}
-                  onConfirm={() => encrypt.mutate(t.id)}
-                />
+                <EncryptButton target={t} />
               )}
               {t.kind !== "local" && (
                 <>
@@ -171,6 +151,75 @@ export function Storage() {
         </DialogContent>
       </Dialog>
     </SettingsPage>
+  );
+}
+
+function EncryptButton({ target }: { target: BackupTarget }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [identity, setIdentity] = useState("");
+  const encrypt = useMutation({
+    meta: { error: "Couldn't encrypt the storage" },
+    mutationFn: () => api.encryptBackupTarget(target.id, identity),
+    onSuccess: (t) => {
+      qc.invalidateQueries({ queryKey: ["storage"] });
+      setOpen(false);
+      toast.success(`${t.name} is encrypted`, {
+        description: identity ? undefined : "Copy its key (key icon) somewhere safe, away from this server.",
+      });
+    },
+  });
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    encrypt.mutate();
+  };
+  return (
+    <>
+      <Button variant="ghost" size="icon-sm" title="Encrypt" aria-label="Encrypt" onClick={() => setOpen(true)}>
+        <Lock />
+      </Button>
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) setIdentity("");
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <form onSubmit={onSubmit} className="flex flex-col gap-4">
+            <DialogHeader>
+              <DialogTitle>Encrypt backups on {target.name}?</DialogTitle>
+              <DialogDescription>
+                Backups made from now on are encrypted with an age key; existing ones stay as they are. It can't be turned off,
+                and without the key (copy it after) encrypted backups are unreadable if this server is lost.
+              </DialogDescription>
+            </DialogHeader>
+            <ExistingKeyField value={identity} onChange={setIdentity} />
+            <DialogFooter>
+              <Button type="submit" loading={encrypt.isPending}>
+                Encrypt
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/** An age key another manager made, so this one reads the backups it left on the storage. */
+function ExistingKeyField({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  return (
+    <FloatingInput
+      label="Use an existing key"
+      type="password"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="AGE-SECRET-KEY-1…"
+      autoComplete="off"
+      description="Optional: another manager's key, to read the backups it stored here. It must open them. Empty generates a new one."
+      className={className}
+    />
   );
 }
 
@@ -334,9 +383,12 @@ function TargetForm({
             }
             description="A key is generated for this storage and cannot be changed or removed. Copy it (Show key) somewhere safe: without it, these backups are unreadable if this server is lost."
             checked={form.encrypt ?? false}
-            onCheckedChange={(v) => setForm({ ...form, encrypt: v })}
+            onCheckedChange={(v) => setForm({ ...form, encrypt: v, ageIdentity: "" })}
             className="sm:col-span-2"
           />
+        )}
+        {!target && form.encrypt && (
+          <ExistingKeyField value={form.ageIdentity ?? ""} onChange={(v) => setForm({ ...form, ageIdentity: v })} className="sm:col-span-2" />
         )}
       </div>
       <DialogFooter>

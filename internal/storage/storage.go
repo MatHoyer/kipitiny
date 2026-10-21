@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"iter"
 	"os"
 	"path"
 	"path/filepath"
@@ -26,6 +28,13 @@ type Storage interface {
 	Delete(ctx context.Context, key string) error
 	// Check verifies the target is reachable and writable.
 	Check(ctx context.Context) error
+	// List yields the objects under prefix, keys as Put takes them.
+	List(ctx context.Context, prefix string) iter.Seq2[Object, error]
+}
+
+type Object struct {
+	Key  string
+	Size int64
 }
 
 // Env is what drivers need besides the target.
@@ -116,6 +125,41 @@ func (l *Local) Delete(_ context.Context, key string) error {
 	return nil
 }
 
+func (l *Local) List(ctx context.Context, prefix string) iter.Seq2[Object, error] {
+	return func(yield func(Object, error) bool) {
+		err := filepath.WalkDir(filepath.Join(l.Root, filepath.FromSlash(prefix)), func(p string, d fs.DirEntry, err error) error {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			// Temp files of uploads in progress and the check file aren't objects.
+			if d.IsDir() || strings.HasPrefix(d.Name(), ".") {
+				return nil
+			}
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
+			rel, err := filepath.Rel(l.Root, p)
+			if err != nil {
+				return err
+			}
+			if !yield(Object{Key: filepath.ToSlash(rel), Size: info.Size()}, nil) {
+				return fs.SkipAll
+			}
+			return nil
+		})
+		if err != nil {
+			yield(Object{}, err)
+		}
+	}
+}
+
 // Steps of Check, reported with progress.Report.
 const (
 	// StepBucket: checking the bucket exists.
@@ -175,6 +219,30 @@ func (s *S3) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 
 func (s *S3) Delete(ctx context.Context, key string) error {
 	return s.client.RemoveObject(ctx, s.bucket, s.key(key), minio.RemoveObjectOptions{})
+}
+
+func (s *S3) List(ctx context.Context, prefix string) iter.Seq2[Object, error] {
+	return func(yield func(Object, error) bool) {
+		ctx, cancel := context.WithCancel(ctx) // stops the listing when the caller does
+		defer cancel()
+		root := ""
+		if s.prefix != "" {
+			root = s.prefix + "/"
+		}
+		for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{Prefix: root + prefix, Recursive: true}) {
+			if obj.Err != nil {
+				yield(Object{}, obj.Err)
+				return
+			}
+			key := strings.TrimPrefix(obj.Key, root)
+			if key == ".kipitiny-check" || strings.HasSuffix(key, "/") {
+				continue
+			}
+			if !yield(Object{Key: key, Size: obj.Size}, nil) {
+				return
+			}
+		}
+	}
 }
 
 // Check writes and deletes a test object in the bucket, reporting

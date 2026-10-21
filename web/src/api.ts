@@ -401,6 +401,8 @@ export type BackupTarget = {
 export type TargetInput = Omit<BackupTarget, "id" | "kind" | "createdAt" | "ageRecipient"> & {
   kind?: TargetKindName;
   encrypt?: boolean;
+  /** An existing age key (another manager's) instead of a new one. */
+  ageIdentity?: string;
 };
 
 /** dump: a MySQL, MariaDB or MongoDB dump (serviceKind tells which). */
@@ -1516,7 +1518,8 @@ export const api = {
   backupTargetKey: (id: string) => request<{ identity: string; recipient: string }>(`/storage/${id}/key`),
   backupManager: (targetId: string) => request<Backup>("/manager/backups", json("POST", { targetId })),
   deleteBackupTarget: (id: string) => request<void>(`/storage/${id}`, { method: "DELETE" }),
-  encryptBackupTarget: (id: string) => request<BackupTarget>(`/storage/${id}/encrypt`, { method: "POST" }),
+  encryptBackupTarget: (id: string, ageIdentity = "") =>
+    request<BackupTarget>(`/storage/${id}/encrypt`, json("POST", { ageIdentity })),
   testBackupTarget: (id: string, onStep?: (step: string) => void) => test(`/storage/${id}/test`, onStep),
 
   backups: (projectId?: string) => request<Backup[]>(`/backups${projectId ? `?projectId=${projectId}` : ""}`),

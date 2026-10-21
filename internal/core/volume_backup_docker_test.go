@@ -31,7 +31,7 @@ func TestVolumeBackupDocker(t *testing.T) {
 	}
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
 	c.pool = docker.NewPool(dk, c.connectServer)
-	if _, err := c.EncryptBackupTarget(ctx, store.LocalTargetID); err != nil {
+	if _, err := c.EncryptBackupTarget(ctx, store.LocalTargetID, ""); err != nil {
 		t.Fatal(err)
 	}
 

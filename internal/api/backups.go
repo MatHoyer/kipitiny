@@ -111,7 +111,13 @@ func (a *API) listRestores(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) encryptStorage(w http.ResponseWriter, r *http.Request) {
-	t, err := a.core.EncryptBackupTarget(r.Context(), r.PathValue("id"))
+	var body struct {
+		AgeIdentity string `json:"ageIdentity"`
+	}
+	if r.ContentLength != 0 && !decode(w, r, &body) { // the body is optional
+		return
+	}
+	t, err := a.core.EncryptBackupTarget(r.Context(), r.PathValue("id"), body.AgeIdentity)
 	if err != nil {
 		a.fail(w, err)
 		return
