@@ -31,7 +31,7 @@ func dumpTestDB(t *testing.T, kind store.ServiceKind) (*Core, context.Context, s
 	}
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
 	c.pool = docker.NewPool(dk, c.connectServer)
-	if _, err := c.EncryptBackupTarget(ctx, store.LocalTargetID); err != nil {
+	if _, err := c.EncryptBackupTarget(ctx, store.LocalTargetID, ""); err != nil {
 		t.Fatal(err)
 	}
 	p, err := c.store.CreateProject(ctx, store.Project{Name: "dumptest", ServerID: store.LocalServerID})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -72,6 +73,17 @@ func TestS3(t *testing.T) {
 	}
 	if _, err := st.Get(ctx, "shop/db/b.dump"); err == nil {
 		t.Fatal("failed upload left an object")
+	}
+
+	// Keys come back without the target's prefix, and only from under it.
+	if err := s3.client.RemoveObject(ctx, target.Bucket, "pgx/other", minio.RemoveObjectOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s3.client.PutObject(ctx, target.Bucket, "pgx/other", strings.NewReader("x"), 1, minio.PutObjectOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := listKeys(t, st, ""); !slices.Equal(got, []string{"shop/db/a.dump"}) {
+		t.Errorf("list = %q", got)
 	}
 
 	if err := st.Delete(ctx, "shop/db/a.dump"); err != nil {

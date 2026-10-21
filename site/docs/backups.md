@@ -65,8 +65,14 @@ container, checks the checksum and records the number of entries.
 ## Encryption
 
 An S3 target can encrypt everything stored on it with [age](https://age-encryption.org)
-(chosen at creation; the key never changes). Copy the key (*Show key*) somewhere
-safe: without it, those backups are unreadable if this server is lost. Offline:
+(chosen at creation, or later with the lock icon; the key never changes). Copy
+the key (*Show key*) somewhere safe: without it, those backups are unreadable if
+this server is lost.
+
+A storage another manager encrypted (a project moved here, a rebuilt server)
+takes that manager's key: paste it in *Use an existing key* when adding or
+encrypting the storage. It is checked against an encrypted backup already
+there, and refused if it can't open it. Offline:
 
 ```sh
 age -d -i key.txt shop-20260930T030000Z-xxxx.dump.age | pg_restore -d "$DATABASE_URL" --no-owner
