@@ -41,6 +41,10 @@ order: 8
   anything, then stop the service, replace each volume's content and start it
   again.
 - Backups outlive their service and project; delete them explicitly.
+- Next to each backup, a small `<backup>.json` holds what the history shows
+  about it (project, service, kind, database, size, checksum, version, image),
+  encrypted like the backup. Another manager given the same storage reads it
+  to adopt the backup (see [Moving to another manager](#moving-to-another-manager)).
 - **Schedules** (cron, UTC unless `CRON_TZ=` is given) back up a service to a
   target and then apply retention to *their own* backups: keep the last N, plus
   the newest of each of the last N days / ISO weeks / months. Manual backups are

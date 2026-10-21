@@ -208,6 +208,10 @@ func (c *Core) runBackup(svc store.Service, containerID string, st storage.Stora
 		log.Warn("backup failed", "err", err)
 	} else {
 		log.Info("backup succeeded", "bytes", b.SizeBytes, "ms", b.DurationMS)
+		// Without it the backup is fine, only not adoptable by another manager.
+		if err := writeSidecar(ctx, st, target, b); err != nil {
+			log.Warn("cannot write backup sidecar", "err", err)
+		}
 	}
 	if err := c.store.FinishBackup(context.WithoutCancel(ctx), b); err != nil {
 		log.Error("cannot record backup result", "err", err)
@@ -859,6 +863,11 @@ func (c *Core) DeleteBackup(ctx context.Context, id string) error {
 	}
 	if err := st.Delete(ctx, b.ObjectKey); err != nil {
 		return fmt.Errorf("delete backup object: %w", err)
+	}
+	if b.Kind != store.BackupKindManager {
+		if err := st.Delete(ctx, b.ObjectKey+sidecarExt); err != nil {
+			return fmt.Errorf("delete backup sidecar: %w", err)
+		}
 	}
 	return c.store.DeleteBackup(ctx, id)
 }

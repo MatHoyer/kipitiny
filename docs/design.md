@@ -242,7 +242,7 @@ Run `pg_dump -Fc` **inside the database container** via `docker exec` so the dum
 
 - **Check exit codes** and delete partial uploads.
 - **Retention policies** (e.g. 7 daily, 4 weekly, 6 monthly), pruned automatically.
-- **Metadata in SQLite:** size, duration, Postgres version, checksum, status.
+- **Metadata in SQLite:** size, duration, Postgres version, checksum, status. A copy goes next to each successful backup as `<object>.json` (the row without this manager's IDs, schedule or restore test; age-encrypted when the target is), deleted with it; manager snapshots get none. *Scan* on a target adopts the ones the manager doesn't know (issue #424).
 - **Optional encryption** before upload (`age`).
 - **Automated restore tests** (key differentiator): start a throwaway Postgres container, `pg_restore` the latest backup, run a sanity query, delete the container, record the result.
 - **Project-level backups:** "back up everything in this project".
