@@ -30,7 +30,7 @@ x-template:
 name: umami
 services:
   umami:
-    image: ghcr.io/umami-software/umami:3.4.0
+    image: ghcr.io/umami-software/umami:3.4.1
     expose: ["3000"]
     environment:
       DATABASE_URL: "{{ db.db.URL }}"
