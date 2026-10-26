@@ -9,6 +9,12 @@ Add a notice under `## Unreleased` in the change that causes it, as
 `- warning: …` (disruptive) or `- info: …`; continue on indented lines. The
 release renames the section to its version.
 
+## Unreleased
+- info: The Cloudflare tunnel moves to `cloudflared` 2026.10.4 (security fix):
+  with a tunnel configured, its container is recreated once, dropping
+  connections for a few seconds. A `KIPITINY_CLOUDFLARED_IMAGE` you set is
+  kept: bump it to 2026.10.2 or later yourself.
+
 ## 0.41.0
 - info: The analytics server now runs from the manager's image
   (`ghcr.io/mathoyer/kipitiny-analytics` is no longer released): with analytics

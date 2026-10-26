@@ -19,7 +19,7 @@ order: 15
 | `KIPITINY_HTTP_PORT` / `KIPITINY_HTTPS_PORT` | `80` / `443` | Host ports Traefik binds |
 | `KIPITINY_ACME_EMAIL` | — | Let's Encrypt account email (optional) |
 | `KIPITINY_CLOUDFLARE_TUNNEL_TOKEN` | — | Receive traffic through a Cloudflare Tunnel instead of ports 80/443 |
-| `KIPITINY_CLOUDFLARED_IMAGE` | `cloudflare/cloudflared:2026.9.3` | |
+| `KIPITINY_CLOUDFLARED_IMAGE` | `cloudflare/cloudflared:2026.10.4` | |
 | `KIPITINY_PROTONPASS_IMAGE` | `ghcr.io/mathoyer/kipitiny-protonpass:2.4.2` | Proton Pass CLI image, pulled on first connect ([Password managers](/docs/services#password-managers)) |
 | `KIPITINY_MANAGER_BACKUP_CRON` | `@daily` | First-start schedule for snapshots of the manager's state (`off` for none) |
 | `KIPITINY_MANAGER_BACKUP_TARGET` | `local` | Storage ID for that schedule |

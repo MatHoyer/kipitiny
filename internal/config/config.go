@@ -103,7 +103,7 @@ func Load() Config {
 		},
 		Tunnel: Tunnel{
 			Token: env("KIPITINY_CLOUDFLARE_TUNNEL_TOKEN", ""),
-			Image: env("KIPITINY_CLOUDFLARED_IMAGE", "cloudflare/cloudflared:2026.9.3"),
+			Image: env("KIPITINY_CLOUDFLARED_IMAGE", "cloudflare/cloudflared:2026.10.4"),
 		},
 		ProtonPass: ProtonPass{
 			Image: env("KIPITINY_PROTONPASS_IMAGE", "ghcr.io/mathoyer/kipitiny-protonpass:2.4.2"),
