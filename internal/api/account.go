@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/MatHoyer/kipitiny/internal/core"
+	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
 // The signed-in user's own security settings. Changes that alter how the
@@ -39,6 +40,19 @@ func (a *API) account(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, acc)
+}
+
+func (a *API) setPreferences(w http.ResponseWriter, r *http.Request) {
+	var p store.Preferences
+	if !decode(w, r, &p) {
+		return
+	}
+	p, err := a.core.SetPreferences(r.Context(), p)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
 }
 
 func (a *API) changePassword(w http.ResponseWriter, r *http.Request) {

@@ -44,7 +44,9 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState<"project" | "network" | null>(null);
-  const [view3d, setView3d] = useState(false);
+  const auth = useQuery({ queryKey: ["auth"], queryFn: api.authState, staleTime: Infinity });
+  // The user's preferred view opens; the 3D button only switches this visit.
+  const [view3d, setView3d] = useState(auth.data?.user?.preferences?.mapView === "3d");
   const saved = layout.data?.positions;
   const edits = useCanvasEdits(servers);
 

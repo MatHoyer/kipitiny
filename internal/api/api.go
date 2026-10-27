@@ -44,6 +44,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("DELETE /api/account/sso/{id}", a.unlinkSSO)
 	handle("POST /api/account/sso/{id}/confirm", a.beginSSOConfirm)
 	handle("PUT /api/account/password", a.changePassword)
+	handle("PUT /api/account/preferences", a.setPreferences)
 	handle("POST /api/account/totp", a.beginTOTP)
 	handle("POST /api/account/totp/enable", a.enableTOTP)
 	handle("POST /api/account/totp/disable", a.disableTOTP)

@@ -1161,7 +1161,7 @@ const routes: Route[] = [
     /^\/auth\/state$/,
     (): AuthState => ({
       setupRequired: false,
-      user: { id: "demo", username: "demo", role: "admin", features: [], createdAt: now() },
+      user: { id: "demo", username: "demo", role: "admin", features: [], createdAt: now(), preferences: db.preferences ?? {} },
       sso: [],
       ssoRequired: false,
       branding: db.branding ?? {},
@@ -1189,6 +1189,7 @@ const routes: Route[] = [
     },
   ],
   ["DELETE", /^\/branding$/, () => (db.branding = {})],
+  ["PUT", /^\/account\/preferences$/, ({ body }) => ((db.preferences = body.mapView === "3d" ? { mapView: "3d" } : {}), save(), db.preferences)],
   [
     "GET",
     /^\/account$/,

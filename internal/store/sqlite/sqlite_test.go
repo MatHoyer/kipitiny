@@ -282,6 +282,15 @@ func TestUserAccessAndInvites(t *testing.T) {
 	if err != nil || u.Role != store.RoleAdmin || u.Features == nil {
 		t.Fatalf("update access: %+v %v", u, err)
 	}
+	if err := s.SetUserPreferences(ctx, m.ID, store.Preferences{MapView: "3d"}); err != nil {
+		t.Fatal(err)
+	}
+	if u, _ := s.GetUser(ctx, m.ID); u.Preferences.MapView != "3d" {
+		t.Fatalf("preferences: %+v", u.Preferences)
+	}
+	if err := s.SetUserPreferences(ctx, "nope", store.Preferences{}); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("unknown user: %v", err)
+	}
 	if us, err := s.ListUsers(ctx); err != nil || len(us) != 2 || us[0].ID != admin.ID {
 		t.Fatalf("users: %+v %v", us, err)
 	}

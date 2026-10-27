@@ -45,6 +45,7 @@ var routeAccess = map[string]access{
 	"POST /api/tokens/{id}/roll":        anyone,
 	"DELETE /api/tokens/{id}":           anyone,
 	"PUT /api/account/password":         anyone,
+	"PUT /api/account/preferences":      anyone,
 	"POST /api/account/totp":            anyone,
 	"POST /api/account/totp/enable":     anyone,
 	"POST /api/account/totp/disable":    anyone,

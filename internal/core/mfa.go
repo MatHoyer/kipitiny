@@ -163,6 +163,18 @@ func (c *Core) currentUser(ctx context.Context) (store.User, error) {
 	return c.store.GetUser(ctx, a.UserID)
 }
 
+// SetPreferences replaces the current user's preferences.
+func (c *Core) SetPreferences(ctx context.Context, p store.Preferences) (store.Preferences, error) {
+	if p.MapView != "" && p.MapView != "3d" {
+		return store.Preferences{}, fmt.Errorf("%w: map view must be empty (2D) or 3d", ErrInvalid)
+	}
+	u, err := c.currentUser(ctx)
+	if err != nil {
+		return store.Preferences{}, err
+	}
+	return p, c.store.SetUserPreferences(ctx, u.ID, p)
+}
+
 // confirmedUser is the current user, once they re-entered their password:
 // a stolen session alone can't change how the account signs in.
 func (c *Core) confirmedUser(ctx context.Context, password string) (store.User, error) {

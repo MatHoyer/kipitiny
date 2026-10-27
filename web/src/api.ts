@@ -650,7 +650,10 @@ export type Feature = (typeof features)[number];
 /** Project ID to a member's permissions there. */
 export type Grants = Record<string, Perm[]>;
 
-export type User = { id: string; username: string; role: Role; features: Feature[]; createdAt: string };
+export type User = { id: string; username: string; role: Role; features: Feature[]; createdAt: string; preferences?: Preferences };
+
+/** The user's own UI choices; missing values are the defaults. */
+export type Preferences = { mapView?: "3d" };
 
 export type UserView = User & { grants: Grants; totpEnabled: boolean };
 
@@ -1441,6 +1444,7 @@ export const api = {
     request<User>("/auth/invite/accept", json("POST", { token, username, password })),
 
   account: () => request<Account>("/account"),
+  setPreferences: (p: Preferences) => request<Preferences>("/account/preferences", json("PUT", p)),
   changePassword: (current: string, password: string) => request<void>("/account/password", json("PUT", { current, password })),
   beginTotp: (password: string) => request<TotpSetup>("/account/totp", json("POST", { password })),
   enableTotp: (code: string) => request<{ recoveryCodes: string[] }>("/account/totp/enable", json("POST", { code })),

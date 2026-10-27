@@ -8,6 +8,7 @@ import {
   LogOut,
   Monitor,
   Moon,
+  SlidersHorizontal,
   Sun,
   SunMoon,
   UserRound,
@@ -347,6 +348,12 @@ function NavUser({ username }: { username: string }) {
               <Link to="/account" onClick={() => setOpenMobile(false)}>
                 <UserRound />
                 Account
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild className="gap-2">
+              <Link to="/preferences" onClick={() => setOpenMobile(false)}>
+                <SlidersHorizontal />
+                Preferences
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
