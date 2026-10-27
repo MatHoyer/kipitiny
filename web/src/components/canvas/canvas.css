@@ -10,7 +10,8 @@
 .react-flow__edge.map-edge-db path.react-flow__edge-path,
 .map-legend-db path {
   stroke: #4169e1;
-  stroke-dasharray: 5 4;
+  /* A 10px period, like React Flow's dashdraw offset: any other loops with a jump. */
+  stroke-dasharray: 6 4;
 }
 .react-flow__edge.map-edge-net path.react-flow__edge-path,
 .map-legend-net path {
