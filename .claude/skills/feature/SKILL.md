@@ -25,21 +25,27 @@ running servers are disrupted. `make test` and `make lint` green before phase 3.
 
 Code tests are not enough: exercise every new behavior the way a user would, through the real manager.
 
-**Local manager (default).** The local test manager is `kipitiny-manager-1`, running `ghcr.io/mathoyer/kipitiny:dev`
-from `docker-compose.yml` at the repo root. To run the branch:
+**Test environment (default).** Each worktree gets its own manager, isolated from the other worktrees' ones:
+`scripts/test-env.sh` runs it in its own Docker daemon (`docker:29-dind`, container `kipitiny-test-<branch>`), from
+the image `ghcr.io/mathoyer/kipitiny:dev-<branch>` built from the worktree and the repo's `docker-compose.yml`.
 
 ```bash
-make docker && KIPITINY_VERSION=dev docker compose up -d   # rebuilds :dev and recreates the local manager
+scripts/test-env.sh up      # build the branch, (re)start its manager, print its URL and Traefik's ports
+scripts/test-env.sh url     # print them again (random 127.0.0.1 ports)
+scripts/test-env.sh docker logs kipitiny-manager-1   # any command runs inside it; first start logs a setup token
+scripts/test-env.sh down    # delete it with its data, when the work is merged
 ```
 
-- Never start a second manager (`go run ./cmd/kipitiny`, fresh `KIPITINY_DATA_DIR`) on the host Docker: its
-  reconciler deletes the local manager's containers.
-- The local manager is test-only: migrations, wipes and recreates are fine without asking.
+- Never test on `kipitiny-manager-1` of the host Docker (`localhost:3000`, image `:dev`): other worktrees use it, and
+  rebuilding `:dev` can leave it on a schema it doesn't know. Never start a manager on the host Docker either
+  (`go run ./cmd/kipitiny`, fresh `KIPITINY_DATA_DIR`): its reconciler deletes the other managers' containers.
+- The test environment is yours: migrations, wipes, `down` and `up` are fine without asking.
 - The `kipitiny` MCP server is the **production** manager (manager.mathieuhoyer.fr): never test with it.
-- Create test resources in projects named `test-<feature>-*` and delete them when done. Never touch other projects.
-- Drive the local one at http://localhost:3000 through its API (`Authorization: Bearer <token>`) and the UI. UI
-  features are checked in a real browser against this manager (playwright-core with the cached Chromium), not only
-  in demo mode.
+- Create test resources in projects named `test-<feature>-*`.
+- Drive it at its URL through its API and the UI. UI features are checked in a real browser against this manager
+  (playwright-core with the cached Chromium), not only in demo mode. Apps on `*.localhost` go through its Traefik
+  ports: curl with `--resolve host:<port>:127.0.0.1 -k`, Chromium with `--host-resolver-rules=MAP *.localhost
+  127.0.0.1:<port>`.
 
 **VM (root/host-level changes).** For anything that touches the host itself (install script, systemd, firewall,
 Docker install, upgrades from an older release), use a throwaway qemu VM: qemu-system-x86_64 with KVM, an Ubuntu
@@ -50,8 +56,10 @@ For each case record: what you did (exact compose file, command, click path), ex
 Failures you find are fixed and retested, not just reported.
 
 Practical notes:
-- API access: create an admin API token (`POST /api/tokens`) and keep it and any password in the scratchpad only. With no
-  known login, move the local data dir aside (it's disposable) and take the setup token from the manager's logs.
+- API access: on a new environment, `POST /api/auth/setup` with the setup token from the logs (`setupToken`,
+  `username`, `password`) gives an admin session; keep passwords and tokens in the scratchpad only. A member: `POST
+  /api/invites` (`role`, `grants` per project), then `POST /api/auth/invite/accept`. Lost login: `scripts/test-env.sh
+  docker exec -i kipitiny-manager-1 /kipitiny reset-password <user> < pwfile`.
 - Git-only features (repo files, include, sync, previews): push fixtures to an orphan `test/<feature>-fixtures` branch of
   this repo, one folder per case, link a test project to it, and delete the branch at the end.
 - Before calling something a bug, check that `docker compose` would behave differently with the same file: shell
@@ -69,7 +77,7 @@ Put the report in the PR description (the last PR of a stack, or each PR for its
 
 `make test` / `make lint`: green.
 
-Real usage on local manager (`:dev` built from <sha>):
+Real usage on the test environment (`:dev-<branch>` built from <sha>):
 
 | # | Case | How | Expected | Result |
 |---|------|-----|----------|--------|
