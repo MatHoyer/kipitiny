@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Background, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow, type Edge, type Node, type OnNodeDrag } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { FolderPlus, Network, Plus, RotateCcw } from "lucide-react";
+import { Box, FolderPlus, Network, Plus, RotateCcw } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -42,6 +42,9 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
   const [adding, setAdding] = useState<"project" | "network" | null>(null);
   // Projects whose previews are spread out instead of stacked behind them.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Isometric: the same map tilted, to look at. Dragging and drawing lines are
+  // off, as React Flow reads pointer moves flat.
+  const [iso, setIso] = useState(false);
   const saved = layout.data?.positions;
   const edits = useCanvasEdits(servers);
   const { fitView } = useReactFlow();
@@ -106,7 +109,7 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
 
   if (!saved) return <div className={cn("rounded-xl border bg-muted/20", className)} />;
   return (
-    <div className={cn("relative overflow-hidden rounded-xl border", className)}>
+    <div className={cn("relative overflow-hidden rounded-xl border", iso && "map-iso", className)}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -114,6 +117,8 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeDragStop={onDragStop}
+        nodesDraggable={!iso}
+        nodesConnectable={!iso}
         onNodeClick={(_, n) => setSelected(n.id)}
         onPaneClick={() => setSelected(null)}
         isValidConnection={edits.isValidConnection}
@@ -139,6 +144,17 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
           <div className="max-sm:hidden">
             <Legend />
           </div>
+          <Button
+            variant={iso ? "secondary" : "ghost"}
+            size="sm"
+            aria-pressed={iso}
+            title={iso ? "Back to the flat map" : "Isometric view (to look at: no dragging)"}
+            onClick={() => setIso(!iso)}
+            className="h-6 px-1.5 text-xs text-muted-foreground"
+          >
+            <Box data-icon="inline-start" />
+            3D
+          </Button>
           {Object.keys(saved).length > 0 && (
             <ConfirmDialog
               trigger={
@@ -178,7 +194,7 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
           <NewProjectDialog stay open={adding === "project"} onOpenChange={(o) => !o && setAdding(null)} />
         </Panel>
         <Panel position="bottom-center" className="rounded-md bg-card/80 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur max-sm:hidden">
-          Drag a service's bottom dot onto a database or network · select a line and press Delete to remove it
+          {iso ? "Isometric view: pan, zoom and click nodes · 3D again to drag and edit" : "Drag a service's bottom dot onto a database or network · select a line and press Delete to remove it"}
         </Panel>
       </ReactFlow>
       <Dialog open={adding === "network"} onOpenChange={(o) => !o && setAdding(null)}>

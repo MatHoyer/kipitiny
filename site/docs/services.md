@@ -57,7 +57,9 @@ order: 3
   dropped on others pushes them aside, and new ones take the nearest free
   spot. A service with several replicas shows a stack of cards and its count
   (×3); a project's previews stack behind its frame, and its *N previews*
-  button spreads them out next to it (again to stack them back). Click a node for its details,
+  button spreads them out next to it (again to stack them back). **3D** tilts
+  the map into an isometric view, to look at: pan, zoom and click work, dragging
+  and drawing lines wait for the flat map. Click a node for its details,
   each container's addresses on the networks it is actually attached to, and
   Deploy, Restart or Stop. You can also edit from it:
   - drag a service's bottom dot onto a network to make it join (right away),

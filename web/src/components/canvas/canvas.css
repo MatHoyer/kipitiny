@@ -43,3 +43,23 @@
 .react-flow {
   --xy-background-color: transparent;
 }
+/* Isometric view: the plane tilted (rotateX then rotateZ reads as an
+   isometric floor), cards extruded downwards on screen. Through Tailwind's
+   shadow variable, so rings (selection, issues) still draw. */
+.map-iso .react-flow__renderer {
+  transform: rotateX(55deg) rotateZ(-45deg);
+  transform-origin: 50% 50%;
+}
+.map-iso .react-flow__node-service .bg-card,
+.map-iso .react-flow__node-infra .bg-card,
+.map-iso .react-flow__node-network .bg-card {
+  --tw-shadow:
+    1px 1px 0 var(--border),
+    2px 2px 0 var(--border),
+    3px 3px 0 var(--border),
+    4px 4px 0 var(--border),
+    5px 5px 0 var(--border),
+    6px 6px 0 var(--border),
+    7px 7px 0 var(--border),
+    8px 8px 12px rgb(0 0 0 / 0.25);
+}
