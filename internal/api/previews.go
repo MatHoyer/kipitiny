@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/MatHoyer/kipitiny/internal/anonymize"
 	"github.com/MatHoyer/kipitiny/internal/core"
 )
 
@@ -58,4 +59,38 @@ func (a *API) setPreviewSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, ps)
+}
+
+func (a *API) previewSeed(w http.ResponseWriter, r *http.Request) {
+	dbs, err := a.core.PreviewSeed(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, dbs)
+}
+
+// setAnonymizeRules takes {"rules": ...}; null removes them.
+func (a *API) setAnonymizeRules(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Rules anonymize.Rules `json:"rules"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	d, err := a.core.SetAnonymizeRules(r.Context(), r.PathValue("id"), r.PathValue("service"), in.Rules)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
+
+func (a *API) anonymizeNow(w http.ResponseWriter, r *http.Request) {
+	b, err := a.core.AnonymizeNow(r.Context(), r.PathValue("id"), r.PathValue("service"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, b)
 }
