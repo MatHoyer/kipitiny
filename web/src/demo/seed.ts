@@ -1,5 +1,6 @@
 import type {
   Branding,
+  Preferences,
   ApiToken,
   AuditEntry,
   Backup,
@@ -59,6 +60,8 @@ export type DemoDb = {
   ssoProviders?: SSOProvider[];
   /** Settings › Appearance; the logo is kept as a data URL. */
   branding?: Branding;
+  /** The demo user's Preferences page. */
+  preferences?: Preferences;
   /** The demo phone stopped getting pushes. */
   pushRemoved?: boolean;
   /** Added after version 3: the colors picked for tags, by name. */

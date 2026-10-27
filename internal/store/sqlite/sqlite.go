@@ -460,6 +460,17 @@ func (s *Store) UpdateUserAccess(ctx context.Context, id string, role store.Role
 	return s.GetUser(ctx, id)
 }
 
+func (s *Store) SetUserPreferences(ctx context.Context, id string, p store.Preferences) error {
+	res, err := s.db.NewUpdate().Model(&store.User{ID: id, Preferences: p}).Column("preferences").WherePK().Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) DeleteUser(ctx context.Context, id string) error {
 	return deleteByID(ctx, s.db, "users", id)
 }

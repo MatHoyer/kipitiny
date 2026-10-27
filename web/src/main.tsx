@@ -11,6 +11,7 @@ import "./index.css";
 import { DocsRedirect } from "./lib/docs";
 import { friendlyError } from "./lib/errors";
 import { AccountPage } from "./routes/Account";
+import { PreferencesPage } from "./routes/Preferences";
 import { Backup } from "./routes/Backup";
 import { Backups } from "./routes/Backups";
 import { Layout } from "./routes/Layout";
@@ -59,6 +60,7 @@ const router = createBrowserRouter([
       { path: "map", element: <MapPage /> },
       { path: "docs/*", element: <DocsRedirect /> },
       { path: "account", element: <AccountPage /> },
+      { path: "preferences", element: <PreferencesPage /> },
       { path: "backups", element: <Backups /> },
       { path: "backups/:id", element: <Backup /> },
       ...settingsPages.filter((p) => p.page).map((p) => ({ path: p.slug, element: <SettingsShell slug={p.slug} /> })),

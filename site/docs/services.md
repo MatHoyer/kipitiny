@@ -59,6 +59,9 @@ order: 3
   count (×3), a project's previews a stack behind its frame (*N previews*).
   Click the node, its stack or *N previews*: its panel lists the replicas, or
   the previews with their state and branch, each opening its own map.
+  *3D* shows the same map as small 3D models, to look around (drag to pan,
+  right-drag to rotate); it opens in 3D by default once picked in
+  **Preferences** (user menu), per user and on every browser.
   Click a node for its details,
   each container's addresses on the networks it is actually attached to, and
   Deploy, Restart or Stop. You can also edit from it:

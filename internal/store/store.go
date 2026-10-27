@@ -111,6 +111,8 @@ type Store interface {
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	// UpdateUserAccess sets the role and features.
 	UpdateUserAccess(ctx context.Context, id string, role Role, features []string) (User, error)
+	// SetUserPreferences replaces the user's preferences.
+	SetUserPreferences(ctx context.Context, id string, p Preferences) error
 	// DeleteUser removes the user with their sessions, grants and tokens.
 	DeleteUser(ctx context.Context, id string) error
 	// DeleteUserSessions signs the user out everywhere.
@@ -308,8 +310,15 @@ type User struct {
 	// Features are the server-level resources a member may see, read-only.
 	Features []string `bun:"features" json:"features"`
 	// TOTPSecret is the base32 authenticator secret; empty while 2FA is off.
-	TOTPSecret   string `bun:"totp_secret" json:"-"`
-	TOTPLastStep int64  `bun:"totp_last_step" json:"-"`
+	TOTPSecret   string      `bun:"totp_secret" json:"-"`
+	TOTPLastStep int64       `bun:"totp_last_step" json:"-"`
+	Preferences  Preferences `bun:"preferences" json:"preferences"`
+}
+
+// Preferences are a user's own UI choices; zero values are the defaults.
+type Preferences struct {
+	// MapView is the map's view when it opens: "" (2D) or "3d".
+	MapView string `json:"mapView,omitempty"`
 }
 
 type Role string
