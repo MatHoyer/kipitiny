@@ -1,0 +1,52 @@
+# Mailpit: catches the email apps send, for testing. Nothing reaches a real
+# inbox; the web UI shows every message.
+x-template:
+  title: Mailpit
+  description: Email testing. Apps send to it over SMTP instead of a real server; you read every message in its web UI.
+  website: https://mailpit.axllent.org
+  docs: https://mailpit.axllent.org/docs/
+  icon: mailpit
+  category: development
+  tags: [email, smtp, mail catcher, testing, mailhog]
+  notes: |
+    Sign in to the web UI with `admin` and the password you chose.
+
+    - Apps of this project send to `mailpit` on port `1025` (SMTP, no TLS); any username and password are accepted. Apps of other projects reach it through a [network](/docs/services#networks) they share with it.
+    - For a mail catcher in each [preview](/docs/previews#mail-in-previews), set the service to **Previews only** in its settings: every preview gets its own, and none runs here. Previews then need `MP_UI_AUTH` (`admin:<password>`) in the preview settings, like any secret.
+    - Messages are kept in a volume, the 500 most recent.
+  logo:
+    label: Mailpit
+    color: "#00B786"
+    images: [mailpit]
+  inputs:
+    - name: DOMAIN
+      label: Domain
+      type: domain
+      required: true
+      placeholder: mail.example.com
+      help: Where the web UI is served.
+    - name: UI_PASSWORD
+      label: Web UI password
+      type: secret
+      required: true
+      help: For the user admin. No spaces.
+name: mailpit
+services:
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    expose: ["8025", "1025"]
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: "500"
+      MP_UI_AUTH: admin:${UI_PASSWORD}
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    volumes:
+      - data:/data
+    x-kipitiny:
+      domain: ${DOMAIN}
+      port: 8025
+      icon: mailpit
+      secrets: [MP_UI_AUTH]
+volumes:
+  data: {}
