@@ -6,6 +6,7 @@ import { SaveBar } from "@/components/save-bar";
 import { ServiceIcon, useServiceLogos, type Logos } from "@/components/service-icon";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
+import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { cn } from "@/lib/utils";
 import { api, isDatabase, type Service as ServiceT } from "../../api";
 import { Applies } from "./parts";
@@ -192,3 +193,37 @@ const imageHints: Partial<Record<ServiceT["kind"], string>> = {
   mariadb: "Upgrades apply on start; going back to an older version needs a dump and restore.",
   mongodb: "One major version at a time, forward only; older versions can't read newer data.",
 };
+
+/** Whether the service runs here, in the project's previews, or both. */
+export function PreviewCard({ svc, git }: { svc: ServiceT; git?: boolean }) {
+  const qc = useQueryClient();
+  const save = useMutation({
+    meta: { error: "Couldn't change where it runs" },
+    mutationFn: (preview: ServiceT["preview"]) => api.updateService(svc.id, { preview }),
+    onSuccess: (updated) => {
+      qc.setQueryData(["service", svc.id], updated);
+      qc.invalidateQueries({ queryKey: ["services", updated.projectId] });
+    },
+  });
+  return (
+    <Section
+      title={<Applies title="Previews" when="now" />}
+      description={
+        git
+          ? "Set with x-kipitiny.preview in the compose file."
+          : "Previews only: a mail catcher, say, each preview gets its own; it stops here. Not in previews: a job that emails real customers."
+      }
+    >
+      <Segmented
+        value={svc.preview || "both"}
+        onValueChange={(v) => save.mutate(v === "both" ? "" : (v as ServiceT["preview"]))}
+        disabled={git || save.isPending}
+        aria-label="Where it runs"
+      >
+        <SegmentedItem value="both">Here and in previews</SegmentedItem>
+        <SegmentedItem value="only">Previews only</SegmentedItem>
+        <SegmentedItem value="skip">Not in previews</SegmentedItem>
+      </Segmented>
+    </Section>
+  );
+}

@@ -164,6 +164,10 @@ func (c *Core) startDeploy(ctx context.Context, serviceID string, req deployRequ
 		unlock()
 		return store.Deployment{}, err
 	}
+	if svc.Preview == "only" {
+		unlock()
+		return store.Deployment{}, errPreviewOnly(svc)
+	}
 	project, err := c.store.GetProject(ctx, svc.ProjectID)
 	if err != nil {
 		unlock()

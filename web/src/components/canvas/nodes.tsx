@@ -68,7 +68,9 @@ function ServiceNode({ data: { svc }, selected }: Props<ServiceData>) {
       ) : (
         !replicasLikeService && (
           <div className="flex items-center gap-1">
-            {svc.stopped || svc.sleeping ? (
+            {svc.preview === "only" ? (
+              <span className="text-[11px] text-muted-foreground">Previews only</span>
+            ) : svc.stopped || svc.sleeping ? (
               <span className="text-[11px] text-muted-foreground">{svc.stopped ? "Stopped" : "Asleep"}</span>
             ) : live.length === 0 ? (
               <span className="text-[11px] text-muted-foreground">Not deployed</span>

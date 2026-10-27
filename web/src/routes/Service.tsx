@@ -141,7 +141,7 @@ export function Service() {
     );
 
   const active = svc.containers.filter((c) => !c.retired);
-  const state = deploying ? "deploying" : svc.stopped ? "stopped" : svc.sleeping ? "asleep" : serviceState(active);
+  const state = deploying ? "deploying" : svc.preview === "only" ? "previews only" : svc.stopped ? "stopped" : svc.sleeping ? "asleep" : serviceState(active);
   const allStopped = active.length > 0 && active.every((c) => c.state !== "running");
   const problem = serviceIssue(svc);
   const busy = deploying || deploy.isPending || action.isPending || remove.isPending;
@@ -157,7 +157,8 @@ export function Service() {
         actions={
           <>
             <ComposeDialog projectId={svc.projectId} service={svc.name} />
-            {svc.containers.length > 0 && may("deploy") && (
+            {svc.preview === "only" && <span className="text-sm text-muted-foreground">Runs in previews only</span>}
+            {svc.preview !== "only" && svc.containers.length > 0 && may("deploy") && (
               <>
                 <Button variant="outline" size="sm" disabled={busy} onClick={() => action.mutate("restart")}>
                   <RotateCcw data-icon="inline-start" />
@@ -169,7 +170,7 @@ export function Service() {
                 </Button>
               </>
             )}
-            {may("deploy") && (
+            {svc.preview !== "only" && may("deploy") && (
               <Button size="sm" loading={deploying} disabled={busy} onClick={() => deploy.mutate()}>
                 <Rocket data-icon="inline-start" />
                 {deploying ? "Deploying" : "Deploy"}

@@ -187,8 +187,10 @@ export function formatDuration(ms: number): string {
 export function liveState(svc: {
   stopped: boolean;
   sleeping?: boolean;
+  preview?: string;
   containers: { state: string; status?: string; health?: string; retired?: boolean }[];
 }): string {
+  if (svc.preview === "only") return "previews only";
   return svc.stopped ? "stopped" : svc.sleeping ? "asleep" : serviceState(svc.containers.filter((c) => !c.retired));
 }
 

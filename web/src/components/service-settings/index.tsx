@@ -8,7 +8,7 @@ import { useTab } from "@/hooks/use-tab";
 import { api, httpRouted, isDatabase, type Service as ServiceT } from "../../api";
 import { AccessCard } from "./access";
 import { ContainerCard } from "./container";
-import { GeneralCard } from "./general";
+import { GeneralCard, PreviewCard } from "./general";
 import { HostAccessCard } from "./host-access";
 import { AnalyticsCard, DomainCard, NetworksCard, PortsCard } from "./networking";
 import { GitOwned } from "./parts";
@@ -119,6 +119,7 @@ export function ServiceSettings({
           onSave={(tags) => setTags.mutate(tags)}
         />
         <GeneralCard key={`general-${svc.id}`} svc={svc} preview={preview} />
+        {!preview && <PreviewCard svc={svc} git={!!gitPath} />}
       </GitOwned>
     ),
     networking: (

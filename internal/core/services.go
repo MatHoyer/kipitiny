@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"regexp"
@@ -82,6 +83,9 @@ type ServiceInput struct {
 	// ProjectNetworks are the project's own networks it's on; empty is the
 	// default one.
 	ProjectNetworks []string `json:"projectNetworks"`
+	// Preview is "only" (deployed in previews alone), "skip" (left out of
+	// previews) or "" (both).
+	Preview string `json:"preview"`
 	// Password is a new database's password, from a compose export; empty
 	// generates one. Not settable through the API.
 	Password string `json:"-"`
@@ -129,6 +133,7 @@ type ServicePatch struct {
 	DependsOn []store.Dependency `json:"dependsOn"`
 	// ProjectNetworks replaces the project networks it's on; nil keeps them.
 	ProjectNetworks []string `json:"projectNetworks"`
+	Preview         *string  `json:"preview"`
 }
 
 type ContainerView struct {
@@ -224,6 +229,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		Files:            normalizeFiles(in.Files, nil),
 		DependsOn:        in.DependsOn,
 		ProjectNetworks:  normalizeProjectNetworks(in.ProjectNetworks),
+		Preview:          in.Preview,
 	}
 	if svc.Env == nil {
 		svc.Env = map[string]string{}
@@ -340,6 +346,22 @@ func (c *Core) updateService(ctx context.Context, id string, p ServicePatch) (st
 	if svc, err = c.store.UpdateService(ctx, svc); err != nil {
 		return store.Service{}, err
 	}
+	switch {
+	case svc.Preview == "only" && old.Preview != "only":
+		// Its previews' copy only: the project's own containers stop for good.
+		if err := c.store.SetServiceStopped(ctx, svc.ID, true); err != nil {
+			return store.Service{}, err
+		}
+		if _, err := c.ServiceAction(ctx, svc.ID, ActionStop); err != nil && !errors.Is(err, ErrInvalid) {
+			return store.Service{}, err
+		}
+		svc.Stopped = true
+	case old.Preview == "only" && svc.Preview != "only":
+		if err := c.store.SetServiceStopped(ctx, svc.ID, false); err != nil {
+			return store.Service{}, err
+		}
+		svc.Stopped = false
+	}
 	if svc.Replicas != old.Replicas {
 		c.kick() // scaling applies right away, other changes on the next deploy
 	}
@@ -434,6 +456,9 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 	if p.ProjectNetworks != nil {
 		svc.ProjectNetworks = normalizeProjectNetworks(p.ProjectNetworks)
 	}
+	if p.Preview != nil {
+		svc.Preview = *p.Preview
+	}
 	if p.Middlewares != nil {
 		if svc.Middlewares, err = mergeMiddlewares(*p.Middlewares, old.Middlewares); err != nil {
 			return store.Service{}, err
@@ -477,6 +502,9 @@ func (c *Core) validateIn(ctx context.Context, s store.Service, project store.Pr
 	}
 	if project.SleepAfterSeconds != 0 && (len(s.PublishedPorts) > 0 || s.HostNetwork) {
 		return fmt.Errorf("%w: %s sleeps, and traffic that goes around Traefik can't wake it: turn sleep mode off first", ErrInvalid, project.Name)
+	}
+	if project.ParentID != "" && s.Preview != "" {
+		return fmt.Errorf("%w: a preview's services all run in it", ErrInvalid)
 	}
 	if project.ParentID != "" && s.Replicas > 1 {
 		// Each deploy resets it: a preview is a cheap copy, not a load test.
@@ -524,6 +552,9 @@ func validateService(s store.Service) error {
 	}
 	if !iconRe.MatchString(s.Icon) {
 		return fmt.Errorf("%w: icon must be lowercase letters, digits and dashes", ErrInvalid)
+	}
+	if s.Preview != "" && s.Preview != "only" && s.Preview != "skip" {
+		return fmt.Errorf("%w: preview must be only, skip or empty", ErrInvalid)
 	}
 	if s.Analytics && (s.Kind.IsDatabase() || !httpRouted(s)) {
 		return fmt.Errorf("%w: analytics count the visits of an app's domain: set a domain and a container port", ErrInvalid)
@@ -838,6 +869,11 @@ func (c *Core) removeServiceContainers(ctx context.Context, svc store.Service) e
 	return removeServiceVolumes(ctx, dk, svc)
 }
 
+// errPreviewOnly refuses running a previews-only service in its project.
+func errPreviewOnly(svc store.Service) error {
+	return fmt.Errorf("%w: %s runs in previews only", ErrInvalid, svc.Name)
+}
+
 type Action string
 
 const (
@@ -857,6 +893,9 @@ func (c *Core) ServiceAction(ctx context.Context, id string, action Action) (Ser
 	svc, err := c.store.GetService(ctx, id)
 	if err != nil {
 		return ServiceView{}, err
+	}
+	if action != ActionStop && svc.Preview == "only" {
+		return ServiceView{}, errPreviewOnly(svc)
 	}
 	if action != ActionStop {
 		// Its project wakes with it: the service may need the others.

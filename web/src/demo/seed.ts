@@ -98,6 +98,7 @@ export function service(p: Partial<Service> & Pick<Service, "id" | "name" | "kin
     port: 0,
     domain: "",
     analytics: false,
+    preview: "",
     env: {},
     secrets: [],
     memoryMb: 0,

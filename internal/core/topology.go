@@ -105,6 +105,8 @@ type TopoService struct {
 	Replicas int               `json:"replicas"`
 	Stopped  bool              `json:"stopped,omitempty"`
 	Sleeping bool              `json:"sleeping,omitempty"`
+	// Preview is "only" or "skip" (store.Service.Preview).
+	Preview string `json:"preview,omitempty"`
 	// Volume holds a database's data.
 	Volume string `json:"volume,omitempty"`
 	// Uses are the IDs of the project databases its env references.
@@ -247,7 +249,7 @@ func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []s
 		for _, s := range own {
 			ts := TopoService{
 				ID: s.ID, Name: s.Name, Kind: s.Kind, Image: s.Image, Icon: s.Icon, Domain: s.Domain, Port: s.Port,
-				Replicas: s.Replicas, Stopped: s.Stopped, Sleeping: s.Sleeping, Uses: usedDatabases(s, p, dbs), Networks: s.Networks, HostNetwork: s.HostNetwork,
+				Replicas: s.Replicas, Stopped: s.Stopped, Sleeping: s.Sleeping, Preview: s.Preview, Uses: usedDatabases(s, p, dbs), Networks: s.Networks, HostNetwork: s.HostNetwork,
 				PublishedPorts: s.PublishedPorts, RoutePending: c.routePending(ctx, s), Containers: []TopoNode{},
 				NetworkIssues: networkIssues(p, s, byService[s.ID]),
 			}

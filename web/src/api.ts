@@ -135,6 +135,8 @@ export type Service = {
   hostNetwork: boolean;
   /** The host's Docker socket mounted read-only or read-write; "" when not. */
   dockerSocket: "" | "ro" | "rw";
+  /** "only": in the project's previews alone, never deployed here; "skip": left out of previews. */
+  preview: "" | "only" | "skip";
   /** Command, entrypoint, user, tmpfs… (apps only); empty fields keep the image's. */
   runtime: Runtime;
   /** Written into the containers before they start: compose configs, secrets, files from git. */
@@ -227,6 +229,7 @@ export type TopoService = {
   replicas: number;
   stopped?: boolean;
   sleeping?: boolean;
+  preview?: "only" | "skip";
   /** Volume holding a database's data. */
   volume?: string;
   /** IDs of the project databases its env references. */
@@ -351,6 +354,7 @@ export type ServiceInput = {
   hostNetwork?: boolean;
   dockerSocket?: "" | "ro" | "rw";
   runtime?: Runtime;
+  preview?: "" | "only" | "skip";
 };
 
 export type Connection = {
