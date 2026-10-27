@@ -53,7 +53,13 @@ order: 3
   what runs where, how traffic gets in (Traefik's entrypoints or a Cloudflare
   tunnel), which apps use which databases, and the networks created by hand.
   Pan, zoom and drag nodes (a project by its title); positions are saved for
-  everyone (*Reset layout* puts them back). Click a node for its details,
+  everyone (*Reset layout* puts them back). Nodes never sit on one another:
+  a node dropped on others pushes them aside, and new ones take the nearest
+  free spot. A service with several replicas shows a stack of cards and its
+  count (×3), a project's previews a stack behind its frame (*N previews*).
+  Click the node, its stack or *N previews*: its panel lists the replicas, or
+  the previews with their state and branch, each opening its own map.
+  Click a node for its details,
   each container's addresses on the networks it is actually attached to, and
   Deploy, Restart or Stop. You can also edit from it:
   - drag a service's bottom dot onto a network to make it join (right away),

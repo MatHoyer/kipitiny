@@ -1,14 +1,14 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Globe, Network, Play, RotateCw, Rocket, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { Mono, StateBadge } from "@/components/common";
+import { Mono, StateBadge, stateColors } from "@/components/common";
 import { ServiceIcon } from "@/components/service-icon";
-import { issueText, Replicas, serviceIssue, serviceState } from "@/components/topology";
+import { issueText, projectProblems, Replicas, serviceIssue, serviceState } from "@/components/topology";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { api, type ServerTopology, type TopoService } from "@/api";
+import { api, type ServerTopology, type TopoProject, type TopoService } from "@/api";
 import type { MapNode } from "./build";
 
 /** Details of the selected node, over the canvas's right edge. */
@@ -68,7 +68,7 @@ export function NodePanel({ node, servers, onClose }: { node: MapNode; servers: 
             </Field>
           )}
           {svc.containers.length > 0 && (
-            <Field label="Containers">
+            <Field label={svc.replicas > 1 ? `Replicas (${svc.replicas})` : "Containers"}>
               <Replicas nodes={svc.containers} networks={networks} />
             </Field>
           )}
@@ -91,6 +91,11 @@ export function NodePanel({ node, servers, onClose }: { node: MapNode; servers: 
             <Mono>{d.net?.name ?? "—"}</Mono> {d.net?.subnet && <span className="text-muted-foreground">{d.net.subnet}</span>}
           </Field>
           <Field label="Services">{d.project.services.length}</Field>
+          {d.previews.length > 0 && (
+            <Field label={`Previews (${d.previews.length})`}>
+              <PreviewRows projectId={d.project.id} previews={d.previews} />
+            </Field>
+          )}
           <Button asChild size="sm" variant="outline" className="w-full">
             <Link to={`/projects/${d.project.id}`}>
               Open project
@@ -163,6 +168,31 @@ export function NodePanel({ node, servers, onClose }: { node: MapNode; servers: 
       </header>
       <div className="flex-1 space-y-4 overflow-y-auto p-4 text-sm">{body}</div>
     </aside>
+  );
+}
+
+/** A project's previews, with their state and branch; each opens its map. */
+function PreviewRows({ projectId, previews }: { projectId: string; previews: TopoProject[] }) {
+  // Same query as the Previews tab: the branch isn't in the topology.
+  const views = useQuery({ queryKey: ["previews", projectId], queryFn: () => api.previews(projectId) });
+  const branch = new Map(views.data?.map((v) => [v.id, v.preview?.branch]));
+  return (
+    <ul className="-mx-2 space-y-0.5 break-normal">
+      {previews.map((pv) => {
+        const live = pv.services.some((svc) => svc.containers.some((c) => !c.retired));
+        const state = projectProblems(pv) > 0 ? "failed" : live ? "running" : "";
+        return (
+          <li key={pv.id}>
+            <Link to={`/projects/${pv.id}?tab=map`} className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted">
+              <span title={state || "not deployed"} className={cn("size-2 shrink-0 rounded-full", stateColors[state] ?? "bg-muted-foreground/50")} />
+              <span className="min-w-0 flex-1 truncate">{pv.name}</span>
+              {branch.get(pv.id) && <span className="max-w-28 shrink-0 truncate font-mono text-[11px] text-muted-foreground">{branch.get(pv.id)}</span>}
+              <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

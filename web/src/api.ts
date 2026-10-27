@@ -279,8 +279,8 @@ export type TopoNetwork = {
   missing?: boolean;
 };
 
-/** gitPath: the compose file the project follows, when it's linked to git. */
-export type TopoProject = { id: string; name: string; network: string; gitPath?: string; services: TopoService[] };
+/** gitPath: the compose file the project follows, when it's linked to git; parentId: the project a preview copies. */
+export type TopoProject = { id: string; name: string; network: string; gitPath?: string; parentId?: string; services: TopoService[] };
 
 export type ServerTopology = {
   id: string;
