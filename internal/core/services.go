@@ -15,6 +15,7 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
+	"github.com/MatHoyer/kipitiny/internal/anonymize"
 	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -89,6 +90,9 @@ type ServiceInput struct {
 	// Password is a new database's password, from a compose export; empty
 	// generates one. Not settable through the API.
 	Password string `json:"-"`
+	// Anonymize are a database's rules for anonymized preview seeds, from
+	// a compose file; the preview settings set them otherwise.
+	Anonymize anonymize.Rules `json:"-"`
 	// networks are the networks created by hand it joins, from a compose
 	// file whose service lists networks; nil keeps them.
 	networks []string
@@ -134,6 +138,9 @@ type ServicePatch struct {
 	// ProjectNetworks replaces the project networks it's on; nil keeps them.
 	ProjectNetworks []string `json:"projectNetworks"`
 	Preview         *string  `json:"preview"`
+	// Anonymize replaces a database's anonymize rules (from a compose
+	// file); nil keeps them.
+	Anonymize *anonymize.Rules `json:"-"`
 }
 
 type ContainerView struct {
@@ -239,6 +246,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		return store.Service{}, err
 	}
 	svc.Tags = tags
+	svc.Anonymize = in.Anonymize
 	env, secrets, envErr := mergeEnv(svc.Env, in.Secrets, nil, nil)
 	if envErr != nil {
 		return store.Service{}, envErr
@@ -389,6 +397,9 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 		if svc.Tags, err = normalizeTags(p.Tags); err != nil {
 			return store.Service{}, err
 		}
+	}
+	if p.Anonymize != nil {
+		svc.Anonymize = *p.Anonymize
 	}
 	if p.Replicas != nil {
 		svc.Replicas = *p.Replicas

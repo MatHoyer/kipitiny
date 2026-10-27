@@ -18,6 +18,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/MatHoyer/kipitiny/internal/anonymize"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -113,6 +114,10 @@ type Ext struct {
 	// Jobs are an app's scheduled jobs, by name. Tagged so the hash of a
 	// service without any stays the same.
 	Jobs map[string]Job `yaml:"jobs,omitempty" json:",omitempty"`
+	// Anonymize are a database's rules for anonymized preview seeds; nil
+	// has none, an empty set holds nothing personal. Tagged so the hash of
+	// a service without any stays the same.
+	Anonymize *anonymize.Rules `yaml:"anonymize,omitempty" json:",omitempty"`
 }
 
 // Job is a scheduled job: a command run with sh -c on a cron schedule.
@@ -318,7 +323,7 @@ func Escape(s string) string {
 func isZeroExt(x Ext) bool {
 	return x.Kind == "" && x.Domain == "" && x.Port == 0 && x.HealthPath == "" && x.PreDeploy == "" &&
 		x.PreBackup == "" && x.Icon == "" && !x.Analytics && x.Preview == "" && len(x.Tags) == 0 && len(x.Secrets) == 0 && x.Password == "" && x.Middlewares == nil &&
-		x.Uptime == nil && len(x.Jobs) == 0
+		x.Uptime == nil && len(x.Jobs) == 0 && x.Anonymize == nil
 }
 
 type outFile struct {
@@ -764,6 +769,13 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 	}
 	if s.HostNetwork && s.Networks != nil {
 		p.fail("an app in the host network can't join networks")
+	}
+	if s.X.Anonymize != nil {
+		if k := store.ServiceKind(s.X.Kind); !k.IsDatabase() || k == store.ServiceKindRedis {
+			p.fail("%s.anonymize: only PostgreSQL, MySQL, MariaDB and MongoDB databases are anonymized", ExtKey)
+		} else if err := s.X.Anonymize.Validate(); err != nil {
+			p.fail("%s.anonymize: %v", ExtKey, err)
+		}
 	}
 	if store.ServiceKind(s.X.Kind).IsDatabase() {
 		// The manager generates a database's environment and owns its volume.

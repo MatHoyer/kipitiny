@@ -133,6 +133,9 @@ func exportFile(p store.Project, svcs []store.Service, checks map[string]store.U
 				Preview:    s.Preview,
 			},
 		}
+		if s.Anonymize != nil {
+			cs.X.Anonymize = &s.Anonymize
+		}
 		if s.Replicas > 1 {
 			cs.Replicas = s.Replicas
 		}
@@ -640,6 +643,9 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 	if in.Kind == "" {
 		in.Kind = store.ServiceKindApp
 	}
+	if cs.X.Anonymize != nil {
+		in.Anonymize = *cs.X.Anonymize
+	}
 	if in.Replicas == 0 {
 		in.Replicas = 1
 	}
@@ -800,7 +806,7 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		// Scaling, the icon, analytics, sleep mode and the start order apply without a
 		// deploy.
 		needsDeploy := slices.ContainsFunc(fields, func(f string) bool {
-			return f != "replicas" && f != "icon" && f != "tags" && f != "analytics" && f != "sleepAfter" && f != "dependsOn" && f != "networks" &&
+			return f != "replicas" && f != "icon" && f != "tags" && f != "anonymize" && f != "analytics" && f != "sleepAfter" && f != "dependsOn" && f != "networks" &&
 				!(f == "files" && old.Kind.IsDatabase()) // init scripts run on an empty database only
 		})
 		a.updates = append(a.updates, pendingUpdate{id: old.ID, name: name, patch: patch, deploy: needsDeploy})
@@ -895,6 +901,7 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 		Image:            &in.Image,
 		Icon:             &in.Icon,
 		Tags:             in.Tags,
+		Anonymize:        &in.Anonymize,
 		Replicas:         &in.Replicas,
 		Port:             &in.Port,
 		Domain:           &in.Domain,
@@ -959,6 +966,7 @@ func changedFields(old, svc store.Service) []string {
 	add("image", old.Image != svc.Image)
 	add("icon", old.Icon != svc.Icon)
 	add("tags", !slices.Equal(old.Tags, svc.Tags))
+	add("anonymize", (old.Anonymize == nil) != (svc.Anonymize == nil) || old.Anonymize.Hash("") != svc.Anonymize.Hash(""))
 	add("replicas", old.Replicas != svc.Replicas)
 	add("port", old.Port != svc.Port)
 	add("domain", old.Domain != svc.Domain)
