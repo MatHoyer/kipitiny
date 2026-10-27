@@ -11,7 +11,7 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { formatBytes, formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, type KeyChanges, type RedisKey, type RedisValue } from "../../api";
-import { BrowserShell, SearchBox, SidebarToggle } from "./browser-shell";
+import { BrowserShell, SidebarNav, SearchBox, SidebarToggle } from "./browser-shell";
 import { ChangeBar, ReviewDialog, useUnsaved } from "./changes";
 import { CELL_MAX, DataTable, type Cell, type DataColumn, type GridEdit } from "./data-table";
 import { prettyValue } from "./values";
@@ -29,6 +29,7 @@ export function RedisBrowser({ serviceId }: { serviceId: string }) {
   const [match, setMatch] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
   const [sidebar, setSidebar] = useState(true);
+  const navScroll = useRef(0);
   // Kept across keys: switching doesn't lock it again.
   const [write, setWrite] = useState(false);
   const { confirm } = useUnsaved();
@@ -71,7 +72,7 @@ export function RedisBrowser({ serviceId }: { serviceId: string }) {
       <div className="border-b p-2">
         <SearchBox value={match} onChange={setMatch} placeholder="Match keys" />
       </div>
-      <nav aria-label="Keys" className="flex-1 overflow-y-auto p-2">
+      <SidebarNav scroll={navScroll} aria-label="Keys" className="flex-1 overflow-y-auto p-2">
         {keys.isPending ? (
           <Loading className="py-6" />
         ) : list.length === 0 ? (
@@ -84,7 +85,7 @@ export function RedisBrowser({ serviceId }: { serviceId: string }) {
           </ul>
         )}
         <ErrorText error={keys.error} />
-      </nav>
+      </SidebarNav>
       <div className="flex items-center gap-2 border-t px-3 py-2 text-xs text-muted-foreground">
         <span className="flex-1">
           {list.length} keys{keys.hasNextPage && " so far"}

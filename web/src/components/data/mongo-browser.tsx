@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { api, type DocChanges, type PgTable } from "../../api";
-import { BrowserShell, SidebarHeader, SidebarItem, SidebarToggle } from "./browser-shell";
+import { BrowserShell, SidebarNav, SidebarHeader, SidebarItem, SidebarToggle } from "./browser-shell";
 import { ChangeBar, ReviewDialog, useUnsaved } from "./changes";
 import { DropButton, NewCollectionDialog } from "./schema-dialogs";
 import { WriteMode } from "./write-mode";
@@ -21,6 +21,7 @@ export function MongoBrowser({ serviceId, database }: { serviceId: string; datab
   const [picked, setPicked] = useState<string | null>(null);
   const [find, setFind] = useState("");
   const [sidebar, setSidebar] = useState(true);
+  const navScroll = useRef(0);
   // Kept across collections: switching doesn't lock it again.
   const [write, setWrite] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -101,7 +102,7 @@ export function MongoBrowser({ serviceId, database }: { serviceId: string; datab
         }
       />
       {newCollection}
-      <nav aria-label="Collections" className="flex-1 space-y-px overflow-y-auto p-2">
+      <SidebarNav scroll={navScroll} aria-label="Collections" className="flex-1 space-y-px overflow-y-auto p-2">
         {shown.length === 0 && <p className="px-2 text-xs text-muted-foreground">No collection matches.</p>}
         {shown.map((c) => (
           <SidebarItem key={c.name} selected={c.name === current.name} onClick={() => pick(c.name)} title={c.kind}>
@@ -109,7 +110,7 @@ export function MongoBrowser({ serviceId, database }: { serviceId: string; datab
             {c.kind !== "collection" && <span className="text-[0.65rem] opacity-70">{c.kind}</span>}
           </SidebarItem>
         ))}
-      </nav>
+      </SidebarNav>
     </>
   );
 
