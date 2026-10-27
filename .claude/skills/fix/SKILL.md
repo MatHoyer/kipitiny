@@ -18,7 +18,7 @@ Five phases, in order. Never skip the failing test or the real-usage tests.
 
 - Write the regression test first (unit or API, next to the existing tests of that code) and see it **fail** on the
   current code, for the reason found in phase 1.
-- When the bug shows in the app, reproduce it on the local manager too (phase 4 setup) and note the symptom.
+- When the bug shows in the app, reproduce it on the worktree's test environment too (phase 4 setup) and note the symptom.
 - Can't reproduce: say so with what you tried, and ask before changing code.
 
 ## 3. Fix
@@ -32,9 +32,9 @@ Five phases, in order. Never skip the failing test or the real-usage tests.
 
 ## 4. Test in real usage
 
-Same as the feature skill's phase 3 (`.claude/skills/feature/SKILL.md`): local manager rebuilt from the branch,
-test resources in `test-<fix>-*` projects, API and real browser, never the production MCP server, never a second
-manager. Exercise:
+Same as the feature skill's phase 3 (`.claude/skills/feature/SKILL.md`): the worktree's own test
+environment (`scripts/test-env.sh up`), test resources in `test-<fix>-*` projects, API and real browser, never the
+production MCP server, never the host's `kipitiny-manager-1`. Exercise:
 - the bug's reproduction: now fixed;
 - the normal path the fix touches, as an admin **and** as a member, so the fix doesn't break legitimate use;
 - for a security fix, the lower-trust principal: now refused, with a clear message.
