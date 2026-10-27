@@ -90,7 +90,9 @@ type TopoProject struct {
 	Network string `json:"network"`
 	// GitPath is the compose file a project linked to git follows: its
 	// services are changed there, not from the map.
-	GitPath  string        `json:"gitPath,omitempty"`
+	GitPath string `json:"gitPath,omitempty"`
+	// ParentID is set on a preview: the project it copies.
+	ParentID string        `json:"parentId,omitempty"`
 	Services []TopoService `json:"services"`
 }
 
@@ -244,7 +246,7 @@ func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []s
 		}
 		netName := docker.ProjectNetwork(p.ID)
 		t.Networks = append(t.Networks, topoNetwork(nets, netName, p.ID, err == nil))
-		tp := TopoProject{ID: p.ID, Name: p.Name, Network: netName, GitPath: gitPaths[p.ID], Services: make([]TopoService, 0, len(own))}
+		tp := TopoProject{ID: p.ID, Name: p.Name, Network: netName, GitPath: gitPaths[p.ID], ParentID: p.ParentID, Services: make([]TopoService, 0, len(own))}
 		dbs := databasesOf(own)
 		for _, s := range own {
 			ts := TopoService{

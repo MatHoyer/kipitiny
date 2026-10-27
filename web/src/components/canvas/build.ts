@@ -8,7 +8,8 @@ import { separate } from "./separate.ts";
  * position is relative to the node's parent frame. Nodes nobody moved get a
  * simple layout, centred: the ingress stacked on top, then the manager and
  * the projects in a grid (apps over the databases they use), networks
- * created by hand below.
+ * created by hand below. A project's previews aren't drawn: they stack
+ * behind its frame, listed in its panel.
  */
 
 export const SVC_W = 240;
@@ -26,7 +27,7 @@ const EMPTY_W = 280;
 const EMPTY_H = 120;
 
 export type ServiceData = { kind: "service"; svc: TopoService; project: TopoProject; serverId: string };
-export type ProjectData = { kind: "project"; project: TopoProject; net?: TopoNetwork; serverId: string };
+export type ProjectData = { kind: "project"; project: TopoProject; net?: TopoNetwork; serverId: string; previews: TopoProject[] };
 export type ServerData = { kind: "server"; server: ServerTopology };
 export type InfraData = { kind: "internet" | "tunnel" | "traefik" | "manager"; server: ServerTopology };
 export type NetworkData = { kind: "network"; net: TopoNetwork; serverId: string; members: number };
@@ -101,12 +102,15 @@ export function buildGraph(
       }
     }
 
-    // Projects, wrapping into rows.
+    // Projects, wrapping into rows; previews with their project.
     const projectNets = new Map(s.networks.filter((n) => n.projectId).map((n) => [n.projectId!, n]));
+    const here = new Set(s.projects.map((p) => p.id));
+    const projects = s.projects.filter((p) => !p.parentId || !here.has(p.parentId));
     let row: Item[] = top;
     let rowW = top.length ? INFRA_W : 0;
-    for (const p of s.projects) {
-      const { frame, children, size } = projectFrame(p, projectNets.get(p.id), s.id, place);
+    for (const p of projects) {
+      const previews = s.projects.filter((pv) => pv.parentId === p.id);
+      const { frame, children, size } = projectFrame(p, projectNets.get(p.id), s.id, place, previews);
       if (row.length > 0 && rowW + GAP + size.w > ROW_W) {
         rows.push({ items: row, gap: GAP });
         row = [];
@@ -128,7 +132,7 @@ export function buildGraph(
     if (row.length > 0) rows.push({ items: row, gap: GAP * 2 });
 
     // Networks created by hand, with an edge from each member shown here.
-    const shown = new Set(s.projects.flatMap((p) => p.services.map((svc) => svc.id)));
+    const shown = new Set(projects.flatMap((p) => p.services.map((svc) => svc.id)));
     const nets: Item[] = [];
     for (const n of s.networks.filter((n) => n.customId)) {
       const members = s.projects.flatMap((p) => p.services).filter((svc) => svc.networks.includes(n.customId!));
@@ -181,7 +185,7 @@ function infra(kind: InfraData["kind"], s: ServerTopology): MapNode {
 }
 
 /** A project's frame and its services: public apps, then the other apps, then databases. */
-function projectFrame(p: TopoProject, net: TopoNetwork | undefined, serverId: string, place: Placer) {
+function projectFrame(p: TopoProject, net: TopoNetwork | undefined, serverId: string, place: Placer, previews: TopoProject[]) {
   const id = `project:${p.id}`;
   const apps = p.services.filter((s) => !isDatabase(s.kind)).sort((a, b) => Number(!!b.domain) - Number(!!a.domain));
   const dbs = p.services.filter((s) => isDatabase(s.kind));
@@ -232,7 +236,7 @@ function projectFrame(p: TopoProject, net: TopoNetwork | undefined, serverId: st
         });
       }),
     );
-  const frame: MapNode = { id, type: "project", position: { x: 0, y: 0 }, data: { kind: "project", project: p, net, serverId } };
+  const frame: MapNode = { id, type: "project", position: { x: 0, y: 0 }, data: { kind: "project", project: p, net, serverId, previews } };
   return { frame, children, size: frameSize(children, { w: EMPTY_W, h: EMPTY_H }) };
 }
 
