@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { api, type PgColumn, type PgFilter, type PgFilterOp, type PgRef, type PgTable, type RowChanges } from "../../api";
-import { BrowserShell, SearchBox, SidebarHeader, SidebarItem, SidebarToggle } from "./browser-shell";
+import { BrowserShell, SidebarNav, SearchBox, SidebarHeader, SidebarItem, SidebarToggle } from "./browser-shell";
 import { ChangeBar, ReviewDialog, useUnsaved } from "./changes";
 import { CELL_MAX, DataTable, type Cell, type GridEdit } from "./data-table";
 import { DropButton, NewTableDialog } from "./schema-dialogs";
@@ -49,6 +49,7 @@ export function PgBrowser({ serviceId, database, defaultSchema, dialect }: { ser
   const [picked, setPicked] = useState<string | null>(null);
   const [find, setFind] = useState("");
   const [sidebar, setSidebar] = useState(true);
+  const navScroll = useRef(0);
   // Kept across tables: switching table doesn't lock it again.
   const [write, setWrite] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -144,7 +145,7 @@ export function PgBrowser({ serviceId, database, defaultSchema, dialect }: { ser
         }
       />
       {newTable}
-      <nav aria-label="Tables" className="flex-1 space-y-3 overflow-y-auto p-2">
+      <SidebarNav scroll={navScroll} aria-label="Tables" className="flex-1 space-y-3 overflow-y-auto p-2">
         {shown.length === 0 && <p className="px-2 text-xs text-muted-foreground">No table matches.</p>}
         {schemas.map((schema) => {
           // A schema heads its tables, nested under it, unless it's the only (default) one.
@@ -171,7 +172,7 @@ export function PgBrowser({ serviceId, database, defaultSchema, dialect }: { ser
             </div>
           );
         })}
-      </nav>
+      </SidebarNav>
     </>
   );
 

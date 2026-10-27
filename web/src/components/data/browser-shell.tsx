@@ -1,5 +1,5 @@
 import { PanelLeft, Search, X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -109,6 +109,19 @@ export function SearchBox({ value, onChange, placeholder, className }: { value: 
         </button>
       )}
     </div>
+  );
+}
+
+/** The list's scrolling part. The view around it remounts on each pick, so its scroll lives in `scroll`, held by the browser. */
+export function SidebarNav({ scroll, ...props }: ComponentProps<"nav"> & { scroll: RefObject<number> }) {
+  return (
+    <nav
+      {...props}
+      ref={(n) => {
+        if (n) n.scrollTop = scroll.current;
+      }}
+      onScroll={(e) => (scroll.current = e.currentTarget.scrollTop)}
+    />
   );
 }
 
