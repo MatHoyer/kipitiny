@@ -130,6 +130,11 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, database, s
 		if ok && scheduleID != "" {
 			c.afterScheduledBackup(scheduleID, b.ID)
 		}
+		if ok && seedable(b) && svc.Anonymize != nil {
+			if err := c.refreshAnonymized(c.bg, svc.ProjectID, false); err != nil {
+				c.log.Warn("anonymized copy", "service", svc.Name, "err", err)
+			}
+		}
 	}); err != nil {
 		unlock()
 		b.Status, b.Error = store.OpFailed, err.Error()
@@ -848,7 +853,8 @@ func (c *Core) OpenBackup(ctx context.Context, id string) (store.Backup, io.Read
 	return b, rc, err
 }
 
-// DeleteBackup removes the object and its record.
+// DeleteBackup removes the object and its record, with its anonymized
+// copies.
 func (c *Core) DeleteBackup(ctx context.Context, id string) error {
 	b, err := c.store.GetBackup(ctx, id)
 	if err != nil {
@@ -856,6 +862,15 @@ func (c *Core) DeleteBackup(ctx context.Context, id string) error {
 	}
 	if b.Status == store.OpRunning {
 		return ErrBusy
+	}
+	copies, err := c.store.ListBackups(ctx, store.BackupFilter{Anonymized: true, SourceID: id})
+	if err != nil {
+		return err
+	}
+	for _, cp := range copies {
+		if err := c.DeleteBackup(ctx, cp.ID); err != nil {
+			return fmt.Errorf("anonymized copy: %w", err)
+		}
 	}
 	st, err := c.storageFor(ctx, b.TargetID)
 	if err != nil {

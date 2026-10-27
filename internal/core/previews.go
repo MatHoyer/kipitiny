@@ -117,9 +117,12 @@ func (c *Core) SetPreviewSettings(ctx context.Context, projectID string, in Prev
 		ps.Inherit = append(ps.Inherit, k)
 	}
 	slices.Sort(ps.Inherit)
-	ps, err = c.store.SavePreviewSettings(ctx, ps)
+	if ps, err = c.store.SavePreviewSettings(ctx, ps); err != nil {
+		return store.PreviewSettings{}, err
+	}
+	c.logAnonymizeErr(c.refreshAnonymized(ctx, projectID, false))
 	ps.Env = maskEnv(ps.Env, ps.Secrets)
-	return ps, err
+	return ps, nil
 }
 
 // PreviewOptions are what CI gives for a preview's deploy.
@@ -700,6 +703,7 @@ func (c *Core) StartPreviewExpiry() error {
 			case <-tick.C:
 			}
 			c.expirePreviews(c.bg)
+			c.refreshAllAnonymized(c.bg)
 		}
 	})
 }
