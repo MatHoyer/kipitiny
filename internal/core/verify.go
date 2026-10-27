@@ -139,46 +139,12 @@ func (c *Core) verify(ctx context.Context, b store.Backup) (store.VerificationDe
 	if err != nil {
 		return d, err
 	}
-	image, serverID := c.verifyImage(ctx, b)
-	dk := c.dockerFor(serverID)
-	c.steps.set(verifyKey(b.ID), VerifyImage)
-	if err := dk.EnsureImage(ctx, image, c.registryAuth(ctx, image)); err != nil {
-		return d, fmt.Errorf("pull %s: %w", image, err)
-	}
-	c.steps.set(verifyKey(b.ID), VerifyServer)
-
 	const user, db = "app", "app"
-	id, err := dk.Run(ctx, client.ContainerCreateOptions{
-		Name: "kipitiny-verify-" + strings.ToLower(b.ID),
-		Config: &container.Config{
-			Image: image,
-			Env:   []string{"POSTGRES_USER=" + user, "POSTGRES_DB=" + db, "POSTGRES_PASSWORD=" + randomToken(16)},
-			Labels: map[string]string{
-				docker.LabelManaged:   "true",
-				docker.LabelComponent: verifyComponent,
-			},
-			Healthcheck: postgresHealthcheck(user, db),
-		},
-		HostConfig: &container.HostConfig{
-			// Isolated: the restore arrives over exec, nothing needs a network.
-			NetworkMode: "none",
-			Resources:   container.Resources{Memory: verifyMemoryMB << 20},
-			ShmSize:     128 << 20,
-			LogConfig:   docker.DefaultLogConfig(),
-		},
-	})
+	dk, id, err := c.scratchPostgres(ctx, b, "kipitiny-verify-"+strings.ToLower(b.ID), user, db, func(s string) { c.steps.set(verifyKey(b.ID), s) })
 	if err != nil {
 		return d, err
 	}
-	defer func() {
-		// The data directory is an anonymous volume: remove it too.
-		if err := dk.RemoveContainerAndVolumes(context.WithoutCancel(ctx), id); err != nil {
-			c.log.Warn("cannot remove restore test container", "id", id[:12], "err", err)
-		}
-	}()
-	if err := dk.WaitHealthy(ctx, id, postgresReadyTimeout); err != nil {
-		return d, fmt.Errorf("throwaway server: %w", err)
-	}
+	defer c.removeScratch(ctx, dk, id)
 	// The image's init scripts may have filled db (PostGIS creates its
 	// extensions there): restore into an empty database, as a restore does.
 	const restored = "restore_test"
@@ -212,6 +178,55 @@ SELECT (SELECT count(*) FROM pg_stat_user_tables),
 		return d, fmt.Errorf("sanity query: %w", err)
 	}
 	return parseVerifyOutput(out.String())
+}
+
+// scratchPostgres starts a throwaway, network-less server able to restore
+// b, with the superuser user and the database db, and waits until it's
+// ready; step reports where it's at (VerifyImage, VerifyServer). The caller
+// removes it with removeScratch.
+func (c *Core) scratchPostgres(ctx context.Context, b store.Backup, name, user, db string, step func(string)) (*docker.Client, string, error) {
+	image, serverID := c.verifyImage(ctx, b)
+	dk := c.dockerFor(serverID)
+	step(VerifyImage)
+	if err := dk.EnsureImage(ctx, image, c.registryAuth(ctx, image)); err != nil {
+		return nil, "", fmt.Errorf("pull %s: %w", image, err)
+	}
+	step(VerifyServer)
+	id, err := dk.Run(ctx, client.ContainerCreateOptions{
+		Name: name,
+		Config: &container.Config{
+			Image: image,
+			Env:   []string{"POSTGRES_USER=" + user, "POSTGRES_DB=" + db, "POSTGRES_PASSWORD=" + randomToken(16)},
+			Labels: map[string]string{
+				docker.LabelManaged:   "true",
+				docker.LabelComponent: verifyComponent,
+			},
+			Healthcheck: postgresHealthcheck(user, db),
+		},
+		HostConfig: &container.HostConfig{
+			// Isolated: the restore arrives over exec, nothing needs a network.
+			NetworkMode: "none",
+			Resources:   container.Resources{Memory: verifyMemoryMB << 20},
+			ShmSize:     128 << 20,
+			LogConfig:   docker.DefaultLogConfig(),
+		},
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	if err := dk.WaitHealthy(ctx, id, postgresReadyTimeout); err != nil {
+		c.removeScratch(ctx, dk, id)
+		return nil, "", fmt.Errorf("throwaway server: %w", err)
+	}
+	return dk, id, nil
+}
+
+// removeScratch removes a throwaway server and its data, an anonymous
+// volume.
+func (c *Core) removeScratch(ctx context.Context, dk *docker.Client, id string) {
+	if err := dk.RemoveContainerAndVolumes(context.WithoutCancel(ctx), id); err != nil {
+		c.log.Warn("cannot remove throwaway server", "id", id[:12], "err", err)
+	}
 }
 
 // parseVerifyOutput reads "tables|rows|bytes" from psql -tA output.

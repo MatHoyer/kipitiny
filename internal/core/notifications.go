@@ -33,6 +33,7 @@ const (
 	EventServerReboot     = "server.reboot_required"
 	EventJobFailed        = "job.failed"
 	EventJobSucceeded     = "job.succeeded"
+	EventAnonymizeFailed  = "anonymize.failed"
 )
 
 // EventType describes an event a channel can subscribe to.
@@ -61,6 +62,7 @@ var eventTypes = []EventType{
 	{EventVerifySucceeded, "Restore test passed", false},
 	{EventRestoreFailed, "Restore failed", true},
 	{EventRestoreSucceeded, "Restore succeeded", true},
+	{EventAnonymizeFailed, "Anonymized preview data failed", true},
 	{EventCleanupFailed, "Cleanup had errors", true},
 	{EventUpdateAvailable, "New kipitiny version", true},
 	{EventServerUpdates, "Server has security updates", true},

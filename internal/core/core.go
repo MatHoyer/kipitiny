@@ -56,8 +56,10 @@ type Core struct {
 	setupMu    sync.Mutex
 	setupToken string // set while no admin exists
 
-	sched          scheduler
-	verifySem      chan struct{}
+	sched     scheduler
+	verifySem chan struct{}
+	// anonymizeMu makes starting an anonymized copy check-then-create.
+	anonymizeMu    sync.Mutex
 	steps          opSteps
 	reconcileKick  chan struct{}
 	probes         sync.Map // server ID -> *mount.Mount (nil: no probe there)

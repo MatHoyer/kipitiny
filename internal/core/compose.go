@@ -386,7 +386,13 @@ func (c *Core) applyCompose(ctx context.Context, projectID string, data []byte, 
 			return a, err
 		}
 	}
-	return a, a.apply(ctx)
+	if err := a.apply(ctx); err != nil {
+		return a, err
+	}
+	if project.ParentID == "" { // rules may have changed
+		c.logAnonymizeErr(c.refreshAnonymized(ctx, projectID, false))
+	}
+	return a, nil
 }
 
 // planCompose checks a compose file against a project and its services
