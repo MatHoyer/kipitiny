@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Background, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, type Edge, type Node, type OnNodeDrag } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { FolderPlus, Network, Plus, RotateCcw } from "lucide-react";
+import { Box, FolderPlus, Network, Plus, RotateCcw } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { NewProjectDialog } from "@/routes/Projects";
@@ -17,6 +18,9 @@ import { useCanvasEdits } from "./edit";
 import "./canvas.css";
 import { nodeTypes } from "./nodes";
 import { NodePanel } from "./panel";
+
+// Its own chunk: three.js is only downloaded by who opens the 3D view.
+const Map3D = lazy(() => import("./map3d"));
 
 /**
  * The map as a canvas: pan, zoom, drag nodes (positions are saved for every
@@ -40,6 +44,7 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState<"project" | "network" | null>(null);
+  const [view3d, setView3d] = useState(false);
   const saved = layout.data?.positions;
   const edits = useCanvasEdits(servers);
 
@@ -115,9 +120,17 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
         minZoom={0.1}
         proOptions={{ hideAttribution: true }}
       >
+        {view3d && (
+          // Over the flat map, under its panels.
+          <div className="absolute inset-0 z-[5] bg-background">
+            <Suspense fallback={<Spinner className="absolute top-1/2 left-1/2" />}>
+              <Map3D nodes={nodes} edges={edges} dark={dark} selected={selected} onSelect={setSelected} />
+            </Suspense>
+          </div>
+        )}
         <Background gap={20} size={1.5} />
-        <Controls showInteractive={false} />
-        <MiniMap className="max-sm:hidden" pannable zoomable nodeStrokeWidth={2} nodeColor={(n: Node) => (n.type === "project" || n.type === "server" ? "transparent" : "var(--muted-foreground)")} />
+        {!view3d && <Controls showInteractive={false} />}
+        <MiniMap className={cn("max-sm:hidden", view3d && "hidden")} pannable zoomable nodeStrokeWidth={2} nodeColor={(n: Node) => (n.type === "project" || n.type === "server" ? "transparent" : "var(--muted-foreground)")} />
         <Panel
           position="top-left"
           // On a phone the legend hides; the panel too, unless it holds Reset layout.
@@ -126,6 +139,17 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
           <div className="max-sm:hidden">
             <Legend />
           </div>
+          <Button
+            variant={view3d ? "secondary" : "ghost"}
+            size="sm"
+            aria-pressed={view3d}
+            title={view3d ? "Back to the flat map" : "3D view (downloads its renderer the first time)"}
+            onClick={() => setView3d(!view3d)}
+            className="h-6 px-1.5 text-xs text-muted-foreground"
+          >
+            <Box data-icon="inline-start" />
+            3D
+          </Button>
           {Object.keys(saved).length > 0 && (
             <ConfirmDialog
               trigger={
@@ -165,7 +189,9 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
           <NewProjectDialog stay open={adding === "project"} onOpenChange={(o) => !o && setAdding(null)} />
         </Panel>
         <Panel position="bottom-center" className="rounded-md bg-card/80 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur max-sm:hidden">
-          Drag a service's bottom dot onto a database or network · select a line and press Delete to remove it
+          {view3d
+            ? "Drag to pan, right-drag to turn, scroll to zoom · click an object for its details · 3D again to edit"
+            : "Drag a service's bottom dot onto a database or network · select a line and press Delete to remove it"}
         </Panel>
       </ReactFlow>
       <Dialog open={adding === "network"} onOpenChange={(o) => !o && setAdding(null)}>
