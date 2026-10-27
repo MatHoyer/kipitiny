@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/uptrace/bun"
+
+	"github.com/MatHoyer/kipitiny/internal/anonymize"
 )
 
 var (
@@ -39,6 +41,7 @@ type Store interface {
 	UpdateService(ctx context.Context, s Service) (Service, error)
 	RenameService(ctx context.Context, id, name string) error
 	SetServiceTags(ctx context.Context, id string, tags []string) error
+	SetServiceAnonymize(ctx context.Context, id string, rules anonymize.Rules) error
 	SetCurrentDeployment(ctx context.Context, serviceID, deploymentID string) error
 	// SetDeploymentImage records the image a deployment runs, pinned to the
 	// digest it was pulled at.
@@ -441,12 +444,26 @@ type PreviewSettings struct {
 	Secrets []string          `bun:"secrets" json:"secrets"`
 	// Inherit names the parent's secrets previews may still use; the
 	// others are left out.
-	Inherit           []string  `bun:"inherit" json:"inherit"`
-	TTLSeconds        int       `bun:"ttl_seconds" json:"ttlSeconds"`
-	SleepAfterSeconds int       `bun:"sleep_after_seconds" json:"sleepAfterSeconds"`
-	AllowSeed         bool      `bun:"allow_seed" json:"allowSeed"`
-	UpdatedAt         time.Time `bun:"updated_at" json:"updatedAt"`
+	Inherit           []string `bun:"inherit" json:"inherit"`
+	TTLSeconds        int      `bun:"ttl_seconds" json:"ttlSeconds"`
+	SleepAfterSeconds int      `bun:"sleep_after_seconds" json:"sleepAfterSeconds"`
+	// SeedMode is what --seed fills a new preview's databases with.
+	SeedMode SeedMode `bun:"seed_mode" json:"seed"`
+	// Salt keys the anonymized values' hashes (anonymize.Value).
+	Salt      string    `bun:"salt" json:"-"`
+	UpdatedAt time.Time `bun:"updated_at" json:"updatedAt"`
 }
+
+// SeedMode is what previews may be seeded with: nothing, their parent's
+// databases anonymized with the rules of each (Service.Anonymize), or
+// copied as they are.
+type SeedMode string
+
+const (
+	SeedOff        SeedMode = ""
+	SeedAnonymized SeedMode = "anonymized"
+	SeedRaw        SeedMode = "raw"
+)
 
 type ServiceKind string
 
@@ -491,6 +508,9 @@ type Service struct {
 	// Tags group services in the UI, like Icon set by a compose file or
 	// the user.
 	Tags []string `bun:"tags" json:"tags"`
+	// Anonymize are a database's rules for anonymized preview seeds; nil
+	// has none.
+	Anonymize anonymize.Rules `bun:"anonymize" json:"anonymize"`
 	// Replicas is always 1 for databases.
 	Replicas int `bun:"replicas" json:"replicas"`
 	// Port is the container port Traefik routes to; 0 when not public.
@@ -908,6 +928,10 @@ type Backup struct {
 	// Database is the PostgreSQL database dumped; empty (older backups) is
 	// the service's own.
 	Database string `bun:"db_name" json:"database,omitempty"`
+	// SourceID is the backup an anonymized copy was made from, with the
+	// rules (and salt) hashing to RulesHash; empty for other backups.
+	SourceID  string `bun:"source_id" json:"sourceId,omitempty"`
+	RulesHash string `bun:"rules_hash" json:"rulesHash,omitempty"`
 	// Volumes names the volumes in a volume backup's archive.
 	Volumes []string `bun:"volumes" json:"volumes,omitempty"`
 	// Image is the backed-up service's image: a restore test falls back to
@@ -964,7 +988,11 @@ type BackupFilter struct {
 	// ProjectIn, when not nil, keeps the backups of these projects only.
 	ProjectIn []string
 	Status    OpStatus
-	Limit     int
+	// Anonymized lists anonymized copies (of SourceID, when set) instead
+	// of backups.
+	Anonymized bool
+	SourceID   string
+	Limit      int
 }
 
 type Restore struct {

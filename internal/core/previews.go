@@ -35,7 +35,8 @@ type PreviewSettingsInput struct {
 	Inherit           []string          `json:"inherit"`
 	TTLSeconds        int               `json:"ttlSeconds"`
 	SleepAfterSeconds int               `json:"sleepAfterSeconds"`
-	AllowSeed         bool              `json:"allowSeed"`
+	// Seed is what --seed fills a new preview's databases with.
+	Seed store.SeedMode `json:"seed"`
 }
 
 // GetPreviewSettings returns a project's preview settings, secrets masked;
@@ -77,10 +78,14 @@ func (c *Core) SetPreviewSettings(ctx context.Context, projectID string, in Prev
 		Inherit:           []string{},
 		TTLSeconds:        in.TTLSeconds,
 		SleepAfterSeconds: in.SleepAfterSeconds,
-		AllowSeed:         in.AllowSeed,
+		SeedMode:          in.Seed,
+		Salt:              old.Salt,
 	}
 	if ps.BaseDomain != "" && !domainRe.MatchString(ps.BaseDomain) {
 		return store.PreviewSettings{}, fmt.Errorf("%w: base domain %q is not a valid hostname", ErrInvalid, ps.BaseDomain)
+	}
+	if !slices.Contains([]store.SeedMode{store.SeedOff, store.SeedAnonymized, store.SeedRaw}, ps.SeedMode) {
+		return store.PreviewSettings{}, fmt.Errorf("%w: seed is empty (off), anonymized or raw", ErrInvalid)
 	}
 	if ps.TTLSeconds < 0 {
 		return store.PreviewSettings{}, fmt.Errorf("%w: the time to live can't be negative", ErrInvalid)
@@ -253,8 +258,12 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 	}
 	var seeds map[string]string // database name -> parent's backup ID
 	if opts.Seed {
-		if !settings.AllowSeed {
+		if settings.SeedMode == store.SeedOff {
 			return PreviewView{}, fmt.Errorf("%w: %s's preview settings don't allow seeding previews with its data", ErrInvalid, parent.Name)
+		}
+		if settings.SeedMode == store.SeedAnonymized {
+			// shortcut: anonymized copies aren't made yet; never fall back to raw data.
+			return PreviewView{}, fmt.Errorf("%w: anonymized seeding isn't available yet", ErrInvalid)
 		}
 		if seeds, err = c.seedBackups(ctx, file, parentSvcs); err != nil {
 			return PreviewView{}, err

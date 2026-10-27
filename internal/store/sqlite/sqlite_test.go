@@ -18,6 +18,7 @@ import (
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 
+	"github.com/MatHoyer/kipitiny/internal/anonymize"
 	"github.com/MatHoyer/kipitiny/internal/ids"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -1437,5 +1438,110 @@ func TestPushSubscriptions(t *testing.T) {
 	}
 	if ps, _ := s.ListPushSubscriptions(ctx, member.ID); len(ps) != 0 {
 		t.Fatalf("member subscriptions: %+v", ps)
+	}
+}
+
+func TestAnonymizeRulesAndCopies(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	p, err := s.CreateProject(ctx, store.Project{Name: "shop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := s.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// nil has no rules, an empty set holds nothing personal: both survive.
+	if got, _ := s.GetService(ctx, db.ID); got.Anonymize != nil {
+		t.Fatalf("new service has rules %#v", got.Anonymize)
+	}
+	if err := s.SetServiceAnonymize(ctx, db.ID, anonymize.Rules{}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetService(ctx, db.ID); got.Anonymize == nil || len(got.Anonymize) != 0 {
+		t.Fatalf("empty rules came back as %#v", got.Anonymize)
+	}
+	rules := anonymize.Rules{"users": {Columns: map[string]string{"email": "fake:email"}}, "sessions": {Action: anonymize.Truncate}}
+	if err := s.SetServiceAnonymize(ctx, db.ID, rules); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetService(ctx, db.ID); got.Anonymize.Hash("00") != rules.Hash("00") {
+		t.Fatalf("rules came back as %#v", got.Anonymize)
+	}
+	if err := s.SetServiceAnonymize(ctx, db.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetService(ctx, db.ID); got.Anonymize != nil {
+		t.Fatalf("cleared rules came back as %#v", got.Anonymize)
+	}
+
+	src, err := s.CreateBackup(ctx, store.Backup{ServiceID: db.ID, ProjectID: p.ID, TargetID: store.LocalTargetID, ObjectKey: "a.dump", Status: store.OpSucceeded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cp, err := s.CreateBackup(ctx, store.Backup{ServiceID: db.ID, ProjectID: p.ID, TargetID: store.LocalTargetID, ObjectKey: "a.anon.dump",
+		Status: store.OpSucceeded, SourceID: src.ID, RulesHash: "h"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bs, _ := s.ListBackups(ctx, store.BackupFilter{ServiceID: db.ID}); len(bs) != 1 || bs[0].ID != src.ID {
+		t.Fatalf("backups list copies: %+v", bs)
+	}
+	if bs, _ := s.ListBackups(ctx, store.BackupFilter{ServiceID: db.ID, Anonymized: true, SourceID: src.ID}); len(bs) != 1 || bs[0].ID != cp.ID || bs[0].RulesHash != "h" {
+		t.Fatalf("copies: %+v", bs)
+	}
+
+	ps, err := s.SavePreviewSettings(ctx, store.PreviewSettings{ProjectID: p.ID, SeedMode: store.SeedAnonymized, Salt: "abc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ps.SeedMode = store.SeedRaw
+	if _, err := s.SavePreviewSettings(ctx, ps); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetPreviewSettings(ctx, p.ID); got.SeedMode != store.SeedRaw || got.Salt != "abc" {
+		t.Fatalf("preview settings %+v", got)
+	}
+}
+
+func TestSeedModeMigration(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "k.db")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	sub, _ := fs.Sub(migrations, "migrations")
+	p, err := goose.NewProvider(goose.DialectSQLite3, db, sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.UpTo(ctx, 72); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`INSERT INTO projects (id, name, server_id, created_at, updated_at) VALUES ('shop', 'shop', '` + store.LocalServerID + `', '2026-01-01', '2026-01-01')`,
+		`INSERT INTO projects (id, name, server_id, created_at, updated_at) VALUES ('blog', 'blog', '` + store.LocalServerID + `', '2026-01-01', '2026-01-01')`,
+		`INSERT INTO preview_settings (project_id, allow_seed, updated_at) VALUES ('shop', 1, '2026-01-01')`,
+		`INSERT INTO preview_settings (project_id, allow_seed, updated_at) VALUES ('blog', 0, '2026-01-01')`,
+	} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	// Projects that allowed seeding keep seeding with their data as is.
+	if ps, _ := s.GetPreviewSettings(ctx, "shop"); ps.SeedMode != store.SeedRaw {
+		t.Errorf("shop seeds %q", ps.SeedMode)
+	}
+	if ps, _ := s.GetPreviewSettings(ctx, "blog"); ps.SeedMode != store.SeedOff {
+		t.Errorf("blog seeds %q", ps.SeedMode)
 	}
 }

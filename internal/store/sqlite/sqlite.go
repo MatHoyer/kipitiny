@@ -15,6 +15,7 @@ import (
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 
+	"github.com/MatHoyer/kipitiny/internal/anonymize"
 	"github.com/MatHoyer/kipitiny/internal/ids"
 	"github.com/MatHoyer/kipitiny/internal/sqlitedb"
 	"github.com/MatHoyer/kipitiny/internal/store"
@@ -164,7 +165,7 @@ func (s *Store) SavePreviewSettings(ctx context.Context, ps store.PreviewSetting
 	_, err := s.db.NewInsert().Model(&ps).On("CONFLICT (project_id) DO UPDATE").
 		Set("base_domain = EXCLUDED.base_domain").Set("env = EXCLUDED.env").Set("secrets = EXCLUDED.secrets").
 		Set("inherit = EXCLUDED.inherit").Set("ttl_seconds = EXCLUDED.ttl_seconds").
-		Set("sleep_after_seconds = EXCLUDED.sleep_after_seconds").Set("allow_seed = EXCLUDED.allow_seed").
+		Set("sleep_after_seconds = EXCLUDED.sleep_after_seconds").Set("seed_mode = EXCLUDED.seed_mode").Set("salt = EXCLUDED.salt").
 		Set("updated_at = EXCLUDED.updated_at").Exec(ctx)
 	return ps, mapErr(err)
 }
@@ -258,7 +259,7 @@ func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Ser
 		svc.ProjectNetworks = []string{}
 	}
 	res, err := s.db.NewUpdate().Model(&svc).
-		Column("image", "icon", "tags", "replicas", "port", "domain", "analytics", "analytics_since", "env", "secrets", "memory_mb", "cpus", "health_path", "healthcheck", "pre_deploy", "volumes", "middlewares", "pre_backup", "published_ports", "stop_grace_seconds", "host_network", "docker_socket", "runtime", "files", "depends_on", "project_networks", "preview", "updated_at").
+		Column("image", "icon", "tags", "anonymize", "replicas", "port", "domain", "analytics", "analytics_since", "env", "secrets", "memory_mb", "cpus", "health_path", "healthcheck", "pre_deploy", "volumes", "middlewares", "pre_backup", "published_ports", "stop_grace_seconds", "host_network", "docker_socket", "runtime", "files", "depends_on", "project_networks", "preview", "updated_at").
 		WherePK().Exec(ctx)
 	if err != nil {
 		return store.Service{}, mapErr(err)
@@ -287,6 +288,18 @@ func (s *Store) SetServiceTags(ctx context.Context, id string, tags []string) er
 	}
 	svc := store.Service{ID: id, Tags: tags, UpdatedAt: now()}
 	res, err := s.db.NewUpdate().Model(&svc).Column("tags", "updated_at").WherePK().Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) SetServiceAnonymize(ctx context.Context, id string, rules anonymize.Rules) error {
+	svc := store.Service{ID: id, Anonymize: rules, UpdatedAt: now()}
+	res, err := s.db.NewUpdate().Model(&svc).Column("anonymize", "updated_at").WherePK().Exec(ctx)
 	if err != nil {
 		return mapErr(err)
 	}
@@ -843,6 +856,14 @@ func (s *Store) ListBackups(ctx context.Context, f store.BackupFilter) ([]store.
 	}
 	if f.Status != "" {
 		q = q.Where("status = ?", f.Status)
+	}
+	if f.Anonymized {
+		q = q.Where("source_id != ''")
+	} else {
+		q = q.Where("source_id = ''")
+	}
+	if f.SourceID != "" {
+		q = q.Where("source_id = ?", f.SourceID)
 	}
 	if f.Limit > 0 {
 		q = q.Limit(f.Limit)

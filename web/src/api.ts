@@ -76,8 +76,8 @@ export type PreviewSettings = {
   inherit: string[];
   ttlSeconds: number;
   sleepAfterSeconds: number;
-  /** Previews may be seeded with the project's backups (production data). */
-  allowSeed: boolean;
+  /** What --seed fills new previews' databases with: nothing, anonymized backups, or production data as is. */
+  seed: "" | "anonymized" | "raw";
 };
 
 export type Container = {
