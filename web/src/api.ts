@@ -653,7 +653,7 @@ export type Grants = Record<string, Perm[]>;
 export type User = { id: string; username: string; role: Role; features: Feature[]; createdAt: string; preferences?: Preferences };
 
 /** The user's own UI choices; missing values are the defaults. */
-export type Preferences = { mapView?: "3d"; theme?: string };
+export type Preferences = { mapView?: "3d" };
 
 export type UserView = User & { grants: Grants; totpEnabled: boolean };
 

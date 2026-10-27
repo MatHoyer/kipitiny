@@ -20,13 +20,10 @@ func TestSetPreferences(t *testing.T) {
 	if _, err := c.SetPreferences(ctx, store.Preferences{MapView: "4d"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("bad view: %v", err)
 	}
-	if _, err := c.SetPreferences(ctx, store.Preferences{Theme: "blue"}); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("bad theme: %v", err)
-	}
-	if _, err := c.SetPreferences(ctx, store.Preferences{MapView: "3d", Theme: "dark"}); err != nil {
+	if _, err := c.SetPreferences(ctx, store.Preferences{MapView: "3d"}); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := c.store.GetUser(ctx, u.ID); got.Preferences != (store.Preferences{MapView: "3d", Theme: "dark"}) {
+	if got, _ := c.store.GetUser(ctx, u.ID); got.Preferences.MapView != "3d" {
 		t.Fatalf("saved: %+v", got.Preferences)
 	}
 	if _, err := c.SetPreferences(context.Background(), store.Preferences{}); !errors.Is(err, ErrUnauthorized) {

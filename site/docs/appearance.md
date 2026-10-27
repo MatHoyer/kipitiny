@@ -9,7 +9,7 @@ The whole UI shows your changes while you edit, and goes back if you leave
 without saving. **Reset** returns to kipitiny's own look.
 
 Light or dark mode is each user's own: **Preferences** (user menu)
-sets it on every browser they sign in to, *System* following the device.
+switches it for the browser, *System* following the device.
 
 ## Theme
 
