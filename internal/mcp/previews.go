@@ -107,7 +107,7 @@ type setPreviewSettingsIn struct {
 	Inherit    *[]string         `json:"inherit,omitempty" jsonschema:"the project's secrets previews may still use (replaces the list); the others are left out"`
 	TTL        *string           `json:"ttl,omitempty" jsonschema:"close a preview after this long unused, as a duration (168h); 0 for the default of 7 days"`
 	SleepAfter *string           `json:"sleep_after,omitempty" jsonschema:"idle time before a preview sleeps, as a duration (30m; 5 minutes to 30 days); 0 for the default"`
-	AllowSeed  *bool             `json:"allow_seed,omitempty" jsonschema:"let deploy_preview seed new previews' databases with the project's latest backups (production data)"`
+	Seed       *string           `json:"seed,omitempty" jsonschema:"what deploy_preview --seed fills new previews' databases with: empty (off), anonymized (the latest backups anonymized with each database's rules) or raw (production data as is)"`
 }
 
 // setPreviewSettings changes only the fields given, unlike the API's
@@ -123,7 +123,7 @@ func (t *tools) setPreviewSettings(ctx context.Context, _ *mcp.CallToolRequest, 
 			return store.PreviewSettings{}, err
 		}
 		next := core.PreviewSettingsInput{BaseDomain: ps.BaseDomain, Env: ps.Env, Inherit: ps.Inherit,
-			TTLSeconds: ps.TTLSeconds, SleepAfterSeconds: ps.SleepAfterSeconds, AllowSeed: ps.AllowSeed}
+			TTLSeconds: ps.TTLSeconds, SleepAfterSeconds: ps.SleepAfterSeconds, Seed: ps.SeedMode}
 		next.Secrets = slices.DeleteFunc(ps.Secrets, func(k string) bool { _, set := in.Set[k]; return set })
 		maps.Copy(next.Env, in.Set)
 		maps.Copy(next.Env, in.Secrets)
@@ -147,8 +147,8 @@ func (t *tools) setPreviewSettings(ctx context.Context, _ *mcp.CallToolRequest, 
 				return store.PreviewSettings{}, err
 			}
 		}
-		if in.AllowSeed != nil {
-			next.AllowSeed = *in.AllowSeed
+		if in.Seed != nil {
+			next.Seed = store.SeedMode(*in.Seed)
 		}
 		return t.c.SetPreviewSettings(ctx, p.ID, next)
 	})

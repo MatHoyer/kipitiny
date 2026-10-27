@@ -151,7 +151,7 @@ const settingsForm = (s: PreviewSettings) => ({
   ttlDays: s.ttlSeconds ? String(s.ttlSeconds / DAY) : "",
   sleepMinutes: s.sleepAfterSeconds ? String(s.sleepAfterSeconds / 60) : "",
   inherit: [...s.inherit].sort(),
-  allowSeed: s.allowSeed,
+  seed: s.seed,
 });
 
 function PreviewSettingsCard({ project, canEdit }: { project: Project; canEdit: boolean }) {
@@ -177,7 +177,7 @@ function PreviewSettingsForm({ project, saved, canEdit }: { project: Project; sa
         inherit: form.inherit,
         ttlSeconds: Math.round((Number(form.ttlDays) || 0) * DAY),
         sleepAfterSeconds: Math.round((Number(form.sleepMinutes) || 0) * 60),
-        allowSeed: form.allowSeed,
+        seed: form.seed,
       }),
     onSuccess: (updated) => {
       qc.setQueryData(["preview-settings", project.id], updated);
@@ -270,8 +270,8 @@ function PreviewSettingsForm({ project, saved, canEdit }: { project: Project; sa
           className="col-span-full"
           label="Allow seeding with the project's data"
           description="CI may pass --seed to fill a new preview's databases from the latest backups. That copies production data into the preview."
-          checked={form.allowSeed}
-          onCheckedChange={(allowSeed) => canEdit && setForm({ ...form, allowSeed })}
+          checked={form.seed !== ""}
+          onCheckedChange={(on) => canEdit && setForm({ ...form, seed: on ? "raw" : "" })}
         />
       </form>
       {canEdit && (

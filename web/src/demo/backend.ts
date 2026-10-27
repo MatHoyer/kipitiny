@@ -1134,7 +1134,7 @@ function previewSettings(projectId: string): PreviewSettings {
     inherit: [],
     ttlSeconds: 0,
     sleepAfterSeconds: 0,
-    allowSeed: false,
+    seed: "",
   };
   return { ...s, env: Object.fromEntries(Object.entries(s.env).map(([k, v]) => [k, s.secrets.includes(k) ? MASK : v])) };
 }
