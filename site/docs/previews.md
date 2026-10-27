@@ -30,7 +30,8 @@ In the project's **Previews** tab, under *Preview settings*:
 - **Inherit**: production secrets previews may still use as they are, e.g. an
   error tracker's DSN. Every other secret is left out.
 - How long an unused preview lives (default 7 days), when it sleeps
-  (default 30 minutes), and whether CI may **seed** it with production data.
+  (default 30 minutes), and what CI's `--seed` fills its databases with:
+  nothing, [anonymized data](#anonymized-seeds), or production data as is.
 
 ### What a preview gets
 
@@ -38,7 +39,7 @@ In the project's **Previews** tab, under *Preview settings*:
 |---|---|---|
 | Services | as set up | the same; a git-linked project's compose file is read at the preview's branch, so a PR can change it |
 | Images | as deployed | the tags CI passes (`--tag web=sha-abc`); the others keep production's |
-| Databases | as they are | new and empty (new passwords); `--seed` fills them from the latest backups |
+| Databases | as they are | new and empty (new passwords); `--seed` fills them from the latest backups, anonymized or as is |
 | Project variables | as set | production's plain variables, then the inherited secrets, then the preview settings, then CI's `--env` |
 | Service and project secrets | as set | **left out**: a service's secret `API_KEY` takes the preview variable `API_KEY` |
 | Password manager references | resolved | left out, unless inherited or set again in the preview settings (e.g. `{{ pass://Staging/stripe/key }}`) |
@@ -115,8 +116,9 @@ kipitiny preview --url https://kipitiny.example.com --project shop --name pr-12 
 - `--env KEY=value` adds a plain variable to this preview only (no
   references).
 - `--seed` fills the databases of a **new** preview from the project's latest
-  backups (the preview settings must allow it). Later deploys keep the
-  preview's data.
+  backups, as the preview settings say: [anonymized](#anonymized-seeds) or as
+  they are (refused when the settings say nothing). Redis starts empty. Later
+  deploys keep the preview's data.
 - `--ttl 72h` overrides how long it lives unused.
 - `--close` deletes it: containers, volumes, databases.
 
@@ -125,6 +127,62 @@ The API is `PUT /api/projects/{id}/previews/{name}` (same fields as JSON:
 `DELETE /api/projects/{id}/previews/{name}`; agents use `deploy_preview`,
 `list_previews`, `close_preview`, and `get_preview_settings` and
 `set_preview_settings` for the settings.
+
+## Anonymized seeds
+
+Previews are usually less protected than production: public URLs, CI tokens,
+more people with access. With **Seed new previews with › Anonymized data**,
+`--seed` never copies production's personal data into them:
+
+- Each PostgreSQL, MySQL, MariaDB and MongoDB database gets **rules**, under
+  **Previews › Anonymized data**, or in `x-kipitiny.anonymize` of the compose
+  file of a [git project](/docs/compose#x-kipitiny-per-service) (the settings
+  then show them read-only). Rules empty a table (`truncate`), drop it
+  (`exclude`), or change columns: `null`, `hash`, `fixed:<value>`,
+  `fake:email`, `fake:name`, `fake:phone`, `fake:text`, or `keep`. The
+  [compose reference](/docs/compose#x-kipitiny-per-service) details each.
+- After each backup of the database, and when its rules change, kipitiny
+  makes an **anonymized copy**: the backup is restored into a throwaway
+  server without network, the rules are applied in one transaction (triggers
+  don't run), and the result is dumped next to the backup, on the same
+  storage and encrypted the same way. Previews restore that copy, as fast as
+  a backup; production data never reaches a preview's container.
+- A copy is made once per backup and set of rules. The newest good one is
+  kept; it's deleted with its backup.
+- **Fail closed**: a database without rules, without a backup or without a
+  good copy made with its current rules refuses `--seed`, saying why. A
+  database holding nothing personal says so with empty rules
+  (`anonymize: {}`, or **Holds nothing personal**). If a new copy fails (a
+  rule names a column that's gone), previews keep the previous good copy, a
+  notification says so, and **Retry** makes it again once fixed.
+- The settings list columns whose names look personal (`email`, `phone`,
+  `name`, `address`, `token`, `password`, `ip`…) and have no rule.
+
+```yaml
+services:
+  db:
+    image: postgres:17-alpine
+    x-kipitiny:
+      anonymize:
+        users:
+          email: fake:email
+          name: fake:name
+          phone: fake:phone
+          password_hash: fixed:$2b$10$7EqJtq98hPqEX7fNZaFWoO   # everyone logs in with the same password
+        sessions: truncate
+        audit_log: exclude
+```
+
+A row `michelle | 06 01 01 01 01 | michelle@mail.com` becomes, for instance,
+`Jordan Kowalski | 06 43 04 57 80 | u400c9c020163@example.invalid`. Values derive
+from the original through the project's secret salt: the same email gives the
+same fake address in every table, so unique keys and joins keep working, and
+`.invalid` addresses can't receive mail. The salt never leaves the manager.
+
+Agents use `get_preview_seed`, `set_anonymize_rules` and `anonymize_now`; the
+API is `GET /api/projects/{id}/preview-seed`,
+`PUT /api/projects/{id}/preview-seed/{service}` (`{"rules": …}`, `null`
+removes them) and `POST /api/projects/{id}/preview-seed/{service}/anonymize`.
 
 ## One preview per stack of pull requests
 

@@ -203,9 +203,15 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 	addTool(s, &mcp.Tool{Name: "close_preview", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Close a preview environment: delete its containers, volumes and databases. Needs deploy."}, t.closePreview)
 	addTool(s, &mcp.Tool{Name: "get_preview_settings", Annotations: readOnly,
-		Description: "A project's preview settings (secrets masked): the base domain of previews' apps, the preview variables and secrets replacing production's, the production secrets previews still inherit, the time to live, sleep delay and whether seeding with production data is allowed."}, t.getPreviewSettings)
+		Description: "A project's preview settings (secrets masked): the base domain of previews' apps, the preview variables and secrets replacing production's, the production secrets previews still inherit, the time to live, sleep delay and what deploy_preview's seed fills new previews with (seed: empty, anonymized or raw)."}, t.getPreviewSettings)
 	addTool(s, &mcp.Tool{Name: "set_preview_settings",
 		Description: "Change a project's preview settings (see get_preview_settings); omitted fields are kept. Previews pick them up on their next deploy_preview. Needs env."}, t.setPreviewSettings)
+	addTool(s, &mcp.Tool{Name: "get_preview_seed", Annotations: readOnly,
+		Description: "What previews seeded with anonymized data get from each database of a project (PostgreSQL, MySQL, MariaDB, MongoDB): its anonymize rules (null: none, so it can't seed; {}: nothing personal), its latest backup, the latest anonymized copy made with the current rules and its status or error, and the copy previews get now."}, t.getPreviewSeed)
+	addTool(s, &mcp.Tool{Name: "set_anonymize_rules",
+		Description: "Set a database's anonymize rules, by table (schema.table outside PostgreSQL's public; a collection for MongoDB): \"truncate\", \"exclude\", or rules by column (a field path for MongoDB): keep, null, hash, fixed:<value>, fake:email|name|phone|text. {} says it holds nothing personal, remove takes them away. Its latest backup is anonymized again in the background. Not for a git project: set x-kipitiny.anonymize in its file. Needs env."}, t.setAnonymizeRules)
+	addTool(s, &mcp.Tool{Name: "anonymize_now", Annotations: &mcp.ToolAnnotations{IdempotentHint: true},
+		Description: "Make the anonymized copy of a database's latest backup again, after it failed (get_preview_seed shows why). Needs env."}, t.anonymizeNow)
 	addTool(s, &mcp.Tool{Name: "set_sleep",
 		Description: "Set a project's sleep mode: after this long without a request to any of its apps, every service stops, databases too, and the next request starts them again behind a \"starting\" page (503 with Retry-After for API calls). Background workers don't run while it sleeps; a deploy, a start, a backup or a data query wakes it. Needs an app with a domain, and no service with published ports or the host network; get_app_status reports sleeping services."}, t.setSleep)
 	addTool(s, &mcp.Tool{Name: "list_domains", Annotations: readOnly,
