@@ -1,12 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Box, MapIcon } from "lucide-react";
+import { Box, MapIcon, Monitor, Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 import { Section } from "@/components/common";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { api, type AuthState, type Preferences } from "@/api";
 
+const themes = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "System", icon: Monitor },
+];
+
 /** The signed-in user's own UI choices, kept on the server for every browser. */
 export function PreferencesPage() {
+  const { theme, setTheme } = useTheme();
   const qc = useQueryClient();
   const auth = useQuery({ queryKey: ["auth"], queryFn: api.authState, staleTime: Infinity });
   const prefs = auth.data?.user?.preferences ?? {};
@@ -20,6 +28,20 @@ export function PreferencesPage() {
     <>
       <PageHeader crumbs={[{ label: "Preferences" }]} />
       <PageBody className="max-w-3xl">
+        <Section
+          title="Theme"
+          description="Light, dark, or as the device is set, on every browser you sign in to."
+          actions={
+            <Segmented value={theme ?? "system"} onValueChange={(v) => (setTheme(v), set({ theme: v }))} aria-label="Theme">
+              {themes.map(({ value, label, icon: Icon }) => (
+                <SegmentedItem key={value} value={value}>
+                  <Icon />
+                  {label}
+                </SegmentedItem>
+              ))}
+            </Segmented>
+          }
+        />
         <Section
           title="Map view"
           description="How the map opens, on the Map page and in projects. Its 3D button still switches for one visit."

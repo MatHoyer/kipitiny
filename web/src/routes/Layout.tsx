@@ -6,11 +6,7 @@ import {
   FolderKanban,
   LoaderCircle,
   LogOut,
-  Monitor,
-  Moon,
   SlidersHorizontal,
-  Sun,
-  SunMoon,
   UserRound,
   Waypoints,
   TriangleAlert,
@@ -45,8 +41,7 @@ import {
   SidebarProvider,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Segmented, SegmentedItem } from "@/components/ui/segmented";
-import { Tip, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/logo";
 import { DemoBanner } from "@/demo/banner";
@@ -64,6 +59,12 @@ export function Layout() {
   const { pathname } = useLocation();
   const [preview, setPreview] = useState<Branding | null>(null);
   useApplyBranding(preview ?? auth.data?.branding ?? {});
+  // The user's theme follows them; next-themes still keeps it locally so pages open without a flash.
+  const { setTheme } = useTheme();
+  const savedTheme = auth.data?.user?.preferences?.theme;
+  useEffect(() => {
+    if (savedTheme) setTheme(savedTheme);
+  }, [savedTheme, setTheme]);
 
   if (auth.isPending) return null;
   if (auth.error) return <p className="p-8 text-sm text-destructive">{auth.error.message}</p>;
@@ -300,16 +301,9 @@ function DockerStatus() {
   );
 }
 
-const themes = [
-  { value: "light", label: "Light", icon: Sun },
-  { value: "dark", label: "Dark", icon: Moon },
-  { value: "system", label: "System", icon: Monitor },
-];
-
 function NavUser({ username }: { username: string }) {
   const qc = useQueryClient();
   const { isMobile, setOpenMobile } = useSidebar();
-  const { theme, setTheme } = useTheme();
   const logout = useMutation({ meta: { error: "Couldn't sign out" }, mutationFn: api.logout, onSettled: () => qc.resetQueries() });
   const avatar = (
     <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground uppercase">
@@ -356,29 +350,6 @@ function NavUser({ username }: { username: string }) {
                 Preferences
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <div className="flex items-center gap-2 px-2 py-1 text-sm">
-              <SunMoon className="size-4 text-muted-foreground" />
-              Theme
-              <Segmented
-                size="sm"
-                value={theme ?? "system"}
-                onValueChange={setTheme}
-                aria-label="Theme"
-                className="ml-auto"
-              >
-                {themes.map(({ value, label, icon: Icon }) => (
-                  <Tooltip key={value}>
-                    <TooltipTrigger asChild>
-                      <SegmentedItem value={value} aria-label={label} className="px-1.5">
-                        <Icon />
-                      </SegmentedItem>
-                    </TooltipTrigger>
-                    <TooltipContent>{label}</TooltipContent>
-                  </Tooltip>
-                ))}
-              </Segmented>
-            </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" className="gap-2" onClick={() => logout.mutate()}>
               <LogOut />

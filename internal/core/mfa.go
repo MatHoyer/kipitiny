@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -167,6 +168,9 @@ func (c *Core) currentUser(ctx context.Context) (store.User, error) {
 func (c *Core) SetPreferences(ctx context.Context, p store.Preferences) (store.Preferences, error) {
 	if p.MapView != "" && p.MapView != "3d" {
 		return store.Preferences{}, fmt.Errorf("%w: map view must be empty (2D) or 3d", ErrInvalid)
+	}
+	if !slices.Contains([]string{"", "light", "dark", "system"}, p.Theme) {
+		return store.Preferences{}, fmt.Errorf("%w: theme must be light, dark or system", ErrInvalid)
 	}
 	u, err := c.currentUser(ctx)
 	if err != nil {
