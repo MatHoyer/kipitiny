@@ -251,10 +251,10 @@ function frameSize(children: MapNode[], min: Size): Size {
   return { w, h };
 }
 
-/** Lines of a network or a database reference can be selected and deleted; the others only show traffic. */
+/** Lines of a network or a database reference can be selected and deleted; the others only show traffic. All but network lines flow. */
 function edge(source: string, target: string, kind: EdgeKind): Edge {
   const editable = kind === "db" || kind === "net";
-  return { id: `${kind}:${source}:${target}`, source, target, type: "smoothstep", data: { kind }, selectable: editable, deletable: editable, focusable: editable, animated: kind === "web" || kind === "tunnel", className: `map-edge-${kind}` };
+  return { id: `${kind}:${source}:${target}`, source, target, type: "smoothstep", data: { kind }, selectable: editable, deletable: editable, focusable: editable, animated: kind !== "net", className: `map-edge-${kind}` };
 }
 
 /**
