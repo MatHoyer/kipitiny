@@ -9,12 +9,14 @@ import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { ServiceStates } from "@/components/service-states";
 import { memoryOf, useUsage } from "@/components/usage";
+import { PreviewSeedCard } from "@/components/preview-seed";
 import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FloatingInput } from "@/components/ui/floating-input";
+import { FloatingSelect } from "@/components/ui/floating-select";
 import { envMap, envRows, envSecrets, formatBytes, sameEnv, timeAgo, type EnvRow } from "@/lib/format";
-import { api, type PreviewSettings, type PreviewView, type Project } from "../api";
+import { api, type PreviewSettings, type PreviewView, type Project, type SeedMode } from "../api";
 
 const DAY = 86_400;
 
@@ -24,6 +26,7 @@ export function Previews({ project, canDeploy, canEdit }: { project: Project; ca
     <>
       <PreviewList project={project} canDeploy={canDeploy} />
       <PreviewSettingsCard key={project.id} project={project} canEdit={canEdit} />
+      <AnonymizedSeed project={project} canEdit={canEdit} />
     </>
   );
 }
@@ -144,6 +147,19 @@ const baseDomainNote = (example: string) => (
     <Mono>{`*.${example}`}</Mono> at the server. A domain of its own keeps production's cookies away.
   </>
 );
+
+const seedNotes: Record<SeedMode, string> = {
+  "": "Previews start with empty databases.",
+  anonymized:
+    "CI may pass --seed to fill a new preview's databases from the latest backups, anonymized with each database's rules (below once saved).",
+  raw: "CI may pass --seed to fill a new preview's databases from the latest backups. That copies production data, personal data included, into the preview.",
+};
+
+/** The rules of each database, when previews are seeded with anonymized data. */
+function AnonymizedSeed({ project, canEdit }: { project: Project; canEdit: boolean }) {
+  const settings = useQuery({ queryKey: ["preview-settings", project.id], queryFn: () => api.previewSettings(project.id) });
+  return settings.data?.seed === "anonymized" ? <PreviewSeedCard project={project} canEdit={canEdit} /> : null;
+}
 
 /** The settings form's fields, as saved. */
 const settingsForm = (s: PreviewSettings) => ({
@@ -266,12 +282,18 @@ function PreviewSettingsForm({ project, saved, canEdit }: { project: Project; sa
             </div>
           </div>
         )}
-        <CheckboxField
+        <FloatingSelect
+          label="Seed new previews with"
           className="col-span-full"
-          label="Allow seeding with the project's data"
-          description="CI may pass --seed to fill a new preview's databases from the latest backups. That copies production data into the preview."
-          checked={form.seed !== ""}
-          onCheckedChange={(on) => canEdit && setForm({ ...form, seed: on ? "raw" : "" })}
+          value={form.seed || "off"}
+          onValueChange={(v) => setForm({ ...form, seed: (v === "off" ? "" : v) as SeedMode })}
+          options={[
+            { value: "off", label: "Nothing: --seed is refused" },
+            { value: "anonymized", label: "Anonymized data" },
+            { value: "raw", label: "Production data as is" },
+          ]}
+          disabled={!canEdit}
+          description={seedNotes[form.seed]}
         />
       </form>
       {canEdit && (
