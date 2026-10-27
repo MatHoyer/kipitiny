@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Background, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, type Edge, type Node, type OnNodeDrag } from "@xyflow/react";
+import { Background, Controls, MiniMap, Panel, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow, type Edge, type Node, type OnNodeDrag } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { FolderPlus, Network, Plus, RotateCcw } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -40,8 +40,11 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState<"project" | "network" | null>(null);
+  // Projects whose previews are spread out instead of stacked behind them.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const saved = layout.data?.positions;
   const edits = useCanvasEdits(servers);
+  const { fitView } = useReactFlow();
 
   const save = useMutation({
     meta: { error: "Couldn't save the layout" },
@@ -61,18 +64,28 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
   // what is selected.
   useEffect(() => {
     if (!saved) return;
+    const togglePreviews = (id: string) => {
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        if (!next.delete(id)) next.add(id);
+        return next;
+      });
+      // Once the nodes are rebuilt, show where the previews went.
+      setTimeout(() => fitView({ ...fitOptions, duration: 300 }), 50);
+    };
+    const opts = { projectId, expanded, togglePreviews };
     setNodes((prev) => {
       const current = new Map(prev.map((n) => [n.id, n.position]));
       const picked = new Set(prev.filter((n) => n.selected).map((n) => n.id));
-      const built = buildGraph(servers, saved, current, { projectId }).nodes.map((n) => ({ ...n, selected: picked.has(n.id) }));
+      const built = buildGraph(servers, saved, current, opts).nodes.map((n) => ({ ...n, selected: picked.has(n.id) }));
       // Nodes on screen keep their place, then the saved ones; new ones go around them.
       return untangle(built, (n) => (current.has(n.id) ? 0 : saved[layoutKey(n.id, projectId)] ? 1 : 2)).nodes;
     });
     setEdges((prev) => {
       const picked = new Set(prev.filter((e) => e.selected).map((e) => e.id));
-      return buildGraph(servers, saved, new Map(), { projectId }).edges.map((e) => ({ ...e, selected: picked.has(e.id) }));
+      return buildGraph(servers, saved, new Map(), opts).edges.map((e) => ({ ...e, selected: picked.has(e.id) }));
     });
-  }, [servers, saved, projectId, setNodes, setEdges]);
+  }, [servers, saved, projectId, expanded, setNodes, setEdges, fitView]);
 
   // Save what was dragged, and what it pushed away or refitting its frames moved.
   const onDragStop: OnNodeDrag<MapNode> = (_, __, dragged) => {
@@ -111,7 +124,7 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
         connectionLineStyle={{ strokeWidth: 2, strokeDasharray: "4 4" }}
         colorMode={dark ? "dark" : "light"}
         fitView
-        fitViewOptions={{ padding: { top: "64px", right: "32px", bottom: "32px", left: "32px" }, maxZoom: 1 }}
+        fitViewOptions={fitOptions}
         minZoom={0.1}
         proOptions={{ hideAttribution: true }}
       >
@@ -176,6 +189,8 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
     </div>
   );
 }
+
+const fitOptions = { padding: { top: "64px", right: "32px", bottom: "32px", left: "32px" }, maxZoom: 1 } as const;
 
 const legend: [EdgeKind, string][] = [
   ["web", "HTTP routing"],

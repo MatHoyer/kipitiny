@@ -301,6 +301,7 @@ function topology(projectId?: string): Topology {
           id: p.id,
           name: p.name,
           network: projectNet(p),
+          parentId: p.parentId,
           services: db.services
             .filter((s) => s.projectId === p.id)
             .map(
