@@ -139,8 +139,8 @@ type PreviewOptions struct {
 	// TTLSeconds overrides the settings' time to live; 0 keeps it.
 	TTLSeconds int `json:"ttlSeconds"`
 	// Seed fills the databases a deploy creates with the latest backup of
-	// the parent's database of the same name, before the apps deploy. The
-	// preview settings must allow it: it copies production's data.
+	// the parent's database of the same name, before the apps deploy, as
+	// the preview settings say: anonymized, or as is.
 	Seed bool `json:"seed"`
 }
 
@@ -259,16 +259,17 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 	if err := checkPreviewEnv(file, env, settings, parentSvcs); err != nil {
 		return PreviewView{}, err
 	}
-	var seeds map[string]string // database name -> parent's backup ID
+	var seeds map[string]string // database name -> parent's backup (or anonymized copy) ID
 	if opts.Seed {
 		if settings.SeedMode == store.SeedOff {
 			return PreviewView{}, fmt.Errorf("%w: %s's preview settings don't allow seeding previews with its data", ErrInvalid, parent.Name)
 		}
 		if settings.SeedMode == store.SeedAnonymized {
-			// shortcut: anonymized copies aren't made yet; never fall back to raw data.
-			return PreviewView{}, fmt.Errorf("%w: anonymized seeding isn't available yet", ErrInvalid)
+			seeds, err = c.seedAnonymized(ctx, parent, file, parentSvcs)
+		} else {
+			seeds, err = c.seedBackups(ctx, file, parentSvcs)
 		}
-		if seeds, err = c.seedBackups(ctx, file, parentSvcs); err != nil {
+		if err != nil {
 			return PreviewView{}, err
 		}
 	}
@@ -343,16 +344,15 @@ func (c *Core) seedBackups(ctx context.Context, f compose.File, parentSvcs []sto
 		if _, listed := f.Services[s.Name]; !listed || !s.Kind.IsDatabase() {
 			continue
 		}
-		bs, err := c.store.ListBackups(ctx, store.BackupFilter{ServiceID: s.ID, Status: store.OpSucceeded, Limit: 20})
+		b, ok, err := c.latestSeedable(ctx, s.ID)
 		if err != nil {
 			return nil, err
 		}
-		i := slices.IndexFunc(bs, func(b store.Backup) bool { return b.Kind == store.BackupKindPostgres || b.Kind == store.BackupKindDump })
-		if i < 0 {
+		if !ok {
 			none = append(none, s.Name)
 			continue
 		}
-		out[s.Name] = bs[i].ID
+		out[s.Name] = b.ID
 	}
 	if len(none) > 0 {
 		return nil, fmt.Errorf("%w: no backup of %s to seed the preview with", ErrInvalid, strings.Join(none, ", "))
