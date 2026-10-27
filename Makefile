@@ -43,6 +43,7 @@ site-demo:
 
 test: ui-stub
 	go test ./...
+	cd web && node --test 'src/**/*.test.ts'
 
 lint: ui-stub
 	@unformatted=$$(gofmt -l .); if [ -n "$$unformatted" ]; then echo "Run gofmt on:"; echo "$$unformatted"; exit 1; fi

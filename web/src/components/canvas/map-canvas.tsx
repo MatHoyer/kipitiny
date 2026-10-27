@@ -12,7 +12,7 @@ import { NewProjectDialog } from "@/routes/Projects";
 import { CreateNetworkForm } from "@/routes/settings/Networks";
 import { cn } from "@/lib/utils";
 import { api, type CanvasPoint, type ServerTopology } from "@/api";
-import { buildGraph, fitFrames, layoutKey, type EdgeKind, type MapNode } from "./build";
+import { buildGraph, layoutKey, untangle, type EdgeKind, type MapNode } from "./build";
 import { useCanvasEdits } from "./edit";
 import "./canvas.css";
 import { nodeTypes } from "./nodes";
@@ -65,7 +65,8 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
       const current = new Map(prev.map((n) => [n.id, n.position]));
       const picked = new Set(prev.filter((n) => n.selected).map((n) => n.id));
       const built = buildGraph(servers, saved, current, { projectId }).nodes.map((n) => ({ ...n, selected: picked.has(n.id) }));
-      return fitFrames(built).nodes;
+      // Nodes on screen keep their place, then the saved ones; new ones go around them.
+      return untangle(built, (n) => (current.has(n.id) ? 0 : saved[layoutKey(n.id, projectId)] ? 1 : 2)).nodes;
     });
     setEdges((prev) => {
       const picked = new Set(prev.filter((e) => e.selected).map((e) => e.id));
@@ -73,10 +74,13 @@ function Flow({ servers, projectId, className }: { servers: ServerTopology[]; pr
     });
   }, [servers, saved, projectId, setNodes, setEdges]);
 
-  // Save what was dragged, and what refitting its frames moved.
+  // Save what was dragged, and what it pushed away or refitting its frames moved.
   const onDragStop: OnNodeDrag<MapNode> = (_, __, dragged) => {
     const latest = new Map(dragged.map((n) => [n.id, n]));
-    const { nodes: fitted, moved } = fitFrames(nodes.map((n) => latest.get(n.id) ?? n));
+    const { nodes: fitted, moved } = untangle(
+      nodes.map((n) => latest.get(n.id) ?? n),
+      (n) => (latest.has(n.id) ? 0 : 1),
+    );
     setNodes(fitted);
     const byId = new Map(fitted.map((n) => [n.id, n]));
     const positions: Record<string, CanvasPoint> = {};
