@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/MatHoyer/kipitiny/internal/anonymize"
 )
 
 // toolset is the server tools are added to, and whether it is in dry-run
@@ -23,8 +26,34 @@ func addTool[In, Out any](s toolset, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out])
 	if s.dryRun && (t.Annotations == nil || !t.Annotations.ReadOnlyHint) {
 		h = dryRun(t.Name, h)
 	}
+	for _, v := range []struct {
+		schema *any
+		t      reflect.Type
+	}{{&t.InputSchema, reflect.TypeFor[In]()}, {&t.OutputSchema, reflect.TypeFor[Out]()}} {
+		if *v.schema != nil || v.t == reflect.TypeFor[any]() {
+			continue
+		}
+		if v.t.Kind() == reflect.Pointer {
+			v.t = v.t.Elem()
+		}
+		sc, err := jsonschema.ForType(v.t, &jsonschema.ForOptions{TypeSchemas: typeSchemas})
+		if err != nil {
+			panic(fmt.Errorf("tool %s: %w", t.Name, err))
+		}
+		*v.schema = sc
+	}
 	mcp.AddTool(s.server, t, h)
 }
+
+// typeSchemas are the schemas of types whose JSON reflection can't infer.
+var typeSchemas = func() map[reflect.Type]*jsonschema.Schema {
+	// A table's rule: truncate, exclude, or rules by column.
+	table := &jsonschema.Schema{Types: []string{"string", "object"}, AdditionalProperties: &jsonschema.Schema{Type: "string"}}
+	return map[reflect.Type]*jsonschema.Schema{
+		reflect.TypeFor[anonymize.Table](): table,
+		reflect.TypeFor[anonymize.Rules](): {Types: []string{"null", "object"}, AdditionalProperties: table},
+	}
+}()
 
 func dryRun[In, Out any](name string, h mcp.ToolHandlerFor[In, Out]) mcp.ToolHandlerFor[In, Out] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {

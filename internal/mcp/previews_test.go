@@ -37,3 +37,34 @@ func TestPreviewSettingsTools(t *testing.T) {
 		t.Errorf("bad ttl: %s", out)
 	}
 }
+
+func TestAnonymizeRulesTools(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	p, _ := e.st.CreateProject(ctx, store.Project{Name: "shop"})
+	db, _ := e.st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17"})
+	read, admin := e.session(core.PermView), e.session()
+
+	rules := map[string]any{"users": map[string]any{"email": "fake:email"}, "sessions": "truncate"}
+	if out, isErr := e.call(read, "set_anonymize_rules", map[string]any{"project": "shop", "service": "db", "rules": rules}); !isErr || !strings.Contains(out, "forbidden") {
+		t.Errorf("set with a read token: %s", out)
+	}
+	if out, isErr := e.call(admin, "set_anonymize_rules", map[string]any{"project": "shop", "service": "db", "rules": rules}); isErr {
+		t.Fatalf("set_anonymize_rules: %s", out)
+	}
+	if got, _ := e.st.GetService(ctx, db.ID); got.Anonymize["sessions"].Action != "truncate" || got.Anonymize["users"].Columns["email"] != "fake:email" {
+		t.Errorf("stored: %+v", got.Anonymize)
+	}
+	if out, isErr := e.call(read, "get_preview_seed", map[string]any{"project": "shop"}); isErr || !strings.Contains(out, `"truncate"`) {
+		t.Errorf("get_preview_seed: %s", out)
+	}
+	if out, isErr := e.call(admin, "set_anonymize_rules", map[string]any{"project": "shop", "service": "db", "rules": map[string]any{"users": "drop"}}); !isErr {
+		t.Errorf("bad rule: %s", out)
+	}
+	if out, isErr := e.call(admin, "set_anonymize_rules", map[string]any{"project": "shop", "service": "db", "remove": true}); isErr {
+		t.Fatalf("remove: %s", out)
+	}
+	if got, _ := e.st.GetService(ctx, db.ID); got.Anonymize != nil {
+		t.Errorf("not removed: %+v", got.Anonymize)
+	}
+}

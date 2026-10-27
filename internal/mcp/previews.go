@@ -2,12 +2,15 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"maps"
 	"slices"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/MatHoyer/kipitiny/internal/anonymize"
 	"github.com/MatHoyer/kipitiny/internal/core"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
@@ -40,7 +43,7 @@ type deployPreviewIn struct {
 	Commit  string            `json:"commit,omitempty" jsonschema:"source commit, recorded on the deployments"`
 	Env     map[string]string `json:"env,omitempty" jsonschema:"project variables for this preview only, plain text (no references)"`
 	TTL     string            `json:"ttl,omitempty" jsonschema:"close the preview after this long unused, as a duration (168h); default from the project's preview settings, else 7 days"`
-	Seed    bool              `json:"seed,omitempty" jsonschema:"fill the databases a new preview gets with the project's latest backups (production data; the preview settings must allow it)"`
+	Seed    bool              `json:"seed,omitempty" jsonschema:"fill the databases a new preview gets with the project's latest backups, anonymized or as is, as the preview settings say (refused when they say nothing)"`
 }
 
 func (t *tools) deployPreview(ctx context.Context, _ *mcp.CallToolRequest, in deployPreviewIn) (*mcp.CallToolResult, core.PreviewView, error) {
@@ -162,4 +165,66 @@ func seconds(s string) (int, error) {
 	}
 	d, err := time.ParseDuration(s)
 	return int(d.Seconds()), err
+}
+
+type previewSeedIn struct {
+	Project string `json:"project" jsonschema:"the project whose databases to list"`
+}
+
+type previewSeedOut struct {
+	Databases []core.SeedDatabase `json:"databases"`
+}
+
+func (t *tools) getPreviewSeed(ctx context.Context, _ *mcp.CallToolRequest, in previewSeedIn) (*mcp.CallToolResult, previewSeedOut, error) {
+	if err := core.Authenticated(ctx); err != nil {
+		return nil, previewSeedOut{}, err
+	}
+	p, err := t.project(ctx, in.Project, core.PermView)
+	if err != nil {
+		return nil, previewSeedOut{}, friendly(err)
+	}
+	dbs, err := t.c.PreviewSeed(ctx, p.ID)
+	return nil, previewSeedOut{Databases: dbs}, friendly(err)
+}
+
+type setAnonymizeRulesIn struct {
+	Project string         `json:"project" jsonschema:"the database's project"`
+	Service string         `json:"service" jsonschema:"the database service"`
+	Rules   map[string]any `json:"rules,omitempty" jsonschema:"rules by table: a string (truncate or exclude) or an object of rules by column; {} (or omitted) says the database holds nothing personal"`
+	Remove  bool           `json:"remove,omitempty" jsonschema:"remove the rules instead: the database can't seed previews with anonymized data"`
+}
+
+func (t *tools) setAnonymizeRules(ctx context.Context, _ *mcp.CallToolRequest, in setAnonymizeRulesIn) (*mcp.CallToolResult, core.SeedDatabase, error) {
+	out, err := mutate(ctx, t.c, "set_anonymize_rules", in.Project+"/"+in.Service, func() (core.SeedDatabase, error) {
+		p, err := t.project(ctx, in.Project, core.PermEnv)
+		if err != nil {
+			return core.SeedDatabase{}, err
+		}
+		var rules anonymize.Rules
+		if !in.Remove {
+			rules = anonymize.Rules{}
+			raw, _ := json.Marshal(in.Rules)
+			if err := json.Unmarshal(raw, &rules); err != nil {
+				return core.SeedDatabase{}, fmt.Errorf("%w: rules: %v", core.ErrInvalid, err)
+			}
+		}
+		return t.c.SetAnonymizeRules(ctx, p.ID, in.Service, rules)
+	})
+	return nil, out, err
+}
+
+type anonymizeNowIn struct {
+	Project string `json:"project" jsonschema:"the database's project"`
+	Service string `json:"service" jsonschema:"the database service"`
+}
+
+func (t *tools) anonymizeNow(ctx context.Context, _ *mcp.CallToolRequest, in anonymizeNowIn) (*mcp.CallToolResult, store.Backup, error) {
+	out, err := mutate(ctx, t.c, "anonymize_now", in.Project+"/"+in.Service, func() (store.Backup, error) {
+		p, err := t.project(ctx, in.Project, core.PermEnv)
+		if err != nil {
+			return store.Backup{}, err
+		}
+		return t.c.AnonymizeNow(ctx, p.ID, in.Service)
+	})
+	return nil, out, err
 }
