@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MatHoyer/kipitiny/internal/anonymize"
 	"github.com/MatHoyer/kipitiny/internal/compose"
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/store"
@@ -25,7 +26,8 @@ func previewParent(t *testing.T, c *Core) store.Project {
 		t.Fatal(err)
 	}
 	for _, s := range []store.Service{
-		{Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17", Env: map[string]string{pgUser: "u", pgPassword: "prod-pass", pgDatabase: "app"}},
+		{Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17", Env: map[string]string{pgUser: "u", pgPassword: "prod-pass", pgDatabase: "app"},
+			Anonymize: anonymize.Rules{"users": {Action: anonymize.Truncate}}},
 		{Name: "web", Kind: store.ServiceKindApp, Image: "ghcr.io/acme/web:v1", Domain: "shop.example.com", Port: 3000, Replicas: 3,
 			Env:     map[string]string{"DATABASE_URL": "{{ db.db.URL }}", "APP_URL": "{{ app.web.URL }}", "API_TOKEN": "t0ken", "STRIPE": "{{ project.STRIPE_KEY }}"},
 			Secrets: []string{"API_TOKEN"}},
@@ -73,8 +75,8 @@ func TestPreviewFile(t *testing.T) {
 		t.Errorf("worker: %s", worker.Image)
 	case len(game.Ports) != 0 || len(warnings) != 1:
 		t.Errorf("game ports %v, warnings %v", game.Ports, warnings)
-	case db.X.Password != "":
-		t.Errorf("db gets a fresh password, has %q", db.X.Password)
+	case db.X.Password != "" || db.X.Anonymize != nil:
+		t.Errorf("db gets a fresh password and no rules, has %q, %v", db.X.Password, db.X.Anonymize)
 	}
 	if _, err := compose.Marshal(f); err != nil {
 		t.Fatal(err)

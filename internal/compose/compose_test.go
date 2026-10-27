@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MatHoyer/kipitiny/internal/anonymize"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -52,7 +53,11 @@ func TestRoundTrip(t *testing.T) {
 					SecurityOpt: []string{"no-new-privileges:true"},
 				},
 			},
-			"db": {Image: "postgres:17-alpine", MemoryMB: 512, X: Ext{Kind: "postgres", Password: "${DB_PASSWORD}"}},
+			"db": {Image: "postgres:17-alpine", MemoryMB: 512, X: Ext{Kind: "postgres", Password: "${DB_PASSWORD}", Anonymize: &anonymize.Rules{
+				"users":    {Columns: map[string]string{"email": "fake:email", "pw": "fixed:$2b$10$x"}},
+				"sessions": {Action: anonymize.Truncate},
+			}}},
+			"cache": {Image: "mongo:8.2", MemoryMB: 512, X: Ext{Kind: "mongodb", Anonymize: &anonymize.Rules{}}},
 		},
 		X: FileExt{Variables: map[string]string{"REGION": "eu", "TOKEN": "${PROJECT_TOKEN}"}, Secrets: []string{"TOKEN"}},
 	}
@@ -128,23 +133,25 @@ volumes:
 
 func TestParseErrors(t *testing.T) {
 	for name, tc := range map[string]struct{ src, want string }{
-		"build only":   {"services:\n  web:\n    build: .\n", "kipitiny doesn't build"},
-		"cgroup":       {"services:\n  web:\n    image: a\n    cgroup: host\n", "cgroup is not supported"},
-		"cap string":   {"services:\n  web:\n    image: a\n    cap_add: NET_ADMIN\n", "cap_add must be a list"},
-		"bad quote":    {"services:\n  web:\n    image: a\n    command: echo 'hi\n", "unterminated quote"},
-		"bad bool":     {"services:\n  web:\n    image: a\n    init: maybe\n", "not true or false"},
-		"bind mount":   {"services:\n  web:\n    image: a\n    volumes: [./data:/data]\n", "need a git project"},
-		"nfs plugin":   {"services:\n  web:\n    image: a\n    volumes: [d:/d]\nvolumes: {d: {driver: rexray}}\n", "driver rexray"},
-		"missing var":  {"services:\n  web:\n    image: a:${TAG}\n", "variables not set: TAG"},
-		"required var": {"services:\n  web:\n    image: a:${TAG:?set a tag}\n", "set a tag"},
-		"bad ext":      {"services:\n  web:\n    image: a\n    x-kipitiny:\n      domian: x\n", "domian"},
-		"plain auth":   {"services:\n  web:\n    image: a\n    x-kipitiny:\n      middlewares:\n        basic_auth: [{name: a}]\n", "bcrypt hash"},
-		"top unknown":  {"services:\n  web:\n    image: a\nmodels: {}\n", "top-level models"},
-		"no secret":    {"services:\n  web:\n    image: a\n    secrets: [pw]\n", "secret pw is not defined"},
-		"two sources":  {"services:\n  web:\n    image: a\nconfigs: {c: {content: x, file: ./c}}\n", "one of content"},
-		"env file":     {"services:\n  web:\n    image: a\n    env_file: .env\n", "needs a git project"},
-		"no services":  {"name: x\n", "no services"},
-		"port range":   {"services:\n  web:\n    image: a\n    ports: [\"8000-8001:80\"]\n", "ranges of the same length"},
+		"build only":     {"services:\n  web:\n    build: .\n", "kipitiny doesn't build"},
+		"cgroup":         {"services:\n  web:\n    image: a\n    cgroup: host\n", "cgroup is not supported"},
+		"cap string":     {"services:\n  web:\n    image: a\n    cap_add: NET_ADMIN\n", "cap_add must be a list"},
+		"bad quote":      {"services:\n  web:\n    image: a\n    command: echo 'hi\n", "unterminated quote"},
+		"bad bool":       {"services:\n  web:\n    image: a\n    init: maybe\n", "not true or false"},
+		"bind mount":     {"services:\n  web:\n    image: a\n    volumes: [./data:/data]\n", "need a git project"},
+		"nfs plugin":     {"services:\n  web:\n    image: a\n    volumes: [d:/d]\nvolumes: {d: {driver: rexray}}\n", "driver rexray"},
+		"missing var":    {"services:\n  web:\n    image: a:${TAG}\n", "variables not set: TAG"},
+		"required var":   {"services:\n  web:\n    image: a:${TAG:?set a tag}\n", "set a tag"},
+		"bad ext":        {"services:\n  web:\n    image: a\n    x-kipitiny:\n      domian: x\n", "domian"},
+		"plain auth":     {"services:\n  web:\n    image: a\n    x-kipitiny:\n      middlewares:\n        basic_auth: [{name: a}]\n", "bcrypt hash"},
+		"top unknown":    {"services:\n  web:\n    image: a\nmodels: {}\n", "top-level models"},
+		"no secret":      {"services:\n  web:\n    image: a\n    secrets: [pw]\n", "secret pw is not defined"},
+		"two sources":    {"services:\n  web:\n    image: a\nconfigs: {c: {content: x, file: ./c}}\n", "one of content"},
+		"env file":       {"services:\n  web:\n    image: a\n    env_file: .env\n", "needs a git project"},
+		"no services":    {"name: x\n", "no services"},
+		"port range":     {"services:\n  web:\n    image: a\n    ports: [\"8000-8001:80\"]\n", "ranges of the same length"},
+		"anonymize app":  {"services:\n  web:\n    image: a\n    x-kipitiny:\n      anonymize: {}\n", "only PostgreSQL"},
+		"anonymize rule": {"services:\n  db:\n    image: postgres:17\n    x-kipitiny:\n      anonymize: {users: {email: fake:iban}}\n", "users.email"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, _, err := Parse([]byte(tc.src), Vars{})

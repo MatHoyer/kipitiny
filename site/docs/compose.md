@@ -177,6 +177,7 @@ services:
 | `middlewares` | mapping | public apps | Applied by Traefik to every request, below. |
 | `uptime` | mapping | public apps | An [uptime check](/docs/monitoring#uptime-checks) of the domain, below. `uptime: {}` checks `/` with the defaults. Without it, the app has no check: applying the file removes one set in the UI. |
 | `jobs` | mapping of names | apps | [Scheduled jobs](/docs/jobs), below. Without it, the app has none: applying the file removes the ones set in the UI. Left out of previews. |
+| `anonymize` | mapping of tables | PostgreSQL, MySQL, MariaDB, MongoDB | How [previews seeded with anonymized data](/docs/previews#anonymized-seeds) get this database: rules by table and column, below. `anonymize: {}` says it holds nothing personal. Without it, the database has no rules: applying the file removes the ones set in the UI. Applies without a deploy. |
 
 `middlewares`:
 
@@ -215,6 +216,33 @@ x-kipitiny:
 | `schedule` | Cron, UTC unless prefixed with `CRON_TZ=<zone>`, or `@hourly`, `@daily`... Required. |
 | `timeout` | 1 s to 24 h (`90s`, `10m`, or seconds). Default 1 h. |
 | `paused` | `true` keeps the job and its runs without scheduling it. |
+
+`anonymize`, by table (`schema.table` outside PostgreSQL's `public`; a collection of the service's own database for MongoDB):
+
+```yaml
+x-kipitiny:
+  anonymize:
+    users:
+      email: fake:email        # u1f3a…@example.invalid, unique per address
+      name: fake:name
+      phone: fake:phone        # same shape, first two digits kept
+      password_hash: fixed:$2b$10$7EqJtq98hPqEX7fNZaFWoO   # everyone logs in with the same password
+      notes: null
+    sessions: truncate
+    audit_log: exclude
+```
+
+| Rule | Meaning |
+|---|---|
+| `truncate` (table) | Kept, empty. Tables referencing it must be truncated too. |
+| `exclude` (table) | Dropped, with the views and foreign keys on it. |
+| `keep` | Unchanged; the same as no rule. |
+| `null` | Emptied. |
+| `hash` | A salted MD5 (32 hex characters; a valid UUID on a `uuid` column). |
+| `fixed:<value>` | Every row gets the value. |
+| `fake:email` \| `fake:name` \| `fake:phone` \| `fake:text` | A made-up value of that kind: an `@example.invalid` address, a name, digits in place of digits, lorem ipsum of the same length. |
+
+`hash` and `fake:` values derive from the original through the project's secret salt: the same value always gives the same result, in every table, so unique keys and joins keep working, and nobody without the salt can match one against a list of known values. Empty values stay empty.
 
 ### Databases
 

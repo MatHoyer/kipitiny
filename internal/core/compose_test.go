@@ -91,7 +91,9 @@ x-kipitiny:
 services:
   db:
     image: postgres:17-alpine
-    x-kipitiny: {password: "${DB_PASSWORD}"}
+    x-kipitiny:
+      password: "${DB_PASSWORD}"
+      anonymize: {users: {email: fake:email}}
   web:
     image: ghcr.io/me/shop:1
     environment:
@@ -129,7 +131,7 @@ services:
 	for _, s := range svcs {
 		byName[s.Name] = s
 	}
-	if db := byName["db"]; db.Kind != store.ServiceKindPostgres || db.Env[pgPassword] != "dbpw" {
+	if db := byName["db"]; db.Kind != store.ServiceKindPostgres || db.Env[pgPassword] != "dbpw" || db.Anonymize["users"].Columns["email"] != "fake:email" {
 		t.Errorf("db = %+v", db)
 	}
 	web := byName["web"]
@@ -185,6 +187,15 @@ services:
 	}
 	if chk, _ := c.store.GetUptimeCheck(ctx, web.ID); chk.Enabled {
 		t.Error("check not paused")
+	}
+	// Only the anonymize rules change: an update without a deploy.
+	rules := strings.Replace(paused, "email: fake:email", "email: hash", 1)
+	plan, err = c.ApplyCompose(ctx, p.ID, []byte(rules), ApplyOptions{})
+	if err != nil || len(plan.Update) != 1 || !slices.Equal(plan.Update[0].Fields, []string{"anonymize"}) {
+		t.Fatalf("rules plan = %+v, %v\n%s", plan, err, rules)
+	}
+	if db, _ := c.store.GetService(ctx, byName["db"].ID); db.Anonymize["users"].Columns["email"] != "hash" {
+		t.Errorf("rules = %+v", db.Anonymize)
 	}
 	// A check on a service without a domain is refused.
 	noDomain := strings.Replace(paused, "domain: shop.example.com", "", 1)

@@ -546,6 +546,7 @@ func previewFile(f *compose.File, parent store.Project, name string, settings st
 		s.Replicas = 0
 		s.X.Uptime = nil
 		s.X.Analytics = false // prod's numbers only
+		s.X.Anonymize = nil   // only the parent's databases are anonymized
 		s.X.Password = ""     // a fresh database
 		if s.X.Port == 0 {
 			s.X.Domain = ""
