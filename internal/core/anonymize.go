@@ -103,10 +103,6 @@ func (c *Core) logAnonymizeErr(err error) {
 func (c *Core) anonymizeLatest(ctx context.Context, svc store.Service, force bool) (store.Backup, error) {
 	c.anonymizeMu.Lock() // check-then-create: one copy per backup and rules
 	defer c.anonymizeMu.Unlock()
-	if svc.Kind != store.ServiceKindPostgres {
-		// shortcut: MySQL, MariaDB and MongoDB copies come in the next step.
-		return store.Backup{}, fmt.Errorf("%w: only PostgreSQL databases are anonymized for now", ErrInvalid)
-	}
 	src, ok, err := c.latestSeedable(ctx, svc.ID)
 	if err != nil || !ok {
 		return store.Backup{}, err
@@ -142,8 +138,8 @@ func (c *Core) anonymizeLatest(ctx context.Context, svc store.Service, force boo
 	if cp, err = c.store.CreateBackup(ctx, cp); err != nil {
 		return store.Backup{}, err
 	}
-	rules := svc.Anonymize
-	if err := c.goBackground(func() { c.runAnonymize(src, cp, rules, ps.Salt, st, target) }); err != nil {
+	rules, mongoDB := svc.Anonymize, svc.Env[mongoDatabase]
+	if err := c.goBackground(func() { c.runAnonymize(src, cp, rules, ps.Salt, mongoDB, st, target) }); err != nil {
 		cp.Status, cp.Error = store.OpFailed, err.Error()
 		_ = c.store.FinishBackup(context.WithoutCancel(ctx), cp)
 		return store.Backup{}, err
@@ -166,10 +162,11 @@ func anonymizedKey(src store.Backup, hash string, target store.BackupTarget) str
 	return key
 }
 
-// runAnonymize makes and records the copy cp of src. Once it succeeded,
+// runAnonymize makes and records the copy cp of src (mongoDB is the
+// database MongoDB rules apply to). Once it succeeded,
 // the service's older copies go; a failed one stays to tell why seeding is
 // refused, and the previous good copy keeps seeding previews.
-func (c *Core) runAnonymize(src, cp store.Backup, rules anonymize.Rules, salt string, st storage.Storage, target store.BackupTarget) {
+func (c *Core) runAnonymize(src, cp store.Backup, rules anonymize.Rules, salt, mongoDB string, st storage.Storage, target store.BackupTarget) {
 	defer c.steps.done(backupKey(cp.ID))
 	// One throwaway server at a time, restore tests included.
 	select {
@@ -183,7 +180,12 @@ func (c *Core) runAnonymize(src, cp store.Backup, rules anonymize.Rules, salt st
 	log := c.log.With("backup", src.ID, "copy", cp.ID, "service", src.ServiceName)
 	start := time.Now()
 
-	err := c.anonymizePostgres(ctx, src, &cp, rules, salt, st, target)
+	var err error
+	if src.Kind == store.BackupKindDump {
+		err = c.anonymizeDump(ctx, src, &cp, rules, salt, mongoDB, st, target)
+	} else {
+		err = c.anonymizePostgres(ctx, src, &cp, rules, salt, st, target)
+	}
 	cp.DurationMS = time.Since(start).Milliseconds()
 	cp.Status = store.OpSucceeded
 	if err != nil {
@@ -276,6 +278,43 @@ func (c *Core) anonymizePostgres(ctx context.Context, src store.Backup, cp *stor
 		}
 		return nil
 	})
+}
+
+// anonymizeDump loads a MySQL, MariaDB or MongoDB dump into a throwaway
+// server, applies the rules and dumps the result as cp.
+func (c *Core) anonymizeDump(ctx context.Context, src store.Backup, cp *store.Backup, rules anonymize.Rules, salt, mongoDB string,
+	st storage.Storage, target store.BackupTarget) error {
+
+	key := backupKey(cp.ID)
+	svc, dk, id, err := c.scratchDump(ctx, src, "kipitiny-anonymize-"+strings.ToLower(cp.ID), func(s string) { c.steps.set(key, s) })
+	if err != nil {
+		return err
+	}
+	defer c.removeScratch(ctx, dk, id)
+	c.steps.set(key, VerifyRestore)
+	if err := c.loadDump(ctx, dk, id, svc, svc.Env[mysqlDatabase], st, target, src); err != nil {
+		return err
+	}
+	c.steps.set(key, AnonymizeRules)
+	opts := docker.ExecOptions{Stdout: io.Discard}
+	if svc.Kind == store.ServiceKindMongoDB {
+		script, env, err := anonymize.Mongo(rules, salt, mongoDB)
+		if err != nil {
+			return err
+		}
+		opts.Cmd, opts.Env = append([]string{"mongosh", "--quiet", "--eval", script}, mongoAuthArgs(svc)...), env
+	} else {
+		script, err := anonymize.MySQL(rules, salt)
+		if err != nil {
+			return err
+		}
+		opts.Cmd = []string{mysqlBin(svc.Kind, "mysql"), "-uroot", "--default-character-set=utf8mb4", "--", svc.Env[mysqlDatabase]}
+		opts.Env, opts.Stdin = mysqlExecEnv(svc), strings.NewReader(script)
+	}
+	if err := dk.Exec(ctx, id, opts); err != nil {
+		return fmt.Errorf("apply rules: %w", err)
+	}
+	return c.dumpDatabase(ctx, svc, id, st, target, cp)
 }
 
 // AnonymizeRules: an anonymized copy is applying the database's rules.

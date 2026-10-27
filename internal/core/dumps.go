@@ -222,56 +222,11 @@ func (c *Core) verifyDump(ctx context.Context, b store.Backup) (store.Verificati
 	if err != nil {
 		return d, err
 	}
-	// The throwaway server is a service of its own: fresh credentials.
-	svc := store.Service{Kind: b.ServiceKind, ServerID: store.LocalServerID, MemoryMB: verifyMemoryMB}
-	svc.Image = defaultMySQLImage(svc.Kind)
-	svc.Env = newMySQLEnv()
-	if svc.Kind == store.ServiceKindMongoDB {
-		svc.Image, svc.Env = DefaultMongoImage, newMongoEnv()
-	}
-	if live, err := c.store.GetService(ctx, b.ServiceID); err == nil && live.Kind == svc.Kind {
-		// Its own image: the server that made the dump, or a later one.
-		svc.Image, svc.ServerID = live.Image, live.ServerID
-	} else if b.Image != "" {
-		svc.Image = b.Image
-	}
-	dk := c.dockerFor(svc.ServerID)
-	c.steps.set(verifyKey(b.ID), VerifyImage)
-	if err := dk.EnsureImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image)); err != nil {
-		return d, fmt.Errorf("pull %s: %w", svc.Image, err)
-	}
-	c.steps.set(verifyKey(b.ID), VerifyServer)
-	cfg := &container.Config{
-		Image:  svc.Image,
-		Labels: map[string]string{docker.LabelManaged: "true", docker.LabelComponent: verifyComponent},
-	}
-	host := &container.HostConfig{
-		// Isolated: the restore arrives over exec, nothing needs a network.
-		NetworkMode: "none",
-		Resources:   container.Resources{Memory: verifyMemoryMB << 20},
-		LogConfig:   docker.DefaultLogConfig(),
-	}
-	for k, v := range svc.Env {
-		cfg.Env = append(cfg.Env, k+"="+v)
-	}
-	if svc.Kind == store.ServiceKindMongoDB {
-		cfg.Cmd, cfg.Healthcheck = mongoArgs(verifyMemoryMB), mongoHealthcheck()
-	} else {
-		cfg.Cmd, cfg.Healthcheck = mysqlArgs(verifyMemoryMB), mysqlHealthcheck(svc.Kind)
-	}
-	id, err := dk.Run(ctx, client.ContainerCreateOptions{Name: "kipitiny-verify-" + strings.ToLower(b.ID), Config: cfg, HostConfig: host})
+	svc, dk, id, err := c.scratchDump(ctx, b, "kipitiny-verify-"+strings.ToLower(b.ID), func(s string) { c.steps.set(verifyKey(b.ID), s) })
 	if err != nil {
 		return d, err
 	}
-	defer func() {
-		// The data directory is an anonymous volume: remove it too.
-		if err := dk.RemoveContainerAndVolumes(context.WithoutCancel(ctx), id); err != nil {
-			c.log.Warn("cannot remove restore test container", "id", id[:12], "err", err)
-		}
-	}()
-	if err := dk.WaitHealthy(ctx, id, databaseReadyTimeout); err != nil {
-		return d, fmt.Errorf("throwaway server: %w", err)
-	}
+	defer c.removeScratch(ctx, dk, id)
 	c.steps.set(verifyKey(b.ID), VerifyRestore)
 	if err := c.loadDump(ctx, dk, id, svc, svc.Env[mysqlDatabase], st, target, b); err != nil {
 		return d, err
@@ -291,6 +246,59 @@ func (c *Core) verifyDump(ctx context.Context, b store.Backup) (store.Verificati
 		return d, fmt.Errorf("sanity query: %w", err)
 	}
 	return parseVerifyOutput(out.String())
+}
+
+// scratchDump starts a throwaway, network-less server of b's kind (MySQL,
+// MariaDB, MongoDB) able to load it, and waits until it's ready; step
+// reports where it's at. svc describes it: kind, image, credentials. The
+// caller removes it with removeScratch.
+func (c *Core) scratchDump(ctx context.Context, b store.Backup, name string, step func(string)) (store.Service, *docker.Client, string, error) {
+	// The throwaway server is a service of its own: fresh credentials.
+	svc := store.Service{Kind: b.ServiceKind, ServerID: store.LocalServerID, MemoryMB: verifyMemoryMB}
+	svc.Image = defaultMySQLImage(svc.Kind)
+	svc.Env = newMySQLEnv()
+	if svc.Kind == store.ServiceKindMongoDB {
+		svc.Image, svc.Env = DefaultMongoImage, newMongoEnv()
+	}
+	if live, err := c.store.GetService(ctx, b.ServiceID); err == nil && live.Kind == svc.Kind {
+		// Its own image: the server that made the dump, or a later one.
+		svc.Image, svc.ServerID = live.Image, live.ServerID
+	} else if b.Image != "" {
+		svc.Image = b.Image
+	}
+	dk := c.dockerFor(svc.ServerID)
+	step(VerifyImage)
+	if err := dk.EnsureImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image)); err != nil {
+		return svc, nil, "", fmt.Errorf("pull %s: %w", svc.Image, err)
+	}
+	step(VerifyServer)
+	cfg := &container.Config{
+		Image:  svc.Image,
+		Labels: map[string]string{docker.LabelManaged: "true", docker.LabelComponent: verifyComponent},
+	}
+	host := &container.HostConfig{
+		// Isolated: the restore arrives over exec, nothing needs a network.
+		NetworkMode: "none",
+		Resources:   container.Resources{Memory: verifyMemoryMB << 20},
+		LogConfig:   docker.DefaultLogConfig(),
+	}
+	for k, v := range svc.Env {
+		cfg.Env = append(cfg.Env, k+"="+v)
+	}
+	if svc.Kind == store.ServiceKindMongoDB {
+		cfg.Cmd, cfg.Healthcheck = mongoArgs(verifyMemoryMB), mongoHealthcheck()
+	} else {
+		cfg.Cmd, cfg.Healthcheck = mysqlArgs(verifyMemoryMB), mysqlHealthcheck(svc.Kind)
+	}
+	id, err := dk.Run(ctx, client.ContainerCreateOptions{Name: name, Config: cfg, HostConfig: host})
+	if err != nil {
+		return svc, nil, "", err
+	}
+	if err := dk.WaitHealthy(ctx, id, databaseReadyTimeout); err != nil {
+		c.removeScratch(ctx, dk, id)
+		return svc, nil, "", fmt.Errorf("throwaway server: %w", err)
+	}
+	return svc, dk, id, nil
 }
 
 // mongoStatsJS prints "collections|documents|bytes" of the user databases.
