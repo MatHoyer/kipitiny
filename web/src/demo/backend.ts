@@ -31,6 +31,8 @@ import type {
   ChangeResult,
   PgTable,
   PreviewSettings,
+  AnonymizeRules,
+  SeedDatabase,
   Project,
   TagInfo,
   UpgradeNotice,
@@ -1125,6 +1127,19 @@ const demoNotices: UpgradeNotice[] = [
 
 /** Preview settings per project, in memory only. */
 const demoPreviewSettings = new Map<string, PreviewSettings>();
+const demoSeedRules = new Map<string, AnonymizeRules | null>([["db", { users: { email: "fake:email" }, sessions: "truncate" }]]);
+
+/** The project's databases, each with the copy of its latest backup when it has rules. */
+function previewSeed(projectId: string): SeedDatabase[] {
+  return db.services
+    .filter((s) => s.projectId === projectId && ["postgres", "mysql", "mariadb", "mongodb"].includes(s.kind))
+    .map((s) => {
+      const backup = db.backups.find((b) => b.serviceId === s.id && b.status === "succeeded");
+      const rules = demoSeedRules.get(s.name) ?? null;
+      const copy = backup && rules ? { ...backup, id: backup.id + "-anon", sourceId: backup.id, objectKey: backup.objectKey + ".anon" } : undefined;
+      return { serviceId: s.id, name: s.name, kind: s.kind, rules, backup, copy, seeds: copy };
+    });
+}
 
 function previewSettings(projectId: string): PreviewSettings {
   const s = demoPreviewSettings.get(projectId) ?? {
@@ -1134,7 +1149,7 @@ function previewSettings(projectId: string): PreviewSettings {
     inherit: [],
     ttlSeconds: 0,
     sleepAfterSeconds: 0,
-    seed: "",
+    seed: projectId === "acme" ? "anonymized" : "",
   };
   return { ...s, env: Object.fromEntries(Object.entries(s.env).map(([k, v]) => [k, s.secrets.includes(k) ? MASK : v])) };
 }
@@ -1403,6 +1418,16 @@ const routes: Route[] = [
       return previewSettings(m[1]);
     },
   ],
+  ["GET", /^\/projects\/([^/]+)\/preview-seed$/, ({ m }) => previewSeed(m[1])],
+  [
+    "PUT",
+    /^\/projects\/([^/]+)\/preview-seed\/([^/]+)$/,
+    ({ m, body }) => {
+      demoSeedRules.set(m[2], (body.rules ?? null) as AnonymizeRules | null);
+      return previewSeed(m[1]).find((d) => d.name === m[2]);
+    },
+  ],
+  ["POST", /^\/projects\/([^/]+)\/preview-seed\/([^/]+)\/anonymize$/, ({ m }) => previewSeed(m[1]).find((d) => d.name === m[2])?.seeds],
   ["GET", /^\/projects\/([^/]+)\/compose$/, ({ m, q }) => compose(m[1], q.get("service") ?? undefined)],
   // The preview's services: the parent's, asleep (its project isn't simulated).
   [

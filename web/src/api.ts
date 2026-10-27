@@ -77,7 +77,27 @@ export type PreviewSettings = {
   ttlSeconds: number;
   sleepAfterSeconds: number;
   /** What --seed fills new previews' databases with: nothing, anonymized backups, or production data as is. */
-  seed: "" | "anonymized" | "raw";
+  seed: SeedMode;
+};
+
+export type SeedMode = "" | "anonymized" | "raw";
+
+/** A database's anonymize rules, by table: truncate, exclude, or rules by column (keep, null, hash, fixed:<value>, fake:<kind>). */
+export type AnonymizeRules = Record<string, string | Record<string, string>>;
+
+/** A database of a project, as previews are seeded with it. */
+export type SeedDatabase = {
+  serviceId: string;
+  name: string;
+  kind: ServiceKind;
+  /** null: no rules, so no anonymized seeds; {}: nothing personal. */
+  rules: AnonymizeRules | null;
+  /** Its latest backup a preview can be seeded with. */
+  backup?: Backup;
+  /** The latest anonymized copy made with the current rules, whatever its status. */
+  copy?: Backup;
+  /** The copy previews get: the latest good one with the current rules. */
+  seeds?: Backup;
 };
 
 export type Container = {
@@ -456,8 +476,10 @@ export type Backup = {
   finishedAt?: string;
   verifyStatus?: OpStatus;
   verifyError?: string;
-  /** Where a running backup is at, and how much it uploaded so far. */
-  step?: "prebackup" | "prepare" | "snapshot" | "helper" | "upload";
+  /** The backup an anonymized copy was made from. */
+  sourceId?: string;
+  /** Where a running backup (or anonymized copy) is at, and how much it uploaded so far. */
+  step?: "prebackup" | "prepare" | "snapshot" | "helper" | "upload" | "image" | "server" | "restore" | "anonymize";
   stepBytes?: number;
   /** Where a running restore test is at. */
   verifyStep?: "queued" | "image" | "server" | "restore" | "read" | "check";
@@ -1468,6 +1490,12 @@ export const api = {
   templateLogos: () => request<TemplateLogo[]>("/templates/logos"),
   installTemplate: (id: string, body: TemplateInstall) => request<TemplateResult>(`/templates/${id}/install`, json("POST", body)),
   /** The project's git link; null when it has none. */
+  previewSeed: (id: string) => request<SeedDatabase[]>(`/projects/${id}/preview-seed`),
+  /** rules null removes them. */
+  setAnonymizeRules: (id: string, service: string, rules: AnonymizeRules | null) =>
+    request<SeedDatabase>(`/projects/${id}/preview-seed/${encodeURIComponent(service)}`, json("PUT", { rules })),
+  anonymizeNow: (id: string, service: string) =>
+    request<Backup>(`/projects/${id}/preview-seed/${encodeURIComponent(service)}/anonymize`, { method: "POST" }),
   projectGit: (id: string) =>
     request<GitStatus>(`/projects/${id}/git`).catch((e) => {
       if (e instanceof ApiError && e.status === 404) return null;
