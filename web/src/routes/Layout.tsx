@@ -11,7 +11,6 @@ import {
   Waypoints,
   TriangleAlert,
 } from "lucide-react";
-import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { toast } from "sonner";
@@ -59,12 +58,6 @@ export function Layout() {
   const { pathname } = useLocation();
   const [preview, setPreview] = useState<Branding | null>(null);
   useApplyBranding(preview ?? auth.data?.branding ?? {});
-  // The user's theme follows them; next-themes still keeps it locally so pages open without a flash.
-  const { setTheme } = useTheme();
-  const savedTheme = auth.data?.user?.preferences?.theme;
-  useEffect(() => {
-    if (savedTheme) setTheme(savedTheme);
-  }, [savedTheme, setTheme]);
 
   if (auth.isPending) return null;
   if (auth.error) return <p className="p-8 text-sm text-destructive">{auth.error.message}</p>;

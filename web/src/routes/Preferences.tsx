@@ -12,7 +12,7 @@ const themes = [
   { value: "system", label: "System", icon: Monitor },
 ];
 
-/** The signed-in user's own UI choices, kept on the server for every browser. */
+/** The signed-in user's own UI choices: on the server for every browser, but the theme (this browser). */
 export function PreferencesPage() {
   const { theme, setTheme } = useTheme();
   const qc = useQueryClient();
@@ -30,9 +30,9 @@ export function PreferencesPage() {
       <PageBody className="max-w-3xl">
         <Section
           title="Theme"
-          description="Light, dark, or as the device is set, on every browser you sign in to."
+          description="Light, dark, or as the device is set. Saved in this browser."
           actions={
-            <Segmented value={theme ?? "system"} onValueChange={(v) => (setTheme(v), set({ theme: v }))} aria-label="Theme">
+            <Segmented value={theme ?? "system"} onValueChange={setTheme} aria-label="Theme">
               {themes.map(({ value, label, icon: Icon }) => (
                 <SegmentedItem key={value} value={value}>
                   <Icon />
