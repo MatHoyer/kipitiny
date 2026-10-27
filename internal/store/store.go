@@ -319,6 +319,8 @@ type User struct {
 type Preferences struct {
 	// MapView is the map's view when it opens: "" (2D) or "3d".
 	MapView string `json:"mapView,omitempty"`
+	// Theme is "light", "dark" or "system"; "" leaves each browser its own.
+	Theme string `json:"theme,omitempty"`
 }
 
 type Role string

@@ -1189,7 +1189,7 @@ const routes: Route[] = [
     },
   ],
   ["DELETE", /^\/branding$/, () => (db.branding = {})],
-  ["PUT", /^\/account\/preferences$/, ({ body }) => ((db.preferences = body.mapView === "3d" ? { mapView: "3d" } : {}), save(), db.preferences)],
+  ["PUT", /^\/account\/preferences$/, ({ body }) => ((db.preferences = { mapView: body.mapView === "3d" ? "3d" : undefined, theme: body.theme ? String(body.theme) : undefined }), save(), db.preferences)],
   [
     "GET",
     /^\/account$/,
