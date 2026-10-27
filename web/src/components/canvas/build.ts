@@ -1,5 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 import { isDatabase, type CanvasPoint, type ServerTopology, type TopoNetwork, type TopoProject, type TopoService } from "@/api";
+import { separate } from "./separate.ts";
 
 /*
  * Turns the topology into React Flow nodes and edges. Node IDs are the keys
@@ -259,7 +260,7 @@ function edge(source: string, target: string, kind: EdgeKind): Edge {
  * moves with it, its children shifting back so nothing moves on screen.
  * Returns the nodes and the IDs whose position changed (to save).
  */
-export function fitFrames(nodes: MapNode[]): { nodes: MapNode[]; moved: string[] } {
+function fitFrames(nodes: MapNode[]): { nodes: MapNode[]; moved: string[] } {
   const out = nodes.map((n) => ({ ...n, position: { ...n.position } }));
   const moved = new Set<string>();
   // Project frames first: a server frame fits around their new size.
@@ -292,3 +293,30 @@ export function fitFrames(nodes: MapNode[]): { nodes: MapNode[]; moved: string[]
   return { nodes: out, moved: [...moved] };
 }
 
+
+/**
+ * Pushes nodes apart so none sits on another: services in their frame, then
+ * the frames they resized among their neighbours, then the server frames.
+ * Lower ranks keep their place first (what was just dragged, then what has
+ * one), each rank in reading order. Returns the nodes, fitted, and the IDs
+ * whose position changed.
+ */
+export function untangle(nodes: MapNode[], rank: (n: MapNode) => number): { nodes: MapNode[]; moved: string[] } {
+  let out = nodes.map((n) => ({ ...n, position: { ...n.position } }));
+  const moved = new Set<string>();
+  const level = (n: MapNode) => (!n.parentId ? 2 : n.parentId.startsWith("project:") ? 0 : 1);
+  for (const l of [0, 1, 2]) {
+    const groups = new Map<string, MapNode[]>();
+    for (const n of out) if (level(n) === l) groups.set(n.parentId ?? "", [...(groups.get(n.parentId ?? "") ?? []), n]);
+    for (const group of groups.values()) {
+      group.sort((a, b) => rank(a) - rank(b) || a.position.y - b.position.y || a.position.x - b.position.x);
+      const boxes = group.map((n) => ({ id: n.id, x: n.position.x, y: n.position.y, w: n.width ?? SVC_W, h: n.height ?? SVC_H }));
+      for (const id of separate(boxes, GAP)) moved.add(id);
+      boxes.forEach((b, i) => (group[i].position = { x: b.x, y: b.y }));
+    }
+    const fit = fitFrames(out);
+    out = fit.nodes;
+    for (const id of fit.moved) moved.add(id);
+  }
+  return { nodes: out, moved: [...moved] };
+}
