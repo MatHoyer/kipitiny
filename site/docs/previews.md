@@ -48,11 +48,25 @@ In the project's **Previews** tab, under *Preview settings*:
 | Uptime checks, backups | as set | none |
 | Maintenance and starting pages | as set | the project's, kept up to date on each deploy; maintenance mode is the preview's own |
 
-In a git project's compose file, `x-kipitiny.preview: skip` leaves a service
-out of previews (a scheduler emailing real customers), and `profiles: [preview]`
-(or `x-kipitiny.preview: only`) makes one for previews only, never run in the
-project itself. A mail catcher, for instance, gives each preview its own inbox,
-reached by name on its network:
+### Services of previews only, or never in previews
+
+A service's **Settings › General › Previews** says where it runs:
+
+- **Not in previews** leaves it out of them: a scheduler emailing real
+  customers shouldn't run on a copy.
+- **Previews only** runs it in each preview, never in the project itself: its
+  containers stop and it can't be deployed or started there. A mail catcher,
+  for instance.
+
+In a compose file, it's `x-kipitiny.preview: skip` or `only` (or
+`profiles: [preview]`); a git project sets it there, as the cards of its
+services are read-only.
+
+### Mail in previews
+
+A mail catcher of previews only gives each preview its own inbox, so previews
+never send real email. Install the [Mailpit template](/docs/templates) in the
+project and set it to **Previews only**, or in a compose file:
 
 ```yaml
 services:
@@ -61,7 +75,7 @@ services:
     environment:
       SMTP_HOST: "{{ project.SMTP_HOST }}"
   mailpit:
-    image: axllent/mailpit:v1.27
+    image: axllent/mailpit:v1.32.0
     profiles: [preview]
     expose: ["8025"]
     x-kipitiny:
@@ -71,6 +85,8 @@ services:
 with the project variable `SMTP_HOST` set to the real server, and to `mailpit`
 (SMTP on port 1025) in the preview settings; its web UI is at
 `<preview>-mailpit.<base domain>`.
+
+### Production values
 
 A preview never quietly falls back on production:
 

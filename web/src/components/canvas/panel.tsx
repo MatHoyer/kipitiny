@@ -188,6 +188,7 @@ function ServiceActions({ svc }: { svc: TopoService }) {
     onSettled: () => qc.invalidateQueries({ queryKey: ["topology"] }),
   });
   const deployed = svc.containers.length > 0;
+  if (svc.preview === "only") return <p className="text-sm text-muted-foreground">Runs in previews only.</p>;
   return (
     <div className="flex flex-wrap gap-2">
       <Button size="sm" loading={run.isPending && run.variables === "deploy"} onClick={() => run.mutate("deploy")}>

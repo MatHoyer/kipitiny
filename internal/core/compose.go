@@ -130,6 +130,7 @@ func exportFile(p store.Project, svcs []store.Service, checks map[string]store.U
 				Icon:       s.Icon,
 				Tags:       s.Tags,
 				Analytics:  s.Analytics,
+				Preview:    s.Preview,
 			},
 		}
 		if s.Replicas > 1 {
@@ -514,16 +515,11 @@ func (a *applier) prepare(ctx context.Context, f compose.File) error {
 	inputs := map[string]ServiceInput{}
 	var errs []string
 	for _, name := range f.ServiceNames() {
-		switch preview := f.Services[name].X.Preview; {
-		case preview == "only" && a.git:
+		if f.Services[name].X.Preview == "only" {
 			a.warn("service %s runs in previews only", name)
-			continue
-		case preview == "only":
-			// Previews of a project without git copy its services.
-			a.warn("service %s skipped: %s.preview only applies to git projects (previews read the file)", name, compose.ExtKey)
-			continue
-		case preview == "skip" && !a.git:
-			a.warn("service %s: %s.preview only applies to git projects (previews read the file)", name, compose.ExtKey)
+			if a.git { // previews read the file: nothing to keep
+				continue
+			}
 		}
 		in, err := a.input(name, f.Services[name])
 		if err == nil {
@@ -639,6 +635,7 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 		StopGraceSeconds: cs.StopGraceSeconds,
 		HostNetwork:      cs.HostNetwork,
 		DockerSocket:     cs.DockerSocket,
+		Preview:          cs.X.Preview,
 	}
 	if in.Kind == "" {
 		in.Kind = store.ServiceKindApp
@@ -918,6 +915,7 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 		Files:            in.Files,
 		DependsOn:        in.DependsOn,
 		ProjectNetworks:  in.ProjectNetworks,
+		Preview:          &in.Preview,
 	}
 	if in.Image == "" { // a database on the default image
 		p.Image = nil
@@ -984,6 +982,7 @@ func changedFields(old, svc store.Service) []string {
 	add("dependsOn", !slices.Equal(old.DependsOn, svc.DependsOn))
 	add("projectNetworks", !slices.Equal(old.ProjectNetworks, svc.ProjectNetworks))
 	add("middlewares", !sameMiddlewares(old.Middlewares, svc.Middlewares))
+	add("preview", old.Preview != svc.Preview)
 	return out
 }
 
@@ -1023,7 +1022,9 @@ func (a *applier) apply(ctx context.Context) error {
 				return fmt.Errorf("networks of %s: %w", in.Name, err)
 			}
 		}
-		queue(svc.ID, svc.Kind)
+		if svc.Preview != "only" {
+			queue(svc.ID, svc.Kind)
+		}
 	}
 	for _, u := range a.updates {
 		svc, err := c.updateService(ctx, u.id, u.patch)
@@ -1104,7 +1105,9 @@ func (a *applier) apply(ctx context.Context) error {
 		}
 	}
 	for _, in := range a.creates {
-		a.plan.Deploying = append(a.plan.Deploying, in.Name)
+		if in.Preview != "only" {
+			a.plan.Deploying = append(a.plan.Deploying, in.Name)
+		}
 	}
 	slices.Sort(a.plan.Deploying)
 	commit, created := a.opts.Commit, maps.Clone(a.created)
@@ -1208,7 +1211,7 @@ func (c *Core) deployInOrder(dbs, apps []string, commit string, between func()) 
 // its change needs it, or when it never deployed successfully (its first
 // deploy failed, or a failed apply created it) even if its block is unchanged.
 func needsDeploy(svc store.Service, changed bool) bool {
-	return !svc.Stopped && (changed || svc.CurrentDeploymentID == "")
+	return svc.Preview != "only" && !svc.Stopped && (changed || svc.CurrentDeploymentID == "")
 }
 
 // waitDeployments waits until deployments are over, at most

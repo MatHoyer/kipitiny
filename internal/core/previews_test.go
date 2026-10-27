@@ -315,3 +315,83 @@ func TestPreviewSourceBranchRefs(t *testing.T) {
 		t.Errorf("env = %v", env)
 	}
 }
+
+// A project without git stores where its services run: previews copy the
+// stored services.
+func TestPreviewOnlyStored(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := []byte(`
+services:
+  web: {image: a, x-kipitiny: {domain: shop.example.com, port: 80}}
+  mailpit: {image: axllent/mailpit, profiles: [preview], x-kipitiny: {domain: mail.example.com, port: 8025}}
+  mailer: {image: a, x-kipitiny: {preview: skip}}
+`)
+	a, err := c.applyCompose(ctx, p.ID, src, ApplyOptions{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(a.plan.Create) != 3 {
+		t.Fatalf("plan = %+v", a.plan)
+	}
+	svcs, _ := c.store.ListServices(ctx, p.ID)
+	by := map[string]store.Service{}
+	for _, s := range svcs {
+		by[s.Name] = s
+	}
+	if by["mailpit"].Preview != "only" || by["mailer"].Preview != "skip" || by["web"].Preview != "" {
+		t.Fatalf("stored = %+v", by)
+	}
+	if !needsDeploy(by["web"], false) || needsDeploy(by["mailpit"], true) {
+		t.Error("an apply deploys a previews-only service")
+	}
+	if _, err := c.Deploy(ctx, by["mailpit"].ID, DeployOptions{}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("deployed a previews-only service: %v", err)
+	}
+	if _, err := c.ServiceAction(ctx, by["mailpit"].ID, ActionStart); !errors.Is(err, ErrInvalid) {
+		t.Errorf("started a previews-only service: %v", err)
+	}
+	// The exported file applies again unchanged.
+	f, vars := exportFile(p, svcs, nil, nil, nil, false)
+	data, err := compose.Marshal(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, err = c.applyCompose(ctx, p.ID, data, ApplyOptions{Env: vars, Prune: true, DryRun: true}, false); err != nil ||
+		len(a.plan.Create)+len(a.plan.Update)+len(a.plan.Delete) > 0 {
+		t.Errorf("reapply: %v %+v", err, a.plan)
+	}
+
+	f, _, _, err = c.previewSource(ctx, p, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := previewFile(&f, p, "pr-1", store.PreviewSettings{BaseDomain: "preview.example.com"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := f.Services["mailer"]; ok || f.Services["mailpit"].X.Preview != "" || f.Services["web"].Image != "a" {
+		t.Errorf("preview services = %+v", f.Services)
+	}
+
+	bad := "sometimes"
+	if _, err := c.UpdateService(ctx, by["web"].ID, ServicePatch{Preview: &bad}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("preview %q: %v", bad, err)
+	}
+	// Switching to only stops the containers: tested on Docker.
+	none := ""
+	if v, err := c.updateService(ctx, by["mailpit"].ID, ServicePatch{Preview: &none}); err != nil || v.Preview != "" || v.Stopped || !needsDeploy(v, false) {
+		t.Errorf("back to both: %v %+v", err, v)
+	}
+
+	pr, err := c.store.CreateProject(ctx, store.Project{Name: "shop-pr-1", ServerID: store.LocalServerID, ParentID: p.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.CreateService(ctx, pr.ID, ServiceInput{Name: "web", Image: "nginx", Preview: "skip"}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("a preview's service left out of previews: %v", err)
+	}
+}

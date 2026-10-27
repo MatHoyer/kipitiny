@@ -560,6 +560,10 @@ type Service struct {
 	// file whose service lists networks (external ones).
 	Networks            []string `bun:"networks" json:"networks"`
 	CurrentDeploymentID string   `bun:"current_deployment_id" json:"currentDeploymentId"`
+	// Preview is "only" for a service of the project's previews alone, never
+	// deployed in the project itself (e.g. a mail catcher), "skip" for one
+	// previews leave out; "" runs in both.
+	Preview string `bun:"preview" json:"preview"`
 	// Stopped is the desired run state after the user stopped the service.
 	Stopped bool `bun:"stopped" json:"stopped"`
 	// Sleeping is set while the manager keeps the service stopped for its

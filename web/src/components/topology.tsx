@@ -48,7 +48,7 @@ export const needsAttention = (svc: IssueSource & { stopped: boolean; sleeping?:
 export const issueRing = { error: "ring-destructive/60", warn: "ring-amber-500/60" } as const;
 export const issueText = { error: "text-destructive", warn: "text-amber-600 dark:text-amber-400" } as const;
 
-export const serviceState = (svc: TopoService) => liveState({ stopped: !!svc.stopped, sleeping: svc.sleeping, containers: svc.containers });
+export const serviceState = (svc: TopoService) => liveState({ stopped: !!svc.stopped, sleeping: svc.sleeping, preview: svc.preview, containers: svc.containers });
 
 /** How many of the project's services are misconfigured or not running well. */
 export function projectProblems(p: TopoProject): number {
