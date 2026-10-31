@@ -33,7 +33,7 @@ x-template:
 name: beszel-agent
 services:
   agent:
-    image: henrygd/beszel-agent:0.21.0
+    image: henrygd/beszel-agent:0.21.1
     network_mode: host
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
