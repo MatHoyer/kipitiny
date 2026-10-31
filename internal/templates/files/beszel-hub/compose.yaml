@@ -27,7 +27,7 @@ x-template:
 name: beszel
 services:
   hub:
-    image: henrygd/beszel:0.21.0
+    image: henrygd/beszel:0.21.1
     expose: ["8090"]
     environment:
       APP_URL: https://${DOMAIN}
