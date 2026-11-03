@@ -91,7 +91,7 @@ func Load() Config {
 		SetupToken:     env("KIPITINY_SETUP_TOKEN", ""),
 		Traefik: Traefik{
 			Enabled:      env("KIPITINY_TRAEFIK", "true") != "false",
-			Image:        env("KIPITINY_TRAEFIK_IMAGE", "traefik:v3.7"),
+			Image:        env("KIPITINY_TRAEFIK_IMAGE", "traefik:v3.7.17"),
 			HTTPPort:     env("KIPITINY_HTTP_PORT", "80"),
 			HTTPSPort:    env("KIPITINY_HTTPS_PORT", "443"),
 			ACMEEmail:    env("KIPITINY_ACME_EMAIL", ""),

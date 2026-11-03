@@ -36,7 +36,7 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := config.Config{DataDir: t.TempDir(), Traefik: config.Traefik{Image: "traefik:v3.7", DockerSocket: "/var/run/docker.sock", HTTPPort: "0", HTTPSPort: "0"}}
+	cfg := config.Config{DataDir: t.TempDir(), Traefik: config.Traefik{Image: "traefik:v3.7.17", DockerSocket: "/var/run/docker.sock", HTTPPort: "0", HTTPSPort: "0"}}
 	c := newTestCore(t, cfg)
 	c.pool = docker.NewPool(dk, c.connectServer)
 	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})

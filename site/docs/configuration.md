@@ -15,7 +15,7 @@ order: 15
 | `KIPITINY_SETUP_TOKEN` | random | Fix the first-run setup token instead of generating one |
 | `KIPITINY_TRUSTED_PROXIES` | — | Comma-separated CIDRs/IPs allowed to set `X-Forwarded-For` (your own proxy). Loopback and the managed Traefik are always trusted |
 | `KIPITINY_TRAEFIK`   | `true`  | Run and maintain the Traefik container (`false` to bring your own) |
-| `KIPITINY_TRAEFIK_IMAGE` | `traefik:v3.7` | |
+| `KIPITINY_TRAEFIK_IMAGE` | `traefik:v3.7.17` | Pinned to a patch release; each kipitiny update bumps it. Set your own pinned tag here only if you track Traefik releases yourself. |
 | `KIPITINY_HTTP_PORT` / `KIPITINY_HTTPS_PORT` | `80` / `443` | Host ports Traefik binds |
 | `KIPITINY_ACME_EMAIL` | — | Let's Encrypt account email (optional) |
 | `KIPITINY_CLOUDFLARE_TUNNEL_TOKEN` | — | Receive traffic through a Cloudflare Tunnel instead of ports 80/443 |

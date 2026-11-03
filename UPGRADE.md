@@ -9,6 +9,14 @@ Add a notice under `## Unreleased` in the change that causes it, as
 `- warning: …` (disruptive) or `- info: …`; continue on indented lines. The
 release renames the section to its version.
 
+## Unreleased
+- info: Traefik is now pinned to `traefik:v3.7.17` (security fixes, including
+  CVE-2026-48020 and CVE-2026-85597). The old `traefik:v3.7` tag was never
+  re-pulled, so servers could still run an early 3.7 release. Traefik is
+  recreated once on every server, dropping connections for a few seconds.
+  A `KIPITINY_TRAEFIK_IMAGE` you set is kept: pin it to v3.7.17 or later
+  yourself.
+
 ## 0.41.1
 - info: The Cloudflare tunnel moves to `cloudflared` 2026.10.4 (security fix):
   with a tunnel configured, its container is recreated once, dropping

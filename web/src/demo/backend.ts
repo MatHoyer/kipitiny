@@ -275,7 +275,7 @@ function topology(projectId?: string): Topology {
   const used = (s: DemoDb["services"][number], p: Project) =>
     db.services.filter((d) => d.projectId === p.id && isDb(d) && Object.values(s.env).some((v) => v.includes(`db.${d.name}.`))).map((d) => d.id);
   const proxy: TopoNode = node(
-    { id: hash("traefik"), name: "kipitiny-traefik", replica: 0, deployId: "", image: "traefik:v3.7", state: "running", status: "Up 9 days" },
+    { id: hash("traefik"), name: "kipitiny-traefik", replica: 0, deployId: "", image: "traefik:v3.7.17", state: "running", status: "Up 9 days" },
     [{ network: "kipitiny-proxy", ip: "172.18.0.2" }],
   );
   return {
