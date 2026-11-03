@@ -1,7 +1,9 @@
 package config
 
 import (
+	"regexp"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -16,3 +18,21 @@ func TestPrefixes(t *testing.T) {
 		t.Errorf("prefixes = %v, want %v", s, want)
 	}
 }
+
+// Traefik and cloudflared are pulled only when missing and recreated only
+// when their image string changes: a floating tag like traefik:v3.7 leaves
+// running servers on whatever patch they first pulled, security fixes
+// included. Defaults must name an exact version.
+func TestDefaultProxyImagesPinned(t *testing.T) {
+	t.Setenv("KIPITINY_TRAEFIK_IMAGE", "")
+	t.Setenv("KIPITINY_CLOUDFLARED_IMAGE", "")
+	cfg := Load()
+	for name, img := range map[string]string{"traefik": cfg.Traefik.Image, "cloudflared": cfg.Tunnel.Image} {
+		_, tag, _ := strings.Cut(img, ":")
+		if !pinnedTag.MatchString(tag) {
+			t.Errorf("default %s image %q is not pinned to an exact version", name, img)
+		}
+	}
+}
+
+var pinnedTag = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
