@@ -369,7 +369,7 @@ function securityReport(): SecurityReport {
     os: "Ubuntu 24.04.1 LTS",
     items: [
       { id: "updates", title: "Security updates", status: "warn", detail: "3 security updates pending (12 updates in all).", hint: "Install them, or turn on automatic updates." },
-      { id: "reboot", title: "Reboot", status: "ok", detail: "No reboot needed." },
+      { id: "reboot", title: "Reboot", status: "warn", detail: "A reboot is needed to finish installing updates.", hint: "Reboot at a quiet time: every app on this server restarts." },
       { id: "auto_updates", title: "Automatic security updates", status: "fail", detail: "Off: security fixes wait for someone to install them.", hint: "Install and enable unattended-upgrades." },
       { id: "ssh_password", title: "SSH password login", status: "fail", detail: "On: passwords can be guessed from the internet.", hint: "Set PasswordAuthentication no, once your key logs in." },
       { id: "ssh_root", title: "SSH root login", status: "ok", detail: "root: without-password." },
@@ -377,7 +377,7 @@ function securityReport(): SecurityReport {
       { id: "fail2ban", title: "Brute-force protection", status: "warn", detail: "fail2ban isn't running: SSH login attempts aren't throttled.", hint: "Install fail2ban with its sshd jail." },
       { id: "ports", title: "Open ports", status: "ok", detail: "Only SSH (22) and ports published by Docker." },
     ],
-    reboot: false,
+    reboot: true,
     updates: [
       { name: "linux-image-6.8.0-50-generic", version: "6.8.0-50.51", security: true, impact: "reboot" },
       { name: "openssh-server", version: "1:9.6p1-3ubuntu13.8", security: true, impact: "ssh" },
@@ -1249,6 +1249,13 @@ const routes: Route[] = [
     /^\/servers\/[^/]+\/security\/updates$/,
     () => {
       throw new Error("this is a demo: it doesn't install anything on its host");
+    },
+  ],
+  [
+    "POST",
+    /^\/servers\/[^/]+\/reboot$/,
+    () => {
+      throw new Error("this is a demo: it can't reboot its host");
     },
   ],
   [

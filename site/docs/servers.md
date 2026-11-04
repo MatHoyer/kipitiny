@@ -69,3 +69,14 @@ follows it, shows the end of its log, and checks the host again once it's
 done; a manager restarted meanwhile picks it up again. The API is
 `POST /api/servers/{id}/security/updates` with `{"all": false}`, the MCP tool
 `install_server_updates`.
+
+### Rebooting
+
+When installed updates wait for a reboot, the **Reboot** row has a **Reboot**
+button. It asks first, then reboots the host a few seconds later through
+systemd: every app on it is down for a few minutes, until Docker starts them
+again, and so is the manager when it runs there (the page reconnects). It's
+refused while updates are being installed. The section shows the reboot until
+the host answers on a new boot (at most 20 minutes), then checks it again. The
+API is `POST /api/servers/{id}/reboot`, the MCP tool `reboot_server` (the
+server's name as confirmation).

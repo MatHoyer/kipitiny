@@ -79,6 +79,9 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 	addTool(s, &mcp.Tool{Name: "install_server_updates", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
 		Description: "Install a server's pending security updates (all of them with all) through apt or dnf, in the background; get_server_status shows the install and its log, and the host is checked again once done. " +
 			"Read the pending updates' impact in get_server_status first: docker restarts Docker so every app of the server (and the manager, if it runs there), reboot means the server then needs a reboot, ssh restarts the SSH server. Needs admin."}, t.installServerUpdates)
+	addTool(s, &mcp.Tool{Name: "reboot_server", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+		Description: "Reboot a server's host, for instance when get_server_status says installed updates need it. Every app on it is down for a few minutes, and the manager too if it runs there. " +
+			"confirm must repeat the server's name. The host is checked again once it's back. Needs admin."}, t.rebootServer)
 	addTool(s, &mcp.Tool{Name: "get_cleanup", Annotations: readOnly,
 		Description: "The disk cleanup's settings (what it removes from every server: unused images, volumes, build cache, stopped containers, old deployments), its schedule, whether one is running and the last run's result with the space reclaimed. Needs admin."}, t.getCleanup)
 	addTool(s, &mcp.Tool{Name: "run_cleanup",

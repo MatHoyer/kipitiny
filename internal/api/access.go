@@ -181,6 +181,7 @@ var routeAccess = map[string]access{
 	"GET /api/servers/{id}/security":             admin,
 	"POST /api/servers/{id}/security/check":      admin,
 	"POST /api/servers/{id}/security/updates":    admin,
+	"POST /api/servers/{id}/reboot":              admin,
 	"POST /api/domains":                          admin,
 	"PATCH /api/domains/{id}":                    admin,
 	"DELETE /api/domains/{id}":                   admin,

@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, CircleCheck, CircleHelp, CircleX, Download, RefreshCw, TriangleAlert, type LucideIcon } from "lucide-react";
+import { ChevronDown, CircleCheck, CircleHelp, CircleX, Download, Power, RefreshCw, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { CheckboxField, Empty, Section } from "@/components/common";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { logBox } from "@/components/logs";
 import {
   AlertDialog,
@@ -36,7 +37,7 @@ export function ServerSecuritySection({ serverId }: { serverId: string }) {
   const report = useQuery({
     queryKey: ["server-security", serverId],
     queryFn: () => api.serverSecurity(serverId),
-    refetchInterval: (q) => (q.state.data?.install?.running ? 5000 : false),
+    refetchInterval: (q) => (q.state.data?.install?.running || q.state.data?.rebootingSince ? 5000 : false),
   });
   const check = useMutation({
     meta: { error: "Couldn't check the server" },
@@ -62,7 +63,12 @@ export function ServerSecuritySection({ serverId }: { serverId: string }) {
         </Button>
       }
     >
-      {report.isPending ? null : r?.error ? (
+      {report.isPending ? null : r?.rebootingSince ? (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner />
+          Rebooting, started {timeAgo(r.rebootingSince)}. The host is checked again once it's back.
+        </p>
+      ) : r?.error ? (
         <p role="alert" className="text-sm text-destructive">
           Couldn't check the host: {r.error}
         </p>
@@ -80,6 +86,7 @@ export function ServerSecuritySection({ serverId }: { serverId: string }) {
                   {it.detail && <p className="text-muted-foreground">{it.detail}</p>}
                   {it.hint && it.status !== "ok" && <p className="text-muted-foreground">{it.hint}</p>}
                   {it.id === "updates" && it.status !== "unknown" && <Updates serverId={serverId} report={r} />}
+                  {it.id === "reboot" && r.reboot && <RebootButton serverId={serverId} disabled={!!r.install?.running} />}
                 </div>
               </li>
             );
@@ -136,6 +143,35 @@ function Updates({ serverId, report }: { serverId: string; report: SecurityRepor
           </CollapsibleContent>
         </Collapsible>
       )}
+    </div>
+  );
+}
+
+function RebootButton({ serverId, disabled }: { serverId: string; disabled: boolean }) {
+  const qc = useQueryClient();
+  const reboot = useMutation({
+    meta: { error: "Couldn't reboot the server" },
+    mutationFn: () => api.rebootServer(serverId),
+    onSuccess: (r) => qc.setQueryData(["server-security", serverId], r),
+  });
+  return (
+    <div className="pt-1.5">
+      <ConfirmDialog
+        title="Reboot this server?"
+        description={
+          serverId === "local"
+            ? "Every app on it, and this manager, is down for a few minutes. The page reconnects once the manager is back."
+            : "Every app on it is down for a few minutes, until the host is back and Docker restarts them."
+        }
+        confirmLabel="Reboot"
+        onConfirm={() => reboot.mutate()}
+        trigger={
+          <Button size="sm" variant="outline" disabled={disabled || reboot.isPending}>
+            {reboot.isPending ? <Spinner data-icon="inline-start" /> : <Power data-icon="inline-start" />}
+            Reboot
+          </Button>
+        }
+      />
     </div>
   );
 }
