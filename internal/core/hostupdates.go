@@ -199,3 +199,103 @@ func (c *Core) resumeUpdates() {
 		}
 	}
 }
+
+// rebootTimeout is how long a server may take to come back from a reboot
+// before kipitiny stops waiting for it.
+const rebootTimeout = 20 * time.Minute
+
+// hostReboot is a reboot started from kipitiny.
+type hostReboot struct {
+	At time.Time `json:"at"`
+	// BootID is the boot it ends.
+	BootID string `json:"bootId"`
+}
+
+func rebootSetting(serverID string) string { return "security-reboot/" + serverID }
+
+// pendingReboot returns the reboot started from kipitiny that the report
+// doesn't show over yet, or nil.
+func (c *Core) pendingReboot(ctx context.Context, serverID string, r SecurityReport) (*hostReboot, error) {
+	v, err := c.store.GetSetting(ctx, rebootSetting(serverID))
+	if errors.Is(err, store.ErrNotFound) || err == nil && v == "" {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var rb hostReboot
+	if err := json.Unmarshal([]byte(v), &rb); err != nil {
+		return nil, err
+	}
+	// A host that can't be checked (no BootID) is still rebooting.
+	if r.BootID != "" && r.BootID != rb.BootID || time.Since(rb.At) > rebootTimeout {
+		return nil, nil
+	}
+	return &rb, nil
+}
+
+// RebootServer reboots a server's host a few seconds from now, then checks
+// it again once it's back. Every container on it restarts. Admin only.
+func (c *Core) RebootServer(ctx context.Context, serverID string) (SecurityReport, error) {
+	if err := RequireAdmin(ctx); err != nil {
+		return SecurityReport{}, err
+	}
+	sv, err := c.store.GetServer(ctx, serverID)
+	if err != nil {
+		return SecurityReport{}, err
+	}
+	c.hostActionMu.Lock()
+	defer c.hostActionMu.Unlock()
+	if run, err := c.updateRun(ctx, serverID); err != nil {
+		return SecurityReport{}, err
+	} else if run.Running {
+		return SecurityReport{}, fmt.Errorf("%w: updates are being installed; reboot once they're done", ErrBusy)
+	}
+	r, err := c.securityReport(ctx, serverID)
+	if err != nil {
+		return SecurityReport{}, err
+	}
+	if rb, err := c.pendingReboot(ctx, serverID, r); err != nil {
+		return SecurityReport{}, err
+	} else if rb != nil {
+		return SecurityReport{}, fmt.Errorf("%w: the server is already rebooting", ErrBusy)
+	}
+	startCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
+	defer cancel()
+	// The delay lets the helper answer before the host goes down.
+	out, err := c.runOnHost(startCtx, serverID, `command -v systemd-run >/dev/null 2>&1 || { echo "systemd-run not found: kipitiny reboots through systemd" >&2; exit 1; }
+cat /proc/sys/kernel/random/boot_id
+systemd-run --quiet --on-active=5 --unit=kipitiny-reboot-`+strings.ToLower(ids.New())+` systemctl reboot
+`)
+	if err != nil {
+		return SecurityReport{}, fmt.Errorf("start the reboot: %w", err)
+	}
+	b, err := json.Marshal(hostReboot{At: time.Now().UTC(), BootID: strings.TrimSpace(out)})
+	if err != nil {
+		return SecurityReport{}, err
+	}
+	if err := c.store.SetSetting(context.WithoutCancel(ctx), rebootSetting(serverID), string(b)); err != nil {
+		return SecurityReport{}, err
+	}
+	if err := c.goLoop(func() { c.waitReboot(sv) }); err != nil {
+		return SecurityReport{}, err
+	}
+	return c.ServerSecurity(ctx, serverID)
+}
+
+// waitReboot checks a rebooting server until it's back on a new boot. When
+// the manager runs there, it goes down too and StartSecurityChecks checks
+// the server once it's back.
+func (c *Core) waitReboot(sv store.Server) {
+	for {
+		select {
+		case <-c.bg.Done():
+			return
+		case <-time.After(30 * time.Second):
+		}
+		r := c.checkSecurity(c.bg, sv)
+		if rb, err := c.pendingReboot(c.bg, sv.ID, r); err != nil || rb == nil {
+			return
+		}
+	}
+}

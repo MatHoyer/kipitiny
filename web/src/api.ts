@@ -1046,6 +1046,8 @@ export type SecurityReport = {
   updates: PendingUpdate[];
   /** The last update install started from kipitiny. */
   install?: UpdateRun;
+  /** Set while a reboot started from kipitiny isn't over. */
+  rebootingSince?: string;
 };
 
 /** reboot: takes effect after a reboot; docker: restarts Docker, so every app; ssh: restarts the SSH server. */
@@ -1691,6 +1693,7 @@ export const api = {
   checkServerSecurity: (id: string) => request<SecurityReport>(`/servers/${id}/security/check`, { method: "POST" }),
   installServerUpdates: (id: string, all: boolean) =>
     request<SecurityReport>(`/servers/${id}/security/updates`, json("POST", { all })),
+  rebootServer: (id: string) => request<SecurityReport>(`/servers/${id}/reboot`, { method: "POST" }),
   /** With onStep, reports each step of reaching and preparing the server as it starts. */
   createServer: (s: ServerInput, onStep?: (step: string) => void) =>
     onStep ? progress<Server>("/servers", json("POST", s), onStep) : request<Server>("/servers", json("POST", s)),

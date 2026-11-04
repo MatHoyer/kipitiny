@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -102,6 +103,36 @@ func (t *tools) installServerUpdates(ctx context.Context, _ *mcp.CallToolRequest
 		rep, err := t.c.InstallUpdates(ctx, id, in.All)
 		if errors.Is(err, core.ErrBusy) {
 			err = errors.New("updates are already being installed on this server; get_server_status shows the install")
+		}
+		return rep, err
+	})
+	return nil, out, err
+}
+
+type rebootServerIn struct {
+	Server  string `json:"server,omitempty" jsonschema:"the server's name; this one by default"`
+	Confirm string `json:"confirm" jsonschema:"must equal the server's name"`
+}
+
+func (t *tools) rebootServer(ctx context.Context, _ *mcp.CallToolRequest, in rebootServerIn) (*mcp.CallToolResult, core.SecurityReport, error) {
+	out, err := mutate(ctx, t.c, "reboot_server", in.Server, func() (core.SecurityReport, error) {
+		if err := core.RequireAdmin(ctx); err != nil {
+			return core.SecurityReport{}, err
+		}
+		id, err := t.serverID(ctx, in.Server)
+		if err != nil {
+			return core.SecurityReport{}, err
+		}
+		names, err := t.serverNames(ctx)
+		if err != nil {
+			return core.SecurityReport{}, err
+		}
+		if in.Confirm == "" || in.Confirm != names[id] {
+			return core.SecurityReport{}, fmt.Errorf("rebooting stops every app on the server: confirm must repeat the server name (%s)", names[id])
+		}
+		rep, err := t.c.RebootServer(ctx, id)
+		if errors.Is(err, core.ErrBusy) {
+			err = errors.New(strings.TrimPrefix(err.Error(), core.ErrBusy.Error()+": "))
 		}
 		return rep, err
 	})

@@ -62,6 +62,11 @@ type SecurityReport struct {
 	// Install is the last update install started from kipitiny; not stored
 	// with the report.
 	Install *UpdateRun `json:"install,omitempty"`
+	// BootID changes on every boot: a reboot is over once it does.
+	BootID string `json:"bootId,omitempty"`
+	// RebootingSince is set while a reboot started from kipitiny isn't
+	// over; not stored with the report.
+	RebootingSince time.Time `json:"rebootingSince,omitzero"`
 }
 
 // Impacts of installing an update.
@@ -102,6 +107,7 @@ func securitySetting(serverID string) string { return "security/" + serverID }
 // hostCheckScript prints what the checklist needs as key=value lines. It
 // runs in the host's namespaces and only reads.
 const hostCheckScript = `. /etc/os-release 2>/dev/null; echo "os=$PRETTY_NAME"
+echo "boot_id=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
 if command -v apt-get >/dev/null 2>&1; then
   echo pm=apt
   up=$(apt-get -s -o Debug::NoLocking=1 --with-new-pkgs upgrade 2>/dev/null | grep '^Inst ')
@@ -389,7 +395,7 @@ func (c *Core) checkSecurity(ctx context.Context, sv store.Server) SecurityRepor
 		r.Error = err.Error()
 	} else {
 		f := parseHostFacts(out)
-		r.OS, r.Items = f.kv["os"], securityItems(f)
+		r.OS, r.Items, r.BootID = f.kv["os"], securityItems(f), f.kv["boot_id"]
 		r.SecurityUpdates, r.Reboot = f.int("security_updates"), f.kv["reboot"] == "1"
 		if f.updates != nil {
 			r.Updates = f.updates
@@ -443,7 +449,8 @@ func (c *Core) StartSecurityChecks() error {
 				continue
 			}
 			for _, sv := range servers {
-				if r, _ := c.securityReport(c.bg, sv.ID); time.Since(r.CheckedAt) < securityEvery-time.Minute {
+				r, _ := c.securityReport(c.bg, sv.ID)
+				if rb, _ := c.pendingReboot(c.bg, sv.ID, r); rb == nil && time.Since(r.CheckedAt) < securityEvery-time.Minute {
 					continue // checked recently, e.g. before a restart
 				}
 				c.checkSecurity(c.bg, sv)
@@ -475,6 +482,11 @@ func (c *Core) ServerSecurity(ctx context.Context, serverID string) (SecurityRep
 		return r, err
 	} else if !run.StartedAt.IsZero() {
 		r.Install = &run
+	}
+	if rb, err := c.pendingReboot(ctx, serverID, r); err != nil {
+		return r, err
+	} else if rb != nil {
+		r.RebootingSince = rb.At
 	}
 	return r, nil
 }

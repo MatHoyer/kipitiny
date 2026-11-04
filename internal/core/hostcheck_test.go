@@ -5,6 +5,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/MatHoyer/kipitiny/internal/config"
 )
 
 func TestSecurityItems(t *testing.T) {
@@ -137,6 +140,25 @@ func TestInstallError(t *testing.T) {
 	} {
 		if got := installError(log, u); got != want {
 			t.Errorf("got %q, want %q", got, want)
+		}
+	}
+}
+
+func TestPendingReboot(t *testing.T) {
+	c := newTestCore(t, config.Config{})
+	ctx := t.Context()
+	if rb, err := c.pendingReboot(ctx, "local", SecurityReport{BootID: "a"}); rb != nil || err != nil {
+		t.Fatalf("none started: %v %v", rb, err)
+	}
+	if err := c.store.SetSetting(ctx, rebootSetting("local"), `{"at":"`+time.Now().UTC().Format(time.RFC3339)+`","bootId":"a"}`); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		bootID  string
+		pending bool
+	}{{"a", true}, {"", true}, {"b", false}} {
+		if rb, err := c.pendingReboot(ctx, "local", SecurityReport{BootID: tc.bootID}); err != nil || (rb != nil) != tc.pending {
+			t.Errorf("boot %q: %v %v", tc.bootID, rb, err)
 		}
 	}
 }
