@@ -87,3 +87,23 @@ func (t *tools) runCleanup(ctx context.Context, _ *mcp.CallToolRequest, _ struct
 	})
 	return nil, out, err
 }
+
+type installServerUpdatesIn struct {
+	Server string `json:"server,omitempty" jsonschema:"the server's name; this one by default"`
+	All    bool   `json:"all,omitempty" jsonschema:"every pending update, not only security ones"`
+}
+
+func (t *tools) installServerUpdates(ctx context.Context, _ *mcp.CallToolRequest, in installServerUpdatesIn) (*mcp.CallToolResult, core.SecurityReport, error) {
+	out, err := mutate(ctx, t.c, "install_server_updates", in.Server, func() (core.SecurityReport, error) {
+		id, err := t.serverID(ctx, in.Server)
+		if err != nil {
+			return core.SecurityReport{}, err
+		}
+		rep, err := t.c.InstallUpdates(ctx, id, in.All)
+		if errors.Is(err, core.ErrBusy) {
+			err = errors.New("updates are already being installed on this server; get_server_status shows the install")
+		}
+		return rep, err
+	})
+	return nil, out, err
+}

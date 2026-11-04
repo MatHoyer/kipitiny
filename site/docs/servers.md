@@ -49,3 +49,23 @@ The check runs the host's own tools as root in a short-lived container (the
 same way as the host terminal) and only reads. New security updates and a
 needed reboot are [notifications](/docs/monitoring#notifications)
 (`server.updates_pending`, `server.reboot_required`).
+
+### Installing updates
+
+The **Security updates** row lists the pending updates (security ones first)
+with what installing them restarts: *restarts Docker* (`docker-ce`,
+`containerd.io`…: every app on the server stops for about a minute, and the
+manager too when it runs there), *needs a reboot* (kernel, libc, systemd),
+*restarts SSH* (open sessions stay). **Install updates** asks first, with the
+same summary; *Also install non-security updates* is checked by default, untick
+it to install only the security ones.
+
+The install runs on the host as a systemd unit (`kipitiny-updates-…`), so it
+keeps going when Docker restarts: `apt-get update`, then the security updates
+(or `apt-get --with-new-pkgs upgrade` for all), keeping changed config files;
+`dnf upgrade --security` (or `dnf upgrade`) on dnf hosts. Services using an
+updated library restart (needrestart, which leaves Docker alone). The page
+follows it, shows the end of its log, and checks the host again once it's
+done; a manager restarted meanwhile picks it up again. The API is
+`POST /api/servers/{id}/security/updates` with `{"all": false}`, the MCP tool
+`install_server_updates`.

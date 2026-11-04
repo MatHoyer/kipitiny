@@ -85,6 +85,21 @@ func (a *API) serverSecurity(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rep)
 }
 
+func (a *API) installServerUpdates(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		All bool `json:"all"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	rep, err := a.core.InstallUpdates(r.Context(), r.PathValue("id"), body.All)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, rep)
+}
+
 func (a *API) checkServerSecurity(w http.ResponseWriter, r *http.Request) {
 	rep, err := a.core.CheckServerSecurity(r.Context(), r.PathValue("id"))
 	if err != nil {

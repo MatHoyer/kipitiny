@@ -57,6 +57,44 @@ type SecurityReport struct {
 	// SecurityUpdates and Reboot are kept to notify only on a change.
 	SecurityUpdates int  `json:"securityUpdates"`
 	Reboot          bool `json:"reboot"`
+	// Updates are the pending package updates, security ones first.
+	Updates []PendingUpdate `json:"updates"`
+	// Install is the last update install started from kipitiny; not stored
+	// with the report.
+	Install *UpdateRun `json:"install,omitempty"`
+}
+
+// Impacts of installing an update.
+const (
+	// ImpactReboot: takes effect after a reboot (kernel, libc, systemd).
+	ImpactReboot = "reboot"
+	// ImpactDocker: restarts Docker, so every container of the server.
+	ImpactDocker = "docker"
+	// ImpactSSH: restarts the SSH server; open sessions stay.
+	ImpactSSH = "ssh"
+)
+
+// PendingUpdate is a package with a newer version available.
+type PendingUpdate struct {
+	Name     string `json:"name"`
+	Version  string `json:"version,omitempty"`
+	Security bool   `json:"security"`
+	// Impact is one of the Impact constants, or empty: services using the
+	// package restart.
+	Impact string `json:"impact,omitempty"`
+}
+
+func updateImpact(name string) string {
+	switch {
+	case slices.Contains([]string{"docker-ce", "docker.io", "docker-engine", "containerd", "containerd.io", "moby-engine", "moby-containerd"}, name):
+		return ImpactDocker
+	case strings.HasPrefix(name, "linux-image") || strings.HasPrefix(name, "linux-modules") || name == "kernel" || strings.HasPrefix(name, "kernel-core") ||
+		strings.HasPrefix(name, "kernel-modules") || slices.Contains([]string{"libc6", "glibc", "systemd", "dbus", "dbus-broker"}, name):
+		return ImpactReboot
+	case name == "openssh-server":
+		return ImpactSSH
+	}
+	return ""
 }
 
 func securitySetting(serverID string) string { return "security/" + serverID }
@@ -66,16 +104,21 @@ func securitySetting(serverID string) string { return "security/" + serverID }
 const hostCheckScript = `. /etc/os-release 2>/dev/null; echo "os=$PRETTY_NAME"
 if command -v apt-get >/dev/null 2>&1; then
   echo pm=apt
-  up=$(apt-get -s -o Debug::NoLocking=1 upgrade 2>/dev/null | grep '^Inst ')
+  up=$(apt-get -s -o Debug::NoLocking=1 --with-new-pkgs upgrade 2>/dev/null | grep '^Inst ')
   echo "updates=$(printf '%s' "$up" | grep -c '^Inst ')"
-  echo "security_updates=$(printf '%s' "$up" | grep -ci security)"
+  echo "security_updates=$(printf '%s' "$up" | grep '^Inst [^ ]* \[' | grep -ci security)" # upgrades: a new package comes with another one
+  printf '%s\n' "$up" | sed -n 's/^Inst /inst=/p'
   [ -f /var/run/reboot-required ] && echo reboot=1 || echo reboot=0
   if dpkg-query -W -f='${Status}' unattended-upgrades 2>/dev/null | grep -q 'ok installed' &&
     apt-config dump APT::Periodic::Unattended-Upgrade 2>/dev/null | grep -q '"1"'; then echo auto_updates=1; else echo auto_updates=0; fi
 elif command -v dnf >/dev/null 2>&1; then
   echo pm=dnf
-  echo "updates=$(dnf -q check-update 2>/dev/null | grep -c '^[^ ]')"
-  echo "security_updates=$(dnf -q updateinfo list --security 2>/dev/null | grep -c .)"
+  up=$(dnf -q check-update 2>/dev/null | grep '^[^ ]')
+  echo "updates=$(printf '%s' "$up" | grep -c .)"
+  printf '%s\n' "$up" | awk 'NF==3 {print "upd=" $1 " " $2}'
+  sec=$(dnf -q updateinfo list --security 2>/dev/null)
+  echo "security_updates=$(printf '%s' "$sec" | grep -c .)"
+  printf '%s\n' "$sec" | awk 'NF==3 {print "sec=" $3}'
   needs-restarting -r >/dev/null 2>&1; [ $? = 1 ] && echo reboot=1 || echo reboot=0
   if systemctl is-enabled -q dnf-automatic.timer 2>/dev/null || systemctl is-enabled -q dnf-automatic-install.timer 2>/dev/null; then echo auto_updates=1; else echo auto_updates=0; fi
 fi
@@ -137,6 +180,9 @@ type hostFacts struct {
 	listen []listener
 	// sshPorts are the ports sshd listens on, checked numbers.
 	sshPorts []string
+	updates  []PendingUpdate
+	// dnfSecurity names the packages dnf has security advisories for.
+	dnfSecurity []string
 }
 
 type listener struct{ addr, port, process string }
@@ -157,7 +203,36 @@ func parseHostFacts(out string) hostFacts {
 			}
 			continue
 		}
-		if k != "listen" {
+		switch k {
+		case "inst":
+			// inst=openssl [3.0.13-0ubuntu3.4] (3.0.13-0ubuntu3.5 Ubuntu:24.04/noble-updates, Ubuntu:24.04/noble-security [amd64])
+			// A new package has no [old version]: it comes with the upgrade
+			// that needs it, so it isn't a security update of its own.
+			name, rest, _ := strings.Cut(v, " ")
+			upgrade := strings.HasPrefix(rest, "[")
+			_, rest, _ = strings.Cut(rest, "(")
+			version, _, _ := strings.Cut(rest, " ")
+			f.updates = append(f.updates, PendingUpdate{Name: name, Version: version, Security: upgrade && strings.Contains(strings.ToLower(rest), "security")})
+			continue
+		case "upd":
+			// upd=openssl.x86_64 1:3.1.4-2.fc39
+			nameArch, version, _ := strings.Cut(v, " ")
+			if i := strings.LastIndexByte(nameArch, '.'); i > 0 {
+				nameArch = nameArch[:i]
+			}
+			f.updates = append(f.updates, PendingUpdate{Name: nameArch, Version: version})
+			continue
+		case "sec":
+			// sec=openssl-1:3.1.4-2.fc39.x86_64: the name is before version-release.
+			for range 2 {
+				if i := strings.LastIndexByte(v, '-'); i > 0 {
+					v = v[:i]
+				}
+			}
+			f.dnfSecurity = append(f.dnfSecurity, v)
+			continue
+		case "listen":
+		default:
 			f.kv[k] = v
 			continue
 		}
@@ -173,6 +248,20 @@ func parseHostFacts(out string) hostFacts {
 		}
 		f.listen = append(f.listen, l)
 	}
+	for i := range f.updates {
+		u := &f.updates[i]
+		u.Security = u.Security || slices.Contains(f.dnfSecurity, u.Name)
+		u.Impact = updateImpact(u.Name)
+	}
+	slices.SortStableFunc(f.updates, func(a, b PendingUpdate) int {
+		if a.Security != b.Security {
+			if a.Security {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(a.Name, b.Name)
+	})
 	return f
 }
 
@@ -294,7 +383,7 @@ func public(addr string) bool {
 func (c *Core) checkSecurity(ctx context.Context, sv store.Server) SecurityReport {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	r := SecurityReport{CheckedAt: time.Now().UTC(), Items: []SecurityItem{}}
+	r := SecurityReport{CheckedAt: time.Now().UTC(), Items: []SecurityItem{}, Updates: []PendingUpdate{}}
 	out, err := c.runOnHost(ctx, sv.ID, hostCheckScript)
 	if err != nil {
 		r.Error = err.Error()
@@ -302,6 +391,9 @@ func (c *Core) checkSecurity(ctx context.Context, sv store.Server) SecurityRepor
 		f := parseHostFacts(out)
 		r.OS, r.Items = f.kv["os"], securityItems(f)
 		r.SecurityUpdates, r.Reboot = f.int("security_updates"), f.kv["reboot"] == "1"
+		if f.updates != nil {
+			r.Updates = f.updates
+		}
 	}
 	prev, _ := c.securityReport(ctx, sv.ID)
 	if b, err := json.Marshal(r); err == nil {
@@ -334,9 +426,10 @@ func (c *Core) securityReport(ctx context.Context, serverID string) (SecurityRep
 }
 
 // StartSecurityChecks checks every server's host a minute after start, then
-// every securityEvery.
+// every securityEvery, and follows the update installs still running.
 func (c *Core) StartSecurityChecks() error {
 	return c.goLoop(func() {
+		c.resumeUpdates()
 		wait := time.Minute
 		for {
 			select {
@@ -369,10 +462,21 @@ func (c *Core) ServerSecurity(ctx context.Context, serverID string) (SecurityRep
 		return SecurityReport{}, err
 	}
 	r, err := c.securityReport(ctx, serverID)
+	if err != nil {
+		return r, err
+	}
 	if r.Items == nil {
 		r.Items = []SecurityItem{}
 	}
-	return r, err
+	if r.Updates == nil {
+		r.Updates = []PendingUpdate{}
+	}
+	if run, err := c.updateRun(ctx, serverID); err != nil {
+		return r, err
+	} else if !run.StartedAt.IsZero() {
+		r.Install = &run
+	}
+	return r, nil
 }
 
 // CheckServerSecurity checks a server's host now; a host that can't be
@@ -389,5 +493,6 @@ func (c *Core) CheckServerSecurity(ctx context.Context, serverID string) (Securi
 		return SecurityReport{}, fmt.Errorf("%w: a check is already running", ErrBusy)
 	}
 	defer c.securityBusy.Store(false)
-	return c.checkSecurity(ctx, sv), nil
+	c.checkSecurity(ctx, sv)
+	return c.ServerSecurity(ctx, serverID)
 }

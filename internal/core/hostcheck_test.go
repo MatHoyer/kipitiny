@@ -1,6 +1,11 @@
 package core
 
-import "testing"
+import (
+	"os/exec"
+	"slices"
+	"strings"
+	"testing"
+)
 
 func TestSecurityItems(t *testing.T) {
 	out := `os=Ubuntu 24.04.1 LTS
@@ -70,6 +75,68 @@ func TestPublicAddr(t *testing.T) {
 	} {
 		if got := public(addr); got != want {
 			t.Errorf("public(%q) = %v", addr, got)
+		}
+	}
+}
+
+func TestPendingUpdates(t *testing.T) {
+	f := parseHostFacts(`pm=apt
+inst=openssl [3.0.13-0ubuntu3.4] (3.0.13-0ubuntu3.5 Ubuntu:24.04/noble-updates, Ubuntu:24.04/noble-security [amd64])
+inst=linux-image-6.8.0-50-generic (6.8.0-50.51 Ubuntu:24.04/noble-updates, Ubuntu:24.04/noble-security [amd64])
+inst=linux-image-virtual [6.8.0-31.31] (6.8.0-50.51 Ubuntu:24.04/noble-updates, Ubuntu:24.04/noble-security [amd64])
+inst=docker-ce [5:27.3.1-1~ubuntu.24.04~noble] (5:27.4.0-1~ubuntu.24.04~noble Docker CE:stable [amd64])
+inst=openssh-server [1:9.6p1-3ubuntu13.5] (1:9.6p1-3ubuntu13.8 Ubuntu:24.04/noble-security [amd64])
+`)
+	want := []PendingUpdate{
+		{Name: "linux-image-virtual", Version: "6.8.0-50.51", Security: true, Impact: ImpactReboot},
+		{Name: "openssh-server", Version: "1:9.6p1-3ubuntu13.8", Security: true, Impact: ImpactSSH},
+		{Name: "openssl", Version: "3.0.13-0ubuntu3.5", Security: true},
+		{Name: "docker-ce", Version: "5:27.4.0-1~ubuntu.24.04~noble", Impact: ImpactDocker},
+		{Name: "linux-image-6.8.0-50-generic", Version: "6.8.0-50.51", Impact: ImpactReboot},
+	}
+	if !slices.Equal(f.updates, want) {
+		t.Errorf("apt: %+v", f.updates)
+	}
+
+	f = parseHostFacts(`pm=dnf
+upd=openssl.x86_64 1:3.1.4-2.fc39
+upd=kernel-core.x86_64 6.11.4-201.fc40
+upd=vim-enhanced.x86_64 2:9.1.785-1.fc40
+sec=openssl-1:3.1.4-2.fc39.x86_64
+sec=kernel-core-6.11.4-201.fc40.x86_64
+`)
+	want = []PendingUpdate{
+		{Name: "kernel-core", Version: "6.11.4-201.fc40", Security: true, Impact: ImpactReboot},
+		{Name: "openssl", Version: "1:3.1.4-2.fc39", Security: true},
+		{Name: "vim-enhanced", Version: "2:9.1.785-1.fc40"},
+	}
+	if !slices.Equal(f.updates, want) {
+		t.Errorf("dnf: %+v", f.updates)
+	}
+}
+
+func TestHostScriptsParse(t *testing.T) {
+	for name, s := range map[string]string{
+		"check": hostCheckScript, "start": startUpdatesScript("kipitiny-updates-x", false),
+		"start all": startUpdatesScript("kipitiny-updates-x", true), "install": installScript(false), "wait": waitUpdatesScript("kipitiny-updates-x"),
+	} {
+		cmd := exec.Command("sh", "-n")
+		cmd.Stdin = strings.NewReader(s)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Errorf("%s: %v %s", name, err, out)
+		}
+	}
+}
+
+func TestInstallError(t *testing.T) {
+	u := "kipitiny-updates-x"
+	for log, want := range map[string]string{
+		"Started kipitiny-updates-x.service - kipitiny: install updates.\nE: Malformed line 1 in source list\nE: The list of sources could not be read.\n" +
+			"kipitiny-updates-x.service: Main process exited, code=exited, status=100/n/a\nkipitiny-updates-x.service: Failed with result 'exit-code'.": "E: Malformed line 1 in source list",
+		"Started kipitiny-updates-x.service - kipitiny: install updates.\ndpkg: error processing package foo\nkipitiny-updates-x.service: Failed with result 'exit-code'.": "dpkg: error processing package foo",
+	} {
+		if got := installError(log, u); got != want {
+			t.Errorf("got %q, want %q", got, want)
 		}
 	}
 }
