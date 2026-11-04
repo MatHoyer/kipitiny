@@ -1041,6 +1041,26 @@ export type SecurityReport = {
   items: SecurityItem[];
   /** Set when the host couldn't be checked at all. */
   error?: string;
+  reboot: boolean;
+  /** Pending package updates, security ones first. */
+  updates: PendingUpdate[];
+  /** The last update install started from kipitiny. */
+  install?: UpdateRun;
+};
+
+/** reboot: takes effect after a reboot; docker: restarts Docker, so every app; ssh: restarts the SSH server. */
+export type UpdateImpact = "reboot" | "docker" | "ssh";
+
+export type PendingUpdate = { name: string; version?: string; security: boolean; impact?: UpdateImpact };
+
+export type UpdateRun = {
+  /** Every pending update, not only security ones. */
+  all: boolean;
+  startedAt: string;
+  finishedAt?: string;
+  running: boolean;
+  error?: string;
+  log?: string;
 };
 
 export type ServerStats = {
@@ -1669,6 +1689,8 @@ export const api = {
   serverStats: (id: string) => request<ServerStats>(`/servers/${id}/stats`),
   serverSecurity: (id: string) => request<SecurityReport>(`/servers/${id}/security`),
   checkServerSecurity: (id: string) => request<SecurityReport>(`/servers/${id}/security/check`, { method: "POST" }),
+  installServerUpdates: (id: string, all: boolean) =>
+    request<SecurityReport>(`/servers/${id}/security/updates`, json("POST", { all })),
   /** With onStep, reports each step of reaching and preparing the server as it starts. */
   createServer: (s: ServerInput, onStep?: (step: string) => void) =>
     onStep ? progress<Server>("/servers", json("POST", s), onStep) : request<Server>("/servers", json("POST", s)),

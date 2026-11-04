@@ -73,6 +73,7 @@ type Core struct {
 	proxy          proxyState
 	cleaning       atomic.Bool  // a cleanup is running
 	securityBusy   atomic.Bool  // a security check started by hand is running
+	hostActionMu   sync.Mutex   // starting an update install or a reboot is check-then-start
 	notified       sync.Map     // notification key -> time.Time last sent
 	notifyHTTP     *http.Client // nil: notify's default; tests redirect it
 	pushMu         sync.Mutex   // generating the VAPID keys

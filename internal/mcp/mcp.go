@@ -75,7 +75,10 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 	addTool(s, &mcp.Tool{Name: "get_manager_status", Annotations: readOnly,
 		Description: "The manager's version and available update, its Docker engine, its database size, and the current CPU, memory and network use of every running service."}, t.getManagerStatus)
 	addTool(s, &mcp.Tool{Name: "get_server_status", Annotations: readOnly,
-		Description: "Each server's connection and Docker engine, its host's current CPU, load, memory, swap, disk (of Docker's data) and uptime, and for admins its last security check (firewall, SSH, updates, reboot needed) with hints. Use it when services are slow or a deploy fails for lack of space."}, t.getServerStatus)
+		Description: "Each server's connection and Docker engine, its host's current CPU, load, memory, swap, disk (of Docker's data) and uptime, and for admins its last security check (firewall, SSH, pending updates with their impact, reboot needed) with hints. Use it when services are slow or a deploy fails for lack of space."}, t.getServerStatus)
+	addTool(s, &mcp.Tool{Name: "install_server_updates", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes},
+		Description: "Install a server's pending security updates (all of them with all) through apt or dnf, in the background; get_server_status shows the install and its log, and the host is checked again once done. " +
+			"Read the pending updates' impact in get_server_status first: docker restarts Docker so every app of the server (and the manager, if it runs there), reboot means the server then needs a reboot, ssh restarts the SSH server. Needs admin."}, t.installServerUpdates)
 	addTool(s, &mcp.Tool{Name: "get_cleanup", Annotations: readOnly,
 		Description: "The disk cleanup's settings (what it removes from every server: unused images, volumes, build cache, stopped containers, old deployments), its schedule, whether one is running and the last run's result with the space reclaimed. Needs admin."}, t.getCleanup)
 	addTool(s, &mcp.Tool{Name: "run_cleanup",

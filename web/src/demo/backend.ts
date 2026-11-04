@@ -377,6 +377,15 @@ function securityReport(): SecurityReport {
       { id: "fail2ban", title: "Brute-force protection", status: "warn", detail: "fail2ban isn't running: SSH login attempts aren't throttled.", hint: "Install fail2ban with its sshd jail." },
       { id: "ports", title: "Open ports", status: "ok", detail: "Only SSH (22) and ports published by Docker." },
     ],
+    reboot: false,
+    updates: [
+      { name: "linux-image-6.8.0-50-generic", version: "6.8.0-50.51", security: true, impact: "reboot" },
+      { name: "openssh-server", version: "1:9.6p1-3ubuntu13.8", security: true, impact: "ssh" },
+      { name: "openssl", version: "3.0.13-0ubuntu3.5", security: true },
+      { name: "containerd.io", version: "1.7.24-1", security: false, impact: "docker" },
+      { name: "docker-ce", version: "5:27.4.0-1~ubuntu.24.04~noble", security: false, impact: "docker" },
+      ...["curl", "git", "libcurl4t64", "python3.12", "tzdata", "vim", "wget"].map((name) => ({ name, version: "1.0-1ubuntu1", security: false })),
+    ],
   };
 }
 
@@ -1235,6 +1244,13 @@ const routes: Route[] = [
   ["GET", /^\/servers\/[^/]+\/stats$/, hostStats],
   ["GET", /^\/servers\/[^/]+\/security$/, securityReport],
   ["POST", /^\/servers\/[^/]+\/security\/check$/, () => ({ ...securityReport(), checkedAt: new Date().toISOString() })],
+  [
+    "POST",
+    /^\/servers\/[^/]+\/security\/updates$/,
+    () => {
+      throw new Error("this is a demo: it doesn't install anything on its host");
+    },
+  ],
   [
     "POST",
     /^\/servers$/,
