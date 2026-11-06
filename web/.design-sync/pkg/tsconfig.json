@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "allowImportingTsExtensions": false,
+    "noUnusedLocals": false,
+    "rootDir": "../..",
+    "outDir": "dist",
+    "paths": { "@/*": ["../../src/*"] }
+  },
+  "include": ["index.ts"]
+}

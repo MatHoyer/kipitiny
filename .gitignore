@@ -9,3 +9,9 @@ site/public/demo/
 *.db-shm
 *.tsbuildinfo
 /kipitiny
+web/.ds-sync/
+web/ds-bundle/
+web/.design-sync/.cache/
+web/.design-sync/learnings/
+web/.design-sync/node_modules
+web/.design-sync/pkg/dist/
