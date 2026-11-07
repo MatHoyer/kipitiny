@@ -33,7 +33,7 @@ x-template:
 name: mailpit
 services:
   mailpit:
-    image: axllent/mailpit:v1.32.0
+    image: axllent/mailpit:v1.33.0
     expose: ["8025", "1025"]
     environment:
       MP_DATABASE: /data/mailpit.db
