@@ -5,17 +5,12 @@ description: Cut a kipitiny release — bump `VERSION` in a `chore(release): X.Y
 
 # Release
 
-A release is a chore commit on `main` that bumps the root `VERSION` file and the
-website's image tag in `site/compose.yaml`, plus a lightweight tag on it. The
+A release is a chore commit on `main` that bumps the root `VERSION` file, plus a
+lightweight tag on it. The
 workflow fails if the tag and `VERSION` disagree. Pushing the tag triggers
 `.github/workflows/release.yml` (multi-arch image to
 `ghcr.io/mathoyer/kipitiny:<tag>` + `:latest`, GitHub release with generated
-notes) and `.github/workflows/site.yml` (the website image,
-`ghcr.io/mathoyer/kipitiny-homepage:<tag>`).
-
-The website's kipitiny project follows `site/compose.yaml` on `main` (git sync),
-so `main` must only name a website image that exists: the tag goes first, `main`
-once the site image is pushed.
+notes) and `.github/workflows/site.yml` (the website, deployed to GitHub Pages).
 
 Tags are bare semver, no `v` prefix: `0.6.0`, not `v0.6.0` (the workflow only
 matches `[0-9]+.[0-9]+.[0-9]+`).
@@ -46,28 +41,23 @@ matches `[0-9]+.[0-9]+.[0-9]+`).
 4. **Commit and tag:**
    ```sh
    printf 'X.Y.Z\n' > VERSION
-   sed -i -E 's#(kipitiny-homepage:)[0-9]+\.[0-9]+\.[0-9]+#\1X.Y.Z#' site/compose.yaml
    # The next release's notices become this one's (no-op without any).
    sed -i 's/^## Unreleased$/## X.Y.Z/' UPGRADE.md
    go run ./internal/upgrade/notes release X.Y.Z   # must succeed: the workflow runs it
-   git add VERSION site/compose.yaml UPGRADE.md
+   git add VERSION UPGRADE.md
    git commit -m "chore(release): X.Y.Z"
    git tag X.Y.Z
    ```
    No AI attribution trailer on the commit.
 
-5. **Push the tag**, then **`main` once the website image exists**:
+5. **Push the tag and `main`:**
    ```sh
    git fetch origin && test "$(git rev-parse origin/main)" = "$(git rev-parse HEAD~1)"
-   git push origin X.Y.Z
-   # wait for the site workflow of the tag (about 2 minutes)
-   gh run watch "$(gh run list --workflow site.yml --branch X.Y.Z --limit 1 --json databaseId -q '.[0].databaseId')" --exit-status
-   git push origin main
+   git push origin X.Y.Z main
    ```
-   If the site workflow fails, stop and report: don't push `main` (its
-   `site/compose.yaml` would name an image that doesn't exist).
 
-6. **Report** the workflow run: `gh run list --workflow release.yml --limit 1`,
+6. **Report** the workflow runs: `gh run list --workflow release.yml --limit 1`
+   and `gh run list --workflow site.yml --limit 1`,
    and the release URL once it exists (`gh release view X.Y.Z --json url`).
 
 ## If something goes wrong

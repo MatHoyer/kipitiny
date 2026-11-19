@@ -118,7 +118,7 @@ parser reads.
 
 Push a tag `x.y.z` (no `v`): GitHub Actions publishes
 `ghcr.io/mathoyer/kipitiny:x.y.z` and `:latest` for amd64 and arm64, and a
-GitHub release; the website image `ghcr.io/mathoyer/kipitiny-homepage` is rebuilt from the same tag, so its docs describe the latest release (run the *site* workflow by hand for a site-only fix). After the first release, make the package public (GitHub →
+GitHub release; the website is rebuilt from the same tag and published to GitHub Pages, so its docs describe the latest release (run the *site* workflow by hand for a site-only fix). After the first release, make the package public (GitHub →
 Packages → kipitiny → Package settings), or managers can neither see nor pull
 updates.
 

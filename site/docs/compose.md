@@ -63,8 +63,6 @@ x-kipitiny:
 
 `db` and `cache` become a managed PostgreSQL and Redis (official images are recognised), `web` connects to them through references, and `API_KEY` comes from the project variable `API_KEY` (or a `.env`, which makes it a secret). Plain compose keys say what compose already has words for (the port, the healthcheck); `x-kipitiny` holds only what compose has none for: the domain, the pre-deploy command, the uptime check, Traefik's middlewares.
 
-A real one: this website runs on kipitiny from [`site/compose.yaml`](https://github.com/MatHoyer/kipitiny/blob/main/site/compose.yaml), synced from git. Each release pins its image tag there, in a commit pushed once the [site workflow](https://github.com/MatHoyer/kipitiny/blob/main/.github/workflows/site.yml) has published that image, so a sync never asks for an image that doesn't exist yet.
-
 ## Services
 
 Each key under `services` is a service. Its name is also its hostname inside the project: lowercase letters, digits and dashes, at most 40 characters.
