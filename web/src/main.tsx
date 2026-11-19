@@ -48,6 +48,10 @@ const queryClient: QueryClient = new QueryClient({
   },
 });
 
+// GitHub Pages has no per-folder fallback: the website's 404 page sends demo deep links to /demo/?r=<path>.
+const deepLink = import.meta.env.MODE === "demo" && new URLSearchParams(location.search).get("r");
+if (deepLink && deepLink.startsWith("/demo/")) history.replaceState(null, "", deepLink);
+
 const router = createBrowserRouter([
   {
     path: "/",
