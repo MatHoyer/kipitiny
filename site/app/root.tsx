@@ -13,6 +13,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+        {/* Only the 404 page is ever served under /demo/: hand the path to the demo app (GitHub Pages has no per-folder fallback). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if(location.pathname.startsWith("/demo/"))location.replace("/demo/?r="+encodeURIComponent(location.pathname+location.search+location.hash))`,
+          }}
+        />
       </head>
       <body>
         {children}
