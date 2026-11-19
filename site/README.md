@@ -1,7 +1,7 @@
 # site
 
-The kipitiny website: landing page and documentation, published as
-`ghcr.io/mathoyer/kipitiny-homepage` (nginx, port 80). React Router in framework
+The kipitiny website: landing page and documentation, published to GitHub
+Pages at kipitiny.mathieuhoyer.fr (custom domain set in the repo's Pages settings). React Router in framework
 mode with `ssr: false`: every page is prerendered to static HTML at build time.
 It is not part of the manager image.
 
@@ -27,12 +27,7 @@ manager (UI links, MCP instructions) points to its own version.
 ```sh
 make dev-site    # from the repo root: http://localhost:5173
 make site        # typecheck + static build in site/build/client
-docker build -t kipitiny-homepage site && docker run --rm -p 8080:80 kipitiny-homepage
 ```
 
-The *site* workflow publishes the image on every release tag, or when run by hand.
-
-It runs on kipitiny itself: a project linked to `compose.yaml` here (Project ›
-Git, path `site/compose.yaml`). The release commit pins the image to its
-version and is pushed to `main` after the tag, once the workflow has published
-that image; git sync then deploys it.
+The *site* workflow builds it and deploys it to Pages on every release tag, or
+when run by hand (that deploys the current branch, so run it from `main`).

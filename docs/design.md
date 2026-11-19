@@ -382,7 +382,7 @@ Clients ────┤                            ├──→ core (service la
 
 ## 14a. Website and documentation
 
-- `site/`: landing page and docs, one React Router app prerendered to static HTML (`ssr: false`), served by nginx as `ghcr.io/mathoyer/kipitiny-homepage`. Separate from the manager image: the manager ships no docs and no Node.
+- `site/`: landing page and docs, one React Router app prerendered to static HTML (`ssr: false`), published to GitHub Pages by the *site* workflow. Separate from the manager image: the manager ships no docs and no Node.
 - Docs are `site/docs/<slug>.md` (front matter: title, description, order), also served as markdown at `/docs/<slug>/llms.txt`, indexed by `/llms.txt`.
 - Built on each release tag from the tagged commit, so `/docs` describes the latest release; the footer shows `VERSION`.
 - Versioned: `site/scripts/versions.sh` copies `site/docs` at the last patch tag of each minor since 0.10 to `/docs/<minor>/...` (own `llms.txt`, version picker, banner on old versions). Generated in CI from tags, not committed.

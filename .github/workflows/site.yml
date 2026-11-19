@@ -1,13 +1,7 @@
-# Publishes the website (site/: landing page and docs) as
-# ghcr.io/mathoyer/kipitiny-homepage for amd64 and arm64: on each release tag,
-# as :1.2.3 and :latest like the manager, so the docs match the latest release;
-# or by hand, as :sha-<commit> and :latest, to try a build. Each minor release
-# since 0.10 also keeps its own docs at /docs/<minor>, taken from its last
-# patch tag.
-#
-# The website runs on kipitiny from site/compose.yaml, which the release commit
-# pins to its tag: git sync deploys it once main has that commit, pushed after
-# this image (see the release skill).
+# Publishes the website (site/: landing page and docs) to GitHub Pages at
+# kipitiny.mathieuhoyer.fr: on each release tag, so the docs match the latest
+# release, or by hand for a site-only fix. Each minor release since 0.10 also
+# keeps its own docs at /docs/<minor>, taken from its last patch tag.
 name: site
 
 on:
@@ -17,36 +11,33 @@ on:
 
 permissions:
   contents: read
-  packages: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
-  image:
+  pages:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
         with:
-          fetch-depth: 0
-      - name: Docs of each release
-        run: site/scripts/versions.sh
-      - name: Version
-        id: version
-        run: echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+          fetch-depth: 0 # versions.sh reads the release tags
+      - uses: actions/setup-node@v5
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+          node-version: 24
+      - run: corepack enable
+      - name: Build
+        run: KIPITINY_VERSION="$(cat VERSION)" make site
+      # Pages has no per-path fallback: unknown paths get the site's 404 page.
+      - run: cp site/build/client/__spa-fallback.html site/build/client/404.html
+      - uses: actions/upload-pages-artifact@v4
         with:
-          context: .
-          file: site/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          build-args: KIPITINY_VERSION=${{ steps.version.outputs.version }}
-          tags: |
-            ghcr.io/mathoyer/kipitiny-homepage:${{ github.ref_type == 'tag' && github.ref_name || format('sha-{0}', github.sha) }}
-            ghcr.io/mathoyer/kipitiny-homepage:latest
-          push: true
-          cache-from: type=gha,scope=site
-          cache-to: type=gha,mode=max,scope=site
+          path: site/build/client
+      - id: deploy
+        uses: actions/deploy-pages@v4
