@@ -37,7 +37,9 @@ In the UI, the same rows are under *Settings › Networking › Domain*: path
 prefixes separated by spaces or commas, the scheme and an optional port.
 
 - **gRPC** needs `scheme: h2c`: Traefik then talks HTTP/2 to the container
-  without TLS. Long-lived streams work as is. h2c paths go without the retry
+  without TLS. Streams that stay open longer than a minute also need
+  [`KIPITINY_TRAEFIK_READ_TIMEOUT=0`](/docs/configuration): Traefik
+  otherwise cuts them after 60 s. h2c paths go without the retry
   Traefik otherwise adds during rollouts, which would hold a bidirectional
   stream back: gRPC clients reconnect on their own.
 - **WebSockets** work on the default `http` scheme.

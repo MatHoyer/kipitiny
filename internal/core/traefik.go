@@ -184,6 +184,10 @@ func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreate
 		"--metrics.prometheus.addentrypointslabels=false",
 		"--metrics.prometheus.addserviceslabels=false",
 	}
+	if cfg.ReadTimeout != "" {
+		// Unset, Traefik's 60s stays: adding the flag recreates Traefik.
+		args = append(args, "--entrypoints.websecure.transport.respondingTimeouts.readTimeout="+cfg.ReadTimeout)
+	}
 	// Keep X-Forwarded-For from Cloudflare, so IP allowlists and rate
 	// limits can see the client behind it (see route.behindProxy).
 	if tunnel {

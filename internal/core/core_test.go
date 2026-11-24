@@ -160,6 +160,20 @@ func TestMasked(t *testing.T) {
 	}
 }
 
+func TestTraefikReadTimeout(t *testing.T) {
+	const flag = "--entrypoints.websecure.transport.respondingTimeouts.readTimeout="
+	has := func(c *Core) []string {
+		opts, _ := c.traefikSpec("/var/run/docker.sock", traefikOpts{})
+		return slices.DeleteFunc(slices.Clone(opts.Config.Cmd), func(a string) bool { return !strings.HasPrefix(a, flag) })
+	}
+	if got := has(&Core{}); len(got) != 0 {
+		t.Errorf("unset: %v (would recreate Traefik on upgrade)", got)
+	}
+	if got := has(&Core{cfg: config.Config{Traefik: config.Traefik{ReadTimeout: "0"}}}); !slices.Equal(got, []string{flag + "0"}) {
+		t.Errorf("0: %v", got)
+	}
+}
+
 func TestTraefikManagerRoute(t *testing.T) {
 	c := &Core{cfg: config.Config{Domain: "kipitiny.example.com"}}
 	opts, files := c.traefikSpec("/var/run/docker.sock", traefikOpts{})

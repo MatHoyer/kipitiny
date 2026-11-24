@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -79,6 +80,10 @@ type Traefik struct {
 	ACMEEmail string
 	// DockerSocket is the socket path on the host, mounted into Traefik.
 	DockerSocket string
+	// ReadTimeout is the HTTPS entrypoint's read timeout (a Go duration,
+	// "0" for none); empty keeps Traefik's 60s, which cuts long gRPC
+	// streams.
+	ReadTimeout string
 }
 
 func Load() Config {
@@ -96,6 +101,7 @@ func Load() Config {
 			HTTPSPort:    env("KIPITINY_HTTPS_PORT", "443"),
 			ACMEEmail:    env("KIPITINY_ACME_EMAIL", ""),
 			DockerSocket: env("KIPITINY_DOCKER_SOCKET", "/var/run/docker.sock"),
+			ReadTimeout:  duration(env("KIPITINY_TRAEFIK_READ_TIMEOUT", "")),
 		},
 		Update: Update{
 			Image: env("KIPITINY_IMAGE", "ghcr.io/mathoyer/kipitiny"),
@@ -114,6 +120,15 @@ func Load() Config {
 			Keep:     envInt("KIPITINY_MANAGER_BACKUP_KEEP", 14),
 		},
 	}
+}
+
+// duration is v when it's a Go duration (0, 90s, 1h), else empty.
+func duration(v string) string {
+	v = strings.TrimSpace(v)
+	if _, err := time.ParseDuration(v); err != nil {
+		return ""
+	}
+	return v
 }
 
 func managerCron(v string) string {
