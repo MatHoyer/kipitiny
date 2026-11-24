@@ -11,16 +11,29 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { api, type PublishedPort, type Service as ServiceT } from "../../api";
+import { api, type PublishedPort, type Route, type Service as ServiceT } from "../../api";
 import { Applies } from "./parts";
 
 /** A domain without an HTTP port only names the server: Traefik doesn't route it. */
 export const dnsOnlyHint = (ports: PublishedPort[]) =>
   `DNS only: connections go straight to ${ports.length > 1 ? "ports" : "port"} ${ports.map((p) => p.hostPort).join(", ")} on the server, not through Traefik.`;
 
-const domainForm = (s: ServiceT) => ({ domain: s.domain, port: s.port ? String(s.port) : "" });
+type RouteRow = { paths: string; scheme: "http" | "h2c"; port: string };
 
-/** The public domain and the HTTP port Traefik routes it to. */
+const domainForm = (s: ServiceT) => ({
+  domain: s.domain,
+  port: s.port ? String(s.port) : "",
+  routes: (s.routes ?? []).map((r): RouteRow => ({ paths: r.paths.join(" "), scheme: r.scheme ?? "http", port: r.port ? String(r.port) : "" })),
+});
+
+const toRoutes = (rows: RouteRow[]): Route[] =>
+  rows.map((r) => ({
+    paths: r.paths.split(/[\s,]+/).filter(Boolean),
+    ...(r.scheme === "h2c" ? { scheme: "h2c" as const } : {}),
+    ...(Number(r.port) ? { port: Number(r.port) } : {}),
+  }));
+
+/** The public domain, the HTTP port Traefik routes it to, and the paths routed to the app when it shares the domain. */
 export function DomainCard({ svc }: { svc: ServiceT }) {
   const qc = useQueryClient();
   const [form, setForm] = useState(() => domainForm(svc));
@@ -28,7 +41,8 @@ export function DomainCard({ svc }: { svc: ServiceT }) {
   const formId = useId();
   const save = useMutation({
     meta: { error: "Couldn't save the domain" },
-    mutationFn: () => api.updateService(svc.id, { domain: form.domain.trim(), port: Number(form.port) || 0 }),
+    mutationFn: () =>
+      api.updateService(svc.id, { domain: form.domain.trim(), port: Number(form.port) || 0, routes: toRoutes(form.routes) }),
     onSuccess: (updated) => {
       qc.setQueryData(["service", svc.id], updated);
       setForm(domainForm(updated));
@@ -55,27 +69,100 @@ export function DomainCard({ svc }: { svc: ServiceT }) {
     e.preventDefault();
     save.mutate();
   };
+  const setRoute = (i: number, field: keyof RouteRow) => (value: string) =>
+    setForm({ ...form, routes: form.routes.map((r, j) => (j === i ? { ...r, [field]: value } : r)) });
+  const routed = form.domain.trim() !== "" && Number(form.port) > 0;
 
   return (
     <Section title={<Applies title="Domain" when="deploy" />}>
-      <form id={formId} onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-3">
-        <DomainField
-          value={form.domain}
-          onChange={(domain) => setForm({ ...form, domain })}
-          note={!Number(form.port) && svc.publishedPorts.length > 0 ? dnsOnlyHint(svc.publishedPorts) : undefined}
-          className="sm:col-span-2"
-        />
-        <FloatingInput
-          label="Port"
-          type="number"
-          min={0}
-          max={65535}
-          value={form.port}
-          onChange={(e) => setForm({ ...form, port: e.target.value })}
-          description={
-            svc.publishedPorts.length > 0 ? "HTTP port Traefik routes the domain to. Empty: the domain is only for DNS." : undefined
-          }
-        />
+      <form id={formId} onSubmit={onSubmit} className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <DomainField
+            value={form.domain}
+            onChange={(domain) => setForm({ ...form, domain })}
+            note={!Number(form.port) && svc.publishedPorts.length > 0 ? dnsOnlyHint(svc.publishedPorts) : undefined}
+            className="sm:col-span-2"
+          />
+          <FloatingInput
+            label="Port"
+            type="number"
+            min={0}
+            max={65535}
+            value={form.port}
+            onChange={(e) => setForm({ ...form, port: e.target.value })}
+            description={
+              svc.publishedPorts.length > 0 ? "HTTP port Traefik routes the domain to. Empty: the domain is only for DNS." : undefined
+            }
+          />
+        </div>
+        {(routed || form.routes.length > 0) && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <Label>Path routes</Label>
+                <p className="text-sm text-muted-foreground">
+                  {form.routes.length === 0
+                    ? "None: the whole domain goes to this app. With routes, only their paths do, and another service of the project can take the rest of the domain."
+                    : "Only these path prefixes reach this app (the longest wins). Use h2c for gRPC."}
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setForm({ ...form, routes: [...form.routes, { paths: "", scheme: "http", port: "" }] })}
+              >
+                <Plus data-icon="inline-start" />
+                Add route
+              </Button>
+            </div>
+            {form.routes.map((r, i) => (
+              <div key={i} className="flex flex-wrap items-start gap-2 sm:flex-nowrap">
+                <FloatingInput
+                  label="Paths"
+                  required
+                  value={r.paths}
+                  onChange={(e) => setRoute(i, "paths")(e.target.value)}
+                  placeholder="/api /ws"
+                  title="Path prefixes, separated by spaces or commas."
+                  className="w-full sm:min-w-0 sm:flex-1"
+                  inputClassName="font-mono"
+                />
+                <Select value={r.scheme} onValueChange={setRoute(i, "scheme")}>
+                  <SelectTrigger aria-label="Scheme" className="w-32 shrink-0 rounded-xl data-[size=default]:h-14">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="http">HTTP</SelectItem>
+                    <SelectItem value="h2c">h2c (gRPC)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FloatingInput
+                  label="Port"
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={r.port}
+                  onChange={(e) => setRoute(i, "port")(e.target.value)}
+                  placeholder={form.port || "app's"}
+                  className="w-28 shrink-0"
+                  inputClassName="font-mono"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  title="Remove"
+                  aria-label={`Remove route ${r.paths}`}
+                  className="mt-3.5 text-muted-foreground hover:text-destructive"
+                  onClick={() => setForm({ ...form, routes: form.routes.filter((_, j) => j !== i) })}
+                >
+                  <Trash2 />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
       </form>
       <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setForm(domainForm(svc))} label="Save domain" />
     </Section>
