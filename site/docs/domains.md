@@ -38,8 +38,43 @@ services:
   Traefik otherwise adds during rollouts, which would hold a bidirectional
   stream back: gRPC clients reconnect on their own.
 - **WebSockets** work on the default `http` scheme.
-- Other paths of the domain get a 404.
 - While the app is down, its paths show the maintenance page below.
+
+### One domain, several services
+
+Services of the same project can share a domain: each one lists its paths in
+`routes`, and at most one has no `routes` and takes every other path. Without
+such a catch-all, other paths get a 404. Two services can't list the same
+path, and a domain belongs to one project.
+
+```yaml
+services:
+  dashboard:
+    image: ghcr.io/example/dashboard:2.1.0
+    expose: ["80"]
+    x-kipitiny:
+      domain: app.example.com   # everything else
+  server:
+    image: ghcr.io/example/server:1.4.0
+    expose: ["80"]
+    ports: ["3478:3478/udp"]
+    x-kipitiny:
+      domain: app.example.com
+      routes:
+        - paths: [/my.api.Service/]
+          scheme: h2c
+        - paths: [/api, /ws]
+```
+
+- The domain has one DNS record. When any of its services publishes ports,
+  the record points straight at the server, never through Cloudflare's proxy,
+  for all of them. Behind a [Cloudflare Tunnel](#cloudflare-tunnel-no-open-ports)
+  that can't work, so a service with published ports can't share its domain
+  with services serving HTTP there.
+- Middlewares (basic auth, IP allowlist…) apply to each service's own paths.
+  [Analytics](/docs/analytics) count a domain through one of its services.
+- [Previews](/docs/previews) give the services sharing a domain one preview
+  domain too.
 
 ## Maintenance page
 

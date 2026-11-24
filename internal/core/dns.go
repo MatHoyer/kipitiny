@@ -519,10 +519,17 @@ func (c *Core) wantedRecords(ctx context.Context, zones []cloudflare.Zone) (map[
 		}
 		wants[host] = w
 	}
+	// Services of a project may share a domain: its one record is direct
+	// when any of them publishes ports.
+	direct, server := map[string]bool{}, map[string]string{}
 	for _, svc := range svcs {
 		if svc.Domain != "" {
-			add(svc.Domain, svc.ServerID, len(svc.PublishedPorts) > 0)
+			direct[svc.Domain] = direct[svc.Domain] || len(svc.PublishedPorts) > 0
+			server[svc.Domain] = svc.ServerID
 		}
+	}
+	for host, d := range direct {
+		add(host, server[host], d)
 	}
 	if c.cfg.Domain != "" && c.cfg.Traefik.Enabled {
 		add(c.cfg.Domain, store.LocalServerID, false)

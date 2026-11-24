@@ -326,8 +326,8 @@ type route struct {
 func (c *Core) routeFor(ctx context.Context, svc store.Service) route {
 	return route{
 		resolver: c.certResolver(ctx, svc.ServerID, svc.Domain),
-		// The domain of an app with published ports is never proxied.
-		behindProxy:  len(svc.PublishedPorts) == 0 && c.behindCloudflare(ctx, svc.ServerID, svc.Domain),
+		// A domain with published ports (on any of its apps) is never proxied.
+		behindProxy:  !c.domainDirect(ctx, svc) && c.behindCloudflare(ctx, svc.ServerID, svc.Domain),
 		dockerSocket: c.dockerSocketFor(ctx, svc),
 	}
 }

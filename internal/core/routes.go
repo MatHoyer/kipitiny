@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"slices"
@@ -116,4 +117,81 @@ func pathRule(domain, path string) string {
 // replicas of two rollouts may carry different ones.
 func routeService(name string, svc store.Service, r store.Route) string {
 	return name + "-" + specHash(r.Scheme, routePort(svc, r))[:8]
+}
+
+// checkDomain checks that s can have its domain next to others, the other
+// services as they will be: a domain belongs to one project, whose
+// services split it by path, one of them (without routes) taking the rest.
+//
+// shortcut: check-then-write, so two concurrent writes claiming one domain
+// can both pass; add a lock around validate and the store write if that
+// ever matters.
+func (c *Core) checkDomain(ctx context.Context, s store.Service, serverID string, others []store.Service) error {
+	if s.Domain == "" {
+		return nil
+	}
+	var group []store.Service
+	for _, o := range others {
+		if o.Domain != s.Domain {
+			continue
+		}
+		if o.ProjectID != s.ProjectID {
+			p, err := c.store.GetProject(ctx, o.ProjectID)
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("%w: domain %q is used by %s in project %s", ErrInvalid, s.Domain, o.Name, p.Name)
+		}
+		group = append(group, o)
+	}
+	if len(group) == 0 {
+		return nil
+	}
+	owner := map[string]string{}
+	for _, o := range group {
+		switch {
+		case len(o.Routes) == 0 && len(s.Routes) == 0 && httpRouted(o) && httpRouted(s):
+			return fmt.Errorf("%w: %s already takes the whole domain %q: give one of them routes", ErrInvalid, o.Name, s.Domain)
+		case o.Analytics && s.Analytics:
+			return fmt.Errorf("%w: analytics already count %q through %s", ErrInvalid, s.Domain, o.Name)
+		}
+		for _, r := range o.Routes {
+			for _, p := range r.Paths {
+				owner[p] = o.Name
+			}
+		}
+	}
+	for _, r := range s.Routes {
+		for _, p := range r.Paths {
+			if o, ok := owner[p]; ok {
+				return fmt.Errorf("%w: path %s of %q is already routed to %s", ErrInvalid, p, s.Domain, o)
+			}
+		}
+	}
+	if !c.viaTunnel(ctx, serverID) {
+		return nil
+	}
+	// The domain's one record points at the server when a service publishes
+	// ports, and no HTTP port is open there behind a tunnel.
+	for _, o := range group {
+		if a, b := s, o; len(a.PublishedPorts) > 0 && httpRouted(b) || len(b.PublishedPorts) > 0 && httpRouted(a) {
+			return fmt.Errorf("%w: behind a Cloudflare tunnel, %s and %s can't share %q: published ports need the record to point at the server, "+
+				"which serves no HTTP behind a tunnel", ErrInvalid, s.Name, o.Name, s.Domain)
+		}
+	}
+	return nil
+}
+
+// domainDirect reports whether svc's domain points straight at the server,
+// never through Cloudflare's proxy: a service on it publishes ports.
+func (c *Core) domainDirect(ctx context.Context, svc store.Service) bool {
+	if len(svc.PublishedPorts) > 0 {
+		return true
+	}
+	svcs, err := c.store.ListServices(ctx, svc.ProjectID)
+	if err != nil {
+		c.log.Warn("list the services sharing a domain", "service", svc.ID, "err", err)
+		return false
+	}
+	return slices.ContainsFunc(svcs, func(o store.Service) bool { return o.Domain == svc.Domain && len(o.PublishedPorts) > 0 })
 }
