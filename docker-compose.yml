@@ -16,6 +16,11 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - manager-data:/data
+    # Every other KIPITINY_* setting (KIPITINY_TRAEFIK, KIPITINY_LOG_LEVEL…)
+    # comes from .env: compose reads it for ${} interpolation only.
+    env_file:
+      - path: .env
+        required: false
     environment:
       KIPITINY_DOMAIN: ${KIPITINY_DOMAIN:-}
       KIPITINY_ACME_EMAIL: ${KIPITINY_ACME_EMAIL:-}
