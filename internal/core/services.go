@@ -69,6 +69,8 @@ type ServiceInput struct {
 	PreBackup   string            `json:"preBackup"`
 	// PublishedPorts bind host ports to the app's container (apps only).
 	PublishedPorts []store.PublishedPort `json:"publishedPorts"`
+	// Routes send some paths of the domain to the app (apps only).
+	Routes []store.Route `json:"routes"`
 	// StopGraceSeconds is the app's time to exit on stop; 0 means 10 s.
 	StopGraceSeconds int `json:"stopGraceSeconds"`
 	// HostNetwork runs the app in the host's network (apps only).
@@ -124,10 +126,12 @@ type ServicePatch struct {
 	Middlewares *MiddlewaresInput `json:"middlewares"`
 	PreBackup   *string           `json:"preBackup"`
 	// PublishedPorts replaces the app's published ports; nil keeps them.
-	PublishedPorts   []store.PublishedPort `json:"publishedPorts"`
-	StopGraceSeconds *int                  `json:"stopGraceSeconds"`
-	HostNetwork      *bool                 `json:"hostNetwork"`
-	DockerSocket     *string               `json:"dockerSocket"`
+	PublishedPorts []store.PublishedPort `json:"publishedPorts"`
+	// Routes replaces the app's routes; nil keeps them.
+	Routes           []store.Route `json:"routes"`
+	StopGraceSeconds *int          `json:"stopGraceSeconds"`
+	HostNetwork      *bool         `json:"hostNetwork"`
+	DockerSocket     *string       `json:"dockerSocket"`
 	// Runtime replaces the app's runtime settings; nil keeps them.
 	Runtime *store.Runtime `json:"runtime"`
 	// Files replaces the app's files; nil keeps them. A file without its
@@ -229,6 +233,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		Volumes:          normalizeVolumes(in.Volumes),
 		PreBackup:        strings.TrimSpace(in.PreBackup),
 		PublishedPorts:   normalizePorts(in.PublishedPorts),
+		Routes:           normalizeRoutes(in.Routes),
 		StopGraceSeconds: in.StopGraceSeconds,
 		HostNetwork:      in.HostNetwork,
 		DockerSocket:     in.DockerSocket,
@@ -446,6 +451,9 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 	if p.PublishedPorts != nil {
 		svc.PublishedPorts = normalizePorts(p.PublishedPorts)
 	}
+	if p.Routes != nil {
+		svc.Routes = normalizeRoutes(p.Routes)
+	}
 	if p.StopGraceSeconds != nil {
 		svc.StopGraceSeconds = *p.StopGraceSeconds
 	}
@@ -585,8 +593,8 @@ func validateService(s store.Service) error {
 		if len(s.Volumes) > 0 || s.PreBackup != "" {
 			return fmt.Errorf("%w: databases keep their data in their own volume, backed up as is", ErrInvalid)
 		}
-		if !s.Middlewares.IsZero() || len(s.PublishedPorts) > 0 {
-			return fmt.Errorf("%w: databases are never public, so take no middlewares or published ports", ErrInvalid)
+		if !s.Middlewares.IsZero() || len(s.PublishedPorts) > 0 || len(s.Routes) > 0 {
+			return fmt.Errorf("%w: databases are never public, so take no middlewares, routes or published ports", ErrInvalid)
 		}
 		if s.StopGraceSeconds != 0 {
 			return fmt.Errorf("%w: databases have their own stop timeout", ErrInvalid)
@@ -621,6 +629,9 @@ func validateService(s store.Service) error {
 		return err
 	}
 	if err := validateDependsOn(s); err != nil {
+		return err
+	}
+	if err := validateRoutes(s); err != nil {
 		return err
 	}
 	if s.StopGraceSeconds < 0 || s.StopGraceSeconds > maxStopGraceSeconds {
@@ -729,7 +740,7 @@ func (c *Core) routePending(ctx context.Context, svc store.Service) bool {
 	if err != nil || d.Config.ID == "" { // older deployments didn't keep their config
 		return false
 	}
-	return d.Config.Domain != svc.Domain || d.Config.Port != svc.Port
+	return d.Config.Domain != svc.Domain || d.Config.Port != svc.Port || !sameRoutes(d.Config.Routes, svc.Routes)
 }
 
 func (c *Core) serviceContainers(ctx context.Context, svc store.Service) ([]container.Summary, error) {

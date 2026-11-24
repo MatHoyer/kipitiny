@@ -288,7 +288,7 @@ func checkServiceChange(ctx context.Context, old, svc store.Service) error {
 			return err
 		}
 	}
-	if svc.Domain != old.Domain || !reflect.DeepEqual(svc.Middlewares, old.Middlewares) {
+	if svc.Domain != old.Domain || !reflect.DeepEqual(svc.Middlewares, old.Middlewares) || !sameRoutes(svc.Routes, old.Routes) {
 		if err := Authorize(ctx, svc.ProjectID, PermDomains); err != nil {
 			return err
 		}

@@ -108,6 +108,10 @@ type Ext struct {
 	// one.
 	Password    string       `yaml:"password,omitempty"`
 	Middlewares *Middlewares `yaml:"middlewares,omitempty"`
+	// Routes send some paths of Domain to the service (gRPC on h2c, an API
+	// next to another service's frontend). Tagged so the hash of a service
+	// without any stays the same.
+	Routes []Route `yaml:"routes,omitempty" json:",omitempty"`
 	// Uptime is an app's uptime check; nil has none. Tagged so the hash of a
 	// service without one stays the same.
 	Uptime *Uptime `yaml:"uptime,omitempty" json:",omitempty"`
@@ -118,6 +122,14 @@ type Ext struct {
 	// has none, an empty set holds nothing personal. Tagged so the hash of
 	// a service without any stays the same.
 	Anonymize *anonymize.Rules `yaml:"anonymize,omitempty" json:",omitempty"`
+}
+
+// Route is a set of path prefixes of the domain routed to the service.
+type Route struct {
+	Paths []string `yaml:"paths"`
+	// Scheme is http (default) or h2c.
+	Scheme string `yaml:"scheme,omitempty"`
+	Port   int    `yaml:"port,omitempty"`
 }
 
 // Job is a scheduled job: a command run with sh -c on a cron schedule.
@@ -322,7 +334,7 @@ func Escape(s string) string {
 
 func isZeroExt(x Ext) bool {
 	return x.Kind == "" && x.Domain == "" && x.Port == 0 && x.HealthPath == "" && x.PreDeploy == "" &&
-		x.PreBackup == "" && x.Icon == "" && !x.Analytics && x.Preview == "" && len(x.Tags) == 0 && len(x.Secrets) == 0 && x.Password == "" && x.Middlewares == nil &&
+		x.PreBackup == "" && x.Icon == "" && !x.Analytics && x.Preview == "" && len(x.Tags) == 0 && len(x.Secrets) == 0 && x.Password == "" && x.Middlewares == nil && len(x.Routes) == 0 &&
 		x.Uptime == nil && len(x.Jobs) == 0 && x.Anonymize == nil
 }
 
