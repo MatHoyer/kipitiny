@@ -33,6 +33,9 @@ services:
         - paths: [/api, /ws]
 ```
 
+In the UI, the same rows are under *Settings › Networking › Domain*: path
+prefixes separated by spaces or commas, the scheme and an optional port.
+
 - **gRPC** needs `scheme: h2c`: Traefik then talks HTTP/2 to the container
   without TLS. Long-lived streams work as is. h2c paths go without the retry
   Traefik otherwise adds during rollouts, which would hold a bidirectional

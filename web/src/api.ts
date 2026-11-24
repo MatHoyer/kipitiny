@@ -147,6 +147,8 @@ export type Service = {
   preBackup: string;
   /** Host ports bound straight to the container (apps only); such an app runs one replica. */
   publishedPorts: PublishedPort[];
+  /** Paths of the domain routed to the app, each with its scheme and port; empty routes the whole domain. */
+  routes: Route[];
   /** Seconds an app gets to exit after SIGTERM; 0 means 10. */
   stopGraceSeconds: number;
   /** Stopped by the manager for its project being idle; the next request starts it. */
@@ -188,6 +190,15 @@ export type Volume = {
   external?: string;
   /** The local driver's options (an NFS share…; admins only). */
   driverOpts?: Record<string, string>;
+};
+
+export type Route = {
+  /** Path prefixes, e.g. /api or /my.grpc.Service/. */
+  paths: string[];
+  /** Absent is HTTP/1.1; h2c is HTTP/2 without TLS, for gRPC. */
+  scheme?: "h2c";
+  /** Container port; absent is the app's. */
+  port?: number;
 };
 
 export type PublishedPort = {
@@ -370,6 +381,7 @@ export type ServiceInput = {
   middlewares?: MiddlewaresInput;
   preBackup?: string;
   publishedPorts?: PublishedPort[];
+  routes?: Route[];
   stopGraceSeconds?: number;
   hostNetwork?: boolean;
   dockerSocket?: "" | "ro" | "rw";

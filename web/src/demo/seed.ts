@@ -112,6 +112,7 @@ export function service(p: Partial<Service> & Pick<Service, "id" | "name" | "kin
     middlewares: {},
     preBackup: "",
     publishedPorts: [],
+    routes: [],
     stopGraceSeconds: 0,
     hostNetwork: false,
     dockerSocket: "",
