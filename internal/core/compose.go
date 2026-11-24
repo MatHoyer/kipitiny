@@ -424,7 +424,7 @@ func (c *Core) planCompose(ctx context.Context, project store.Project, existing 
 		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	a := &applier{c: c, project: project, opts: opts, git: git, byName: byName,
-		hashes: map[string]string{}, images: map[string]string{}, created: map[string]string{}, uptimes: map[string]*compose.Uptime{}, jobs: map[string]map[string]compose.Job{}, plan: ComposePlan{
+		hashes: map[string]string{}, images: map[string]string{}, created: map[string]string{}, planned: map[string]store.Service{}, uptimes: map[string]*compose.Uptime{}, jobs: map[string]map[string]compose.Job{}, plan: ComposePlan{
 			Create: []string{}, Update: []ServiceChange{}, Unchanged: []string{}, Delete: []string{}, Orphaned: []string{},
 			Variables: []string{}, Warnings: append([]string{}, warns...), Deploying: []string{},
 		}}
@@ -445,6 +445,8 @@ type applier struct {
 	hashes  map[string]string
 	images  map[string]string
 	created map[string]string
+	// planned are the project's services as the file leaves them, by name.
+	planned map[string]store.Service
 
 	// projectEnv and projectSecrets are the project's variables once applied.
 	projectEnv     map[string]string
@@ -581,8 +583,37 @@ func (a *applier) prepare(ctx context.Context, f compose.File) error {
 			a.deletes = append(a.deletes, s)
 		}
 	}
+	if len(errs) == 0 {
+		if err := a.checkDomains(ctx); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
 	if len(errs) > 0 {
 		return fmt.Errorf("%w: %s", ErrInvalid, strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+// checkDomains checks the domains of the project's services as the file
+// leaves them, against each other and the other projects' services.
+func (a *applier) checkDomains(ctx context.Context) error {
+	for name, s := range a.byName {
+		if _, listed := a.planned[name]; !listed && !slices.ContainsFunc(a.deletes, func(d store.Service) bool { return d.ID == s.ID }) {
+			a.planned[name] = s // not in the file, kept
+		}
+	}
+	all, err := a.c.store.ListAllServices(ctx)
+	if err != nil {
+		return err
+	}
+	others := slices.DeleteFunc(all, func(o store.Service) bool { return o.ProjectID == a.project.ID })
+	// Each pair once: a service is checked against the ones before it.
+	for _, name := range slices.Sorted(maps.Keys(a.planned)) {
+		s := a.planned[name]
+		if err := a.c.checkDomain(ctx, s, a.project.ServerID, others); err != nil {
+			return fmt.Errorf("service %s: %s", name, strings.TrimPrefix(err.Error(), ErrInvalid.Error()+": "))
+		}
+		others = append(others, s)
 	}
 	return nil
 }
@@ -747,6 +778,7 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		if err := a.c.validateIn(ctx, svc, project, dbs); err != nil {
 			return err
 		}
+		a.planned[name] = svc
 		if u := a.uptimes[name]; u != nil {
 			chk, err := uptimeCheck(svc, uptimeInput(*u))
 			if err != nil {
@@ -761,6 +793,7 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		a.creates = append(a.creates, in)
 		return nil
 	}
+	a.planned[name] = old
 	if a.git && old.GitSpecHash == a.hashes[name] {
 		// Unchanged in the file since the last sync: keep what was done
 		// since (a tag deployed by CI).
@@ -789,6 +822,7 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 	if err := a.c.validateIn(ctx, svc, project, dbs); err != nil {
 		return err
 	}
+	a.planned[name] = svc
 	fields := changedFields(old, svc)
 	if in.networks != nil && !slices.Equal(slices.Sorted(slices.Values(old.Networks)), in.networks) {
 		fields = append(fields, "networks")

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -522,12 +523,16 @@ func (c *Core) previewSleep(ctx context.Context, p store.Project, f compose.File
 func previewFile(f *compose.File, parent store.Project, name string, settings store.PreviewSettings, tags map[string]string) ([]string, error) {
 	f.Name, f.X = parent.Name+"-"+name, compose.FileExt{}
 	var warnings []string
-	routed := 0
-	for _, s := range f.Services {
-		if s.X.Domain != "" && s.X.Port > 0 && s.X.Preview != "skip" {
-			routed++
+	// Services sharing a domain share the preview's: the one named first
+	// gives it its label.
+	owner := map[string]string{}
+	for _, svcName := range f.ServiceNames() {
+		s := f.Services[svcName]
+		if _, ok := owner[s.X.Domain]; !ok && s.X.Domain != "" && s.X.Port > 0 && s.X.Preview != "skip" {
+			owner[s.X.Domain] = svcName
 		}
 	}
+	routed := len(owner)
 	for _, svcName := range f.ServiceNames() {
 		s := f.Services[svcName]
 		if s.HostNetwork || s.DockerSocket != "" || (s.Runtime != nil && s.Runtime.HostAccess()) ||
@@ -555,7 +560,7 @@ func previewFile(f *compose.File, parent store.Project, name string, settings st
 			s.X.Domain = ""
 		}
 		if s.X.Domain != "" {
-			label := name + "-" + svcName
+			label := name + "-" + cmp.Or(owner[s.X.Domain], svcName)
 			if routed == 1 {
 				label = name
 			}

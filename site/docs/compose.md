@@ -161,7 +161,7 @@ services:
 | Field | Type | Applies to | Meaning |
 |---|---|---|---|
 | `kind` | `app` \| `postgres` \| `redis` \| `mysql` \| `mariadb` \| `mongodb` | all | What the service is. Default: `postgres` or `redis` when the image is the official one (`postgres:17-alpine`, `redis:8`), else `app`. Set `kind: app` to run those images as plain containers. MySQL, MariaDB, MongoDB and PostGIS (`postgis/postgis`) images stay apps unless `kind` says otherwise (`postgres` for PostGIS), so existing files that run them with their own `environment` and `volumes` keep working. |
-| `domain` | hostname | apps | Public hostname, served over HTTPS by Traefik. Needs `port` (unless the app only publishes ports and the domain is only for DNS). |
+| `domain` | hostname | apps | Public hostname, served over HTTPS by Traefik. Needs `port` (unless the app only publishes ports and the domain is only for DNS). Services of one project can share it, split by `routes` ([Domains](/docs/domains#one-domain-several-services)). |
 | `port` | 1–65535 | apps | Container port Traefik routes the domain to. Usually written as `expose` instead. |
 | `health_path` | path | apps | HTTP path (e.g. `/healthz`) that must answer 2xx/3xx before a new replica takes traffic, checked by a probe kipitiny injects, so the image needs no `curl`. Needs the port. Without it or a `healthcheck`: the image's healthcheck, else a stability wait. Not with `healthcheck`. |
 | `pre_deploy` | shell command | apps | Runs once (`sh -c`) in a one-off container before a rollout, e.g. migrations. A failure aborts the deploy. |
@@ -173,7 +173,7 @@ services:
 | `secrets` | list of env keys | apps | Which `environment` entries are secrets (write-only in the UI and API, masked everywhere, exported only with secrets). Without it, the values given as `${NAME}` are (see [Values](#values-references-and-secrets)). |
 | `password` | string, usually `${NAME}` | databases | The database's password at creation, to keep the credentials of a moved database. Empty generates one. It can't change afterwards. |
 | `middlewares` | mapping | public apps | Applied by Traefik to every request, below. |
-| `routes` | list | public apps | Only some paths of the domain reach the app, each over its own scheme and port, below and in [Domains](/docs/domains#path-routes). Without it, the whole domain goes to `port`. |
+| `routes` | list | public apps | Only some paths of the domain reach the app, each over its own scheme and port, below and in [Domains](/docs/domains#path-routes). Without it, the whole domain goes to `port`, or every path the other services sharing the domain don't list. |
 | `uptime` | mapping | public apps | An [uptime check](/docs/monitoring#uptime-checks) of the domain, below. `uptime: {}` checks `/` with the defaults. Without it, the app has no check: applying the file removes one set in the UI. |
 | `jobs` | mapping of names | apps | [Scheduled jobs](/docs/jobs), below. Without it, the app has none: applying the file removes the ones set in the UI. Left out of previews. |
 | `anonymize` | mapping of tables | PostgreSQL, MySQL, MariaDB, MongoDB | How [previews seeded with anonymized data](/docs/previews#anonymized-seeds) get this database: rules by table and column, below. `anonymize: {}` says it holds nothing personal. Without it, the database has no rules: applying the file removes the ones set in the UI. Applies without a deploy. |

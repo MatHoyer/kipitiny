@@ -73,12 +73,16 @@ func TestProjectsAndServices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateService(ctx, store.Service{
+	// Services may share a domain (split by path): core decides who may.
+	web2, err := s.CreateService(ctx, store.Service{
 		ProjectID: p.ID, Name: "web2", Kind: store.ServiceKindApp, Image: "nginx", Domain: "shop.example.com",
-	}); !errors.Is(err, store.ErrConflict) {
-		t.Fatalf("duplicate domain: got %v, want ErrConflict", err)
+	})
+	if err != nil {
+		t.Fatalf("shared domain: %v", err)
 	}
-	// Empty domains don't collide.
+	if err := s.DeleteService(ctx, web2.ID); err != nil {
+		t.Fatal(err)
+	}
 	for _, name := range []string{"worker1", "worker2"} {
 		if _, err := s.CreateService(ctx, store.Service{
 			ProjectID: p.ID, Name: name, Kind: store.ServiceKindApp, Image: "busybox",

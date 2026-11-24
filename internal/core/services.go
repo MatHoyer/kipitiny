@@ -501,7 +501,15 @@ func (c *Core) validate(ctx context.Context, s store.Service) error {
 	if err != nil {
 		return err
 	}
-	return c.validateIn(ctx, s, project, dbs)
+	if err := c.validateIn(ctx, s, project, dbs); err != nil {
+		return err
+	}
+	all, err := c.store.ListAllServices(ctx)
+	if err != nil {
+		return err
+	}
+	others := slices.DeleteFunc(all, func(o store.Service) bool { return s.ID != "" && o.ID == s.ID })
+	return c.checkDomain(ctx, s, project.ServerID, others)
 }
 
 // validateIn is validate against a project's variables and databases as
