@@ -36,3 +36,12 @@ func TestDefaultProxyImagesPinned(t *testing.T) {
 }
 
 var pinnedTag = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
+
+func TestTraefikReadTimeout(t *testing.T) {
+	for v, want := range map[string]string{"": "", "0": "0", " 10m ": "10m", "forever": "", "60": ""} {
+		t.Setenv("KIPITINY_TRAEFIK_READ_TIMEOUT", v)
+		if got := Load().Traefik.ReadTimeout; got != want {
+			t.Errorf("%q: got %q, want %q", v, got, want)
+		}
+	}
+}
