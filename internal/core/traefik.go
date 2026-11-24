@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"net"
+	"slices"
 	"strings"
 	"time"
 
@@ -352,7 +353,8 @@ func httpRouted(svc store.Service) bool {
 }
 
 // traefikLabels routes HTTPS traffic for svc.Domain to svc.Port through the
-// service's middlewares.
+// service's middlewares; with routes, only their paths, each to its scheme
+// and port.
 //
 // Traefik drops a router or middleware that containers define differently,
 // and old and new replicas run side by side during a rollout, so the router
@@ -361,18 +363,18 @@ func httpRouted(svc store.Service) bool {
 func traefikLabels(svc store.Service, rt route) map[string]string {
 	name := "kipitiny-" + strings.ToLower(svc.ID)
 	mws := middlewareLabels(svc.Middlewares, rt.behindProxy)
-	router := name + "-" + specHash(svc.Domain, rt.resolver, mws)[:8]
+	spec := []any{svc.Domain, rt.resolver, mws}
+	if len(svc.Routes) > 0 {
+		spec = append(spec, svc.Routes) // without, the name of every app stays the same
+	}
+	router := name + "-" + specHash(spec...)[:8]
 	labels := map[string]string{
-		"traefik.enable":                                  "true",
-		"traefik.docker.network":                          docker.ProxyNetwork,
-		"traefik.http.routers." + router + ".rule":        "Host(`" + svc.Domain + "`)",
-		"traefik.http.routers." + router + ".entrypoints": "websecure",
-		"traefik.http.routers." + router + ".service":     name,
+		"traefik.enable":         "true",
+		"traefik.docker.network": docker.ProxyNetwork,
 		// Connection failures (a replica stopping during a rollout, before
 		// Traefik sees the event) are retried on another replica.
 		"traefik.http.middlewares." + name + "-retry.retry.attempts":        "3",
 		"traefik.http.middlewares." + name + "-retry.retry.initialinterval": "100ms",
-		"traefik.http.services." + name + ".loadbalancer.server.port":       fmt.Sprint(svc.Port),
 	}
 	chain := make([]string, 0, len(mws)+1)
 	for _, mw := range mws {
@@ -382,11 +384,42 @@ func traefikLabels(svc store.Service, rt route) map[string]string {
 			labels["traefik.http.middlewares."+mwName+"."+k] = v
 		}
 	}
-	labels["traefik.http.routers."+router+".middlewares"] = strings.Join(append(chain, name+"-retry@docker"), ",")
-	if rt.resolver == "" {
-		labels["traefik.http.routers."+router+".tls"] = "true"
-	} else {
-		labels["traefik.http.routers."+router+".tls.certresolver"] = rt.resolver
+	addRouter := func(r, rule, service string, chain []string) {
+		labels["traefik.http.routers."+r+".rule"] = rule
+		labels["traefik.http.routers."+r+".entrypoints"] = "websecure"
+		labels["traefik.http.routers."+r+".service"] = service
+		if len(chain) > 0 {
+			labels["traefik.http.routers."+r+".middlewares"] = strings.Join(chain, ",")
+		}
+		if rt.resolver == "" {
+			labels["traefik.http.routers."+r+".tls"] = "true"
+		} else {
+			labels["traefik.http.routers."+r+".tls.certresolver"] = rt.resolver
+		}
+	}
+	retry := append(slices.Clone(chain), name+"-retry@docker")
+	if len(svc.Routes) == 0 {
+		labels["traefik.http.services."+name+".loadbalancer.server.port"] = fmt.Sprint(svc.Port)
+		addRouter(router, "Host(`"+svc.Domain+"`)", name, retry)
+		return labels
+	}
+	i := 0
+	for _, r := range svc.Routes {
+		service := routeService(name, svc, r)
+		labels["traefik.http.services."+service+".loadbalancer.server.port"] = fmt.Sprint(routePort(svc, r))
+		c := retry
+		if r.Scheme == "h2c" {
+			labels["traefik.http.services."+service+".loadbalancer.server.scheme"] = "h2c"
+			// The retry middleware holds a request's body until it ends,
+			// which a bidirectional gRPC stream never does.
+			c = chain
+		}
+		for _, p := range r.Paths {
+			pr := fmt.Sprintf("%s-p%d", router, i)
+			addRouter(pr, pathRule(svc.Domain, p), service, c)
+			labels["traefik.http.routers."+pr+".priority"] = fmt.Sprint(pathPriority(p, true))
+			i++
+		}
 	}
 	return labels
 }

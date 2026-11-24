@@ -14,6 +14,33 @@ bind it to `127.0.0.1` for SSH-tunnel access. Run on the host, the manager is
 reached through `host.docker.internal`, so it must listen on the Docker bridge
 (the default `:3000` does).
 
+## Path routes
+
+By default an app gets its whole domain. With `routes` in its
+[`x-kipitiny`](/docs/compose#x-kipitiny-per-service) block, only the listed
+path prefixes reach it, each over its own scheme and container port:
+
+```yaml
+services:
+  server:
+    image: ghcr.io/example/server:1.4.0
+    expose: ["80"]
+    x-kipitiny:
+      domain: app.example.com
+      routes:
+        - paths: [/my.api.Service/]
+          scheme: h2c
+        - paths: [/api, /ws]
+```
+
+- **gRPC** needs `scheme: h2c`: Traefik then talks HTTP/2 to the container
+  without TLS. Long-lived streams work as is. h2c paths go without the retry
+  Traefik otherwise adds during rollouts, which would hold a bidirectional
+  stream back: gRPC clients reconnect on their own.
+- **WebSockets** work on the default `http` scheme.
+- Other paths of the domain get a 404.
+- While the app is down, its paths show the maintenance page below.
+
 ## Maintenance page
 
 When an app's domain has no replica to answer (stopped, crashed, or a deploy

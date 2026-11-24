@@ -204,6 +204,9 @@ func (s *Store) CreateService(ctx context.Context, svc store.Service) (store.Ser
 	if svc.PublishedPorts == nil {
 		svc.PublishedPorts = []store.PublishedPort{}
 	}
+	if svc.Routes == nil {
+		svc.Routes = []store.Route{}
+	}
 	if svc.Files == nil {
 		svc.Files = []store.ServiceFile{}
 	}
@@ -246,6 +249,9 @@ func (s *Store) ListServices(ctx context.Context, projectID string) ([]store.Ser
 
 func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Service, error) {
 	svc.UpdatedAt = now()
+	if svc.Routes == nil {
+		svc.Routes = []store.Route{}
+	}
 	if svc.Tags == nil {
 		svc.Tags = []string{}
 	}
@@ -259,7 +265,7 @@ func (s *Store) UpdateService(ctx context.Context, svc store.Service) (store.Ser
 		svc.ProjectNetworks = []string{}
 	}
 	res, err := s.db.NewUpdate().Model(&svc).
-		Column("image", "icon", "tags", "anonymize", "replicas", "port", "domain", "analytics", "analytics_since", "env", "secrets", "memory_mb", "cpus", "health_path", "healthcheck", "pre_deploy", "volumes", "middlewares", "pre_backup", "published_ports", "stop_grace_seconds", "host_network", "docker_socket", "runtime", "files", "depends_on", "project_networks", "preview", "updated_at").
+		Column("image", "icon", "tags", "anonymize", "replicas", "port", "domain", "analytics", "analytics_since", "env", "secrets", "memory_mb", "cpus", "health_path", "healthcheck", "pre_deploy", "volumes", "middlewares", "pre_backup", "published_ports", "routes", "stop_grace_seconds", "host_network", "docker_socket", "runtime", "files", "depends_on", "project_networks", "preview", "updated_at").
 		WherePK().Exec(ctx)
 	if err != nil {
 		return store.Service{}, mapErr(err)

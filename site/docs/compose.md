@@ -173,6 +173,7 @@ services:
 | `secrets` | list of env keys | apps | Which `environment` entries are secrets (write-only in the UI and API, masked everywhere, exported only with secrets). Without it, the values given as `${NAME}` are (see [Values](#values-references-and-secrets)). |
 | `password` | string, usually `${NAME}` | databases | The database's password at creation, to keep the credentials of a moved database. Empty generates one. It can't change afterwards. |
 | `middlewares` | mapping | public apps | Applied by Traefik to every request, below. |
+| `routes` | list | public apps | Only some paths of the domain reach the app, each over its own scheme and port, below and in [Domains](/docs/domains#path-routes). Without it, the whole domain goes to `port`. |
 | `uptime` | mapping | public apps | An [uptime check](/docs/monitoring#uptime-checks) of the domain, below. `uptime: {}` checks `/` with the defaults. Without it, the app has no check: applying the file removes one set in the UI. |
 | `jobs` | mapping of names | apps | [Scheduled jobs](/docs/jobs), below. Without it, the app has none: applying the file removes the ones set in the UI. Left out of previews. |
 | `anonymize` | mapping of tables | PostgreSQL, MySQL, MariaDB, MongoDB | How [previews seeded with anonymized data](/docs/previews#anonymized-seeds) get this database: rules by table and column, below. `anonymize: {}` says it holds nothing personal. Without it, the database has no rules: applying the file removes the ones set in the UI. Applies without a deploy. |
@@ -185,6 +186,14 @@ services:
 | `ip_allowlist` | Up to 50 IPs or CIDR ranges allowed to connect. |
 | `rate_limit` | `average` requests per second per client IP, with bursts up to `burst` (defaults to `average`). |
 | `headers` | Response headers to set (up to 20); an empty value removes the header. |
+
+`routes`, each entry:
+
+| Field | Meaning |
+|---|---|
+| `paths` | 1 to 20 path prefixes (`/api`, `/my.grpc.Service/`), matched as prefixes: `/api` also matches `/api/v2` and `/apix`. The longest prefix wins. |
+| `scheme` | How Traefik talks to the container: `http` (default, HTTP/1.1, WebSockets included) or `h2c` (HTTP/2 without TLS, for gRPC). |
+| `port` | Container port for these paths. Default: the app's `port`. |
 
 `uptime`:
 

@@ -131,6 +131,7 @@ func exportFile(p store.Project, svcs []store.Service, checks map[string]store.U
 				Tags:       s.Tags,
 				Analytics:  s.Analytics,
 				Preview:    s.Preview,
+				Routes:     composeRoutes(s.Routes),
 			},
 		}
 		if s.Anonymize != nil {
@@ -641,6 +642,7 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 		Volumes:          cs.Volumes,
 		PreBackup:        cs.X.PreBackup,
 		PublishedPorts:   cs.Ports,
+		Routes:           storeRoutes(cs.X.Routes),
 		StopGraceSeconds: cs.StopGraceSeconds,
 		HostNetwork:      cs.HostNetwork,
 		DockerSocket:     cs.DockerSocket,
@@ -921,6 +923,7 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 		Middlewares:      in.Middlewares,
 		PreBackup:        &in.PreBackup,
 		PublishedPorts:   in.PublishedPorts,
+		Routes:           in.Routes,
 		StopGraceSeconds: &in.StopGraceSeconds,
 		HostNetwork:      &in.HostNetwork,
 		DockerSocket:     &in.DockerSocket,
@@ -938,6 +941,9 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 	}
 	if p.PublishedPorts == nil {
 		p.PublishedPorts = []store.PublishedPort{}
+	}
+	if p.Routes == nil {
+		p.Routes = []store.Route{}
 	}
 	if p.Tags == nil {
 		p.Tags = []string{}
@@ -988,6 +994,7 @@ func changedFields(old, svc store.Service) []string {
 	add("preBackup", old.PreBackup != svc.PreBackup)
 	add("volumes", !reflect.DeepEqual(old.Volumes, svc.Volumes))
 	add("publishedPorts", !slices.Equal(old.PublishedPorts, svc.PublishedPorts))
+	add("routes", !sameRoutes(old.Routes, svc.Routes))
 	add("stopGraceSeconds", old.StopGraceSeconds != svc.StopGraceSeconds)
 	add("hostNetwork", old.HostNetwork != svc.HostNetwork)
 	add("dockerSocket", old.DockerSocket != svc.DockerSocket)
@@ -997,6 +1004,22 @@ func changedFields(old, svc store.Service) []string {
 	add("projectNetworks", !slices.Equal(old.ProjectNetworks, svc.ProjectNetworks))
 	add("middlewares", !sameMiddlewares(old.Middlewares, svc.Middlewares))
 	add("preview", old.Preview != svc.Preview)
+	return out
+}
+
+func composeRoutes(rs []store.Route) []compose.Route {
+	var out []compose.Route
+	for _, r := range rs {
+		out = append(out, compose.Route{Paths: r.Paths, Scheme: r.Scheme, Port: r.Port})
+	}
+	return out
+}
+
+func storeRoutes(rs []compose.Route) []store.Route {
+	var out []store.Route
+	for _, r := range rs {
+		out = append(out, store.Route{Paths: r.Paths, Scheme: r.Scheme, Port: r.Port})
+	}
 	return out
 }
 

@@ -559,6 +559,9 @@ type Service struct {
 	// for traffic Traefik doesn't carry (game servers, MQTT…). An app with
 	// published ports runs one replica.
 	PublishedPorts []PublishedPort `bun:"published_ports" json:"publishedPorts"`
+	// Routes send some paths of Domain to the app, each with its own scheme
+	// and port; empty routes the whole domain to Port.
+	Routes []Route `bun:"routes" json:"routes"`
 	// StopGraceSeconds is how long an app gets to exit after SIGTERM before
 	// it is killed (e.g. a game server saving its world); 0 means 10 s.
 	StopGraceSeconds int `bun:"stop_grace_seconds" json:"stopGraceSeconds"`
@@ -665,6 +668,17 @@ type PublishedPort struct {
 	ContainerPort int    `json:"containerPort"`
 	// Protocol is "tcp" or "udp".
 	Protocol string `json:"protocol"`
+}
+
+// Route sends the paths of an app's domain that start with one of Paths to
+// the app, ahead of a catch-all on the same domain.
+type Route struct {
+	Paths []string `json:"paths"`
+	// Scheme is how Traefik talks to the container: "" (HTTP/1.1) or "h2c"
+	// (HTTP/2 cleartext, for gRPC).
+	Scheme string `json:"scheme,omitempty"`
+	// Port is the container port; 0 is the app's.
+	Port int `json:"port,omitempty"`
 }
 
 // Healthcheck is a Docker healthcheck, as compose's healthcheck key writes

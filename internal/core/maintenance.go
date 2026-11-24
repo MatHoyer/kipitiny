@@ -424,13 +424,42 @@ func (c *Core) TraefikConfig(ctx context.Context, serverID, token string) ([]byt
 		}
 		page := name + "-page"
 		middlewares[page] = map[string]any{"replacePath": map[string]string{"path": PagesPath + svc.ID}}
-		router := func(priority int, service string, chain ...string) map[string]any {
+		router := func(rule string, priority int, service string, chain ...string) map[string]any {
 			return map[string]any{
-				"rule": "Host(`" + svc.Domain + "`)", "entryPoints": []string{"websecure"}, "tls": tls,
+				"rule": rule, "entryPoints": []string{"websecure"}, "tls": tls,
 				"priority": priority, "service": service, "middlewares": chain,
 			}
 		}
-		routers[page] = router(1, pagesService+"@file", page)
+		// paths are the rules svc's routers match, with their service
+		// and scheme; a service without routes has the whole domain.
+		type pathRoute struct {
+			rule, service string
+			priority      int
+			h2c           bool
+		}
+		host := "Host(`" + svc.Domain + "`)"
+		paths := []pathRoute{{rule: host, service: name}}
+		if len(svc.Routes) > 0 {
+			paths = paths[:0]
+			for _, r := range svc.Routes {
+				for _, p := range r.Paths {
+					paths = append(paths, pathRoute{pathRule(svc.Domain, p), routeService(name, svc, r), len(p), r.Scheme == "h2c"})
+				}
+			}
+		}
+		suffix := func(i int) string {
+			if len(svc.Routes) == 0 {
+				return ""
+			}
+			return fmt.Sprintf("-p%d", i)
+		}
+		for i, p := range paths {
+			if len(svc.Routes) == 0 {
+				routers[page] = router(p.rule, 1, pagesService+"@file", page)
+			} else {
+				routers[page+suffix(i)] = router(p.rule, routePriority+2*p.priority, pagesService+"@file", page)
+			}
+		}
 		m := maintenance[svc.ProjectID]
 		if !m.Enabled {
 			continue
@@ -443,7 +472,9 @@ func (c *Core) TraefikConfig(ctx context.Context, serverID, token string) ([]byt
 		}
 		if appChain == nil {
 			// Nobody gets through: no allowlist, or no replica to reach.
-			routers[name+"-maintenance"] = router(maintenancePriority, pagesService+"@file", page)
+			for i, p := range paths {
+				routers[name+"-maintenance"+suffix(i)] = router(p.rule, maintenancePriority+p.priority, pagesService+"@file", page)
+			}
 			continue
 		}
 		allow := map[string]any{"sourceRange": m.AllowIPs, "rejectStatusCode": maintenanceReject}
@@ -458,8 +489,16 @@ func (c *Core) TraefikConfig(ctx context.Context, serverID, token string) ([]byt
 			"query":               PagesPath + svc.ID,
 			"errorRequestHeaders": []string{"Accept-Language"},
 		}}
-		chain := append([]string{name + "-maintenance-page", name + "-maintenance-allow"}, appChain...)
-		routers[name+"-maintenance"] = router(maintenancePriority, name+"@docker", chain...)
+		// The app's chain without its retry, which h2c routes go without.
+		retry := name + "-retry@docker"
+		appChain = slices.DeleteFunc(appChain, func(m string) bool { return m == retry })
+		for i, p := range paths {
+			chain := append([]string{name + "-maintenance-page", name + "-maintenance-allow"}, appChain...)
+			if !p.h2c {
+				chain = append(chain, retry)
+			}
+			routers[name+"-maintenance"+suffix(i)] = router(p.rule, maintenancePriority+p.priority, p.service+"@docker", chain...)
+		}
 	}
 	return json.Marshal(map[string]any{"http": map[string]any{"routers": routers, "middlewares": middlewares}})
 }
@@ -478,9 +517,14 @@ func (c *Core) routerChain(ctx context.Context, svc store.Service, name string) 
 		if ct.State != container.StateRunning {
 			continue
 		}
-		for k, v := range ct.Labels {
-			if strings.HasPrefix(k, prefix) && strings.HasSuffix(k, ".middlewares") {
-				return strings.Split(v, ","), nil
+		for k := range ct.Labels {
+			if r, ok := strings.CutSuffix(k, ".rule"); ok && strings.HasPrefix(k, prefix) {
+				// An h2c route's router may have no middlewares.
+				chain := []string{}
+				if v := ct.Labels[r+".middlewares"]; v != "" {
+					chain = strings.Split(v, ",")
+				}
+				return chain, nil
 			}
 		}
 	}

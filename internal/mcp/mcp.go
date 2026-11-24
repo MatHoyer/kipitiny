@@ -475,6 +475,24 @@ type deployImageIn struct {
 	// Pointers: omitted keeps an existing service's value.
 	PublishedPorts   *[]publishedPortIn `json:"publishedPorts,omitempty" jsonschema:"host ports bound straight to the container, for non-HTTP traffic (e.g. a game server); the app then runs one replica and deploys stop-then-start"`
 	StopGraceSeconds *int               `json:"stopGraceSeconds,omitempty" jsonschema:"seconds the app gets to exit after SIGTERM before it is killed (default 10, max 600)"`
+	Routes           *[]routeIn         `json:"routes,omitempty" jsonschema:"path prefixes of the domain routed to this app, each with its scheme and port; then only these paths reach it (another service of the project can take the rest of the domain)"`
+}
+
+type routeIn struct {
+	Paths  []string `json:"paths" jsonschema:"path prefixes, e.g. /api or /my.grpc.Service/"`
+	Scheme string   `json:"scheme,omitempty" jsonschema:"http (default) or h2c (HTTP/2 cleartext, for gRPC)"`
+	Port   int      `json:"port,omitempty" jsonschema:"container port; defaults to port"`
+}
+
+func (in deployImageIn) routes() []store.Route {
+	if in.Routes == nil {
+		return nil
+	}
+	out := make([]store.Route, 0, len(*in.Routes))
+	for _, r := range *in.Routes {
+		out = append(out, store.Route{Paths: r.Paths, Scheme: r.Scheme, Port: r.Port})
+	}
+	return out
 }
 
 type publishedPortIn struct {
@@ -516,6 +534,7 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 		case errors.Is(err, store.ErrNotFound):
 			input := core.ServiceInput{
 				Name: in.Name, Image: in.Image, Domain: in.Domain, Port: in.Port, Env: in.Env, PublishedPorts: in.ports(),
+				Routes: in.routes(),
 			}
 			if in.StopGraceSeconds != nil {
 				input.StopGraceSeconds = *in.StopGraceSeconds
@@ -532,7 +551,7 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 				return store.Deployment{}, fmt.Errorf("%s/%s exists and is not an app", project.Name, in.Name)
 			}
 			patch := core.ServicePatch{Image: &in.Image, Domain: &in.Domain, Port: &in.Port,
-				PublishedPorts: in.ports(), StopGraceSeconds: in.StopGraceSeconds}
+				PublishedPorts: in.ports(), StopGraceSeconds: in.StopGraceSeconds, Routes: in.routes()}
 			if in.Env != nil {
 				// Keep existing entries; new ones become secrets.
 				env := maps.Clone(svc.Env)
@@ -561,7 +580,7 @@ func (t *tools) retag(ctx context.Context, in deployImageIn) (store.Deployment, 
 	if svc.Kind != store.ServiceKindApp {
 		return store.Deployment{}, fmt.Errorf("%s/%s exists and is not an app", in.Project, in.Name)
 	}
-	if in.Env != nil || in.PublishedPorts != nil || in.StopGraceSeconds != nil ||
+	if in.Env != nil || in.PublishedPorts != nil || in.StopGraceSeconds != nil || in.Routes != nil ||
 		(in.Domain != "" && in.Domain != svc.Domain) || (in.Port != 0 && in.Port != svc.Port) {
 		return store.Deployment{}, fmt.Errorf("%w: needs the settings permission to change anything but the image tag", core.ErrForbidden)
 	}
