@@ -256,7 +256,7 @@ func (c *Core) ensureAnalytics(ctx context.Context) error {
 		if _, err := dk.ImageInspect(ctx, opts.Config.Image); err != nil {
 			progress.Report(ctx, AnalyticsStepImage)
 		}
-		if err := dk.EnsureImage(ctx, opts.Config.Image, c.registryAuth(ctx, opts.Config.Image)); err != nil {
+		if err := dk.EnsureImage(ctx, opts.Config.Image, c.registryAuth(ctx, opts.Config.Image), ""); err != nil {
 			return fmt.Errorf("pull %s: %w", opts.Config.Image, err)
 		}
 		progress.Report(ctx, AnalyticsStepStart)

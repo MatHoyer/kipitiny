@@ -23,6 +23,7 @@ const (
 var (
 	stopSignalRe = regexp.MustCompile(`^(SIG)?[A-Z][A-Z0-9+-]*$|^[0-9]{1,2}$`)
 	restartRe    = regexp.MustCompile(`^(no|on-failure(:[0-9]{1,4})?)$`)
+	platformRe   = regexp.MustCompile(`^linux/[a-z0-9_]+(/[a-z0-9]+)?$`)
 	sysctlRe     = regexp.MustCompile(`^[a-z0-9_]+(\.[a-z0-9_-]+)+$`)
 	labelKeyRe   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*$`)
 	capRe        = regexp.MustCompile(`^[A-Z][A-Z_]*$`)
@@ -33,6 +34,7 @@ var (
 // settings compare equal however they were sent.
 func normalizeRuntime(r store.Runtime) store.Runtime {
 	r.User, r.WorkingDir, r.StopSignal = strings.TrimSpace(r.User), strings.TrimSpace(r.WorkingDir), strings.TrimSpace(r.StopSignal)
+	r.Platform = normalizePlatform(r.Platform)
 	if len(r.Command) == 0 {
 		r.Command = nil
 	}
@@ -134,6 +136,9 @@ func validateRuntime(s store.Service) error {
 	if r.StopSignal != "" && !stopSignalRe.MatchString(r.StopSignal) {
 		return invalid("stop signal must be a signal name (SIGINT) or number")
 	}
+	if r.Platform != "" && !platformRe.MatchString(r.Platform) {
+		return invalid("platform %q must be linux/arch[/variant] (linux/amd64, linux/arm64, linux/arm/v7)", r.Platform)
+	}
 	if r.Restart != "" && !restartRe.MatchString(r.Restart) {
 		return invalid("restart must be no or on-failure[:retries]")
 	}
@@ -232,6 +237,21 @@ func applyRuntime(cfg *container.Config, host *container.HostConfig, r store.Run
 		}
 		host.Devices = append(host.Devices, m)
 	}
+}
+
+// normalizePlatform lowercases p and names its architecture as Docker
+// reports it (x86_64 is amd64, aarch64 arm64).
+func normalizePlatform(p string) string {
+	parts := strings.Split(strings.ToLower(strings.TrimSpace(p)), "/")
+	if len(parts) > 1 {
+		switch parts[1] {
+		case "x86_64", "x86-64":
+			parts[1] = "amd64"
+		case "aarch64":
+			parts[1] = "arm64"
+		}
+	}
+	return strings.Join(parts, "/")
 }
 
 // runtimeHostAccess is the part of r only admins change.

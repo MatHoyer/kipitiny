@@ -486,7 +486,7 @@ func (c *Core) execJob(ctx context.Context, project store.Project, svc store.Ser
 		return nil, err
 	}
 	dk := c.dockerFor(svc.ServerID)
-	if err := dk.EnsureImage(ctx, want.Image, c.registryAuth(ctx, want.Image)); err != nil {
+	if err := dk.EnsureImage(ctx, want.Image, c.registryAuth(ctx, want.Image), want.Runtime.Platform); err != nil {
 		return nil, fmt.Errorf("pull %s: %w", want.Image, err)
 	}
 

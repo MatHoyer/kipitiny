@@ -89,6 +89,8 @@ func (p *parser) runtimeKey(k string, v *yaml.Node, rt *store.Runtime) bool {
 		rt.ReadOnly = p.bool(v)
 	case "init":
 		rt.Init = p.bool(v)
+	case "platform":
+		rt.Platform = p.str(v)
 	case "stop_signal":
 		rt.StopSignal = p.str(v)
 	case "tty":

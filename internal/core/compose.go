@@ -5,13 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"path"
 	"reflect"
 	"regexp"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/moby/moby/client"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
 	"github.com/MatHoyer/kipitiny/internal/compose"
+	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/store"
 )
 
@@ -778,6 +783,9 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		if err := a.c.validateIn(ctx, svc, project, dbs); err != nil {
 			return err
 		}
+		if err := a.checkPlatform(ctx, name, svc); err != nil {
+			return err
+		}
 		a.planned[name] = svc
 		if u := a.uptimes[name]; u != nil {
 			chk, err := uptimeCheck(svc, uptimeInput(*u))
@@ -822,6 +830,11 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 	if err := a.c.validateIn(ctx, svc, project, dbs); err != nil {
 		return err
 	}
+	if svc.Image != old.Image || svc.Runtime.Platform != old.Runtime.Platform {
+		if err := a.checkPlatform(ctx, name, svc); err != nil {
+			return err
+		}
+	}
 	a.planned[name] = svc
 	fields := changedFields(old, svc)
 	if in.networks != nil && !slices.Equal(slices.Sorted(slices.Values(old.Networks)), in.networks) {
@@ -861,6 +874,44 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 	}
 	a.plan.Update = append(a.plan.Update, ServiceChange{Name: name, Fields: fields})
 	return nil
+}
+
+// checkPlatform warns when svc's platform isn't the server's (it runs
+// under emulation) and refuses one its image doesn't ship. A server or
+// registry that doesn't answer skips the check: the pull would tell.
+func (a *applier) checkPlatform(ctx context.Context, name string, svc store.Service) error {
+	want := docker.Platform(svc.Runtime.Platform)
+	dk := a.c.dockerFor(svc.ServerID)
+	if want == nil || dk == nil {
+		return nil
+	}
+	if info, err := dk.Info(ctx); err == nil && info.Arch != want.Architecture {
+		a.warn("service %s: platform %s isn't the server's (%s/%s): it runs under emulation, slowly, and needs QEMU (binfmt) on the server",
+			name, svc.Runtime.Platform, info.OS, info.Arch)
+	}
+	res, err := dk.DistributionInspect(ctx, svc.Image, client.DistributionInspectOptions{EncodedRegistryAuth: a.c.registryAuth(ctx, svc.Image)})
+	if err != nil || len(res.Platforms) == 0 {
+		return nil
+	}
+	if others := otherPlatforms(res.Platforms, *want); others != nil {
+		return fmt.Errorf("%w: image %s has no %s platform (it has %s)", ErrInvalid, svc.Image, svc.Runtime.Platform, strings.Join(others, ", "))
+	}
+	return nil
+}
+
+// otherPlatforms lists an image's platforms when none is want; nil when one
+// is (arm64 is arm64/v8).
+func otherPlatforms(have []ocispec.Platform, want ocispec.Platform) []string {
+	others := []string{}
+	for _, p := range have {
+		if p.OS == want.OS && p.Architecture == want.Architecture && (want.Variant == p.Variant || want.Variant == "" || (want.Variant == "v8" && p.Variant == "")) {
+			return nil
+		}
+		if p.OS != "unknown" { // attestations
+			others = append(others, path.Join(p.OS, p.Architecture, p.Variant))
+		}
+	}
+	return others
 }
 
 // prepareUptime plans the check of an existing service, as svc will be:

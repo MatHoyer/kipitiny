@@ -188,7 +188,7 @@ func (c *Core) scratchPostgres(ctx context.Context, b store.Backup, name, user, 
 	image, serverID := c.verifyImage(ctx, b)
 	dk := c.dockerFor(serverID)
 	step(VerifyImage)
-	if err := dk.EnsureImage(ctx, image, c.registryAuth(ctx, image)); err != nil {
+	if err := dk.EnsureImage(ctx, image, c.registryAuth(ctx, image), ""); err != nil {
 		return nil, "", fmt.Errorf("pull %s: %w", image, err)
 	}
 	step(VerifyServer)

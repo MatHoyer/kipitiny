@@ -50,7 +50,7 @@ func TestRoundTrip(t *testing.T) {
 					Sysctls: map[string]string{"net.core.somaxconn": "1024"}, ReadOnly: true, Init: true, StopSignal: "SIGINT",
 					TTY: true, StdinOpen: true, ExtraHosts: []string{"host.docker.internal:host-gateway"},
 					CapAdd: []string{"NET_ADMIN"}, CapDrop: []string{"MKNOD"}, Devices: []string{"/dev/net/tun"}, Privileged: true,
-					SecurityOpt: []string{"no-new-privileges:true"},
+					SecurityOpt: []string{"no-new-privileges:true"}, Platform: "linux/arm64",
 				},
 			},
 			"db": {Image: "postgres:17-alpine", MemoryMB: 512, X: Ext{Kind: "postgres", Password: "${DB_PASSWORD}", Anonymize: &anonymize.Rules{
@@ -256,6 +256,9 @@ func TestHostAccess(t *testing.T) {
 		if _, _, err := Parse([]byte(file), Vars{}); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+	if _, _, err := Parse([]byte("services: {a: {image: x, network_mode: 'service:vpn'}}"), Vars{}); err == nil || !strings.Contains(err.Error(), "proxy") {
+		t.Errorf("service mode error doesn't explain: %v", err)
 	}
 }
 

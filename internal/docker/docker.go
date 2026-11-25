@@ -20,6 +20,7 @@ import (
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/api/types/registry"
 	"github.com/moby/moby/client"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 const (
@@ -171,9 +172,14 @@ func (c *Client) RemoveContainer(ctx context.Context, id string, timeout time.Du
 }
 
 // PullImage pulls ref with auth (an encoded registry credential, or "" for
-// none), writing one line per status change (not per progress tick) to w.
-func (c *Client) PullImage(ctx context.Context, ref, auth string, w io.Writer) error {
-	resp, err := c.ImagePull(ctx, ref, client.ImagePullOptions{RegistryAuth: auth})
+// none) for platform ("" is the server's, see Platform), writing one line per
+// status change (not per progress tick) to w.
+func (c *Client) PullImage(ctx context.Context, ref, auth, platform string, w io.Writer) error {
+	opts := client.ImagePullOptions{RegistryAuth: auth}
+	if p := Platform(platform); p != nil {
+		opts.Platforms = []ocispec.Platform{*p}
+	}
+	resp, err := c.ImagePull(ctx, ref, opts)
 	if err != nil {
 		return err
 	}
@@ -196,15 +202,38 @@ func (c *Client) PullImage(ctx context.Context, ref, auth string, w io.Writer) e
 	return nil
 }
 
-// EnsureImage pulls ref (with auth, see PullImage) only if it is not
-// present locally.
-func (c *Client) EnsureImage(ctx context.Context, ref, auth string) error {
-	if _, err := c.ImageInspect(ctx, ref); err == nil {
+// EnsureImage pulls ref (with auth and platform, see PullImage) only if it
+// is not present locally.
+func (c *Client) EnsureImage(ctx context.Context, ref, auth, platform string) error {
+	if _, err := c.InspectImage(ctx, ref, platform); err == nil {
 		return nil
 	} else if !cerrdefs.IsNotFound(err) {
 		return err
 	}
-	return c.PullImage(ctx, ref, auth, io.Discard)
+	return c.PullImage(ctx, ref, auth, platform, io.Discard)
+}
+
+// InspectImage inspects platform's image of ref ("" is the server's).
+func (c *Client) InspectImage(ctx context.Context, ref, platform string) (client.ImageInspectResult, error) {
+	p := Platform(platform)
+	if p == nil {
+		return c.ImageInspect(ctx, ref)
+	}
+	res, err := c.ImageInspect(ctx, ref, client.ImageInspectWithPlatform(p))
+	if err != nil && !cerrdefs.IsNotFound(err) {
+		// shortcut: daemons before API 1.49 can't pick a platform; the tag's image is then the one pulled last.
+		return c.ImageInspect(ctx, ref)
+	}
+	return res, err
+}
+
+// Platform parses os/arch[/variant]; "" is nil, the server's own.
+func Platform(s string) *ocispec.Platform {
+	if s == "" {
+		return nil
+	}
+	parts := append(strings.SplitN(s, "/", 3), "", "")
+	return &ocispec.Platform{OS: parts[0], Architecture: parts[1], Variant: parts[2]}
 }
 
 // RegistryAuth encodes a registry credential for PullImage.

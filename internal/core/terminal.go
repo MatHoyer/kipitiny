@@ -142,7 +142,7 @@ func (c *Core) OpenServerTerminal(ctx context.Context, serverID string, cols, ro
 	}
 	target := "server " + sv.Name
 	dk := c.dockerFor(sv.ID)
-	if err := dk.EnsureImage(ctx, hostShellImage, ""); err != nil {
+	if err := dk.EnsureImage(ctx, hostShellImage, "", ""); err != nil {
 		return c.openTerminal(ctx, target, nil, fmt.Errorf("pull %s: %w", hostShellImage, err))
 	}
 	tty, err := dk.RunTTY(ctx, client.ContainerCreateOptions{

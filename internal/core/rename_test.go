@@ -108,7 +108,7 @@ func TestRenameDocker(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = dk.RemoveNetwork(context.Background(), netName) })
-	if err := dk.EnsureImage(ctx, "busybox:stable", ""); err != nil {
+	if err := dk.EnsureImage(ctx, "busybox:stable", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	id, err := dk.Run(ctx, client.ContainerCreateOptions{

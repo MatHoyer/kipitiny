@@ -29,7 +29,7 @@ func TestRuntimeDocker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := dk.EnsureImage(ctx, "busybox", ""); err != nil {
+	if err := dk.EnsureImage(ctx, "busybox", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	svc := store.Service{ID: "01RUNTIMETEST", Name: "rt", Kind: store.ServiceKindApp, Image: "busybox", Replicas: 1,
@@ -92,7 +92,7 @@ func TestFilesDocker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := dk.EnsureImage(ctx, "busybox", ""); err != nil {
+	if err := dk.EnsureImage(ctx, "busybox", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	svc := store.Service{ID: "01FILESTEST", Name: "files", Kind: store.ServiceKindApp, Image: "busybox", Replicas: 1,
@@ -137,7 +137,7 @@ func TestJobsDocker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := dk.EnsureImage(ctx, "busybox", ""); err != nil {
+	if err := dk.EnsureImage(ctx, "busybox", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	c := &Core{}
@@ -181,7 +181,7 @@ func TestProjectNetworksDocker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := dk.EnsureImage(ctx, "busybox", ""); err != nil {
+	if err := dk.EnsureImage(ctx, "busybox", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	c := &Core{}

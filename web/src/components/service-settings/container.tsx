@@ -75,6 +75,7 @@ const runtimeForm = (r: Runtime) => ({
 /** The settings only a compose file (or the API) sets, listed so the card shows everything that applies. */
 function otherSettings(r: Runtime, files: ServiceT["files"], deps: ServiceT["dependsOn"], nets: ServiceT["projectNetworks"]) {
   const out: [string, string][] = [];
+  if (r.platform) out.push(["platform", r.platform]);
   for (const n of nets ?? []) out.push(["networks", n]);
   for (const d of deps ?? []) out.push(["depends_on", d.condition ? `${d.service} (${d.condition})` : d.service]);
   if (r.restart) out.push(["restart", r.restart === "no" ? "no (a job: runs once)" : r.restart]);

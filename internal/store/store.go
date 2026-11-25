@@ -744,6 +744,10 @@ type Runtime struct {
 	// Restart is "" (always restarted), "no" (a job: it runs once, a
 	// deploy waits for it to exit 0) or "on-failure[:max retries]".
 	Restart string `json:"restart,omitempty"`
+	// Platform is the image platform pulled and run (linux/arm64,
+	// linux/arm/v7); "" is the server's own. Another architecture runs
+	// under emulation.
+	Platform string `json:"platform,omitempty"`
 }
 
 // Dependency is a service another one waits for.
@@ -781,7 +785,7 @@ type Ulimit struct {
 func (r Runtime) IsZero() bool {
 	return len(r.Command) == 0 && len(r.Entrypoint) == 0 && r.User == "" && r.WorkingDir == "" && len(r.Labels) == 0 &&
 		len(r.Tmpfs) == 0 && r.ShmSizeMB == 0 && len(r.Ulimits) == 0 && len(r.Sysctls) == 0 && !r.ReadOnly && !r.Init &&
-		r.StopSignal == "" && !r.TTY && !r.StdinOpen && len(r.ExtraHosts) == 0 && len(r.CapDrop) == 0 && r.Restart == "" && r.MemoryReservationMB == 0 && !r.HostAccess()
+		r.StopSignal == "" && !r.TTY && !r.StdinOpen && len(r.ExtraHosts) == 0 && len(r.CapDrop) == 0 && r.Restart == "" && r.MemoryReservationMB == 0 && r.Platform == "" && !r.HostAccess()
 }
 
 // HostAccess reports whether r loosens the container's isolation, which

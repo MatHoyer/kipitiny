@@ -79,7 +79,8 @@ Each key under `services` is a service. Its name is also its hostname inside the
 | `volumes` | Named volumes: `name:/path` (`:ro` for read-only) or `{type: volume, source: name, target: /path, read_only: true}`. Shared by the service's replicas, kept across deploys, backed up, managed from the [Files](/docs/files) tab. At most 10. Names: lowercase letters, digits and dashes. An anonymous volume (`/app/node_modules`) is kept as a named one after its path (`app-node-modules`), with a warning. Bind mounts: see [Files](#files). |
 | `configs`, `secrets` | Files written into the container: see [Files](#files). |
 | `env_file` | `.env`-style files of the git repository, merged into `environment` (which wins): a path, a list, or `{path: …, required: false}`. Git projects only; elsewhere, use `environment`, a `.env` or the project variables. |
-| `network_mode` | Only `host`: the app runs in the server's network. See [Host access](#host-access). |
+| `network_mode` | Only `host`: the app runs in the server's network. See [Host access](#host-access). `service:<name>` (an app in a VPN container's network, as with gluetun) is refused: kipitiny networks each service on its own (project networks, Traefik routing, aliases), so one can't borrow another's. Put both processes in one image, or have the app use the VPN container as a proxy (its HTTP or SOCKS port, by service name). |
+| `platform` | The image platform pulled and run: `linux/amd64`, `linux/arm64`, `linux/arm/v7`. For images that ship one architecture only. One other than the server's runs under emulation: slow, and the server needs QEMU's binfmt handlers (`docker run --privileged --rm tonistiigi/binfmt --install all`); the plan warns. An image without that platform is refused when the registry can be reached, else its pull fails. Apps only. |
 | `deploy` | `replicas` (1–10; databases always 1), `resources.limits.memory` / `resources.limits.cpus`, `resources.reservations.memory` (memory Docker tries to leave the app when the server runs short, at most the limit), and `restart_policy` (`condition: none` is `restart: "no"`, `on-failure` with `max_attempts` is `restart: on-failure:N`, `any` the default). `update_config` and `rollback_config` are ignored: kipitiny starts the new replicas, moves traffic once they're ready, then stops the old ones. |
 | `mem_limit` | Same as `deploy.resources.limits.memory` (`512m`, `1g`, bytes). |
 | `cpus` | Same as `deploy.resources.limits.cpus` (cores, `0.5` = half a core; 0.01–256). |
@@ -118,7 +119,7 @@ kipitiny networks services itself, so these are dropped and reported: `container
 
 ### Errors
 
-Any other key is refused, because ignoring it would run something different from what the file says: for example `platform`, `cgroup`, `pid`, `ipc`. So is any `network_mode` but `host`.
+Any other key is refused, because ignoring it would run something different from what the file says: for example `cgroup`, `pid`, `ipc`. So is any `network_mode` but `host`.
 
 ### Files
 

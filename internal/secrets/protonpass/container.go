@@ -179,7 +179,7 @@ func (r *ContainerRunner) start(ctx context.Context) (string, error) {
 	if _, err := r.dk.ImageInspect(ctx, r.image); cerrdefs.IsNotFound(err) {
 		progress.Report(ctx, secrets.StepImage)
 	}
-	if err := r.dk.EnsureImage(ctx, r.image, ""); err != nil {
+	if err := r.dk.EnsureImage(ctx, r.image, "", ""); err != nil {
 		return "", fmt.Errorf("pull %s: %w", r.image, err)
 	}
 	labels := map[string]string{docker.LabelManaged: "true", docker.LabelComponent: Component}

@@ -146,7 +146,7 @@ ss -tlnpH 2>/dev/null | awk '{print "listen=" $4 " " $6}'
 // output. Docker access is root on the host anyway.
 func (c *Core) runOnHost(ctx context.Context, serverID, script string) (string, error) {
 	dk := c.dockerFor(serverID)
-	if err := dk.EnsureImage(ctx, hostShellImage, ""); err != nil {
+	if err := dk.EnsureImage(ctx, hostShellImage, "", ""); err != nil {
 		return "", fmt.Errorf("pull %s: %w", hostShellImage, err)
 	}
 	var out bytes.Buffer
