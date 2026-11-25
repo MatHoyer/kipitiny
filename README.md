@@ -93,6 +93,23 @@ To let an agent drive it, create a token under **API tokens & MCP** and add the 
 claude mcp add --transport http kipitiny https://your-server/mcp --header "Authorization: Bearer <token>"
 ```
 
+### Deploy from CI
+
+Push the image in CI, then deploy that tag with a token restricted to *deploy*
+([more](https://kipitiny.mathieuhoyer.fr/docs/deploys#deploy-from-ci)):
+
+```yaml
+- uses: MatHoyer/kipitiny/deploy@0.46.0
+  with:
+    url: https://kipitiny.example.com
+    token: ${{ secrets.KIPITINY_TOKEN }}
+    service: shop/web
+    tag: sha-${{ github.sha }}
+```
+
+Without GitHub Actions, run the release binary (`kipitiny-linux-amd64`/`-arm64`)
+or `docker run --rm ghcr.io/mathoyer/kipitiny deploy …` with the same flags.
+
 ## Develop
 
 Screenshots in `docs/screenshots` come from the demo build (`cd web && pnpm dev:demo`).
@@ -118,7 +135,8 @@ parser reads.
 
 Push a tag `x.y.z` (no `v`): GitHub Actions publishes
 `ghcr.io/mathoyer/kipitiny:x.y.z` and `:latest` for amd64 and arm64, and a
-GitHub release; the website is rebuilt from the same tag and published to GitHub Pages, so its docs describe the latest release (run the *site* workflow by hand for a site-only fix). After the first release, make the package public (GitHub →
+GitHub release with static `kipitiny-linux-{amd64,arm64}` binaries and their
+`SHA256SUMS` (for `deploy/action.yml`); the website is rebuilt from the same tag and published to GitHub Pages, so its docs describe the latest release (run the *site* workflow by hand for a site-only fix). After the first release, make the package public (GitHub →
 Packages → kipitiny → Package settings), or managers can neither see nor pull
 updates.
 
