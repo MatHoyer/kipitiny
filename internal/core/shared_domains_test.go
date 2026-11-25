@@ -16,7 +16,7 @@ import (
 const sharedFile = `
 services:
   dashboard:
-    image: netbirdio/dashboard:v2.98.0
+    image: netbirdio/dashboard:v2.99.0
     expose: ["80"]
     x-kipitiny:
       domain: nb.example.com
