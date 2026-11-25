@@ -1,0 +1,114 @@
+# NetBird self-hosted: the combined server (management, signal, relay, STUN)
+# and the dashboard on one domain, behind kipitiny's Traefik. Its own users
+# (embedded IdP), SQLite store in a volume. Based on getting-started.sh.
+x-template:
+  title: NetBird
+  description: WireGuard mesh VPN with SSO, access policies and a web dashboard. Peers connect directly, through the relay when they can't.
+  website: https://netbird.io
+  docs: https://docs.netbird.io/selfhosted/selfhosted-quickstart
+  icon: netbird
+  category: security
+  tags: [vpn, wireguard, mesh, zero-trust, network]
+  notes: |
+    Set [`KIPITINY_TRAEFIK_READ_TIMEOUT=0`](https://kipitiny.mathieuhoyer.fr/docs/configuration) on the manager first: clients keep gRPC streams open, which Traefik otherwise cuts every 60 s.
+
+    - Open **UDP 3478** (STUN) on the server's firewall. The domain then points straight at the server: no Cloudflare proxy or tunnel.
+    - The first visit to the domain creates the admin account. Then add peers with `netbird up --management-url https://your.domain`, or setup keys from the dashboard.
+    - Peers, users and keys are in the `data` volume: back it up from the service's **Backups** tab.
+  logo:
+    label: NetBird
+    color: "#F68330"
+    images: [netbird-server]
+  inputs:
+    - name: DOMAIN
+      label: Domain
+      type: domain
+      required: true
+      placeholder: netbird.example.com
+      help: The dashboard, the API and the clients' gRPC all use it.
+    - name: AUTH_SECRET
+      label: Relay secret
+      generate: 32
+    - name: COOKIE_KEY
+      label: Session cookie key
+      generate: 32
+    - name: STORE_KEY
+      label: Store encryption key
+      generate: 32
+name: netbird
+services:
+  dashboard:
+    image: netbirdio/dashboard:v2.98.0
+    expose: ["80"]
+    environment:
+      NETBIRD_MGMT_API_ENDPOINT: https://${DOMAIN}
+      NETBIRD_MGMT_GRPC_API_ENDPOINT: https://${DOMAIN}
+      AUTH_AUDIENCE: netbird-dashboard
+      AUTH_CLIENT_ID: netbird-dashboard
+      AUTH_CLIENT_SECRET: ""
+      AUTH_AUTHORITY: https://${DOMAIN}/oauth2
+      USE_AUTH0: "false"
+      AUTH_SUPPORTED_SCOPES: openid profile email groups
+      AUTH_REDIRECT_URI: /nb-auth
+      AUTH_SILENT_REDIRECT_URI: /nb-silent-auth
+      NGINX_SSL_PORT: "443"
+      LETSENCRYPT_DOMAIN: none
+    x-kipitiny:
+      domain: ${DOMAIN} # every path the server doesn't take
+      icon: netbird
+  server:
+    image: netbirdio/netbird-server:0.83.2
+    expose: ["80"]
+    ports: ["3478:3478/udp"]
+    # NetBird wants the store key in standard base64; generated values are
+    # base64url without padding.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - NB_STORE_ENCRYPTION_KEY="$$(printf %s "$$STORE_KEY" | tr _- /+)=" exec /go/bin/netbird-server --config /etc/netbird/config.yaml
+    environment:
+      STORE_KEY: ${STORE_KEY}
+    configs:
+      - source: config
+        target: /etc/netbird/config.yaml
+    volumes:
+      - data:/var/lib/netbird
+    x-kipitiny:
+      domain: ${DOMAIN}
+      icon: netbird
+      secrets: [STORE_KEY]
+      routes:
+        - paths: [/signalexchange.SignalExchange/, /management.ManagementService/, /management.ProxyService/]
+          scheme: h2c
+        - paths: [/relay, /ws-proxy/, /api, /oauth2]
+configs:
+  config:
+    content: |
+      server:
+        listenAddress: ":80"
+        exposedAddress: "https://${DOMAIN}:443"
+        stunPorts:
+          - 3478
+        metricsPort: 9090
+        healthcheckAddress: ":9000"
+        logLevel: "info"
+        logFile: "console"
+        authSecret: "${AUTH_SECRET}"
+        dataDir: "/var/lib/netbird"
+        auth:
+          issuer: "https://${DOMAIN}/oauth2"
+          signKeyRefreshEnabled: true
+          sessionCookieEncryptionKey: "${COOKIE_KEY}"
+          dashboardRedirectURIs:
+            - "https://${DOMAIN}/nb-auth"
+            - "https://${DOMAIN}/nb-silent-auth"
+          cliRedirectURIs:
+            - "http://localhost:53000/"
+        # Only Docker networks reach the server: trust Traefik's
+        # X-Forwarded-For from them, not from anywhere.
+        reverseProxy:
+          trustedHTTPProxies: ["172.16.0.0/12", "192.168.0.0/16", "10.0.0.0/8"]
+          trustedPeers: ["172.16.0.0/12", "192.168.0.0/16", "10.0.0.0/8"]
+        store:
+          engine: "sqlite"
+volumes:
+  data: {}
