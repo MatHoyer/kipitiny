@@ -671,6 +671,11 @@ const EVENTS: Notifications["events"] = [
   { type: "service.restarted", label: "Stopped service restarted", default: true },
   { type: "service.unhealthy", label: "Service unhealthy", default: true },
   { type: "service.healthy", label: "Service healthy again", default: true },
+  { type: "service.oom_killed", label: "Service ran out of memory", default: true },
+  { type: "service.memory_high", label: "Service memory high", default: true },
+  { type: "service.memory_ok", label: "Service memory back to normal", default: true },
+  { type: "service.cpu_high", label: "Service CPU high", default: true },
+  { type: "service.cpu_ok", label: "Service CPU back to normal", default: true },
   { type: "uptime.down", label: "Uptime check failing", default: true },
   { type: "uptime.up", label: "Uptime check recovered", default: true },
   { type: "job.failed", label: "Scheduled job failed", default: true },
@@ -685,7 +690,11 @@ const EVENTS: Notifications["events"] = [
   { type: "update.available", label: "New kipitiny version", default: true },
   { type: "server.updates_pending", label: "Server has security updates", default: true },
   { type: "server.reboot_required", label: "Server needs a reboot", default: true },
+  { type: "server.disk_low", label: "Server disk almost full", default: true },
+  { type: "server.disk_ok", label: "Server disk space recovered", default: true },
 ];
+
+let thresholds: Notifications["thresholds"] = { memoryPercent: 90, memoryMinutes: 5, cpuPercent: 90, cpuMinutes: 10, diskFreePercent: 10 };
 
 const backupKindOf = (kind: string) => (kind === "postgres" ? "postgres" : kind === "redis" || kind === "app" ? "volume" : "dump");
 
@@ -2015,8 +2024,10 @@ const routes: Route[] = [
         { name: "push", label: "Push", fields: [] },
       ],
       events: EVENTS,
+      thresholds,
     }),
   ],
+  ["PUT", /^\/notifications\/thresholds$/, ({ body }) => (thresholds = { ...thresholds, ...body })],
   [
     "POST",
     /^\/notifications\/channels$/,

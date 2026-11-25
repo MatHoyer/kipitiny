@@ -963,7 +963,11 @@ export type Notifications = {
   channels: NotificationChannel[];
   kinds: NotificationKind[];
   events: { type: string; label: string; default: boolean }[];
+  thresholds: ResourceAlerts;
 };
+
+/** When resource alerts fire: memory and CPU of their limit (the server's when unlimited), held for some minutes. */
+export type ResourceAlerts = { memoryPercent: number; memoryMinutes: number; cpuPercent: number; cpuMinutes: number; diskFreePercent: number };
 
 /** State of a service domain's managed Cloudflare record. */
 export type DNSStatus = { state: "synced" | "warning" | "conflict" | "error"; message?: string };
@@ -1812,6 +1816,7 @@ export const api = {
     request<NotificationChannel>(`/notifications/channels/${id}`, json("PUT", c)),
   deleteChannel: (id: string) => request<void>(`/notifications/channels/${id}`, { method: "DELETE" }),
   testChannel: (id: string) => request<void>(`/notifications/channels/${id}/test`, { method: "POST" }),
+  setThresholds: (t: ResourceAlerts) => request<ResourceAlerts>("/notifications/thresholds", json("PUT", t)),
   tokens: () => request<ApiToken[]>("/tokens"),
   createToken: (t: TokenInput) => request<ApiToken & { token: string }>("/tokens", json("POST", t)),
   updateToken: (id: string, t: TokenInput) => request<ApiToken>(`/tokens/${id}`, json("PUT", t)),

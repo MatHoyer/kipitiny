@@ -56,3 +56,16 @@ func (a *API) testChannel(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (a *API) setThresholds(w http.ResponseWriter, r *http.Request) {
+	var body core.ResourceAlerts
+	if !decode(w, r, &body) {
+		return
+	}
+	v, err := a.core.SetResourceAlerts(r.Context(), body)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}

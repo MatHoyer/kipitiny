@@ -237,6 +237,7 @@ var routeAccess = map[string]access{
 	"PUT /api/notifications/channels/{id}":       admin,
 	"DELETE /api/notifications/channels/{id}":    admin,
 	"POST /api/notifications/channels/{id}/test": admin,
+	"PUT /api/notifications/thresholds":          admin,
 	"GET /api/users":                             admin,
 	"PUT /api/users/{id}":                        admin,
 	"DELETE /api/users/{id}":                     admin,

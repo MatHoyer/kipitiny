@@ -66,6 +66,7 @@ type statsState struct {
 	series     map[string]*series
 	containers map[string]*series     // container ID ->
 	hosts      map[string]*hostSeries // server ID ->
+	alerts     map[string]*alertState // "mem:<service>", "cpu:<service>", "disk:<server>" ->
 	last       time.Time              // of the last round
 }
 
@@ -166,6 +167,7 @@ func (c *Core) sampleStats(ctx context.Context) {
 	now := time.Now()
 	c.stats.record(now, got, owner, byID)
 	c.stats.recordHosts(now, hosts)
+	c.alertResources(ctx, now, byID, servers)
 }
 
 // sampleServer reads the counters of the server's running replicas that
