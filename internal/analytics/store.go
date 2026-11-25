@@ -38,6 +38,7 @@ type Store struct {
 
 	mu       sync.Mutex
 	sites    map[string]bool
+	paths    map[string]Paths   // by hostname, the sites with their own
 	trackers map[string]Tracker // by slug
 	day      int64
 	salt     []byte
@@ -59,6 +60,15 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		return nil, err
 	}
 	s.sites = setOf(hosts)
+	var rows []struct{ Hostname, Script, Hit string }
+	if err := s.db.NewRaw("SELECT hostname, script, hit FROM sites WHERE script <> ''").Scan(ctx, &rows); err != nil {
+		s.db.Close()
+		return nil, err
+	}
+	s.paths = map[string]Paths{}
+	for _, r := range rows {
+		s.paths[r.Hostname] = Paths{r.Script, r.Hit}
+	}
 	if err := s.loadTrackers(ctx); err != nil {
 		s.db.Close()
 		return nil, err
@@ -76,14 +86,31 @@ func setOf(hosts []string) map[string]bool {
 	return m
 }
 
-// SetSites replaces the tracked hostnames. Their events stay.
-func (s *Store) SetSites(ctx context.Context, hosts []string) error {
+// Paths are where a site's own domain serves the tracker script and takes
+// hits, instead of /a.js and /e of the analytics domain (which keep
+// working): ad blockers skip a first-party path they don't know.
+type Paths struct {
+	Script string `json:"script"`
+	Hit    string `json:"hit"`
+}
+
+// SetSites replaces the tracked hostnames, and the paths of those that have
+// their own. Their events stay.
+func (s *Store) SetSites(ctx context.Context, hosts []string, paths map[string]Paths) error {
+	sites := setOf(hosts)
+	own := map[string]Paths{}
+	for h, p := range paths {
+		if h = strings.ToLower(h); sites[h] && p.Script != "" && p.Hit != "" {
+			own[h] = p
+		}
+	}
 	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		if _, err := tx.NewRaw("DELETE FROM sites").Exec(ctx); err != nil {
 			return err
 		}
-		for h := range setOf(hosts) {
-			if _, err := tx.NewRaw("INSERT INTO sites (hostname) VALUES (?)", h).Exec(ctx); err != nil {
+		for h := range sites {
+			p := own[h]
+			if _, err := tx.NewRaw("INSERT INTO sites (hostname, script, hit) VALUES (?, ?, ?)", h, p.Script, p.Hit).Exec(ctx); err != nil {
 				return err
 			}
 		}
@@ -93,9 +120,17 @@ func (s *Store) SetSites(ctx context.Context, hosts []string) error {
 		return err
 	}
 	s.mu.Lock()
-	s.sites = setOf(hosts)
+	s.sites, s.paths = sites, own
 	s.mu.Unlock()
 	return nil
+}
+
+// sitePaths are host's own paths, if it has some.
+func (s *Store) sitePaths(host string) (Paths, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.paths[host]
+	return p, ok
 }
 
 func (s *Store) tracked(host string) bool {

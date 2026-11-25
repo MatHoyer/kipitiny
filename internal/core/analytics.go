@@ -166,7 +166,39 @@ func (c *Core) analyticsImageRef() string {
 	return c.cfg.Update.Image + ":dev"
 }
 
-func (c *Core) analyticsSpec(ctx context.Context, st analyticsState) client.ContainerCreateOptions {
+// analyticsPathRe is an app's own tracker path: no "/", no Traefik rule
+// syntax, nothing to escape in the script.
+var analyticsPathRe = regexp.MustCompile(`^/[A-Za-z0-9._~-][A-Za-z0-9._~/-]{0,99}$`)
+
+func validateAnalyticsPaths(script, hit string) error {
+	if script == "" && hit == "" {
+		return nil
+	}
+	if !analyticsPathRe.MatchString(script) || !analyticsPathRe.MatchString(hit) {
+		return fmt.Errorf("%w: tracker paths: both, each a path like /js/app.js (letters, digits and . _ ~ - /, up to 100)", ErrInvalid)
+	}
+	if script == hit {
+		return fmt.Errorf("%w: tracker paths: the script and the hits need different paths", ErrInvalid)
+	}
+	return nil
+}
+
+// trackedApps are the apps the analytics server counts.
+func (c *Core) trackedApps(ctx context.Context) ([]store.Service, error) {
+	svcs, err := c.store.ListAllServices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(svcs, func(s store.Service) bool {
+		return !s.Analytics || s.ServerID != store.LocalServerID || !httpRouted(s)
+	}), nil
+}
+
+// ownPathsPriority puts an app's tracker paths above its own routers (and
+// the pages shown while it's down or asleep), below maintenance.
+const ownPathsPriority = 1 << 29
+
+func (c *Core) analyticsSpec(ctx context.Context, st analyticsState, apps []store.Service) client.ContainerCreateOptions {
 	labels := map[string]string{
 		docker.LabelManaged:      "true",
 		docker.LabelComponent:    analyticsComponent,
@@ -181,6 +213,23 @@ func (c *Core) analyticsSpec(ctx context.Context, st analyticsState) client.Cont
 		labels["traefik.http.routers."+analyticsRouter+".tls.certresolver"] = r
 	} else {
 		labels["traefik.http.routers."+analyticsRouter+".tls"] = "true"
+	}
+	// Apps with their own paths: those two paths of their domain reach the
+	// server, which tells them apart by the Host.
+	for _, s := range apps {
+		if s.AnalyticsScript == "" {
+			continue
+		}
+		r := analyticsRouter + "-" + strings.ToLower(s.ID)
+		labels["traefik.http.routers."+r+".rule"] = "Host(`" + s.Domain + "`) && (Path(`" + s.AnalyticsScript + "`) || Path(`" + s.AnalyticsHit + "`))"
+		labels["traefik.http.routers."+r+".entrypoints"] = "websecure"
+		labels["traefik.http.routers."+r+".service"] = analyticsRouter
+		labels["traefik.http.routers."+r+".priority"] = strconv.Itoa(ownPathsPriority)
+		if res := c.certResolver(ctx, s.ServerID, s.Domain); res != "" {
+			labels["traefik.http.routers."+r+".tls.certresolver"] = res
+		} else {
+			labels["traefik.http.routers."+r+".tls"] = "true"
+		}
 	}
 	return client.ContainerCreateOptions{
 		Name: analyticsName,
@@ -234,7 +283,11 @@ func (c *Core) ensureAnalytics(ctx context.Context) error {
 		c.analyticsSites = ""
 		return c.removeAnalytics(ctx, dk)
 	}
-	opts := c.analyticsSpec(ctx, st)
+	apps, err := c.trackedApps(ctx)
+	if err != nil {
+		return err
+	}
+	opts := c.analyticsSpec(ctx, st, apps)
 	hash := specHash(opts.Config.Image, opts.Config.Env, opts.Config.Labels)
 	opts.Config.Labels[docker.LabelConfigHash] = hash
 	existing, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: analyticsComponent})
@@ -271,7 +324,7 @@ func (c *Core) ensureAnalytics(ctx context.Context) error {
 		c.analyticsSites = ""
 	}
 	progress.Report(ctx, AnalyticsStepSites)
-	return c.syncAnalyticsSites(ctx, id, st.Token)
+	return c.syncAnalyticsSites(ctx, id, st.Token, apps)
 }
 
 func (c *Core) removeAnalytics(ctx context.Context, dk *docker.Client) error {
@@ -288,21 +341,24 @@ func (c *Core) removeAnalytics(ctx context.Context, dk *docker.Client) error {
 	return nil
 }
 
-// syncAnalyticsSites sends the opted-in apps' domains when they changed
-// since the last time (or the container is new).
-func (c *Core) syncAnalyticsSites(ctx context.Context, id, token string) error {
-	svcs, err := c.store.ListAllServices(ctx)
-	if err != nil {
-		return err
-	}
+// syncAnalyticsSites sends the opted-in apps' domains and own paths when
+// they changed since the last time (or the container is new).
+func (c *Core) syncAnalyticsSites(ctx context.Context, id, token string, apps []store.Service) error {
 	hosts := []string{}
-	for _, s := range svcs {
-		if s.Analytics && s.ServerID == store.LocalServerID && httpRouted(s) {
-			hosts = append(hosts, s.Domain)
+	paths := map[string]analytics.Paths{}
+	for _, s := range apps {
+		hosts = append(hosts, s.Domain)
+		if s.AnalyticsScript != "" {
+			paths[s.Domain] = analytics.Paths{Script: s.AnalyticsScript, Hit: s.AnalyticsHit}
 		}
 	}
 	slices.Sort(hosts)
 	key := id + " " + strings.Join(hosts, " ")
+	for _, h := range hosts {
+		if p, ok := paths[h]; ok {
+			key += " " + h + p.Script + " " + p.Hit
+		}
+	}
 	if key == c.analyticsSites {
 		return nil
 	}
@@ -310,7 +366,7 @@ func (c *Core) syncAnalyticsSites(ctx context.Context, id, token string) error {
 	if err != nil {
 		return err
 	}
-	if err := cl.SetSites(ctx, hosts); err != nil {
+	if err := cl.SetSites(ctx, hosts, paths); err != nil {
 		return err
 	}
 	c.analyticsSites = key
@@ -426,7 +482,7 @@ func (c *Core) ServiceAnalytics(ctx context.Context, serviceID string, q Analyti
 	if err != nil {
 		return AnalyticsView{}, err
 	}
-	return AnalyticsView{Stats: s, Script: AnalyticsScript(st.Domain)}, nil
+	return AnalyticsView{Stats: s, Script: serviceScript(svc, st.Domain)}, nil
 }
 
 // ServiceVisits lists the app's visits started in q's range, newest first:
@@ -537,4 +593,12 @@ func (c *Core) TrackerAnalytics(ctx context.Context, id string, q AnalyticsQuery
 // AnalyticsScript is the tag a tracked app's pages include.
 func AnalyticsScript(domain string) string {
 	return `<script defer src="https://` + domain + `/a.js"></script>`
+}
+
+// serviceScript is svc's tag: from its own domain when it has its own paths.
+func serviceScript(svc store.Service, domain string) string {
+	if svc.AnalyticsScript != "" {
+		return `<script defer src="https://` + svc.Domain + svc.AnalyticsScript + `"></script>`
+	}
+	return AnalyticsScript(domain)
 }

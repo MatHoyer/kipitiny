@@ -2,7 +2,8 @@
 // too), kipitiny.track(name, props) or data-kipitiny-event clicks, and
 // kipitiny.identify(id, props) naming the visitor for the rest of the page.
 (() => {
-  const s = document.currentScript, e = s.src.replace(/\/a\.js(\?.*)?$/, "") + "/e";
+  // Served from an app's own domain, the server swaps this hit path for the app's.
+  const s = document.currentScript, e = new URL("/e", s.src).href;
   // After a SPA navigation the referrer is the previous page, not the site that sent the visitor.
   let last, ref = document.referrer, id;
   const send = (n, p) => {

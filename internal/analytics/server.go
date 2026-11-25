@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"bytes"
 	"crypto/subtle"
 	_ "embed"
 	"encoding/json"
@@ -41,18 +42,18 @@ const maxHit = 8 << 10
 // tracked hostnames.
 func Public(st *Store, log *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /a.js", func(w http.ResponseWriter, r *http.Request) {
+	script := func(w http.ResponseWriter, js []byte) {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=3600")
-		w.Write(tracker)
-	})
-	mux.HandleFunc("OPTIONS /e", func(w http.ResponseWriter, r *http.Request) {
+		w.Write(js)
+	}
+	preflight := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("POST /e", func(w http.ResponseWriter, r *http.Request) {
+	}
+	hit := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		var h Hit
 		if err := json.NewDecoder(io.LimitReader(r.Body, maxHit)).Decode(&h); err != nil {
@@ -67,7 +68,10 @@ func Public(st *Store, log *slog.Logger) http.Handler {
 		}
 		// Same answer either way: a page can't probe what is tracked.
 		w.WriteHeader(http.StatusNoContent)
-	})
+	}
+	mux.HandleFunc("GET /a.js", func(w http.ResponseWriter, r *http.Request) { script(w, tracker) })
+	mux.HandleFunc("OPTIONS /e", preflight)
+	mux.HandleFunc("POST /e", hit)
 	mux.HandleFunc("GET /p/{file}", func(w http.ResponseWriter, r *http.Request) {
 		if slug, ok := strings.CutSuffix(r.PathValue("file"), ".gif"); ok {
 			if t, ok := st.tracker(KindPixel, slug); ok {
@@ -90,7 +94,28 @@ func Public(st *Store, log *slog.Logger) http.Handler {
 		http.Redirect(w, r, t.Target, http.StatusFound)
 	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {})
-	return mux
+	// A site's own paths, on its own domain (Traefik routes only those
+	// there); anything else falls through to the analytics domain's.
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host, _, err := net.SplitHostPort(r.Host)
+		if err != nil {
+			host = r.Host
+		}
+		if p, ok := st.sitePaths(strings.ToLower(host)); ok {
+			switch {
+			case r.URL.Path == p.Script && r.Method == http.MethodGet:
+				script(w, bytes.Replace(tracker, []byte(`"/e"`), []byte(`"`+p.Hit+`"`), 1))
+				return
+			case r.URL.Path == p.Hit && r.Method == http.MethodPost:
+				hit(w, r)
+				return
+			case r.URL.Path == p.Hit && r.Method == http.MethodOptions:
+				preflight(w, r)
+				return
+			}
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
 // pixelGIF is a transparent 1x1 GIF.
@@ -223,13 +248,14 @@ func Private(st *Store, token string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("PUT /api/sites", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
-			Hostnames []string `json:"hostnames"`
+			Hostnames []string         `json:"hostnames"`
+			Paths     map[string]Paths `json:"paths"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if err := st.SetSites(r.Context(), in.Hostnames); err != nil {
+		if err := st.SetSites(r.Context(), in.Hostnames, in.Paths); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

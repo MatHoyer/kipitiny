@@ -59,11 +59,13 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	return json.NewDecoder(res.Body).Decode(out)
 }
 
-func (c *Client) SetSites(ctx context.Context, hosts []string) error {
+// SetSites sends the tracked hostnames, and the paths of those with their
+// own.
+func (c *Client) SetSites(ctx context.Context, hosts []string, paths map[string]Paths) error {
 	if hosts == nil {
 		hosts = []string{}
 	}
-	return c.do(ctx, http.MethodPut, "/api/sites", map[string][]string{"hostnames": hosts}, nil)
+	return c.do(ctx, http.MethodPut, "/api/sites", map[string]any{"hostnames": hosts, "paths": paths}, nil)
 }
 
 func (q Query) values() url.Values {

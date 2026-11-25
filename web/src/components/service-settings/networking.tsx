@@ -377,8 +377,62 @@ export function AnalyticsCard({ svc }: { svc: ServiceT }) {
         <Switch id={id} checked={svc.analytics} disabled={save.isPending} onCheckedChange={(v) => save.mutate(v)} />
         <Label htmlFor={id}>Count visits</Label>
       </div>
+      {svc.analytics && <TrackerPaths svc={svc} />}
       {svc.analytics && <ShareLink svc={svc} />}
     </Section>
+  );
+}
+
+/** The app's own tracker paths on its domain, which ad blockers don't know, instead of the analytics domain's /a.js and /e. */
+function TrackerPaths({ svc }: { svc: ServiceT }) {
+  const qc = useQueryClient();
+  const saved = { script: svc.analyticsScript ?? "", hit: svc.analyticsHit ?? "" };
+  const [form, setForm] = useState(saved);
+  const dirty = form.script !== saved.script || form.hit !== saved.hit;
+  const save = useMutation({
+    meta: { error: "Couldn't change the tracker paths" },
+    mutationFn: (p: { script: string; hit: string }) => api.updateService(svc.id, { analyticsScript: p.script, analyticsHit: p.hit }),
+    onSuccess: (updated) => {
+      qc.setQueryData(["service", svc.id], updated);
+      setForm({ script: updated.analyticsScript ?? "", hit: updated.analyticsHit ?? "" });
+      toast.success("Tracker paths saved");
+    },
+  });
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    save.mutate({ script: form.script.trim(), hit: form.hit.trim() });
+  };
+  return (
+    <form className="space-y-3 border-t pt-4" onSubmit={onSubmit}>
+      <div>
+        <p className="text-sm font-medium">Tracker paths</p>
+        <p className="text-sm text-muted-foreground">
+          Ad blockers know the analytics domain's <Mono>/a.js</Mono> and <Mono>/e</Mono>. Paths of your own serve the script and take the
+          visits on <Mono>{svc.domain}</Mono> itself, without a deploy; leave both empty for the defaults. The old tag keeps counting until you
+          change it.
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FloatingInput label="Script path, e.g. /js/app.js" value={form.script} onChange={(e) => setForm({ ...form, script: e.target.value })} />
+        <FloatingInput label="Hits path, e.g. /api/collect" value={form.hit} onChange={(e) => setForm({ ...form, hit: e.target.value })} />
+      </div>
+      {saved.script && (
+        <div className="space-y-1.5">
+          <p className="text-xs text-muted-foreground">The tag for the app's pages:</p>
+          <CopyField value={`<script defer src="https://${svc.domain}${saved.script}"></script>`} />
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Button type="submit" variant="outline" size="sm" disabled={!dirty || save.isPending}>
+          Save paths
+        </Button>
+        {saved.script && (
+          <Button type="button" variant="ghost" size="sm" disabled={save.isPending} onClick={() => save.mutate({ script: "", hit: "" })}>
+            Use the defaults
+          </Button>
+        )}
+      </div>
+    </form>
   );
 }
 

@@ -24,7 +24,7 @@ func open(t *testing.T) (*Store, *time.Time) {
 	t.Cleanup(func() { st.Close() })
 	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
 	st.now = func() time.Time { return now }
-	if err := st.SetSites(context.Background(), []string{"Shop.example.com"}); err != nil {
+	if err := st.SetSites(context.Background(), []string{"Shop.example.com"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	return st, &now
@@ -335,12 +335,12 @@ func TestPrivateNeedsToken(t *testing.T) {
 	defer srv.Close()
 	for _, tok := range []string{"", "wrong"} {
 		c := &Client{BaseURL: srv.URL, Token: tok}
-		if err := c.SetSites(context.Background(), []string{"x.com"}); err == nil || !strings.Contains(err.Error(), "401") {
+		if err := c.SetSites(context.Background(), []string{"x.com"}, nil); err == nil || !strings.Contains(err.Error(), "401") {
 			t.Errorf("token %q: %v", tok, err)
 		}
 	}
 	c := &Client{BaseURL: srv.URL, Token: "secret"}
-	if err := c.SetSites(context.Background(), []string{"x.com"}); err != nil {
+	if err := c.SetSites(context.Background(), []string{"x.com"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !st.tracked("x.com") || st.tracked("shop.example.com") {
