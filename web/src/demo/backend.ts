@@ -2171,6 +2171,11 @@ const routes: Route[] = [
   ["GET", /^\/services\/([^/]+)\/analytics\/visits$/, ({ q }) => (q.get("before") ? [] : demoVisits(Number(q.get("to"))))],
   ["GET", /^\/services\/([^/]+)\/analytics\/visits\/([^/]+)$/, ({ m }) => demoVisit(m[2])],
   [
+    "GET",
+    /^\/services\/([^/]+)\/analytics\/funnel$/,
+    ({ q }) => q.getAll("step").map((step, i) => ({ step, visits: Math.round(1200 * 0.45 ** i) })),
+  ],
+  [
     "POST",
     /^\/services\/([^/]+)\/analytics\/share$/,
     ({ m }) => ((serviceOf(m[1]).analyticsSharedAt = new Date().toISOString()), save(), { token: "demo-share-link" }),

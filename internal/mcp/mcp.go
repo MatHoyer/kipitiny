@@ -166,6 +166,9 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 	addTool(s, &mcp.Tool{Name: "export_analytics", Annotations: readOnly,
 		Description: "An app's analytics over the last days as CSV, filters applied: table summary (totals and the previous span's), " +
 			"series (daily pageviews and visitors), breakdowns (top 20 values of each) or visits (up to 10000, newest first)."}, t.exportAnalytics)
+	addTool(s, &mcp.Tool{Name: "get_funnel", Annotations: readOnly,
+		Description: "Conversion of an app's visits through ordered steps (pages or custom events), each after the ones before within " +
+			"a visit, over the last days: how many visits reached each step."}, t.getFunnel)
 	addTool(s, &mcp.Tool{Name: "list_trackers", Annotations: readOnly,
 		Description: "Pixels (1x1 GIFs counting views, for emails and pages without the script) and tracked links (redirects counting " +
 			"clicks), with their URL and last 30 days' hits. Needs admin and analytics on."}, t.listTrackers)

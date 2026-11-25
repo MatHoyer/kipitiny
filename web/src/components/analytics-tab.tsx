@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { cn } from "@/lib/utils";
+import { Funnel } from "./analytics-funnel";
 import { countryLabel, duration, Visits } from "./analytics-visits";
 import { api, type AnalyticsRow, type AnalyticsStats, type Service, type TrackerKind } from "../api";
 
@@ -55,7 +56,12 @@ export function AnalyticsTab({ svc }: { svc: Service }) {
         </>
       }
       actions={(q) => <ExportMenu svc={svc} q={q} />}
-      below={(span, filters, addFilter, live) => <Visits svc={svc} span={span} filters={filters} onFilter={addFilter} live={live} />}
+      below={(span, filters, addFilter, live) => (
+        <>
+          <Funnel svc={svc} span={span} />
+          <Visits svc={svc} span={span} filters={filters} onFilter={addFilter} live={live} />
+        </>
+      )}
     />
   );
 }

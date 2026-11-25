@@ -1811,6 +1811,12 @@ export const api = {
     const p = new URLSearchParams(Object.entries(q).map(([k, v]) => [k, String(v)]));
     return request<SharedAnalytics>(`/share/analytics/${encodeURIComponent(token)}?${p}`);
   },
+  /** Visits of the range through steps in order, "page:<path>" or "event:<name>". */
+  serviceFunnel: (id: string, { steps, ...q }: { from: number; to: number; steps: string[] }) => {
+    const p = new URLSearchParams(Object.entries(q).map(([k, v]) => [k, String(v)]));
+    for (const s of steps) p.append("step", s);
+    return request<{ step: string; visits: number }[]>(`/services/${id}/analytics/funnel?${p}`);
+  },
   trackers: () => request<Tracker[]>("/analytics/trackers"),
   createTracker: (t: TrackerInput) => request<Tracker>("/analytics/trackers", json("POST", t)),
   updateTracker: (id: string, t: TrackerInput) => request<Tracker>(`/analytics/trackers/${id}`, json("PUT", t)),

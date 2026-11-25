@@ -73,6 +73,33 @@ func (t *tools) exportAnalytics(ctx context.Context, _ *mcp.CallToolRequest, in 
 	return nil, exportAnalyticsOut{CSV: b.String()}, friendly(err)
 }
 
+type funnelIn struct {
+	Service string   `json:"service" jsonschema:"project/service of an app with analytics on"`
+	Steps   []string `json:"steps" jsonschema:"2 to 8 steps in order, page:<path> or event:<name>, e.g. [\"page:/\", \"page:/pricing\", \"event:signup\"]"`
+	Days    int      `json:"days,omitempty" jsonschema:"how many days back, default 7, at most 730"`
+}
+
+type funnelOut struct {
+	Steps []analytics.FunnelStep `json:"steps"`
+}
+
+func (t *tools) getFunnel(ctx context.Context, _ *mcp.CallToolRequest, in funnelIn) (*mcp.CallToolResult, funnelOut, error) {
+	if err := core.Authenticated(ctx); err != nil {
+		return nil, funnelOut{}, err
+	}
+	svc, err := t.service(ctx, in.Service, core.PermView)
+	if err != nil {
+		return nil, funnelOut{}, friendly(err)
+	}
+	days := in.Days
+	if days <= 0 {
+		days = 7
+	}
+	now := time.Now()
+	fs, err := t.c.ServiceFunnel(ctx, svc.ID, core.AnalyticsQuery{From: now.AddDate(0, 0, -min(days, 730)), To: now}, in.Steps)
+	return nil, funnelOut{Steps: fs}, friendly(err)
+}
+
 type trackersOut struct {
 	Trackers []analytics.Tracker `json:"trackers"`
 }
