@@ -100,6 +100,7 @@ export function AnalyticsPanel({
   kind,
   actions,
   below,
+  readOnly,
 }: {
   queryKey: unknown[];
   load: (q: StatsQuery) => Promise<Omit<AnalyticsStats, "script"> & { script?: string }>;
@@ -108,6 +109,8 @@ export function AnalyticsPanel({
   /** Next to the range picker, given the query of the range shown. */
   actions?: (q: StatsQuery) => ReactNode;
   below?: (span: number, filters: string[], addFilter: (f: string) => void, live: boolean) => ReactNode;
+  /** No filters: a shared link's view. */
+  readOnly?: boolean;
 }) {
   const [range, setRange] = useState<Range>("7d");
   // "<breakdown>:<value>", as the API takes them.
@@ -164,7 +167,7 @@ export function AnalyticsPanel({
           versus={range === "live" ? "the 30 minutes before" : `the ${r.label} before`}
           filtered={filters.length > 0}
           kind={kind}
-          onFilter={addFilter}
+          onFilter={readOnly ? undefined : addFilter}
         />
       )}
       {below?.(r.span, filters, addFilter, range === "live")}
@@ -219,7 +222,7 @@ function Stats({
   versus: string;
   filtered: boolean;
   kind?: TrackerKind;
-  onFilter: (filter: string) => void;
+  onFilter?: (filter: string) => void;
 }) {
   const bounce = stats.visits ? Math.round((stats.bounces / stats.visits) * 100) : 0;
   const hits = kind === "link" ? "Clicks" : "Views";
@@ -277,7 +280,7 @@ function Stats({
               rows={stats.breakdowns[b.key]}
               label={b.key === "countries" ? countryLabel : undefined}
               // Props mix the event and the property: not one column to filter on.
-              onPick={b.key === "props" ? undefined : (v) => onFilter(`${b.key}:${v}`)}
+              onPick={b.key === "props" || !onFilter ? undefined : (v) => onFilter(`${b.key}:${v}`)}
             />
           ))}
       </div>

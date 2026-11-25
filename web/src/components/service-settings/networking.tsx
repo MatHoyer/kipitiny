@@ -3,7 +3,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { useId, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
-import { CheckboxField, Empty, ErrorText, Loading, Mono, Section } from "@/components/common";
+import { CheckboxField, CopyField, Empty, ErrorText, Loading, Mono, Section } from "@/components/common";
 import { DomainField } from "@/components/domain-field";
 import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { api, type PublishedPort, type Route, type Service as ServiceT } from "../../api";
+import { formatDateTime } from "@/lib/format";
 import { Applies } from "./parts";
 
 /** A domain without an HTTP port only names the server: Traefik doesn't route it. */
@@ -376,6 +377,56 @@ export function AnalyticsCard({ svc }: { svc: ServiceT }) {
         <Switch id={id} checked={svc.analytics} disabled={save.isPending} onCheckedChange={(v) => save.mutate(v)} />
         <Label htmlFor={id}>Count visits</Label>
       </div>
+      {svc.analytics && <ShareLink svc={svc} />}
     </Section>
+  );
+}
+
+/** The app's public, read-only Analytics tab: one link at a time, its token shown once. */
+function ShareLink({ svc }: { svc: ServiceT }) {
+  const qc = useQueryClient();
+  const [token, setToken] = useState("");
+  const refresh = () => qc.invalidateQueries({ queryKey: ["service", svc.id] });
+  const share = useMutation({
+    meta: { error: "Couldn't create the link" },
+    mutationFn: () => api.shareAnalytics(svc.id),
+    onSuccess: (res) => (setToken(res.token), refresh()),
+  });
+  const revoke = useMutation({
+    meta: { error: "Couldn't revoke the link" },
+    mutationFn: () => api.unshareAnalytics(svc.id),
+    onSuccess: () => (setToken(""), refresh(), toast.success("Link revoked")),
+  });
+  const busy = share.isPending || revoke.isPending;
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <div>
+        <p className="text-sm font-medium">Public link</p>
+        <p className="text-sm text-muted-foreground">
+          Anyone with it sees the Analytics tab without signing in: the numbers, lists and range picker, never the visits, identified users,
+          event properties or settings.
+        </p>
+      </div>
+      {token && (
+        <div className="space-y-1.5">
+          <CopyField value={`${location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/share/analytics/${token}`} />
+          <p className="text-xs text-muted-foreground">Copy it now: it isn't shown again.</p>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {svc.analyticsSharedAt && !token && (
+          <span className="text-sm text-muted-foreground">Shared since {formatDateTime(svc.analyticsSharedAt)}.</span>
+        )}
+        <Button variant="outline" size="sm" disabled={busy} onClick={() => share.mutate()}>
+          {svc.analyticsSharedAt ? "New link" : "Create link"}
+        </Button>
+        {svc.analyticsSharedAt && (
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => revoke.mutate()}>
+            Revoke
+          </Button>
+        )}
+      </div>
+      {svc.analyticsSharedAt && <p className="text-xs text-muted-foreground">A new link revokes the current one.</p>}
+    </div>
   );
 }

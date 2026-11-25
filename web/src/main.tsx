@@ -19,6 +19,7 @@ import { MapPage } from "./routes/MapPage";
 import { Project } from "./routes/Project";
 import { Projects } from "./routes/Projects";
 import { Service } from "./routes/Service";
+import { SharedAnalytics } from "./routes/SharedAnalytics";
 import { SettingsShell, settingsPages } from "./routes/settings";
 import { ServerPage } from "./routes/settings/Servers";
 
@@ -53,6 +54,8 @@ const deepLink = import.meta.env.MODE === "demo" && new URLSearchParams(location
 if (deepLink && deepLink.startsWith("/demo/")) history.replaceState(null, "", deepLink);
 
 const router = createBrowserRouter([
+  // A shared analytics link, without signing in.
+  { path: "/share/analytics/:token", element: <SharedAnalytics /> },
   {
     path: "/",
     element: <Layout />,

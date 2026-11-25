@@ -288,6 +288,30 @@ func (s *Store) RenameService(ctx context.Context, id, name string) error {
 	return nil
 }
 
+func (s *Store) SetServiceAnalyticsShare(ctx context.Context, id, hash string) error {
+	svc := store.Service{ID: id, AnalyticsShare: hash, UpdatedAt: now()}
+	if hash != "" {
+		svc.AnalyticsSharedAt = now()
+	}
+	res, err := s.db.NewUpdate().Model(&svc).Column("analytics_share", "analytics_shared_at", "updated_at").WherePK().Exec(ctx)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) GetServiceByAnalyticsShare(ctx context.Context, hash string) (store.Service, error) {
+	var svc store.Service
+	if hash == "" {
+		return svc, store.ErrNotFound
+	}
+	err := s.db.NewSelect().Model(&svc).Where("analytics_share = ?", hash).Scan(ctx)
+	return svc, mapErr(err)
+}
+
 func (s *Store) SetServiceTags(ctx context.Context, id string, tags []string) error {
 	if tags == nil {
 		tags = []string{}

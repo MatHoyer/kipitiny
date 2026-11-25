@@ -41,6 +41,11 @@ type Store interface {
 	UpdateService(ctx context.Context, s Service) (Service, error)
 	RenameService(ctx context.Context, id, name string) error
 	SetServiceTags(ctx context.Context, id string, tags []string) error
+	// SetServiceAnalyticsShare sets the hash of the app's analytics link
+	// (now as its creation), or removes it when empty.
+	SetServiceAnalyticsShare(ctx context.Context, id, hash string) error
+	// GetServiceByAnalyticsShare returns ErrNotFound for a hash no app has.
+	GetServiceByAnalyticsShare(ctx context.Context, hash string) (Service, error)
 	SetServiceAnonymize(ctx context.Context, id string, rules anonymize.Rules) error
 	SetCurrentDeployment(ctx context.Context, serviceID, deploymentID string) error
 	// SetDeploymentImage records the image a deployment runs, pinned to the
@@ -531,8 +536,13 @@ type Service struct {
 	// AnalyticsSince is when Domain started being counted for this service:
 	// the hostname's earlier visits were someone else's. Zero for a domain
 	// set before it was recorded.
-	AnalyticsSince time.Time         `bun:"analytics_since,nullzero" json:"-"`
-	Env            map[string]string `bun:"env" json:"env"`
+	AnalyticsSince time.Time `bun:"analytics_since,nullzero" json:"-"`
+	// AnalyticsShare is the SHA-256 (hex) of the token of the app's public
+	// analytics link, empty when not shared; AnalyticsSharedAt when it was
+	// created. Set by SetServiceAnalyticsShare only.
+	AnalyticsShare    string            `bun:"analytics_share" json:"-"`
+	AnalyticsSharedAt time.Time         `bun:"analytics_shared_at,nullzero" json:"analyticsSharedAt,omitzero"`
+	Env               map[string]string `bun:"env" json:"env"`
 	// Secrets names the Env entries that are write-only; the others are
 	// plain variables.
 	Secrets []string `bun:"secrets" json:"secrets"`

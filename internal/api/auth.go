@@ -35,6 +35,8 @@ var publicRoutes = map[string]bool{
 	// An invite link's token is its credential.
 	"POST /api/auth/invite":        true,
 	"POST /api/auth/invite/accept": true,
+	// A shared analytics link's token is its credential, read-only.
+	"GET /api/share/analytics/{token}": true,
 	// Push webhooks authenticate with the project's webhook secret.
 	"POST /api/hooks/projects/{id}": true,
 	// A GitHub App's webhooks, signed with its secret.
