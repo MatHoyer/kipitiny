@@ -110,6 +110,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("GET /api/services/{id}/analytics", a.serviceAnalytics)
 	handle("GET /api/services/{id}/analytics/visits", a.serviceVisits)
 	handle("GET /api/services/{id}/analytics/export", a.exportServiceAnalytics)
+	handle("GET /api/services/{id}/analytics/funnel", a.serviceFunnel)
 	handle("POST /api/services/{id}/analytics/share", a.shareServiceAnalytics)
 	handle("DELETE /api/services/{id}/analytics/share", a.unshareServiceAnalytics)
 	handle("GET /api/share/analytics/{token}", a.sharedAnalytics)

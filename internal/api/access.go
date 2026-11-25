@@ -248,6 +248,7 @@ var routeAccess = map[string]access{
 
 	"GET /api/services/{id}/analytics/visits":         onService(core.PermView),
 	"GET /api/services/{id}/analytics/export":         onService(core.PermView),
+	"GET /api/services/{id}/analytics/funnel":         onService(core.PermView),
 	"POST /api/services/{id}/analytics/share":         onService(core.PermSettings),
 	"DELETE /api/services/{id}/analytics/share":       onService(core.PermSettings),
 	"GET /api/services/{id}/analytics/visits/{visit}": onService(core.PermView),

@@ -135,6 +135,20 @@ or, without code, on what gets clicked:
 Up to 20 properties per event, strings, numbers or booleans. Events and their
 properties have their own lists in the Analytics tab.
 
+### Goals and funnels
+
+**Funnel**, under the lists, follows the range's visits through 2 to 8 steps
+in order: each a **page** (a path, like `/pricing`) or a custom **event**
+(like `signup`, see [Custom events](#custom-events)). A visit reaches a step
+when it has it after the step before, within the same visit (30 minutes of
+inactivity end one); its first step must fall in the range. Each step shows
+its visits, the share of the step before and of the first. A goal is a
+funnel ending on it: `page:/` then `event:signup`.
+
+The steps are kept in your browser, per app. Filters don't narrow the funnel.
+`GET /api/services/{id}/analytics/funnel?step=page:/&step=event:signup&from=…&to=…`
+and the MCP tool `get_funnel` give the same counts.
+
 ### Exporting
 
 **Export CSV**, next to the range, downloads the range shown, its filters

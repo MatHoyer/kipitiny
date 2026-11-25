@@ -102,6 +102,15 @@ func (c *Client) Visit(ctx context.Context, hosts []string, id string) (VisitDet
 	return d, err
 }
 
+// Funnel counts q's visits through steps ("page:<path>", "event:<name>").
+func (c *Client) Funnel(ctx context.Context, q Query, steps []string) ([]FunnelStep, error) {
+	v := q.values()
+	v["step"] = steps
+	var fs []FunnelStep
+	err := c.do(ctx, http.MethodGet, "/api/funnel?"+v.Encode(), nil, &fs)
+	return fs, err
+}
+
 func (c *Client) Trackers(ctx context.Context) ([]Tracker, error) {
 	var ts []Tracker
 	err := c.do(ctx, http.MethodGet, "/api/trackers", nil, &ts)

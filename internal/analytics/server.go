@@ -303,6 +303,20 @@ func Private(st *Store, token string) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(s)
 	})
+	mux.HandleFunc("GET /api/funnel", func(w http.ResponseWriter, r *http.Request) {
+		q, err := parseQuery(r.URL.Query())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		steps, err := ParseSteps(r.URL.Query()["step"])
+		if err != nil {
+			reply(w, nil, fmt.Errorf("%w: %v", ErrInvalid, err))
+			return
+		}
+		fs, err := st.Funnel(r.Context(), q, steps)
+		reply(w, fs, err)
+	})
 	mux.HandleFunc("GET /api/trackers", func(w http.ResponseWriter, r *http.Request) {
 		ts, err := st.Trackers(r.Context())
 		reply(w, ts, err)

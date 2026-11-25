@@ -500,6 +500,25 @@ func (c *Core) ServiceVisits(ctx context.Context, serviceID string, q AnalyticsQ
 	return cl.Visits(ctx, aq, before, limit)
 }
 
+// ServiceFunnel counts the app's visits of q's range through steps, in
+// order ("page:<path>" or "event:<name>", 2 to 8); q's filters aside.
+func (c *Core) ServiceFunnel(ctx context.Context, serviceID string, q AnalyticsQuery, steps []string) ([]analytics.FunnelStep, error) {
+	svc, cl, _, err := c.serviceAnalytics(ctx, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := analytics.ParseSteps(steps); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	q.Interval, q.Filters = 86400, nil // the interval is only checked by the server
+	aq, err := q.since(svc).query(svc.Domain)
+	if err != nil {
+		return nil, err
+	}
+	fs, err := cl.Funnel(ctx, aq, steps)
+	return fs, analyticsErr(err, "funnel")
+}
+
 // ServiceVisit is one of the app's visits, with its journey.
 func (c *Core) ServiceVisit(ctx context.Context, serviceID, visitID string) (analytics.VisitDetail, error) {
 	svc, cl, _, err := c.serviceAnalytics(ctx, serviceID)

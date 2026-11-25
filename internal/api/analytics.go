@@ -98,6 +98,17 @@ func (a *API) exportServiceAnalytics(w http.ResponseWriter, r *http.Request) {
 	w.Write(b.Bytes())
 }
 
+// serviceFunnel takes the range of analyticsQuery and its steps (step,
+// repeated, page:<path> or event:<name>).
+func (a *API) serviceFunnel(w http.ResponseWriter, r *http.Request) {
+	res, err := a.core.ServiceFunnel(r.Context(), r.PathValue("id"), analyticsQuery(r), r.URL.Query()["step"])
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
 func (a *API) shareServiceAnalytics(w http.ResponseWriter, r *http.Request) {
 	token, err := a.core.ShareServiceAnalytics(r.Context(), r.PathValue("id"))
 	if err != nil {
