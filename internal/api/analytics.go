@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -80,6 +82,20 @@ func (a *API) serviceVisits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
+}
+
+// exportServiceAnalytics takes the range and filters of analyticsQuery,
+// and table (summary, series, breakdowns or visits): a CSV download.
+func (a *API) exportServiceAnalytics(w http.ResponseWriter, r *http.Request) {
+	table := r.URL.Query().Get("table")
+	var b bytes.Buffer
+	if err := a.core.ServiceAnalyticsCSV(r.Context(), r.PathValue("id"), analyticsQuery(r), table, &b); err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", "analytics-"+table+".csv"))
+	w.Write(b.Bytes())
 }
 
 func (a *API) serviceVisit(w http.ResponseWriter, r *http.Request) {
