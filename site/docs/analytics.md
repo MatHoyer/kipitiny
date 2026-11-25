@@ -115,6 +115,23 @@ or, without code, on what gets clicked:
 Up to 20 properties per event, strings, numbers or booleans. Events and their
 properties have their own lists in the Analytics tab.
 
+### Exporting
+
+**Export CSV**, next to the range, downloads the range shown, its filters
+applied, as one of four tables:
+
+- **Summary**: visitors, visits, pageviews, bounces and the summed duration
+  (seconds), with the span before.
+- **Traffic over time**: pageviews and visitors per hour or day (UTC times).
+- **Breakdowns**: the top 20 values of every list, as `breakdown,value,visitors,count`.
+- **Visits**: up to 10,000, newest first, with their identity.
+
+Text that starts like a spreadsheet formula (`=`, `+`, `-`, `@`) gets a
+leading `'`. The same tables come from
+`GET /api/services/{id}/analytics/export?table=visits&from=…&to=…` (the
+[API](/docs/api), with the tab's `filter` parameters) and the MCP tool
+`export_analytics`.
+
 ## Pixels and links
 
 For what the script can't see, **Settings › Analytics › Pixels and links**

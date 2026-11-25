@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -40,6 +41,36 @@ func (t *tools) getAnalytics(ctx context.Context, _ *mcp.CallToolRequest, in ana
 	}
 	out, err := t.c.ServiceAnalytics(ctx, svc.ID, q)
 	return nil, out, friendly(err)
+}
+
+type exportAnalyticsIn struct {
+	Service string   `json:"service" jsonschema:"project/service of an app with analytics on"`
+	Table   string   `json:"table" jsonschema:"summary, series, breakdowns or visits"`
+	Days    int      `json:"days,omitempty" jsonschema:"how many days back, default 7, at most 730"`
+	Filters []string `json:"filters,omitempty" jsonschema:"as get_analytics"`
+}
+
+type exportAnalyticsOut struct {
+	CSV string `json:"csv"`
+}
+
+func (t *tools) exportAnalytics(ctx context.Context, _ *mcp.CallToolRequest, in exportAnalyticsIn) (*mcp.CallToolResult, exportAnalyticsOut, error) {
+	if err := core.Authenticated(ctx); err != nil {
+		return nil, exportAnalyticsOut{}, err
+	}
+	svc, err := t.service(ctx, in.Service, core.PermView)
+	if err != nil {
+		return nil, exportAnalyticsOut{}, friendly(err)
+	}
+	days := in.Days
+	if days <= 0 {
+		days = 7
+	}
+	now := time.Now()
+	q := core.AnalyticsQuery{From: now.AddDate(0, 0, -min(days, 730)), To: now, Interval: 86400, Filters: in.Filters}
+	var b strings.Builder
+	err = t.c.ServiceAnalyticsCSV(ctx, svc.ID, q, in.Table, &b)
+	return nil, exportAnalyticsOut{CSV: b.String()}, friendly(err)
 }
 
 type trackersOut struct {

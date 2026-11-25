@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Clock, Eye, LogOut, MousePointerClick, Users, X } from "lucide-react";
+import { Activity, Clock, Download, Eye, LogOut, MousePointerClick, Users, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { CopyField, Empty, ErrorText, Loading, Mono, Section, StatCard } from "@/components/common";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { cn } from "@/lib/utils";
 import { countryLabel, duration, Visits } from "./analytics-visits";
@@ -53,8 +54,39 @@ export function AnalyticsTab({ svc }: { svc: Service }) {
           Visits of <Mono>{svc.domain}</Mono>, counted without cookies.
         </>
       }
+      actions={(q) => <ExportMenu svc={svc} q={q} />}
       below={(span, filters, addFilter, live) => <Visits svc={svc} span={span} filters={filters} onFilter={addFilter} live={live} />}
     />
+  );
+}
+
+const exports = [
+  { table: "summary", label: "Summary" },
+  { table: "series", label: "Traffic over time" },
+  { table: "breakdowns", label: "Breakdowns" },
+  { table: "visits", label: "Visits" },
+] as const;
+
+/** CSV downloads of the range shown, its filters applied. */
+function ExportMenu({ svc, q }: { svc: Service; q: StatsQuery }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Download />
+          Export CSV
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-44">
+        {exports.map((e) => (
+          <DropdownMenuItem key={e.table} asChild>
+            <a href={api.analyticsExportUrl(svc.id, e.table, q)} download>
+              {e.label}
+            </a>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -66,12 +98,15 @@ export function AnalyticsPanel({
   load,
   intro,
   kind,
+  actions,
   below,
 }: {
   queryKey: unknown[];
   load: (q: StatsQuery) => Promise<Omit<AnalyticsStats, "script"> & { script?: string }>;
   intro: ReactNode;
   kind?: TrackerKind;
+  /** Next to the range picker, given the query of the range shown. */
+  actions?: (q: StatsQuery) => ReactNode;
   below?: (span: number, filters: string[], addFilter: (f: string) => void, live: boolean) => ReactNode;
 }) {
   const [range, setRange] = useState<Range>("7d");
@@ -79,12 +114,13 @@ export function AnalyticsPanel({
   const [filters, setFilters] = useState<string[]>([]);
   const r = ranges[range];
   const addFilter = (f: string) => !filters.includes(f) && setFilters([...filters, f]);
+  const query = (): StatsQuery => {
+    const to = Math.ceil(Date.now() / 1000 / 60) * 60;
+    return { from: to - r.span, to, interval: r.interval, offset: -new Date().getTimezoneOffset() * 60, filters };
+  };
   const stats = useQuery({
     queryKey: [...queryKey, range, filters],
-    queryFn: () => {
-      const to = Math.ceil(Date.now() / 1000 / 60) * 60;
-      return load({ from: to - r.span, to, interval: r.interval, offset: -new Date().getTimezoneOffset() * 60, filters });
-    },
+    queryFn: () => load(query()),
     placeholderData: (prev) => prev,
     refetchInterval: range === "live" ? 5_000 : 60_000,
   });
@@ -93,13 +129,16 @@ export function AnalyticsPanel({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">{intro}</p>
-        <Segmented size="sm" value={range} onValueChange={(v) => setRange(v as Range)} aria-label="Range">
-          {Object.entries(ranges).map(([k, v]) => (
-            <SegmentedItem key={k} value={k}>
-              {v.label}
-            </SegmentedItem>
-          ))}
-        </Segmented>
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented size="sm" value={range} onValueChange={(v) => setRange(v as Range)} aria-label="Range">
+            {Object.entries(ranges).map(([k, v]) => (
+              <SegmentedItem key={k} value={k}>
+                {v.label}
+              </SegmentedItem>
+            ))}
+          </Segmented>
+          {actions?.(query())}
+        </div>
       </div>
       {filters.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">

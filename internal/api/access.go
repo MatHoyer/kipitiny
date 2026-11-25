@@ -247,6 +247,7 @@ var routeAccess = map[string]access{
 	"GET /api/audit":                             admin,
 
 	"GET /api/services/{id}/analytics/visits":         onService(core.PermView),
+	"GET /api/services/{id}/analytics/export":         onService(core.PermView),
 	"GET /api/services/{id}/analytics/visits/{visit}": onService(core.PermView),
 	"GET /api/analytics/trackers":                     admin,
 	"POST /api/analytics/trackers":                    admin,

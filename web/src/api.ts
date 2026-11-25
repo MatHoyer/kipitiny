@@ -1793,6 +1793,12 @@ export const api = {
     for (const f of filters) p.append("filter", f);
     return request<AnalyticsVisit[]>(`/services/${id}/analytics/visits?${p}`);
   },
+  /** A CSV of the range: its summary, series, breakdowns or visits. */
+  analyticsExportUrl: (id: string, table: string, { filters = [], ...q }: { from: number; to: number; interval: number; offset: number; filters?: string[] }) => {
+    const p = new URLSearchParams(Object.entries({ ...q, table }).map(([k, v]) => [k, String(v)]));
+    for (const f of filters) p.append("filter", f);
+    return `/api/services/${id}/analytics/export?${p}`;
+  },
   trackers: () => request<Tracker[]>("/analytics/trackers"),
   createTracker: (t: TrackerInput) => request<Tracker>("/analytics/trackers", json("POST", t)),
   updateTracker: (id: string, t: TrackerInput) => request<Tracker>(`/analytics/trackers/${id}`, json("PUT", t)),
