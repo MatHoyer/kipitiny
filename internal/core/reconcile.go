@@ -89,18 +89,26 @@ func (c *Core) syncWatchers(watchers map[string]context.CancelFunc) {
 }
 
 // watchEvents kicks the reconciler when a managed container on a server dies
-// or is removed, reconnecting if the event stream breaks.
+// or is removed, and reports the kernel killing one for memory, reconnecting
+// if the event stream breaks.
 func (c *Core) watchEvents(ctx context.Context, serverID string) {
 	for ctx.Err() == nil {
 		f := make(client.Filters)
 		f.Add("type", string(events.ContainerEventType))
 		f.Add("label", docker.LabelManaged+"=true")
-		f.Add("event", string(events.ActionDie), string(events.ActionDestroy))
+		f.Add("event", string(events.ActionDie), string(events.ActionDestroy), string(events.ActionOOM))
 		res := c.dockerFor(serverID).Events(ctx, client.EventsListOptions{Filters: f})
 	stream:
 		for {
 			select {
-			case <-res.Messages:
+			case m := <-res.Messages:
+				if m.Action == events.ActionOOM {
+					// Docker restarts the replica itself: the reconciler wouldn't see it.
+					if sid := m.Actor.Attributes[docker.LabelService]; sid != "" {
+						c.notifyOOM(ctx, sid, m.Actor.Attributes[docker.LabelReplica])
+					}
+					continue
+				}
 				c.kick()
 			case err := <-res.Err:
 				if err != nil && ctx.Err() == nil {
@@ -285,6 +293,9 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 		case ct.State == container.StateExited && isJob(want):
 			// Ran once (or Docker gave up on-failure): not restarted.
 		case ct.State == container.StateExited || ct.State == container.StateCreated:
+			// Read before the start resets it.
+			in, err := dk.ContainerInspect(ctx, ct.ID, client.ContainerInspectOptions{})
+			oom := err == nil && in.Container.State != nil && in.Container.State.OOMKilled
 			if _, err := dk.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{}); cerrdefs.IsNotFound(err) {
 				// A network it was on was removed outside kipitiny: Docker
 				// can't start it any more, even once the network is back.
@@ -300,6 +311,10 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 				return fmt.Errorf("start %s: %w", ct.Names[0][1:], err)
 			}
 			log.Info("reconcile: started stopped replica", "container", ct.Names[0][1:])
+			if oom {
+				c.notifyOOM(ctx, svc.ID, strconv.Itoa(i))
+				continue
+			}
 			c.notify(notify.Event{
 				Type:    EventServiceRestarted,
 				Level:   notify.Warning,

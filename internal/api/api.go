@@ -259,6 +259,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("PUT /api/notifications/channels/{id}", a.updateChannel)
 	handle("DELETE /api/notifications/channels/{id}", a.deleteChannel)
 	handle("POST /api/notifications/channels/{id}/test", a.testChannel)
+	handle("PUT /api/notifications/thresholds", a.setThresholds)
 	handle("GET /api/tokens", a.listTokens)
 	handle("POST /api/tokens", a.createToken)
 	handle("PUT /api/tokens/{id}", a.updateToken)

@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, ChevronLeft, Mail, Pencil, Plus, Send, Smartphone, Trash2, TriangleAlert } from "lucide-react";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useContext, useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { DiscordIcon } from "@/components/brand-icons";
-import { CheckboxField, ChoiceTile, EmptyState, ErrorText, Tag } from "@/components/common";
+import { CheckboxField, ChoiceTile, EmptyState, ErrorText, Section, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { HowTo, type HowToStep } from "@/components/how-to";
+import { SaveBar } from "@/components/save-bar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -21,8 +22,8 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { useAccess } from "@/lib/access";
 import { cn } from "@/lib/utils";
-import { api, type ChannelInput, type NotificationChannel, type Notifications as NotificationsState } from "@/api";
-import { SettingsPage } from "./page";
+import { api, type ChannelInput, type NotificationChannel, type Notifications as NotificationsState, type ResourceAlerts } from "@/api";
+import { SettingsPage, SettingsReadOnly } from "./page";
 
 /** Brand marks by channel kind; others get a bell. */
 const kindIcons: Record<string, ReactNode> = {
@@ -131,6 +132,7 @@ export function Notifications() {
           ))}
         </div>
       )}
+      {data && <Thresholds saved={data.thresholds} />}
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="sm:max-w-lg">
           {editing && data && editing.step === "pick" && (
@@ -165,6 +167,59 @@ export function Notifications() {
         </DialogContent>
       </Dialog>
     </SettingsPage>
+  );
+}
+
+/** The global thresholds of the resource alerts; channels pick the events. */
+function Thresholds({ saved }: { saved: ResourceAlerts }) {
+  const qc = useQueryClient();
+  const readOnly = useContext(SettingsReadOnly);
+  const [form, setForm] = useState(saved);
+  useEffect(() => setForm(saved), [saved]);
+  const save = useMutation({
+    meta: { error: "Couldn't save the thresholds" },
+    mutationFn: () => api.setThresholds(form),
+    onSuccess: (t) => qc.setQueryData<NotificationsState>(["notifications"], (d) => d && { ...d, thresholds: t }),
+  });
+  const formId = useId();
+  const dirty = JSON.stringify(form) !== JSON.stringify(saved);
+  const field = (key: keyof ResourceAlerts, label: string, min: number, max: number, description?: string) => (
+    <FloatingInput
+      label={label}
+      type="number"
+      min={min}
+      max={max}
+      required
+      disabled={readOnly}
+      value={String(form[key])}
+      onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) || 0 })}
+      description={description}
+    />
+  );
+  return (
+    <form
+      id={formId}
+      onSubmit={(e) => {
+        e.preventDefault();
+        save.mutate();
+      }}
+      className="mt-6"
+    >
+      <Section
+        title="Resource alerts"
+        description="When the memory, CPU and disk events go out, for every service and server. A service without a limit is measured against its server."
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          {field("memoryPercent", "Memory high at (% of limit)", 1, 100)}
+          {field("memoryMinutes", "Memory high for (minutes)", 1, 60)}
+          {field("cpuPercent", "CPU high at (% of limit)", 1, 100)}
+          {field("cpuMinutes", "CPU high for (minutes)", 1, 60)}
+          {field("diskFreePercent", "Disk low under (% free)", 1, 99, "On the filesystem holding Docker's data, on each server.")}
+        </div>
+        <p className="text-xs text-muted-foreground">Recoveries go out after a minute back on the right side of the threshold.</p>
+      </Section>
+      {!readOnly && <SaveBar form={formId} dirty={dirty} saving={save.isPending} onReset={() => setForm(saved)} />}
+    </form>
   );
 }
 

@@ -34,6 +34,13 @@ const (
 	EventJobFailed        = "job.failed"
 	EventJobSucceeded     = "job.succeeded"
 	EventAnonymizeFailed  = "anonymize.failed"
+	EventServiceOOMKilled = "service.oom_killed"
+	EventMemoryHigh       = "service.memory_high"
+	EventMemoryOK         = "service.memory_ok"
+	EventCPUHigh          = "service.cpu_high"
+	EventCPUOK            = "service.cpu_ok"
+	EventDiskLow          = "server.disk_low"
+	EventDiskOK           = "server.disk_ok"
 )
 
 // EventType describes an event a channel can subscribe to.
@@ -52,6 +59,11 @@ var eventTypes = []EventType{
 	{EventServiceRestarted, "Stopped service restarted", true},
 	{EventServiceUnhealthy, "Service unhealthy", true},
 	{EventServiceHealthy, "Service healthy again", true},
+	{EventServiceOOMKilled, "Service ran out of memory", true},
+	{EventMemoryHigh, "Service memory high", true},
+	{EventMemoryOK, "Service memory back to normal", true},
+	{EventCPUHigh, "Service CPU high", true},
+	{EventCPUOK, "Service CPU back to normal", true},
 	{EventUptimeDown, "Uptime check failing", true},
 	{EventUptimeUp, "Uptime check recovered", true},
 	{EventJobFailed, "Scheduled job failed", true},
@@ -67,6 +79,8 @@ var eventTypes = []EventType{
 	{EventUpdateAvailable, "New kipitiny version", true},
 	{EventServerUpdates, "Server has security updates", true},
 	{EventServerReboot, "Server needs a reboot", true},
+	{EventDiskLow, "Server disk almost full", true},
+	{EventDiskOK, "Server disk space recovered", true},
 }
 
 const (
@@ -80,6 +94,8 @@ type NotificationsView struct {
 	Channels []store.NotificationChannel `json:"channels"`
 	Kinds    []notify.Kind               `json:"kinds"`
 	Events   []EventType                 `json:"events"`
+	// Thresholds of the resource alerts.
+	Thresholds ResourceAlerts `json:"thresholds"`
 }
 
 func (c *Core) Notifications(ctx context.Context) (NotificationsView, error) {
@@ -99,7 +115,7 @@ func (c *Core) Notifications(ctx context.Context) (NotificationsView, error) {
 			return NotificationsView{}, err
 		}
 	}
-	return NotificationsView{Channels: chs, Kinds: kinds, Events: eventTypes}, nil
+	return NotificationsView{Channels: chs, Kinds: kinds, Events: eventTypes, Thresholds: c.resourceAlerts(ctx)}, nil
 }
 
 // withEmailProviders offers the email providers in the email kind's

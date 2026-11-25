@@ -334,6 +334,7 @@ Later: optional VictoriaLogs or Loki, opt-in.
 - Every 10 s the manager takes a one-shot `ContainerStats` of each running replica that serves traffic, on every server, and sums them per service: CPU (percent of one core, from the CPU time delta between two samples), memory (without reclaimable page cache, like `docker stats`), network bytes/s.
 - Kept in memory only: the last five minutes per service. Nothing in SQLite, no metrics container.
 - `GET /api/services/{id}/stats` (current + history, for the service page sparklines), `GET /api/stats` (current use of every service, which project and server lists add up).
+- Resource alerts (issue #333, `internal/core/resource_alerts.go`), judged at the end of each sampling round: `service.memory_high` (memory ≥ 90% of the limit, of the host's RAM when unlimited, for 5 min), `service.cpu_high` (≥ 90% of the CPU limit, of the host's cores when unlimited, for 10 min), `server.disk_low` (< 10% free on Docker's filesystem for 1 min), each with an `_ok` once back for 1 min. A round without a reading of it restarts the wait. Global thresholds in the `resource_alerts` setting (*Settings › Notifications*); state in memory. `service.oom_killed` comes from Docker's `oom` container event (the replica is restarted by Docker, not the reconciler), and from `State.OOMKilled` when the reconciler starts an exited replica; keyed, once per cooldown.
 
 ### Uptime checks
 

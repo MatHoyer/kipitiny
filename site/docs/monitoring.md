@@ -19,6 +19,33 @@ when it recovers (`service.healthy`): a restart or a slow start pages no one.
 The [reconciler](/docs/deploys) restarts crashed replicas on its own; each
 restart is an event too (`service.restarted`).
 
+## Resource alerts
+
+kipitiny samples the CPU, memory and network of every running service every
+10 seconds (the charts on its page), and the disk of every server. It sends
+an event when one runs out of room:
+
+- **Out of memory** (`service.oom_killed`): the kernel killed a process of a
+  replica because it went past its memory limit, or the server ran out of
+  memory. Sent at once, then at most once per 15 minutes for the same service.
+- **Memory high** (`service.memory_high`): a service uses **90%** of its
+  memory limit for **5 minutes**. A service without a limit is measured
+  against the server's RAM. `service.memory_ok` follows once it stays below
+  for a minute.
+- **CPU high** (`service.cpu_high`): a service uses **90%** of its CPU limit
+  (the server's cores when it has none) for **10 minutes**, then
+  `service.cpu_ok` after a minute below.
+- **Disk low** (`server.disk_low`): less than **10%** free for a minute on the
+  filesystem holding a server's Docker data (images, containers, volumes),
+  then `server.disk_ok` once there is more again. Clean up in
+  [System › Cleanup](/docs/cleanup) or grow the disk.
+
+The thresholds apply to every service and server; change them in
+*Settings › Notifications › Resource alerts*. Limits are set per service in
+the compose file (`mem_limit`, `cpus`; see [Compose](/docs/compose)). Like
+service health, the alert state is kept in memory: after a manager restart an
+ongoing problem is reported again.
+
 ## Logs
 
 A service's **Logs** tab follows the output of its running replicas, merged in
@@ -114,6 +141,10 @@ service, is sent at most once per 15 minutes.
 | `service.unhealthy`, `service.healthy` | No healthy replica for 2 minutes, then recovered. |
 | `service.restarted` | The reconciler restarted a service's container stopped outside kipitiny. |
 | `uptime.down`, `uptime.up` | An uptime check failed 3 times in a row, then passed twice. |
+| `service.oom_killed` | A replica was killed for using too much memory. |
+| `service.memory_high`, `service.memory_ok` | A service's memory stayed over its [threshold](#resource-alerts), then went back below. |
+| `service.cpu_high`, `service.cpu_ok` | A service's CPU stayed over its threshold, then went back below. |
+| `server.disk_low`, `server.disk_ok` | A server's Docker disk has less free space than its threshold, then more again. |
 | `server.updates_pending`, `server.reboot_required` | A server's [security check](/docs/servers#security-checklist) finds new security updates, or that a reboot is needed. |
 | `job.succeeded`, `job.failed` | A [scheduled job](/docs/jobs) run ends; failed when it exits non-zero or times out. |
 | `backup.succeeded`, `backup.failed` | A backup ends (manual or scheduled). |
