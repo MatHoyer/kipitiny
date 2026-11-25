@@ -45,11 +45,31 @@ stays stopped. Services busy with a deploy, backup or restore are left alone.
 Services run Docker images; kipitiny doesn't build them. Build, test and push
 the image once in CI, then have kipitiny deploy that exact image.
 Create a token restricted to *deploy* on the project (Settings), keep it as a
-CI secret, and end the pipeline with `kipitiny deploy` (in the manager image):
+CI secret, and end the pipeline with `kipitiny deploy`. On GitHub Actions, the
+`deploy` action downloads it (a static binary of about 40 MB instead of the 400 MB image, checksum-verified)
+from the [releases](https://github.com/MatHoyer/kipitiny/releases):
 
 ```yaml
 # .github/workflows/deploy.yml (after docker/build-push-action pushed
 # ghcr.io/org/shop:sha-${{ github.sha }})
+- name: Deploy
+  uses: MatHoyer/kipitiny/deploy@0.46.0
+  with:
+    url: https://kipitiny.example.com
+    token: ${{ secrets.KIPITINY_TOKEN }}
+    service: shop/web
+    tag: sha-${{ github.sha }}
+```
+
+Its inputs are the command's flags: `url`, `token`, `service`, `tag`, `digest`,
+`commit` (default: the workflow's commit), `timeout` and `no-wait`, plus
+`version`, the release to download the binary from (default: the latest). It
+runs on Linux x64 and arm64 runners.
+
+Elsewhere, download `kipitiny-linux-amd64` (or `-arm64`) from a release, or run
+the same command from the manager image:
+
+```yaml
 - name: Deploy
   run: >
     docker run --rm -e KIPITINY_TOKEN=${{ secrets.KIPITINY_TOKEN }}

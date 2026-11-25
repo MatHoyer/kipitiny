@@ -547,7 +547,20 @@ function BackupsCard({
 /** The CI step that deploys the tag it just pushed. */
 function DeployFromCIDialog({ svc }: { svc: ServiceT }) {
   const repo = imageRepo(svc.image);
+  const status = useQuery({ queryKey: ["status"], queryFn: api.status });
+  // The action of this manager's release; a dev build has none, so main.
+  const version = status.data?.version ?? "";
+  const ref = /^\d+\.\d+\.\d+$/.test(version) ? version : "main";
   const step = [
+    "- name: Deploy",
+    `  uses: MatHoyer/kipitiny/deploy@${ref}`,
+    "  with:",
+    `    url: ${window.location.origin}`,
+    "    token: ${{ secrets.KIPITINY_TOKEN }}",
+    `    service: ${svc.id}`,
+    "    tag: sha-${{ github.sha }}",
+  ].join("\n");
+  const dockerStep = [
     "- name: Deploy",
     "  run: >",
     "    docker run --rm -e KIPITINY_TOKEN=${{ secrets.KIPITINY_TOKEN }}",
@@ -571,14 +584,22 @@ function DeployFromCIDialog({ svc }: { svc: ServiceT }) {
             tokens & MCP). The service keeps that tag; the step fails if the deployment does.
           </DialogDescription>
         </DialogHeader>
-        <div className="relative">
-          <pre className={cn(terminal, "pr-10")}>{step}</pre>
-          <div className="absolute top-1.5 right-1.5 text-neutral-200">
-            <CopyButton value={step} label="Copy step" />
-          </div>
-        </div>
+        <CopyBlock value={step} />
+        <p className="text-muted-foreground text-sm">Other CI systems run the same command from the manager image:</p>
+        <CopyBlock value={dockerStep} />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function CopyBlock({ value }: { value: string }) {
+  return (
+    <div className="relative">
+      <pre className={cn(terminal, "pr-10")}>{value}</pre>
+      <div className="absolute top-1.5 right-1.5 text-neutral-200">
+        <CopyButton value={value} label="Copy step" />
+      </div>
+    </div>
   );
 }
 

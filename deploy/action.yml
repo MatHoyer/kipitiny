@@ -1,0 +1,92 @@
+# Deploys a kipitiny service from GitHub Actions with the release binary
+# (about 40 MB) instead of the manager image:
+#
+#   - uses: MatHoyer/kipitiny/deploy@0.46.0
+#     with:
+#       url: https://kipitiny.example.com
+#       token: ${{ secrets.KIPITINY_TOKEN }}
+#       service: shop/web
+#       tag: sha-${{ github.sha }}
+name: kipitiny deploy
+description: Deploy a kipitiny service and wait for the outcome
+branding:
+  icon: upload-cloud
+  color: blue
+inputs:
+  url:
+    description: Manager URL
+    required: true
+  token:
+    description: API token with the deploy permission
+    required: true
+  service:
+    description: Service as project/service, or its ID
+    required: true
+  tag:
+    description: "Image services: deploy this tag of the service's image"
+    required: false
+  digest:
+    description: "Image services: deploy this digest (sha256:...) of the service's image"
+    required: false
+  commit:
+    description: Source commit SHA, recorded on the deployment
+    required: false
+    default: ${{ github.sha }}
+  timeout:
+    description: How long to wait for the outcome (Go duration)
+    required: false
+    default: 20m
+  no-wait:
+    description: Return once the deployment started
+    required: false
+    default: "false"
+  version:
+    description: kipitiny release to download the CLI from, e.g. 0.46.0
+    required: false
+    default: latest
+runs:
+  using: composite
+  steps:
+    - name: Download kipitiny
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        OS: ${{ runner.os }}
+        ARCH: ${{ runner.arch }}
+      run: |
+        set -euo pipefail
+        case "$OS/$ARCH" in
+          Linux/X64) bin=kipitiny-linux-amd64 ;;
+          Linux/ARM64) bin=kipitiny-linux-arm64 ;;
+          *) echo "::error::kipitiny deploy runs on Linux x64 or arm64 runners, not $OS/$ARCH"; exit 1 ;;
+        esac
+        # KIPITINY_RELEASES: a mirror of the GitHub releases page, if any.
+        base=${KIPITINY_RELEASES:-https://github.com/MatHoyer/kipitiny/releases}
+        if [ "$VERSION" = latest ]; then base=$base/latest/download; else base=$base/download/$VERSION; fi
+        dir=$RUNNER_TEMP/kipitiny
+        mkdir -p "$dir"
+        cd "$dir"
+        curl -fsSL --retry 3 -o "$bin" "$base/$bin"
+        curl -fsSL --retry 3 -o SHA256SUMS "$base/SHA256SUMS"
+        grep " $bin\$" SHA256SUMS | sha256sum -c -
+        install -m 755 "$bin" kipitiny
+        echo "$dir" >> "$GITHUB_PATH"
+    - name: Deploy
+      shell: bash
+      env:
+        KIPITINY_URL: ${{ inputs.url }}
+        KIPITINY_TOKEN: ${{ inputs.token }}
+        SERVICE: ${{ inputs.service }}
+        TAG: ${{ inputs.tag }}
+        DIGEST: ${{ inputs.digest }}
+        COMMIT: ${{ inputs.commit }}
+        TIMEOUT: ${{ inputs.timeout }}
+        NO_WAIT: ${{ inputs.no-wait }}
+      run: |
+        set -euo pipefail
+        args=(--service "$SERVICE" --timeout "$TIMEOUT")
+        if [ -n "$TAG" ]; then args+=(--tag "$TAG"); fi
+        if [ -n "$DIGEST" ]; then args+=(--digest "$DIGEST"); fi
+        if [ -n "$COMMIT" ]; then args+=(--commit "$COMMIT"); fi
+        if [ "$NO_WAIT" = true ]; then args+=(--no-wait); fi
+        kipitiny deploy "${args[@]}"

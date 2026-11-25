@@ -51,3 +51,38 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         # The notices come first; the generated notes follow.
         run: gh release create "${{ github.ref_name }}" --generate-notes --notes-file "$RUNNER_TEMP/notices.md" --verify-tag
+
+  # Static binaries for `kipitiny deploy` in CI (deploy/action.yml downloads
+  # them), attached to the release the image job created.
+  binaries:
+    needs: image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      # The same binary as the image's, UI included.
+      - name: UI
+        working-directory: web
+        run: pnpm install --frozen-lockfile && pnpm build
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: |
+          mkdir dist
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
+              -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o dist/kipitiny-linux-$arch ./cmd/kipitiny
+          done
+          cd dist && sha256sum kipitiny-linux-* > SHA256SUMS
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" dist/*
