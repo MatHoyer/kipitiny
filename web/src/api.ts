@@ -131,6 +131,8 @@ export type Service = {
   domain: string;
   /** The analytics server counts the domain's visits (when analytics are on). */
   analytics: boolean;
+  /** When the app's public analytics link was created; absent when not shared. */
+  analyticsSharedAt?: string;
   env: Record<string, string>;
   /** Names of the env entries that are secrets: their values come back masked. */
   secrets: string[];
@@ -895,6 +897,9 @@ export type Tracker = {
 };
 
 export type TrackerInput = { kind: TrackerKind; name: string; slug: string; target?: string };
+
+/** What a shared analytics link shows. */
+export type SharedAnalytics = Omit<AnalyticsStats, "script"> & { domain: string };
 
 export type TrackerStats = Omit<AnalyticsStats, "script"> & { tracker: Tracker };
 
@@ -1798,6 +1803,14 @@ export const api = {
     const p = new URLSearchParams(Object.entries({ ...q, table }).map(([k, v]) => [k, String(v)]));
     for (const f of filters) p.append("filter", f);
     return `/api/services/${id}/analytics/export?${p}`;
+  },
+  /** A new public link to the app's analytics (revoking the one before); the token is only returned now. */
+  shareAnalytics: (id: string) => request<{ token: string }>(`/services/${id}/analytics/share`, { method: "POST" }),
+  unshareAnalytics: (id: string) => request<void>(`/services/${id}/analytics/share`, { method: "DELETE" }),
+  /** A shared link's stats, without a session: no identities, properties or visits. */
+  sharedAnalytics: (token: string, { filters: _, ...q }: { from: number; to: number; interval: number; offset: number; filters?: string[] }) => {
+    const p = new URLSearchParams(Object.entries(q).map(([k, v]) => [k, String(v)]));
+    return request<SharedAnalytics>(`/share/analytics/${encodeURIComponent(token)}?${p}`);
   },
   trackers: () => request<Tracker[]>("/analytics/trackers"),
   createTracker: (t: TrackerInput) => request<Tracker>("/analytics/trackers", json("POST", t)),

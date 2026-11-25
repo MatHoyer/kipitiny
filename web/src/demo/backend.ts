@@ -2181,6 +2181,17 @@ const routes: Route[] = [
   ],
   ["GET", /^\/services\/([^/]+)\/analytics\/visits$/, ({ q }) => (q.get("before") ? [] : demoVisits(Number(q.get("to"))))],
   ["GET", /^\/services\/([^/]+)\/analytics\/visits\/([^/]+)$/, ({ m }) => demoVisit(m[2])],
+  [
+    "POST",
+    /^\/services\/([^/]+)\/analytics\/share$/,
+    ({ m }) => ((serviceOf(m[1]).analyticsSharedAt = new Date().toISOString()), save(), { token: "demo-share-link" }),
+  ],
+  ["DELETE", /^\/services\/([^/]+)\/analytics\/share$/, ({ m }) => void (delete serviceOf(m[1]).analyticsSharedAt, save())],
+  [
+    "GET",
+    /^\/share\/analytics\/([^/]+)$/,
+    ({ q }) => ({ ...demoAnalytics(Number(q.get("from")), Number(q.get("to")), Number(q.get("interval"))), domain: "acme.example", script: undefined }),
+  ],
   ["GET", /^\/services\/([^/]+)\/analytics$/, ({ q }) => demoAnalytics(Number(q.get("from")), Number(q.get("to")), Number(q.get("interval")))],
   ["GET", /^\/cleanup$/, () => cleanupView()],
   [

@@ -98,6 +98,35 @@ func (a *API) exportServiceAnalytics(w http.ResponseWriter, r *http.Request) {
 	w.Write(b.Bytes())
 }
 
+func (a *API) shareServiceAnalytics(w http.ResponseWriter, r *http.Request) {
+	token, err := a.core.ShareServiceAnalytics(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]string{"token": token})
+}
+
+func (a *API) unshareServiceAnalytics(w http.ResponseWriter, r *http.Request) {
+	if err := a.core.UnshareServiceAnalytics(r.Context(), r.PathValue("id")); err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// sharedAnalytics is a shared link's stats, without a session; it takes the
+// range of analyticsQuery, not its filters.
+func (a *API) sharedAnalytics(w http.ResponseWriter, r *http.Request) {
+	res, err := a.core.SharedAnalytics(r.Context(), r.PathValue("token"), analyticsQuery(r))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, res)
+}
+
 func (a *API) serviceVisit(w http.ResponseWriter, r *http.Request) {
 	res, err := a.core.ServiceVisit(r.Context(), r.PathValue("id"), r.PathValue("visit"))
 	if err != nil {

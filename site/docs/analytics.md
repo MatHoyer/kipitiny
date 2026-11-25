@@ -132,6 +132,22 @@ leading `'`. The same tables come from
 [API](/docs/api), with the tab's `filter` parameters) and the MCP tool
 `export_analytics`.
 
+### Sharing
+
+To show an app's numbers to someone without an account (a client, your
+team), its **Settings › Networking › Analytics** has a **Public link**:
+**Create link** gives a URL like
+`https://manager.example.com/share/analytics/<token>`. Anyone with it sees the
+Analytics tab without signing in: the totals, the chart and the lists, over
+any range of the picker. Never the visits and journeys, the identified users,
+the custom events' properties, the script or any setting; filters are off.
+
+The link is shown once, when created (the manager keeps only a hash of its
+token): copy it then. An app has one link at a time: **New link** replaces it,
+and **Revoke** turns it off; the old URL then shows that the link doesn't work
+anymore. While the app's analytics are off, it shows nothing. Creating or revoking a
+link needs the *settings* permission.
+
 ## Pixels and links
 
 For what the script can't see, **Settings › Analytics › Pixels and links**
@@ -175,7 +191,8 @@ addresses are never stored. Visits older than the retention
 
 Anyone who can view a project sees its apps' analytics. Turning an app's
 analytics on or off needs the *settings* permission; the server's settings are
-admin-only. The [MCP](/docs/api) tools `get_analytics`, `list_visits` and
+admin-only. A [public link](#sharing) shows the numbers, without the visits
+or identities, to anyone who has it. The [MCP](/docs/api) tools `get_analytics`, `list_visits` and
 `get_visit` return the same numbers and journeys to agents. Pixels and links
 are admin-only.
 
