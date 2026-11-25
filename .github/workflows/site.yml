@@ -39,5 +39,7 @@ jobs:
       - uses: actions/upload-pages-artifact@v4
         with:
           path: site/build/client
+      # shortcut: the artifact list lags the upload (actions/deploy-pages#451), drop once fixed upstream.
+      - run: sleep 20
       - id: deploy
         uses: actions/deploy-pages@v4
