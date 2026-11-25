@@ -268,7 +268,7 @@ func (c *Core) scratchDump(ctx context.Context, b store.Backup, name string, ste
 	}
 	dk := c.dockerFor(svc.ServerID)
 	step(VerifyImage)
-	if err := dk.EnsureImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image)); err != nil {
+	if err := dk.EnsureImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image), ""); err != nil {
 		return svc, nil, "", fmt.Errorf("pull %s: %w", svc.Image, err)
 	}
 	step(VerifyServer)

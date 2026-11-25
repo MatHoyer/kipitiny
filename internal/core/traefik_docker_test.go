@@ -29,7 +29,7 @@ func TestTraefikImageUpgradeDocker(t *testing.T) {
 	}
 	// An old server: the floating tag still names the release it first pulled.
 	const floating = "kipitiny-test/traefik:v3.7"
-	if err := dk.EnsureImage(ctx, "traefik:v3.7.0", ""); err != nil {
+	if err := dk.EnsureImage(ctx, "traefik:v3.7.0", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := dk.ImageTag(ctx, client.ImageTagOptions{Source: "traefik:v3.7.0", Target: floating}); err != nil {

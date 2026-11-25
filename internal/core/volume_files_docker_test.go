@@ -60,7 +60,7 @@ func filesTestService(t *testing.T, svc store.Service, vol, seed string) (*Core,
 			_ = dk.RemoveVolume(context.Background(), v)
 		}
 	})
-	if err := dk.EnsureImage(ctx, volumeHelperImage, ""); err != nil {
+	if err := dk.EnsureImage(ctx, volumeHelperImage, "", ""); err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer

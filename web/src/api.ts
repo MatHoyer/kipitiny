@@ -344,6 +344,8 @@ export type Runtime = {
   memoryReservationMb?: number;
   /** "no" (a job, run once) or "on-failure[:retries]"; unset keeps it running. */
   restart?: string;
+  /** Image platform pulled and run (linux/arm64); unset is the server's own. */
+  platform?: string;
 };
 
 /** A service started before another: "healthy" waits until it's ready, "completed" until it exits 0. */

@@ -334,7 +334,7 @@ func (c *Core) recreateReplica(ctx context.Context, project store.Project, svc s
 		return err
 	}
 	dk := c.dockerFor(svc.ServerID)
-	if err := dk.EnsureImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image)); err != nil {
+	if err := dk.EnsureImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image), svc.Runtime.Platform); err != nil {
 		return err
 	}
 	probe, err := c.probeFor(ctx, svc)

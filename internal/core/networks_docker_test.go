@@ -38,7 +38,7 @@ func TestNetworksDocker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := dk.EnsureImage(ctx, "busybox", ""); err != nil {
+	if err := dk.EnsureImage(ctx, "busybox", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	// Not kipitiny.managed: a manager running on this daemon would remove

@@ -203,7 +203,7 @@ const ExtKey = "x-kipitiny"
 // supportedServiceKeys are the compose service keys Parse reads.
 var supportedServiceKeys = []string{"image", "build", "environment", "ports", "expose", "volumes", "deploy", "mem_limit", "cpus", "stop_grace_period", "network_mode", "healthcheck",
 	"command", "entrypoint", "user", "working_dir", "labels", "tmpfs", "shm_size", "ulimits", "sysctls", "read_only", "init", "stop_signal",
-	"tty", "stdin_open", "extra_hosts", "cap_add", "cap_drop", "devices", "privileged", "security_opt", "configs", "secrets", "env_file", "extends", "depends_on", "restart", "networks", "profiles", ExtKey}
+	"tty", "stdin_open", "extra_hosts", "cap_add", "cap_drop", "devices", "privileged", "security_opt", "configs", "secrets", "env_file", "extends", "depends_on", "restart", "networks", "profiles", "platform", ExtKey}
 
 // Keys that change nothing kipitiny can't do itself (it orders, networks
 // and restarts services on its own): dropped with a warning. Any other
@@ -394,12 +394,13 @@ type outRuntime struct {
 	Privileged bool              `yaml:"privileged,omitempty"`
 	SecOpt     []string          `yaml:"security_opt,omitempty"`
 	Restart    string            `yaml:"restart,omitempty"`
+	Platform   string            `yaml:"platform,omitempty"`
 }
 
 func outRuntimeOf(r store.Runtime) outRuntime {
 	o := outRuntime{Command: r.Command, Entrypoint: r.Entrypoint, User: r.User, WorkingDir: r.WorkingDir, Labels: r.Labels, Restart: r.Restart,
 		Sysctls: r.Sysctls, ReadOnly: r.ReadOnly, Init: r.Init, StopSignal: r.StopSignal, TTY: r.TTY, StdinOpen: r.StdinOpen,
-		ExtraHosts: r.ExtraHosts, CapAdd: r.CapAdd, CapDrop: r.CapDrop, Devices: r.Devices, Privileged: r.Privileged, SecOpt: r.SecurityOpt}
+		ExtraHosts: r.ExtraHosts, CapAdd: r.CapAdd, CapDrop: r.CapDrop, Devices: r.Devices, Privileged: r.Privileged, SecOpt: r.SecurityOpt, Platform: r.Platform}
 	for _, path := range slices.Sorted(maps.Keys(r.Tmpfs)) {
 		v := path
 		if opts := r.Tmpfs[path]; opts != "" {
@@ -447,7 +448,7 @@ func EscapeRuntime(r store.Runtime) store.Runtime {
 	}
 	r.Command, r.Entrypoint, r.ExtraHosts = list(r.Command), list(r.Entrypoint), list(r.ExtraHosts)
 	r.Devices, r.SecurityOpt, r.Binds = list(r.Devices), list(r.SecurityOpt), list(r.Binds)
-	r.User, r.WorkingDir, r.StopSignal = Escape(r.User), Escape(r.WorkingDir), Escape(r.StopSignal)
+	r.User, r.WorkingDir, r.StopSignal, r.Platform = Escape(r.User), Escape(r.WorkingDir), Escape(r.StopSignal), Escape(r.Platform)
 	r.Labels, r.Tmpfs, r.Sysctls = values(r.Labels), values(r.Tmpfs), values(r.Sysctls)
 	return r
 }
@@ -713,9 +714,13 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 		case k == "env_file":
 			envFile = p.envFiles(v)
 		case k == "network_mode":
-			if mode := p.str(v); mode == "host" {
+			switch mode := p.str(v); {
+			case mode == "host":
 				s.HostNetwork = true
-			} else {
+			case strings.HasPrefix(mode, "service:") || strings.HasPrefix(mode, "container:"):
+				p.fail("network_mode %s is not supported: kipitiny networks each service on its own (project networks, routing, aliases), "+
+					"so a service can't share another's network; run both in one image, or use the other service as a proxy (a VPN container's HTTP or SOCKS port)", mode)
+			default:
 				p.fail("network_mode %s is not supported (only host)", mode)
 			}
 		case k == "deploy":

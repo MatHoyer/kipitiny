@@ -58,7 +58,7 @@ func startTestDB(t *testing.T, c *Core, ctx context.Context, projectID string, i
 	if err := c.store.SetCurrentDeployment(ctx, svc.ID, "D1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := dk.EnsureImage(ctx, svc.Image, ""); err != nil {
+	if err := dk.EnsureImage(ctx, svc.Image, "", ""); err != nil {
 		t.Fatal(err)
 	}
 	cfg := &container.Config{Image: svc.Image, Labels: map[string]string{}}

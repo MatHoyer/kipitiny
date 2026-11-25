@@ -6,6 +6,8 @@ import (
 	"slices"
 	"testing"
 
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
 	"github.com/MatHoyer/kipitiny/internal/config"
 	"github.com/MatHoyer/kipitiny/internal/docker"
 	"github.com/MatHoyer/kipitiny/internal/store"
@@ -35,6 +37,7 @@ services:
     init: true
     stop_signal: SIGINT
     extra_hosts: ["host.docker.internal:host-gateway"]
+    platform: Linux/x86_64
 `
 	if _, err := c.ApplyCompose(ctx, p.ID, []byte(src), ApplyOptions{}); err != nil {
 		t.Fatal(err)
@@ -46,6 +49,9 @@ services:
 	}
 
 	spec := containerSpec(p, w, envSources{}, "D1", 1, route{})
+	if w.Runtime.Platform != "linux/amd64" || spec.Platform == nil || spec.Platform.Architecture != "amd64" {
+		t.Errorf("platform = %q, spec %+v", w.Runtime.Platform, spec.Platform)
+	}
 	cfg, host := spec.Config, spec.HostConfig
 	if !slices.Equal(cfg.Entrypoint, []string{""}) || cfg.User != "1000" || cfg.WorkingDir != "/app" || cfg.StopSignal != "SIGINT" {
 		t.Errorf("config = %+v", cfg)
@@ -85,6 +91,8 @@ func TestValidateRuntime(t *testing.T) {
 		"bad signal":        {StopSignal: "sigint now"},
 		"bad extra host":    {ExtraHosts: []string{"db:not-an-ip"}},
 		"negative shm size": {ShmSizeMB: -1},
+		"windows platform":  {Platform: "windows/amd64"},
+		"bare arch":         {Platform: "arm64"},
 	} {
 		s := app
 		s.Runtime = r
@@ -94,7 +102,7 @@ func TestValidateRuntime(t *testing.T) {
 	}
 	s := app
 	s.Runtime = store.Runtime{Command: []string{"run"}, ExtraHosts: []string{"db:10.0.0.2", "v6:::1"}, StopSignal: "SIGTERM",
-		Ulimits: map[string]store.Ulimit{"nofile": {Soft: -1, Hard: -1}}}
+		Ulimits: map[string]store.Ulimit{"nofile": {Soft: -1, Hard: -1}}, Platform: "linux/arm/v7"}
 	if err := validateService(s); err != nil {
 		t.Errorf("valid: %v", err)
 	}
@@ -218,5 +226,17 @@ func TestPortsAndVolumesHostAccess(t *testing.T) {
 	conf.Volumes[0].ReadOnly = false
 	if err := checkServiceChange(member, app, conf); err != nil {
 		t.Errorf("member making their own volume writable: %v", err)
+	}
+}
+
+func TestOtherPlatforms(t *testing.T) {
+	have := []ocispec.Platform{{OS: "linux", Architecture: "amd64"}, {OS: "linux", Architecture: "arm64", Variant: "v8"}, {OS: "unknown", Architecture: "unknown"}}
+	for want, found := range map[string]bool{"linux/amd64": true, "linux/arm64": true, "linux/arm64/v8": true, "linux/arm/v7": false, "linux/riscv64": false} {
+		if got := otherPlatforms(have, *docker.Platform(want)); (got == nil) != found {
+			t.Errorf("%s: %v", want, got)
+		}
+	}
+	if got := otherPlatforms(have, *docker.Platform("linux/s390x")); !slices.Equal(got, []string{"linux/amd64", "linux/arm64/v8"}) {
+		t.Errorf("others = %v", got)
 	}
 }

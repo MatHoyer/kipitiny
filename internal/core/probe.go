@@ -104,7 +104,7 @@ func installProbe(ctx context.Context, dk *docker.Client, volume, bin string) er
 		return err
 	}
 	// A fixed public image: no registry credential.
-	if err := dk.EnsureImage(ctx, probeHelperImage, ""); err != nil {
+	if err := dk.EnsureImage(ctx, probeHelperImage, "", ""); err != nil {
 		return err
 	}
 	helper, err := dk.ContainerCreate(ctx, client.ContainerCreateOptions{
@@ -145,8 +145,8 @@ func installProbe(ctx context.Context, dk *docker.Client, volume, bin string) er
 }
 
 // imageHealthcheck reports whether an image defines its own HEALTHCHECK.
-func imageHealthcheck(ctx context.Context, dk *docker.Client, image string) (bool, error) {
-	res, err := dk.ImageInspect(ctx, image)
+func imageHealthcheck(ctx context.Context, dk *docker.Client, image, platform string) (bool, error) {
+	res, err := dk.InspectImage(ctx, image, platform)
 	if err != nil {
 		return false, err
 	}
@@ -205,7 +205,7 @@ func (c *Core) probeFor(ctx context.Context, svc store.Service) (*mount.Mount, e
 	if svc.Kind != store.ServiceKindApp || probePort(svc) == 0 || svc.Healthcheck.Set() {
 		return nil, nil
 	}
-	has, err := imageHealthcheck(ctx, c.dockerFor(svc.ServerID), svc.Image)
+	has, err := imageHealthcheck(ctx, c.dockerFor(svc.ServerID), svc.Image, svc.Runtime.Platform)
 	if err != nil || has {
 		return nil, err
 	}

@@ -84,7 +84,7 @@ func helperMounts(svc store.Service, names []string, root string, readOnly bool)
 // over exec. The caller removes it.
 func startVolumeHelper(ctx context.Context, dk *docker.Client, name string, mounts []mount.Mount) (string, error) {
 	// A fixed public image: no registry credential.
-	if err := dk.EnsureImage(ctx, volumeHelperImage, ""); err != nil {
+	if err := dk.EnsureImage(ctx, volumeHelperImage, "", ""); err != nil {
 		return "", fmt.Errorf("pull %s: %w", volumeHelperImage, err)
 	}
 	return dk.Run(ctx, client.ContainerCreateOptions{

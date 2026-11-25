@@ -311,10 +311,10 @@ func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Serv
 		return err
 	}
 	logf("Pulling %s", svc.Image)
-	if err := dk.PullImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image), out); err != nil {
+	if err := dk.PullImage(ctx, svc.Image, c.registryAuth(ctx, svc.Image), svc.Runtime.Platform, out); err != nil {
 		return fmt.Errorf("pull %s: %w%s", svc.Image, err, pullHint(err))
 	}
-	if res, err := dk.ImageInspect(ctx, svc.Image); err != nil {
+	if res, err := dk.InspectImage(ctx, svc.Image, svc.Runtime.Platform); err != nil {
 		return err
 	} else if err := checkImageLabels(res.Config); err != nil {
 		return err
@@ -696,6 +696,7 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 		Config:           cfg,
 		HostConfig:       host,
 		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: endpoints},
+		Platform:         docker.Platform(svc.Runtime.Platform),
 	}
 }
 

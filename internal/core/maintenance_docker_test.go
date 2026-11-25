@@ -48,7 +48,7 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, img := range []string{"busybox", cfg.Traefik.Image} {
-		if err := dk.EnsureImage(ctx, img, ""); err != nil {
+		if err := dk.EnsureImage(ctx, img, "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
