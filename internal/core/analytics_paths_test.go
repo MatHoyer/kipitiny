@@ -1,0 +1,47 @@
+package core
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/MatHoyer/kipitiny/internal/config"
+	"github.com/MatHoyer/kipitiny/internal/store"
+)
+
+func TestAnalyticsPaths(t *testing.T) {
+	for _, c := range []struct {
+		script, hit string
+		ok          bool
+	}{
+		{"", "", true},
+		{"/js/app.js", "/api/collect", true},
+		{"/js/app.js", "", false},
+		{"/same", "/same", false},
+		{"/", "/x", false},
+		{"/x`) || Host(`evil", "/y", false},
+		{"js/app.js", "/y", false},
+	} {
+		if err := validateAnalyticsPaths(c.script, c.hit); (err == nil) != c.ok {
+			t.Errorf("%q %q: %v", c.script, c.hit, err)
+		}
+	}
+
+	ctx := context.Background()
+	co := newTestCore(t, config.Config{})
+	own := store.Service{ID: "01OWN", Domain: "shop.example.com", ServerID: store.LocalServerID, AnalyticsScript: "/js/k.js", AnalyticsHit: "/k"}
+	plain := store.Service{ID: "01PLAIN", Domain: "blog.example.com", ServerID: store.LocalServerID}
+	labels := co.analyticsSpec(ctx, analyticsState{AnalyticsSettings: AnalyticsSettings{Domain: "stats.example.com"}}, []store.Service{own, plain}).Config.Labels
+	if r := labels["traefik.http.routers.kipitiny-analytics-01own.rule"]; r != "Host(`shop.example.com`) && (Path(`/js/k.js`) || Path(`/k`))" {
+		t.Errorf("own paths' router: %q", r)
+	}
+	if labels["traefik.http.routers.kipitiny-analytics-01own.service"] != analyticsRouter || labels["traefik.http.routers.kipitiny-analytics-01plain.rule"] != "" {
+		t.Errorf("labels: %v", labels)
+	}
+	if s := serviceScript(own, "stats.example.com"); s != `<script defer src="https://shop.example.com/js/k.js"></script>` {
+		t.Errorf("own script tag: %s", s)
+	}
+	if s := serviceScript(plain, "stats.example.com"); !strings.Contains(s, "https://stats.example.com/a.js") {
+		t.Errorf("default script tag: %s", s)
+	}
+}

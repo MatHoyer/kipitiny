@@ -28,6 +28,26 @@ stores none of it.
 
 The app's **Analytics** tab shows the numbers, and the exact tag to copy.
 
+### Ad blockers
+
+Some ad blockers drop scripts and requests to known analytics paths. In the
+app's **Settings › Networking › Analytics**, **Tracker paths** gives the app
+two paths of its own domain instead, e.g. `/js/app.js` for the script and
+`/api/collect` for the visits. Traefik then sends those two paths of the
+app's domain to the analytics server (above the app's own routes, so pick
+paths the app doesn't use), and the tag becomes:
+
+```html
+<script defer src="https://shop.example.com/js/app.js"></script>
+```
+
+It applies right away, without a deploy; the analytics server restarts in a
+second to take the new routes. The analytics domain's `/a.js` and `/e` keep
+working, so pages still on the old tag count until you change it. **Use the
+defaults** removes the paths. Paths are letters, digits and `. _ ~ - /`, up to
+100 characters, and differ from each other. Not settable from a compose file
+for now, so not for apps of a git-linked project.
+
 The server runs from the manager's own image, so there's nothing to pull: a
 container of a few MB of memory, and none while analytics are off.
 

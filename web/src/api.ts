@@ -131,6 +131,9 @@ export type Service = {
   domain: string;
   /** The analytics server counts the domain's visits (when analytics are on). */
   analytics: boolean;
+  /** The app's own tracker script and hit paths on its domain (both or neither); empty: the analytics domain's /a.js and /e. */
+  analyticsScript?: string;
+  analyticsHit?: string;
   /** When the app's public analytics link was created; absent when not shared. */
   analyticsSharedAt?: string;
   env: Record<string, string>;
@@ -375,6 +378,8 @@ export type ServiceInput = {
   port?: number;
   domain?: string;
   analytics?: boolean;
+  analyticsScript?: string;
+  analyticsHit?: string;
   env?: Record<string, string>;
   secrets?: string[];
   memoryMb?: number;

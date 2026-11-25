@@ -107,16 +107,20 @@ type ServicePatch struct {
 	Image *string `json:"image"`
 	Icon  *string `json:"icon"`
 	// Tags replaces the service's tags; nil keeps them.
-	Tags       []string          `json:"tags"`
-	Replicas   *int              `json:"replicas"`
-	Port       *int              `json:"port"`
-	Domain     *string           `json:"domain"`
-	Analytics  *bool             `json:"analytics"`
-	Env        map[string]string `json:"env"`
-	Secrets    []string          `json:"secrets"`
-	MemoryMB   *int              `json:"memoryMb"`
-	CPUs       *float64          `json:"cpus"`
-	HealthPath *string           `json:"healthPath"`
+	Tags      []string `json:"tags"`
+	Replicas  *int     `json:"replicas"`
+	Port      *int     `json:"port"`
+	Domain    *string  `json:"domain"`
+	Analytics *bool    `json:"analytics"`
+	// AnalyticsScript and AnalyticsHit set the app's own tracker paths,
+	// both or neither (empty: the analytics domain's).
+	AnalyticsScript *string           `json:"analyticsScript"`
+	AnalyticsHit    *string           `json:"analyticsHit"`
+	Env             map[string]string `json:"env"`
+	Secrets         []string          `json:"secrets"`
+	MemoryMB        *int              `json:"memoryMb"`
+	CPUs            *float64          `json:"cpus"`
+	HealthPath      *string           `json:"healthPath"`
 	// Healthcheck replaces the app's healthcheck; nil keeps it.
 	Healthcheck *store.Healthcheck `json:"healthcheck"`
 	PreDeploy   *string            `json:"preDeploy"`
@@ -381,8 +385,9 @@ func (c *Core) updateService(ctx context.Context, id string, p ServicePatch) (st
 	if svc.Domain != old.Domain {
 		c.kickDNS()
 	}
-	if svc.Analytics != old.Analytics || svc.Analytics && svc.Domain != old.Domain {
-		c.kick() // the reconciler sends the analytics server its hostnames
+	if svc.Analytics != old.Analytics || svc.Analytics && (svc.Domain != old.Domain ||
+		svc.AnalyticsScript != old.AnalyticsScript || svc.AnalyticsHit != old.AnalyticsHit) {
+		c.kick() // the reconciler sends the analytics server its hostnames and paths
 	}
 	return svc, nil
 }
@@ -411,6 +416,12 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 	}
 	if p.Analytics != nil {
 		svc.Analytics = *p.Analytics
+	}
+	if p.AnalyticsScript != nil {
+		svc.AnalyticsScript = strings.TrimSpace(*p.AnalyticsScript)
+	}
+	if p.AnalyticsHit != nil {
+		svc.AnalyticsHit = strings.TrimSpace(*p.AnalyticsHit)
 	}
 	if p.Port != nil {
 		svc.Port = *p.Port
@@ -585,6 +596,9 @@ func validateService(s store.Service) error {
 	}
 	if s.Analytics && (s.Kind.IsDatabase() || !httpRouted(s)) {
 		return fmt.Errorf("%w: analytics count the visits of an app's domain: set a domain and a container port", ErrInvalid)
+	}
+	if err := validateAnalyticsPaths(s.AnalyticsScript, s.AnalyticsHit); err != nil {
+		return err
 	}
 	for k := range s.Env {
 		if !envKeyRe.MatchString(k) {

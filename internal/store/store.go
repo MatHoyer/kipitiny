@@ -540,7 +540,12 @@ type Service struct {
 	// AnalyticsShare is the SHA-256 (hex) of the token of the app's public
 	// analytics link, empty when not shared; AnalyticsSharedAt when it was
 	// created. Set by SetServiceAnalyticsShare only.
-	AnalyticsShare    string            `bun:"analytics_share" json:"-"`
+	AnalyticsShare string `bun:"analytics_share" json:"-"`
+	// AnalyticsScript and AnalyticsHit are the paths of Domain serving the
+	// tracker script and taking hits (both or neither), so ad blockers
+	// don't recognize them; empty uses /a.js and /e of the analytics domain.
+	AnalyticsScript   string            `bun:"analytics_script" json:"analyticsScript"`
+	AnalyticsHit      string            `bun:"analytics_hit" json:"analyticsHit"`
 	AnalyticsSharedAt time.Time         `bun:"analytics_shared_at,nullzero" json:"analyticsSharedAt,omitzero"`
 	Env               map[string]string `bun:"env" json:"env"`
 	// Secrets names the Env entries that are write-only; the others are
