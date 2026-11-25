@@ -162,6 +162,50 @@ func TestTools(t *testing.T) {
 	}
 }
 
+// A tag-only deploy_image with the settings permission keeps the app's domain and port.
+func TestDeployImageKeepsSettings(t *testing.T) {
+	ctx := context.Background()
+	st, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	t.Setenv("DOCKER_HOST", "unix://"+filepath.Join(t.TempDir(), "none.sock")) // the deploy must never reach the host's Docker
+	dc, _ := docker.New()
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	c := core.New(config.Config{DataDir: t.TempDir()}, st, dc, log)
+	srv := httptest.NewServer(api.New(c, log).Authenticated(Handler(c, "test")))
+	defer srv.Close()
+
+	p, _ := st.CreateProject(ctx, store.Project{Name: "shop"})
+	svc, err := st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp,
+		Image: "ghcr.io/org/web:v1", Replicas: 1, Domain: "web.example.com", Port: 8080})
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin, _ := asUser(t, c, st, "admin", store.RoleAdmin)
+	tok, _ := c.CreateAPIToken(admin, core.TokenInput{Name: "agent"})
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(ctx, &mcp.StreamableClientTransport{
+		Endpoint: srv.URL, HTTPClient: &http.Client{Transport: bearer{tok.Token}},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+
+	if _, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "deploy_image",
+		Arguments: map[string]any{"project": "shop", "name": "web", "image": "ghcr.io/org/web:v2"}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.GetService(ctx, svc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Image != "ghcr.io/org/web:v2" || got.Domain != "web.example.com" || got.Port != 8080 {
+		t.Fatalf("tag bump changed settings: image %q domain %q port %d", got.Image, got.Domain, got.Port)
+	}
+}
+
 func TestDocs(t *testing.T) {
 	for _, tc := range []struct{ version, index, base, sources string }{
 		{"0.10.2", "https://kipitiny.mathieuhoyer.fr/docs/0.10/llms.txt", "https://kipitiny.mathieuhoyer.fr/docs/0.10", "https://github.com/MatHoyer/kipitiny/tree/0.10.2/site/docs"},

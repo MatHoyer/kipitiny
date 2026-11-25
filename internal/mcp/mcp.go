@@ -469,8 +469,8 @@ type deployImageIn struct {
 	Project string            `json:"project" jsonschema:"project name (created if missing)"`
 	Name    string            `json:"name" jsonschema:"service name (lowercase, digits, dashes)"`
 	Image   string            `json:"image" jsonschema:"Docker image, e.g. ghcr.io/org/app:v1"`
-	Domain  string            `json:"domain,omitempty" jsonschema:"public hostname; omit for a private service"`
-	Port    int               `json:"port,omitempty" jsonschema:"container port Traefik routes HTTPS to (required with a domain, unless the app publishes ports)"`
+	Domain  string            `json:"domain,omitempty" jsonschema:"public hostname; omit for a private service (an existing app keeps its domain)"`
+	Port    int               `json:"port,omitempty" jsonschema:"container port Traefik routes HTTPS to (required with a domain, unless the app publishes ports; an existing app keeps its port)"`
 	Env     map[string]string `json:"env,omitempty" jsonschema:"environment variables to set; a value may reference a project variable as {{ project.NAME }}"`
 	// Pointers: omitted keeps an existing service's value.
 	PublishedPorts   *[]publishedPortIn `json:"publishedPorts,omitempty" jsonschema:"host ports bound straight to the container, for non-HTTP traffic (e.g. a game server); the app then runs one replica and deploys stop-then-start"`
@@ -550,8 +550,14 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 			if svc.Kind != store.ServiceKindApp {
 				return store.Deployment{}, fmt.Errorf("%s/%s exists and is not an app", project.Name, in.Name)
 			}
-			patch := core.ServicePatch{Image: &in.Image, Domain: &in.Domain, Port: &in.Port,
-				PublishedPorts: in.ports(), StopGraceSeconds: in.StopGraceSeconds, Routes: in.routes()}
+			patch := core.ServicePatch{Image: &in.Image, PublishedPorts: in.ports(), StopGraceSeconds: in.StopGraceSeconds, Routes: in.routes()}
+			// Omitted keeps the app's domain and port, as in retag.
+			if in.Domain != "" {
+				patch.Domain = &in.Domain
+			}
+			if in.Port != 0 {
+				patch.Port = &in.Port
+			}
 			if in.Env != nil {
 				// Keep existing entries; new ones become secrets.
 				env := maps.Clone(svc.Env)
