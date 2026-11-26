@@ -41,6 +41,9 @@ const (
 	EventCPUOK            = "service.cpu_ok"
 	EventDiskLow          = "server.disk_low"
 	EventDiskOK           = "server.disk_ok"
+	EventErrorNew         = "error.new"
+	EventErrorRegression  = "error.regression"
+	EventErrorSpike       = "error.spike"
 )
 
 // EventType describes an event a channel can subscribe to.
@@ -64,6 +67,9 @@ var eventTypes = []EventType{
 	{EventMemoryOK, "Service memory back to normal", true},
 	{EventCPUHigh, "Service CPU high", true},
 	{EventCPUOK, "Service CPU back to normal", true},
+	{EventErrorNew, "New error in an app", true},
+	{EventErrorRegression, "Resolved error back", true},
+	{EventErrorSpike, "Errors up after a deploy", true},
 	{EventUptimeDown, "Uptime check failing", true},
 	{EventUptimeUp, "Uptime check recovered", true},
 	{EventJobFailed, "Scheduled job failed", true},

@@ -981,6 +981,20 @@ export type ErrorEvent = {
   sdk?: string;
 };
 
+/** The current deployment's errors over its first hour, against the release before over the day before; rates per minute. */
+export type DeployErrors = {
+  deploymentId: string;
+  release: string;
+  minutes: number;
+  events: number;
+  newIssues: number;
+  previous?: string;
+  previousRelease?: string;
+  rate: number;
+  previousRate: number;
+  spike: boolean;
+};
+
 /** One kept event of an issue; older and newer are its neighbours' ids. */
 export type IssueEvent = { event: ErrorEvent; older?: string; newer?: string; index: number; kept: number };
 
@@ -1905,6 +1919,7 @@ export const api = {
   },
   serviceErrorSeries: (id: string, q: { from: number; to: number; interval: number }) =>
     request<{ t: number; n: number }[]>(`/services/${id}/errors/series?${new URLSearchParams(Object.entries(q).map(([k, v]) => [k, String(v)]))}`),
+  serviceDeployErrors: (id: string) => request<DeployErrors>(`/services/${id}/errors/deploy`),
   serviceIssue: (id: string, issue: number) => request<Issue>(`/services/${id}/errors/${issue}`),
   serviceIssueEvent: (id: string, issue: number, event = "") =>
     request<IssueEvent>(`/services/${id}/errors/${issue}/event?event=${encodeURIComponent(event)}`),

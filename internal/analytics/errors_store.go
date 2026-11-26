@@ -144,6 +144,19 @@ func (s *Store) RecordError(ctx context.Context, project int64, p parsedEvent) (
 		if err != nil {
 			return err
 		}
+		kind := ""
+		switch {
+		case rec.New:
+			kind = "new"
+		case rec.Regressed:
+			kind = "regression"
+		}
+		if kind != "" {
+			if _, err := tx.NewRaw("INSERT INTO error_changes (project, issue, kind, at) VALUES (?, ?, ?, ?)",
+				project, rec.Issue, kind, now).Exec(ctx); err != nil {
+				return err
+			}
+		}
 		if p.User != "" {
 			res, err := tx.NewRaw("INSERT INTO error_users (issue, user) VALUES (?, ?) ON CONFLICT DO NOTHING", rec.Issue, p.User).Exec(ctx)
 			if err != nil {
@@ -392,6 +405,7 @@ func (s *Store) pruneErrors(ctx context.Context, keep time.Duration) error {
 		arg int64
 	}{
 		{"DELETE FROM error_events WHERE created_at < ?", recent},
+		{"DELETE FROM error_changes WHERE at < ?", now.Add(-7 * 24 * time.Hour).Unix()},
 		{"DELETE FROM error_counts WHERE minute < ?", recent},
 		{"DELETE FROM error_users WHERE issue IN (SELECT id FROM error_issues WHERE last_seen < ?)", stale},
 		{"DELETE FROM error_events WHERE issue IN (SELECT id FROM error_issues WHERE last_seen < ?)", stale},
@@ -403,4 +417,48 @@ func (s *Store) pruneErrors(ctx context.Context, keep time.Duration) error {
 		}
 	}
 	return nil
+}
+
+// ErrorChange is an issue that opened (Kind new) or reopened (regression).
+type ErrorChange struct {
+	Seq     int64  `json:"seq"`
+	Project int64  `json:"project"`
+	Issue   int64  `json:"issue"`
+	Kind    string `json:"kind"`
+	At      int64  `json:"at"`
+	Title   string `json:"title"`
+	Culprit string `json:"culprit"`
+	Release string `json:"release"`
+}
+
+// ErrorChanges are the changes after seq (at most 100, oldest first), and
+// the last seq there is.
+func (s *Store) ErrorChanges(ctx context.Context, after int64) ([]ErrorChange, int64, error) {
+	cs := []ErrorChange{}
+	if err := s.db.NewRaw(`SELECT c.seq, c.project, c.issue, c.kind, c.at, i.title, i.culprit, i.last_release AS release
+		FROM error_changes c JOIN error_issues i ON i.id = c.issue WHERE c.seq > ? ORDER BY c.seq LIMIT 100`, after).Scan(ctx, &cs); err != nil {
+		return nil, 0, err
+	}
+	var last int64
+	err := s.db.NewRaw("SELECT coalesce(max(seq), 0) FROM error_changes").Scan(ctx, &last)
+	return cs, last, err
+}
+
+// ReleaseErrors is what a release of a project did in a span.
+type ReleaseErrors struct {
+	Events int `json:"events"`
+	// NewIssues first seen in it, in the span.
+	NewIssues int `json:"newIssues"`
+}
+
+// ReleaseErrors counts project's events of release in [from, to).
+func (s *Store) ReleaseErrors(ctx context.Context, project int64, release string, from, to time.Time) (ReleaseErrors, error) {
+	var r ReleaseErrors
+	if err := s.db.NewRaw(`SELECT coalesce(sum(c.n), 0) FROM error_counts c JOIN error_issues i ON i.id = c.issue
+		WHERE i.project = ? AND c.release = ? AND c.minute >= ? AND c.minute < ?`, project, release, from.Unix(), to.Unix()).Scan(ctx, &r.Events); err != nil {
+		return r, err
+	}
+	err := s.db.NewRaw("SELECT count(*) FROM error_issues WHERE project = ? AND first_release = ? AND first_seen >= ? AND first_seen < ?",
+		project, release, from.Unix(), to.Unix()).Scan(ctx, &r.NewIssues)
+	return r, err
 }

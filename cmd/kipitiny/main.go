@@ -137,6 +137,9 @@ func serve() error {
 	if err := c.StartUptime(); err != nil {
 		return err
 	}
+	if err := c.StartErrorsWatch(); err != nil {
+		return err
+	}
 	if err := c.StartSecurityChecks(); err != nil {
 		return err
 	}

@@ -68,6 +68,21 @@ and `kipitiny.identify` the same user id, the user's
 - **Ignore** keeps counting it, without showing it among the open ones or
   alerting.
 
+## Alerts
+
+Three [notification](/docs/monitoring#notifications) events, on by default
+for new channels:
+
+- `error.new`: an app reported an error that isn't any of its issues yet.
+- `error.regression`: a resolved issue happened again.
+- `error.spike`: 10 minutes after a deploy, its errors (at least 10) come at 3
+  times the rate of the release before, over its last day. The app's
+  **Deployments** tab then shows it, with **Roll back** to that release.
+  Nothing rolls back by itself.
+
+Previews never alert. A restart of the manager doesn't repeat alerts already
+sent, nor send those of what happened while it was down.
+
 ### Grouping
 
 Events are grouped by the raised exception's type and the three innermost

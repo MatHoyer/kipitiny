@@ -102,13 +102,18 @@ type Core struct {
 	// analyticsErrors is the container ID and DSN keys last sent to the
 	// analytics server.
 	analyticsErrors string
+	// errorsSeq is the last error change alerted about, -1 before the
+	// first look; spiked the deployments alerted about.
+	errorsSeq int64
+	spiked    map[string]bool
 }
 
 // New builds the core around the local Docker client; remote servers are
 // connected on demand over SSH.
 func New(cfg config.Config, s store.Store, local *docker.Client, log *slog.Logger) *Core {
 	bg, cancel := context.WithCancel(context.Background())
-	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1), dnsKick: make(chan struct{}, 1), gitKick: make(chan string, 16)}
+	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1), dnsKick: make(chan struct{}, 1), gitKick: make(chan string, 16),
+		errorsSeq: -1, spiked: map[string]bool{}}
 	c.pool = docker.NewPool(local, c.connectServer)
 	c.secretKinds = secretKinds(cfg, local)
 	return c

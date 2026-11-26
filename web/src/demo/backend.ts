@@ -61,7 +61,7 @@ import type {
 } from "@/api";
 import { autoTagColor, normalizeTag, tagColors } from "@/lib/tags";
 import { files } from "./files";
-import { demoErrorSeries, demoIssue, demoIssueEvent, demoIssues, setDemoIssueStatus } from "./errors";
+import { demoDeployErrors, demoErrorSeries, demoIssue, demoIssueEvent, demoIssues, setDemoIssueStatus } from "./errors";
 import { demoJobs, demoUsers, rng, seed, service as newService, type DemoDb } from "./seed";
 import { demoLogos, demoTemplates } from "./templates";
 
@@ -2200,6 +2200,7 @@ const routes: Route[] = [
   ],
   ["GET", /^\/services\/([^/]+)\/errors$/, ({ q }) => demoIssues(q)],
   ["GET", /^\/services\/([^/]+)\/errors\/series$/, ({ q }) => demoErrorSeries(q)],
+  ["GET", /^\/services\/([^/]+)\/errors\/deploy$/, ({ m }) => demoDeployErrors(db.deployments.filter((d) => d.serviceId === m[1]))],
   ["GET", /^\/services\/([^/]+)\/errors\/(\d+)$/, ({ m }) => demoIssue(m[2])],
   ["GET", /^\/services\/([^/]+)\/errors\/(\d+)\/event$/, ({ m }) => demoIssueEvent(m[2])],
   ["PUT", /^\/services\/([^/]+)\/errors\/(\d+)\/status$/, ({ m, body }) => setDemoIssueStatus(m[2], body.status)],

@@ -1,4 +1,4 @@
-import type { ErrorEvent, Issue, IssueEvent, IssueStatus } from "@/api";
+import type { DeployErrors, Deployment, ErrorEvent, Issue, IssueEvent, IssueStatus } from "@/api";
 
 const now = () => Math.floor(Date.now() / 1000);
 const H = 3600;
@@ -88,4 +88,16 @@ export function setDemoIssueStatus(id: string, status: IssueStatus) {
   const is = demoIssue(id);
   if (is) Object.assign(is, { status, resolvedAt: status === "resolved" ? now() : undefined, regressedAt: undefined });
   return is;
+}
+
+/** The web app's last deploy raised errors: the banner and its rollback. */
+export function demoDeployErrors(deps: Deployment[]): DeployErrors {
+  const ok = deps.filter((d) => d.status === "succeeded");
+  const [cur, prev] = ok;
+  const tag = (d?: Deployment) => d?.image.split(":").pop() ?? "";
+  if (!cur || !prev) return { deploymentId: "", release: "", minutes: 0, events: 0, newIssues: 0, rate: 0, previousRate: 0, spike: false };
+  return {
+    deploymentId: cur.id, release: tag(cur), minutes: 60, events: 1031, newIssues: 1, previous: prev.id, previousRelease: tag(prev),
+    rate: 17.2, previousRate: 1.2, spike: true,
+  };
 }

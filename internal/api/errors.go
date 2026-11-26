@@ -33,6 +33,15 @@ func (a *API) serviceErrorSeries(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
+func (a *API) serviceDeployErrors(w http.ResponseWriter, r *http.Request) {
+	res, err := a.core.ServiceDeployErrors(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
 func issueID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	id, err := strconv.ParseInt(r.PathValue("issue"), 10, 64)
 	if err != nil {

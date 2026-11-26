@@ -3,6 +3,7 @@ import { Bug, ChevronLeft, ChevronRight, Clock, Rocket, Users } from "lucide-rea
 import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { CopyField, Empty, ErrorText, Loading, Meta, MetaItem, Mono, Section, Tag } from "@/components/common";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
@@ -451,6 +452,49 @@ function ExceptionView({ x, cause }: { x: ErrorException; cause: boolean }) {
           Show {frames.length - shown.length} library frames
         </button>
       )}
+    </div>
+  );
+}
+
+/** Above the deployments: the current deploy raises errors well above the release before. */
+export function DeployErrorsBanner({ svc, canRollback, onIssues }: { svc: Service; canRollback: boolean; onIssues: () => void }) {
+  const qc = useQueryClient();
+  const de = useQuery({ queryKey: ["service-deploy-errors", svc.id], queryFn: () => api.serviceDeployErrors(svc.id), refetchInterval: 60_000 });
+  const rollback = useMutation({
+    meta: { error: "Couldn't roll back" },
+    mutationFn: (deploymentId: string) => api.rollback(svc.id, deploymentId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["deployments", svc.id] }),
+  });
+  const d = de.data;
+  if (!d?.spike) return null;
+  const times = d.previousRate > 0 ? `${Math.round(d.rate / d.previousRate)}× the rate of ${d.previousRelease}` : `${d.previousRelease ? `none with ${d.previousRelease}` : "none before"}`;
+  return (
+    <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm">
+      <p>
+        <span className="font-medium">
+          <Mono>{d.release}</Mono> raised {d.events.toLocaleString()} errors in its first {Math.round(d.minutes)} minutes
+        </span>{" "}
+        ({times}){d.newIssues > 0 && `, ${d.newIssues} new ${d.newIssues === 1 ? "issue" : "issues"}`}.
+      </p>
+      <span className="flex gap-2">
+        <Button size="sm" variant="outline" onClick={onIssues}>
+          See issues
+        </Button>
+        {canRollback && d.previous && (
+          <ConfirmDialog
+            trigger={
+              <Button size="sm" variant="destructive" loading={rollback.isPending}>
+                Roll back to {d.previousRelease}
+              </Button>
+            }
+            title="Roll back?"
+            description={`Redeploys ${d.previousRelease}. Current settings are kept; the next regular deploy uses the image in Settings again.`}
+            confirmLabel="Roll back"
+            destructive={false}
+            onConfirm={() => rollback.mutate(d.previous!)}
+          />
+        )}
+      </span>
     </div>
   );
 }
