@@ -1,7 +1,7 @@
 import { CircleDot } from "lucide-react";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Button } from "@/components/ui/button";
+import { Button } from "@kipit-labs/kipitidy/button";
 import { cn } from "@/lib/utils";
 
 const HostContext = createContext<HTMLElement | null>(null);

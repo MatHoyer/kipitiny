@@ -3,9 +3,9 @@ import { Check, ChevronLeft, ChevronRight, ChevronsLeft, Download, FolderOpen, L
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { ErrorText, Loading } from "@/components/common";
-import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@kipit-labs/kipitidy/dropdown-menu";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@kipit-labs/kipitidy/select";
 import { cn } from "@/lib/utils";
 import { api, type PgColumn, type PgFilter, type PgFilterOp, type PgRef, type PgTable, type RowChanges } from "../../api";
 import { BrowserShell, SidebarNav, SearchBox, SidebarHeader, SidebarItem, SidebarToggle } from "./browser-shell";

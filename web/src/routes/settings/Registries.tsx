@@ -6,8 +6,8 @@ import { ChoiceTile, EmptyState, ErrorText, Mono } from "@/components/common";
 import { HowTo, type HowToStep } from "@/components/how-to";
 import { TestDialog } from "@/components/test-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Card } from "@kipit-labs/kipitidy/card";
 import {
   Dialog,
   DialogContent,
@@ -15,8 +15,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
+} from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
 import { api, type Registry, type RegistryInput } from "@/api";
 import { SettingsPage } from "./page";
 

@@ -35,10 +35,10 @@ import { SaveBar } from "@/components/save-bar";
 import { ServerSecuritySection } from "@/components/server-security";
 import { HostUsageSection, memoryOf, useUsage } from "@/components/usage";
 import { useAccess } from "@/lib/access";
-import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Spinner } from "@/components/ui/spinner";
-import { Card } from "@/components/ui/card";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@kipit-labs/kipitidy/sheet";
+import { Spinner } from "@kipit-labs/kipitidy/spinner";
+import { Card } from "@kipit-labs/kipitidy/card";
 import {
   Dialog,
   DialogContent,
@@ -47,8 +47,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
+} from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
 import { api, SECRET_MASK, type Server, type ServerInput, type ServiceUsage } from "@/api";
 import { formatBytes } from "@/lib/format";
 import { SettingsPage } from "./page";

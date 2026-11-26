@@ -3,8 +3,8 @@ import { Moon } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Section, Tag } from "@/components/common";
-import { Button } from "@/components/ui/button";
-import { FloatingInput } from "@/components/ui/floating-input";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
 import { api, type Project, type Service } from "../api";
 
 /** Why the project can't sleep: only a request through Traefik wakes it. */

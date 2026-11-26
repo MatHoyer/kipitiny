@@ -10,9 +10,9 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { FloatingInput } from "@/components/ui/floating-input";
+} from "@kipit-labs/kipitidy/alert-dialog";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
 
 /**
  * Asks before a destructive action. With typeToConfirm, the user must type

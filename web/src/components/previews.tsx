@@ -11,10 +11,10 @@ import { ServiceStates } from "@/components/service-states";
 import { memoryOf, useUsage } from "@/components/usage";
 import { PreviewSeedCard } from "@/components/preview-seed";
 import { SaveBar } from "@/components/save-bar";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingSelect } from "@/components/ui/floating-select";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Card } from "@kipit-labs/kipitidy/card";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { FloatingSelect } from "@kipit-labs/kipitidy/floating-select";
 import { envMap, envRows, envSecrets, formatBytes, sameEnv, timeAgo, type EnvRow } from "@/lib/format";
 import { api, type PreviewSettings, type PreviewView, type Project, type SeedMode } from "../api";
 

@@ -5,10 +5,10 @@ import { toast } from "sonner";
 import { AnalyticsPanel } from "@/components/analytics-tab";
 import { CopyButton, Empty, ErrorText, Loading, Mono, Section } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@kipit-labs/kipitidy/sheet";
 import { api, type Tracker, type TrackerKind } from "@/api";
 
 const utmKeys = ["utm_source", "utm_medium", "utm_campaign"] as const;

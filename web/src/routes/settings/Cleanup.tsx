@@ -5,11 +5,11 @@ import { CheckboxField, ErrorText, Loading, Section, StatCard } from "@/componen
 import { CronField, cleanupPresets } from "@/components/cron-field";
 import { useLastStep } from "@/components/op-steps";
 import { SaveBar } from "@/components/save-bar";
-import { Button } from "@/components/ui/button";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingSelect } from "@/components/ui/floating-select";
-import { Stepper, type Step } from "@/components/ui/stepper";
-import { Switch } from "@/components/ui/switch";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { FloatingSelect } from "@kipit-labs/kipitidy/floating-select";
+import { Stepper, type Step } from "@kipit-labs/kipitidy/stepper";
+import { Switch } from "@kipit-labs/kipitidy/switch";
 import { formatBytes, formatDateTime, timeAgo } from "@/lib/format";
 import { api, type Cleanup as CleanupState, type CleanupResult, type CleanupSettings } from "@/api";
 import { SettingsPage } from "./page";

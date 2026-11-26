@@ -4,7 +4,7 @@ import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { HoverCard, Popover } from "radix-ui";
 import { Section } from "@/components/common";
-import { Button } from "@/components/ui/button";
+import { Button } from "@kipit-labs/kipitidy/button";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -13,7 +13,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@kipit-labs/kipitidy/dropdown-menu";
 import { autoTagColor, normalizeTag, tagChipClass, tagColors, tagDotClass } from "@/lib/tags";
 import { cn } from "@/lib/utils";
 import { api, type TagInfo } from "../api";

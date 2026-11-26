@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { Button } from "@kipit-labs/kipitidy/button";
 import { friendlyError } from "@/lib/errors";
 
 type Item = { id: string; name: string };

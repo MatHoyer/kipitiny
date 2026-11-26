@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Empty, ErrorText, Loading, Section } from "@/components/common";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Input } from "@kipit-labs/kipitidy/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kipit-labs/kipitidy/select";
 import { api, type Service } from "../api";
 
 type Step = { kind: "page" | "event"; value: string };

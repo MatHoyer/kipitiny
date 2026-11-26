@@ -3,10 +3,10 @@ import { Cloud, DatabaseBackup, HardDrive, History, Search, TriangleAlert } from
 import { useState } from "react";
 import { EmptyState, ErrorText, Section, StatCard } from "@/components/common";
 import { PageBody, PageHeader } from "@/components/page-header";
-import { Spinner } from "@/components/ui/spinner";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Spinner } from "@kipit-labs/kipitidy/spinner";
+import { Input } from "@kipit-labs/kipitidy/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kipit-labs/kipitidy/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@kipit-labs/kipitidy/tabs";
 import { useTab } from "@/hooks/use-tab";
 import { formatBytes, timeAgo } from "@/lib/format";
 import { api, type Backup, type BackupTarget } from "../api";

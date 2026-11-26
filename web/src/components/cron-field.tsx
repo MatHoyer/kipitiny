@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Mono } from "@/components/common";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingSelect } from "@/components/ui/floating-select";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { FloatingSelect } from "@kipit-labs/kipitidy/floating-select";
 
 export type CronPreset = [cron: string, label: string];
 

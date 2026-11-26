@@ -1,11 +1,11 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Checkbox } from "@kipit-labs/kipitidy/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@kipit-labs/kipitidy/select";
 import type { ChangeResult, NewColumn } from "../../api";
 import { ReviewDialog } from "./changes";
 import type { SqlDialect } from "./sql-editor";

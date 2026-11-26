@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { CheckboxField, Empty, Meta, MetaItem } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CronField, describeCron } from "@/components/cron-field";
-import { Button } from "@/components/ui/button";
+import { Button } from "@kipit-labs/kipitidy/button";
 import {
   Dialog,
   DialogContent,
@@ -13,9 +13,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingSelect } from "@/components/ui/floating-select";
+} from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { FloatingSelect } from "@kipit-labs/kipitidy/floating-select";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { storageIcon } from "@/components/storage";

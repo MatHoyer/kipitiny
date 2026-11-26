@@ -1,6 +1,6 @@
 import { PanelLeft, Search, X } from "lucide-react";
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode, type RefObject } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@kipit-labs/kipitidy/button";
 import { cn } from "@/lib/utils";
 
 /** The browsers' frame: a hideable list on the left, a toolbar, the content, a footer. */

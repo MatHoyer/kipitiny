@@ -8,9 +8,9 @@ import { CopyButton, CopyField, EmptyState, ErrorText, Section, Tag } from "@/co
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ConfirmField, useConfirmation } from "@/components/confirm-identity";
 import { PageBody, PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
 import { friendlyError } from "@/lib/errors";
 import { timeAgo } from "@/lib/format";
 import { currentPushSubscription, enablePush, pushNeedsInstall, pushSupported } from "@/lib/push";

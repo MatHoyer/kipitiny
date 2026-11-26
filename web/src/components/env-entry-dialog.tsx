@@ -6,7 +6,7 @@ import { databaseLabels, passwordManagerIcon } from "@/components/brand-icons";
 import { ServiceIcon } from "@/components/service-icon";
 import { ChoiceTile, ErrorText, Mono } from "@/components/common";
 import { TemplateValue } from "@/components/template-value";
-import { Button } from "@/components/ui/button";
+import { Button } from "@kipit-labs/kipitidy/button";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@kipit-labs/kipitidy/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,10 +22,10 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingSelect } from "@/components/ui/floating-select";
-import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+} from "@kipit-labs/kipitidy/dropdown-menu";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { FloatingSelect } from "@kipit-labs/kipitidy/floating-select";
+import { Segmented, SegmentedItem } from "@kipit-labs/kipitidy/segmented";
 import { connectionLabel, dbFields, dbRef, dbRefValid, envRef, managerRef, refName, refsIn, type EnvReference, type EnvRow } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, SECRET_MASK, type DatabaseKind, type DatabaseRef } from "../api";

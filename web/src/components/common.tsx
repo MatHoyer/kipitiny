@@ -1,10 +1,10 @@
 import { CheckIcon, CircleCheck, CircleSlash, CircleX, CopyIcon, type LucideIcon } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@kipit-labs/kipitidy/card";
+import { Checkbox } from "@kipit-labs/kipitidy/checkbox";
+import { Label } from "@kipit-labs/kipitidy/label";
+import { Spinner } from "@kipit-labs/kipitidy/spinner";
 import { friendlyError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 

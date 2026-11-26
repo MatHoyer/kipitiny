@@ -3,7 +3,7 @@ import { useId, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { CheckboxField, Mono, Section } from "@/components/common";
 import { SaveBar } from "@/components/save-bar";
-import { FloatingSelect } from "@/components/ui/floating-select";
+import { FloatingSelect } from "@kipit-labs/kipitidy/floating-select";
 import { api, type Service as ServiceT } from "../../api";
 import { Applies } from "./parts";
 

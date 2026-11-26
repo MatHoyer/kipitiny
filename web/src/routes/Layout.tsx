@@ -16,7 +16,7 @@ import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { toast } from "sonner";
 import { SaveBarHost } from "@/components/save-bar";
 import { UpdateDialog } from "@/components/update-dialog";
-import { Button } from "@/components/ui/button";
+import { Button } from "@kipit-labs/kipitidy/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,7 +24,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@kipit-labs/kipitidy/dropdown-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -39,8 +39,8 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   useSidebar,
-} from "@/components/ui/sidebar";
-import { Tip } from "@/components/ui/tooltip";
+} from "@kipit-labs/kipitidy/sidebar";
+import { Tip } from "@kipit-labs/kipitidy/tooltip";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/logo";
 import { DemoBanner } from "@/demo/banner";

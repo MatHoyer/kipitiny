@@ -1,9 +1,9 @@
 import { ArrowDown, Download, Eraser, Pause, Play, Search, WrapText } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@kipit-labs/kipitidy/input";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Spinner } from "@kipit-labs/kipitidy/spinner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kipit-labs/kipitidy/select";
 import { levelRank, logLevel, parseAnsi, stripAnsi, type Level, type Segment } from "@/lib/logs";
 import { cn } from "@/lib/utils";
 import { api, type LogLine } from "../api";

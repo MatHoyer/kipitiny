@@ -7,11 +7,11 @@ import { PlanView } from "@/components/compose-dialog";
 import { CheckboxField, EmptyState, ErrorText, Loading } from "@/components/common";
 import { DomainField } from "@/components/domain-field";
 import { ServiceIconTile } from "@/components/service-icon";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingSelect } from "@/components/ui/floating-select";
-import { StepNode, Stepper, type StepState } from "@/components/ui/stepper";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { FloatingSelect } from "@kipit-labs/kipitidy/floating-select";
+import { StepNode, Stepper, type StepState } from "@kipit-labs/kipitidy/stepper";
 import { useDocsUrl } from "@/lib/docs";
 import { api, isDatabase, type AppTemplate, type Deployment, type Service, type TemplateInstall, type TemplateResult } from "../api";
 

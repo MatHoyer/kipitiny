@@ -8,8 +8,8 @@ import { CheckboxField, ChoiceTile, EmptyState, ErrorText, Section, Tag } from "
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { HowTo, type HowToStep } from "@/components/how-to";
 import { SaveBar } from "@/components/save-bar";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Card } from "@kipit-labs/kipitidy/card";
 import {
   Dialog,
   DialogContent,
@@ -17,9 +17,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingSelect } from "@/components/ui/floating-select";
+} from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { FloatingSelect } from "@kipit-labs/kipitidy/floating-select";
 import { useAccess } from "@/lib/access";
 import { cn } from "@/lib/utils";
 import { api, type ChannelInput, type NotificationChannel, type Notifications as NotificationsState, type ResourceAlerts } from "@/api";

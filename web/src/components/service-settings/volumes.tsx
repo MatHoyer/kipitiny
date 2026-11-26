@@ -4,9 +4,9 @@ import { useId, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Empty, Section } from "@/components/common";
 import { SaveBar } from "@/components/save-bar";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { FloatingInput } from "@/components/ui/floating-input";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Checkbox } from "@kipit-labs/kipitidy/checkbox";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
 import { api, type Service as ServiceT, type Volume } from "../../api";
 import { Applies } from "./parts";
 

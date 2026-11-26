@@ -1,5 +1,5 @@
 import { RotateCcw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@kipit-labs/kipitidy/button";
 
 /** Says it's a demo, and starts it over. Kept free of the backend so normal builds can drop it. */
 export function DemoBanner() {

@@ -1,7 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Section } from "@/components/common";
-import { Button } from "@/components/ui/button";
-import { FloatingInput } from "@/components/ui/floating-input";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
 
 /** Renames a project or a service: lowercase letters, digits and dashes. */
 export function RenameCard({

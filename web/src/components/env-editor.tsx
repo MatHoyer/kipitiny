@@ -3,9 +3,9 @@ import { Code, List, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { EnvEntryDialog, envKeyRe, type EnvContext } from "@/components/env-entry-dialog";
 import { ManagerRefValue, TemplateValue } from "@/components/template-value";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Textarea } from "@kipit-labs/kipitidy/textarea";
+import { Segmented, SegmentedItem } from "@kipit-labs/kipitidy/segmented";
 import {
   dbRefValid,
   envRef,

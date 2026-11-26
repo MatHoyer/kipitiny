@@ -6,7 +6,7 @@ import { EmptyState, Meta, MetaItem, StateBadge, Tag } from "@/components/common
 import { byDay, formatBytes, formatDuration, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Backup, BackupTarget } from "../api";
-import { Tip } from "@/components/ui/tooltip";
+import { Tip } from "@kipit-labs/kipitidy/tooltip";
 import { storageIcon } from "@/components/storage";
 
 /** Backups as rows grouped by day; each opens its page. */

@@ -7,11 +7,11 @@ import { CopyButton, DangerZone, ErrorText, Mono, Section, StatCard, StateBadge,
 import { databaseLabels } from "@/components/brand-icons";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingSelect } from "@/components/ui/floating-select";
-import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { FloatingSelect } from "@kipit-labs/kipitidy/floating-select";
+import { Spinner } from "@kipit-labs/kipitidy/spinner";
 import { BackupSteps, RestoreSteps, VerifySteps, useLastStep } from "@/components/op-steps";
 import { formatBytes, formatDateTime, formatDuration, timeAgo } from "@/lib/format";
 import { api, type Backup as BackupT, type DatabaseKind, type Restore, type Service } from "../api";

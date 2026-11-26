@@ -10,10 +10,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
+} from "@kipit-labs/kipitidy/alert-dialog";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
 import { Mono } from "@/components/common";
 import { dbRef } from "@/lib/format";
 import { api, databaseUrlKey, isDatabase, type ServerTopology, type TopoProject, type TopoService } from "@/api";

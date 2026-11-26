@@ -1,7 +1,7 @@
 import { CircleAlert, CircleCheck, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Spinner } from "@kipit-labs/kipitidy/spinner";
 import { friendlyError } from "@/lib/errors";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
