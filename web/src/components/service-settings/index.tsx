@@ -10,7 +10,7 @@ import { AccessCard } from "./access";
 import { ContainerCard } from "./container";
 import { GeneralCard, PreviewCard } from "./general";
 import { HostAccessCard } from "./host-access";
-import { AnalyticsCard, DomainCard, NetworksCard, PortsCard } from "./networking";
+import { AnalyticsCard, DomainCard, ErrorsCard, NetworksCard, PortsCard } from "./networking";
 import { GitOwned } from "./parts";
 import { VolumesCard } from "./volumes";
 
@@ -129,6 +129,7 @@ export function ServiceSettings({
             <DomainCard key={`domain-${svc.id}`} svc={svc} />
             <PortsCard key={`ports-${svc.id}`} svc={svc} />
             {httpRouted(svc) && !preview && <AnalyticsCard key={`analytics-${svc.id}`} svc={svc} />}
+            <ErrorsCard key={`errors-${svc.id}`} svc={svc} />
           </GitOwned>
         )}
         {/* Not in the compose file, so git projects set them here too. */}

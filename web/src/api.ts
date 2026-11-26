@@ -136,6 +136,8 @@ export type Service = {
   analyticsHit?: string;
   /** When the app's public analytics link was created; absent when not shared. */
   analyticsSharedAt?: string;
+  /** The analytics server takes the errors of the app's Sentry SDK. */
+  errors: boolean;
   env: Record<string, string>;
   /** Names of the env entries that are secrets: their values come back masked. */
   secrets: string[];
@@ -380,6 +382,7 @@ export type ServiceInput = {
   analytics?: boolean;
   analyticsScript?: string;
   analyticsHit?: string;
+  errors?: boolean;
   env?: Record<string, string>;
   secrets?: string[];
   memoryMb?: number;
@@ -907,6 +910,79 @@ export type TrackerInput = { kind: TrackerKind; name: string; slug: string; targ
 export type SharedAnalytics = Omit<AnalyticsStats, "script"> & { domain: string };
 
 export type TrackerStats = Omit<AnalyticsStats, "script"> & { tracker: Tracker };
+
+export type IssueStatus = "open" | "resolved" | "ignored";
+
+/** The events of one fingerprint; times are unix seconds. */
+export type Issue = {
+  id: number;
+  title: string;
+  /** Where it was thrown: function · file:line. */
+  culprit: string;
+  level: string;
+  platform: string;
+  status: IssueStatus;
+  firstSeen: number;
+  lastSeen: number;
+  events: number;
+  users: number;
+  firstRelease: string;
+  lastRelease: string;
+  resolvedAt?: number;
+  /** When a resolved issue happened again. */
+  regressedAt?: number;
+  /** Events per hour of the last 24, oldest first (lists only). */
+  spark?: number[];
+};
+
+export type ErrorsView = { issues: Issue[]; counts: Record<IssueStatus, number>; dsn: string };
+
+export type ErrorFrame = {
+  function?: string;
+  module?: string;
+  file?: string;
+  line?: number;
+  col?: number;
+  inApp?: boolean;
+  /** Source around line, which is context[contextLine]. */
+  context?: string[];
+  contextLine?: number;
+};
+
+export type ErrorException = {
+  type?: string;
+  value?: string;
+  module?: string;
+  mechanism?: string;
+  handled?: boolean;
+  /** Oldest first: the last one threw. */
+  frames?: ErrorFrame[];
+};
+
+export type ErrorEvent = {
+  id: string;
+  at: number;
+  level?: string;
+  platform?: string;
+  release?: string;
+  environment?: string;
+  serverName?: string;
+  transaction?: string;
+  message?: string;
+  /** The last one is the one raised. */
+  exceptions?: ErrorException[];
+  breadcrumbs?: { at?: number; type?: string; category?: string; level?: string; message?: string; data?: Record<string, string> }[];
+  tags?: Record<string, string>;
+  contexts?: Record<string, string>;
+  user?: string;
+  url?: string;
+  method?: string;
+  country?: string;
+  sdk?: string;
+};
+
+/** One kept event of an issue; older and newer are its neighbours' ids. */
+export type IssueEvent = { event: ErrorEvent; older?: string; newer?: string; index: number; kept: number };
 
 export type CleanupSettings = {
   enabled: boolean;
@@ -1823,6 +1899,17 @@ export const api = {
     for (const s of steps) p.append("step", s);
     return request<{ step: string; visits: number }[]>(`/services/${id}/analytics/funnel?${p}`);
   },
+  serviceErrors: (id: string, q: { status?: IssueStatus; q?: string; sort?: string; offset?: number }) => {
+    const p = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined || v === "" ? [] : [[k, String(v)]])));
+    return request<ErrorsView>(`/services/${id}/errors?${p}`);
+  },
+  serviceErrorSeries: (id: string, q: { from: number; to: number; interval: number }) =>
+    request<{ t: number; n: number }[]>(`/services/${id}/errors/series?${new URLSearchParams(Object.entries(q).map(([k, v]) => [k, String(v)]))}`),
+  serviceIssue: (id: string, issue: number) => request<Issue>(`/services/${id}/errors/${issue}`),
+  serviceIssueEvent: (id: string, issue: number, event = "") =>
+    request<IssueEvent>(`/services/${id}/errors/${issue}/event?event=${encodeURIComponent(event)}`),
+  setIssueStatus: (id: string, issue: number, status: IssueStatus) =>
+    request<Issue>(`/services/${id}/errors/${issue}/status`, json("PUT", { status })),
   trackers: () => request<Tracker[]>("/analytics/trackers"),
   createTracker: (t: TrackerInput) => request<Tracker>("/analytics/trackers", json("POST", t)),
   updateTracker: (id: string, t: TrackerInput) => request<Tracker>(`/analytics/trackers/${id}`, json("PUT", t)),

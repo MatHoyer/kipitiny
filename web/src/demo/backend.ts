@@ -61,6 +61,7 @@ import type {
 } from "@/api";
 import { autoTagColor, normalizeTag, tagColors } from "@/lib/tags";
 import { files } from "./files";
+import { demoErrorSeries, demoIssue, demoIssueEvent, demoIssues, setDemoIssueStatus } from "./errors";
 import { demoJobs, demoUsers, rng, seed, service as newService, type DemoDb } from "./seed";
 import { demoLogos, demoTemplates } from "./templates";
 
@@ -2197,6 +2198,11 @@ const routes: Route[] = [
     /^\/share\/analytics\/([^/]+)$/,
     ({ q }) => ({ ...demoAnalytics(Number(q.get("from")), Number(q.get("to")), Number(q.get("interval"))), domain: "acme.example", script: undefined }),
   ],
+  ["GET", /^\/services\/([^/]+)\/errors$/, ({ q }) => demoIssues(q)],
+  ["GET", /^\/services\/([^/]+)\/errors\/series$/, ({ q }) => demoErrorSeries(q)],
+  ["GET", /^\/services\/([^/]+)\/errors\/(\d+)$/, ({ m }) => demoIssue(m[2])],
+  ["GET", /^\/services\/([^/]+)\/errors\/(\d+)\/event$/, ({ m }) => demoIssueEvent(m[2])],
+  ["PUT", /^\/services\/([^/]+)\/errors\/(\d+)\/status$/, ({ m, body }) => setDemoIssueStatus(m[2], body.status)],
   ["GET", /^\/services\/([^/]+)\/analytics$/, ({ q }) => demoAnalytics(Number(q.get("from")), Number(q.get("to")), Number(q.get("interval")))],
   ["GET", /^\/cleanup$/, () => cleanupView()],
   [
