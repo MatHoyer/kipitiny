@@ -40,8 +40,11 @@ type Store struct {
 	sites    map[string]bool
 	paths    map[string]Paths   // by hostname, the sites with their own
 	trackers map[string]Tracker // by slug
-	day      int64
-	salt     []byte
+	// errorKeys are the DSN keys of the projects taking errors.
+	errorKeys map[int64]string
+	limits    map[int64]*bucket
+	day       int64
+	salt      []byte
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
@@ -70,6 +73,10 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		s.paths[r.Hostname] = Paths{r.Script, r.Hit}
 	}
 	if err := s.loadTrackers(ctx); err != nil {
+		s.db.Close()
+		return nil, err
+	}
+	if err := s.loadErrorProjects(ctx); err != nil {
 		s.db.Close()
 		return nil, err
 	}
@@ -238,8 +245,10 @@ func (s *Store) Prune(ctx context.Context, keep time.Duration) error {
 	if _, err := s.db.NewRaw("DELETE FROM events WHERE created_at < ?", before).Exec(ctx); err != nil {
 		return err
 	}
-	_, err := s.db.NewRaw("DELETE FROM visits WHERE last_at < ?", before).Exec(ctx)
-	return err
+	if _, err := s.db.NewRaw("DELETE FROM visits WHERE last_at < ?", before).Exec(ctx); err != nil {
+		return err
+	}
+	return s.pruneErrors(ctx, keep)
 }
 
 // Query selects the events of Stats.

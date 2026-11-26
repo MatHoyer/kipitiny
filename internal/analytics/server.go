@@ -93,6 +93,12 @@ func Public(st *Store, log *slog.Logger) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		http.Redirect(w, r, t.Target, http.StatusFound)
 	})
+	mux.HandleFunc("POST /api/{project}/envelope/", ingestErrors(st, log, true))
+	mux.HandleFunc("POST /api/{project}/store/", ingestErrors(st, log, false))
+	mux.HandleFunc("OPTIONS /api/{project}/{kind}/", func(w http.ResponseWriter, r *http.Request) {
+		errorsCORS(w)
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {})
 	// A site's own paths, on its own domain (Traefik routes only those
 	// there); anything else falls through to the analytics domain's.
@@ -347,6 +353,7 @@ func Private(st *Store, token string) http.Handler {
 	mux.HandleFunc("DELETE /api/trackers/{id}", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, nil, st.DeleteTracker(r.Context(), r.PathValue("id")))
 	})
+	errorRoutes(mux, st)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if token == "" || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
