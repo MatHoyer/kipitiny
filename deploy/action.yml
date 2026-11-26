@@ -1,7 +1,7 @@
 # Deploys a kipitiny service from GitHub Actions with the release binary
 # (about 40 MB) instead of the manager image:
 #
-#   - uses: MatHoyer/kipitiny/deploy@0.46.0
+#   - uses: kipit-labs/kipitiny/deploy@0.46.0
 #     with:
 #       url: https://kipitiny.example.com
 #       token: ${{ secrets.KIPITINY_TOKEN }}
@@ -61,7 +61,7 @@ runs:
           *) echo "::error::kipitiny deploy runs on Linux x64 or arm64 runners, not $OS/$ARCH"; exit 1 ;;
         esac
         # KIPITINY_RELEASES: a mirror of the GitHub releases page, if any.
-        base=${KIPITINY_RELEASES:-https://github.com/MatHoyer/kipitiny/releases}
+        base=${KIPITINY_RELEASES:-https://github.com/kipit-labs/kipitiny/releases}
         if [ "$VERSION" = latest ]; then base=$base/latest/download; else base=$base/download/$VERSION; fi
         dir=$RUNNER_TEMP/kipitiny
         mkdir -p "$dir"

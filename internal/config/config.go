@@ -104,7 +104,7 @@ func Load() Config {
 			ReadTimeout:  duration(env("KIPITINY_TRAEFIK_READ_TIMEOUT", "")),
 		},
 		Update: Update{
-			Image: env("KIPITINY_IMAGE", "ghcr.io/mathoyer/kipitiny"),
+			Image: env("KIPITINY_IMAGE", "ghcr.io/kipit-labs/kipitiny"),
 			Check: !strings.EqualFold(env("KIPITINY_UPDATE_CHECK", "on"), "off"),
 		},
 		Tunnel: Tunnel{
@@ -112,7 +112,7 @@ func Load() Config {
 			Image: env("KIPITINY_CLOUDFLARED_IMAGE", "cloudflare/cloudflared:2026.10.4"),
 		},
 		ProtonPass: ProtonPass{
-			Image: env("KIPITINY_PROTONPASS_IMAGE", "ghcr.io/mathoyer/kipitiny-protonpass:2.4.2"),
+			Image: env("KIPITINY_PROTONPASS_IMAGE", "ghcr.io/kipit-labs/kipitiny-protonpass:2.4.2"),
 		},
 		ManagerBackup: ManagerBackup{
 			Cron:     managerCron(env("KIPITINY_MANAGER_BACKUP_CRON", "@daily")),

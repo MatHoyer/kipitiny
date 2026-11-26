@@ -55,10 +55,10 @@ func TestTagsPrivate(t *testing.T) {
 
 func TestSplit(t *testing.T) {
 	for ref, want := range map[string][2]string{
-		"ghcr.io/mathoyer/kipitiny": {"ghcr.io", "mathoyer/kipitiny"},
-		"localhost:5000/app":        {"localhost:5000", "app"},
-		"cloudflare/cloudflared":    {"registry-1.docker.io", "cloudflare/cloudflared"},
-		"traefik":                   {"registry-1.docker.io", "library/traefik"},
+		"ghcr.io/kipit-labs/kipitiny": {"ghcr.io", "kipit-labs/kipitiny"},
+		"localhost:5000/app":          {"localhost:5000", "app"},
+		"cloudflare/cloudflared":      {"registry-1.docker.io", "cloudflare/cloudflared"},
+		"traefik":                     {"registry-1.docker.io", "library/traefik"},
 	} {
 		if h, r := split(ref); h != want[0] || r != want[1] {
 			t.Errorf("split(%q) = %q, %q", ref, h, r)

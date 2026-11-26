@@ -15,8 +15,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/MatHoyer/kipitiny/internal/progress"
-	"github.com/MatHoyer/kipitiny/internal/secrets"
+	"github.com/kipit-labs/kipitiny/internal/progress"
+	"github.com/kipit-labs/kipitiny/internal/secrets"
 )
 
 const Scheme = "pass"

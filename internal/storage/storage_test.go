@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MatHoyer/kipitiny/internal/progress"
+	"github.com/kipit-labs/kipitiny/internal/progress"
 )
 
 type failingReader struct{ n int }

@@ -17,8 +17,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/MatHoyer/kipitiny/internal/core"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 var release = regexp.MustCompile(`^(\d+\.\d+)\.\d+$`)
@@ -30,9 +30,9 @@ func docs(version string) (index, base, sources string) {
 	const site = "https://kipitiny.mathieuhoyer.fr"
 	if m := release.FindStringSubmatch(version); m != nil {
 		base = site + "/docs/" + m[1]
-		return base + "/llms.txt", base, "https://github.com/MatHoyer/kipitiny/tree/" + version + "/site/docs"
+		return base + "/llms.txt", base, "https://github.com/kipit-labs/kipitiny/tree/" + version + "/site/docs"
 	}
-	return site + "/llms.txt", site + "/docs", "https://github.com/MatHoyer/kipitiny/tree/main/site/docs"
+	return site + "/llms.txt", site + "/docs", "https://github.com/kipit-labs/kipitiny/tree/main/site/docs"
 }
 
 // Handler serves MCP. It must run behind authentication that puts a

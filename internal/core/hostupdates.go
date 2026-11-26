@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/ids"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/ids"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // updatesTimeout is how long an update install may run before kipitiny stops

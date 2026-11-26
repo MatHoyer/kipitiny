@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 func TestPostgresMajor(t *testing.T) {

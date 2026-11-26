@@ -18,8 +18,8 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/MatHoyer/kipitiny/internal/anonymize"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/anonymize"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // File is a project as a compose file.

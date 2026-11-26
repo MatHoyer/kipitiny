@@ -13,7 +13,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/mail"
+	"github.com/kipit-labs/kipitiny/internal/mail"
 )
 
 // Level sets how an event is presented (colour, icon).

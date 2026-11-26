@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // backupsEvery makes n backups, newest first, spaced by step from start.

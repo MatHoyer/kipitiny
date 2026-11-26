@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/analytics"
-	"github.com/MatHoyer/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/analytics"
+	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 func (a *API) getAnalytics(w http.ResponseWriter, r *http.Request) {

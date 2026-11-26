@@ -8,8 +8,8 @@ import (
 	"path"
 	"strconv"
 
-	"github.com/MatHoyer/kipitiny/internal/core"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 func (a *API) listServiceBackups(w http.ResponseWriter, r *http.Request) {

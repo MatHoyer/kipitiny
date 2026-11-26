@@ -52,7 +52,7 @@ lint: ui-stub
 	cd site && pnpm typecheck
 
 docker:
-	docker build --build-arg VERSION=$(VERSION) -t kipitiny -t ghcr.io/mathoyer/kipitiny:dev .
+	docker build --build-arg VERSION=$(VERSION) -t kipitiny -t ghcr.io/kipit-labs/kipitiny:dev .
 
 clean:
 	rm -rf bin web/dist

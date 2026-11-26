@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
-	"github.com/MatHoyer/kipitiny/internal/templates"
+	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/templates"
 )
 
 // TemplateInstall installs a template into a project: an existing one

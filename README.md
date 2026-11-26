@@ -77,7 +77,7 @@ running in your browser.
 Only this repo's `docker-compose.yml` is needed on the server:
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/MatHoyer/kipitiny/main/docker-compose.yml
+curl -fsSLO https://raw.githubusercontent.com/kipit-labs/kipitiny/main/docker-compose.yml
 docker compose up -d   # http://localhost:3000
 docker compose logs manager | grep setup_token
 ```
@@ -99,7 +99,7 @@ Push the image in CI, then deploy that tag with a token restricted to *deploy*
 ([more](https://kipitiny.mathieuhoyer.fr/docs/deploys#deploy-from-ci)):
 
 ```yaml
-- uses: MatHoyer/kipitiny/deploy@0.46.0
+- uses: kipit-labs/kipitiny/deploy@0.46.0
   with:
     url: https://kipitiny.example.com
     token: ${{ secrets.KIPITINY_TOKEN }}
@@ -108,7 +108,7 @@ Push the image in CI, then deploy that tag with a token restricted to *deploy*
 ```
 
 Without GitHub Actions, run the release binary (`kipitiny-linux-amd64`/`-arm64`)
-or `docker run --rm ghcr.io/mathoyer/kipitiny deploy …` with the same flags.
+or `docker run --rm ghcr.io/kipit-labs/kipitiny deploy …` with the same flags.
 
 ## Develop
 
@@ -122,7 +122,7 @@ make dev-ui    # Vite on :5173, proxies /api to :8080
 make test      # go test ./...
 make lint      # go vet + tsc
 make build     # UI + static binary in bin/
-make docker    # images `kipitiny` and `ghcr.io/mathoyer/kipitiny:dev`
+make docker    # images `kipitiny` and `ghcr.io/kipit-labs/kipitiny:dev`
 make dev-site  # the website (landing page and docs) on :5173
 KIPITINY_VERSION=dev docker compose up -d   # run that build
 ```
@@ -134,7 +134,7 @@ parser reads.
 ## Releasing
 
 Push a tag `x.y.z` (no `v`): GitHub Actions publishes
-`ghcr.io/mathoyer/kipitiny:x.y.z` and `:latest` for amd64 and arm64, and a
+`ghcr.io/kipit-labs/kipitiny:x.y.z` and `:latest` for amd64 and arm64, and a
 GitHub release with static `kipitiny-linux-{amd64,arm64}` binaries and their
 `SHA256SUMS` (for `deploy/action.yml`); the website is rebuilt from the same tag and published to GitHub Pages, so its docs describe the latest release (run the *site* workflow by hand for a site-only fix). After the first release, make the package public (GitHub →
 Packages → kipitiny → Package settings), or managers can neither see nor pull

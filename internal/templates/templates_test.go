@@ -6,7 +6,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/MatHoyer/kipitiny/internal/compose"
+	"github.com/kipit-labs/kipitiny/internal/compose"
 )
 
 var useRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)`)

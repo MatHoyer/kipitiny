@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/mail/mailtest"
+	"github.com/kipit-labs/kipitiny/internal/mail/mailtest"
 )
 
 func TestValidate(t *testing.T) {

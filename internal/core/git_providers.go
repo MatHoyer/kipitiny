@@ -16,10 +16,10 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/MatHoyer/kipitiny/internal/gitprovider"
-	"github.com/MatHoyer/kipitiny/internal/ids"
-	"github.com/MatHoyer/kipitiny/internal/progress"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/gitprovider"
+	"github.com/kipit-labs/kipitiny/internal/ids"
+	"github.com/kipit-labs/kipitiny/internal/progress"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Git providers give the manager read access to private repositories:

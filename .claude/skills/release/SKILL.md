@@ -9,7 +9,7 @@ A release is a chore commit on `main` that bumps the root `VERSION` file, plus a
 lightweight tag on it. The
 workflow fails if the tag and `VERSION` disagree. Pushing the tag triggers
 `.github/workflows/release.yml` (multi-arch image to
-`ghcr.io/mathoyer/kipitiny:<tag>` + `:latest`, GitHub release with generated
+`ghcr.io/kipit-labs/kipitiny:<tag>` + `:latest`, GitHub release with generated
 notes) and `.github/workflows/site.yml` (the website, deployed to GitHub Pages).
 
 Tags are bare semver, no `v` prefix: `0.6.0`, not `v0.6.0` (the workflow only

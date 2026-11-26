@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/MatHoyer/kipitiny/internal/core"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // The signed-in user's own security settings. Changes that alter how the

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 const sessionCookie = "kipitiny_session"

@@ -11,8 +11,8 @@ import (
 
 	"golang.org/x/net/websocket"
 
-	"github.com/MatHoyer/kipitiny/internal/core"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // terminalMsg is what the browser sends: keystrokes or a new size. The

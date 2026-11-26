@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Proton Pass CLI for pass:// env references, published as
-# ghcr.io/mathoyer/kipitiny-protonpass:<PASS_CLI_VERSION>. The manager runs it
+# ghcr.io/kipit-labs/kipitiny-protonpass:<PASS_CLI_VERSION>. The manager runs it
 # on demand through the Docker socket, so pass-cli stays out of its own image.
 # Pinned and checksummed from https://proton.me/download/pass-cli/versions.json.
 FROM --platform=$BUILDPLATFORM alpine:3.22 AS download
@@ -27,7 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     useradd --uid 10001 --home-dir /session --no-create-home pass && \
     install -d -o pass -g pass -m 700 /session
 COPY --from=download /pass-cli /usr/local/bin/pass-cli
-LABEL org.opencontainers.image.source=https://github.com/MatHoyer/kipitiny \
+LABEL org.opencontainers.image.source=https://github.com/kipit-labs/kipitiny \
       org.opencontainers.image.description="Proton Pass CLI for kipitiny" \
       org.opencontainers.image.version=$PASS_CLI_VERSION
 ENV HOME=/session \

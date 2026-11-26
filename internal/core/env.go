@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // envRefRe matches a reference in a service env value, spaces optional:

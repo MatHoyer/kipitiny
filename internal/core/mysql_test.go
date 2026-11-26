@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 func mysqlService(kind store.ServiceKind) store.Service {

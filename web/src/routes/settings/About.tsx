@@ -88,7 +88,7 @@ export function Version() {
                   </p>
                 </div>
                 <Button variant="outline" size="sm" asChild>
-                  <a href={`https://github.com/MatHoyer/kipitiny/releases/tag/${update.latest}`} target="_blank" rel="noreferrer">
+                  <a href={`https://github.com/kipit-labs/kipitiny/releases/tag/${update.latest}`} target="_blank" rel="noreferrer">
                     Release notes
                     <ExternalLink data-icon="inline-end" />
                   </a>

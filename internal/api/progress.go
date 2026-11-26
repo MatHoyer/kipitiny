@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/MatHoyer/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 // test answers a call checking an integration still works: 204 or the

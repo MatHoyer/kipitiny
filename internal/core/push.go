@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/MatHoyer/kipitiny/internal/notify"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Push notifications reach the browsers admins turned them on in (Account),
@@ -22,7 +22,7 @@ const pushSetting = "webpush"
 
 // pushSubject is who push services contact about the manager's pushes when it
 // has no public address.
-const pushSubject = "https://github.com/MatHoyer/kipitiny"
+const pushSubject = "https://github.com/kipit-labs/kipitiny"
 
 func (c *Core) vapid(ctx context.Context) (notify.VAPID, error) {
 	c.pushMu.Lock()

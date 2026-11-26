@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // KIPITINY_TEST_DOCKER=1 go test ./internal/core/ -run DataBrowserDocker

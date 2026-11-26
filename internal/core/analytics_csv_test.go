@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MatHoyer/kipitiny/internal/analytics"
+	"github.com/kipit-labs/kipitiny/internal/analytics"
 )
 
 func TestAnalyticsCSV(t *testing.T) {

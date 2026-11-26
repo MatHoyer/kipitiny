@@ -40,7 +40,7 @@ System › About checks for a new release on demand.
 
 Some releases do something to running servers you'd rather plan for: Traefik
 restarted (apps unreachable for a few seconds), a manual step. They say so
-in [UPGRADE.md](https://github.com/MatHoyer/kipitiny/blob/main/UPGRADE.md),
+in [UPGRADE.md](https://github.com/kipit-labs/kipitiny/blob/main/UPGRADE.md),
 and you see it:
 
 - in the sidebar's **Update available**, and in the update dialog, which

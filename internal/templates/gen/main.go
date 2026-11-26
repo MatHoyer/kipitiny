@@ -13,9 +13,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/MatHoyer/kipitiny/internal/compose"
-	"github.com/MatHoyer/kipitiny/internal/store"
-	"github.com/MatHoyer/kipitiny/internal/templates"
+	"github.com/kipit-labs/kipitiny/internal/compose"
+	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/templates"
 )
 
 // demoTemplate is a template plus the services the demo creates for it.

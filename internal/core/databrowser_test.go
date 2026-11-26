@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/docker"
 )
 
 func TestPgSelect(t *testing.T) {

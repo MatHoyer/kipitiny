@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // TestPostGISDocker backs up a PostGIS database and checks that restore tests

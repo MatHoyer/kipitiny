@@ -1,4 +1,4 @@
-module github.com/MatHoyer/kipitiny
+module github.com/kipit-labs/kipitiny
 
 go 1.26.11
 

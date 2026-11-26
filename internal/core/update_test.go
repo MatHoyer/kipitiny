@@ -40,18 +40,35 @@ func TestComposePin(t *testing.T) {
 		labels map[string]string
 		want   string
 	}{
-		{"ghcr.io/mathoyer/kipitiny:1.2.3", compose, "1.2.3"},
-		{"ghcr.io/mathoyer/kipitiny:1.2.3@sha256:abc", compose, "1.2.3"},
+		{"ghcr.io/kipit-labs/kipitiny:1.2.3", compose, "1.2.3"},
+		{"ghcr.io/kipit-labs/kipitiny:1.2.3@sha256:abc", compose, "1.2.3"},
 		{"localhost:5000/kipitiny:1.2.3", compose, "1.2.3"},
-		{"ghcr.io/mathoyer/kipitiny:latest", compose, ""}, // retagged by the updater
-		{"ghcr.io/mathoyer/kipitiny", compose, ""},
+		{"ghcr.io/kipit-labs/kipitiny:latest", compose, ""}, // retagged by the updater
+		{"ghcr.io/kipit-labs/kipitiny", compose, ""},
 		{"localhost:5000/kipitiny", compose, ""}, // port, not a tag
-		{"ghcr.io/mathoyer/kipitiny:dev", compose, ""},
-		{"ghcr.io/mathoyer/kipitiny:1.2.3", nil, ""}, // docker run: the swap sticks
+		{"ghcr.io/kipit-labs/kipitiny:dev", compose, ""},
+		{"ghcr.io/kipit-labs/kipitiny:1.2.3", nil, ""}, // docker run: the swap sticks
 	}
 	for _, tt := range tests {
 		if got := composePin(tt.ref, tt.labels); got != tt.want {
 			t.Errorf("composePin(%q) = %q, want %q", tt.ref, got, tt.want)
+		}
+	}
+}
+
+func TestFloatingTag(t *testing.T) {
+	const image = "ghcr.io/kipit-labs/kipitiny"
+	for ref, want := range map[string]bool{
+		image:                              true,
+		image + ":latest":                  true,
+		"ghcr.io/mathoyer/kipitiny":        true,
+		"ghcr.io/mathoyer/kipitiny:latest": true,
+		image + ":0.47.0":                  false,
+		"ghcr.io/mathoyer/kipitiny:0.47.0": false,
+		"ghcr.io/other/kipitiny:latest":    false,
+	} {
+		if got := floatingTag(ref, image); got != want {
+			t.Errorf("floatingTag(%q) = %v, want %v", ref, got, want)
 		}
 	}
 }

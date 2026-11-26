@@ -6,10 +6,10 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/MatHoyer/kipitiny/internal/config"
-	"github.com/MatHoyer/kipitiny/internal/progress"
-	"github.com/MatHoyer/kipitiny/internal/secrets"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/progress"
+	"github.com/kipit-labs/kipitiny/internal/secrets"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // fakeProvider resolves fake://X to "value-of-X" once connected with "good".

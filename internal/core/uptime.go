@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/notify"
-	"github.com/MatHoyer/kipitiny/internal/probe"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/probe"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const (

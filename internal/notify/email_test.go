@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/mail"
+	"github.com/kipit-labs/kipitiny/internal/mail"
 )
 
 func TestEmailRecipients(t *testing.T) {

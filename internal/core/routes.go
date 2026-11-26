@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const (

@@ -158,7 +158,7 @@ is refused when saving; one to a default connection that isn't connected
 fails at deploy.
 
 The Proton Pass CLI isn't part of the manager's image. The first connection
-pulls `ghcr.io/mathoyer/kipitiny-protonpass` (about 60 MB) on the manager's
+pulls `ghcr.io/kipit-labs/kipitiny-protonpass` (about 60 MB) on the manager's
 server and runs it as a container named `kipitiny-protonpass` while it's used
 (a deploy, browsing in the env editor); it's removed after 5 minutes idle. Its
 session lives in the `kipitiny-protonpass` volume, deleted on disconnect, and

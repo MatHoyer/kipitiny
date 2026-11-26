@@ -5,7 +5,7 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 
-	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/docker"
 )
 
 func TestPickContainer(t *testing.T) {

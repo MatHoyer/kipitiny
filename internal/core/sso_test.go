@@ -17,8 +17,8 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/MatHoyer/kipitiny/internal/config"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // fakeIssuer is an OpenID provider: discovery, keys, and a token endpoint

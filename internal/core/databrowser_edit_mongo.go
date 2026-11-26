@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // DocChanges are edits to one collection's documents, in relaxed Extended

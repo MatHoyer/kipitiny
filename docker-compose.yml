@@ -7,7 +7,7 @@ services:
   manager:
     # Pin with KIPITINY_VERSION=1.2.3 to upgrade only by hand: a UI update
     # would be undone by the next `up` with a pinned version.
-    image: ghcr.io/mathoyer/kipitiny:${KIPITINY_VERSION:-latest}
+    image: ghcr.io/kipit-labs/kipitiny:${KIPITINY_VERSION:-latest}
     # Direct access to the UI. With KIPITINY_DOMAIN set, the UI is served over
     # HTTPS by Traefik: use KIPITINY_UI_PORT=127.0.0.1:3000 (Docker's published
     # ports bypass host firewalls like ufw).
