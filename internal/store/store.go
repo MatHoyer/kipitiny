@@ -544,10 +544,16 @@ type Service struct {
 	// AnalyticsScript and AnalyticsHit are the paths of Domain serving the
 	// tracker script and taking hits (both or neither), so ad blockers
 	// don't recognize them; empty uses /a.js and /e of the analytics domain.
-	AnalyticsScript   string            `bun:"analytics_script" json:"analyticsScript"`
-	AnalyticsHit      string            `bun:"analytics_hit" json:"analyticsHit"`
-	AnalyticsSharedAt time.Time         `bun:"analytics_shared_at,nullzero" json:"analyticsSharedAt,omitzero"`
-	Env               map[string]string `bun:"env" json:"env"`
+	AnalyticsScript   string    `bun:"analytics_script" json:"analyticsScript"`
+	AnalyticsHit      string    `bun:"analytics_hit" json:"analyticsHit"`
+	AnalyticsSharedAt time.Time `bun:"analytics_shared_at,nullzero" json:"analyticsSharedAt,omitzero"`
+	// Errors: the app's Sentry SDK reports to the analytics server, with
+	// the DSN of ErrorsProject and ErrorsKey (kept while off, so turning it
+	// back on keeps the DSN).
+	Errors        bool              `bun:"errors" json:"errors"`
+	ErrorsProject int64             `bun:"errors_project" json:"-"`
+	ErrorsKey     string            `bun:"errors_key" json:"-"`
+	Env           map[string]string `bun:"env" json:"env"`
 	// Secrets names the Env entries that are write-only; the others are
 	// plain variables.
 	Secrets []string `bun:"secrets" json:"secrets"`

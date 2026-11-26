@@ -52,8 +52,10 @@ type ServiceInput struct {
 	Port     int               `json:"port"`
 	Domain   string            `json:"domain"`
 	// Analytics counts the domain's visits (apps with a domain only).
-	Analytics bool              `json:"analytics"`
-	Env       map[string]string `json:"env"`
+	Analytics bool `json:"analytics"`
+	// Errors takes the errors of the app's Sentry SDK (apps only).
+	Errors bool              `json:"errors"`
+	Env    map[string]string `json:"env"`
 	// Secrets names the write-only Env entries; nil makes them all secrets.
 	Secrets    []string `json:"secrets"`
 	MemoryMB   int      `json:"memoryMb"`
@@ -112,6 +114,7 @@ type ServicePatch struct {
 	Port      *int     `json:"port"`
 	Domain    *string  `json:"domain"`
 	Analytics *bool    `json:"analytics"`
+	Errors    *bool    `json:"errors"`
 	// AnalyticsScript and AnalyticsHit set the app's own tracker paths,
 	// both or neither (empty: the analytics domain's).
 	AnalyticsScript *string           `json:"analyticsScript"`
@@ -196,6 +199,9 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 	if err := c.validate(ctx, svc); err != nil {
 		return ServiceView{}, err
 	}
+	if err := c.errorsIdentity(ctx, &svc); err != nil {
+		return ServiceView{}, err
+	}
 	if svc.Analytics && svc.Domain != "" {
 		svc.AnalyticsSince = time.Now().UTC().Truncate(time.Microsecond) // as stored
 	}
@@ -228,6 +234,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		Port:             in.Port,
 		Domain:           strings.ToLower(strings.TrimSpace(in.Domain)),
 		Analytics:        in.Analytics,
+		Errors:           in.Errors,
 		Env:              in.Env,
 		MemoryMB:         in.MemoryMB,
 		CPUs:             in.CPUs,
@@ -357,6 +364,9 @@ func (c *Core) updateService(ctx context.Context, id string, p ServicePatch) (st
 	if err := c.validate(ctx, svc); err != nil {
 		return store.Service{}, err
 	}
+	if err := c.errorsIdentity(ctx, &svc); err != nil {
+		return store.Service{}, err
+	}
 	if svc.Domain != old.Domain || svc.Analytics && !old.Analytics {
 		svc.AnalyticsSince = time.Now().UTC().Truncate(time.Microsecond) // as stored
 	}
@@ -389,6 +399,9 @@ func (c *Core) updateService(ctx context.Context, id string, p ServicePatch) (st
 		svc.AnalyticsScript != old.AnalyticsScript || svc.AnalyticsHit != old.AnalyticsHit) {
 		c.kick() // the reconciler sends the analytics server its hostnames and paths
 	}
+	if svc.Errors != old.Errors {
+		c.kick() // and the DSN keys
+	}
 	return svc, nil
 }
 
@@ -416,6 +429,9 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 	}
 	if p.Analytics != nil {
 		svc.Analytics = *p.Analytics
+	}
+	if p.Errors != nil {
+		svc.Errors = *p.Errors
 	}
 	if p.AnalyticsScript != nil {
 		svc.AnalyticsScript = strings.TrimSpace(*p.AnalyticsScript)
@@ -593,6 +609,9 @@ func validateService(s store.Service) error {
 	}
 	if s.Preview != "" && s.Preview != "only" && s.Preview != "skip" {
 		return fmt.Errorf("%w: preview must be only, skip or empty", ErrInvalid)
+	}
+	if s.Errors && s.Kind.IsDatabase() {
+		return fmt.Errorf("%w: error tracking is for apps, whose Sentry SDK reports their errors", ErrInvalid)
 	}
 	if s.Analytics && (s.Kind.IsDatabase() || !httpRouted(s)) {
 		return fmt.Errorf("%w: analytics count the visits of an app's domain: set a domain and a container port", ErrInvalid)
