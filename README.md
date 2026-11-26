@@ -1,3 +1,5 @@
+<p align="center"><img src="site/public/favicon.svg" alt="" width="96"></p>
+
 <h1 align="center">kipitiny</h1>
 
 <p align="center">
