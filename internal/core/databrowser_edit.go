@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/MatHoyer/kipitiny/internal/docker"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Edits from the data browser: the caller sends what changed, the manager

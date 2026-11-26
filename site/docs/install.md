@@ -5,7 +5,7 @@ order: 1
 ---
 
 To set up a fresh server (firewall, SSH hardening, Docker, kipitiny), use the
-Ansible playbook in [`deploy/ansible`](https://github.com/MatHoyer/kipitiny/tree/main/deploy/ansible). By hand, only
+Ansible playbook in [`deploy/ansible`](https://github.com/kipit-labs/kipitiny/tree/main/deploy/ansible). By hand, only
 this repo's `docker-compose.yml` is needed on the server:
 
 ```sh

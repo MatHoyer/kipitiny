@@ -13,12 +13,12 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/MatHoyer/kipitiny/internal/api"
-	"github.com/MatHoyer/kipitiny/internal/config"
-	"github.com/MatHoyer/kipitiny/internal/core"
-	"github.com/MatHoyer/kipitiny/internal/docker"
-	"github.com/MatHoyer/kipitiny/internal/store"
-	"github.com/MatHoyer/kipitiny/internal/store/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/api"
+	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store/sqlite"
 )
 
 type bearer struct{ token string }
@@ -208,8 +208,8 @@ func TestDeployImageKeepsSettings(t *testing.T) {
 
 func TestDocs(t *testing.T) {
 	for _, tc := range []struct{ version, index, base, sources string }{
-		{"0.10.2", "https://kipitiny.mathieuhoyer.fr/docs/0.10/llms.txt", "https://kipitiny.mathieuhoyer.fr/docs/0.10", "https://github.com/MatHoyer/kipitiny/tree/0.10.2/site/docs"},
-		{"dev", "https://kipitiny.mathieuhoyer.fr/llms.txt", "https://kipitiny.mathieuhoyer.fr/docs", "https://github.com/MatHoyer/kipitiny/tree/main/site/docs"},
+		{"0.10.2", "https://kipitiny.mathieuhoyer.fr/docs/0.10/llms.txt", "https://kipitiny.mathieuhoyer.fr/docs/0.10", "https://github.com/kipit-labs/kipitiny/tree/0.10.2/site/docs"},
+		{"dev", "https://kipitiny.mathieuhoyer.fr/llms.txt", "https://kipitiny.mathieuhoyer.fr/docs", "https://github.com/kipit-labs/kipitiny/tree/main/site/docs"},
 	} {
 		index, base, sources := docs(tc.version)
 		if index != tc.index || base != tc.base || sources != tc.sources {

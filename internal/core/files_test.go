@@ -12,8 +12,8 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
-	"github.com/MatHoyer/kipitiny/internal/config"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 func TestGitRepoFiles(t *testing.T) {

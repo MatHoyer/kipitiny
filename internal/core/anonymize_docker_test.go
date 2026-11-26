@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/anonymize"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/anonymize"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // anonymizeRoundTrip backs svc up (seed writes its data), turns on

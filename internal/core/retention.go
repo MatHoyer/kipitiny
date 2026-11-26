@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // retain returns the IDs to keep among a schedule's successful backups

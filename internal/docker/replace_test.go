@@ -17,7 +17,7 @@ func TestReplacementSpec(t *testing.T) {
 		ID:   id,
 		Name: "/kipitiny-manager-1",
 		Config: &container.Config{
-			Image:    "ghcr.io/mathoyer/kipitiny:1.0.0",
+			Image:    "ghcr.io/kipit-labs/kipitiny:1.0.0",
 			Hostname: id[:12],
 			Env:      []string{"KIPITINY_DOMAIN=k.example.com"},
 		},
@@ -36,14 +36,14 @@ func TestReplacementSpec(t *testing.T) {
 		}},
 	}
 
-	spec := replacementSpec(old, "ghcr.io/mathoyer/kipitiny:1.1.0")
-	if spec.Name != "kipitiny-manager-1" || spec.Config.Image != "ghcr.io/mathoyer/kipitiny:1.1.0" {
+	spec := replacementSpec(old, "ghcr.io/kipit-labs/kipitiny:1.1.0")
+	if spec.Name != "kipitiny-manager-1" || spec.Config.Image != "ghcr.io/kipit-labs/kipitiny:1.1.0" {
 		t.Errorf("name/image = %q %q", spec.Name, spec.Config.Image)
 	}
 	if spec.Config.Hostname != "" {
 		t.Error("the default hostname (old ID) must not be carried over")
 	}
-	if old.Config.Image != "ghcr.io/mathoyer/kipitiny:1.0.0" {
+	if old.Config.Image != "ghcr.io/kipit-labs/kipitiny:1.0.0" {
 		t.Error("old config mutated")
 	}
 	want := []mount.Mount{
@@ -90,13 +90,13 @@ func TestStripImageDefaults(t *testing.T) {
 }
 
 func TestFloating(t *testing.T) {
-	const image = "ghcr.io/mathoyer/kipitiny:1.1.0"
+	const image = "ghcr.io/kipit-labs/kipitiny:1.1.0"
 	tests := map[string]bool{
-		"ghcr.io/mathoyer/kipitiny":        true,
-		"ghcr.io/mathoyer/kipitiny:latest": true,
-		"ghcr.io/mathoyer/kipitiny:1.0.0":  false,
-		"ghcr.io/other/kipitiny:latest":    false,
-		"localhost:5000/kipitiny:latest":   false,
+		"ghcr.io/kipit-labs/kipitiny":        true,
+		"ghcr.io/kipit-labs/kipitiny:latest": true,
+		"ghcr.io/kipit-labs/kipitiny:1.0.0":  false,
+		"ghcr.io/other/kipitiny:latest":      false,
+		"localhost:5000/kipitiny:latest":     false,
 	}
 	for ref, want := range tests {
 		if got := floating(ref, image); got != want {

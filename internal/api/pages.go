@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/MatHoyer/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 const (

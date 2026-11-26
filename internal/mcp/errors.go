@@ -5,8 +5,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/MatHoyer/kipitiny/internal/analytics"
-	"github.com/MatHoyer/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/analytics"
+	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 type listIssuesIn struct {

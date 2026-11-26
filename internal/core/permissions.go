@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"slices"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Perm is something a member may do in a project they were granted.

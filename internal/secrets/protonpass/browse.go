@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/MatHoyer/kipitiny/internal/secrets"
+	"github.com/kipit-labs/kipitiny/internal/secrets"
 )
 
 func (c *Client) Vaults(ctx context.Context) ([]string, error) {

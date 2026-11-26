@@ -561,7 +561,7 @@ function DeployFromCIDialog({ svc }: { svc: ServiceT }) {
   const ref = /^\d+\.\d+\.\d+$/.test(version) ? version : "main";
   const step = [
     "- name: Deploy",
-    `  uses: MatHoyer/kipitiny/deploy@${ref}`,
+    `  uses: kipit-labs/kipitiny/deploy@${ref}`,
     "  with:",
     `    url: ${window.location.origin}`,
     "    token: ${{ secrets.KIPITINY_TOKEN }}",
@@ -572,7 +572,7 @@ function DeployFromCIDialog({ svc }: { svc: ServiceT }) {
     "- name: Deploy",
     "  run: >",
     "    docker run --rm -e KIPITINY_TOKEN=${{ secrets.KIPITINY_TOKEN }}",
-    "    ghcr.io/mathoyer/kipitiny deploy",
+    "    ghcr.io/kipit-labs/kipitiny deploy",
     `    --url ${window.location.origin} --service ${svc.id}`,
     "    --tag sha-${{ github.sha }} --commit ${{ github.sha }}",
   ].join("\n");

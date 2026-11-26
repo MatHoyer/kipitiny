@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/MatHoyer/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 func (a *API) email(w http.ResponseWriter, r *http.Request) {

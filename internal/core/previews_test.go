@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MatHoyer/kipitiny/internal/anonymize"
-	"github.com/MatHoyer/kipitiny/internal/compose"
-	"github.com/MatHoyer/kipitiny/internal/config"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/anonymize"
+	"github.com/kipit-labs/kipitiny/internal/compose"
+	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // previewParent is a project like most: an app on a domain using a

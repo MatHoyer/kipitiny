@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/config"
 )
 
 func TestShutdownDrainsOperations(t *testing.T) {

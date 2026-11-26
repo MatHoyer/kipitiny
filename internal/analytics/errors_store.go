@@ -11,7 +11,7 @@ import (
 
 	"github.com/uptrace/bun"
 
-	"github.com/MatHoyer/kipitiny/internal/ids"
+	"github.com/kipit-labs/kipitiny/internal/ids"
 )
 
 // ErrorProject is an app with error tracking on: ID is its DSN's project,

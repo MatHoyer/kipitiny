@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/MatHoyer/kipitiny/internal/upgrade"
+	"github.com/kipit-labs/kipitiny/internal/upgrade"
 )
 
 func main() {

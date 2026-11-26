@@ -4,7 +4,7 @@ export const SITE_URL = (import.meta.env.VITE_SITE_URL || "https://kipitiny.math
 /** The kipitiny version the site is built from ("" if unknown). */
 export const VERSION: string = __KIPITINY_VERSION__;
 
-export const GITHUB = "https://github.com/MatHoyer/kipitiny";
+export const GITHUB = "https://github.com/kipit-labs/kipitiny";
 
 /** Title, description, canonical URL and social card tags for one page. */
 export function seo({ title, description, path }: { title: string; description: string; path: string }) {

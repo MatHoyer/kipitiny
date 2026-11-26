@@ -8,8 +8,8 @@ import (
 
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 
-	"github.com/MatHoyer/kipitiny/internal/config"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 func TestRetagImage(t *testing.T) {

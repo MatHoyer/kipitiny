@@ -10,7 +10,7 @@ import (
 
 	"github.com/uptrace/bun"
 
-	"github.com/MatHoyer/kipitiny/internal/anonymize"
+	"github.com/kipit-labs/kipitiny/internal/anonymize"
 )
 
 var (

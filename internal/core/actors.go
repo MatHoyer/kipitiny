@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // ErrForbidden means the caller is authenticated but may not do that.

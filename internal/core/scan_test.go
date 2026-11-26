@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/config"
-	"github.com/MatHoyer/kipitiny/internal/storage"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/storage"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 func TestScanBackupTarget(t *testing.T) {

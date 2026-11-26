@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/analytics"
-	"github.com/MatHoyer/kipitiny/internal/notify"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/analytics"
+	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const (

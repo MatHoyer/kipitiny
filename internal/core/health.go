@@ -9,8 +9,8 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 
-	"github.com/MatHoyer/kipitiny/internal/notify"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // healthGrace is how long a service may have no healthy replica before it is

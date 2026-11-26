@@ -34,7 +34,7 @@ export const meta: Route.MetaFunction = () => [
   },
 ];
 
-const INSTALL = `curl -fsSLO https://raw.githubusercontent.com/MatHoyer/kipitiny/main/docker-compose.yml
+const INSTALL = `curl -fsSLO https://raw.githubusercontent.com/kipit-labs/kipitiny/main/docker-compose.yml
 docker compose up -d`;
 
 /** Position of a tick on the 0–2048 MB axis. */
@@ -112,7 +112,7 @@ export default function Home() {
           <h1>Your server is for your apps.</h1>
           <p className="lede">Not for the platform that runs them. kipitiny is a self-hosted PaaS: it deploys your <strong>apps</strong> and <strong>databases</strong>, keeps them backed up, lets your <strong>coding agent</strong> run them over MCP, and stays out of the way: about 15&nbsp;MB of memory and no CPU at rest.</p>
           <InstallCommand />
-          <p className="hero-links">Then open <code>http://your-server:3000</code>. Setting up a fresh server? Use the <a href="https://github.com/MatHoyer/kipitiny/tree/main/deploy/ansible">Ansible playbook</a>.</p>
+          <p className="hero-links">Then open <code>http://your-server:3000</code>. Setting up a fresh server? Use the <a href="https://github.com/kipit-labs/kipitiny/tree/main/deploy/ansible">Ansible playbook</a>.</p>
 
           <figure className="scale" aria-labelledby="scale-title">
             <h2 id="scale-title">A 2&nbsp;GB server, drawn to scale</h2>
@@ -257,7 +257,7 @@ export default function Home() {
             <li>
               <div>
                 <h3>Start the manager</h3>
-                <pre>{`curl -fsSLO https://raw.githubusercontent.com/MatHoyer/kipitiny/main/docker-compose.yml
+                <pre>{`curl -fsSLO https://raw.githubusercontent.com/kipit-labs/kipitiny/main/docker-compose.yml
 docker compose up -d`}</pre>
               </div>
             </li>

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/analytics"
+	"github.com/kipit-labs/kipitiny/internal/analytics"
 )
 
 // AnalyticsExports are the tables ServiceAnalyticsCSV writes.

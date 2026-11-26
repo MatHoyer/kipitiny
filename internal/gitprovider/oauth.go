@@ -3,7 +3,7 @@ package gitprovider
 import (
 	"golang.org/x/oauth2"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // GitLab and Gitea providers are OAuth applications the user registers on

@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.."
 
 slug=$(git rev-parse --abbrev-ref HEAD | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '-' | cut -c1-40)
 name="kipitiny-test-$slug"
-image="ghcr.io/mathoyer/kipitiny:dev-$slug"
+image="ghcr.io/kipit-labs/kipitiny:dev-$slug"
 
 ports() {
   echo "manager: http://$(docker port "$name" 3000/tcp | head -1)"

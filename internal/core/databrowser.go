@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/docker"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // The data browser runs the database's own client (psql, redis-cli) inside

@@ -235,7 +235,7 @@ function UpdateNotice() {
             {update.current} → {update.latest} ·{" "}
             <a
               className="underline underline-offset-2"
-              href={`https://github.com/MatHoyer/kipitiny/releases/tag/${update.latest}`}
+              href={`https://github.com/kipit-labs/kipitiny/releases/tag/${update.latest}`}
               target="_blank"
               rel="noreferrer"
             >

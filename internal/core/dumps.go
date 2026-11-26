@@ -10,9 +10,9 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
-	"github.com/MatHoyer/kipitiny/internal/docker"
-	"github.com/MatHoyer/kipitiny/internal/storage"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/storage"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Dump backups (kind dump) are made by the database's own tool inside its

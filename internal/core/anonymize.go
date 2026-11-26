@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/anonymize"
-	"github.com/MatHoyer/kipitiny/internal/compose"
-	"github.com/MatHoyer/kipitiny/internal/docker"
-	"github.com/MatHoyer/kipitiny/internal/notify"
-	"github.com/MatHoyer/kipitiny/internal/storage"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/anonymize"
+	"github.com/kipit-labs/kipitiny/internal/compose"
+	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/storage"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Previews seeded with anonymized data restore an anonymized copy of the

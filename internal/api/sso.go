@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 func (a *API) listSSOProviders(w http.ResponseWriter, r *http.Request) {

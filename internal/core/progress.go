@@ -3,7 +3,7 @@ package core
 import (
 	"context"
 
-	"github.com/MatHoyer/kipitiny/internal/progress"
+	"github.com/kipit-labs/kipitiny/internal/progress"
 )
 
 // WithProgress has a long call under ctx (connecting or testing an

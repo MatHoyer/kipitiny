@@ -47,13 +47,13 @@ the image once in CI, then have kipitiny deploy that exact image.
 Create a token restricted to *deploy* on the project (Settings), keep it as a
 CI secret, and end the pipeline with `kipitiny deploy`. On GitHub Actions, the
 `deploy` action downloads it (a static binary of about 40 MB instead of the 400 MB image, checksum-verified)
-from the [releases](https://github.com/MatHoyer/kipitiny/releases):
+from the [releases](https://github.com/kipit-labs/kipitiny/releases):
 
 ```yaml
 # .github/workflows/deploy.yml (after docker/build-push-action pushed
 # ghcr.io/org/shop:sha-${{ github.sha }})
 - name: Deploy
-  uses: MatHoyer/kipitiny/deploy@0.46.0
+  uses: kipit-labs/kipitiny/deploy@0.46.0
   with:
     url: https://kipitiny.example.com
     token: ${{ secrets.KIPITINY_TOKEN }}
@@ -73,7 +73,7 @@ the same command from the manager image:
 - name: Deploy
   run: >
     docker run --rm -e KIPITINY_TOKEN=${{ secrets.KIPITINY_TOKEN }}
-    ghcr.io/mathoyer/kipitiny deploy
+    ghcr.io/kipit-labs/kipitiny deploy
     --url https://kipitiny.example.com --service shop/web
     --tag sha-${{ github.sha }} --commit ${{ github.sha }}
 ```

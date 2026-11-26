@@ -7,7 +7,7 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 func TestSchemaDockerPostgres(t *testing.T) {

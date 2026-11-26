@@ -254,7 +254,7 @@ jobs:
         with: { push: true, tags: "ghcr.io/${{ github.repository }}:sha-${{ github.event.pull_request.head.sha }}" }
       - run: >
           docker run --rm -e KIPITINY_TOKEN=${{ secrets.KIPITINY_TOKEN }}
-          ghcr.io/mathoyer/kipitiny preview
+          ghcr.io/kipit-labs/kipitiny preview
           --url https://kipitiny.example.com --project shop --name ${{ needs.plan.outputs.name }}
           --tag web=sha-${{ github.event.pull_request.head.sha }}
           --branch ${{ github.event.pull_request.head.ref }} --commit ${{ github.event.pull_request.head.sha }}
@@ -267,7 +267,7 @@ jobs:
     steps:
       - run: >
           docker run --rm -e KIPITINY_TOKEN=${{ secrets.KIPITINY_TOKEN }}
-          ghcr.io/mathoyer/kipitiny preview
+          ghcr.io/kipit-labs/kipitiny preview
           --url https://kipitiny.example.com --project shop --name pr-${{ github.event.pull_request.number }} --close
 ```
 

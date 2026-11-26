@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 func (a *API) projectGit(w http.ResponseWriter, r *http.Request) {

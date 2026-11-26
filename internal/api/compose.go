@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/MatHoyer/kipitiny/internal/compose"
-	"github.com/MatHoyer/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/compose"
+	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 // exportCompose returns a project (or ?service=name) as a compose file,

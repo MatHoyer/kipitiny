@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 func TestVolumePath(t *testing.T) {

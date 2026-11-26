@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/docker"
 )
 
 // HostUsage is a server's resource use at one moment.

@@ -1,5 +1,8 @@
-# Pushing a tag like 1.2.3 publishes ghcr.io/mathoyer/kipitiny:1.2.3 and
+# Pushing a tag like 1.2.3 publishes ghcr.io/kipit-labs/kipitiny:1.2.3 and
 # :latest for amd64 and arm64. Managers look for new versions there.
+# Managers from before the move to kipit-labs look at ghcr.io/mathoyer/kipitiny:
+# the release after the move goes there too, as their bridge; drop those two
+# tags once it's out.
 name: release
 
 on:
@@ -41,6 +44,8 @@ jobs:
           labels: |
             io.kipitiny.upgrade-notices=${{ steps.notices.outputs.label }}
           tags: |
+            ghcr.io/kipit-labs/kipitiny:${{ github.ref_name }}
+            ghcr.io/kipit-labs/kipitiny:latest
             ghcr.io/mathoyer/kipitiny:${{ github.ref_name }}
             ghcr.io/mathoyer/kipitiny:latest
           push: true

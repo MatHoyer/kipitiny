@@ -10,8 +10,8 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 
-	"github.com/MatHoyer/kipitiny/internal/docker"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Everything Docker holds for a project or a service is keyed by ID (labels,

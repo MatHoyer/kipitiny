@@ -11,7 +11,7 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/client"
 
-	"github.com/MatHoyer/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/docker"
 )
 
 // TestContainerRunner runs the helper image on the local Docker. It needs

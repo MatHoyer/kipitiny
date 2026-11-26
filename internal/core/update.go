@@ -16,11 +16,11 @@ import (
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
-	"github.com/MatHoyer/kipitiny/internal/docker"
-	"github.com/MatHoyer/kipitiny/internal/notify"
-	"github.com/MatHoyer/kipitiny/internal/registry"
-	"github.com/MatHoyer/kipitiny/internal/store"
-	"github.com/MatHoyer/kipitiny/internal/upgrade"
+	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/registry"
+	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/upgrade"
 )
 
 const (
@@ -369,10 +369,19 @@ func (c *Core) launchUpdater(ctx context.Context, self, ref string) error {
 	return err
 }
 
-// floatingTag reports whether ref is image without tag or tagged latest.
+// floatingTag reports whether ref is image (or the image's name before the
+// move to kipit-labs, which compose files still name) without tag or tagged latest.
 func floatingTag(ref, image string) bool {
-	return ref == image || ref == image+":latest"
+	for _, img := range []string{image, legacyImage} {
+		if ref == img || ref == img+":latest" {
+			return true
+		}
+	}
+	return false
 }
+
+// legacyImage is where releases were published before the repository moved.
+const legacyImage = "ghcr.io/mathoyer/kipitiny"
 
 // cleanupUpdater removes finished updater containers, copying their output
 // into the manager's log first: it is the only record of how an update went.

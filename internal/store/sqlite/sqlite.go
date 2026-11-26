@@ -15,10 +15,10 @@ import (
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 
-	"github.com/MatHoyer/kipitiny/internal/anonymize"
-	"github.com/MatHoyer/kipitiny/internal/ids"
-	"github.com/MatHoyer/kipitiny/internal/sqlitedb"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/anonymize"
+	"github.com/kipit-labs/kipitiny/internal/ids"
+	"github.com/kipit-labs/kipitiny/internal/sqlitedb"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 //go:embed migrations/*.sql

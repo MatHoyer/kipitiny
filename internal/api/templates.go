@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/MatHoyer/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 func (a *API) listTemplates(w http.ResponseWriter, r *http.Request) {

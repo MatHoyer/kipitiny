@@ -27,7 +27,7 @@ Code tests are not enough: exercise every new behavior the way a user would, thr
 
 **Test environment (default).** Each worktree gets its own manager, isolated from the other worktrees' ones:
 `scripts/test-env.sh` runs it in its own Docker daemon (`docker:29-dind`, container `kipitiny-test-<branch>`), from
-the image `ghcr.io/mathoyer/kipitiny:dev-<branch>` built from the worktree and the repo's `docker-compose.yml`.
+the image `ghcr.io/kipit-labs/kipitiny:dev-<branch>` built from the worktree and the repo's `docker-compose.yml`.
 
 ```bash
 scripts/test-env.sh up      # build the branch, (re)start its manager, print its URL and Traefik's ports

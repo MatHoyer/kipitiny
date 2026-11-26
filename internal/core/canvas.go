@@ -6,7 +6,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // The map canvas lays nodes out by itself; where someone drags one is kept

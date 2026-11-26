@@ -22,8 +22,8 @@ import (
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 
-	"github.com/MatHoyer/kipitiny/internal/ids"
-	"github.com/MatHoyer/kipitiny/internal/sqlitedb"
+	"github.com/kipit-labs/kipitiny/internal/ids"
+	"github.com/kipit-labs/kipitiny/internal/sqlitedb"
 )
 
 //go:embed migrations/*.sql

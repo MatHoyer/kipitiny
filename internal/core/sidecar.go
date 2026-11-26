@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/MatHoyer/kipitiny/internal/storage"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/storage"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // sidecarExt names a backup's sidecar: <object key>.json, the backup's

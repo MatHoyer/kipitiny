@@ -8,7 +8,7 @@ order: 15
 |----------------------|---------|---|
 | `KIPITINY_ADDR`      | `:3000` | HTTP listen address |
 | `KIPITINY_DOMAIN`    | — | Serve the UI/API over HTTPS on this domain, through Traefik |
-| `KIPITINY_IMAGE`     | `ghcr.io/mathoyer/kipitiny` | Where new versions are looked up and pulled |
+| `KIPITINY_IMAGE`     | `ghcr.io/kipit-labs/kipitiny` | Where new versions are looked up and pulled |
 | `KIPITINY_UPDATE_CHECK` | `on` | `off` stops looking for new versions |
 | `KIPITINY_DATA_DIR`  | `/data` | SQLite DB, deploy logs, local backups. Local disk only. |
 | `KIPITINY_LOG_LEVEL` | `info`  | `debug`, `info`, `warn`, `error` |
@@ -21,7 +21,7 @@ order: 15
 | `KIPITINY_ACME_EMAIL` | — | Let's Encrypt account email (optional) |
 | `KIPITINY_CLOUDFLARE_TUNNEL_TOKEN` | — | Receive traffic through a Cloudflare Tunnel instead of ports 80/443 |
 | `KIPITINY_CLOUDFLARED_IMAGE` | `cloudflare/cloudflared:2026.10.4` | |
-| `KIPITINY_PROTONPASS_IMAGE` | `ghcr.io/mathoyer/kipitiny-protonpass:2.4.2` | Proton Pass CLI image, pulled on first connect ([Password managers](/docs/services#password-managers)) |
+| `KIPITINY_PROTONPASS_IMAGE` | `ghcr.io/kipit-labs/kipitiny-protonpass:2.4.2` | Proton Pass CLI image, pulled on first connect ([Password managers](/docs/services#password-managers)) |
 | `KIPITINY_MANAGER_BACKUP_CRON` | `@daily` | First-start schedule for snapshots of the manager's state (`off` for none) |
 | `KIPITINY_MANAGER_BACKUP_TARGET` | `local` | Storage ID for that schedule |
 | `KIPITINY_MANAGER_BACKUP_KEEP` | `14` | Snapshots that schedule keeps |

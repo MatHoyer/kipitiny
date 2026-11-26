@@ -1,6 +1,6 @@
 # Builds the Proton Pass helper (images/protonpass) for amd64 and arm64. Pull
 # requests only build it, so a bad checksum fails there; main and manual runs
-# publish ghcr.io/mathoyer/kipitiny-protonpass:<pass-cli version>, the tag the
+# publish ghcr.io/kipit-labs/kipitiny-protonpass:<pass-cli version>, the tag the
 # manager's KIPITINY_PROTONPASS_IMAGE default points at. Releases of kipitiny
 # don't rebuild it.
 name: protonpass
@@ -41,7 +41,7 @@ jobs:
         with:
           context: images/protonpass
           platforms: linux/amd64,linux/arm64
-          tags: ghcr.io/mathoyer/kipitiny-protonpass:${{ steps.version.outputs.version }}
+          tags: ghcr.io/kipit-labs/kipitiny-protonpass:${{ steps.version.outputs.version }}
           push: ${{ github.event_name != 'pull_request' }}
           cache-from: type=gha,scope=protonpass
           cache-to: type=gha,mode=max,scope=protonpass

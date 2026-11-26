@@ -9,8 +9,8 @@ import (
 
 	"filippo.io/age"
 
-	"github.com/MatHoyer/kipitiny/internal/storage"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/storage"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 type TargetInput struct {

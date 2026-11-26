@@ -7,7 +7,7 @@ import (
 	netmail "net/mail"
 	"strings"
 
-	"github.com/MatHoyer/kipitiny/internal/mail"
+	"github.com/kipit-labs/kipitiny/internal/mail"
 )
 
 // EmailProviderKey is the email field naming the provider mail goes

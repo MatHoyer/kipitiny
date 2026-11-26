@@ -8,9 +8,9 @@ import (
 
 	"github.com/distribution/reference"
 
-	"github.com/MatHoyer/kipitiny/internal/docker"
-	"github.com/MatHoyer/kipitiny/internal/progress"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/progress"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 type RegistryInput struct {

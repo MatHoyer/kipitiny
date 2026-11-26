@@ -7,12 +7,12 @@ import (
 	"slices"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/config"
 	"strings"
 	"testing"
 
-	"github.com/MatHoyer/kipitiny/internal/compose"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/compose"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 func TestExportFile(t *testing.T) {

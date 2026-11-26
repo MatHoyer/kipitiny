@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MatHoyer/kipitiny/internal/notify"
-	"github.com/MatHoyer/kipitiny/internal/upgrade"
+	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/upgrade"
 )
 
 func TestUpdateEvent(t *testing.T) {

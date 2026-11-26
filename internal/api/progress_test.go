@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/MatHoyer/kipitiny/internal/core"
-	"github.com/MatHoyer/kipitiny/internal/progress"
+	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/progress"
 )
 
 func TestProgress(t *testing.T) {

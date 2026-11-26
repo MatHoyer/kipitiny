@@ -16,11 +16,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/MatHoyer/kipitiny/internal/config"
-	"github.com/MatHoyer/kipitiny/internal/docker"
-	"github.com/MatHoyer/kipitiny/internal/progress"
-	"github.com/MatHoyer/kipitiny/internal/secrets"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/progress"
+	"github.com/kipit-labs/kipitiny/internal/secrets"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 var (

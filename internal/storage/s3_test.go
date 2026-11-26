@@ -10,7 +10,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // TestS3 runs against a real S3-compatible server when configured, e.g.

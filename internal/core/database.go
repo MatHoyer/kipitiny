@@ -12,8 +12,8 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 
-	"github.com/MatHoyer/kipitiny/internal/compose"
-	"github.com/MatHoyer/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/compose"
+	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // databaseReadyTimeout bounds the wait for a recreated database to pass its

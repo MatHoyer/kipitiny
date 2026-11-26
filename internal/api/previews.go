@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	"github.com/MatHoyer/kipitiny/internal/anonymize"
-	"github.com/MatHoyer/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/anonymize"
+	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 func (a *API) listPreviews(w http.ResponseWriter, r *http.Request) {
