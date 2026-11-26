@@ -4,10 +4,10 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import { toast } from "sonner";
 import { CheckboxField, CopyButton, ErrorText, Loading, Tag } from "@/components/common";
 import { ConfirmField, useConfirmation } from "@/components/confirm-identity";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { FloatingTextarea } from "@/components/ui/floating-textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@kipit-labs/kipitidy/dialog";
+import { FloatingTextarea } from "@kipit-labs/kipitidy/floating-textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@kipit-labs/kipitidy/tabs";
 import { useDocsUrl } from "@/lib/docs";
 import { api, type ComposePlan } from "../api";
 

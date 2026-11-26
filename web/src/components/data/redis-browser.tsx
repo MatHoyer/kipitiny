@@ -3,11 +3,11 @@ import { ChevronRight, Clock, Plus, RefreshCw, Trash2, Undo2 } from "lucide-reac
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CopyButton, ErrorText, Loading } from "@/components/common";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kipit-labs/kipitidy/select";
+import { Segmented, SegmentedItem } from "@kipit-labs/kipitidy/segmented";
 import { formatBytes, formatDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, type KeyChanges, type RedisKey, type RedisValue } from "../../api";

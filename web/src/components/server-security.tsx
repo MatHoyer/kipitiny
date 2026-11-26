@@ -14,10 +14,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Spinner } from "@/components/ui/spinner";
+} from "@kipit-labs/kipitidy/alert-dialog";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@kipit-labs/kipitidy/collapsible";
+import { Spinner } from "@kipit-labs/kipitidy/spinner";
 import { timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, type PendingUpdate, type SecurityReport, type SecurityStatus, type UpdateImpact } from "@/api";

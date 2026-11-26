@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState, type CSSProperties } from "react";
 import { Empty } from "@/components/common";
 import { serviceLogos } from "@/components/service-icon";
-import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+import { Segmented, SegmentedItem } from "@kipit-labs/kipitidy/segmented";
 import { api, isDatabase, type Service } from "../../api";
 import { UnsavedChanges, useUnsaved } from "./changes";
 import { MongoConsole, PgConsole, preloadSqlEditor, RedisConsole } from "./data-console";

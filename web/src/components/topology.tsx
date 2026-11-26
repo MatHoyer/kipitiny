@@ -1,5 +1,5 @@
 import { stateColors } from "@/components/common";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@kipit-labs/kipitidy/tooltip";
 import { liveState, troubled } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { isDatabase, type Container, type TopoNetwork, type TopoNode, type TopoProject, type TopoService } from "../api";

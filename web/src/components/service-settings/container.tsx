@@ -3,8 +3,8 @@ import { useId, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Mono, Section } from "@/components/common";
 import { SaveBar } from "@/components/save-bar";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingTextarea } from "@/components/ui/floating-textarea";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { FloatingTextarea } from "@kipit-labs/kipitidy/floating-textarea";
 import { api, type Runtime, type Service as ServiceT } from "../../api";
 import { Applies } from "./parts";
 

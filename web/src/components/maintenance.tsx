@@ -4,9 +4,9 @@ import { lazy, Suspense, useId, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { CheckboxField, Mono, Section } from "@/components/common";
 import { SaveBar } from "@/components/save-bar";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingTextarea } from "@/components/ui/floating-textarea";
-import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { FloatingTextarea } from "@kipit-labs/kipitidy/floating-textarea";
+import { Segmented, SegmentedItem } from "@kipit-labs/kipitidy/segmented";
 import { Applies } from "@/components/service-settings/parts";
 import { api, type Maintenance, type Project } from "../api";
 

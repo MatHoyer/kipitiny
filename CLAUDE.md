@@ -10,6 +10,8 @@ Design doc: `docs/design.md` â€” read before architectural changes. Roadmap in Â
 - Docker SDK is `github.com/moby/moby/client` (Options/Result struct API, not the old `docker/docker/client` signatures). Use `cerrdefs.IsNotFound`.
 - Everything created on Docker carries `kipitiny.*` labels (`internal/docker`).
 - Postgres services are always 1 replica.
+- UI primitives (`@kipit-labs/kipitidy/*`: buttons, dialogs, form fields, theme tokens) live in the kipitidy repo
+  (`kipit-labs/kipitidy`): change them there, release, then bump the version in `web/`. App components stay in `web/src/components`.
 - User docs live in `site/docs/*.md` (the website), not in the manager; the MCP instructions link to them.
 - A change that disrupts running servers on upgrade (Traefik recreated, a manual step) adds a notice under `## Unreleased` in `UPGRADE.md`; managers show it before updating.
 

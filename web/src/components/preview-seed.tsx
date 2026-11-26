@@ -5,9 +5,9 @@ import { toast } from "sonner";
 import { ErrorText, Loading, Mono, Section } from "@/components/common";
 import { useProjectGit } from "@/components/git-source";
 import { ServiceIcon } from "@/components/service-icon";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Input } from "@kipit-labs/kipitidy/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kipit-labs/kipitidy/select";
 import { timeAgo } from "@/lib/format";
 import { api, type AnonymizeRules, type PgTable, type Project, type SeedDatabase } from "../api";
 

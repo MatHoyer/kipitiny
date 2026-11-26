@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Cpu, HardDrive, MemoryStick, Network, type LucideIcon } from "lucide-react";
 import { useState, type PointerEvent, type ReactNode } from "react";
 import { Empty, Section } from "@/components/common";
-import { Card } from "@/components/ui/card";
+import { Card } from "@kipit-labs/kipitidy/card";
 import { formatBytes, formatCpu, formatRate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, type ServiceUsage, type Usage } from "../api";

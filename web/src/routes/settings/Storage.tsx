@@ -7,8 +7,8 @@ import { CheckboxField, ChoiceTile, CopyField, ErrorText, Mono, Tag } from "@/co
 import { TestDialog, type PlannedStep } from "@/components/test-dialog";
 import { HowTo } from "@/components/how-to";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Card } from "@kipit-labs/kipitidy/card";
 import {
   Dialog,
   DialogContent,
@@ -16,9 +16,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingSelect } from "@/components/ui/floating-select";
+} from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { FloatingSelect } from "@kipit-labs/kipitidy/floating-select";
 import { api, type BackupTarget, type ScanResult, type TargetInput } from "@/api";
 import {
   storageForm,

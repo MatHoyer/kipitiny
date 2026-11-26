@@ -7,11 +7,11 @@ import { GitHubIcon, GitLabIcon } from "@/components/brand-icons";
 import { ChoiceTile, CopyField, EmptyState, ErrorText, Mono, Tag } from "@/components/common";
 import { TestDialog } from "@/components/test-dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { Stepper, type Step } from "@/components/ui/stepper";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Card } from "@kipit-labs/kipitidy/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { Stepper, type Step } from "@kipit-labs/kipitidy/stepper";
 import { api, type GitProvider, type GitProviderInput, type GitProviderKind } from "@/api";
 import { SettingsPage } from "./page";
 

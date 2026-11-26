@@ -2,8 +2,8 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Eye, MousePointerClick, UserRound } from "lucide-react";
 import { useState } from "react";
 import { Empty, ErrorText, Loading, Mono, Section } from "@/components/common";
-import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@kipit-labs/kipitidy/sheet";
 import { api, type AnalyticsVisit, type Service } from "../api";
 
 const regionNames = typeof Intl.DisplayNames === "function" ? new Intl.DisplayNames(undefined, { type: "region" }) : null;

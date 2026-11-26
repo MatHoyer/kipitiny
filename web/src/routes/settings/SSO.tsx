@@ -5,10 +5,10 @@ import { AuthentikIcon, GoogleIcon, KeycloakIcon, MicrosoftIcon } from "@/compon
 import { ChoiceTile, CopyField, EmptyState, ErrorText, Mono, Tag } from "@/components/common";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { HowTo, type HowToStep } from "@/components/how-to";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Card } from "@kipit-labs/kipitidy/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
 import { api, ssoCallbackUrl, type SSOProvider, type SSOProviderInput } from "@/api";
 import { SettingsPage } from "./page";
 

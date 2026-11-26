@@ -34,11 +34,11 @@ import {
   AlertDialogHeader,
   AlertDialogMedia,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+} from "@kipit-labs/kipitidy/alert-dialog";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Checkbox } from "@kipit-labs/kipitidy/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kipit-labs/kipitidy/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@kipit-labs/kipitidy/dropdown-menu";
 import { formatBytes, formatDateTime, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, isDatabase, type Service, type VolumeEntry } from "../../api";

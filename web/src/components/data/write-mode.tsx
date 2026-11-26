@@ -10,8 +10,8 @@ import {
   AlertDialogHeader,
   AlertDialogMedia,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+} from "@kipit-labs/kipitidy/alert-dialog";
+import { Segmented, SegmentedItem } from "@kipit-labs/kipitidy/segmented";
 
 /**
  * Read only, or writes allowed after a confirmation. description says what

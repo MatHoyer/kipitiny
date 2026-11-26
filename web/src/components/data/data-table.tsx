@@ -1,8 +1,8 @@
 import { ArrowDown, ArrowUp, ArrowUpRight, KeyRound, Maximize2, Trash2, Undo2 } from "lucide-react";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { CopyButton } from "@/components/common";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@kipit-labs/kipitidy/dialog";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { prettyValue } from "./values";

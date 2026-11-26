@@ -13,9 +13,9 @@ import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { SaveBar } from "@/components/save-bar";
 import { memoryOf, useUsage } from "@/components/usage";
-import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { Card } from "@/components/ui/card";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Spinner } from "@kipit-labs/kipitidy/spinner";
+import { Card } from "@kipit-labs/kipitidy/card";
 import {
   Dialog,
   DialogContent,
@@ -24,10 +24,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingSelect } from "@/components/ui/floating-select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+} from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { FloatingSelect } from "@kipit-labs/kipitidy/floating-select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@kipit-labs/kipitidy/tabs";
 import { useAccess } from "@/lib/access";
 import { useTab } from "@/hooks/use-tab";
 import { dbFields, dbRef, envMap, envRows, envSecrets, formatBytes, liveState, sameEnv, type EnvRow } from "@/lib/format";

@@ -7,7 +7,7 @@ import { LogoMark } from "@/components/logo";
 import { ReachIcon, reachOf } from "@/components/reach";
 import { ServiceIcon } from "@/components/service-icon";
 import { issueRing, issueText, projectProblems, serviceIssue, serviceState } from "@/components/topology";
-import { Button } from "@/components/ui/button";
+import { Button } from "@kipit-labs/kipitidy/button";
 import { cn } from "@/lib/utils";
 import { NewServiceDialog } from "@/routes/Project";
 import { databasePorts, isDatabase } from "@/api";

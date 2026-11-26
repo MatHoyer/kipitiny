@@ -6,8 +6,8 @@ import { ChoiceTile, EmptyState, ErrorText, Mono, Tag, withCode } from "@/compon
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { HowTo } from "@/components/how-to";
 import { StepsProgress, TestDialog, type PlannedStep } from "@/components/test-dialog";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Card } from "@kipit-labs/kipitidy/card";
 import {
   Dialog,
   DialogContent,
@@ -16,8 +16,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
+} from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
 import { api, type SecretConnection, type SecretProvider, type SecretStep } from "@/api";
 import { connectionLabel } from "@/lib/format";
 import { SettingsPage } from "./page";

@@ -5,11 +5,11 @@ import { CheckboxField, Empty, Meta, MetaItem, Section, StateBadge, statusIcon, 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CronField, describeCron, jobPresets } from "@/components/cron-field";
 import { DeploymentLogView } from "@/components/logs";
-import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingTextarea } from "@/components/ui/floating-textarea";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@kipit-labs/kipitidy/collapsible";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { FloatingTextarea } from "@kipit-labs/kipitidy/floating-textarea";
 import { formatDateTime, formatDuration, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { api, type Job, type JobRun, type Service } from "../api";

@@ -6,9 +6,9 @@ import { toast } from "sonner";
 import { ChoiceTile, Tag } from "@/components/common";
 import { BackupSteps, useLastStep } from "@/components/op-steps";
 import { storageIcon, storageLocation } from "@/components/storage";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { FloatingSelect } from "@/components/ui/floating-select";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@kipit-labs/kipitidy/dialog";
+import { FloatingSelect } from "@kipit-labs/kipitidy/floating-select";
 import { formatBytes, formatDuration } from "@/lib/format";
 import { api, type Backup, type BackupTarget, type PgDatabase } from "@/api";
 

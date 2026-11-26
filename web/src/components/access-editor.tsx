@@ -29,9 +29,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
-import { Segmented, SegmentedItem } from "@/components/ui/segmented";
-import { Switch } from "@/components/ui/switch";
-import { Tip } from "@/components/ui/tooltip";
+import { Segmented, SegmentedItem } from "@kipit-labs/kipitidy/segmented";
+import { Switch } from "@kipit-labs/kipitidy/switch";
+import { Tip } from "@kipit-labs/kipitidy/tooltip";
 import type { useAccess } from "@/lib/access";
 import { cn } from "@/lib/utils";
 import { api, features, perms, type Feature, type Perm, type UserAccess } from "@/api";

@@ -1,9 +1,9 @@
 import { useMutation } from "@tanstack/react-query";
 import { PlugZap, RotateCw } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Stepper } from "@/components/ui/stepper";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@kipit-labs/kipitidy/dialog";
+import { Stepper } from "@kipit-labs/kipitidy/stepper";
 
 /** A step a call may report (see the API's ?progress), said for the user. */
 export type PlannedStep = {

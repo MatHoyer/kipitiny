@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpCircle, CircleHelp, Container, Database, ExternalLink, Package, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@kipit-labs/kipitidy/button";
 import { ErrorText, IconTile, Loading, StatCard } from "@/components/common";
-import { Card } from "@/components/ui/card";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Card } from "@kipit-labs/kipitidy/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@kipit-labs/kipitidy/tooltip";
 import { formatBytes, timeAgo } from "@/lib/format";
 import { api, type Status } from "@/api";
 import { SettingsPage } from "./page";

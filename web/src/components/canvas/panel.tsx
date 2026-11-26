@@ -6,7 +6,7 @@ import { Link } from "react-router";
 import { Mono, StateBadge, stateColors } from "@/components/common";
 import { ServiceIcon } from "@/components/service-icon";
 import { issueText, projectProblems, Replicas, serviceIssue, serviceState } from "@/components/topology";
-import { Button } from "@/components/ui/button";
+import { Button } from "@kipit-labs/kipitidy/button";
 import { cn } from "@/lib/utils";
 import { api, type ServerTopology, type TopoProject, type TopoService } from "@/api";
 import type { MapNode } from "./build";

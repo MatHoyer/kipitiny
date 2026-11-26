@@ -11,11 +11,11 @@ import { TagChips, TagFilter, useTagFilter } from "@/components/tags";
 import { TemplateDialog } from "@/components/template-dialog";
 import { EmptyState, ErrorText, IconTile, StatCard, Tag, Loading } from "@/components/common";
 import { PageBody, PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
-import { Segmented, SegmentedItem } from "@/components/ui/segmented";
-import { Spinner } from "@/components/ui/spinner";
-import { Card } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Segmented, SegmentedItem } from "@kipit-labs/kipitidy/segmented";
+import { Spinner } from "@kipit-labs/kipitidy/spinner";
+import { Card } from "@kipit-labs/kipitidy/card";
+import { Checkbox } from "@kipit-labs/kipitidy/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -24,9 +24,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingSelect } from "@/components/ui/floating-select";
+} from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { FloatingSelect } from "@kipit-labs/kipitidy/floating-select";
 import { issueRing, issueText, needsAttention, serviceIssue } from "@/components/topology";
 import { memoryOf, useUsage } from "@/components/usage";
 import { formatBytes, liveState, timeAgo } from "@/lib/format";

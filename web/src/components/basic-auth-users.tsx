@@ -3,10 +3,10 @@ import { useState, type FormEvent } from "react";
 import { ManagerSourceFields, useManagerSource } from "@/components/env-entry-dialog";
 import { Empty } from "@/components/common";
 import { ManagerRefValue } from "@/components/template-value";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@kipit-labs/kipitidy/dialog";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { Segmented, SegmentedItem } from "@kipit-labs/kipitidy/segmented";
 import { managerRef } from "@/lib/format";
 
 /**

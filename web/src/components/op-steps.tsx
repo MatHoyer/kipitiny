@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Stepper, type Step } from "@/components/ui/stepper";
+import { Stepper, type Step } from "@kipit-labs/kipitidy/stepper";
 import { databaseLabels } from "@/components/brand-icons";
 import { formatBytes } from "@/lib/format";
 import type { Backup, DatabaseKind, OpStatus, Restore } from "@/api";

@@ -3,7 +3,7 @@ import { Box, MapIcon, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Section } from "@/components/common";
 import { PageBody, PageHeader } from "@/components/page-header";
-import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+import { Segmented, SegmentedItem } from "@kipit-labs/kipitidy/segmented";
 import { api, type AuthState, type Preferences } from "@/api";
 
 const themes = [

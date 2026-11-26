@@ -7,9 +7,9 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+} from "@kipit-labs/kipitidy/breadcrumb";
+import { Separator } from "@kipit-labs/kipitidy/separator";
+import { SidebarTrigger } from "@kipit-labs/kipitidy/sidebar";
 import { cn } from "@/lib/utils";
 
 /** A step in the breadcrumb; the last one is the current page and needs no link. */

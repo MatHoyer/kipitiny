@@ -2,9 +2,9 @@ import { ChevronDown, CircleHelp, ExternalLink } from "lucide-react";
 import { cn } from "cn";
 import { useState, type ReactNode } from "react";
 import { CopyField } from "@/components/common";
-import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Stepper } from "@/components/ui/stepper";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@kipit-labs/kipitidy/collapsible";
+import { Stepper } from "@kipit-labs/kipitidy/stepper";
 
 export type HowToStep = {
   title: ReactNode;

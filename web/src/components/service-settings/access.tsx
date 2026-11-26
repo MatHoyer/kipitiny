@@ -5,9 +5,9 @@ import { toast } from "sonner";
 import { Mono, Section } from "@/components/common";
 import { BasicAuthUsers, type BasicAuthRow } from "@/components/basic-auth-users";
 import { SaveBar } from "@/components/save-bar";
-import { Button } from "@/components/ui/button";
-import { FloatingInput } from "@/components/ui/floating-input";
-import { FloatingTextarea } from "@/components/ui/floating-textarea";
+import { Button } from "@kipit-labs/kipitidy/button";
+import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
+import { FloatingTextarea } from "@kipit-labs/kipitidy/floating-textarea";
 import { api, type Middlewares, type MiddlewaresInput, type Service as ServiceT } from "../../api";
 import { Applies } from "./parts";
 

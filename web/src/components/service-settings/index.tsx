@@ -3,7 +3,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { RenameCard } from "@/components/rename-card";
 import { TagsCard } from "@/components/tags";
 import { DirtyContext } from "@/components/save-bar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@kipit-labs/kipitidy/tabs";
 import { useTab } from "@/hooks/use-tab";
 import { api, httpRouted, isDatabase, type Service as ServiceT } from "../../api";
 import { AccessCard } from "./access";
