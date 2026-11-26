@@ -101,6 +101,28 @@ func errorRoutes(mux *http.ServeMux, st *Store) {
 		ev, err := st.Event(r.Context(), project, id, r.URL.Query().Get("event"))
 		reply(w, ev, err)
 	})
+	mux.HandleFunc("GET /api/errors/changes", func(w http.ResponseWriter, r *http.Request) {
+		after, err := num(r, "after")
+		if err != nil {
+			reply(w, nil, err)
+			return
+		}
+		cs, last, err := st.ErrorChanges(r.Context(), after)
+		reply(w, ErrorChanges{Changes: cs, Last: last}, err)
+	})
+	mux.HandleFunc("GET /api/errors/release", func(w http.ResponseWriter, r *http.Request) {
+		var n [3]int64
+		for i, k := range []string{"project", "from", "to"} {
+			v, err := num(r, k)
+			if err != nil {
+				reply(w, nil, err)
+				return
+			}
+			n[i] = v
+		}
+		re, err := st.ReleaseErrors(r.Context(), n[0], r.URL.Query().Get("release"), time.Unix(n[1], 0), time.Unix(n[2], 0))
+		reply(w, re, err)
+	})
 	mux.HandleFunc("GET /api/errors/series", func(w http.ResponseWriter, r *http.Request) {
 		var n [4]int64
 		for i, k := range []string{"project", "from", "to", "interval"} {
@@ -164,4 +186,28 @@ func (c *Client) ErrorSeries(ctx context.Context, project int64, from, to time.T
 	var ps []ErrorPoint
 	err := c.do(ctx, http.MethodGet, "/api/errors/series?"+v.Encode(), nil, &ps)
 	return ps, err
+}
+
+// ErrorChanges is a page of changes, and the last seq there is.
+type ErrorChanges struct {
+	Changes []ErrorChange `json:"changes"`
+	Last    int64         `json:"last"`
+}
+
+// ErrorChanges are the issues opened or reopened after seq.
+func (c *Client) ErrorChanges(ctx context.Context, after int64) (ErrorChanges, error) {
+	var out ErrorChanges
+	err := c.do(ctx, http.MethodGet, "/api/errors/changes?after="+strconv.FormatInt(after, 10), nil, &out)
+	return out, err
+}
+
+// ReleaseErrors counts project's events of release in [from, to).
+func (c *Client) ReleaseErrors(ctx context.Context, project int64, release string, from, to time.Time) (ReleaseErrors, error) {
+	v := url.Values{"release": {release}}
+	v.Set("project", strconv.FormatInt(project, 10))
+	v.Set("from", strconv.FormatInt(from.Unix(), 10))
+	v.Set("to", strconv.FormatInt(to.Unix(), 10))
+	var out ReleaseErrors
+	err := c.do(ctx, http.MethodGet, "/api/errors/release?"+v.Encode(), nil, &out)
+	return out, err
 }

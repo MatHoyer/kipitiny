@@ -346,3 +346,36 @@ func TestErrorProjectsReload(t *testing.T) {
 		t.Errorf("cleared: %v", err)
 	}
 }
+
+func TestErrorChangesAndReleases(t *testing.T) {
+	ctx := context.Background()
+	st, now, _ := errorsStore(t)
+	cs, last, err := st.ErrorChanges(ctx, 0)
+	if err != nil || len(cs) != 0 || last != 0 {
+		t.Fatalf("empty: %v %d %v", cs, last, err)
+	}
+	a := record(t, st, 7, `{"message":"a","release":"r1"}`)
+	record(t, st, 7, `{"message":"a","release":"r1"}`)
+	st.SetIssueStatus(ctx, 7, a.Issue, IssueResolved)
+	*now = now.Add(10 * time.Minute)
+	deploy := *now
+	record(t, st, 7, `{"message":"a","release":"r2"}`)
+	record(t, st, 8, `{"message":"b","release":"r2"}`)
+	record(t, st, 7, `{"message":"c","release":"r2"}`)
+	cs, last, err = st.ErrorChanges(ctx, 0)
+	kinds := []string{}
+	for _, c := range cs {
+		kinds = append(kinds, c.Kind+":"+c.Title)
+	}
+	if err != nil || strings.Join(kinds, " ") != "new:a regression:a new:b new:c" || last != cs[3].Seq || cs[1].Release != "r2" || cs[2].Project != 8 {
+		t.Fatalf("changes: %v %d %v", kinds, last, err)
+	}
+	if cs, _, _ := st.ErrorChanges(ctx, cs[1].Seq); len(cs) != 2 {
+		t.Errorf("after: %v", cs)
+	}
+	r1, _ := st.ReleaseErrors(ctx, 7, "r1", deploy.Add(-time.Hour), deploy)
+	r2, err := st.ReleaseErrors(ctx, 7, "r2", deploy, now.Add(time.Minute))
+	if err != nil || r1.Events != 2 || r1.NewIssues != 1 || r2.Events != 2 || r2.NewIssues != 1 {
+		t.Errorf("releases: %+v %+v %v", r1, r2, err)
+	}
+}

@@ -141,6 +141,8 @@ service, is sent at most once per 15 minutes.
 | `service.unhealthy`, `service.healthy` | No healthy replica for 2 minutes, then recovered. |
 | `service.restarted` | The reconciler restarted a service's container stopped outside kipitiny. |
 | `uptime.down`, `uptime.up` | An uptime check failed 3 times in a row, then passed twice. |
+| `error.new`, `error.regression` | An app with [error tracking](/docs/errors) reported a new error, or a resolved one again. |
+| `error.spike` | An app's deploy raised errors well above the release before ([details](/docs/errors#alerts)). |
 | `service.oom_killed` | A replica was killed for using too much memory. |
 | `service.memory_high`, `service.memory_ok` | A service's memory stayed over its [threshold](#resource-alerts), then went back below. |
 | `service.cpu_high`, `service.cpu_ok` | A service's CPU stayed over its threshold, then went back below. |

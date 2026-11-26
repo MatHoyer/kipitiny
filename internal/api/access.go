@@ -249,6 +249,7 @@ var routeAccess = map[string]access{
 	"GET /api/services/{id}/analytics/visits":         onService(core.PermView),
 	"GET /api/services/{id}/errors":                   onService(core.PermView),
 	"GET /api/services/{id}/errors/series":            onService(core.PermView),
+	"GET /api/services/{id}/errors/deploy":            onService(core.PermView),
 	"GET /api/services/{id}/errors/{issue}":           onService(core.PermView),
 	"GET /api/services/{id}/errors/{issue}/event":     onService(core.PermView),
 	"PUT /api/services/{id}/errors/{issue}/status":    onService(core.PermDeploy),

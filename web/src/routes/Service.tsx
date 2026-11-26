@@ -52,7 +52,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AnalyticsTab } from "@/components/analytics-tab";
-import { ErrorsTab } from "@/components/errors-tab";
+import { DeployErrorsBanner, ErrorsTab } from "@/components/errors-tab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAccess } from "@/lib/access";
 import { FilesTab } from "@/components/files/files-tab";
@@ -293,6 +293,7 @@ export function Service() {
             {isDatabase(svc.kind) && may("env") && <ConnectionCard serviceId={svc.id} host={svc.name} kind={svc.kind} />}
           </TabsContent>
           <TabsContent value="deployments">
+            {svc.errors && <DeployErrorsBanner svc={svc} canRollback={may("deploy")} onIssues={() => setTab("errors")} />}
             {deployments.isPending ? (
               <Loading />
             ) : (

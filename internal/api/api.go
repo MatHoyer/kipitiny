@@ -110,6 +110,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("GET /api/services/{id}/analytics", a.serviceAnalytics)
 	handle("GET /api/services/{id}/errors", a.serviceErrors)
 	handle("GET /api/services/{id}/errors/series", a.serviceErrorSeries)
+	handle("GET /api/services/{id}/errors/deploy", a.serviceDeployErrors)
 	handle("GET /api/services/{id}/errors/{issue}", a.serviceIssue)
 	handle("GET /api/services/{id}/errors/{issue}/event", a.serviceIssueEvent)
 	handle("PUT /api/services/{id}/errors/{issue}/status", a.setServiceIssueStatus)
