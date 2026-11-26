@@ -1,61 +1,9 @@
-import { CheckIcon, CircleCheck, CircleSlash, CircleX, CopyIcon, type LucideIcon } from "lucide-react";
-import { useId, useState, type ReactNode } from "react";
-import { Button } from "@kipit-labs/kipitidy/button";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@kipit-labs/kipitidy/card";
-import { Checkbox } from "@kipit-labs/kipitidy/checkbox";
-import { Label } from "@kipit-labs/kipitidy/label";
+import { CircleCheck, CircleSlash, CircleX } from "lucide-react";
+import type { ReactNode } from "react";
+import { CopyButton } from "@kipit-labs/kipitidy/copy-button";
 import { Spinner } from "@kipit-labs/kipitidy/spinner";
 import { friendlyError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
-
-/** A card, titled unless the page header already names it; every block of a page is one. */
-export function Section({
-  title,
-  description,
-  actions,
-  children,
-  className,
-  plain,
-  id,
-}: {
-  /** Anchor for links to the card, e.g. `?tab=settings#maintenance`. */
-  id?: string;
-  title?: ReactNode;
-  description?: ReactNode;
-  actions?: ReactNode;
-  children?: ReactNode;
-  className?: string;
-  /** No card: the block is the page's (or tab's) only content, already named by it. */
-  plain?: boolean;
-}) {
-  if (plain)
-    return (
-      <section id={id} className={cn("scroll-mt-20 space-y-4", className)}>
-        {(title || description || actions) && (
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <div className="space-y-1">
-              {title && <h2 className="font-medium">{title}</h2>}
-              {description && <p className="text-sm text-muted-foreground">{description}</p>}
-            </div>
-            {actions && <div className="flex items-center gap-2">{actions}</div>}
-          </div>
-        )}
-        {children}
-      </section>
-    );
-  return (
-    <Card id={id} className={cn("scroll-mt-20", className)}>
-      {(title || description || actions) && (
-        <CardHeader>
-          {title && <CardTitle>{title}</CardTitle>}
-          {description && <CardDescription>{description}</CardDescription>}
-          {actions && <CardAction className="flex items-center gap-2">{actions}</CardAction>}
-        </CardHeader>
-      )}
-      {children && <CardContent className="space-y-4">{children}</CardContent>}
-    </Card>
-  );
-}
 
 export const stateColors: Record<string, string> = {
   running: "bg-emerald-500",
@@ -101,22 +49,6 @@ export function Tag({ children, className }: { children: ReactNode; className?: 
   );
 }
 
-/** A row of small facts, each led by its icon instead of a separator. */
-export function Meta({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <span className={cn("flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground", className)}>{children}</span>
-  );
-}
-
-export function MetaItem({ icon: Icon, children, className }: { icon?: LucideIcon; children: ReactNode; className?: string }) {
-  return (
-    <span className={cn("inline-flex min-w-0 items-center gap-1 [&>svg]:size-3 [&>svg]:shrink-0", className)}>
-      {Icon && <Icon />}
-      {children}
-    </span>
-  );
-}
-
 export function ErrorText({ error }: { error: Error | null | undefined }) {
   return error ? (
     <p role="alert" className="text-sm wrap-break-word text-destructive">
@@ -125,52 +57,12 @@ export function ErrorText({ error }: { error: Error | null | undefined }) {
   ) : null;
 }
 
-/** What a page or block shows while its data loads. */
-export function Loading({ className }: { className?: string }) {
-  return (
-    <div className={cn("flex justify-center py-12 text-muted-foreground", className)}>
-      <Spinner className="size-6" />
-    </div>
-  );
-}
-
 export function Empty({ children }: { children: ReactNode }) {
   return <p className="text-sm text-muted-foreground">{children}</p>;
 }
 
 export function Mono({ children }: { children: ReactNode }) {
   return <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">{children}</code>;
-}
-
-export function CopyButton({ value, label = "Copy", onCopy }: { value: string; label?: string; onCopy?: () => void }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-xs"
-      aria-label={label}
-      title={label}
-      onClick={() => {
-        navigator.clipboard.writeText(value);
-        setCopied(true);
-        onCopy?.();
-        setTimeout(() => setCopied(false), 1500);
-      }}
-    >
-      {copied ? <CheckIcon /> : <CopyIcon />}
-    </Button>
-  );
-}
-
-/** A value in a bordered box with a copy button, e.g. a token or a URL. */
-export function CopyField({ value, onCopy }: { value: string; onCopy?: () => void }) {
-  return (
-    <div className="flex items-center gap-1 rounded-lg border bg-muted/40 py-1 pr-1 pl-2.5">
-      <code className="flex-1 font-mono text-xs break-all">{value}</code>
-      <CopyButton value={value} onCopy={onCopy} />
-    </div>
-  );
 }
 
 /** Label/value pairs, each value copyable. */
@@ -187,147 +79,6 @@ export function SecretList({ rows }: { rows: [string, string][] }) {
         </div>
       ))}
     </dl>
-  );
-}
-
-export function CheckboxField({
-  label,
-  description,
-  checked,
-  onCheckedChange,
-  className,
-}: {
-  label: ReactNode;
-  description?: ReactNode;
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  className?: string;
-}) {
-  const id = useId();
-  return (
-    <div className={cn("flex items-start gap-3", className)}>
-      <Checkbox id={id} className="mt-0.5" checked={checked} onCheckedChange={(v) => onCheckedChange(v === true)} />
-      <div className="grid gap-1">
-        <Label htmlFor={id}>{label}</Label>
-        {description && <p className="text-xs text-muted-foreground">{description}</p>}
-      </div>
-    </div>
-  );
-}
-
-/** An icon in a tinted rounded square, the visual anchor of a card. */
-export function IconTile({ icon: Icon, className }: { icon: LucideIcon; className?: string }) {
-  return (
-    <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary", className)}>
-      <Icon className="size-5" />
-    </span>
-  );
-}
-
-/** A small metric tile, e.g. "Services 4". */
-export function StatCard({
-  icon: Icon,
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  icon: LucideIcon;
-  label: ReactNode;
-  value: ReactNode;
-  hint?: ReactNode;
-  tone?: "good" | "warn" | "bad";
-}) {
-  return (
-    <Card size="sm" className="gap-1 px-3">
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Icon className="size-3.5" />
-        {label}
-      </p>
-      <p
-        className={cn(
-          "text-2xl font-semibold tabular-nums",
-          tone === "good" && "text-emerald-600 dark:text-emerald-400",
-          tone === "warn" && "text-amber-600 dark:text-amber-400",
-          tone === "bad" && "text-destructive",
-        )}
-      >
-        {value}
-      </p>
-      {hint && <p className="truncate text-xs text-muted-foreground">{hint}</p>}
-    </Card>
-  );
-}
-
-/** What a list shows before it has anything, with the action that fills it. */
-export function EmptyState({
-  icon,
-  title,
-  description,
-  action,
-}: {
-  icon: LucideIcon;
-  title: ReactNode;
-  description?: ReactNode;
-  action?: ReactNode;
-}) {
-  return (
-    <Card className="items-center gap-3 border border-dashed py-12 text-center ring-0">
-      <IconTile icon={icon} className="size-11" />
-      <div className="space-y-1">
-        <p className="font-medium">{title}</p>
-        {description && <p className="mx-auto max-w-sm text-sm text-muted-foreground">{description}</p>}
-      </div>
-      {action}
-    </Card>
-  );
-}
-
-/** A card holding irreversible actions. */
-export function DangerZone({ children, description }: { children: ReactNode; description?: ReactNode }) {
-  return (
-    <Card className="ring-destructive/30">
-      <CardHeader>
-        <CardTitle className="text-destructive">Danger zone</CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
-        <CardAction className="flex items-center gap-2">{children}</CardAction>
-      </CardHeader>
-    </Card>
-  );
-}
-
-/** A large pick in a "choose one" step, e.g. a database engine or a password manager. */
-export function ChoiceTile({
-  icon,
-  title,
-  description,
-  badge,
-  disabled,
-  onClick,
-}: {
-  icon: ReactNode;
-  title: ReactNode;
-  description?: ReactNode;
-  badge?: ReactNode;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className="group flex min-w-0 flex-col items-start gap-3 rounded-xl border p-4 text-left transition-all outline-none hover:-translate-y-px hover:border-foreground/30 hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
-    >
-      <span className="flex w-full items-start justify-between gap-2">
-        <span className="flex size-11 items-center justify-center rounded-lg bg-muted [&>svg]:size-6">{icon}</span>
-        {badge}
-      </span>
-      <span className="w-full min-w-0 space-y-0.5">
-        <span className="block font-medium">{title}</span>
-        {description && <span className="block text-xs text-muted-foreground">{description}</span>}
-      </span>
-    </button>
   );
 }
 

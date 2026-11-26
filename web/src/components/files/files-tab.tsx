@@ -24,7 +24,8 @@ import {
 import { useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { ErrorText, Loading } from "@/components/common";
+import { ErrorText } from "@/components/common";
+import { Loading } from "@kipit-labs/kipitidy/loading";
 import {
   AlertDialog,
   AlertDialogCancel,

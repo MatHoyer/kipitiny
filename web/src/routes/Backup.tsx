@@ -3,9 +3,14 @@ import { ArchiveRestore, Clock, DatabaseBackup, Download, HardDrive, ShieldCheck
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { CopyButton, DangerZone, ErrorText, Mono, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
+import { ErrorText, Mono, StateBadge, Tag } from "@/components/common";
+import { CopyButton } from "@kipit-labs/kipitidy/copy-button";
+import { DangerZone } from "@kipit-labs/kipitidy/danger-zone";
+import { Loading } from "@kipit-labs/kipitidy/loading";
+import { Section } from "@kipit-labs/kipitidy/section";
+import { StatCard } from "@kipit-labs/kipitidy/stat-card";
 import { databaseLabels } from "@/components/brand-icons";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@kipit-labs/kipitidy/dialog";

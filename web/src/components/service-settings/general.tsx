@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { Section } from "@/components/common";
+import { Section } from "@kipit-labs/kipitidy/section";
 import { SaveBar } from "@/components/save-bar";
 import { ServiceIcon, useServiceLogos, type Logos } from "@/components/service-icon";
 import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";

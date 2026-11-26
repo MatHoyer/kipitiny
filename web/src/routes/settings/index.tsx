@@ -1,7 +1,7 @@
 import { Bell, BookOpen, ChartNoAxesColumn, Brush, GitFork, HardDrive, Globe, Info, KeyRound, KeySquare, LogIn, Mail, Network, Package, Palette, ScrollText, Server, Users, type LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 import type { Feature } from "@/api";
-import { EmptyState } from "@/components/common";
+import { EmptyState } from "@kipit-labs/kipitidy/empty-state";
 import { useAccess } from "@/lib/access";
 import { docsUrl } from "@/lib/docs";
 import { Version } from "./About";

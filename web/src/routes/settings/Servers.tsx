@@ -15,19 +15,14 @@ import {
 import { lazy, Suspense, useId, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import {
-  CheckboxField,
-  DangerZone,
-  ErrorText,
-  IconTile,
-  Mono,
-  Section,
-  StatCard,
-  StateBadge,
-  Tag,
-  Loading,
-} from "@/components/common";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ErrorText, Mono, StateBadge, Tag } from "@/components/common";
+import { CheckboxField } from "@kipit-labs/kipitidy/checkbox-field";
+import { DangerZone } from "@kipit-labs/kipitidy/danger-zone";
+import { IconTile } from "@kipit-labs/kipitidy/icon-tile";
+import { Loading } from "@kipit-labs/kipitidy/loading";
+import { Section } from "@kipit-labs/kipitidy/section";
+import { StatCard } from "@kipit-labs/kipitidy/stat-card";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { HowTo } from "@/components/how-to";
 import { StepsProgress, type PlannedStep } from "@/components/test-dialog";
 import { PageBody, PageHeader } from "@/components/page-header";

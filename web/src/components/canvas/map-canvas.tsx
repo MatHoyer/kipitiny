@@ -4,7 +4,7 @@ import "@xyflow/react/dist/style.css";
 import { Box, FolderPlus, Network, Plus, RotateCcw } from "lucide-react";
 import { useTheme } from "next-themes";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { Spinner } from "@kipit-labs/kipitidy/spinner";
 import { Dialog, DialogContent } from "@kipit-labs/kipitidy/dialog";

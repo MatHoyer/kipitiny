@@ -3,10 +3,12 @@ import { Globe, Plus, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { CloudflareIcon } from "@/components/brand-icons";
-import { CheckboxField, EmptyState, ErrorText, Mono, Tag } from "@/components/common";
+import { ErrorText, Mono, Tag } from "@/components/common";
+import { CheckboxField } from "@kipit-labs/kipitidy/checkbox-field";
+import { EmptyState } from "@kipit-labs/kipitidy/empty-state";
 import { HowTo, type HowToStep } from "@/components/how-to";
 import { TestDialog } from "@/components/test-dialog";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { Card } from "@kipit-labs/kipitidy/card";
 import {

@@ -1,7 +1,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, Lock, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { ErrorText, Loading } from "@/components/common";
+import { ErrorText } from "@/components/common";
+import { Loading } from "@kipit-labs/kipitidy/loading";
 import {
   AlertDialog,
   AlertDialogCancel,

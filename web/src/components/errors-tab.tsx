@@ -2,8 +2,12 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { Bug, ChevronLeft, ChevronRight, Clock, Rocket, Users } from "lucide-react";
 import { useState } from "react";
 import { useSearchParams } from "react-router";
-import { CopyField, Empty, ErrorText, Loading, Meta, MetaItem, Mono, Section, Tag } from "@/components/common";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Empty, ErrorText, Mono, Tag } from "@/components/common";
+import { CopyField } from "@kipit-labs/kipitidy/copy-button";
+import { Loading } from "@kipit-labs/kipitidy/loading";
+import { Meta, MetaItem } from "@kipit-labs/kipitidy/meta";
+import { Section } from "@kipit-labs/kipitidy/section";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { Input } from "@kipit-labs/kipitidy/input";
 import { Segmented, SegmentedItem } from "@kipit-labs/kipitidy/segmented";

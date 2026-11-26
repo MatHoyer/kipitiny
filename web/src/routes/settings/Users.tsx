@@ -3,8 +3,10 @@ import { Mail, Pencil, Trash2, TriangleAlert, UserPlus, UserRound } from "lucide
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { AccessEditor } from "@/components/access-editor";
-import { CopyField, ErrorText, Section, Tag } from "@/components/common";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ErrorText, Tag } from "@/components/common";
+import { CopyField } from "@kipit-labs/kipitidy/copy-button";
+import { Section } from "@kipit-labs/kipitidy/section";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@kipit-labs/kipitidy/dialog";
 import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";

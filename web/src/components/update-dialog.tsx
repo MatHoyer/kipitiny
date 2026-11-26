@@ -6,7 +6,7 @@ import { Button } from "@kipit-labs/kipitidy/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@kipit-labs/kipitidy/dialog";
 import { Spinner } from "@kipit-labs/kipitidy/spinner";
 import { cn } from "@/lib/utils";
-import { CheckboxField } from "@/components/common";
+import { CheckboxField } from "@kipit-labs/kipitidy/checkbox-field";
 import { api, type UpdatePreflight, type UpgradeNotice } from "@/api";
 
 const titles: Record<UpdatePreflight["checks"][number]["id"], string> = {

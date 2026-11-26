@@ -3,7 +3,8 @@ import { ArrowRight, ChevronLeft, CircleCheck, DatabaseBackup, Lock, TriangleAle
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
-import { ChoiceTile, Tag } from "@/components/common";
+import { Tag } from "@/components/common";
+import { ChoiceTile } from "@kipit-labs/kipitidy/choice-tile";
 import { BackupSteps, useLastStep } from "@/components/op-steps";
 import { storageIcon, storageLocation } from "@/components/storage";
 import { Button } from "@kipit-labs/kipitidy/button";

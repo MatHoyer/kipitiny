@@ -3,7 +3,7 @@ import { Check, ListFilter, Plus, X } from "lucide-react";
 import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { HoverCard, Popover } from "radix-ui";
-import { Section } from "@/components/common";
+import { Section } from "@kipit-labs/kipitidy/section";
 import { Button } from "@kipit-labs/kipitidy/button";
 import {
   DropdownMenu,

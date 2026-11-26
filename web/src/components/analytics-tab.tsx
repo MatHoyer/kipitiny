@@ -1,7 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, Clock, Download, Eye, LogOut, MousePointerClick, Users, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { CopyField, Empty, ErrorText, Loading, Mono, Section, StatCard } from "@/components/common";
+import { Empty, ErrorText, Mono } from "@/components/common";
+import { CopyField } from "@kipit-labs/kipitidy/copy-button";
+import { Loading } from "@kipit-labs/kipitidy/loading";
+import { Section } from "@kipit-labs/kipitidy/section";
+import { StatCard } from "@kipit-labs/kipitidy/stat-card";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@kipit-labs/kipitidy/dropdown-menu";
 import { Segmented, SegmentedItem } from "@kipit-labs/kipitidy/segmented";

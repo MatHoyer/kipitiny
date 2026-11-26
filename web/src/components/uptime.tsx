@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, HeartPulse, Pencil, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { CheckboxField, Empty, Section, StateBadge } from "@/components/common";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Empty, StateBadge } from "@/components/common";
+import { CheckboxField } from "@kipit-labs/kipitidy/checkbox-field";
+import { Section } from "@kipit-labs/kipitidy/section";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { Sparkline } from "@/components/usage";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { Card } from "@kipit-labs/kipitidy/card";

@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, CircleCheck, CircleHelp, CircleX, Download, Power, RefreshCw, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useState } from "react";
-import { CheckboxField, Empty, Section } from "@/components/common";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Empty } from "@/components/common";
+import { CheckboxField } from "@kipit-labs/kipitidy/checkbox-field";
+import { Section } from "@kipit-labs/kipitidy/section";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { logBox } from "@/components/logs";
 import {
   AlertDialog,

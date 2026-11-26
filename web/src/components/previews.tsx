@@ -3,8 +3,12 @@ import { ExternalLink, GitBranch, GitPullRequestArrow, Trash2 } from "lucide-rea
 import { useId, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
-import { CheckboxField, EmptyState, ErrorText, Loading, Mono, Section, Tag } from "@/components/common";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ErrorText, Mono, Tag } from "@/components/common";
+import { CheckboxField } from "@kipit-labs/kipitidy/checkbox-field";
+import { EmptyState } from "@kipit-labs/kipitidy/empty-state";
+import { Loading } from "@kipit-labs/kipitidy/loading";
+import { Section } from "@kipit-labs/kipitidy/section";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { DomainField } from "@/components/domain-field";
 import { EnvEditor } from "@/components/env-editor";
 import { ServiceStates } from "@/components/service-states";

@@ -4,7 +4,8 @@ import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 import { databaseLabels, passwordManagerIcon } from "@/components/brand-icons";
 import { ServiceIcon } from "@/components/service-icon";
-import { ChoiceTile, ErrorText, Mono } from "@/components/common";
+import { ErrorText, Mono } from "@/components/common";
+import { ChoiceTile } from "@kipit-labs/kipitidy/choice-tile";
 import { TemplateValue } from "@/components/template-value";
 import { Button } from "@kipit-labs/kipitidy/button";
 import {

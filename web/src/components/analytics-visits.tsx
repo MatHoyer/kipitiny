@@ -1,7 +1,9 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Eye, MousePointerClick, UserRound } from "lucide-react";
 import { useState } from "react";
-import { Empty, ErrorText, Loading, Mono, Section } from "@/components/common";
+import { Empty, ErrorText, Mono } from "@/components/common";
+import { Loading } from "@kipit-labs/kipitidy/loading";
+import { Section } from "@kipit-labs/kipitidy/section";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@kipit-labs/kipitidy/sheet";
 import { api, type AnalyticsVisit, type Service } from "../api";

@@ -1,7 +1,7 @@
 import { ChevronDown, CircleHelp, ExternalLink } from "lucide-react";
 import { cn } from "cn";
 import { useState, type ReactNode } from "react";
-import { CopyField } from "@/components/common";
+import { CopyField } from "@kipit-labs/kipitidy/copy-button";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@kipit-labs/kipitidy/collapsible";
 import { Stepper } from "@kipit-labs/kipitidy/stepper";

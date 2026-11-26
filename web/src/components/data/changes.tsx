@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Save, Trash2, Undo2 } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useBlocker } from "react-router";
-import { Loading } from "@/components/common";
+import { Loading } from "@kipit-labs/kipitidy/loading";
 import {
   AlertDialog,
   AlertDialogAction,

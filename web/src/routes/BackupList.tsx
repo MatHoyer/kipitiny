@@ -2,7 +2,9 @@ import { ChevronRight, Clock, DatabaseBackup, HardDrive, ShieldAlert, ShieldChec
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { ServiceIcon } from "@/components/service-icon";
-import { EmptyState, Meta, MetaItem, StateBadge, Tag } from "@/components/common";
+import { StateBadge, Tag } from "@/components/common";
+import { EmptyState } from "@kipit-labs/kipitidy/empty-state";
+import { Meta, MetaItem } from "@kipit-labs/kipitidy/meta";
 import { byDay, formatBytes, formatDuration, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Backup, BackupTarget } from "../api";

@@ -3,10 +3,13 @@ import { ChevronLeft, FolderSearch, KeyRound, Lock, Pencil, Plus, Trash2 } from 
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
-import { CheckboxField, ChoiceTile, CopyField, ErrorText, Mono, Tag } from "@/components/common";
+import { ErrorText, Mono, Tag } from "@/components/common";
+import { CheckboxField } from "@kipit-labs/kipitidy/checkbox-field";
+import { ChoiceTile } from "@kipit-labs/kipitidy/choice-tile";
+import { CopyField } from "@kipit-labs/kipitidy/copy-button";
 import { TestDialog, type PlannedStep } from "@/components/test-dialog";
 import { HowTo } from "@/components/how-to";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { Card } from "@kipit-labs/kipitidy/card";
 import {

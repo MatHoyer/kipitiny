@@ -4,8 +4,12 @@ import { useContext, useEffect, useId, useState, type FormEvent, type ReactNode 
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { DiscordIcon } from "@/components/brand-icons";
-import { CheckboxField, ChoiceTile, EmptyState, ErrorText, Section, Tag } from "@/components/common";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ErrorText, Tag } from "@/components/common";
+import { CheckboxField } from "@kipit-labs/kipitidy/checkbox-field";
+import { ChoiceTile } from "@kipit-labs/kipitidy/choice-tile";
+import { EmptyState } from "@kipit-labs/kipitidy/empty-state";
+import { Section } from "@kipit-labs/kipitidy/section";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { HowTo, type HowToStep } from "@/components/how-to";
 import { SaveBar } from "@/components/save-bar";
 import { Button } from "@kipit-labs/kipitidy/button";

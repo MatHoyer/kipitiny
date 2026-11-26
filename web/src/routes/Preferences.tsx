@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Box, MapIcon, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import { Section } from "@/components/common";
+import { Section } from "@kipit-labs/kipitidy/section";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Segmented, SegmentedItem } from "@kipit-labs/kipitidy/segmented";
 import { api, type AuthState, type Preferences } from "@/api";

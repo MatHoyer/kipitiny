@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { Mono, Section } from "@/components/common";
+import { Mono } from "@/components/common";
+import { Section } from "@kipit-labs/kipitidy/section";
 import { SaveBar } from "@/components/save-bar";
 import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
 import { FloatingTextarea } from "@kipit-labs/kipitidy/floating-textarea";
