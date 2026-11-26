@@ -1,16 +1,16 @@
 ---
 name: release
-description: Cut a kipitiny release — bump `VERSION` in a `chore(release): X.Y.Z` PR, merge it, tag the merged commit X.Y.Z, push the tag. Use when the user says "release", "cut a release", "tag a version", or invokes /release [version|major|minor|patch].
+description: Cut a kipitiny release — bump `VERSION` in a `chore(release): X.Y.Z` PR and merge it; the release workflow tags and publishes. Use when the user says "release", "cut a release", "tag a version", or invokes /release [version|major|minor|patch].
 ---
 
 # Release
 
-A release is a chore commit on `main` that bumps the root `VERSION` file,
-merged through a PR, plus a lightweight tag on the merged commit. The
-workflow fails if the tag and `VERSION` disagree. Pushing the tag triggers
-`.github/workflows/release.yml` (multi-arch image to
-`ghcr.io/kipit-labs/kipitiny:<tag>` + `:latest`, GitHub release with generated
-notes) and `.github/workflows/site.yml` (the website, deployed to GitHub Pages).
+A release is a chore PR that bumps the root `VERSION` file. Merging it into
+`main` runs `.github/workflows/release.yml`: it tags the merged commit
+`X.Y.Z`, publishes the multi-arch image to `ghcr.io/kipit-labs/kipitiny:<tag>`
++ `:latest` and the GitHub release with generated notes, then starts
+`.github/workflows/site.yml` (the website, deployed to GitHub Pages). It
+refuses a `VERSION` that isn't above the last tag.
 
 Tags are bare semver, no `v` prefix: `0.6.0`, not `v0.6.0` (the workflow only
 matches `[0-9]+.[0-9]+.[0-9]+`).
@@ -38,8 +38,7 @@ matches `[0-9]+.[0-9]+.[0-9]+`).
    If a commit clearly disrupts running servers (Traefik recreated, a
    manual step) and has no notice, propose one first. Wait for a yes.
 
-4. **Commit on a branch and open the PR.** The `main` ruleset requires a PR
-   with passing checks, so the release goes through one:
+4. **Commit on a branch, open the PR, auto-merge it:**
    ```sh
    git switch -c chore/release-X.Y.Z
    printf 'X.Y.Z\n' > VERSION
@@ -52,21 +51,12 @@ matches `[0-9]+.[0-9]+.[0-9]+`).
    gh pr create --title "chore(release): X.Y.Z" --body "Release X.Y.Z."
    gh pr merge --rebase --auto
    ```
-   No AI attribution trailer on the commit or the PR. Don't tag yet: the
-   rebase merge rewrites the commit, so a tag on the branch would sit off `main`.
+   No AI attribution trailer on the commit or the PR. Never push a tag by
+   hand: the workflow makes it.
 
-5. **Tag the merged commit and push the tag** once the PR is merged
-   (`gh pr view --json state` says `MERGED`):
-   ```sh
-   git switch main && git pull --ff-only origin main
-   sha=$(git log --format=%H --grep='^chore(release): X.Y.Z$' -1)
-   test -n "$sha" && test "$(git show "$sha":VERSION)" = X.Y.Z
-   git tag X.Y.Z "$sha"
-   git push origin X.Y.Z
-   git branch -d chore/release-X.Y.Z
-   ```
-   Tag the release commit, not `origin/main`: another PR may have merged
-   after it.
+5. **Wait for the merge** (`gh pr view --json state` says `MERGED`), then
+   `git switch main && git pull --ff-only origin main && git branch -d
+   chore/release-X.Y.Z`.
 
 6. **Report** the workflow runs: `gh run list --workflow release.yml --limit 1`
    and `gh run list --workflow site.yml --limit 1`,
@@ -77,5 +67,8 @@ matches `[0-9]+.[0-9]+.[0-9]+`).
 - PR checks fail or it conflicts (another PR touched `UPGRADE.md`): rebase
   the branch on `origin/main`, re-check the version and notices (new commits
   may change them), force-push the branch. Nothing is tagged yet.
+- The release run fails: fix on `main` through a PR, then re-run the failed
+  jobs (`gh run rerun <id> --failed`). Re-running finds its own tag and goes
+  on; a new commit changing `VERSION` would need a new version.
 - Never move or delete a tag that has already been pushed without the user's
   explicit go-ahead: managers in the wild pull images by tag.
