@@ -95,6 +95,9 @@ func TestFloating(t *testing.T) {
 		"ghcr.io/kipit-labs/kipitiny":        true,
 		"ghcr.io/kipit-labs/kipitiny:latest": true,
 		"ghcr.io/kipit-labs/kipitiny:1.0.0":  false,
+		"ghcr.io/mathoyer/kipitiny":          true, // compose files from before the move
+		"ghcr.io/mathoyer/kipitiny:latest":   true,
+		"ghcr.io/mathoyer/kipitiny:1.0.0":    false,
 		"ghcr.io/other/kipitiny:latest":      false,
 		"localhost:5000/kipitiny:latest":     false,
 	}

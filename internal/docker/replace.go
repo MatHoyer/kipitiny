@@ -92,14 +92,23 @@ func (c *Client) restart(ctx context.Context, id string, logf func(string, ...an
 	}
 }
 
-// floating reports whether ref names image's repository untagged or as
-// latest.
+// LegacyImage is where releases were published before the repository moved,
+// which compose files still name.
+const LegacyImage = "ghcr.io/mathoyer/kipitiny"
+
+// floating reports whether ref names image's repository, or LegacyImage,
+// untagged or as latest.
 func floating(ref, image string) bool {
 	repo := image
 	if i := strings.LastIndex(image, ":"); i >= 0 && !strings.Contains(image[i:], "/") {
 		repo = image[:i]
 	}
-	return ref == repo || ref == repo+":latest"
+	for _, r := range []string{repo, LegacyImage} {
+		if ref == r || ref == r+":latest" {
+			return true
+		}
+	}
+	return false
 }
 
 // replacementSpec is old's creation spec with a new image.
