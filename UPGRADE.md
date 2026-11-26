@@ -9,7 +9,7 @@ Add a notice under `## Unreleased` in the change that causes it, as
 `- warning: …` (disruptive) or `- info: …`; continue on indented lines. The
 release renames the section to its version.
 
-## Unreleased
+## 0.47.1
 - info: kipitiny moved to the kipit-labs GitHub organization. Images are now
   `ghcr.io/kipit-labs/kipitiny` and the manager updates from there. This is
   the last release published to `ghcr.io/mathoyer/kipitiny`: change the
