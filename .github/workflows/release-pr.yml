@@ -1,0 +1,28 @@
+# Merging a change of VERSION releases (release.yml), so only a release PR,
+# titled `chore(release): X.Y.Z`, may change it. Runs on every PR, without a
+# path filter, so it can be a required check; and on title edits.
+name: release-pr
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: A VERSION change is a release PR
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          git fetch -q --depth=1 origin "$BASE"
+          old=$(git show FETCH_HEAD:VERSION) new=$(cat VERSION)
+          if [ "$new" != "$old" ] && [ "$TITLE" != "chore(release): $new" ]; then
+            echo "::error::VERSION changes $old -> $new, so merging releases $new: title the PR \"chore(release): $new\", or revert VERSION."
+            exit 1
+          fi
