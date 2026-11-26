@@ -1,7 +1,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CircleCheck, History, Play } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { CopyButton, Loading } from "@/components/common";
+import { CopyButton } from "@kipit-labs/kipitidy/copy-button";
+import { Loading } from "@kipit-labs/kipitidy/loading";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@kipit-labs/kipitidy/dropdown-menu";
 import { friendlyError } from "@/lib/errors";

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { lazy, Suspense } from "react";
-import { ErrorText, Loading } from "@/components/common";
+import { ErrorText } from "@/components/common";
+import { Loading } from "@kipit-labs/kipitidy/loading";
 import { PageHeader } from "@/components/page-header";
 import { api } from "../api";
 

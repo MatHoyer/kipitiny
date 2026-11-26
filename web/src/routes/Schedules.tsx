@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, CalendarClock, HardDrive, Pause, Pencil, Play, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { CheckboxField, Empty, Meta, MetaItem } from "@/components/common";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Empty } from "@/components/common";
+import { CheckboxField } from "@kipit-labs/kipitidy/checkbox-field";
+import { Meta, MetaItem } from "@kipit-labs/kipitidy/meta";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { CronField, describeCron } from "@/components/cron-field";
 import { Button } from "@kipit-labs/kipitidy/button";
 import {

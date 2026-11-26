@@ -1,7 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Cloud, DatabaseBackup, HardDrive, History, Search, TriangleAlert } from "lucide-react";
 import { useState } from "react";
-import { EmptyState, ErrorText, Section, StatCard } from "@/components/common";
+import { ErrorText } from "@/components/common";
+import { EmptyState } from "@kipit-labs/kipitidy/empty-state";
+import { Section } from "@kipit-labs/kipitidy/section";
+import { StatCard } from "@kipit-labs/kipitidy/stat-card";
 import { PageBody, PageHeader } from "@/components/page-header";
 import { Spinner } from "@kipit-labs/kipitidy/spinner";
 import { Input } from "@kipit-labs/kipitidy/input";

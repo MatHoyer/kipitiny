@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Section } from "@/components/common";
+import { Section } from "@kipit-labs/kipitidy/section";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { FloatingInput } from "@kipit-labs/kipitidy/floating-input";
 

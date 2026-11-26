@@ -22,23 +22,14 @@ import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { portLabel } from "@/components/reach";
 import { ServiceIcon } from "@/components/service-icon";
-import {
-  CopyButton,
-  DangerZone,
-  Empty,
-  EmptyState,
-  ErrorText,
-  Mono,
-  SecretList,
-  Section,
-  StatCard,
-  StateBadge,
-  statusIcon,
-  Tag,
-  Loading,
-  triggeredBy,
-} from "@/components/common";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Empty, ErrorText, Mono, SecretList, StateBadge, statusIcon, Tag, triggeredBy } from "@/components/common";
+import { CopyButton } from "@kipit-labs/kipitidy/copy-button";
+import { DangerZone } from "@kipit-labs/kipitidy/danger-zone";
+import { EmptyState } from "@kipit-labs/kipitidy/empty-state";
+import { Loading } from "@kipit-labs/kipitidy/loading";
+import { Section } from "@kipit-labs/kipitidy/section";
+import { StatCard } from "@kipit-labs/kipitidy/stat-card";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { DataTab } from "@/components/data/data-tab";
 import { EnvEditor } from "@/components/env-editor";
 import { PageBody, PageHeader } from "@/components/page-header";

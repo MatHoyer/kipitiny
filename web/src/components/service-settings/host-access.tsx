@@ -1,7 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { CheckboxField, Mono, Section } from "@/components/common";
+import { Mono } from "@/components/common";
+import { CheckboxField } from "@kipit-labs/kipitidy/checkbox-field";
+import { Section } from "@kipit-labs/kipitidy/section";
 import { SaveBar } from "@/components/save-bar";
 import { FloatingSelect } from "@kipit-labs/kipitidy/floating-select";
 import { api, type Service as ServiceT } from "../../api";

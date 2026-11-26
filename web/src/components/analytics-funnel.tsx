@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { Empty, ErrorText, Loading, Section } from "@/components/common";
+import { Empty, ErrorText } from "@/components/common";
+import { Loading } from "@kipit-labs/kipitidy/loading";
+import { Section } from "@kipit-labs/kipitidy/section";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { Input } from "@kipit-labs/kipitidy/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kipit-labs/kipitidy/select";

@@ -2,7 +2,8 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { Check, ChevronLeft, ChevronRight, ChevronsLeft, Download, FolderOpen, ListFilter, Plus, RefreshCw, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { ErrorText, Loading } from "@/components/common";
+import { ErrorText } from "@/components/common";
+import { Loading } from "@kipit-labs/kipitidy/loading";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@kipit-labs/kipitidy/dropdown-menu";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@kipit-labs/kipitidy/select";

@@ -4,8 +4,15 @@ import { lazy, Suspense, useEffect, useId, useState, type FormEvent, type ReactN
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { ServiceIcon, ServiceIconTile } from "@/components/service-icon";
-import { ChoiceTile, CopyButton, DangerZone, EmptyState, ErrorText, Mono, Section, StatCard, StateBadge, Tag, Loading } from "@/components/common";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ErrorText, Mono, StateBadge, Tag } from "@/components/common";
+import { ChoiceTile } from "@kipit-labs/kipitidy/choice-tile";
+import { CopyButton } from "@kipit-labs/kipitidy/copy-button";
+import { DangerZone } from "@kipit-labs/kipitidy/danger-zone";
+import { EmptyState } from "@kipit-labs/kipitidy/empty-state";
+import { Loading } from "@kipit-labs/kipitidy/loading";
+import { Section } from "@kipit-labs/kipitidy/section";
+import { StatCard } from "@kipit-labs/kipitidy/stat-card";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { RenameCard } from "@/components/rename-card";
 import { TagChips, TagFilter, TagsCard, useTagFilter } from "@/components/tags";
 import { DomainField } from "@/components/domain-field";

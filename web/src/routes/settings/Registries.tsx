@@ -2,10 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { DockerIcon, GitHubIcon, GitLabIcon } from "@/components/brand-icons";
-import { ChoiceTile, EmptyState, ErrorText, Mono } from "@/components/common";
+import { ErrorText, Mono } from "@/components/common";
+import { ChoiceTile } from "@kipit-labs/kipitidy/choice-tile";
+import { EmptyState } from "@kipit-labs/kipitidy/empty-state";
 import { HowTo, type HowToStep } from "@/components/how-to";
 import { TestDialog } from "@/components/test-dialog";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { Card } from "@kipit-labs/kipitidy/card";
 import {

@@ -1,7 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, HardDrive, History, Play, Server, Trash2 } from "lucide-react";
 import { useEffect, useId, useState, type FormEvent } from "react";
-import { CheckboxField, ErrorText, Loading, Section, StatCard } from "@/components/common";
+import { ErrorText } from "@/components/common";
+import { CheckboxField } from "@kipit-labs/kipitidy/checkbox-field";
+import { Loading } from "@kipit-labs/kipitidy/loading";
+import { Section } from "@kipit-labs/kipitidy/section";
+import { StatCard } from "@kipit-labs/kipitidy/stat-card";
 import { CronField, cleanupPresets } from "@/components/cron-field";
 import { useLastStep } from "@/components/op-steps";
 import { SaveBar } from "@/components/save-bar";

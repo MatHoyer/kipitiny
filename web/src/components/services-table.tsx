@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router";
 import { databaseLabels } from "@/components/brand-icons";
 import { BulkBar, useBulk, useSelection } from "@/components/bulk";
 import { StateBadge, stateColors } from "@/components/common";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog } from "@kipit-labs/kipitidy/confirm-dialog";
 import { ServiceIcon } from "@/components/service-icon";
 import { TagChips, TagFilter, type useTagFilter } from "@/components/tags";
 import { needsAttention } from "@/components/topology";
