@@ -1,12 +1,10 @@
 # Publishes the website (site/: landing page and docs) to GitHub Pages at
-# kipitiny.mathieuhoyer.fr: on each release tag, so the docs match the latest
-# release, or by hand for a site-only fix. Each minor release since 0.10 also
+# kipitiny.mathieuhoyer.fr: started by release.yml on each release tag, so the
+# docs match the latest release, or by hand for a site-only fix. Each minor release since 0.10 also
 # keeps its own docs at /docs/<minor>, taken from its last patch tag.
 name: site
 
 on:
-  push:
-    tags: ["[0-9]+.[0-9]+.[0-9]+"]
   workflow_dispatch:
 
 permissions:

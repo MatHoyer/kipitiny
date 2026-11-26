@@ -1,5 +1,6 @@
-# Pushing a tag like 1.2.3 publishes ghcr.io/kipit-labs/kipitiny:1.2.3 and
-# :latest for amd64 and arm64. Managers look for new versions there.
+# Merging a change of VERSION (a release PR) into main tags that commit 1.2.3
+# and publishes ghcr.io/kipit-labs/kipitiny:1.2.3 and :latest for amd64 and
+# arm64, then the website. Managers look for new versions there.
 # Managers from before the move to kipit-labs look at ghcr.io/mathoyer/kipitiny:
 # the release after the move is copied there too, as their bridge; drop that
 # step once it's out.
@@ -7,19 +8,37 @@ name: release
 
 on:
   push:
-    tags: ["[0-9]+.[0-9]+.[0-9]+"]
+    branches: [main]
+    paths: [VERSION]
 
 permissions:
   contents: write
   packages: write
+  actions: write # starts site.yml: a tag pushed with GITHUB_TOKEN triggers nothing
 
 jobs:
   image:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
     steps:
       - uses: actions/checkout@v5
-      - name: Tag matches VERSION
-        run: test "$(cat VERSION)" = "${{ github.ref_name }}"
+        with:
+          fetch-depth: 0 # the tags, to check the new version against
+      - name: Tag
+        id: tag
+        run: |
+          v=$(cat VERSION)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          # A re-run finds its own tag.
+          if git rev-parse -q --verify "refs/tags/$v" >/dev/null; then
+            test "$(git rev-list -n1 "$v")" = "$GITHUB_SHA" || { echo "::error::tag $v is on another commit"; exit 1; }
+            exit 0
+          fi
+          echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::VERSION $v is not X.Y.Z"; exit 1; }
+          last=$(git tag -l '[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -1)
+          test "$(printf '%s\n%s\n' "$last" "$v" | sort -V | tail -1)" = "$v" || { echo "::error::$v is not above $last"; exit 1; }
+          git tag "$v" && git push origin "$v"
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -29,7 +48,7 @@ jobs:
         id: notices
         run: |
           echo "label=$(go run ./internal/upgrade/notes label)" >> "$GITHUB_OUTPUT"
-          go run ./internal/upgrade/notes release "${{ github.ref_name }}" > "$RUNNER_TEMP/notices.md"
+          go run ./internal/upgrade/notes release "${{ steps.tag.outputs.version }}" > "$RUNNER_TEMP/notices.md"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -40,11 +59,11 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          build-args: VERSION=${{ github.ref_name }}
+          build-args: VERSION=${{ steps.tag.outputs.version }}
           labels: |
             io.kipitiny.upgrade-notices=${{ steps.notices.outputs.label }}
           tags: |
-            ghcr.io/kipit-labs/kipitiny:${{ github.ref_name }}
+            ghcr.io/kipit-labs/kipitiny:${{ steps.tag.outputs.version }}
             ghcr.io/kipit-labs/kipitiny:latest
           push: true
           cache-from: type=gha
@@ -59,13 +78,17 @@ jobs:
       - name: Bridge to ghcr.io/mathoyer
         run: |
           docker buildx imagetools create \
-            -t ghcr.io/mathoyer/kipitiny:${{ github.ref_name }} -t ghcr.io/mathoyer/kipitiny:latest \
-            ghcr.io/kipit-labs/kipitiny:${{ github.ref_name }}
+            -t ghcr.io/mathoyer/kipitiny:${{ steps.tag.outputs.version }} -t ghcr.io/mathoyer/kipitiny:latest \
+            ghcr.io/kipit-labs/kipitiny:${{ steps.tag.outputs.version }}
       - name: GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         # The notices come first; the generated notes follow.
-        run: gh release create "${{ github.ref_name }}" --generate-notes --notes-file "$RUNNER_TEMP/notices.md" --verify-tag
+        run: gh release create "${{ steps.tag.outputs.version }}" --generate-notes --notes-file "$RUNNER_TEMP/notices.md" --verify-tag
+      - name: Website
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run site.yml --ref "${{ steps.tag.outputs.version }}"
 
   # Static binaries for `kipitiny deploy` in CI (deploy/action.yml downloads
   # them), attached to the release the image job created.
@@ -94,10 +117,10 @@ jobs:
           mkdir dist
           for arch in amd64 arm64; do
             CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
-              -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o dist/kipitiny-linux-$arch ./cmd/kipitiny
+              -ldflags="-s -w -X main.version=${{ needs.image.outputs.version }}" -o dist/kipitiny-linux-$arch ./cmd/kipitiny
           done
           cd dist && sha256sum kipitiny-linux-* > SHA256SUMS
       - name: Upload
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.ref_name }}" dist/*
+        run: gh release upload "${{ needs.image.outputs.version }}" dist/*
