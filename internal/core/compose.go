@@ -135,6 +135,7 @@ func exportFile(p store.Project, svcs []store.Service, checks map[string]store.U
 				Icon:       s.Icon,
 				Tags:       s.Tags,
 				Analytics:  s.Analytics,
+				Errors:     s.Errors,
 				Preview:    s.Preview,
 				Routes:     composeRoutes(s.Routes),
 			},
@@ -669,6 +670,7 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 		Port:             cs.X.Port,
 		Domain:           cs.X.Domain,
 		Analytics:        cs.X.Analytics,
+		Errors:           cs.X.Errors,
 		Env:              cs.Environment,
 		Secrets:          cs.X.Secrets,
 		MemoryMB:         cs.MemoryMB,
@@ -999,6 +1001,7 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 		Port:             &in.Port,
 		Domain:           &in.Domain,
 		Analytics:        &in.Analytics,
+		Errors:           &in.Errors,
 		MemoryMB:         &in.MemoryMB,
 		CPUs:             &in.CPUs,
 		HealthPath:       &in.HealthPath,
@@ -1068,6 +1071,7 @@ func changedFields(old, svc store.Service) []string {
 	add("port", old.Port != svc.Port)
 	add("domain", old.Domain != svc.Domain)
 	add("analytics", old.Analytics != svc.Analytics)
+	add("errors", old.Errors != svc.Errors)
 	add("env", !maps.Equal(old.Env, svc.Env) || !slices.Equal(old.Secrets, svc.Secrets))
 	add("memory", old.MemoryMB != svc.MemoryMB)
 	add("cpus", old.CPUs != svc.CPUs)

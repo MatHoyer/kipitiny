@@ -280,7 +280,7 @@ func (c *Core) ensureAnalytics(ctx context.Context) error {
 	dk := c.dockerFor(store.LocalServerID)
 	st := c.analyticsState(ctx)
 	if !st.Enabled {
-		c.analyticsSites = ""
+		c.analyticsSites, c.analyticsErrors = "", ""
 		return c.removeAnalytics(ctx, dk)
 	}
 	apps, err := c.trackedApps(ctx)
@@ -321,10 +321,13 @@ func (c *Core) ensureAnalytics(ctx context.Context) error {
 			return err
 		}
 		c.log.Info("analytics server started", "image", opts.Config.Image, "domain", st.Domain)
-		c.analyticsSites = ""
+		c.analyticsSites, c.analyticsErrors = "", ""
 	}
 	progress.Report(ctx, AnalyticsStepSites)
-	return c.syncAnalyticsSites(ctx, id, st.Token, apps)
+	if err := c.syncAnalyticsSites(ctx, id, st.Token, apps); err != nil {
+		return err
+	}
+	return c.syncErrorProjects(ctx, id, st.Token)
 }
 
 func (c *Core) removeAnalytics(ctx context.Context, dk *docker.Client) error {

@@ -96,6 +96,8 @@ type Ext struct {
 	// Analytics counts the domain's visits. Tagged so the hash of a service
 	// without it stays the same.
 	Analytics bool `yaml:"analytics,omitempty" json:",omitempty"`
+	// Errors takes the errors of the app's Sentry SDK. Tagged like Analytics.
+	Errors bool `yaml:"errors,omitempty" json:",omitempty"`
 	// Preview is "only" (a service of previews alone, e.g. a mail catcher)
 	// or "skip" (left out of previews). Tagged so the hash of a service
 	// without it stays the same.
@@ -334,7 +336,7 @@ func Escape(s string) string {
 
 func isZeroExt(x Ext) bool {
 	return x.Kind == "" && x.Domain == "" && x.Port == 0 && x.HealthPath == "" && x.PreDeploy == "" &&
-		x.PreBackup == "" && x.Icon == "" && !x.Analytics && x.Preview == "" && len(x.Tags) == 0 && len(x.Secrets) == 0 && x.Password == "" && x.Middlewares == nil && len(x.Routes) == 0 &&
+		x.PreBackup == "" && x.Icon == "" && !x.Analytics && !x.Errors && x.Preview == "" && len(x.Tags) == 0 && len(x.Secrets) == 0 && x.Password == "" && x.Middlewares == nil && len(x.Routes) == 0 &&
 		x.Uptime == nil && len(x.Jobs) == 0 && x.Anonymize == nil
 }
 

@@ -640,6 +640,15 @@ func containerSpec(project store.Project, svc store.Service, src envSources, dep
 	}
 
 	envMap := resolveEnv(svc.Env, src)
+	if src.errors != nil {
+		inject := maps.Clone(src.errors)
+		inject["SENTRY_RELEASE"] = ImageRelease(svc.Image)
+		for k, v := range inject {
+			if _, own := envMap[k]; !own {
+				envMap[k] = v
+			}
+		}
+	}
 	env := make([]string, 0, len(envMap))
 	for _, k := range slices.Sorted(maps.Keys(envMap)) {
 		env = append(env, k+"="+envMap[k])

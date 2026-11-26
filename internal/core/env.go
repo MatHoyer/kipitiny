@@ -36,6 +36,8 @@ type envSources struct {
 	// apps are the public URLs of the project's apps by name; nil when only
 	// checking references before the apps exist (a compose file).
 	apps map[string]string
+	// errors are the Sentry SDK's variables a deploy adds (errorsEnv).
+	errors map[string]string
 }
 
 // projectDatabases returns the project's database services by name.
@@ -164,7 +166,8 @@ func (c *Core) envSources(ctx context.Context, project store.Project, svc store.
 	if err != nil {
 		return envSources{}, err
 	}
-	src := envSources{project: project.Env, dbs: databasesOf(svcs), apps: c.appURLs(svcs), secrets: map[string]string{}}
+	src := envSources{project: project.Env, dbs: databasesOf(svcs), apps: c.appURLs(svcs), secrets: map[string]string{},
+		errors: c.errorsEnv(ctx, project, svc)}
 	if refs := secretRefs(refEnv(svc), project.Env); len(refs) > 0 {
 		if src.secrets, err = c.resolveSecrets(ctx, refs); err != nil {
 			return envSources{}, err

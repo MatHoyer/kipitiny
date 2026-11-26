@@ -247,6 +247,11 @@ var routeAccess = map[string]access{
 	"GET /api/audit":                             admin,
 
 	"GET /api/services/{id}/analytics/visits":         onService(core.PermView),
+	"GET /api/services/{id}/errors":                   onService(core.PermView),
+	"GET /api/services/{id}/errors/series":            onService(core.PermView),
+	"GET /api/services/{id}/errors/{issue}":           onService(core.PermView),
+	"GET /api/services/{id}/errors/{issue}/event":     onService(core.PermView),
+	"PUT /api/services/{id}/errors/{issue}/status":    onService(core.PermDeploy),
 	"GET /api/services/{id}/analytics/export":         onService(core.PermView),
 	"GET /api/services/{id}/analytics/funnel":         onService(core.PermView),
 	"POST /api/services/{id}/analytics/share":         onService(core.PermSettings),

@@ -169,6 +169,15 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 	addTool(s, &mcp.Tool{Name: "get_funnel", Annotations: readOnly,
 		Description: "Conversion of an app's visits through ordered steps (pages or custom events), each after the ones before within " +
 			"a visit, over the last days: how many visits reached each step."}, t.getFunnel)
+	addTool(s, &mcp.Tool{Name: "list_issues", Annotations: readOnly,
+		Description: "Errors an app's Sentry SDK reported (error tracking on), grouped into issues: title, culprit, " +
+			"events and users, first and last seen with their release (the image tag), and the last 24 hours per hour."}, t.listIssues)
+	addTool(s, &mcp.Tool{Name: "get_issue",
+		Annotations: readOnly,
+		Description: "One issue of an app and one of its kept events (the latest by default): exceptions with their stack " +
+			"frames oldest first (the last threw) and source around the line, breadcrumbs, tags, release, environment, user."}, t.getIssue)
+	addTool(s, &mcp.Tool{Name: "set_issue_status",
+		Description: "Resolve, ignore or reopen an app's issue; a resolved issue reopens as a regression when it happens again."}, t.setIssueStatus)
 	addTool(s, &mcp.Tool{Name: "list_trackers", Annotations: readOnly,
 		Description: "Pixels (1x1 GIFs counting views, for emails and pages without the script) and tracked links (redirects counting " +
 			"clicks), with their URL and last 30 days' hits. Needs admin and analytics on."}, t.listTrackers)

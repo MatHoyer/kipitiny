@@ -97,6 +97,11 @@ type Core struct {
 	health         healthState
 	uptimeHTTP     *http.Client // nil: probe's default; tests redirect it
 	files          filesState
+
+	errorsMu sync.Mutex // giving apps their DSN
+	// analyticsErrors is the container ID and DSN keys last sent to the
+	// analytics server.
+	analyticsErrors string
 }
 
 // New builds the core around the local Docker client; remote servers are
