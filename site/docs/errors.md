@@ -59,9 +59,9 @@ them; search looks in titles and the place they were thrown.
 An issue's page shows its latest events one at a time: the exceptions with
 their stack (the app's own frames first, the source around the line when the
 SDK sends it), the breadcrumbs (what happened just before: requests, clicks,
-logs), the tags, the user, the browser or runtime. **Visit of this user**
-opens the user's analytics visits when the app gives Sentry and
-`kipitiny.identify` the same id.
+logs), the tags, the user, the browser or runtime. When the app gives Sentry
+and `kipitiny.identify` the same user id, the user's
+[visits](/docs/analytics#visits) can be found by it.
 
 - **Resolve** when the fix is deployed. If the error happens again, the issue
   reopens as a **regression**.

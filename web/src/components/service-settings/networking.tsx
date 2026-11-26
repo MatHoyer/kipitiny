@@ -383,6 +383,33 @@ export function AnalyticsCard({ svc }: { svc: ServiceT }) {
   );
 }
 
+/** Whether the analytics server takes the errors of the app's Sentry SDK. */
+export function ErrorsCard({ svc }: { svc: ServiceT }) {
+  const qc = useQueryClient();
+  const id = useId();
+  const save = useMutation({
+    meta: { error: "Couldn't change error tracking" },
+    mutationFn: (errors: boolean) => api.updateService(svc.id, { errors }),
+    onSuccess: (updated) => qc.setQueryData(["service", svc.id], updated),
+  });
+  return (
+    <Section
+      title={<Applies title="Error tracking" when="deploy" />}
+      description={
+        <>
+          Takes the errors the app reports with a Sentry SDK, once analytics are on in Settings › Analytics: each deploy sets{" "}
+          <Mono>SENTRY_DSN</Mono>, <Mono>SENTRY_RELEASE</Mono> and <Mono>SENTRY_ENVIRONMENT</Mono>. Issues show in the Errors tab.
+        </>
+      }
+    >
+      <div className="flex items-center gap-3">
+        <Switch id={id} checked={svc.errors} disabled={save.isPending} onCheckedChange={(v) => save.mutate(v)} />
+        <Label htmlFor={id}>Track errors</Label>
+      </div>
+    </Section>
+  );
+}
+
 /** The app's own tracker paths on its domain, which ad blockers don't know, instead of the analytics domain's /a.js and /e. */
 function TrackerPaths({ svc }: { svc: ServiceT }) {
   const qc = useQueryClient();

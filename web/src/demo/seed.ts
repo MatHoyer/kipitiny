@@ -101,6 +101,7 @@ export function service(p: Partial<Service> & Pick<Service, "id" | "name" | "kin
     port: 0,
     domain: "",
     analytics: false,
+    errors: false,
     preview: "",
     env: {},
     secrets: [],
@@ -284,7 +285,7 @@ function backups(): Backup[] {
 
 export function seed(): DemoDb {
   const services = [
-    service({ id: "web", name: "web", kind: "app", image: "nginx:1.27-alpine", domain: "acme.example", port: 80, tags: ["frontend"], analytics: true }),
+    service({ id: "web", name: "web", kind: "app", image: "nginx:1.27-alpine", domain: "acme.example", port: 80, tags: ["frontend"], analytics: true, errors: true }),
     service({
       id: "api",
       name: "api",

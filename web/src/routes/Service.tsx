@@ -52,6 +52,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AnalyticsTab } from "@/components/analytics-tab";
+import { ErrorsTab } from "@/components/errors-tab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAccess } from "@/lib/access";
 import { FilesTab } from "@/components/files/files-tab";
@@ -89,7 +90,7 @@ export function Service() {
   });
   const deploying = deployments.data?.some((d) => d.status === "running") ?? false;
   const [selected, setSelected] = useState<string | null>(null);
-  const [tab, setTab] = useTab(["overview", "deployments", "logs", "terminal", "data", "files", "environment", "jobs", "backups", "analytics", "settings"], "overview");
+  const [tab, setTab] = useTab(["overview", "deployments", "logs", "terminal", "data", "files", "environment", "jobs", "backups", "analytics", "errors", "settings"], "overview");
   const git = useProjectGit(service.data?.projectId ?? "");
   const gitManaged = !!git.data;
   const { can } = useAccess();
@@ -272,6 +273,7 @@ export function Service() {
             {svc.kind === "app" && <TabsTrigger value="jobs">Jobs</TabsTrigger>}
             {canBackup(svc) && <TabsTrigger value="backups">Backups</TabsTrigger>}
             {svc.analytics && <TabsTrigger value="analytics">Analytics</TabsTrigger>}
+            {svc.errors && <TabsTrigger value="errors">Errors</TabsTrigger>}
             {(may("settings") || may("delete")) && <TabsTrigger value="settings">Settings</TabsTrigger>}
           </TabsList>
           <TabsContent value="overview" className="space-y-6">
@@ -323,6 +325,11 @@ export function Service() {
           {svc.analytics && (
             <TabsContent value="analytics">
               <AnalyticsTab svc={svc} />
+            </TabsContent>
+          )}
+          {svc.errors && (
+            <TabsContent value="errors">
+              <ErrorsTab svc={svc} canChange={may("deploy")} />
             </TabsContent>
           )}
           <TabsContent value="environment" className="flex flex-col gap-6">
