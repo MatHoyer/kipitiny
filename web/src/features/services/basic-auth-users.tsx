@@ -1,6 +1,6 @@
 import { Eye, EyeOff, KeyRound, Pencil, Plus, Trash2, UserRound, Vault } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { ManagerSourceFields, useManagerSource } from "@/features/services/env-entry-dialog";
+import { ManagerSourceFields, useManagerSource } from "@/features/services/password-manager-source";
 import { Empty } from "@/components/common";
 import { ManagerRefValue } from "@/features/projects/template-value";
 import { Button } from "@kipit-labs/kipitidy/button";
