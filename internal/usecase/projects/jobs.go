@@ -245,7 +245,7 @@ func (c *Projects) RemoveJobContainers(ctx context.Context, dk *docker.Client, s
 		time.Sleep(200 * time.Millisecond)
 	}
 	for _, id := range ids {
-		cts, err := dk.ListSummaries(ctx, map[string]string{domain.LabelJob: id})
+		cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelJob: id})
 		if err != nil {
 			return err
 		}

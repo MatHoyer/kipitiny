@@ -85,17 +85,21 @@ func TestToContainer(t *testing.T) {
 	got := toContainer(container.Summary{
 		ID: "abc", Names: []string{"/web"}, Image: "nginx", ImageID: "sha256:1", Labels: map[string]string{"a": "b"},
 		State: container.StateRunning, Status: "Up", Health: &container.HealthSummary{Status: container.Healthy},
-		NetworkSettings: &container.NetworkSettingsSummary{Networks: map[string]*network.EndpointSettings{"proxy": {IPAddress: ip}, "gone": nil}},
+		NetworkSettings: &container.NetworkSettingsSummary{Networks: map[string]*network.EndpointSettings{"proxy": {IPAddress: ip, Aliases: []string{"web"}}, "gone": nil}},
 	})
 	want := domain.Container{
 		ID: "abc", Names: []string{"/web"}, Image: "nginx", ImageID: "sha256:1", Labels: map[string]string{"a": "b"},
-		State: domain.StateRunning, Status: "Up", Health: domain.Healthy, Networks: map[string]netip.Addr{"proxy": ip, "gone": {}},
+		State: domain.StateRunning, Status: "Up", Health: domain.Healthy, Networks: map[string]domain.ContainerEndpoint{"proxy": {IP: ip, Aliases: []string{"web"}}, "gone": {}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("toContainer = %+v", got)
 	}
 	if got := toContainer(container.Summary{ID: "x"}); got.Health != "" || got.Networks != nil {
 		t.Errorf("bare summary = %+v", got)
+	}
+	// Network settings without networks: attached to none, not unknown.
+	if got := toContainer(container.Summary{NetworkSettings: &container.NetworkSettingsSummary{}}); got.Networks == nil {
+		t.Error("no networks: nil")
 	}
 
 	info := toContainerInfo(container.InspectResponse{

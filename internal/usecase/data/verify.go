@@ -279,7 +279,7 @@ func (c *Data) verifyImage(ctx context.Context, b domain.Backup) (image, serverI
 // helpers) and staging volumes left by a crash.
 func (c *Data) CleanupRestoreTests(ctx context.Context, dk *docker.Client) error {
 	for _, component := range []string{verifyComponent, volumeHelperComponent} {
-		cts, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: component})
+		cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: component})
 		if err != nil {
 			return err
 		}

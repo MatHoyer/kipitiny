@@ -9,7 +9,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -210,7 +209,7 @@ func (c *Deployer) SetServiceNetworks(ctx context.Context, serviceID string, net
 // created by hand it joins and detaches them from the others. renamed also
 // moves the containers already attached to the current alias (which resets
 // their connections there); container lists don't report aliases.
-func (c *Deployer) syncNetworks(ctx context.Context, project domain.Project, svc domain.Service, cts []container.Summary, renamed bool) error {
+func (c *Deployer) syncNetworks(ctx context.Context, project domain.Project, svc domain.Service, cts []domain.Container, renamed bool) error {
 	if svc.HostNetwork {
 		return nil
 	}
@@ -218,10 +217,10 @@ func (c *Deployer) syncNetworks(ctx context.Context, project domain.Project, svc
 	alias := networkAlias(project, svc)
 	var errs []error
 	for _, ct := range cts {
-		if !IsActive(ct, svc) || ct.NetworkSettings == nil {
+		if !IsActive(ct, svc) || ct.Networks == nil {
 			continue
 		}
-		for name := range ct.NetworkSettings.Networks {
+		for name := range ct.Networks {
 			if !domain.IsCustomNetwork(name) {
 				continue
 			}
@@ -290,7 +289,7 @@ func projectNetworks(project domain.Project, svc domain.Service) []string {
 // wantNetworks maps the networks a service's container should be on to its
 // aliases there, as containerSpec attaches them: the project's, the ones
 // created by hand it joins, and the proxy's when Traefik routes it.
-func wantNetworks(project domain.Project, svc domain.Service, ct container.Summary) map[string][]string {
+func wantNetworks(project domain.Project, svc domain.Service, ct domain.Container) map[string][]string {
 	if svc.HostNetwork {
 		return nil
 	}
@@ -309,10 +308,10 @@ func wantNetworks(project domain.Project, svc domain.Service, ct container.Summa
 
 // networkIssues says which networks the service's running containers miss,
 // e.g. after one was removed outside kipitiny (the reconciler puts them back).
-func networkIssues(project domain.Project, svc domain.Service, cts []container.Summary) []string {
+func networkIssues(project domain.Project, svc domain.Service, cts []domain.Container) []string {
 	var out []string
 	for _, ct := range cts {
-		if !IsActive(ct, svc) || ct.State != container.StateRunning {
+		if !IsActive(ct, svc) || ct.State != domain.StateRunning {
 			continue
 		}
 		for name := range wantNetworks(project, svc, ct) {

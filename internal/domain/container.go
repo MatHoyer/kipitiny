@@ -21,23 +21,37 @@ type Container struct {
 	State string
 	// Status is Docker's human status ("Up 2 hours (healthy)").
 	Status string
-	// Health is starting, healthy or unhealthy; "" without a healthcheck.
+	// Health is Docker's health status (none, starting, healthy,
+	// unhealthy); "" when it gave none.
 	Health string
-	// Networks maps each attached network to the container's IP on it.
-	Networks map[string]netip.Addr
+	// Networks are the networks the container is attached to; nil when
+	// Docker gave no network settings.
+	Networks map[string]ContainerEndpoint
+}
+
+// ContainerEndpoint is a container on a network.
+type ContainerEndpoint struct {
+	// IP is the zero Addr when it has none.
+	IP      netip.Addr
+	Aliases []string
 }
 
 // The container states the manager tells apart.
 const (
-	StateCreated = "created"
-	StateRunning = "running"
-	StateExited  = "exited"
+	StateCreated    = "created"
+	StateRunning    = "running"
+	StateRestarting = "restarting"
+	StatePaused     = "paused"
+	StateExited     = "exited"
+	StateDead       = "dead"
 )
 
 // The healthcheck statuses.
 const (
-	Healthy   = "healthy"
-	Unhealthy = "unhealthy"
+	NoHealthcheck  = "none"
+	HealthStarting = "starting"
+	Healthy        = "healthy"
+	Unhealthy      = "unhealthy"
 )
 
 // ContainerInfo is what inspecting a container tells beyond its listing.
@@ -58,7 +72,7 @@ type ContainerState struct {
 	Restarting bool
 	ExitCode   int
 	OOMKilled  bool
-	// Health is starting, healthy or unhealthy; "" without a healthcheck.
+	// Health is Docker's health status; "" without a healthcheck.
 	Health string
 }
 

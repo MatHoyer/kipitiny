@@ -69,7 +69,7 @@ func TestRuntimeDocker(t *testing.T) {
 	t.Cleanup(func() { _ = rt.RemoveContainer(context.Background(), id, 0) })
 
 	cts, err := rt.ListContainers(ctx, labels)
-	if err != nil || len(cts) != 1 || cts[0].ID != id || cts[0].Names[0] != "/"+name || cts[0].State != domain.StateRunning || !cts[0].Networks[name].IsValid() {
+	if err != nil || len(cts) != 1 || cts[0].ID != id || cts[0].Names[0] != "/"+name || cts[0].State != domain.StateRunning || !cts[0].Networks[name].IP.IsValid() {
 		t.Fatalf("containers = %+v, %v", cts, err)
 	}
 	info, err := rt.InspectContainer(ctx, id)

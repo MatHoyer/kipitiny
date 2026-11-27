@@ -9,8 +9,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -69,16 +67,16 @@ func (m fakeManager) Audit(ctx context.Context, action, target string, status in
 
 func (fakeManager) Notify(notify.Event, string, string) {}
 
-func (m fakeManager) ServiceContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error) {
-	return m.dk.ListSummaries(ctx, map[string]string{domain.LabelProject: svc.ProjectID, domain.LabelService: svc.ID})
+func (m fakeManager) ServiceContainers(ctx context.Context, svc domain.Service) ([]domain.Container, error) {
+	return m.dk.ListContainers(ctx, map[string]string{domain.LabelProject: svc.ProjectID, domain.LabelService: svc.ID})
 }
 
 // ActiveContainers is core's: the current deployment's, else the running ones.
-func (m fakeManager) ActiveContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error) {
+func (m fakeManager) ActiveContainers(ctx context.Context, svc domain.Service) ([]domain.Container, error) {
 	cts, err := m.ServiceContainers(ctx, svc)
 	active := cts[:0]
 	for _, ct := range cts {
-		if svc.CurrentDeploymentID == "" && ct.State == container.StateRunning || svc.CurrentDeploymentID != "" && ct.Labels[domain.LabelDeploy] == svc.CurrentDeploymentID {
+		if svc.CurrentDeploymentID == "" && ct.State == domain.StateRunning || svc.CurrentDeploymentID != "" && ct.Labels[domain.LabelDeploy] == svc.CurrentDeploymentID {
 			active = append(active, ct)
 		}
 	}

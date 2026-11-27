@@ -63,7 +63,7 @@ func (c *Network) ViaTunnel(ctx context.Context, serverID string) bool {
 func (c *Network) EnsureTunnel(ctx context.Context, sv domain.Server) error {
 	dk := c.mgr.DockerFor(sv.ID)
 	token := c.TunnelToken(sv)
-	existing, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: TunnelComponent})
+	existing, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: TunnelComponent})
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func (c *Network) EnsureTunnel(ctx context.Context, sv domain.Server) error {
 		hash = SpecHash(opts.Config.Image, opts.Config.Cmd, opts.Config.Env)
 		opts.Config.Labels[domain.LabelConfigHash] = hash
 		if len(existing) == 1 && existing[0].Labels[domain.LabelConfigHash] == hash {
-			if existing[0].State == container.StateRunning {
+			if existing[0].State == domain.StateRunning {
 				return nil
 			}
 			_, err := dk.ContainerStart(ctx, existing[0].ID, client.ContainerStartOptions{})

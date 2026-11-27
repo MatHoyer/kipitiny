@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"net/netip"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
@@ -304,14 +303,12 @@ func toContainer(s container.Summary) domain.Container {
 		ct.Health = string(s.Health.Status)
 	}
 	if s.NetworkSettings != nil {
+		ct.Networks = make(map[string]domain.ContainerEndpoint, len(s.NetworkSettings.Networks))
 		for name, ep := range s.NetworkSettings.Networks {
-			if ct.Networks == nil {
-				ct.Networks = map[string]netip.Addr{}
-			}
 			if ep != nil {
-				ct.Networks[name] = ep.IPAddress
+				ct.Networks[name] = domain.ContainerEndpoint{IP: ep.IPAddress, Aliases: ep.Aliases}
 			} else {
-				ct.Networks[name] = netip.Addr{}
+				ct.Networks[name] = domain.ContainerEndpoint{}
 			}
 		}
 	}

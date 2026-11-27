@@ -231,7 +231,7 @@ func (c *Projects) pruneJobRuns(ctx context.Context, serviceID, jobID string) {
 
 // RemoveStaleJobContainers removes job containers no run in flight owns,
 // e.g. left by a manager that crashed.
-func (c *Projects) RemoveStaleJobContainers(ctx context.Context, dk *docker.Client, cts []container.Summary) {
+func (c *Projects) RemoveStaleJobContainers(ctx context.Context, dk *docker.Client, cts []domain.Container) {
 	c.jobs.mu.Lock()
 	owned := map[string]bool{}
 	for id := range c.jobs.running {

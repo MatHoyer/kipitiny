@@ -272,13 +272,13 @@ func (c *Deployer) rollout(ctx context.Context, project domain.Project, svc doma
 // removeRetired removes the service's containers retired by an earlier
 // deploy (kept for their logs) or left by a failed one, and returns the
 // active ones.
-func (c *Deployer) removeRetired(ctx context.Context, svc domain.Service, logf func(string, ...any)) ([]container.Summary, error) {
+func (c *Deployer) removeRetired(ctx context.Context, svc domain.Service, logf func(string, ...any)) ([]domain.Container, error) {
 	dk := c.mgr.DockerFor(svc.ServerID)
 	existing, err := c.ServiceContainers(ctx, svc)
 	if err != nil {
 		return nil, err
 	}
-	var active []container.Summary
+	var active []domain.Container
 	for _, ct := range existing {
 		if IsActive(ct, svc) {
 			active = append(active, ct)
@@ -314,7 +314,7 @@ func (c *Deployer) swap(ctx context.Context, project domain.Project, svc domain.
 		return err
 	}
 
-	var stopped []container.Summary
+	var stopped []domain.Container
 	restore := func() {
 		for _, old := range stopped {
 			logf("Starting %s again", old.Names[0][1:])
@@ -325,7 +325,7 @@ func (c *Deployer) swap(ctx context.Context, project domain.Project, svc domain.
 	}
 	secs := int(data.StopTimeoutFor(svc).Seconds())
 	for _, old := range active {
-		if old.State != container.StateRunning {
+		if old.State != domain.StateRunning {
 			continue
 		}
 		logf("Stopping %s to free its ports", old.Names[0][1:])
@@ -364,9 +364,9 @@ func (c *Deployer) swap(ctx context.Context, project domain.Project, svc domain.
 
 // IsActive reports whether a container belongs to the deployment serving
 // traffic. Containers from before deployments were tracked count while running.
-func IsActive(ct container.Summary, svc domain.Service) bool {
+func IsActive(ct domain.Container, svc domain.Service) bool {
 	if svc.CurrentDeploymentID == "" {
-		return ct.State == container.StateRunning
+		return ct.State == domain.StateRunning
 	}
 	return ct.Labels[domain.LabelDeploy] == svc.CurrentDeploymentID
 }

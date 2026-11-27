@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -93,10 +91,10 @@ func (f *fakeManager) ReconcileService(context.Context, domain.Project, domain.S
 	return nil
 }
 
-func (f *fakeManager) TrackHealth(domain.Project, domain.Service, []container.Summary, time.Time) {}
-func (f *fakeManager) ForgetHealth(string, map[string]bool)                                       {}
+func (f *fakeManager) TrackHealth(domain.Project, domain.Service, []domain.Container, time.Time) {}
+func (f *fakeManager) ForgetHealth(string, map[string]bool)                                      {}
 
-func (f *fakeManager) ActiveContainers(context.Context, domain.Service) ([]container.Summary, error) {
+func (f *fakeManager) ActiveContainers(context.Context, domain.Service) ([]domain.Container, error) {
 	return nil, nil
 }
 
@@ -108,5 +106,5 @@ func (f *fakeManager) DeployLogPath(serviceID, deployID string) string {
 
 func (f *fakeManager) RegistryAuth(context.Context, string) string { return "" }
 
-func (f *fakeManager) RemoveStaleJobContainers(context.Context, *docker.Client, []container.Summary) {
+func (f *fakeManager) RemoveStaleJobContainers(context.Context, *docker.Client, []domain.Container) {
 }

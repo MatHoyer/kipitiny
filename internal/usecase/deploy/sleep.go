@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -310,7 +309,7 @@ func (c *Deployer) putToSleep(ctx context.Context, projectID string) error {
 		secs := int(data.StopTimeoutFor(svc).Seconds())
 		dk := c.mgr.DockerFor(svc.ServerID)
 		for _, ct := range cts {
-			if ct.State != container.StateRunning {
+			if ct.State != domain.StateRunning {
 				continue
 			}
 			if _, err := dk.ContainerStop(ctx, ct.ID, client.ContainerStopOptions{Timeout: &secs}); err != nil {
@@ -392,7 +391,7 @@ func (c *Deployer) wakeProject(ctx context.Context, projectID string) error {
 		}
 		dk := c.mgr.DockerFor(svc.ServerID)
 		for _, ct := range cts {
-			if ct.State == container.StateRunning || (isJob(svc) && completed(ct)) {
+			if ct.State == domain.StateRunning || (isJob(svc) && completed(ct)) {
 				continue // a job that already did its work stays done
 			}
 			if _, err := dk.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{}); err != nil {
@@ -426,11 +425,11 @@ func (c *Deployer) WakeFor(ctx context.Context, svc domain.Service) error {
 // ID), over the routers of its replicas (one per configuration hash).
 func (c *Deployer) routerRequests(ctx context.Context, serverID string) (map[string]float64, error) {
 	dk := c.mgr.DockerFor(serverID)
-	cts, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: network.TraefikComponent})
+	cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: network.TraefikComponent})
 	if err != nil {
 		return nil, err
 	}
-	if len(cts) != 1 || cts[0].State != container.StateRunning {
+	if len(cts) != 1 || cts[0].State != domain.StateRunning {
 		return nil, errors.New("traefik is not running")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)

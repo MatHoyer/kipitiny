@@ -3,8 +3,6 @@ package core
 import (
 	"context"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
@@ -43,11 +41,11 @@ func (p dataPorts) Audit(ctx context.Context, action, target string, status int,
 
 func (p dataPorts) Notify(e notify.Event, path, key string) { p.c.Notify(e, path, key) }
 
-func (p dataPorts) ServiceContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error) {
+func (p dataPorts) ServiceContainers(ctx context.Context, svc domain.Service) ([]domain.Container, error) {
 	return p.c.ServiceContainers(ctx, svc)
 }
 
-func (p dataPorts) ActiveContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error) {
+func (p dataPorts) ActiveContainers(ctx context.Context, svc domain.Service) ([]domain.Container, error) {
 	return p.c.ActiveContainers(ctx, svc)
 }
 

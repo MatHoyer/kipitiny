@@ -61,19 +61,16 @@ func (c *Network) refreshProxyLocked(ctx context.Context) {
 	c.proxy.refreshed = time.Now()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	cts, err := c.mgr.DockerFor(domain.LocalServerID).ListSummaries(ctx, map[string]string{domain.LabelComponent: TraefikComponent})
+	cts, err := c.mgr.DockerFor(domain.LocalServerID).ListContainers(ctx, map[string]string{domain.LabelComponent: TraefikComponent})
 	if err != nil {
 		c.log.Warn("read traefik addresses", "err", err)
 		return // keep the last known ones
 	}
 	var addrs []netip.Addr
 	for _, ct := range cts {
-		if ct.NetworkSettings == nil {
-			continue
-		}
-		for _, ep := range ct.NetworkSettings.Networks {
-			if ep != nil && ep.IPAddress.IsValid() {
-				addrs = append(addrs, ep.IPAddress.Unmap())
+		for _, ep := range ct.Networks {
+			if ep.IP.IsValid() {
+				addrs = append(addrs, ep.IP.Unmap())
 			}
 		}
 	}

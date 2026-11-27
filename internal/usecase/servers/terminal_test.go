@@ -3,20 +3,18 @@ package servers
 import (
 	"testing"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestPickContainer(t *testing.T) {
-	ct := func(id, name, replica string, state container.ContainerState) container.Summary {
-		return container.Summary{ID: id, Names: []string{"/" + name}, State: state,
+	ct := func(id, name, replica string, state string) domain.Container {
+		return domain.Container{ID: id, Names: []string{"/" + name}, State: state,
 			Labels: map[string]string{domain.LabelReplica: replica}}
 	}
-	cts := []container.Summary{
-		ct("aaaaaaaaaaaa1111", "p-web-10", "10", container.StateRunning),
-		ct("bbbbbbbbbbbb2222", "p-web-2", "2", container.StateRunning),
-		ct("cccccccccccc3333", "p-web-1", "1", container.StateExited),
+	cts := []domain.Container{
+		ct("aaaaaaaaaaaa1111", "p-web-10", "10", domain.StateRunning),
+		ct("bbbbbbbbbbbb2222", "p-web-2", "2", domain.StateRunning),
+		ct("cccccccccccc3333", "p-web-1", "1", domain.StateExited),
 	}
 	for _, tc := range []struct {
 		ref, want string

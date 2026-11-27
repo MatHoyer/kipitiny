@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 )
@@ -34,7 +32,7 @@ type svcHealth struct {
 // healthOf judges a deployed, running service from its containers: healthy
 // when a replica of the current deployment runs and passes its healthcheck
 // (or has none). judged is false when nothing is expected to run.
-func healthOf(svc domain.Service, cts []container.Summary) (judged, healthy bool, detail string) {
+func healthOf(svc domain.Service, cts []domain.Container) (judged, healthy bool, detail string) {
 	if svc.CurrentDeploymentID == "" || svc.Stopped || svc.Sleeping {
 		return false, false, ""
 	}
@@ -43,16 +41,16 @@ func healthOf(svc domain.Service, cts []container.Summary) (judged, healthy bool
 		if !IsActive(ct, svc) {
 			continue
 		}
-		health := container.NoHealthcheck
-		if ct.Health != nil && ct.Health.Status != "" {
-			health = ct.Health.Status
+		health := domain.NoHealthcheck
+		if ct.Health != "" {
+			health = ct.Health
 		}
-		if ct.State == container.StateRunning && (health == container.NoHealthcheck || health == container.Healthy) || isJob(svc) && completed(ct) {
+		if ct.State == domain.StateRunning && (health == domain.NoHealthcheck || health == domain.Healthy) || isJob(svc) && completed(ct) {
 			return true, true, ""
 		}
-		state := string(ct.State)
-		if ct.State == container.StateRunning {
-			state = string(health)
+		state := ct.State
+		if ct.State == domain.StateRunning {
+			state = health
 		} else if ct.Status != "" {
 			state = strings.ToLower(ct.Status)
 		}
@@ -86,7 +84,7 @@ func (h *svcHealth) observe(healthy bool, detail string, now time.Time) (down, u
 // TrackHealth judges a service from the containers the reconciler listed and
 // notifies when it has had no healthy replica for healthGrace, then once it
 // recovers.
-func (c *Deployer) TrackHealth(project domain.Project, svc domain.Service, cts []container.Summary, now time.Time) {
+func (c *Deployer) TrackHealth(project domain.Project, svc domain.Service, cts []domain.Container, now time.Time) {
 	// A deploy, restart or restore is working on it: its own outcome is
 	// reported, and replicas come and go meanwhile.
 	unlock, err := c.mgr.LockServiceBackground(svc.ID)

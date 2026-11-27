@@ -344,7 +344,7 @@ func (c *Servers) launchUpdater(ctx context.Context, self, ref string) error {
 			}
 		}
 	}
-	old, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: updaterComponent})
+	old, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: updaterComponent})
 	if err != nil {
 		return err
 	}
@@ -390,12 +390,12 @@ func floatingTag(ref, image string) bool {
 // cleanupUpdater removes finished updater containers, copying their output
 // into the manager's log first: it is the only record of how an update went.
 func (c *Servers) cleanupUpdater(ctx context.Context, dk *docker.Client) {
-	cts, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: updaterComponent})
+	cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: updaterComponent})
 	if err != nil {
 		return
 	}
 	for _, ct := range cts {
-		if ct.State == container.StateRunning {
+		if ct.State == domain.StateRunning {
 			continue
 		}
 		if lines, err := containerLogs(ctx, dk, ct, client.ContainerLogsOptions{Tail: "50"}); err == nil {

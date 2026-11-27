@@ -15,8 +15,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
@@ -184,7 +182,7 @@ func (c *Deployer) routerChain(ctx context.Context, svc domain.Service, name str
 	}
 	prefix := "traefik.http.routers." + name + "-"
 	for _, ct := range cts {
-		if ct.State != container.StateRunning {
+		if ct.State != domain.StateRunning {
 			continue
 		}
 		for k := range ct.Labels {

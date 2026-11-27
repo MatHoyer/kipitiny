@@ -176,10 +176,7 @@ func (c *Servers) sampleStats(ctx context.Context) {
 // sampleServer reads the counters of the server's running replicas that
 // serve traffic (not the previous deployment's during a rollout).
 func sampleServer(ctx context.Context, dk *docker.Client, svcs map[string]domain.Service) (map[string]sample, map[string]string, error) {
-	f := make(client.Filters)
-	f.Add("label", domain.LabelManaged+"=true")
-	f.Add("label", domain.LabelService)
-	res, err := dk.ContainerList(ctx, client.ContainerListOptions{Filters: f})
+	cts, err := dk.FindContainers(ctx, false, domain.Filter{}.Add("label", domain.LabelManaged+"=true", domain.LabelService))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -190,7 +187,7 @@ func sampleServer(ctx context.Context, dk *docker.Client, svcs map[string]domain
 		samples = map[string]sample{}
 		owner   = map[string]string{}
 	)
-	for _, ct := range res.Items {
+	for _, ct := range cts {
 		svc, ok := svcs[ct.Labels[domain.LabelService]]
 		if !ok || !deploy.IsActive(ct, svc) {
 			continue

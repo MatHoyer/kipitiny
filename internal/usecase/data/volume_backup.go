@@ -147,7 +147,7 @@ func (c *Data) preBackup(ctx context.Context, svc domain.Service) error {
 		return err
 	}
 	for _, ct := range cts {
-		if ct.State != container.StateRunning {
+		if ct.State != domain.StateRunning {
 			continue
 		}
 		if err := c.mgr.DockerFor(svc.ServerID).Exec(ctx, ct.ID, docker.ExecOptions{Cmd: []string{"sh", "-c", svc.PreBackup}}); err != nil {
@@ -314,7 +314,7 @@ func (c *Data) stopServiceContainers(ctx context.Context, svc domain.Service) ([
 	var stopped []string
 	secs := int(StopTimeoutFor(svc).Seconds())
 	for _, ct := range cts {
-		if ct.State != container.StateRunning {
+		if ct.State != domain.StateRunning {
 			continue
 		}
 		if _, err := c.mgr.DockerFor(svc.ServerID).ContainerStop(ctx, ct.ID, client.ContainerStopOptions{Timeout: &secs}); err != nil {
