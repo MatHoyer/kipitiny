@@ -4,10 +4,12 @@ import (
 	"archive/tar"
 	"io"
 	"testing"
+
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestTarFiles(t *testing.T) {
-	r, err := tarFiles([]File{{Path: "/etc/traefik/a.yml", Content: []byte("x")}, {Path: "/etc/traefik/b.yml"}})
+	r, err := tarFiles([]domain.ContainerFile{{Path: "/etc/traefik/a.yml", Content: []byte("x")}, {Path: "/etc/traefik/b.yml"}})
 	if err != nil {
 		t.Fatal(err)
 	}

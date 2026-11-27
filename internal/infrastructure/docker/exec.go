@@ -14,15 +14,10 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
-type (
-	ExecOptions = domain.ExecOptions
-	ExecError   = domain.ExecError
-)
-
 // Exec runs a command in a running container, streaming stdin/stdout in
-// constant memory. A non-zero exit yields *ExecError with the stderr tail.
+// constant memory. A non-zero exit yields *domain.ExecError with the stderr tail.
 // Cancelling ctx closes the connection, which stops the transfer.
-func (c *Client) Exec(ctx context.Context, containerID string, opts ExecOptions) error {
+func (c *Client) Exec(ctx context.Context, containerID string, opts domain.ExecOptions) error {
 	created, err := c.ExecCreate(ctx, containerID, client.ExecCreateOptions{
 		Cmd:          opts.Cmd,
 		Env:          opts.Env,
@@ -74,7 +69,7 @@ func (c *Client) Exec(ctx context.Context, containerID string, opts ExecOptions)
 		}
 		if !res.Running {
 			if res.ExitCode != 0 {
-				return &ExecError{ExitCode: res.ExitCode, Stderr: stderr.String()}
+				return &domain.ExecError{ExitCode: res.ExitCode, Stderr: stderr.String()}
 			}
 			break
 		}
@@ -105,10 +100,10 @@ func (t *tailBuffer) Write(p []byte) (int, error) {
 
 func (t *tailBuffer) String() string { return string(t.buf) }
 
-// RunAttachedMoby creates and starts a one-off container, streams stdin into it
+// runAttached creates and starts a one-off container, streams stdin into it
 // and its output to out, waits for it to exit and removes it. It returns the
 // exit code.
-func (c *Client) RunAttachedMoby(ctx context.Context, opts client.ContainerCreateOptions, stdin io.Reader, out io.Writer) (int, error) {
+func (c *Client) runAttached(ctx context.Context, opts client.ContainerCreateOptions, stdin io.Reader, out io.Writer) (int, error) {
 	opts.Config.OpenStdin = stdin != nil
 	opts.Config.StdinOnce = stdin != nil
 	opts.Config.AttachStdin = stdin != nil

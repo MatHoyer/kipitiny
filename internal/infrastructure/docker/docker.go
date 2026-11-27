@@ -47,14 +47,12 @@ func New() (*Client, error) {
 	return &Client{Client: c}, nil
 }
 
-type Info = domain.DockerInfo
-
-func (c *Client) Info(ctx context.Context) (Info, error) {
+func (c *Client) Info(ctx context.Context) (domain.DockerInfo, error) {
 	v, err := c.ServerVersion(ctx, client.ServerVersionOptions{})
 	if err != nil {
-		return Info{}, err
+		return domain.DockerInfo{}, err
 	}
-	return Info{Version: v.Version, APIVersion: v.APIVersion, OS: v.Os, Arch: v.Arch}, nil
+	return domain.DockerInfo{Version: v.Version, APIVersion: v.APIVersion, OS: v.Os, Arch: v.Arch}, nil
 }
 
 // EnsureNetwork creates a bridge network if it does not exist yet.
@@ -95,19 +93,6 @@ func (c *Client) DisconnectNetwork(ctx context.Context, name, containerID string
 	return nil
 }
 
-// ListSummaries returns all containers (running or not) matching every label.
-func (c *Client) ListSummaries(ctx context.Context, labels map[string]string) ([]container.Summary, error) {
-	f := make(client.Filters)
-	for k, v := range labels {
-		f.Add("label", k+"="+v)
-	}
-	res, err := c.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: f})
-	if err != nil {
-		return nil, err
-	}
-	return res.Items, nil
-}
-
 // RemoveContainer stops a container gracefully (SIGTERM, then SIGKILL after
 // timeout) and removes it. Missing containers are not an error.
 func (c *Client) RemoveContainer(ctx context.Context, id string, timeout time.Duration) error {
@@ -126,7 +111,7 @@ func (c *Client) RemoveContainer(ctx context.Context, id string, timeout time.Du
 // status change (not per progress tick) to w.
 func (c *Client) PullImage(ctx context.Context, ref, auth, platform string, w io.Writer) error {
 	opts := client.ImagePullOptions{RegistryAuth: auth}
-	if p := Platform(platform); p != nil {
+	if p := ociPlatform(platform); p != nil {
 		opts.Platforms = []ocispec.Platform{*p}
 	}
 	resp, err := c.ImagePull(ctx, ref, opts)
@@ -155,7 +140,7 @@ func (c *Client) PullImage(ctx context.Context, ref, auth, platform string, w io
 // EnsureImage pulls ref (with auth and platform, see PullImage) only if it
 // is not present locally.
 func (c *Client) EnsureImage(ctx context.Context, ref, auth, platform string) error {
-	if _, err := c.InspectImageMoby(ctx, ref, platform); err == nil {
+	if _, err := c.inspectImage(ctx, ref, platform); err == nil {
 		return nil
 	} else if !cerrdefs.IsNotFound(err) {
 		return err
@@ -163,9 +148,9 @@ func (c *Client) EnsureImage(ctx context.Context, ref, auth, platform string) er
 	return c.PullImage(ctx, ref, auth, platform, io.Discard)
 }
 
-// InspectImageMoby inspects platform's image of ref ("" is the server's).
-func (c *Client) InspectImageMoby(ctx context.Context, ref, platform string) (client.ImageInspectResult, error) {
-	p := Platform(platform)
+// inspectImage inspects platform's image of ref ("" is the server's).
+func (c *Client) inspectImage(ctx context.Context, ref, platform string) (client.ImageInspectResult, error) {
+	p := ociPlatform(platform)
 	if p == nil {
 		return c.ImageInspect(ctx, ref)
 	}
@@ -178,7 +163,7 @@ func (c *Client) InspectImageMoby(ctx context.Context, ref, platform string) (cl
 }
 
 // Platform parses os/arch[/variant]; "" is nil, the server's own.
-func Platform(s string) *ocispec.Platform {
+func ociPlatform(s string) *ocispec.Platform {
 	if s == "" {
 		return nil
 	}
@@ -192,12 +177,9 @@ func (c *Client) Login(ctx context.Context, server, username, password string) e
 	return err
 }
 
-// File is written into a container before it starts.
-type File = domain.ContainerFile
-
-// RunMoby creates and starts a container, first writing files into it. If
+// run creates and starts a container, first writing files into it. If
 // anything fails the container is removed.
-func (c *Client) RunMoby(ctx context.Context, opts client.ContainerCreateOptions, files ...File) (string, error) {
+func (c *Client) run(ctx context.Context, opts client.ContainerCreateOptions, files ...domain.ContainerFile) (string, error) {
 	res, err := c.ContainerCreate(ctx, opts)
 	if err != nil {
 		return "", fmt.Errorf("create container %s: %w", opts.Name, err)
@@ -225,7 +207,7 @@ func (c *Client) RunMoby(ctx context.Context, opts client.ContainerCreateOptions
 // tarFiles archives files relative to "/". It has no entries for their
 // parent directories: Docker creates the missing ones, and an entry would
 // reset an existing one's owner and mode (/tmp would lose its sticky bit).
-func tarFiles(files []File) (io.Reader, error) {
+func tarFiles(files []domain.ContainerFile) (io.Reader, error) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 	for _, f := range files {
@@ -328,8 +310,8 @@ func (c *Client) RemoveContainerAndVolumes(ctx context.Context, id string) error
 	return nil
 }
 
-// ListNetworksMoby returns the networks the manager created.
-func (c *Client) ListNetworksMoby(ctx context.Context) ([]network.Summary, error) {
+// listNetworks returns the networks the manager created.
+func (c *Client) listNetworks(ctx context.Context) ([]network.Summary, error) {
 	f := make(client.Filters)
 	f.Add("label", domain.LabelManaged+"=true")
 	res, err := c.NetworkList(ctx, client.NetworkListOptions{Filters: f})

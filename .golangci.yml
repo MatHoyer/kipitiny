@@ -24,6 +24,9 @@ linters:
           files: ["**/internal/domain/**"]
           # anonymize: the anonymization rules, a pure package (no I/O).
           allow: [$gostd, github.com/kipit-labs/kipitiny/internal/domain, github.com/kipit-labs/kipitiny/internal/anonymize]
+          deny:
+            - pkg: github.com/moby
+              desc: the domain's container types are its own, the docker adapter converts
         usecase:
           files: ["**/internal/usecase/**"]
           deny:
@@ -37,6 +40,16 @@ linters:
               desc: use cases know nothing about MCP
             - pkg: github.com/uptrace/bun
               desc: SQL stays in the store adapter
+            - pkg: github.com/moby
+              desc: use cases reach Docker through domain.ContainerRuntime (infrastructure/docker)
+            - pkg: github.com/opencontainers/image-spec
+              desc: use cases reach Docker through domain.ContainerRuntime (infrastructure/docker)
+            - pkg: github.com/go-git/go-git
+              desc: use cases read repositories through domain.Git (infrastructure/git)
+            - pkg: filippo.io/age
+              desc: use cases encrypt through domain.Encryption (infrastructure/age)
+            - pkg: github.com/robfig/cron
+              desc: use cases schedule through domain.Cron (infrastructure/cron)
         infrastructure:
           files: ["**/internal/infrastructure/**"]
           deny:
@@ -54,8 +67,6 @@ linters:
               desc: handlers go through use cases, wiring is in cmd/kipitiny
             - pkg: github.com/kipit-labs/kipitiny/internal/store/sqlite
               desc: handlers go through use cases, wiring is in cmd/kipitiny
-            - pkg: github.com/kipit-labs/kipitiny/internal/docker
-              desc: handlers never touch Docker, they go through use cases
             - pkg: github.com/moby/moby
               desc: handlers never touch Docker, they go through use cases
             - pkg: github.com/uptrace/bun

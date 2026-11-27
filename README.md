@@ -149,16 +149,16 @@ updates.
 ```
 cmd/kipitiny/          entrypoint
 internal/config/       env config
-internal/domain/       entities, repository interfaces (one per area), shared errors
+internal/domain/       entities, repository interfaces (one per area), ports (ContainerRuntime, Git, Encryption, Cron), label/network names, shared errors
 internal/usecase/      use cases by area, each its own package
 internal/core/         wiring and lifecycle; embeds each area for the handlers
 internal/infrastructure/sqlite/ SQLite store (bun + goose migrations)
 internal/infrastructure/age/    backup encryption (age X25519 keys)
 internal/infrastructure/cron/   cron expressions and schedulers (robfig/cron)
 internal/infrastructure/git/    reading git repositories (go-git)
+internal/infrastructure/docker/ Docker Engine API client (moby), local or over SSH: domain.ContainerRuntime
 internal/api/          JSON HTTP handlers
 internal/mcp/          MCP tools, one file per group
-internal/docker/       Docker client wrapper, label/network conventions
 web/                   React SPA (Vite), embedded via go:embed; src/features/<area>/
 site/                  website: landing page and docs (site/docs/*.md), own image
 ```

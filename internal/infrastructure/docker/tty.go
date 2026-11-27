@@ -100,9 +100,9 @@ func (c *Client) ExecTTY(ctx context.Context, containerID string, cmd, env []str
 	}, nil
 }
 
-// RunTTYMoby creates and starts a one-off container on a pseudo-terminal. Close
+// runTTY creates and starts a one-off container on a pseudo-terminal. Close
 // removes it.
-func (c *Client) RunTTYMoby(ctx context.Context, opts client.ContainerCreateOptions, cols, rows uint) (*TTY, error) {
+func (c *Client) runTTY(ctx context.Context, opts client.ContainerCreateOptions, cols, rows uint) (*TTY, error) {
 	opts.Config.Tty = true
 	opts.Config.OpenStdin, opts.Config.StdinOnce = true, true
 	opts.Config.AttachStdin, opts.Config.AttachStdout, opts.Config.AttachStderr = true, true, true
