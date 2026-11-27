@@ -67,15 +67,15 @@ func (c *Client) CreateContainer(ctx context.Context, spec domain.ContainerSpec)
 }
 
 func (c *Client) Run(ctx context.Context, spec domain.ContainerSpec, files ...domain.ContainerFile) (string, error) {
-	return c.RunMoby(ctx, createOptions(spec), files...)
+	return c.run(ctx, createOptions(spec), files...)
 }
 
 func (c *Client) RunAttached(ctx context.Context, spec domain.ContainerSpec, stdin io.Reader, out io.Writer) (int, error) {
-	return c.RunAttachedMoby(ctx, createOptions(spec), stdin, out)
+	return c.runAttached(ctx, createOptions(spec), stdin, out)
 }
 
 func (c *Client) RunTTY(ctx context.Context, spec domain.ContainerSpec, cols, rows uint) (domain.TTY, error) {
-	t, err := c.RunTTYMoby(ctx, createOptions(spec), cols, rows)
+	t, err := c.runTTY(ctx, createOptions(spec), cols, rows)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (c *Client) PruneContainers(ctx context.Context, f domain.Filter) (domain.P
 }
 
 func (c *Client) InspectImage(ctx context.Context, ref, platform string) (domain.Image, error) {
-	res, err := c.InspectImageMoby(ctx, ref, platform)
+	res, err := c.inspectImage(ctx, ref, platform)
 	if err != nil {
 		return domain.Image{}, err
 	}
@@ -262,7 +262,7 @@ func (c *Client) DeleteVolume(ctx context.Context, name string) error {
 }
 
 func (c *Client) ListNetworks(ctx context.Context) ([]domain.DockerNetwork, error) {
-	ns, err := c.ListNetworksMoby(ctx)
+	ns, err := c.listNetworks(ctx)
 	if err != nil {
 		return nil, err
 	}

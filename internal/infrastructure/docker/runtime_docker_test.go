@@ -21,7 +21,7 @@ import (
 // cleanup. Nothing is kipitiny.managed, so a manager on the daemon leaves
 // it alone.
 //
-//	KIPITINY_TEST_DOCKER=1 go test ./internal/docker/ -run RuntimeDocker
+//	KIPITINY_TEST_DOCKER=1 go test ./internal/infrastructure/docker/ -run RuntimeDocker
 func TestRuntimeDocker(t *testing.T) {
 	if os.Getenv("KIPITINY_TEST_DOCKER") == "" {
 		t.Skip("KIPITINY_TEST_DOCKER not set")
