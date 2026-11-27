@@ -5,7 +5,14 @@ Design doc: `docs/design.md` — read before architectural changes. Roadmap in �
 ## Rules
 - Manager is ONE process: no Postgres/Redis/worker containers for its own state.
 - RAM budget matters: no Node at runtime, no heavy deps.
-- Handlers/MCP never touch SQL or Docker directly — go through `internal/core`.
+- Layers, dependencies pointing inward (kipitrek's layout, enforced by depguard in `.golangci.yml`):
+  `internal/domain` (entities, repository interfaces, shared errors; standard library only) ←
+  `internal/usecase/<area>` (the logic) ← `internal/infrastructure/<adapter>` (SQLite now) and the delivery
+  (`internal/api` REST, `internal/mcp` tools). Wiring only in `cmd/kipitiny`. Handlers/MCP never touch SQL or Docker
+  directly. `internal/core` is the use cases not moved to their area yet (#522): it embeds each area's struct
+  (`*identity.Identity`), so handlers call `core.X` for every area.
+- A use case area reaches another through a small interface it declares (`identity.Mailer`), never an import cycle;
+  no interface for code with a single implementation otherwise.
 - `make lint` runs golangci-lint (`.golangci.yml`: depguard layer rules, files under 500 lines) on the code changed
   since `issues.new-from-rev`, and oxlint (`web/.oxlintrc.json`, `max-lines` 500) on the UI. Never `//nolint`: fix the
   dependency or split the file. The move to the layered layout goes area by area (#522).
@@ -15,7 +22,9 @@ Design doc: `docs/design.md` — read before architectural changes. Roadmap in �
 - Everything created on Docker carries `kipitiny.*` labels (`internal/docker`).
 - Postgres services are always 1 replica.
 - UI primitives (`@kipit-labs/kipitidy/*`: buttons, dialogs, form fields, theme tokens) live in the kipitidy repo
-  (`kipit-labs/kipitidy`): change them there, release, then bump the version in `web/`. App components stay in `web/src/components`.
+  (`kipit-labs/kipitidy`): change them there, release, then bump the version in `web/`. Pages and the components one area uses live in
+  `web/src/features/<area>/` (with its `types.ts`); `web/src/components` keeps the shared ones, `lib/api.ts` the request helpers,
+  `src/api.ts` the client.
 - User docs live in `site/docs/*.md` (the website), not in the manager; the MCP instructions link to them.
 - A change that disrupts running servers on upgrade (Traefik recreated, a manual step) adds a notice under `## Unreleased` in `UPGRADE.md`; managers show it before updating.
 
@@ -25,7 +34,7 @@ The tests are the safety net that lets agents change code: a change is done when
 
 | Layer | Where | Covers |
 |---|---|---|
-| Unit | `*_test.go` next to the code, store on a temp SQLite | business rules, edge cases |
+| Unit | `*_test.go` next to the code (`internal/usecase/*`, `internal/core`), store on a temp SQLite | business rules, edge cases |
 | Docker integration | `internal/core/*_docker_test.go` (`KIPITINY_TEST_DOCKER=1`), `flows_docker_test.go` for deploy, rollback, reconcile, compose, backups, previews | what core does on a real daemon |
 | HTTP and MCP contract | `internal/api/*_test.go`, `routeAccess` (`access.go`) checked over HTTP by `TestRouteAccessOverHTTP`; `internal/mcp` `toolAccess` by `TestToolAccess` | status codes, who may call each route and tool |
 | UI end to end | `web/e2e/*.e2e.ts` (Playwright): the real binary deploying on a Docker daemon, WebKit at iPhone size and desktop Chromium, outside requests answered locally | user journeys in a browser, phone layout, uncaught page errors |

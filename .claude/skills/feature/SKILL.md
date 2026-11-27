@@ -9,7 +9,9 @@ Four phases, in order. Never skip the questions or the real-usage tests.
 
 ## 1. Explore and plan
 
-- Read `docs/design.md` (roadmap §16) and the code the feature touches: core, store, API, MCP, UI, site docs.
+- Read `docs/design.md` (roadmap §16) and the code the feature touches: domain (entities, repositories), the use case area
+  (`internal/usecase/<area>`, or `internal/core` until it moves), the SQLite adapter, API, MCP, UI
+  (`web/src/features/<area>`), site docs. New code goes where the layer rules in `.golangci.yml` say.
 - Write a plan: what changes where, PR split (multi-step work = stacked PRs, one `feat/...` branch per step), and the
   real-usage test list you will run in phase 3.
 - **Ask before implementing.** List every open question, ambiguity, and contradiction you found (with the design doc,
