@@ -4,7 +4,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 export CGO_ENABLED := 0
 DEV_ENV := KIPITINY_ADDR=:8080 KIPITINY_DATA_DIR=./data KIPITINY_LOG_LEVEL=debug
 
-.PHONY: all build ui ui-stub dev-api dev-ui dev-site site site-demo test lint docker clean
+.PHONY: all build ui ui-stub dev-api dev-ui dev-site site site-demo test cover lint docker clean
 
 all: build
 
@@ -40,6 +40,13 @@ site: site-demo
 site-demo:
 	cd web && pnpm install --frozen-lockfile && pnpm build:demo
 	rm -rf site/public/demo && cp -r web/dist-demo site/public/demo
+
+# Every Go test, the Docker-backed ones included (they need a daemon), with the race
+# detector and coverage of internal/; fails under COVERAGE_FLOOR, which only goes up.
+COVERAGE_FLOOR := 60
+cover: ui-stub
+	CGO_ENABLED=1 KIPITINY_TEST_DOCKER=1 go test -race -timeout 30m -coverpkg=./internal/... -coverprofile=cover.out ./...
+	@go tool cover -func=cover.out | awk -v floor=$(COVERAGE_FLOOR) '/^total:/ { sub("%", "", $$3); print "coverage " $$3 "% (floor " floor "%)"; if ($$3 + 0 < floor) exit 1 }'
 
 test: ui-stub
 	go test ./...
