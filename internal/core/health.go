@@ -89,7 +89,7 @@ func (h *svcHealth) observe(healthy bool, detail string, now time.Time) (down, u
 func (c *Core) trackHealth(project store.Project, svc store.Service, cts []container.Summary, now time.Time) {
 	// A deploy, restart or restore is working on it: its own outcome is
 	// reported, and replicas come and go meanwhile.
-	unlock, err := c.lockService(svc.ID)
+	unlock, err := c.lockServiceBackground(svc.ID)
 	if err != nil {
 		return
 	}

@@ -234,7 +234,7 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 	if svc.CurrentDeploymentID == "" || svc.Stopped || svc.Sleeping {
 		return nil // never deployed, stopped on purpose, or asleep
 	}
-	unlock, err := c.lockService(svc.ID)
+	unlock, err := c.lockServiceBackground(svc.ID)
 	if errors.Is(err, ErrBusy) {
 		return nil // a deploy/backup/restore is working on it
 	}
