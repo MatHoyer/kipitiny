@@ -16,5 +16,5 @@ Design doc: `docs/design.md` â€” read before architectural changes. Roadmap in Â
 - A change that disrupts running servers on upgrade (Traefik recreated, a manual step) adds a notice under `## Unreleased` in `UPGRADE.md`; managers show it before updating.
 
 ## Commands
-`make dev-api` / `make dev-ui` / `make dev-site` / `make test` / `make lint` / `make build` / `make docker`.
+`make dev-api` / `make dev-ui` / `make dev-site` / `make test` / `make cover` / `make lint` / `make build` / `make docker`.
 `go:embed` needs `web/dist`; make targets stub it via `ui-stub`.

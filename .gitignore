@@ -9,3 +9,4 @@ site/public/demo/
 *.db-shm
 *.tsbuildinfo
 /kipitiny
+cover.out
