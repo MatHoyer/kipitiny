@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
@@ -45,7 +44,7 @@ func (c *Projects) CreateProject(ctx context.Context, name, serverID string) (do
 	if err := c.mgr.GrantCreator(ctx, p.ID); err != nil {
 		return p, err
 	}
-	if err := c.mgr.DockerFor(p.ServerID).EnsureNetwork(ctx, docker.ProjectNetwork(p.ID)); err != nil {
+	if err := c.mgr.DockerFor(p.ServerID).EnsureNetwork(ctx, domain.ProjectNetwork(p.ID)); err != nil {
 		return p, fmt.Errorf("project created but network setup failed: %w", err)
 	}
 	return p, nil
@@ -115,11 +114,11 @@ func (c *Projects) RemoveProject(ctx context.Context, p domain.Project) error {
 		return err
 	}
 	for _, n := range nets { // the networks of its compose file
-		if strings.HasPrefix(n.Name, docker.ProjectNetwork(id)+"-") {
+		if strings.HasPrefix(n.Name, domain.ProjectNetwork(id)+"-") {
 			if err := dk.RemoveNetwork(ctx, n.Name); err != nil {
 				return err
 			}
 		}
 	}
-	return dk.RemoveNetwork(ctx, docker.ProjectNetwork(id))
+	return dk.RemoveNetwork(ctx, domain.ProjectNetwork(id))
 }

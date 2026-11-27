@@ -426,7 +426,7 @@ func (c *Deployer) WakeFor(ctx context.Context, svc domain.Service) error {
 // ID), over the routers of its replicas (one per configuration hash).
 func (c *Deployer) routerRequests(ctx context.Context, serverID string) (map[string]float64, error) {
 	dk := c.mgr.DockerFor(serverID)
-	cts, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: network.TraefikComponent})
+	cts, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: network.TraefikComponent})
 	if err != nil {
 		return nil, err
 	}

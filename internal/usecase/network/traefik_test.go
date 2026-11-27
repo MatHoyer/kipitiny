@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -107,7 +106,7 @@ func TestTunnelMode(t *testing.T) {
 	if !slices.Contains(spec.Config.Env, "TUNNEL_TOKEN=tok") || slices.Contains(spec.Config.Cmd, "tok") {
 		t.Error("token must be passed through the environment only")
 	}
-	if _, ok := spec.NetworkingConfig.EndpointsConfig[docker.ProxyNetwork]; !ok {
+	if _, ok := spec.NetworkingConfig.EndpointsConfig[domain.ProxyNetwork]; !ok {
 		t.Error("cloudflared must reach Traefik on the proxy network")
 	}
 }

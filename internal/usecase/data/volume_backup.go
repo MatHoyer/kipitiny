@@ -98,7 +98,7 @@ func startVolumeHelper(ctx context.Context, dk *docker.Client, name string, moun
 		Config: &container.Config{
 			Image:  volumeHelperImage,
 			Cmd:    []string{"sleep", "2147483647"},
-			Labels: map[string]string{docker.LabelManaged: "true", docker.LabelComponent: volumeHelperComponent},
+			Labels: map[string]string{domain.LabelManaged: "true", domain.LabelComponent: volumeHelperComponent},
 		},
 		HostConfig: &container.HostConfig{
 			NetworkMode: "none",
@@ -240,7 +240,7 @@ func (c *Data) restoreVolumes(ctx context.Context, svc domain.Service, st storag
 	stage := "kipitiny-stage-" + strings.ToLower(r.ID)
 	if _, err := dk.VolumeCreate(ctx, client.VolumeCreateOptions{
 		Name:   stage,
-		Labels: map[string]string{docker.LabelManaged: "true", docker.LabelComponent: volumeStageComponent},
+		Labels: map[string]string{domain.LabelManaged: "true", domain.LabelComponent: volumeStageComponent},
 	}); err != nil {
 		return false, fmt.Errorf("staging volume: %w", err)
 	}

@@ -8,7 +8,6 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -18,7 +17,7 @@ func TestNetworkIssues(t *testing.T) {
 	ct := func(state container.ContainerState, routed bool, nets ...string) container.Summary {
 		c := container.Summary{
 			State:           state,
-			Labels:          map[string]string{docker.LabelDeploy: "D1"},
+			Labels:          map[string]string{domain.LabelDeploy: "D1"},
 			NetworkSettings: &container.NetworkSettingsSummary{Networks: map[string]*network.EndpointSettings{}},
 		}
 		if routed {
@@ -29,13 +28,13 @@ func TestNetworkIssues(t *testing.T) {
 		}
 		return c
 	}
-	all := []string{docker.ProjectNetwork(p.ID), docker.CustomNetwork("N1"), docker.ProxyNetwork}
+	all := []string{domain.ProjectNetwork(p.ID), domain.CustomNetwork("N1"), domain.ProxyNetwork}
 
 	want := wantNetworks(p, svc, ct(container.StateRunning, true))
 	if got := slices.Sorted(maps.Keys(want)); !slices.Equal(got, slices.Sorted(slices.Values(all))) {
 		t.Errorf("wanted networks = %q", got)
 	}
-	if aliases := want[docker.ProjectNetwork(p.ID)]; !slices.Equal(aliases, []string{"web"}) {
+	if aliases := want[domain.ProjectNetwork(p.ID)]; !slices.Equal(aliases, []string{"web"}) {
 		t.Errorf("project alias = %q", aliases)
 	}
 
@@ -44,8 +43,8 @@ func TestNetworkIssues(t *testing.T) {
 	}
 	// The project network was removed and recreated: the replicas lost it.
 	got := networkIssues(p, svc, []container.Summary{
-		ct(container.StateRunning, true, docker.CustomNetwork("N1"), docker.ProxyNetwork),
-		ct(container.StateRunning, true, docker.CustomNetwork("N1")),
+		ct(container.StateRunning, true, domain.CustomNetwork("N1"), domain.ProxyNetwork),
+		ct(container.StateRunning, true, domain.CustomNetwork("N1")),
 	})
 	if want := []string{"not on the project network: other services can't reach it", "not on the proxy network: its domain can't reach it"}; !slices.Equal(got, want) {
 		t.Errorf("detached: %q, want %q", got, want)

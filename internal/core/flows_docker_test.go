@@ -54,7 +54,7 @@ func newFlow(t *testing.T) flow {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelManaged: "true"}); err != nil {
+	if cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelManaged: "true"}); err != nil {
 		t.Fatal(err)
 	} else if len(cts) > 0 {
 		msg := "this Docker daemon runs kipitiny containers, which these tests' reconciler would remove: point DOCKER_HOST at a throwaway daemon"
@@ -63,7 +63,7 @@ func newFlow(t *testing.T) flow {
 		}
 		t.Skip(msg)
 	}
-	if err := dk.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil {
+	if err := dk.EnsureNetwork(ctx, domain.ProxyNetwork); err != nil {
 		t.Fatal(err)
 	}
 	f := flow{dk: dk, dbPath: filepath.Join(t.TempDir(), "t.db"), cfg: config.Config{DataDir: t.TempDir()}}
@@ -182,7 +182,7 @@ func (f flow) running(t *testing.T, svc domain.Service) []string {
 	var deps []string
 	for _, ct := range cts {
 		if ct.State == "running" {
-			deps = append(deps, ct.Labels[docker.LabelDeploy])
+			deps = append(deps, ct.Labels[domain.LabelDeploy])
 		}
 	}
 	return deps
@@ -260,7 +260,7 @@ func TestReconcileAfterRestartFlowDocker(t *testing.T) {
 	}
 	stray, err := f.dk.Run(f.ctx, domain.ContainerSpec{
 		Name: "kipitiny-test-stray", Image: "busybox", Cmd: []string{"sleep", "600"},
-		Labels: map[string]string{docker.LabelManaged: "true", docker.LabelProject: p.ID, docker.LabelService: "01STRAY0000000000000000000"},
+		Labels: map[string]string{domain.LabelManaged: "true", domain.LabelProject: p.ID, domain.LabelService: "01STRAY0000000000000000000"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -274,7 +274,7 @@ func TestReconcileAfterRestartFlowDocker(t *testing.T) {
 	if got := f.running(t, web); len(got) != 2 || got[0] != dep.ID || got[1] != dep.ID {
 		t.Errorf("replicas after the restart: %v, want 2 of %s", got, dep.ID)
 	}
-	if left, _ := f.dk.ListContainers(f.ctx, map[string]string{docker.LabelService: "01STRAY0000000000000000000"}); len(left) != 0 {
+	if left, _ := f.dk.ListContainers(f.ctx, map[string]string{domain.LabelService: "01STRAY0000000000000000000"}); len(left) != 0 {
 		t.Errorf("orphan kept: %d", len(left))
 	}
 	// A second pass changes nothing.
@@ -434,7 +434,7 @@ func TestPreviewFlowDocker(t *testing.T) {
 	if _, err := f.c.store.GetProject(f.ctx, v.ID); err == nil {
 		t.Error("closed preview's project kept")
 	}
-	if left, _ := f.dk.ListContainers(f.ctx, map[string]string{docker.LabelProject: v.ID}); len(left) != 0 {
+	if left, _ := f.dk.ListContainers(f.ctx, map[string]string{domain.LabelProject: v.ID}); len(left) != 0 {
 		t.Errorf("closed preview's containers kept: %d", len(left))
 	}
 	if got := f.running(t, web); len(got) != 1 || got[0] != parent.ID {

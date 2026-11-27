@@ -200,7 +200,7 @@ func (c *Deployer) serverTopology(ctx context.Context, sv domain.Server, project
 	dk := c.mgr.DockerFor(sv.ID)
 	var cts []container.Summary
 	nets := map[string]dockernet.Summary{}
-	cts, err := dk.ListSummaries(ctx, map[string]string{docker.LabelManaged: "true"})
+	cts, err := dk.ListSummaries(ctx, map[string]string{domain.LabelManaged: "true"})
 	if err == nil {
 		var ns []dockernet.Summary
 		if ns, err = dk.ListNetworksMoby(ctx); err == nil {
@@ -213,18 +213,18 @@ func (c *Deployer) serverTopology(ctx context.Context, sv domain.Server, project
 		t.Error = err.Error()
 	}
 
-	t.Networks = append(t.Networks, topoNetwork(nets, docker.ProxyNetwork, "", err == nil))
+	t.Networks = append(t.Networks, topoNetwork(nets, domain.ProxyNetwork, "", err == nil))
 	if custom, cerr := c.store.ListNetworks(ctx); cerr == nil {
 		for _, n := range custom {
 			if n.ServerID == sv.ID {
-				tn := topoNetwork(nets, docker.CustomNetwork(n.ID), "", err == nil)
+				tn := topoNetwork(nets, domain.CustomNetwork(n.ID), "", err == nil)
 				tn.Custom, tn.CustomID = n.Name, n.ID
 				t.Networks = append(t.Networks, tn)
 			}
 		}
 	}
 	for _, ct := range cts {
-		switch ct.Labels[docker.LabelComponent] {
+		switch ct.Labels[domain.LabelComponent] {
 		case network.TraefikComponent:
 			t.Proxy = topoNode(ct, componentView(ct))
 		case network.TunnelComponent:
@@ -237,7 +237,7 @@ func (c *Deployer) serverTopology(ctx context.Context, sv domain.Server, project
 
 	byService := map[string][]container.Summary{}
 	for _, ct := range cts {
-		if id := ct.Labels[docker.LabelService]; id != "" {
+		if id := ct.Labels[domain.LabelService]; id != "" {
 			byService[id] = append(byService[id], ct)
 		}
 	}
@@ -248,7 +248,7 @@ func (c *Deployer) serverTopology(ctx context.Context, sv domain.Server, project
 				own = append(own, s)
 			}
 		}
-		netName := docker.ProjectNetwork(p.ID)
+		netName := domain.ProjectNetwork(p.ID)
 		t.Networks = append(t.Networks, topoNetwork(nets, netName, p.ID, err == nil))
 		tp := TopoProject{ID: p.ID, Name: p.Name, Network: netName, GitPath: gitPaths[p.ID], ParentID: p.ParentID, Services: make([]TopoService, 0, len(own))}
 		dbs := databasesOf(own)

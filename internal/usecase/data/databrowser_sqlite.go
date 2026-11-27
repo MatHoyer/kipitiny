@@ -55,7 +55,7 @@ func (c *Data) startSQLiteHelper(ctx context.Context, dk *docker.Client, name st
 		Config: &container.Config{
 			Image:  image,
 			Cmd:    []string{"sqlite", "idle"},
-			Labels: map[string]string{docker.LabelManaged: "true", docker.LabelComponent: volumeHelperComponent},
+			Labels: map[string]string{domain.LabelManaged: "true", domain.LabelComponent: volumeHelperComponent},
 			// SQLite's temporary files (big sorts) go to the tmpfs.
 			Env: []string{"SQLITE_TMPDIR=/tmp"},
 			// The image's own checks the manager's port.

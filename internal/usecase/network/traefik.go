@@ -71,13 +71,13 @@ func (c *Network) EnsureTraefik(ctx context.Context, sv domain.Server) error {
 		parts = append(parts, o.CFToken) // a new token must reach Traefik
 	}
 	hash := SpecHash(parts...)
-	opts.Config.Labels[docker.LabelConfigHash] = hash
+	opts.Config.Labels[domain.LabelConfigHash] = hash
 
-	existing, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: TraefikComponent})
+	existing, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: TraefikComponent})
 	if err != nil {
 		return err
 	}
-	if len(existing) == 1 && existing[0].Labels[docker.LabelConfigHash] == hash {
+	if len(existing) == 1 && existing[0].Labels[domain.LabelConfigHash] == hash {
 		if existing[0].State == container.StateRunning {
 			return nil
 		}
@@ -118,7 +118,7 @@ func (c *Network) ManagerUpstream(ctx context.Context, dk *docker.Client) (strin
 		return "", fmt.Errorf("KIPITINY_ADDR %q: %w", c.cfg.Addr, err)
 	}
 	if id := docker.SelfContainerID(); id != "" {
-		if err := dk.ConnectNetwork(ctx, docker.ProxyNetwork, id, ManagerAlias); err != nil {
+		if err := dk.ConnectNetwork(ctx, domain.ProxyNetwork, id, ManagerAlias); err != nil {
 			return "", err
 		}
 		return "http://" + ManagerAlias + ":" + port, nil
@@ -168,9 +168,9 @@ func (c *Network) TraefikSpec(socket string, o TraefikOpts) (client.ContainerCre
 		// means the container is gone, so fail fast and let retry pick another.
 		"--serverstransport.forwardingtimeouts.dialtimeout=1s",
 		"--providers.docker.exposedbydefault=false",
-		"--providers.docker.network=" + docker.ProxyNetwork,
+		"--providers.docker.network=" + domain.ProxyNetwork,
 		// Ignore containers the manager does not own.
-		"--providers.docker.constraints=Label(`" + docker.LabelManaged + "`,`true`)",
+		"--providers.docker.constraints=Label(`" + domain.LabelManaged + "`,`true`)",
 		"--entrypoints.web.address=:80",
 		"--entrypoints.web.http.redirections.entrypoint.to=" + redirectTo,
 		"--entrypoints.web.http.redirections.entrypoint.scheme=https",
@@ -268,8 +268,8 @@ func (c *Network) TraefikSpec(socket string, o TraefikOpts) (client.ContainerCre
 			Env:          env,
 			ExposedPorts: network.PortSet{http: {}, https: {}},
 			Labels: map[string]string{
-				docker.LabelManaged:   "true",
-				docker.LabelComponent: TraefikComponent,
+				domain.LabelManaged:   "true",
+				domain.LabelComponent: TraefikComponent,
 			},
 		},
 		HostConfig: &container.HostConfig{
@@ -283,7 +283,7 @@ func (c *Network) TraefikSpec(socket string, o TraefikOpts) (client.ContainerCre
 			LogConfig:     docker.DefaultLogConfig(),
 		},
 		NetworkingConfig: &network.NetworkingConfig{
-			EndpointsConfig: map[string]*network.EndpointSettings{docker.ProxyNetwork: {}},
+			EndpointsConfig: map[string]*network.EndpointSettings{domain.ProxyNetwork: {}},
 		},
 	}, files
 }
@@ -374,7 +374,7 @@ func TraefikLabels(svc domain.Service, rt Routing) map[string]string {
 	router := name + "-" + SpecHash(spec...)[:8]
 	labels := map[string]string{
 		"traefik.enable":         "true",
-		"traefik.docker.network": docker.ProxyNetwork,
+		"traefik.docker.network": domain.ProxyNetwork,
 		// Connection failures (a replica stopping during a rollout, before
 		// Traefik sees the event) are retried on another replica.
 		"traefik.http.middlewares." + name + "-retry.retry.attempts":        "3",

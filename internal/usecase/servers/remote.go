@@ -210,14 +210,14 @@ func (c *Servers) DeleteServer(ctx context.Context, id string) error {
 	}
 	dk := c.DockerFor(id)
 	for _, component := range []string{network.TraefikComponent, network.TunnelComponent} {
-		cts, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: component})
+		cts, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: component})
 		if err != nil {
 			continue
 		}
 		for _, ct := range cts {
 			_ = dk.RemoveContainer(ctx, ct.ID, 10*time.Second)
 		}
-		_ = dk.RemoveNetwork(ctx, docker.ProxyNetwork)
+		_ = dk.RemoveNetwork(ctx, domain.ProxyNetwork)
 	}
 	c.pool.Invalidate(id)
 	c.probes.Delete(id)

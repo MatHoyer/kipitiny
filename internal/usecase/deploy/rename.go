@@ -10,7 +10,6 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -162,7 +161,7 @@ func (c *Deployer) renameContainers(ctx context.Context, svc domain.Service, old
 		return err
 	}
 	dk := c.mgr.DockerFor(svc.ServerID)
-	prefix := docker.ProjectNetwork(svc.ProjectID)
+	prefix := domain.ProjectNetwork(svc.ProjectID)
 	var errs []error
 	for _, ct := range cts {
 		if len(ct.Names) > 0 {

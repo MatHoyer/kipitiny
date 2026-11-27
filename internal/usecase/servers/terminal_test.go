@@ -5,13 +5,13 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestPickContainer(t *testing.T) {
 	ct := func(id, name, replica string, state container.ContainerState) container.Summary {
 		return container.Summary{ID: id, Names: []string{"/" + name}, State: state,
-			Labels: map[string]string{docker.LabelReplica: replica}}
+			Labels: map[string]string{domain.LabelReplica: replica}}
 	}
 	cts := []container.Summary{
 		ct("aaaaaaaaaaaa1111", "p-web-10", "10", container.StateRunning),

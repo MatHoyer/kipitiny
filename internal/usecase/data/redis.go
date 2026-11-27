@@ -13,7 +13,6 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -114,5 +113,5 @@ func applyRedisSpec(cfg *container.Config, host *container.HostConfig, svc domai
 		Source: RedisVolume(svc.ID),
 		Target: redisVolumeMount,
 	})
-	cfg.Labels[docker.LabelComponent] = string(domain.ServiceKindRedis)
+	cfg.Labels[domain.LabelComponent] = string(domain.ServiceKindRedis)
 }

@@ -48,7 +48,7 @@ func dataTestDB(t *testing.T, kind domain.ServiceKind, cfg *container.Config) (*
 	}
 	// Not kipitiny.managed: a manager running on this daemon would remove
 	// it as an orphan.
-	cfg.Labels = map[string]string{docker.LabelProject: p.ID, docker.LabelService: svc.ID}
+	cfg.Labels = map[string]string{domain.LabelProject: p.ID, domain.LabelService: svc.ID}
 	if kind == domain.ServiceKindPostgres {
 		// Commands would otherwise reach initdb's temporary server, which
 		// shuts down right after.

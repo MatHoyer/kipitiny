@@ -12,7 +12,6 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -113,7 +112,7 @@ func applyMongoSpec(cfg *container.Config, host *container.HostConfig, svc domai
 		Target: mongoVolumeMount,
 	})
 	host.Tmpfs = map[string]string{MongoConfigMount: ""}
-	cfg.Labels[docker.LabelComponent] = string(domain.ServiceKindMongoDB)
+	cfg.Labels[domain.LabelComponent] = string(domain.ServiceKindMongoDB)
 }
 
 // mongoHealthcheck pings once the entrypoint has exec'd the server: the

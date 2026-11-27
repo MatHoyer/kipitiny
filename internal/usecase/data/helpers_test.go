@@ -70,7 +70,7 @@ func (m fakeManager) Audit(ctx context.Context, action, target string, status in
 func (fakeManager) Notify(notify.Event, string, string) {}
 
 func (m fakeManager) ServiceContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error) {
-	return m.dk.ListSummaries(ctx, map[string]string{docker.LabelProject: svc.ProjectID, docker.LabelService: svc.ID})
+	return m.dk.ListSummaries(ctx, map[string]string{domain.LabelProject: svc.ProjectID, domain.LabelService: svc.ID})
 }
 
 // ActiveContainers is core's: the current deployment's, else the running ones.
@@ -78,7 +78,7 @@ func (m fakeManager) ActiveContainers(ctx context.Context, svc domain.Service) (
 	cts, err := m.ServiceContainers(ctx, svc)
 	active := cts[:0]
 	for _, ct := range cts {
-		if svc.CurrentDeploymentID == "" && ct.State == container.StateRunning || svc.CurrentDeploymentID != "" && ct.Labels[docker.LabelDeploy] == svc.CurrentDeploymentID {
+		if svc.CurrentDeploymentID == "" && ct.State == container.StateRunning || svc.CurrentDeploymentID != "" && ct.Labels[domain.LabelDeploy] == svc.CurrentDeploymentID {
 			active = append(active, ct)
 		}
 	}

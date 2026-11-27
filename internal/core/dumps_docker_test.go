@@ -79,7 +79,7 @@ func startTestDB(ctx context.Context, t *testing.T, c *Core, projectID string, i
 	data.ApplyDatabaseSpec(cfg, host, svc)
 	// Not kipitiny.managed: a manager running on this daemon would remove
 	// it as an orphan.
-	cfg.Labels = map[string]string{docker.LabelProject: projectID, docker.LabelService: svc.ID, docker.LabelDeploy: "D1"}
+	cfg.Labels = map[string]string{domain.LabelProject: projectID, domain.LabelService: svc.ID, domain.LabelDeploy: "D1"}
 	id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{Name: "kipitiny-test-" + strings.ToLower(svc.ID), Config: cfg, HostConfig: host})
 	if err != nil {
 		t.Fatal(err)

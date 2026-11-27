@@ -41,7 +41,7 @@ func TestScheduledJobsDocker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = dk.RemoveNetwork(context.Background(), docker.ProjectNetwork(p.ID)) })
+	t.Cleanup(func() { _ = dk.RemoveNetwork(context.Background(), domain.ProjectNetwork(p.ID)) })
 	svc, err := st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "app", Kind: domain.ServiceKindApp, Image: "busybox:stable",
 		Replicas: 1, Env: map[string]string{"GREETING": "hello"}})
 	if err != nil {
@@ -99,7 +99,7 @@ func TestScheduledJobsDocker(t *testing.T) {
 	}
 	// The run's goroutine removes the container once it recorded the run.
 	time.Sleep(time.Second)
-	if cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: deploy.JobComponent, docker.LabelProject: p.ID}); err != nil || len(cts) > 0 {
+	if cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: deploy.JobComponent, domain.LabelProject: p.ID}); err != nil || len(cts) > 0 {
 		t.Errorf("job containers left: %d %v", len(cts), err)
 	}
 }

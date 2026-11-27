@@ -8,7 +8,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
@@ -83,21 +82,21 @@ func TestAppContainerSpec(t *testing.T) {
 		t.Errorf("env = %v, want sorted and resolved", spec.Config.Env)
 	}
 	l := spec.Config.Labels
-	if l[docker.LabelProject] != "P1" || l[docker.LabelService] != "01ABC" || l[docker.LabelReplica] != "2" || l[docker.LabelDeploy] != "D1" {
+	if l[domain.LabelProject] != "P1" || l[domain.LabelService] != "01ABC" || l[domain.LabelReplica] != "2" || l[domain.LabelDeploy] != "D1" {
 		t.Errorf("labels = %v", l)
 	}
 	if _, ok := l["traefik.enable"]; ok {
 		t.Error("private service must not be exposed to traefik")
 	}
 	eps := spec.NetworkingConfig.EndpointsConfig
-	if len(eps) != 1 || !slices.Equal(eps[docker.ProjectNetwork("P1")].Aliases, []string{"web"}) {
+	if len(eps) != 1 || !slices.Equal(eps[domain.ProjectNetwork("P1")].Aliases, []string{"web"}) {
 		t.Errorf("endpoints = %v", eps)
 	}
 
 	svc.Networks = []string{"N1"}
 	spec = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, network.Routing{})
 	eps = spec.NetworkingConfig.EndpointsConfig
-	if len(eps) != 2 || !slices.Equal(eps[docker.CustomNetwork("N1")].Aliases, []string{"shop-web"}) {
+	if len(eps) != 2 || !slices.Equal(eps[domain.CustomNetwork("N1")].Aliases, []string{"shop-web"}) {
 		t.Errorf("endpoints with a network created by hand = %v", eps)
 	}
 	svc.Networks = nil
@@ -105,7 +104,7 @@ func TestAppContainerSpec(t *testing.T) {
 	svc.Domain, svc.Port = "shop.example.com", 8080
 	spec = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, network.Routing{Resolver: network.CertResolverTLS})
 	l = spec.Config.Labels
-	if l["traefik.enable"] != "true" || l["traefik.docker.network"] != docker.ProxyNetwork {
+	if l["traefik.enable"] != "true" || l["traefik.docker.network"] != domain.ProxyNetwork {
 		t.Errorf("traefik labels missing: %v", l)
 	}
 	r := routerName(t, l)
@@ -126,7 +125,7 @@ func TestAppContainerSpec(t *testing.T) {
 	if _, acme := l["traefik.http.routers."+r+".tls.certresolver"]; acme || l["traefik.http.routers."+r+".tls"] != "true" {
 		t.Error("no resolver must mean Traefik's default certificate")
 	}
-	if _, ok := spec.NetworkingConfig.EndpointsConfig[docker.ProxyNetwork]; !ok {
+	if _, ok := spec.NetworkingConfig.EndpointsConfig[domain.ProxyNetwork]; !ok {
 		t.Error("public service must join the proxy network")
 	}
 }

@@ -123,10 +123,10 @@ func AppVolumeMount(svc domain.Service, name, path string) mount.Mount {
 		Target:   path,
 		ReadOnly: v.ReadOnly,
 		VolumeOptions: &mount.VolumeOptions{Labels: map[string]string{
-			docker.LabelManaged:   "true",
-			docker.LabelProject:   svc.ProjectID,
-			docker.LabelService:   svc.ID,
-			docker.LabelComponent: VolumeComponent,
+			domain.LabelManaged:   "true",
+			domain.LabelProject:   svc.ProjectID,
+			domain.LabelService:   svc.ID,
+			domain.LabelComponent: VolumeComponent,
 		}},
 	}
 	if len(v.DriverOpts) > 0 {
@@ -160,8 +160,8 @@ func RemoveServiceVolumes(ctx context.Context, dk *docker.Client, svc domain.Ser
 		}
 	}
 	f := make(client.Filters).
-		Add("label", docker.LabelService+"="+svc.ID).
-		Add("label", docker.LabelComponent+"="+VolumeComponent)
+		Add("label", domain.LabelService+"="+svc.ID).
+		Add("label", domain.LabelComponent+"="+VolumeComponent)
 	vols, err := dk.VolumeList(ctx, client.VolumeListOptions{Filters: f})
 	if err != nil {
 		return err

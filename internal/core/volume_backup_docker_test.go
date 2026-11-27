@@ -58,7 +58,7 @@ func TestVolumeBackupDocker(t *testing.T) {
 			Cmd:   []string{"sh", "-c", "[ -f /uploads/a.txt ] || { echo v1 > /uploads/a.txt && mkdir /uploads/.d && chown 1000:1000 /uploads/a.txt; }; sleep 3600"},
 			// Not kipitiny.managed: a manager running on this daemon would
 			// remove it as an orphan.
-			Labels: map[string]string{docker.LabelProject: p.ID, docker.LabelService: svc.ID, docker.LabelDeploy: "D1"},
+			Labels: map[string]string{domain.LabelProject: p.ID, domain.LabelService: svc.ID, domain.LabelDeploy: "D1"},
 		},
 		HostConfig: &container.HostConfig{Mounts: []mount.Mount{data.AppVolumeMount(svc, svc.Volumes[0].Name, svc.Volumes[0].Path)}},
 	})

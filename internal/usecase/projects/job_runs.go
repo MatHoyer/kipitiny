@@ -239,7 +239,7 @@ func (c *Projects) RemoveStaleJobContainers(ctx context.Context, dk *docker.Clie
 	}
 	c.jobs.mu.Unlock()
 	for _, ct := range cts {
-		if ct.Labels[docker.LabelComponent] != deploy.JobComponent || owned[ct.Labels[docker.LabelJob]] {
+		if ct.Labels[domain.LabelComponent] != deploy.JobComponent || owned[ct.Labels[domain.LabelJob]] {
 			continue
 		}
 		c.log.Info("reconcile: removing stale job container", "container", ct.Names[0][1:])

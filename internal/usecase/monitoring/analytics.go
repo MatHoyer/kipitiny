@@ -189,10 +189,10 @@ const ownPathsPriority = 1 << 29
 
 func (c *Monitoring) analyticsSpec(ctx context.Context, st AnalyticsState, apps []domain.Service) client.ContainerCreateOptions {
 	labels := map[string]string{
-		docker.LabelManaged:      "true",
-		docker.LabelComponent:    analyticsComponent,
+		domain.LabelManaged:      "true",
+		domain.LabelComponent:    analyticsComponent,
 		"traefik.enable":         "true",
-		"traefik.docker.network": docker.ProxyNetwork,
+		"traefik.docker.network": domain.ProxyNetwork,
 		"traefik.http.routers." + analyticsRouter + ".rule":                      "Host(`" + st.Domain + "`)",
 		"traefik.http.routers." + analyticsRouter + ".entrypoints":               "websecure",
 		"traefik.http.routers." + analyticsRouter + ".service":                   analyticsRouter,
@@ -250,12 +250,12 @@ func (c *Monitoring) analyticsSpec(ctx context.Context, st AnalyticsState, apps 
 			Mounts: []mount.Mount{{
 				Type: mount.TypeVolume, Source: analyticsVolume, Target: "/data",
 				VolumeOptions: &mount.VolumeOptions{Labels: map[string]string{
-					docker.LabelManaged: "true", docker.LabelComponent: analyticsComponent,
+					domain.LabelManaged: "true", domain.LabelComponent: analyticsComponent,
 				}},
 			}},
 		},
 		NetworkingConfig: &dockernet.NetworkingConfig{
-			EndpointsConfig: map[string]*dockernet.EndpointSettings{docker.ProxyNetwork: {}},
+			EndpointsConfig: map[string]*dockernet.EndpointSettings{domain.ProxyNetwork: {}},
 		},
 	}
 }
@@ -278,13 +278,13 @@ func (c *Monitoring) EnsureAnalytics(ctx context.Context) error {
 	}
 	opts := c.analyticsSpec(ctx, st, apps)
 	hash := network.SpecHash(opts.Config.Image, opts.Config.Env, opts.Config.Labels)
-	opts.Config.Labels[docker.LabelConfigHash] = hash
-	existing, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: analyticsComponent})
+	opts.Config.Labels[domain.LabelConfigHash] = hash
+	existing, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: analyticsComponent})
 	if err != nil {
 		return err
 	}
 	var id string
-	if len(existing) == 1 && existing[0].Labels[docker.LabelConfigHash] == hash {
+	if len(existing) == 1 && existing[0].Labels[domain.LabelConfigHash] == hash {
 		id = existing[0].ID
 		if existing[0].State != container.StateRunning {
 			if _, err := dk.ContainerStart(ctx, id, client.ContainerStartOptions{}); err != nil {
@@ -320,7 +320,7 @@ func (c *Monitoring) EnsureAnalytics(ctx context.Context) error {
 }
 
 func (c *Monitoring) removeAnalytics(ctx context.Context, dk *docker.Client) error {
-	existing, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: analyticsComponent})
+	existing, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: analyticsComponent})
 	if err != nil {
 		return err
 	}
@@ -368,7 +368,7 @@ func (c *Monitoring) syncAnalyticsSites(ctx context.Context, id, token string, a
 // analyticsClient reaches the server's private port at its address on the
 // proxy network, which the manager is on (or, run on the host, routes to).
 func (c *Monitoring) analyticsClient(ctx context.Context, token string) (*analytics.Client, error) {
-	cts, err := c.mgr.DockerFor(domain.LocalServerID).ListSummaries(ctx, map[string]string{docker.LabelComponent: analyticsComponent})
+	cts, err := c.mgr.DockerFor(domain.LocalServerID).ListSummaries(ctx, map[string]string{domain.LabelComponent: analyticsComponent})
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +376,7 @@ func (c *Monitoring) analyticsClient(ctx context.Context, token string) (*analyt
 		if ct.State != container.StateRunning || ct.NetworkSettings == nil {
 			continue
 		}
-		if ep := ct.NetworkSettings.Networks[docker.ProxyNetwork]; ep != nil && ep.IPAddress.IsValid() {
+		if ep := ct.NetworkSettings.Networks[domain.ProxyNetwork]; ep != nil && ep.IPAddress.IsValid() {
 			return &analytics.Client{BaseURL: "http://" + ep.IPAddress.String() + ":" + strconv.Itoa(analytics.PrivatePort), Token: token}, nil
 		}
 	}

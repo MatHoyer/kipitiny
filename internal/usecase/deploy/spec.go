@@ -42,11 +42,11 @@ func readinessMode(svc domain.Service) string {
 // references.
 func containerSpec(project domain.Project, svc domain.Service, src envSources, deployID string, replica int, rt network.Routing) client.ContainerCreateOptions {
 	labels := map[string]string{
-		docker.LabelManaged: "true",
-		docker.LabelProject: project.ID,
-		docker.LabelService: svc.ID,
-		docker.LabelReplica: strconv.Itoa(replica),
-		docker.LabelDeploy:  deployID,
+		domain.LabelManaged: "true",
+		domain.LabelProject: project.ID,
+		domain.LabelService: svc.ID,
+		domain.LabelReplica: strconv.Itoa(replica),
+		domain.LabelDeploy:  deployID,
 	}
 	endpoints := map[string]*dockernet.EndpointSettings{}
 	for _, n := range projectNetworks(project, svc) {
@@ -54,14 +54,14 @@ func containerSpec(project domain.Project, svc domain.Service, src envSources, d
 		endpoints[n] = &dockernet.EndpointSettings{Aliases: []string{svc.Name}}
 	}
 	for _, id := range svc.Networks {
-		endpoints[docker.CustomNetwork(id)] = &dockernet.EndpointSettings{Aliases: []string{networkAlias(project, svc)}}
+		endpoints[domain.CustomNetwork(id)] = &dockernet.EndpointSettings{Aliases: []string{networkAlias(project, svc)}}
 	}
 	if svc.HostNetwork {
 		endpoints = map[string]*dockernet.EndpointSettings{}
 	}
 	if network.HTTPRouted(svc) {
 		maps.Copy(labels, network.TraefikLabels(svc, rt))
-		endpoints[docker.ProxyNetwork] = &dockernet.EndpointSettings{}
+		endpoints[domain.ProxyNetwork] = &dockernet.EndpointSettings{}
 	}
 
 	envMap := resolveEnv(svc.Env, src)

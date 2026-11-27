@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
@@ -261,7 +260,7 @@ func (c *Deployer) ListServices(ctx context.Context, projectID string) ([]Servic
 	if err != nil {
 		return nil, err
 	}
-	cts, err := c.mgr.DockerFor(project.ServerID).ListSummaries(ctx, map[string]string{docker.LabelProject: projectID})
+	cts, err := c.mgr.DockerFor(project.ServerID).ListSummaries(ctx, map[string]string{domain.LabelProject: projectID})
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +270,7 @@ func (c *Deployer) ListServices(ctx context.Context, projectID string) ([]Servic
 	}
 	byService := map[string][]ContainerView{}
 	for _, ct := range cts {
-		sid := ct.Labels[docker.LabelService]
+		sid := ct.Labels[domain.LabelService]
 		if s, ok := svcByID[sid]; ok {
 			byService[sid] = append(byService[sid], containerView(ct, s))
 		}

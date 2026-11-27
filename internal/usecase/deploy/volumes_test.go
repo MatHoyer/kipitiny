@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
@@ -37,7 +36,7 @@ func TestAppVolumeMounts(t *testing.T) {
 	if m.Source != "kipitiny-vol-01abc-uploads" || m.Target != "/app/uploads" || m.ReadOnly {
 		t.Errorf("mount = %+v", m)
 	}
-	if l := m.VolumeOptions.Labels; l[docker.LabelService] != "01ABC" || l[docker.LabelComponent] != data.VolumeComponent || l[docker.LabelManaged] != "true" {
+	if l := m.VolumeOptions.Labels; l[domain.LabelService] != "01ABC" || l[domain.LabelComponent] != data.VolumeComponent || l[domain.LabelManaged] != "true" {
 		t.Errorf("volume labels = %v", l)
 	}
 	if !data.HasData(svc) || data.HasData(domain.Service{Kind: domain.ServiceKindApp}) {

@@ -1,5 +1,5 @@
-// Package docker wraps the Docker Engine API client and holds the label and
-// network conventions shared by everything the manager creates.
+// Package docker wraps the Docker Engine API client: domain.ContainerRuntime
+// on a local or remote (SSH) daemon.
 package docker
 
 import (
@@ -23,27 +23,6 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-)
-
-// The label and network conventions are domain's; these names stay until
-// the use cases use domain's.
-const (
-	ProxyNetwork    = domain.ProxyNetwork
-	LabelManaged    = domain.LabelManaged
-	LabelComponent  = domain.LabelComponent
-	LabelProject    = domain.LabelProject
-	LabelService    = domain.LabelService
-	LabelReplica    = domain.LabelReplica
-	LabelDeploy     = domain.LabelDeploy
-	LabelJob        = domain.LabelJob
-	LabelConfigHash = domain.LabelConfigHash
-)
-
-var (
-	ProjectNetwork      = domain.ProjectNetwork
-	ProjectNetworkNamed = domain.ProjectNetworkNamed
-	CustomNetwork       = domain.CustomNetwork
-	IsCustomNetwork     = domain.IsCustomNetwork
 )
 
 type Client struct {
@@ -92,7 +71,7 @@ func (c *Client) EnsureNetwork(ctx context.Context, name string) error {
 	}
 	_, err = c.NetworkCreate(ctx, name, client.NetworkCreateOptions{
 		Driver: "bridge",
-		Labels: map[string]string{LabelManaged: "true"},
+		Labels: map[string]string{domain.LabelManaged: "true"},
 	})
 	if err != nil && !cerrdefs.IsConflict(err) {
 		return fmt.Errorf("create network %s: %w", name, err)
@@ -361,7 +340,7 @@ func (c *Client) RemoveContainerAndVolumes(ctx context.Context, id string) error
 // ListNetworksMoby returns the networks the manager created.
 func (c *Client) ListNetworksMoby(ctx context.Context) ([]network.Summary, error) {
 	f := make(client.Filters)
-	f.Add("label", LabelManaged+"=true")
+	f.Add("label", domain.LabelManaged+"=true")
 	res, err := c.NetworkList(ctx, client.NetworkListOptions{Filters: f})
 	if err != nil {
 		return nil, err

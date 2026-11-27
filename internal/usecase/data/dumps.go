@@ -274,7 +274,7 @@ func (c *Data) scratchDump(ctx context.Context, b domain.Backup, name string, st
 	step(VerifyServer)
 	cfg := &container.Config{
 		Image:  svc.Image,
-		Labels: map[string]string{docker.LabelManaged: "true", docker.LabelComponent: verifyComponent},
+		Labels: map[string]string{domain.LabelManaged: "true", domain.LabelComponent: verifyComponent},
 	}
 	host := &container.HostConfig{
 		// Isolated: the restore arrives over exec, nothing needs a network.

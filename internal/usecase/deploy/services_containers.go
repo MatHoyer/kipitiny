@@ -10,7 +10,6 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 )
@@ -32,8 +31,8 @@ type ContainerView struct {
 
 func (c *Deployer) ServiceContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error) {
 	return c.mgr.DockerFor(svc.ServerID).ListSummaries(ctx, map[string]string{
-		docker.LabelProject: svc.ProjectID,
-		docker.LabelService: svc.ID,
+		domain.LabelProject: svc.ProjectID,
+		domain.LabelService: svc.ID,
 	})
 }
 
@@ -53,7 +52,7 @@ func (c *Deployer) ActiveContainers(ctx context.Context, svc domain.Service) ([]
 }
 
 func containerView(ct container.Summary, svc domain.Service) ContainerView {
-	replica, _ := strconv.Atoi(ct.Labels[docker.LabelReplica])
+	replica, _ := strconv.Atoi(ct.Labels[domain.LabelReplica])
 	name := ""
 	if len(ct.Names) > 0 {
 		name = strings.TrimPrefix(ct.Names[0], "/")
@@ -67,7 +66,7 @@ func containerView(ct container.Summary, svc domain.Service) ContainerView {
 		ID:       ct.ID[:12],
 		Name:     name,
 		Replica:  replica,
-		DeployID: ct.Labels[docker.LabelDeploy],
+		DeployID: ct.Labels[domain.LabelDeploy],
 		Image:    ct.Image,
 		State:    string(ct.State),
 		Status:   ct.Status,

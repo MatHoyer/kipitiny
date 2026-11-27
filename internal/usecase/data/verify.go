@@ -200,8 +200,8 @@ func (c *Data) scratchPostgres(ctx context.Context, b domain.Backup, name, user,
 			Image: image,
 			Env:   []string{"POSTGRES_USER=" + user, "POSTGRES_DB=" + db, "POSTGRES_PASSWORD=" + identity.RandomToken(16)},
 			Labels: map[string]string{
-				docker.LabelManaged:   "true",
-				docker.LabelComponent: verifyComponent,
+				domain.LabelManaged:   "true",
+				domain.LabelComponent: verifyComponent,
 			},
 			Healthcheck: postgresHealthcheck(user, db),
 		},
@@ -279,7 +279,7 @@ func (c *Data) verifyImage(ctx context.Context, b domain.Backup) (image, serverI
 // helpers) and staging volumes left by a crash.
 func (c *Data) CleanupRestoreTests(ctx context.Context, dk *docker.Client) error {
 	for _, component := range []string{verifyComponent, volumeHelperComponent} {
-		cts, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: component})
+		cts, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: component})
 		if err != nil {
 			return err
 		}
@@ -289,7 +289,7 @@ func (c *Data) CleanupRestoreTests(ctx context.Context, dk *docker.Client) error
 			}
 		}
 	}
-	f := make(client.Filters).Add("label", docker.LabelComponent+"="+volumeStageComponent)
+	f := make(client.Filters).Add("label", domain.LabelComponent+"="+volumeStageComponent)
 	vols, err := dk.VolumeList(ctx, client.VolumeListOptions{Filters: f})
 	if err != nil {
 		return err

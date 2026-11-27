@@ -54,13 +54,13 @@ func (c *Deployer) StartJobContainer(ctx context.Context, project domain.Project
 	spec.Config.Healthcheck = &container.HealthConfig{Test: []string{"NONE"}}
 	// Not a replica: no service label (so it never shows up as one).
 	spec.Config.Labels = map[string]string{
-		docker.LabelManaged:   "true",
-		docker.LabelProject:   project.ID,
-		docker.LabelComponent: JobComponent,
-		docker.LabelJob:       j.ID,
+		domain.LabelManaged:   "true",
+		domain.LabelProject:   project.ID,
+		domain.LabelComponent: JobComponent,
+		domain.LabelJob:       j.ID,
 	}
 	spec.HostConfig.RestartPolicy = container.RestartPolicy{Name: container.RestartPolicyDisabled}
-	delete(spec.NetworkingConfig.EndpointsConfig, docker.ProxyNetwork)
+	delete(spec.NetworkingConfig.EndpointsConfig, domain.ProxyNetwork)
 	spec.Config.ExposedPorts, spec.HostConfig.PortBindings = nil, nil
 
 	logf("Running %s in %s", j.Command, want.Image)
