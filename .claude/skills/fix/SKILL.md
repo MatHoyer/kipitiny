@@ -28,7 +28,7 @@ Five phases, in order. Never skip the failing test or the real-usage tests.
   workflow).
 - User docs in `site/docs/` when behavior changes; an `UPGRADE.md` notice under `## Unreleased` if running servers
   are disrupted (a sync that now fails, a setting refused).
-- The regression test now passes; confirm it still fails with the fix reverted. `make test` and `make lint` green.
+- The regression test now passes; confirm it still fails with the fix reverted. `make cover`, `make e2e` and `make lint` green.
 
 ## 4. Test in real usage
 

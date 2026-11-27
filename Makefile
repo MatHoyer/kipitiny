@@ -2,9 +2,10 @@ BIN := bin/kipitiny
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 # Static binary everywhere: app containers run it as their health probe.
 export CGO_ENABLED := 0
+PLAYWRIGHT_VERSION := $(shell node -p "require('./web/package.json').devDependencies['@playwright/test']" 2>/dev/null)
 DEV_ENV := KIPITINY_ADDR=:8080 KIPITINY_DATA_DIR=./data KIPITINY_LOG_LEVEL=debug
 
-.PHONY: all build ui ui-stub dev-api dev-ui dev-site site site-demo test cover lint docker clean
+.PHONY: all build ui ui-stub dev-api dev-ui dev-site site site-demo test cover e2e lint docker clean
 
 all: build
 
@@ -51,6 +52,18 @@ cover: ui-stub
 test: ui-stub
 	go test ./...
 	cd web && node --test 'src/**/*.test.ts'
+
+# UI tests: Playwright in its Docker image (no browser to install) against bin/kipitiny, which deploys on the daemon
+# of DOCKER_HOST, else the local socket. Its reconciler removes kipitiny containers it doesn't know, so outside CI the
+# daemon must have none (the Playwright container itself runs on the local daemon): give it a throwaway one (docker run -d --privileged -p 127.0.0.1:2375:2375 docker:dind
+# --tls=false, then DOCKER_HOST=tcp://127.0.0.1:2375). ARGS= passes options, e.g. ARGS="--project=iphone deploy".
+e2e: build
+	@test -n "$$CI" || test -z "$$(docker ps -aq --filter label=kipitiny.managed)" || \
+		(echo "make e2e: this Docker daemon runs kipitiny containers the tests would remove; set DOCKER_HOST to a throwaway one" && exit 1)
+	env -u DOCKER_HOST docker run --rm --network host --ipc host -u $$(id -u):$$(id -g) -e HOME=/tmp -e CI \
+		$(if $(DOCKER_HOST),-e DOCKER_HOST=$(DOCKER_HOST),-v /var/run/docker.sock:/var/run/docker.sock --group-add $$(stat -c %g /var/run/docker.sock)) \
+		-v $(CURDIR):$(CURDIR) -w $(CURDIR)/web mcr.microsoft.com/playwright:v$(PLAYWRIGHT_VERSION)-noble \
+		node_modules/.bin/playwright test $(ARGS)
 
 lint: ui-stub
 	@unformatted=$$(gofmt -l .); if [ -n "$$unformatted" ]; then echo "Run gofmt on:"; echo "$$unformatted"; exit 1; fi

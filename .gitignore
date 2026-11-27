@@ -10,3 +10,6 @@ site/public/demo/
 *.tsbuildinfo
 /kipitiny
 cover.out
+web/test-results/
+web/playwright-report/
+web/e2e-data/
