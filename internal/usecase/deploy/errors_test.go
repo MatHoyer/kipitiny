@@ -71,13 +71,13 @@ func TestServiceErrorsIdentityAndEnv(t *testing.T) {
 	again.Image, again.Env = "shop-worker:v3", map[string]string{"SENTRY_ENVIRONMENT": "staging"}
 	spec := containerSpec(p, again, envSources{errors: env}, "dep", 0, network.Routing{})
 	for _, want := range []string{"SENTRY_DSN=" + env["SENTRY_DSN"], "SENTRY_RELEASE=v3", "SENTRY_ENVIRONMENT=staging"} {
-		if !slices.Contains(spec.Config.Env, want) {
-			t.Errorf("container env %v lacks %s", spec.Config.Env, want)
+		if !slices.Contains(spec.Env, want) {
+			t.Errorf("container env %v lacks %s", spec.Env, want)
 		}
 	}
-	if spec := containerSpec(p, web, envSources{}, "dep", 0, network.Routing{}); slices.ContainsFunc(spec.Config.Env, func(e string) bool {
+	if spec := containerSpec(p, web, envSources{}, "dep", 0, network.Routing{}); slices.ContainsFunc(spec.Env, func(e string) bool {
 		return strings.HasPrefix(e, "SENTRY_")
 	}) {
-		t.Errorf("off: %v", spec.Config.Env)
+		t.Errorf("off: %v", spec.Env)
 	}
 }

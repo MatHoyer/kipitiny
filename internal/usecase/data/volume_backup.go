@@ -12,8 +12,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -71,12 +69,12 @@ func backupKind(svc domain.Service) (domain.BackupKind, error) {
 
 // helperMounts mounts the named volumes of svc under helperVolumeRoot/<name>, read-only
 // if readOnly or if the app mounts the volume read-only.
-func helperMounts(svc domain.Service, names []string, readOnly bool) []mount.Mount {
-	mounts := make([]mount.Mount, 0, len(names))
+func helperMounts(svc domain.Service, names []string, readOnly bool) []domain.Mount {
+	mounts := make([]domain.Mount, 0, len(names))
 	for _, name := range names {
-		var m mount.Mount
+		var m domain.Mount
 		if svc.Kind.IsDatabase() {
-			m = mount.Mount{Type: mount.TypeVolume, Source: DataVolume(svc)}
+			m = domain.Mount{Type: domain.MountVolume, Source: DataVolume(svc)}
 		} else {
 			m = AppVolumeMount(svc, name, "")
 		}
@@ -88,23 +86,19 @@ func helperMounts(svc domain.Service, names []string, readOnly bool) []mount.Mou
 
 // startVolumeHelper runs an idle helper with mounts; commands run in it
 // over exec. The caller removes it.
-func startVolumeHelper(ctx context.Context, dk *docker.Client, name string, mounts []mount.Mount) (string, error) {
+func startVolumeHelper(ctx context.Context, dk *docker.Client, name string, mounts []domain.Mount) (string, error) {
 	// A fixed public image: no registry credential.
 	if err := dk.EnsureImage(ctx, volumeHelperImage, "", ""); err != nil {
 		return "", fmt.Errorf("pull %s: %w", volumeHelperImage, err)
 	}
-	return dk.RunMoby(ctx, client.ContainerCreateOptions{
-		Name: name,
-		Config: &container.Config{
-			Image:  volumeHelperImage,
-			Cmd:    []string{"sleep", "2147483647"},
-			Labels: map[string]string{domain.LabelManaged: "true", domain.LabelComponent: volumeHelperComponent},
-		},
-		HostConfig: &container.HostConfig{
-			NetworkMode: "none",
-			Mounts:      mounts,
-			LogConfig:   docker.DefaultLogConfig(),
-		},
+	return dk.Run(ctx, domain.ContainerSpec{
+		Name:        name,
+		Image:       volumeHelperImage,
+		Cmd:         []string{"sleep", "2147483647"},
+		Labels:      map[string]string{domain.LabelManaged: "true", domain.LabelComponent: volumeHelperComponent},
+		NetworkMode: "none",
+		Mounts:      mounts,
+		Log:         true,
 	})
 }
 
@@ -253,7 +247,7 @@ func (c *Data) restoreVolumes(ctx context.Context, svc domain.Service, st storag
 	for i := range mounts {
 		mounts[i].ReadOnly = false // a restore writes read-only volumes too (restoreVolumeBackup checked who may)
 	}
-	mounts = append(mounts, mount.Mount{Type: mount.TypeVolume, Source: stage, Target: helperStageRoot})
+	mounts = append(mounts, domain.Mount{Type: domain.MountVolume, Source: stage, Target: helperStageRoot})
 	id, err := startVolumeHelper(ctx, dk, "kipitiny-restore-"+strings.ToLower(r.ID), mounts)
 	if err != nil {
 		return false, err

@@ -7,9 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/client"
-
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -71,16 +68,15 @@ func startTestDB(ctx context.Context, t *testing.T, c *Core, projectID string, i
 	if err := dk.EnsureImage(ctx, svc.Image, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	cfg := &container.Config{Image: svc.Image, Labels: map[string]string{}}
+	spec := domain.ContainerSpec{Name: "kipitiny-test-" + strings.ToLower(svc.ID), Image: svc.Image, Labels: map[string]string{}, Memory: int64(svc.MemoryMB) << 20}
 	for k, v := range svc.Env {
-		cfg.Env = append(cfg.Env, k+"="+v)
+		spec.Env = append(spec.Env, k+"="+v)
 	}
-	host := &container.HostConfig{Resources: container.Resources{Memory: int64(svc.MemoryMB) << 20}}
-	data.ApplyDatabaseSpec(cfg, host, svc)
+	data.ApplyDatabaseSpec(&spec, svc)
 	// Not kipitiny.managed: a manager running on this daemon would remove
 	// it as an orphan.
-	cfg.Labels = map[string]string{domain.LabelProject: projectID, domain.LabelService: svc.ID, domain.LabelDeploy: "D1"}
-	id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{Name: "kipitiny-test-" + strings.ToLower(svc.ID), Config: cfg, HostConfig: host})
+	spec.Labels = map[string]string{domain.LabelProject: projectID, domain.LabelService: svc.ID, domain.LabelDeploy: "D1"}
+	id, err := dk.Run(ctx, spec)
 	if err != nil {
 		t.Fatal(err)
 	}

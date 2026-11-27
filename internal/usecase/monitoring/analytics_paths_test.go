@@ -31,7 +31,7 @@ func TestAnalyticsPaths(t *testing.T) {
 	co := newTestMonitoring(t, config.Config{})
 	own := domain.Service{ID: "01OWN", Domain: "shop.example.com", ServerID: domain.LocalServerID, AnalyticsScript: "/js/k.js", AnalyticsHit: "/k"}
 	plain := domain.Service{ID: "01PLAIN", Domain: "blog.example.com", ServerID: domain.LocalServerID}
-	labels := co.analyticsSpec(ctx, AnalyticsState{AnalyticsSettings: AnalyticsSettings{Domain: "stats.example.com"}}, []domain.Service{own, plain}).Config.Labels
+	labels := co.analyticsSpec(ctx, AnalyticsState{AnalyticsSettings: AnalyticsSettings{Domain: "stats.example.com"}}, []domain.Service{own, plain}).Labels
 	if r := labels["traefik.http.routers.kipitiny-analytics-01own.rule"]; r != "Host(`shop.example.com`) && (Path(`/js/k.js`) || Path(`/k`))" {
 		t.Errorf("own paths' router: %q", r)
 	}

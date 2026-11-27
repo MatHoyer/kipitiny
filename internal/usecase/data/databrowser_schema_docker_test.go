@@ -5,13 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestSchemaDockerPostgres(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &domain.ContainerSpec{
 		Image: DefaultPostgresImage,
 		Env:   []string{"POSTGRES_USER=app", "POSTGRES_DB=app", "POSTGRES_PASSWORD=secret"},
 	})

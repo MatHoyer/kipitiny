@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -82,8 +81,8 @@ func NormalizeVolumes(vols []domain.Volume) []domain.Volume {
 }
 
 // AppVolumeMounts mounts an app's volumes in a replica.
-func AppVolumeMounts(svc domain.Service) []mount.Mount {
-	mounts := make([]mount.Mount, 0, len(svc.Volumes))
+func AppVolumeMounts(svc domain.Service) []domain.Mount {
+	mounts := make([]domain.Mount, 0, len(svc.Volumes))
 	for _, v := range svc.Volumes {
 		mounts = append(mounts, AppVolumeMount(svc, v.Name, v.Path))
 	}
@@ -109,20 +108,20 @@ func CheckExternalVolumes(ctx context.Context, dk *docker.Client, svc domain.Ser
 // AppVolumeMount mounts one app volume (by name) at path. Docker creates a
 // missing volume on first use, with these labels; an external one is
 // mounted as is.
-func AppVolumeMount(svc domain.Service, name, path string) mount.Mount {
+func AppVolumeMount(svc domain.Service, name, path string) domain.Mount {
 	var v domain.Volume
 	if i := slices.IndexFunc(svc.Volumes, func(v domain.Volume) bool { return v.Name == name }); i >= 0 {
 		v = svc.Volumes[i]
 	}
 	if v.External != "" {
-		return mount.Mount{Type: mount.TypeVolume, Source: v.External, Target: path, ReadOnly: v.ReadOnly}
+		return domain.Mount{Type: domain.MountVolume, Source: v.External, Target: path, ReadOnly: v.ReadOnly}
 	}
-	m := mount.Mount{
-		Type:     mount.TypeVolume,
+	m := domain.Mount{
+		Type:     domain.MountVolume,
 		Source:   AppVolume(svc.ID, name),
 		Target:   path,
 		ReadOnly: v.ReadOnly,
-		VolumeOptions: &mount.VolumeOptions{Labels: map[string]string{
+		Volume: &domain.VolumeOptions{Labels: map[string]string{
 			domain.LabelManaged:   "true",
 			domain.LabelProject:   svc.ProjectID,
 			domain.LabelService:   svc.ID,
@@ -130,7 +129,7 @@ func AppVolumeMount(svc domain.Service, name, path string) mount.Mount {
 		}},
 	}
 	if len(v.DriverOpts) > 0 {
-		m.VolumeOptions.DriverConfig = &mount.Driver{Name: "local", Options: v.DriverOpts}
+		m.Volume.Driver = &domain.VolumeDriver{Name: "local", Options: v.DriverOpts}
 	}
 	return m
 }

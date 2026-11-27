@@ -85,25 +85,25 @@ func TestPostgresContainerSpec(t *testing.T) {
 	svc.CPUs = 1.5
 	spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, network.Routing{Resolver: network.CertResolverTLS})
 
-	if spec.HostConfig.Memory != 512<<20 {
-		t.Errorf("memory = %d", spec.HostConfig.Memory)
+	if spec.Memory != 512<<20 {
+		t.Errorf("memory = %d", spec.Memory)
 	}
-	if spec.HostConfig.NanoCPUs != 1_500_000_000 {
-		t.Errorf("nano cpus = %d", spec.HostConfig.NanoCPUs)
+	if spec.NanoCPUs != 1_500_000_000 {
+		t.Errorf("nano cpus = %d", spec.NanoCPUs)
 	}
-	if !slices.Contains(spec.Config.Env, "PGDATA="+data.PGDataDir) {
-		t.Errorf("PGDATA missing: %v", spec.Config.Env)
+	if !slices.Contains(spec.Env, "PGDATA="+data.PGDataDir) {
+		t.Errorf("PGDATA missing: %v", spec.Env)
 	}
-	if !slices.Contains(spec.Config.Cmd, "shared_buffers=128MB") {
-		t.Errorf("tuning missing: %v", spec.Config.Cmd)
+	if !slices.Contains(spec.Cmd, "shared_buffers=128MB") {
+		t.Errorf("tuning missing: %v", spec.Cmd)
 	}
-	if spec.Config.Healthcheck == nil || !strings.Contains(spec.Config.Healthcheck.Test[1], "pg_isready") {
+	if spec.Healthcheck == nil || !strings.Contains(spec.Healthcheck.Test[1], "pg_isready") {
 		t.Error("healthcheck missing")
 	}
-	if len(spec.HostConfig.Mounts) != 1 || spec.HostConfig.Mounts[0].Source != data.PostgresVolume("01DB") {
-		t.Errorf("mounts = %v", spec.HostConfig.Mounts)
+	if len(spec.Mounts) != 1 || spec.Mounts[0].Source != data.PostgresVolume("01DB") {
+		t.Errorf("mounts = %v", spec.Mounts)
 	}
-	if _, public := spec.Config.Labels["traefik.enable"]; public {
+	if _, public := spec.Labels["traefik.enable"]; public {
 		t.Error("database exposed to traefik")
 	}
 }
@@ -115,7 +115,7 @@ func TestDatabaseRefsInSpec(t *testing.T) {
 		Env: map[string]string{"DATABASE_URL": "{{ db." + db.Name + ".URL }}"}}
 
 	spec := containerSpec(p, app, envSources{project: p.Env, dbs: map[string]domain.Service{db.Name: db}}, "D1", 1, network.Routing{Resolver: network.CertResolverTLS})
-	if !slices.Contains(spec.Config.Env, "DATABASE_URL="+data.DatabaseURL(db)) {
-		t.Errorf("DATABASE_URL not resolved: %v", spec.Config.Env)
+	if !slices.Contains(spec.Env, "DATABASE_URL="+data.DatabaseURL(db)) {
+		t.Errorf("DATABASE_URL not resolved: %v", spec.Env)
 	}
 }

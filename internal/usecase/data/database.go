@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -159,16 +157,16 @@ func (c *Data) DatabaseConnection(ctx context.Context, id string) (Connection, e
 	}, nil
 }
 
-func ApplyDatabaseSpec(cfg *container.Config, host *container.HostConfig, svc domain.Service) {
+func ApplyDatabaseSpec(spec *domain.ContainerSpec, svc domain.Service) {
 	switch svc.Kind {
 	case domain.ServiceKindPostgres:
-		applyPostgresSpec(cfg, host, svc)
+		applyPostgresSpec(spec, svc)
 	case domain.ServiceKindRedis:
-		applyRedisSpec(cfg, host, svc)
+		applyRedisSpec(spec, svc)
 	case domain.ServiceKindMySQL, domain.ServiceKindMariaDB:
-		applyMySQLSpec(cfg, host, svc)
+		applyMySQLSpec(spec, svc)
 	case domain.ServiceKindMongoDB:
-		applyMongoSpec(cfg, host, svc)
+		applyMongoSpec(spec, svc)
 	}
 }
 

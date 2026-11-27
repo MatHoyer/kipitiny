@@ -7,9 +7,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/client"
-
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/storage"
@@ -272,25 +269,24 @@ func (c *Data) scratchDump(ctx context.Context, b domain.Backup, name string, st
 		return svc, nil, "", fmt.Errorf("pull %s: %w", svc.Image, err)
 	}
 	step(VerifyServer)
-	cfg := &container.Config{
+	spec := domain.ContainerSpec{
+		Name:   name,
 		Image:  svc.Image,
 		Labels: map[string]string{domain.LabelManaged: "true", domain.LabelComponent: verifyComponent},
-	}
-	host := &container.HostConfig{
 		// Isolated: the restore arrives over exec, nothing needs a network.
 		NetworkMode: "none",
-		Resources:   container.Resources{Memory: verifyMemoryMB << 20},
-		LogConfig:   docker.DefaultLogConfig(),
+		Memory:      verifyMemoryMB << 20,
+		Log:         true,
 	}
 	for k, v := range svc.Env {
-		cfg.Env = append(cfg.Env, k+"="+v)
+		spec.Env = append(spec.Env, k+"="+v)
 	}
 	if svc.Kind == domain.ServiceKindMongoDB {
-		cfg.Cmd, cfg.Healthcheck = mongoArgs(verifyMemoryMB), mongoHealthcheck()
+		spec.Cmd, spec.Healthcheck = mongoArgs(verifyMemoryMB), mongoHealthcheck()
 	} else {
-		cfg.Cmd, cfg.Healthcheck = mysqlArgs(verifyMemoryMB), mysqlHealthcheck(svc.Kind)
+		spec.Cmd, spec.Healthcheck = mysqlArgs(verifyMemoryMB), mysqlHealthcheck(svc.Kind)
 	}
-	id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{Name: name, Config: cfg, HostConfig: host})
+	id, err := dk.Run(ctx, spec)
 	if err != nil {
 		return svc, nil, "", err
 	}

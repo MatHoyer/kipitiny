@@ -15,7 +15,7 @@ func TestTraefikReadTimeout(t *testing.T) {
 	const flag = "--entrypoints.websecure.transport.respondingTimeouts.readTimeout="
 	has := func(c *Network) []string {
 		opts, _ := c.TraefikSpec("/var/run/docker.sock", TraefikOpts{})
-		return slices.DeleteFunc(slices.Clone(opts.Config.Cmd), func(a string) bool { return !strings.HasPrefix(a, flag) })
+		return slices.DeleteFunc(slices.Clone(opts.Cmd), func(a string) bool { return !strings.HasPrefix(a, flag) })
 	}
 	if got := has(&Network{cfg: &config.Config{}}); len(got) != 0 {
 		t.Errorf("unset: %v (would recreate Traefik on upgrade)", got)
@@ -28,13 +28,13 @@ func TestTraefikReadTimeout(t *testing.T) {
 func TestTraefikManagerRoute(t *testing.T) {
 	c := &Network{cfg: &config.Config{Domain: "kipitiny.example.com"}}
 	opts, files := c.TraefikSpec("/var/run/docker.sock", TraefikOpts{})
-	if len(files) != 0 || slices.ContainsFunc(opts.Config.Cmd, func(a string) bool { return strings.HasPrefix(a, "--providers.file") }) {
+	if len(files) != 0 || slices.ContainsFunc(opts.Cmd, func(a string) bool { return strings.HasPrefix(a, "--providers.file") }) {
 		t.Error("no manager URL must mean no file provider")
 	}
 
 	opts, files = c.TraefikSpec("/var/run/docker.sock", TraefikOpts{ManagerURL: "http://kipitiny-manager:3000", ManagerResolver: CertResolverTLS})
-	if len(files) != 1 || !slices.Contains(opts.Config.Cmd, "--providers.file.filename="+files[0].Path) {
-		t.Fatalf("file provider not wired: %v", opts.Config.Cmd)
+	if len(files) != 1 || !slices.Contains(opts.Cmd, "--providers.file.filename="+files[0].Path) {
+		t.Fatalf("file provider not wired: %v", opts.Cmd)
 	}
 	var route struct {
 		HTTP struct {
@@ -57,13 +57,13 @@ func TestTraefikManagerRoute(t *testing.T) {
 	if s := route.HTTP.Services[ManagerAlias].LoadBalancer.Servers; len(s) != 1 || s[0].URL != "http://kipitiny-manager:3000" {
 		t.Errorf("servers = %+v", s)
 	}
-	if len(opts.HostConfig.ExtraHosts) != 0 {
+	if len(opts.ExtraHosts) != 0 {
 		t.Error("container upstream needs no host-gateway")
 	}
 
 	opts, _ = c.TraefikSpec("/var/run/docker.sock", TraefikOpts{ManagerURL: "http://host.docker.internal:3000", ManagerResolver: CertResolverTLS})
-	if !slices.Equal(opts.HostConfig.ExtraHosts, []string{"host.docker.internal:host-gateway"}) {
-		t.Errorf("extra hosts = %v", opts.HostConfig.ExtraHosts)
+	if !slices.Equal(opts.ExtraHosts, []string{"host.docker.internal:host-gateway"}) {
+		t.Errorf("extra hosts = %v", opts.ExtraHosts)
 	}
 }
 
@@ -86,10 +86,10 @@ func TestTunnelMode(t *testing.T) {
 	}
 
 	opts, files := c.TraefikSpec("/var/run/docker.sock", TraefikOpts{ManagerURL: "http://kipitiny-manager:3000", Tunnel: true})
-	if len(opts.HostConfig.PortBindings) != 0 {
-		t.Errorf("tunnel mode must publish no ports: %v", opts.HostConfig.PortBindings)
+	if len(opts.PortBindings) != 0 {
+		t.Errorf("tunnel mode must publish no ports: %v", opts.PortBindings)
 	}
-	if slices.ContainsFunc(opts.Config.Cmd, func(a string) bool { return strings.Contains(a, "certificatesresolvers") }) {
+	if slices.ContainsFunc(opts.Cmd, func(a string) bool { return strings.Contains(a, "certificatesresolvers") }) {
 		t.Error("tunnel mode must not run ACME")
 	}
 	if strings.Contains(string(files[0].Content), "certResolver") {
@@ -103,10 +103,10 @@ func TestTunnelMode(t *testing.T) {
 	}
 
 	spec := c.tunnelSpec("tok")
-	if !slices.Contains(spec.Config.Env, "TUNNEL_TOKEN=tok") || slices.Contains(spec.Config.Cmd, "tok") {
+	if !slices.Contains(spec.Env, "TUNNEL_TOKEN=tok") || slices.Contains(spec.Cmd, "tok") {
 		t.Error("token must be passed through the environment only")
 	}
-	if _, ok := spec.NetworkingConfig.EndpointsConfig[domain.ProxyNetwork]; !ok {
+	if _, ok := spec.Networks[domain.ProxyNetwork]; !ok {
 		t.Error("cloudflared must reach Traefik on the proxy network")
 	}
 }
@@ -123,8 +123,8 @@ func TestTraefikPages(t *testing.T) {
 		"--providers.http.endpoint=http://kipitiny-manager:3000/api/pages/traefik/01LOCAL",
 		"--providers.http.headers.Authorization=Bearer tok",
 	} {
-		if !slices.Contains(opts.Config.Cmd, a) {
-			t.Errorf("missing %s in %v", a, opts.Config.Cmd)
+		if !slices.Contains(opts.Cmd, a) {
+			t.Errorf("missing %s in %v", a, opts.Cmd)
 		}
 	}
 	if len(files) != 1 {
@@ -147,7 +147,7 @@ func TestTraefikPages(t *testing.T) {
 	// A remote server: no manager route, pages through the public domain.
 	o = TraefikOpts{Pages: &PagesOpts{Upstream: "https://kipitiny.example.com", ServerID: "01W", Token: "tok"}}
 	opts, files = c.TraefikSpec("/var/run/docker.sock", o)
-	if len(files) != 1 || strings.Contains(string(files[0].Content), ManagerAlias) || len(opts.HostConfig.ExtraHosts) != 0 {
-		t.Errorf("remote: %s %v", files[0].Content, opts.HostConfig.ExtraHosts)
+	if len(files) != 1 || strings.Contains(string(files[0].Content), ManagerAlias) || len(opts.ExtraHosts) != 0 {
+		t.Errorf("remote: %s %v", files[0].Content, opts.ExtraHosts)
 	}
 }

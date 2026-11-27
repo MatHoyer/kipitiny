@@ -42,7 +42,7 @@ type Servers struct {
 	// steps is where the cleanup reports its step, and where the update
 	// preflight reads the restore tests', shared with core.
 	steps *progress.Steps
-	// probes: server ID -> *mount.Mount of the health probe, shared with
+	// probes: server ID -> *domain.Mount of the health probe, shared with
 	// deploy (a deleted server forgets its own).
 	probes *sync.Map
 

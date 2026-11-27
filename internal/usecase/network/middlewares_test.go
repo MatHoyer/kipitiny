@@ -126,7 +126,7 @@ func TestTraefikTrustsCloudflare(t *testing.T) {
 	c := &Network{cfg: &config.Config{}}
 	trusted := func(o TraefikOpts) string {
 		opts, _ := c.TraefikSpec("/var/run/docker.sock", o)
-		for _, a := range opts.Config.Cmd {
+		for _, a := range opts.Cmd {
 			if v, ok := strings.CutPrefix(a, "--entrypoints.websecure.forwardedheaders.trustedips="); ok {
 				return v
 			}

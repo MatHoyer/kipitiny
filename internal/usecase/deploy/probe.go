@@ -14,8 +14,6 @@ import (
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -63,9 +61,9 @@ func OwnBinary() (path, hash string, err error) {
 // probeMount returns a read-only mount holding the probe binary on the
 // service's server, creating the volume on first use (one per manager build).
 // Returns nil when the server's CPU architecture differs from the manager's.
-func (c *Deployer) probeMount(ctx context.Context, serverID string) (*mount.Mount, error) {
+func (c *Deployer) probeMount(ctx context.Context, serverID string) (*domain.Mount, error) {
 	if m, ok := c.probes.Load(serverID); ok {
-		return m.(*mount.Mount), nil
+		return m.(*domain.Mount), nil
 	}
 	dk := c.mgr.DockerFor(serverID)
 	info, err := dk.Info(ctx)
@@ -75,7 +73,7 @@ func (c *Deployer) probeMount(ctx context.Context, serverID string) (*mount.Moun
 	if info.Arch != runtime.GOARCH {
 		c.log.Warn("server architecture differs from the manager's: no injected health probe",
 			"server", serverID, "arch", info.Arch)
-		c.probes.Store(serverID, (*mount.Mount)(nil))
+		c.probes.Store(serverID, (*domain.Mount)(nil))
 		return nil, nil
 	}
 	bin, hash, err := OwnBinary()
@@ -90,7 +88,7 @@ func (c *Deployer) probeMount(ctx context.Context, serverID string) (*mount.Moun
 	} else if err != nil {
 		return nil, err
 	}
-	m := &mount.Mount{Type: mount.TypeVolume, Source: name, Target: probeDir, ReadOnly: true}
+	m := &domain.Mount{Type: domain.MountVolume, Source: name, Target: probeDir, ReadOnly: true}
 	c.probes.Store(serverID, m)
 	return m, nil
 }
@@ -108,16 +106,14 @@ func installProbe(ctx context.Context, dk *docker.Client, volume, bin string) er
 	if err := dk.EnsureImage(ctx, probeHelperImage, "", ""); err != nil {
 		return err
 	}
-	helper, err := dk.ContainerCreate(ctx, client.ContainerCreateOptions{
-		Config: &container.Config{Image: probeHelperImage, Labels: map[string]string{domain.LabelManaged: "true"}},
-		HostConfig: &container.HostConfig{
-			Mounts: []mount.Mount{{Type: mount.TypeVolume, Source: volume, Target: "/probe"}},
-		},
+	helper, err := dk.CreateContainer(ctx, domain.ContainerSpec{
+		Image: probeHelperImage, Labels: map[string]string{domain.LabelManaged: "true"},
+		Mounts: []domain.Mount{{Type: domain.MountVolume, Source: volume, Target: "/probe"}},
 	})
 	if err != nil {
 		return err
 	}
-	defer dk.RemoveContainerAndVolumes(context.WithoutCancel(ctx), helper.ID)
+	defer func() { _ = dk.RemoveContainerAndVolumes(context.WithoutCancel(ctx), helper) }()
 
 	f, err := os.Open(bin)
 	if err != nil {
@@ -140,7 +136,7 @@ func installProbe(ctx context.Context, dk *docker.Client, volume, bin string) er
 		}
 		pw.CloseWithError(err)
 	}()
-	_, err = dk.Client.CopyToContainer(ctx, helper.ID, client.CopyToContainerOptions{DestinationPath: "/probe", Content: pr})
+	_, err = dk.Client.CopyToContainer(ctx, helper, client.CopyToContainerOptions{DestinationPath: "/probe", Content: pr})
 	pr.Close()
 	return err
 }
@@ -160,12 +156,12 @@ func imageHealthcheck(ctx context.Context, dk *docker.Client, image, platform st
 // path, or a TCP connect to the port. Traefik only routes to healthy
 // containers, so a new replica gets traffic once it actually serves, and one
 // that stops answering is taken out of rotation.
-func withProbe(spec *client.ContainerCreateOptions, svc domain.Service, m mount.Mount) {
+func withProbe(spec *domain.ContainerSpec, svc domain.Service, m domain.Mount) {
 	target := fmt.Sprintf("tcp://127.0.0.1:%d", network.ProbePort(svc))
 	if svc.HealthPath != "" {
 		target = fmt.Sprintf("http://127.0.0.1:%d%s", svc.Port, svc.HealthPath)
 	}
-	spec.Config.Healthcheck = &container.HealthConfig{
+	spec.Healthcheck = &domain.HealthConfig{
 		Test:     []string{"CMD", probeDir + "/kipitiny", "probe", target},
 		Interval: 10 * time.Second,
 		Timeout:  5 * time.Second,
@@ -174,17 +170,17 @@ func withProbe(spec *client.ContainerCreateOptions, svc domain.Service, m mount.
 		StartPeriod:   readyTimeout,
 		StartInterval: time.Second,
 	}
-	spec.HostConfig.Mounts = append(spec.HostConfig.Mounts, m)
+	spec.Mounts = append(spec.Mounts, m)
 }
 
 // healthConfig is an app's own healthcheck. Without a start period, it
 // gets the probe's: checked every second while starting, so a new replica's
 // readiness is noticed at once rather than after the first interval.
-func healthConfig(h domain.Healthcheck) *container.HealthConfig {
+func healthConfig(h domain.Healthcheck) *domain.HealthConfig {
 	if h.Test[0] == "NONE" {
-		return &container.HealthConfig{Test: []string{"NONE"}}
+		return &domain.HealthConfig{Test: []string{"NONE"}}
 	}
-	hc := &container.HealthConfig{
+	hc := &domain.HealthConfig{
 		Test:          h.Test,
 		Interval:      time.Duration(h.IntervalSeconds) * time.Second,
 		Timeout:       time.Duration(h.TimeoutSeconds) * time.Second,
@@ -202,7 +198,7 @@ func healthConfig(h domain.Healthcheck) *container.HealthConfig {
 // nil when the image or the service has its own healthcheck, the service has
 // no TCP port, or
 // the probe can't run on that server.
-func (c *Deployer) probeFor(ctx context.Context, svc domain.Service) (*mount.Mount, error) {
+func (c *Deployer) probeFor(ctx context.Context, svc domain.Service) (*domain.Mount, error) {
 	if svc.Kind != domain.ServiceKindApp || network.ProbePort(svc) == 0 || svc.Healthcheck.Set() {
 		return nil, nil
 	}
@@ -214,7 +210,7 @@ func (c *Deployer) probeFor(ctx context.Context, svc domain.Service) (*mount.Mou
 }
 
 // replicaSpec is containerSpec plus the injected health probe, if any.
-func replicaSpec(project domain.Project, svc domain.Service, src envSources, deployID string, replica int, probe *mount.Mount, rt network.Routing) client.ContainerCreateOptions {
+func replicaSpec(project domain.Project, svc domain.Service, src envSources, deployID string, replica int, probe *domain.Mount, rt network.Routing) domain.ContainerSpec {
 	spec := containerSpec(project, svc, src, deployID, replica, rt)
 	if probe != nil {
 		withProbe(&spec, svc, *probe)

@@ -13,9 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
-	dockernet "github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/analytics"
@@ -187,7 +184,7 @@ func (c *Monitoring) trackedApps(ctx context.Context) ([]domain.Service, error) 
 // the pages shown while it's down or asleep), below maintenance.
 const ownPathsPriority = 1 << 29
 
-func (c *Monitoring) analyticsSpec(ctx context.Context, st AnalyticsState, apps []domain.Service) client.ContainerCreateOptions {
+func (c *Monitoring) analyticsSpec(ctx context.Context, st AnalyticsState, apps []domain.Service) domain.ContainerSpec {
 	labels := map[string]string{
 		domain.LabelManaged:      "true",
 		domain.LabelComponent:    analyticsComponent,
@@ -220,43 +217,37 @@ func (c *Monitoring) analyticsSpec(ctx context.Context, st AnalyticsState, apps 
 			labels["traefik.http.routers."+r+".tls"] = "true"
 		}
 	}
-	return client.ContainerCreateOptions{
-		Name: analyticsName,
-		Config: &container.Config{
-			Image: c.mgr.OwnImageRef(),
-			Cmd:   []string{"analytics"},
-			// The image runs the manager as root; the server needs none of it
-			// (its volume is owned by nonroot, see the Dockerfile).
-			User: "65532:65532",
-			// The image's own checks the manager's port.
-			Healthcheck: &container.HealthConfig{
-				Test:     []string{"CMD", "/kipitiny", "analytics", "healthcheck"},
-				Interval: 30 * time.Second, Timeout: 5 * time.Second, StartPeriod: 10 * time.Second, Retries: 3,
-			},
-			// The token in the environment keeps it out of `ps`.
-			Env: []string{
-				"KIPITINY_ANALYTICS_TOKEN=" + st.Token,
-				"KIPITINY_ANALYTICS_RETENTION_DAYS=" + strconv.Itoa(st.RetentionDays),
-			},
-			Labels: labels,
+	return domain.ContainerSpec{
+		Name:  analyticsName,
+		Image: c.mgr.OwnImageRef(),
+		Cmd:   []string{"analytics"},
+		// The image runs the manager as root; the server needs none of it
+		// (its volume is owned by nonroot, see the Dockerfile).
+		User: "65532:65532",
+		// The image's own checks the manager's port.
+		Healthcheck: &domain.HealthConfig{
+			Test:     []string{"CMD", "/kipitiny", "analytics", "healthcheck"},
+			Interval: 30 * time.Second, Timeout: 5 * time.Second, StartPeriod: 10 * time.Second, Retries: 3,
 		},
-		HostConfig: &container.HostConfig{
-			RestartPolicy:  container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
-			LogConfig:      docker.DefaultLogConfig(),
-			ReadonlyRootfs: true,
-			CapDrop:        []string{"ALL"},
-			SecurityOpt:    []string{"no-new-privileges"},
-			Resources:      container.Resources{Memory: 256 << 20},
-			Mounts: []mount.Mount{{
-				Type: mount.TypeVolume, Source: analyticsVolume, Target: "/data",
-				VolumeOptions: &mount.VolumeOptions{Labels: map[string]string{
-					domain.LabelManaged: "true", domain.LabelComponent: analyticsComponent,
-				}},
+		// The token in the environment keeps it out of `ps`.
+		Env: []string{
+			"KIPITINY_ANALYTICS_TOKEN=" + st.Token,
+			"KIPITINY_ANALYTICS_RETENTION_DAYS=" + strconv.Itoa(st.RetentionDays),
+		},
+		Labels:         labels,
+		Restart:        domain.RestartPolicy{Name: domain.RestartUnlessStopped},
+		Log:            true,
+		ReadonlyRootfs: true,
+		CapDrop:        []string{"ALL"},
+		SecurityOpt:    []string{"no-new-privileges"},
+		Memory:         256 << 20,
+		Mounts: []domain.Mount{{
+			Type: domain.MountVolume, Source: analyticsVolume, Target: "/data",
+			Volume: &domain.VolumeOptions{Labels: map[string]string{
+				domain.LabelManaged: "true", domain.LabelComponent: analyticsComponent,
 			}},
-		},
-		NetworkingConfig: &dockernet.NetworkingConfig{
-			EndpointsConfig: map[string]*dockernet.EndpointSettings{domain.ProxyNetwork: {}},
-		},
+		}},
+		Networks: map[string][]string{domain.ProxyNetwork: nil},
 	}
 }
 
@@ -277,8 +268,8 @@ func (c *Monitoring) EnsureAnalytics(ctx context.Context) error {
 		return err
 	}
 	opts := c.analyticsSpec(ctx, st, apps)
-	hash := network.SpecHash(opts.Config.Image, opts.Config.Env, opts.Config.Labels)
-	opts.Config.Labels[domain.LabelConfigHash] = hash
+	hash := network.SpecHash(opts.Image, opts.Env, opts.Labels)
+	opts.Labels[domain.LabelConfigHash] = hash
 	existing, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: analyticsComponent})
 	if err != nil {
 		return err
@@ -295,21 +286,21 @@ func (c *Monitoring) EnsureAnalytics(ctx context.Context) error {
 		if err := c.removeAnalytics(ctx, dk); err != nil {
 			return err
 		}
-		if _, err := dk.ImageInspect(ctx, opts.Config.Image); err != nil {
+		if _, err := dk.ImageInspect(ctx, opts.Image); err != nil {
 			progress.Report(ctx, AnalyticsStepImage)
 		}
-		if err := dk.EnsureImage(ctx, opts.Config.Image, c.mgr.RegistryAuth(ctx, opts.Config.Image), ""); err != nil {
-			return fmt.Errorf("pull %s: %w", opts.Config.Image, err)
+		if err := dk.EnsureImage(ctx, opts.Image, c.mgr.RegistryAuth(ctx, opts.Image), ""); err != nil {
+			return fmt.Errorf("pull %s: %w", opts.Image, err)
 		}
 		progress.Report(ctx, AnalyticsStepStart)
-		if id, err = dk.RunMoby(ctx, opts); err != nil {
+		if id, err = dk.Run(ctx, opts); err != nil {
 			return err
 		}
 		progress.Report(ctx, AnalyticsStepHealth)
 		if err := dk.WaitHealthy(ctx, id, time.Minute); err != nil {
 			return err
 		}
-		c.log.Info("analytics server started", "image", opts.Config.Image, "domain", st.Domain)
+		c.log.Info("analytics server started", "image", opts.Image, "domain", st.Domain)
 		c.analyticsSites, c.analyticsErrors = "", ""
 	}
 	progress.Report(ctx, AnalyticsStepSites)

@@ -9,9 +9,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -138,22 +135,22 @@ func mysqlArgs(memoryMB int) []string {
 	}
 }
 
-func applyMySQLSpec(cfg *container.Config, host *container.HostConfig, svc domain.Service) {
-	cfg.Cmd = mysqlArgs(svc.MemoryMB)
-	cfg.Healthcheck = mysqlHealthcheck(svc.Kind)
-	host.Mounts = append(host.Mounts, mount.Mount{
-		Type:   mount.TypeVolume,
+func applyMySQLSpec(spec *domain.ContainerSpec, svc domain.Service) {
+	spec.Cmd = mysqlArgs(svc.MemoryMB)
+	spec.Healthcheck = mysqlHealthcheck(svc.Kind)
+	spec.Mounts = append(spec.Mounts, domain.Mount{
+		Type:   domain.MountVolume,
 		Source: MySQLVolume(svc.ID),
 		Target: mysqlVolumeMount,
 	})
-	cfg.Labels[domain.LabelComponent] = string(svc.Kind)
+	spec.Labels[domain.LabelComponent] = string(svc.Kind)
 }
 
 // mysqlHealthcheck pings over TCP: the image initializes the data directory
 // with a temporary server started with --skip-networking, which must not
 // count as ready. The ping succeeds as soon as the server answers.
-func mysqlHealthcheck(k domain.ServiceKind) *container.HealthConfig {
-	return &container.HealthConfig{
+func mysqlHealthcheck(k domain.ServiceKind) *domain.HealthConfig {
+	return &domain.HealthConfig{
 		Test:          []string{"CMD-SHELL", `MYSQL_PWD="$MYSQL_ROOT_PASSWORD" ` + MySQLBin(k, "mysqladmin") + " -h 127.0.0.1 -uroot --silent ping"},
 		Interval:      10 * time.Second,
 		Timeout:       5 * time.Second,

@@ -56,7 +56,7 @@ services:
 	if w.Runtime.Platform != "linux/amd64" || spec.Platform == nil || spec.Platform.Architecture != "amd64" {
 		t.Errorf("platform = %q, spec %+v", w.Runtime.Platform, spec.Platform)
 	}
-	cfg, host := spec.Config, spec.HostConfig
+	cfg, host := spec, spec
 	if !slices.Equal(cfg.Entrypoint, []string{""}) || cfg.User != "1000" || cfg.WorkingDir != "/app" || cfg.StopSignal != "SIGINT" {
 		t.Errorf("config = %+v", cfg)
 	}
@@ -124,7 +124,7 @@ func TestRuntimeHostAccess(t *testing.T) {
 	if err := validateService(app); err != nil {
 		t.Fatal(err)
 	}
-	host := containerSpec(domain.Project{ID: "P1", Name: "vpn"}, app, envSources{}, "D1", 1, network.Routing{}).HostConfig
+	host := containerSpec(domain.Project{ID: "P1", Name: "vpn"}, app, envSources{}, "D1", 1, network.Routing{})
 	if !slices.Equal(host.CapAdd, []string{"NET_ADMIN"}) || !slices.Equal(host.CapDrop, []string{"NET_RAW", "MKNOD"}) ||
 		!slices.Equal(host.SecurityOpt, []string{"apparmor=unconfined"}) || len(host.Devices) != 2 ||
 		host.Devices[0].PathInContainer != "/dev/net/tun" || host.Devices[0].CgroupPermissions != "rwm" ||
@@ -133,7 +133,7 @@ func TestRuntimeHostAccess(t *testing.T) {
 	}
 	raw := app
 	raw.Runtime = domain.Runtime{CapAdd: []string{"NET_RAW"}}
-	if host := containerSpec(domain.Project{ID: "P1"}, raw, envSources{}, "D1", 1, network.Routing{}).HostConfig; slices.Contains(host.CapDrop, "NET_RAW") {
+	if host := containerSpec(domain.Project{ID: "P1"}, raw, envSources{}, "D1", 1, network.Routing{}); slices.Contains(host.CapDrop, "NET_RAW") {
 		t.Errorf("NET_RAW added back is still dropped: %v", host.CapDrop)
 	}
 	for _, r := range []domain.Runtime{{CapAdd: []string{"net admin"}}, {Devices: []string{"dev/x"}}, {Devices: []string{"/dev/x:/dev/x:rwx"}}} {
@@ -176,7 +176,7 @@ func TestPortsAndVolumesHostAccess(t *testing.T) {
 	if app.PublishedPorts[1].HostIP != "" {
 		t.Errorf("0.0.0.0 is every address: %+v", app.PublishedPorts[1])
 	}
-	host := containerSpec(domain.Project{ID: "P1"}, app, envSources{}, "D1", 1, network.Routing{}).HostConfig
+	host := containerSpec(domain.Project{ID: "P1"}, app, envSources{}, "D1", 1, network.Routing{})
 	var ips []string
 	for _, bs := range host.PortBindings {
 		for _, b := range bs {
@@ -188,8 +188,8 @@ func TestPortsAndVolumesHostAccess(t *testing.T) {
 		t.Errorf("bindings = %v", ips)
 	}
 	m := host.Mounts
-	if len(m) != 3 || !m[0].ReadOnly || m[1].Source != "nas" || m[1].VolumeOptions != nil ||
-		m[2].VolumeOptions.DriverConfig == nil || m[2].VolumeOptions.DriverConfig.Options["type"] != "nfs" {
+	if len(m) != 3 || !m[0].ReadOnly || m[1].Source != "nas" || m[1].Volume != nil ||
+		m[2].Volume.Driver == nil || m[2].Volume.Driver.Options["type"] != "nfs" {
 		t.Errorf("mounts = %+v", m)
 	}
 

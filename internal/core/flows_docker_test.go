@@ -26,8 +26,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 
-	"github.com/moby/moby/api/types/mount"
-
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -83,7 +81,7 @@ func (f flow) core(t *testing.T) *Core {
 	c.useDocker(f.dk)
 	// The injected health probe is the test binary, which can't probe: apps
 	// are ready on their own healthcheck, or once up for a few seconds.
-	c.probes.Store(domain.LocalServerID, (*mount.Mount)(nil))
+	c.probes.Store(domain.LocalServerID, (*domain.Mount)(nil))
 	t.Cleanup(func() { c.cancel(); st.Close() })
 	return c
 }

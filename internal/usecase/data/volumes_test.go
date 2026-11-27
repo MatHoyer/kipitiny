@@ -71,7 +71,7 @@ func TestBackupKind(t *testing.T) {
 
 	m := helperMounts(app, []string{"cache"}, true)
 	if len(m) != 1 || m[0].Source != AppVolume("01APP", "cache") || m[0].Target != "/v/cache" || !m[0].ReadOnly ||
-		m[0].VolumeOptions.Labels[domain.LabelService] != "01APP" {
+		m[0].Volume.Labels[domain.LabelService] != "01APP" {
 		t.Errorf("app helper mounts = %+v", m)
 	}
 	ro := app

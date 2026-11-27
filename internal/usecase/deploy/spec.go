@@ -11,13 +11,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
-	dockernet "github.com/moby/moby/api/types/network"
-	"github.com/moby/moby/client"
-
 	"github.com/kipit-labs/kipitiny/internal/compose"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
@@ -40,7 +34,7 @@ func readinessMode(svc domain.Service) string {
 
 // containerSpec builds the container for one replica. src resolves env
 // references.
-func containerSpec(project domain.Project, svc domain.Service, src envSources, deployID string, replica int, rt network.Routing) client.ContainerCreateOptions {
+func containerSpec(project domain.Project, svc domain.Service, src envSources, deployID string, replica int, rt network.Routing) domain.ContainerSpec {
 	labels := map[string]string{
 		domain.LabelManaged: "true",
 		domain.LabelProject: project.ID,
@@ -48,20 +42,20 @@ func containerSpec(project domain.Project, svc domain.Service, src envSources, d
 		domain.LabelReplica: strconv.Itoa(replica),
 		domain.LabelDeploy:  deployID,
 	}
-	endpoints := map[string]*dockernet.EndpointSettings{}
+	endpoints := map[string][]string{}
 	for _, n := range projectNetworks(project, svc) {
 		// Other services of the project reach this one by its service name.
-		endpoints[n] = &dockernet.EndpointSettings{Aliases: []string{svc.Name}}
+		endpoints[n] = []string{svc.Name}
 	}
 	for _, id := range svc.Networks {
-		endpoints[domain.CustomNetwork(id)] = &dockernet.EndpointSettings{Aliases: []string{networkAlias(project, svc)}}
+		endpoints[domain.CustomNetwork(id)] = []string{networkAlias(project, svc)}
 	}
 	if svc.HostNetwork {
-		endpoints = map[string]*dockernet.EndpointSettings{}
+		endpoints = map[string][]string{}
 	}
 	if network.HTTPRouted(svc) {
 		maps.Copy(labels, network.TraefikLabels(svc, rt))
-		endpoints[domain.ProxyNetwork] = &dockernet.EndpointSettings{}
+		endpoints[domain.ProxyNetwork] = nil
 	}
 
 	envMap := resolveEnv(svc.Env, src)
@@ -79,59 +73,53 @@ func containerSpec(project domain.Project, svc domain.Service, src envSources, d
 		env = append(env, k+"="+envMap[k])
 	}
 
-	cfg := &container.Config{
-		Image:  svc.Image,
-		Env:    env,
-		Labels: labels,
-	}
-	host := &container.HostConfig{
-		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
-		LogConfig:     docker.DefaultLogConfig(),
+	spec := domain.ContainerSpec{
+		Image:    svc.Image,
+		Env:      env,
+		Labels:   labels,
+		Restart:  domain.RestartPolicy{Name: domain.RestartUnlessStopped},
+		Log:      true,
+		Networks: endpoints,
+		Platform: domain.ParsePlatform(svc.Runtime.Platform),
 		// No raw sockets: a compromised container can't ARP-spoof its
 		// networks (e.g. the plain-HTTP Traefik → manager hop). Ping still
 		// works through Docker's default ping_group_range.
 		CapDrop: []string{"NET_RAW"},
 	}
 	if svc.MemoryMB > 0 {
-		host.Memory = int64(svc.MemoryMB) << 20
+		spec.Memory = int64(svc.MemoryMB) << 20
 	}
 	if svc.CPUs > 0 {
-		host.NanoCPUs = int64(math.Round(svc.CPUs * 1e9))
+		spec.NanoCPUs = int64(math.Round(svc.CPUs * 1e9))
 	}
 	if svc.Kind.IsDatabase() {
-		data.ApplyDatabaseSpec(cfg, host, svc)
+		data.ApplyDatabaseSpec(&spec, svc)
 	} else {
-		host.Mounts = append(host.Mounts, data.AppVolumeMounts(svc)...)
+		spec.Mounts = append(spec.Mounts, data.AppVolumeMounts(svc)...)
 		if svc.HostNetwork {
-			host.NetworkMode = "host"
+			spec.NetworkMode = "host"
 		}
 		if svc.DockerSocket != "" && rt.DockerSocket != "" {
-			host.Mounts = append(host.Mounts, mount.Mount{
-				Type: mount.TypeBind, Source: rt.DockerSocket, Target: compose.DockerSocket, ReadOnly: svc.DockerSocket == "ro",
+			spec.Mounts = append(spec.Mounts, domain.Mount{
+				Type: domain.MountBind, Source: rt.DockerSocket, Target: compose.DockerSocket, ReadOnly: svc.DockerSocket == "ro",
 			})
 		}
-		cfg.ExposedPorts, host.PortBindings = network.PortBindings(svc.PublishedPorts)
+		spec.ExposedPorts, spec.PortBindings = network.PortBindings(svc.PublishedPorts)
 		if svc.Healthcheck.Set() {
-			cfg.Healthcheck = healthConfig(svc.Healthcheck)
+			spec.Healthcheck = healthConfig(svc.Healthcheck)
 		}
 		if svc.StopGraceSeconds > 0 {
 			// Docker's own stops (daemon shutdown, restarts) wait as long.
-			cfg.StopTimeout = &svc.StopGraceSeconds
+			spec.StopTimeout = &svc.StopGraceSeconds
 		}
-		applyRuntime(cfg, host, svc.Runtime)
+		applyRuntime(&spec, svc.Runtime)
 	}
-	name := fmt.Sprintf("%s-%s-%d", project.Name, svc.Name, replica)
+	spec.Name = fmt.Sprintf("%s-%s-%d", project.Name, svc.Name, replica)
 	if !svc.Kind.IsDatabase() {
 		// Old and new replicas run side by side during a rollout.
-		name += "-" + deploySuffix(deployID)
+		spec.Name += "-" + deploySuffix(deployID)
 	}
-	return client.ContainerCreateOptions{
-		Name:             name,
-		Config:           cfg,
-		HostConfig:       host,
-		NetworkingConfig: &dockernet.NetworkingConfig{EndpointsConfig: endpoints},
-		Platform:         docker.Platform(svc.Runtime.Platform),
-	}
+	return spec
 }
 
 // deploySuffix is a short, name-safe token from a deployment ID.

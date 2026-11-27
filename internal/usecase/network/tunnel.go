@@ -11,12 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/cloudflare"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
@@ -69,11 +66,11 @@ func (c *Network) EnsureTunnel(ctx context.Context, sv domain.Server) error {
 	}
 
 	var hash string
-	var opts client.ContainerCreateOptions
+	var opts domain.ContainerSpec
 	if token != "" {
 		opts = c.tunnelSpec(token)
-		hash = SpecHash(opts.Config.Image, opts.Config.Cmd, opts.Config.Env)
-		opts.Config.Labels[domain.LabelConfigHash] = hash
+		hash = SpecHash(opts.Image, opts.Cmd, opts.Env)
+		opts.Labels[domain.LabelConfigHash] = hash
 		if len(existing) == 1 && existing[0].Labels[domain.LabelConfigHash] == hash {
 			if existing[0].State == domain.StateRunning {
 				return nil
@@ -92,36 +89,30 @@ func (c *Network) EnsureTunnel(ctx context.Context, sv domain.Server) error {
 		return nil
 	}
 
-	if err := dk.EnsureImage(ctx, opts.Config.Image, c.mgr.RegistryAuth(ctx, opts.Config.Image), ""); err != nil {
-		return fmt.Errorf("pull %s: %w", opts.Config.Image, err)
+	if err := dk.EnsureImage(ctx, opts.Image, c.mgr.RegistryAuth(ctx, opts.Image), ""); err != nil {
+		return fmt.Errorf("pull %s: %w", opts.Image, err)
 	}
-	if _, err := dk.RunMoby(ctx, opts); err != nil {
+	if _, err := dk.Run(ctx, opts); err != nil {
 		return err
 	}
-	c.log.Info("cloudflare tunnel started", "server", sv.Name, "image", opts.Config.Image)
+	c.log.Info("cloudflare tunnel started", "server", sv.Name, "image", opts.Image)
 	return nil
 }
 
-func (c *Network) tunnelSpec(token string) client.ContainerCreateOptions {
-	return client.ContainerCreateOptions{
-		Name: tunnelName,
-		Config: &container.Config{
-			Image: c.cfg.Tunnel.Image,
-			Cmd:   []string{"tunnel", "--no-autoupdate", "run"},
-			// The token is read from the environment, keeping it out of `ps`.
-			Env: []string{"TUNNEL_TOKEN=" + token},
-			Labels: map[string]string{
-				domain.LabelManaged:   "true",
-				domain.LabelComponent: TunnelComponent,
-			},
+func (c *Network) tunnelSpec(token string) domain.ContainerSpec {
+	return domain.ContainerSpec{
+		Name:  tunnelName,
+		Image: c.cfg.Tunnel.Image,
+		Cmd:   []string{"tunnel", "--no-autoupdate", "run"},
+		// The token is read from the environment, keeping it out of `ps`.
+		Env: []string{"TUNNEL_TOKEN=" + token},
+		Labels: map[string]string{
+			domain.LabelManaged:   "true",
+			domain.LabelComponent: TunnelComponent,
 		},
-		HostConfig: &container.HostConfig{
-			RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
-			LogConfig:     docker.DefaultLogConfig(),
-		},
-		NetworkingConfig: &network.NetworkingConfig{
-			EndpointsConfig: map[string]*network.EndpointSettings{domain.ProxyNetwork: {}},
-		},
+		Restart:  domain.RestartPolicy{Name: domain.RestartUnlessStopped},
+		Log:      true,
+		Networks: map[string][]string{domain.ProxyNetwork: nil},
 	}
 }
 

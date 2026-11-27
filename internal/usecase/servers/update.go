@@ -12,8 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -354,24 +352,20 @@ func (c *Servers) launchUpdater(ctx context.Context, self, ref string) error {
 		}
 	}
 	// The new version's binary does the swap, so fixes to it apply at once.
-	_, err = dk.RunMoby(ctx, client.ContainerCreateOptions{
-		Name: updaterName,
-		Config: &container.Config{
-			Image:       ref,
-			Entrypoint:  []string{"/kipitiny"},
-			Cmd:         []string{"self-update", self, ref},
-			Healthcheck: &container.HealthConfig{Test: []string{"NONE"}},
-			Labels: map[string]string{
-				domain.LabelManaged:   "true",
-				domain.LabelComponent: updaterComponent,
-			},
+	_, err = dk.Run(ctx, domain.ContainerSpec{
+		Name:        updaterName,
+		Image:       ref,
+		Entrypoint:  []string{"/kipitiny"},
+		Cmd:         []string{"self-update", self, ref},
+		Healthcheck: &domain.HealthConfig{Test: []string{"NONE"}},
+		Labels: map[string]string{
+			domain.LabelManaged:   "true",
+			domain.LabelComponent: updaterComponent,
 		},
-		HostConfig: &container.HostConfig{
-			Mounts: []mount.Mount{
-				{Type: mount.TypeBind, Source: c.cfg.Traefik.DockerSocket, Target: "/var/run/docker.sock"},
-			},
-			LogConfig: docker.DefaultLogConfig(),
+		Mounts: []domain.Mount{
+			{Type: domain.MountBind, Source: c.cfg.Traefik.DockerSocket, Target: "/var/run/docker.sock"},
 		},
+		Log: true,
 	})
 	return err
 }

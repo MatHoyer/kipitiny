@@ -10,8 +10,6 @@ import (
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -189,23 +187,19 @@ func (r *ContainerRunner) start(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("session volume: %w", err)
 	}
 	progress.Report(ctx, secrets.StepHelper)
-	id, err := r.dk.RunMoby(ctx, client.ContainerCreateOptions{
-		Name: r.name,
-		Config: &container.Config{
-			Image:      r.image,
-			Entrypoint: []string{"sleep", "infinity"},
-			Labels:     labels,
-		},
-		HostConfig: &container.HostConfig{
-			Mounts:         []mount.Mount{{Type: mount.TypeVolume, Source: r.volume, Target: "/session"}},
-			ReadonlyRootfs: true,
-			Tmpfs:          map[string]string{"/tmp": "rw,noexec,nosuid,size=16m"},
-			CapDrop:        []string{"ALL"},
-			SecurityOpt:    []string{"no-new-privileges"},
-			// tini, so sleep stops on SIGTERM.
-			Init:      new(true),
-			LogConfig: docker.DefaultLogConfig(),
-		},
+	id, err := r.dk.Run(ctx, domain.ContainerSpec{
+		Name:           r.name,
+		Image:          r.image,
+		Entrypoint:     []string{"sleep", "infinity"},
+		Labels:         labels,
+		Mounts:         []domain.Mount{{Type: domain.MountVolume, Source: r.volume, Target: "/session"}},
+		ReadonlyRootfs: true,
+		Tmpfs:          map[string]string{"/tmp": "rw,noexec,nosuid,size=16m"},
+		CapDrop:        []string{"ALL"},
+		SecurityOpt:    []string{"no-new-privileges"},
+		// tini, so sleep stops on SIGTERM.
+		Init: new(true),
+		Log:  true,
 	})
 	if err != nil {
 		return "", err
