@@ -11,7 +11,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
 )
@@ -162,7 +161,7 @@ func (c *Servers) OpenServerTerminal(ctx context.Context, serverID string, cols,
 }
 
 // cleanupTerminals removes host shell and host check helpers left by a crash.
-func (c *Servers) cleanupTerminals(ctx context.Context, dk *docker.Client) error {
+func (c *Servers) cleanupTerminals(ctx context.Context, dk domain.ContainerRuntime) error {
 	for _, component := range []string{terminalComponent, hostCheckComponent} {
 		cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: component})
 		if err != nil {

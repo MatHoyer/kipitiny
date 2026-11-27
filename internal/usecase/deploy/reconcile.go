@@ -10,8 +10,6 @@ import (
 
 	cerrdefs "github.com/containerd/errdefs"
 
-	"github.com/moby/moby/client"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
@@ -83,9 +81,9 @@ func (c *Deployer) ReconcileService(ctx context.Context, project domain.Project,
 			// Ran once (or Docker gave up on-failure): not restarted.
 		case ct.State == domain.StateExited || ct.State == domain.StateCreated:
 			// Read before the start resets it.
-			in, err := dk.ContainerInspect(ctx, ct.ID, client.ContainerInspectOptions{})
-			oom := err == nil && in.Container.State != nil && in.Container.State.OOMKilled
-			if _, err := dk.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{}); cerrdefs.IsNotFound(err) {
+			in, err := dk.InspectContainer(ctx, ct.ID)
+			oom := err == nil && in.State != nil && in.State.OOMKilled
+			if err := dk.StartContainer(ctx, ct.ID); cerrdefs.IsNotFound(err) {
 				// A network it was on was removed outside kipitiny: Docker
 				// can't start it any more, even once the network is back.
 				if err := dk.RemoveContainer(ctx, ct.ID, 0); err != nil {

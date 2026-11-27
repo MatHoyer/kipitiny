@@ -4,16 +4,15 @@ import (
 	"context"
 	"os"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
 type Status struct {
-	Version     string       `json:"version"`
-	Update      UpdateInfo   `json:"update"`
-	Docker      *docker.Info `json:"docker"`
-	DockerError string       `json:"dockerError,omitempty"`
+	Version     string             `json:"version"`
+	Update      UpdateInfo         `json:"update"`
+	Docker      *domain.DockerInfo `json:"docker"`
+	DockerError string             `json:"dockerError,omitempty"`
 	// Database is the size of the manager's SQLite files, absent when they
 	// can't be read.
 	Database *DatabaseSize `json:"database,omitempty"`

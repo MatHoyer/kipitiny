@@ -10,7 +10,6 @@ import (
 
 	"github.com/distribution/reference"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 )
@@ -111,7 +110,7 @@ func (c *Deployer) RegistryAuth(ctx context.Context, image string) string {
 	}
 	for _, r := range rs {
 		if r.Host == host {
-			return docker.RegistryAuth(loginAddress(host), r.Username, r.Password)
+			return domain.RegistryAuth(loginAddress(host), r.Username, r.Password)
 		}
 	}
 	return ""

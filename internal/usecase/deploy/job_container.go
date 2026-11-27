@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
@@ -18,7 +17,7 @@ const JobComponent = "job"
 // returns the container on its daemon, for the caller to wait for and
 // remove.
 func (c *Deployer) StartJobContainer(ctx context.Context, project domain.Project, svc domain.Service, j domain.Job, runID string,
-	logf func(string, ...any)) (*docker.Client, string, error) {
+	logf func(string, ...any)) (domain.ContainerRuntime, string, error) {
 
 	if svc.Sleeping {
 		logf("Waking %s", project.Name)

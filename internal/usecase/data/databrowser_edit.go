@@ -14,7 +14,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -299,7 +298,7 @@ WHERE n.nspname = %s AND c.relname = %s;`, pgLiteral(schema), pgLiteral(table)),
 	b.WriteString("END\n" + tag + ";\n")
 	ctx, cancel := context.WithTimeout(ctx, dataConsoleTimeout)
 	defer cancel()
-	err = t.dk.Exec(ctx, t.container, docker.ExecOptions{
+	err = t.dk.Exec(ctx, t.container, domain.ExecOptions{
 		Cmd:   []string{"psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-U", t.svc.Env[PGUser], "-d", t.db, "-f", "-"},
 		Env:   []string{fmt.Sprintf("PGOPTIONS=-c statement_timeout=%ds", int(dataConsoleTimeout.Seconds()))},
 		Stdin: strings.NewReader(b.String()),
@@ -392,9 +391,9 @@ func (t dataTarget) mysqlApply(ctx context.Context, schema, table string, ch Row
 	b.WriteString("COMMIT;\n")
 	ctx, cancel := context.WithTimeout(ctx, dataConsoleTimeout)
 	defer cancel()
-	err = t.dk.Exec(ctx, t.container, t.mysql(b.String(), true, dataConsoleTimeout, nil))
+	err = t.dk.Exec(ctx, t.container, t.mysql(b.String(), true, dataConsoleTimeout))
 	if err != nil {
-		var ee *docker.ExecError
+		var ee *domain.ExecError
 		if errors.As(err, &ee) {
 			if m := mysqlCheckRe.FindStringSubmatch(ee.Stderr); m != nil {
 				if line, _ := strconv.Atoi(m[1]); checks[line] != "" {

@@ -11,7 +11,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -177,7 +176,7 @@ func (c *Data) CreatePgDatabase(ctx context.Context, id, name, collection string
 	// session the browser uses.
 	ctx, cancel := context.WithTimeout(ctx, dataConsoleTimeout)
 	defer cancel()
-	err = t.dk.Exec(ctx, t.container, docker.ExecOptions{Cmd: []string{
+	err = t.dk.Exec(ctx, t.container, domain.ExecOptions{Cmd: []string{
 		"psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-U", t.svc.Env[PGUser], "-d", t.db,
 		"-c", fmt.Sprintf("CREATE DATABASE %s OWNER %s", pgIdent(name), pgIdent(t.svc.Env[PGUser])),
 	}})
@@ -442,8 +441,8 @@ func pgSelect(schema, table string, cols []PgColumn, q RowQuery, page bool) (str
 
 // psql runs one statement read-only: the session can't write, and long
 // queries are cancelled by the server, not only by the context.
-func (t dataTarget) psql(timeout time.Duration, sql string, stdout io.Writer) docker.ExecOptions {
-	return docker.ExecOptions{
+func (t dataTarget) psql(timeout time.Duration, sql string, stdout io.Writer) domain.ExecOptions {
+	return domain.ExecOptions{
 		Cmd: []string{
 			"psql", "-X", "-q", "-At", "-v", "ON_ERROR_STOP=1",
 			"-U", t.svc.Env[PGUser], "-d", t.db, "-f", "-",

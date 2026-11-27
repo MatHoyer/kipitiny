@@ -12,6 +12,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // TestContainerRunner runs the helper image on the local Docker. It needs
@@ -40,7 +41,7 @@ func TestContainerRunner(t *testing.T) {
 		t.Errorf("stdin/env = %q, %v", out, err)
 	}
 	_, stderr, err := r.Run(ctx, []string{"pass-cli", "info"}, nil, nil)
-	var ee *docker.ExecError
+	var ee *domain.ExecError
 	if !errors.As(err, &ee) || cliError(string(stderr)) != "This operation requires an authenticated client" {
 		t.Errorf("info = %q, %v", stderr, err)
 	}

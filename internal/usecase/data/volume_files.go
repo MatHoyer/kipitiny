@@ -16,7 +16,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -397,7 +396,7 @@ func filesCmd(script string, vol fileVolume, abs string) []string {
 
 // filesError turns a helper script's exit code into an error for the caller.
 func filesError(p string, err error) error {
-	var ee *docker.ExecError
+	var ee *domain.ExecError
 	if !errors.As(err, &ee) {
 		return err
 	}

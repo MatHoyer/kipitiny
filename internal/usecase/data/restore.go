@@ -11,9 +11,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/client"
-
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/storage"
@@ -131,7 +128,7 @@ func (c *Data) runRestore(svc domain.Service, containerID string, st storage.Sto
 		c.steps.Set(key, RestoreStart)
 	}
 	for _, id := range stopped {
-		if _, serr := c.mgr.DockerFor(svc.ServerID).ContainerStart(context.WithoutCancel(ctx), id, client.ContainerStartOptions{}); serr != nil {
+		if serr := c.mgr.DockerFor(svc.ServerID).StartContainer(context.WithoutCancel(ctx), id); serr != nil {
 			c.log.Error("cannot restart app using the database", "container", id, "err", serr)
 		}
 	}
@@ -204,7 +201,7 @@ func (c *Data) restore(ctx context.Context, svc domain.Service, containerID stri
 		maintenance = "template1"
 	}
 	admin := func(sql string) error {
-		return dk.Exec(ctx, containerID, docker.ExecOptions{
+		return dk.Exec(ctx, containerID, domain.ExecOptions{
 			Cmd: []string{"psql", "-U", user, "-d", maintenance, "-v", "ON_ERROR_STOP=1", "-qc", sql},
 		})
 	}
@@ -227,7 +224,7 @@ func (c *Data) restore(ctx context.Context, svc domain.Service, containerID stri
 	// A database restored into an instance that lacks it is just renamed in.
 	c.steps.Set(key, RestoreSwap)
 	var exists strings.Builder
-	err = dk.Exec(ctx, containerID, docker.ExecOptions{
+	err = dk.Exec(ctx, containerID, domain.ExecOptions{
 		Cmd:    []string{"psql", "-U", user, "-d", maintenance, "-tAc", "SELECT 1 FROM pg_database WHERE datname = " + pgLiteral(db)},
 		Stdout: &exists,
 	})
@@ -310,9 +307,9 @@ func pgLiteral(s string) string {
 
 // pgRestore streams a stored backup (decrypting if needed) into pg_restore
 // against database db, then verifies the checksum of the stored bytes.
-func (c *Data) pgRestore(ctx context.Context, dk *docker.Client, containerID, user, db string, rc io.Reader, target domain.BackupTarget, b domain.Backup) error {
+func (c *Data) pgRestore(ctx context.Context, dk domain.ContainerRuntime, containerID, user, db string, rc io.Reader, target domain.BackupTarget, b domain.Backup) error {
 	return c.fromStorage(rc, target, b, func(dump io.Reader) error {
-		err := dk.Exec(ctx, containerID, docker.ExecOptions{
+		err := dk.Exec(ctx, containerID, domain.ExecOptions{
 			Cmd: []string{
 				"pg_restore", "-U", user, "-d", db,
 				"--no-owner", "--no-privileges", "--exit-on-error",
@@ -377,7 +374,7 @@ func (c *Data) stopLinkedApps(ctx context.Context, db domain.Service) ([]string,
 			if ct.State != domain.StateRunning {
 				continue
 			}
-			if _, err := c.mgr.DockerFor(db.ServerID).ContainerStop(ctx, ct.ID, client.ContainerStopOptions{Timeout: &secs}); err != nil {
+			if err := c.mgr.DockerFor(db.ServerID).StopContainer(ctx, ct.ID, &secs); err != nil {
 				return stopped, err
 			}
 			stopped = append(stopped, ct.ID)

@@ -9,8 +9,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
-
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
@@ -143,16 +141,14 @@ func TestStopGrace(t *testing.T) {
 }
 
 func TestCheckImageLabels(t *testing.T) {
-	ok := &dockerspec.DockerOCIImageConfig{}
-	ok.Labels = map[string]string{"org.opencontainers.image.source": "x"}
+	ok := map[string]string{"org.opencontainers.image.source": "x"}
 	if err := checkImageLabels(ok); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkImageLabels(nil); err != nil {
 		t.Fatal(err)
 	}
-	bad := &dockerspec.DockerOCIImageConfig{}
-	bad.Labels = map[string]string{"Traefik.http.routers.x.rule": "Host(`manager.example.com`)"}
+	bad := map[string]string{"Traefik.http.routers.x.rule": "Host(`manager.example.com`)"}
 	if err := checkImageLabels(bad); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("traefik label accepted: %v", err)
 	}

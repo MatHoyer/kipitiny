@@ -12,11 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moby/moby/client"
-
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/selfcontainer"
 )
 
 const (
@@ -78,7 +76,7 @@ func (c *Network) EnsureTraefik(ctx context.Context, sv domain.Server) error {
 		if existing[0].State == domain.StateRunning {
 			return nil
 		}
-		_, err := dk.ContainerStart(ctx, existing[0].ID, client.ContainerStartOptions{})
+		err := dk.StartContainer(ctx, existing[0].ID)
 		return err
 	}
 	for _, ct := range existing {
@@ -109,12 +107,12 @@ func socketPath(sv domain.Server, cfg config.Config) string {
 
 // ManagerUpstream is the URL Traefik uses to reach the manager. In a container
 // the manager joins the proxy network itself, so its port needn't be published.
-func (c *Network) ManagerUpstream(ctx context.Context, dk *docker.Client) (string, error) {
+func (c *Network) ManagerUpstream(ctx context.Context, dk domain.ContainerRuntime) (string, error) {
 	_, port, err := net.SplitHostPort(c.cfg.Addr)
 	if err != nil {
 		return "", fmt.Errorf("KIPITINY_ADDR %q: %w", c.cfg.Addr, err)
 	}
-	if id := docker.SelfContainerID(); id != "" {
+	if id := selfcontainer.ID(); id != "" {
 		if err := dk.ConnectNetwork(ctx, domain.ProxyNetwork, id, ManagerAlias); err != nil {
 			return "", err
 		}

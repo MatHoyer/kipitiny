@@ -14,7 +14,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -132,7 +131,7 @@ func TestDataBrowserSQLiteDocker(t *testing.T) {
 	// The helper wrote as the file's owner: nothing beside it is root's.
 	h := c.files.helpers[helperKey(svc.ID, true)]
 	var out bytes.Buffer
-	if err := c.helperExec(ctx, svc, false, docker.ExecOptions{Cmd: []string{"find", "/v/data/db", "!", "-user", "1000"}}, func(r io.Reader) error {
+	if err := c.helperExec(ctx, svc, false, domain.ExecOptions{Cmd: []string{"find", "/v/data/db", "!", "-user", "1000"}}, func(r io.Reader) error {
 		_, err := out.ReadFrom(r)
 		return err
 	}); err != nil || out.Len() != 0 || h == nil {

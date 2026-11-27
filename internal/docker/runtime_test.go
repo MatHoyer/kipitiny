@@ -1,6 +1,8 @@
 package docker
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"net/netip"
 	"reflect"
 	"testing"
@@ -9,6 +11,7 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/api/types/registry"
 	"github.com/moby/moby/client"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
@@ -124,5 +127,13 @@ func TestFilters(t *testing.T) {
 	}
 	if got := domain.LabelFilter(map[string]string{"a": "1"}); !reflect.DeepEqual(got, domain.Filter{"label": {"a=1"}}) {
 		t.Errorf("LabelFilter = %v", got)
+	}
+}
+
+// domain.RegistryAuth encodes a credential as the client did with moby's own type.
+func TestRegistryAuth(t *testing.T) {
+	b, _ := json.Marshal(registry.AuthConfig{Username: "me", Password: "secret", ServerAddress: "ghcr.io"})
+	if got, want := domain.RegistryAuth("ghcr.io", "me", "secret"), base64.URLEncoding.EncodeToString(b); got != want {
+		t.Errorf("RegistryAuth = %s, want %s", got, want)
 	}
 }

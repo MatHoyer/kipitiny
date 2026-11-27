@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/sqlitehelper"
 )
@@ -40,7 +39,7 @@ type sqliteFile struct {
 
 // startSQLiteHelper runs an idle helper of the manager's own image, its
 // `sqlite` command run in it over exec.
-func (c *Data) startSQLiteHelper(ctx context.Context, dk *docker.Client, name string, mounts []domain.Mount) (string, error) {
+func (c *Data) startSQLiteHelper(ctx context.Context, dk domain.ContainerRuntime, name string, mounts []domain.Mount) (string, error) {
 	image := c.mgr.OwnImageRef()
 	// The manager's public image: no registry credential.
 	if err := dk.EnsureImage(ctx, image, "", ""); err != nil {
@@ -74,7 +73,7 @@ func (c *Data) sqliteExec(ctx context.Context, svc domain.Service, req sqlitehel
 	// Read whole, decoded after: an exec that failed (a helper gone, to
 	// start again) then reports its own error, not an empty answer.
 	var out []byte
-	err = c.helperExec(ctx, svc, true, docker.ExecOptions{Cmd: []string{"/kipitiny", "sqlite"}, Stdin: bytes.NewReader(b)}, func(r io.Reader) error {
+	err = c.helperExec(ctx, svc, true, domain.ExecOptions{Cmd: []string{"/kipitiny", "sqlite"}, Stdin: bytes.NewReader(b)}, func(r io.Reader) error {
 		out, err = io.ReadAll(io.LimitReader(r, sqliteReadMax))
 		return err
 	})
@@ -389,7 +388,7 @@ func (t dataTarget) sqliteExport(ctx context.Context, schema, table string, q Ro
 	}
 	ctx, cancel := context.WithTimeout(ctx, dataExportTimeout+5*time.Second)
 	defer cancel()
-	err = t.sqlite.c.helperExec(ctx, t.svc, true, docker.ExecOptions{Cmd: []string{"/kipitiny", "sqlite"}, Stdin: bytes.NewReader(b)}, func(r io.Reader) error {
+	err = t.sqlite.c.helperExec(ctx, t.svc, true, domain.ExecOptions{Cmd: []string{"/kipitiny", "sqlite"}, Stdin: bytes.NewReader(b)}, func(r io.Reader) error {
 		_, err := io.Copy(w, r)
 		return err
 	})

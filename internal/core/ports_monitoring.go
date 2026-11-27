@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -11,7 +10,9 @@ import (
 // (monitoring.Manager).
 type monitoringPorts struct{ c *Core }
 
-func (p monitoringPorts) DockerFor(serverID string) *docker.Client { return p.c.dockerFor(serverID) }
+func (p monitoringPorts) DockerFor(serverID string) domain.ContainerRuntime {
+	return p.c.dockerFor(serverID)
+}
 
 func (p monitoringPorts) RegistryAuth(ctx context.Context, image string) string {
 	return p.c.RegistryAuth(ctx, image)

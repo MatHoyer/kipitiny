@@ -11,7 +11,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -206,7 +205,7 @@ func (t dataTarget) redisEval(ctx context.Context, script string, keys, args []s
 	defer cancel()
 	cmd := append([]string{"redis-cli", "--raw", "EVAL", fmt.Sprintf(redisScriptWrap, script), strconv.Itoa(len(keys))}, keys...)
 	var out bytes.Buffer
-	err := t.dk.Exec(ctx, t.container, docker.ExecOptions{Cmd: append(cmd, args...), Stdout: &limitedBuffer{buf: &out, max: dataLineMax}})
+	err := t.dk.Exec(ctx, t.container, domain.ExecOptions{Cmd: append(cmd, args...), Stdout: &limitedBuffer{buf: &out, max: dataLineMax}})
 	if err != nil {
 		return clientError(err)
 	}

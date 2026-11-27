@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/progress"
@@ -38,7 +37,7 @@ type Servers struct {
 	bg context.Context
 	// pool holds a Docker client per server, remote ones connected on
 	// demand over SSH.
-	pool *docker.Pool
+	pool Pool
 	// steps is where the cleanup reports its step, and where the update
 	// preflight reads the restore tests', shared with core.
 	steps *progress.Steps
@@ -55,16 +54,24 @@ type Servers struct {
 	stats         statsState
 }
 
-// New builds the servers use cases around the local Docker client; bg is the
-// manager's background context.
-func New(bg context.Context, cfg *config.Config, store domain.Store, local *docker.Client, cron domain.Cron, steps *progress.Steps, probes *sync.Map, mgr Manager, log *slog.Logger) *Servers {
-	s := &Servers{cfg: cfg, store: store, cron: cron, mgr: mgr, log: log, bg: bg, steps: steps, probes: probes, reconcileKick: make(chan struct{}, 1)}
-	s.pool = docker.NewPool(local, s.connectServer)
-	return s
+// Pool hands out the Docker client of each server: the local daemon, and
+// remote ones connected on demand over SSH (from RemoteDocker).
+type Pool interface {
+	// For returns the client of a server ("" or "local": this one). One
+	// that can't be built fails every call.
+	For(serverID string) domain.ContainerRuntime
+	// Invalidate drops a remote server's client after it changed.
+	Invalidate(serverID string)
+}
+
+// New builds the servers use cases around the pool of Docker clients; bg is
+// the manager's background context.
+func New(bg context.Context, cfg *config.Config, store domain.Store, pool Pool, cron domain.Cron, steps *progress.Steps, probes *sync.Map, mgr Manager, log *slog.Logger) *Servers {
+	return &Servers{cfg: cfg, store: store, pool: pool, cron: cron, mgr: mgr, log: log, bg: bg, steps: steps, probes: probes, reconcileKick: make(chan struct{}, 1)}
 }
 
 // DockerFor returns the Docker client of a server ("" or "local": this one).
-func (c *Servers) DockerFor(serverID string) *docker.Client {
+func (c *Servers) DockerFor(serverID string) domain.ContainerRuntime {
 	return c.pool.For(serverID)
 }
 
@@ -84,7 +91,7 @@ type Manager interface {
 	Audit(ctx context.Context, action, target string, status int, actionErr error)
 	PruneAudit(ctx context.Context)
 	RequireOn(ctx context.Context, serviceID string, p identity.Perm) error
-	CleanupSecretHelpers(ctx context.Context, dk *docker.Client) error
+	CleanupSecretHelpers(ctx context.Context, dk domain.ContainerRuntime) error
 
 	// Network: what the manager runs on each server (Traefik, the tunnel)
 	// and a server's public IP and tunnel.
@@ -112,8 +119,8 @@ type Manager interface {
 	RegistryAuth(ctx context.Context, image string) string
 
 	// Data: the restore tests a crash left behind.
-	CleanupRestoreTests(ctx context.Context, dk *docker.Client) error
+	CleanupRestoreTests(ctx context.Context, dk domain.ContainerRuntime) error
 
 	// Projects: the containers of jobs that no longer run.
-	RemoveStaleJobContainers(ctx context.Context, dk *docker.Client, all []domain.Container)
+	RemoveStaleJobContainers(ctx context.Context, dk domain.ContainerRuntime, all []domain.Container)
 }

@@ -10,7 +10,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -238,7 +237,7 @@ func (c *Projects) cancelJobRuns(match func(jobID string, r jobRunning) bool) (i
 // RemoveJobContainers stops the service's runs before its volumes are
 // removed: their containers hold them. A cancelled run removes its container;
 // one that doesn't in time is removed here.
-func (c *Projects) RemoveJobContainers(ctx context.Context, dk *docker.Client, serviceID string) error {
+func (c *Projects) RemoveJobContainers(ctx context.Context, dk domain.ContainerRuntime, serviceID string) error {
 	match := func(_ string, r jobRunning) bool { return r.serviceID == serviceID }
 	ids := c.cancelJobRuns(match)
 	for deadline := time.Now().Add(domain.StopTimeout + 5*time.Second); len(c.cancelJobRuns(match)) > 0 && time.Now().Before(deadline); {

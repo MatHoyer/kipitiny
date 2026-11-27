@@ -13,10 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moby/moby/client"
-
 	"github.com/kipit-labs/kipitiny/internal/analytics"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
@@ -278,7 +275,7 @@ func (c *Monitoring) EnsureAnalytics(ctx context.Context) error {
 	if len(existing) == 1 && existing[0].Labels[domain.LabelConfigHash] == hash {
 		id = existing[0].ID
 		if existing[0].State != domain.StateRunning {
-			if _, err := dk.ContainerStart(ctx, id, client.ContainerStartOptions{}); err != nil {
+			if err := dk.StartContainer(ctx, id); err != nil {
 				return err
 			}
 		}
@@ -286,7 +283,7 @@ func (c *Monitoring) EnsureAnalytics(ctx context.Context) error {
 		if err := c.removeAnalytics(ctx, dk); err != nil {
 			return err
 		}
-		if _, err := dk.ImageInspect(ctx, opts.Image); err != nil {
+		if _, err := dk.InspectImage(ctx, opts.Image, ""); err != nil {
 			progress.Report(ctx, AnalyticsStepImage)
 		}
 		if err := dk.EnsureImage(ctx, opts.Image, c.mgr.RegistryAuth(ctx, opts.Image), ""); err != nil {
@@ -310,7 +307,7 @@ func (c *Monitoring) EnsureAnalytics(ctx context.Context) error {
 	return c.syncErrorProjects(ctx, id, st.Token)
 }
 
-func (c *Monitoring) removeAnalytics(ctx context.Context, dk *docker.Client) error {
+func (c *Monitoring) removeAnalytics(ctx context.Context, dk domain.ContainerRuntime) error {
 	existing, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: analyticsComponent})
 	if err != nil {
 		return err

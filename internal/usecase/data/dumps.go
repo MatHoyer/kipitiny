@@ -7,7 +7,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/storage"
 )
@@ -41,7 +40,7 @@ func (c *Data) dumpDatabase(ctx context.Context, svc domain.Service, containerID
 	b.PGVersion = version
 	if svc.Kind == domain.ServiceKindMongoDB {
 		return c.upload(ctx, st, target, b, func(w io.Writer) error {
-			err := dk.Exec(ctx, containerID, docker.ExecOptions{
+			err := dk.Exec(ctx, containerID, domain.ExecOptions{
 				Cmd:    append([]string{"mongodump", "--quiet", "--archive", "--gzip"}, mongoAuthArgs(svc)...),
 				Stdout: w,
 			})
@@ -53,7 +52,7 @@ func (c *Data) dumpDatabase(ctx context.Context, svc domain.Service, containerID
 	}
 	return c.upload(ctx, st, target, b, func(w io.Writer) error {
 		zw := gzip.NewWriter(w)
-		err := dk.Exec(ctx, containerID, docker.ExecOptions{
+		err := dk.Exec(ctx, containerID, domain.ExecOptions{
 			Cmd:    mysqlDumpCmd(svc.Kind, svc.Env[mysqlDatabase]),
 			Env:    mysqlExecEnv(svc),
 			Stdout: zw,
@@ -83,13 +82,13 @@ func mysqlDumpCmd(k domain.ServiceKind, db string) []string {
 
 // dumpServerVersion asks the server of a MySQL, MariaDB or MongoDB service
 // for its version.
-func dumpServerVersion(ctx context.Context, dk *docker.Client, containerID string, svc domain.Service) (string, error) {
-	opts := docker.ExecOptions{
+func dumpServerVersion(ctx context.Context, dk domain.ContainerRuntime, containerID string, svc domain.Service) (string, error) {
+	opts := domain.ExecOptions{
 		Cmd: []string{MySQLBin(svc.Kind, "mysql"), "-uroot", "-NBe", "SELECT VERSION()"},
 		Env: mysqlExecEnv(svc),
 	}
 	if svc.Kind == domain.ServiceKindMongoDB {
-		opts = docker.ExecOptions{
+		opts = domain.ExecOptions{
 			Cmd: append([]string{"mongosh", "--quiet", "--eval", "db.version()"}, mongoAuthArgs(svc)...),
 		}
 	}
@@ -120,7 +119,7 @@ func (c *Data) restoreDump(ctx context.Context, svc domain.Service, containerID 
 	db := svc.Env[mysqlDatabase]
 	scratch := db + "__restore"
 	admin := func(sql string) error {
-		return dk.Exec(ctx, containerID, docker.ExecOptions{
+		return dk.Exec(ctx, containerID, domain.ExecOptions{
 			Cmd: []string{MySQLBin(svc.Kind, "mysql"), "-uroot", "-e", sql},
 			Env: mysqlExecEnv(svc),
 		})
@@ -172,7 +171,7 @@ func (c *Data) checkDump(ctx context.Context, st storage.Storage, target domain.
 
 // loadDump streams a stored dump into the container ct of a server like
 // svc: a MySQL dump into database db, a MongoDB archive into the instance.
-func (c *Data) loadDump(ctx context.Context, dk *docker.Client, ct string, svc domain.Service, db string,
+func (c *Data) loadDump(ctx context.Context, dk domain.ContainerRuntime, ct string, svc domain.Service, db string,
 	st storage.Storage, target domain.BackupTarget, b domain.Backup) error {
 
 	rc, err := st.Get(ctx, b.ObjectKey)
@@ -186,7 +185,7 @@ func (c *Data) loadDump(ctx context.Context, dk *docker.Client, ct string, svc d
 			for _, name := range mongoSkipped {
 				cmd = append(cmd, "--nsExclude", name+".*")
 			}
-			if err := dk.Exec(ctx, ct, docker.ExecOptions{Cmd: append(cmd, mongoAuthArgs(svc)...), Stdin: r}); err != nil {
+			if err := dk.Exec(ctx, ct, domain.ExecOptions{Cmd: append(cmd, mongoAuthArgs(svc)...), Stdin: r}); err != nil {
 				return fmt.Errorf("mongorestore: %w", err)
 			}
 			return nil
@@ -195,7 +194,7 @@ func (c *Data) loadDump(ctx context.Context, dk *docker.Client, ct string, svc d
 		if err != nil {
 			return fmt.Errorf("read backup: %w", err)
 		}
-		err = dk.Exec(ctx, ct, docker.ExecOptions{
+		err = dk.Exec(ctx, ct, domain.ExecOptions{
 			Cmd:   []string{MySQLBin(svc.Kind, "mysql"), "-uroot", "--default-character-set=utf8mb4", "--", db},
 			Env:   mysqlExecEnv(svc),
 			Stdin: zr,
@@ -232,7 +231,7 @@ func (c *Data) verifyDump(ctx context.Context, b domain.Backup) (domain.Verifica
 	c.steps.Set(verifyKey(b.ID), VerifyCheck)
 	var out strings.Builder
 	if svc.Kind == domain.ServiceKindMongoDB {
-		err = dk.Exec(ctx, id, docker.ExecOptions{
+		err = dk.Exec(ctx, id, domain.ExecOptions{
 			Cmd:    append([]string{"mongosh", "--quiet", "--eval", mongoStatsJS}, mongoAuthArgs(svc)...),
 			Stdout: &out,
 		})
@@ -249,7 +248,7 @@ func (c *Data) verifyDump(ctx context.Context, b domain.Backup) (domain.Verifica
 // MariaDB, MongoDB) able to load it, and waits until it's ready; step
 // reports where it's at. svc describes it: kind, image, credentials. The
 // caller removes it with removeScratch.
-func (c *Data) scratchDump(ctx context.Context, b domain.Backup, name string, step func(string)) (domain.Service, *docker.Client, string, error) {
+func (c *Data) scratchDump(ctx context.Context, b domain.Backup, name string, step func(string)) (domain.Service, domain.ContainerRuntime, string, error) {
 	// The throwaway server is a service of its own: fresh credentials.
 	svc := domain.Service{Kind: b.ServiceKind, ServerID: domain.LocalServerID, MemoryMB: verifyMemoryMB}
 	svc.Image = MySQLImageFor(svc.Kind)
@@ -313,9 +312,9 @@ print(t + "|" + r + "|" + b);`
 
 // mysqlStats writes "tables|rows|bytes" of the service's database to out:
 // rows are counted exactly (InnoDB's estimates are rough).
-func mysqlStats(ctx context.Context, dk *docker.Client, ct string, svc domain.Service, out io.Writer) error {
+func mysqlStats(ctx context.Context, dk domain.ContainerRuntime, ct string, svc domain.Service, out io.Writer) error {
 	mysql := func(sql string, w io.Writer) error {
-		return dk.Exec(ctx, ct, docker.ExecOptions{
+		return dk.Exec(ctx, ct, domain.ExecOptions{
 			Cmd:    []string{MySQLBin(svc.Kind, "mysql"), "-uroot", "-NB", "-e", sql, "--", svc.Env[mysqlDatabase]},
 			Env:    mysqlExecEnv(svc),
 			Stdout: w,

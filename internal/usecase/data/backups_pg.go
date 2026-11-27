@@ -5,13 +5,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func (c *Data) serverVersion(ctx context.Context, svc domain.Service, containerID string) (string, error) {
 	var out strings.Builder
-	err := c.mgr.DockerFor(svc.ServerID).Exec(ctx, containerID, docker.ExecOptions{
+	err := c.mgr.DockerFor(svc.ServerID).Exec(ctx, containerID, domain.ExecOptions{
 		Cmd:    []string{"psql", "-U", svc.Env[PGUser], "-d", svc.Env[PGDatabase], "-tAc", "SHOW server_version"},
 		Stdout: &out,
 	})
@@ -43,7 +42,7 @@ func (c *Data) missingExtensions(ctx context.Context, svc domain.Service, contai
 // pgList runs a one-column query and returns its rows.
 func (c *Data) pgList(ctx context.Context, svc domain.Service, containerID, db, query string) ([]string, error) {
 	var out strings.Builder
-	err := c.mgr.DockerFor(svc.ServerID).Exec(ctx, containerID, docker.ExecOptions{
+	err := c.mgr.DockerFor(svc.ServerID).Exec(ctx, containerID, domain.ExecOptions{
 		Cmd:    []string{"psql", "-U", svc.Env[PGUser], "-d", db, "-v", "ON_ERROR_STOP=1", "-tAc", query},
 		Stdout: &out,
 	})

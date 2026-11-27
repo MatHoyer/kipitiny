@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestPgSelect(t *testing.T) {
@@ -61,7 +61,7 @@ func TestClientError(t *testing.T) {
 		"(error) WRONGTYPE Operation against a key":                             "WRONGTYPE Operation against a key",
 		"connection refused": "connection refused",
 	} {
-		err := clientError(&docker.ExecError{ExitCode: 1, Stderr: stderr})
+		err := clientError(&domain.ExecError{ExitCode: 1, Stderr: stderr})
 		if !errors.Is(err, ErrInvalid) || !strings.HasSuffix(err.Error(), ": "+want) {
 			t.Errorf("%q: got %v", stderr, err)
 		}

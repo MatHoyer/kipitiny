@@ -13,7 +13,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -54,7 +53,7 @@ func mysqlString(s string) string {
 
 // mysql runs sql as user (the read-only one unless root), one JSON line or
 // tab-separated row per result row, with statements cut after timeout.
-func (t dataTarget) mysql(sql string, root bool, timeout time.Duration, stdout io.Writer, extra ...string) docker.ExecOptions {
+func (t dataTarget) mysql(sql string, root bool, timeout time.Duration, extra ...string) domain.ExecOptions {
 	user, pw := readUser, readUserPassword(t.svc.Env[MySQLRootPassword])
 	if root {
 		user, pw = "root", t.svc.Env[MySQLRootPassword]
@@ -68,11 +67,10 @@ func (t dataTarget) mysql(sql string, root bool, timeout time.Duration, stdout i
 	cmd := append([]string{
 		MySQLBin(t.svc.Kind, "mysql"), "-u" + user, "--default-character-set=utf8mb4", "--init-command=" + limit,
 	}, extra...)
-	return docker.ExecOptions{
-		Cmd:    append(cmd, "-D", t.db),
-		Env:    []string{"MYSQL_PWD=" + pw},
-		Stdin:  strings.NewReader(sql),
-		Stdout: stdout,
+	return domain.ExecOptions{
+		Cmd:   append(cmd, "-D", t.db),
+		Env:   []string{"MYSQL_PWD=" + pw},
+		Stdin: strings.NewReader(sql),
 	}
 }
 
@@ -83,7 +81,7 @@ func (t dataTarget) mysqlJSON(ctx context.Context, sql string, fn func([]json.Ra
 	defer cancel()
 	// Raw: JSON escapes newlines itself, and batch mode would double its
 	// backslashes.
-	return t.execLines(ctx, t.mysql(sql, false, dataBrowseTimeout, nil, "-N", "-B", "--raw"), func(line []byte) error {
+	return t.execLines(ctx, t.mysql(sql, false, dataBrowseTimeout, "-N", "-B", "--raw"), func(line []byte) error {
 		var row []json.RawMessage
 		if err := json.Unmarshal(line, &row); err != nil {
 			return fmt.Errorf("mysql output: %w", err)
@@ -131,7 +129,7 @@ func (t dataTarget) mysqlCreateDatabase(ctx context.Context, name string) error 
 	sql := fmt.Sprintf("SET SESSION sql_mode = CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), 'NO_BACKSLASH_ESCAPES'); "+
 		"CREATE DATABASE %s; GRANT ALL ON %s.* TO %s@'%%'",
 		mysqlIdent(name), mysqlIdent(name), mysqlQuote(t.svc.Env[mysqlUser]))
-	return clientError(t.dk.Exec(ctx, t.container, t.mysql(sql, true, dataConsoleTimeout, nil)))
+	return clientError(t.dk.Exec(ctx, t.container, t.mysql(sql, true, dataConsoleTimeout)))
 }
 
 type mysqlColumn struct {
@@ -377,7 +375,7 @@ func (t dataTarget) mysqlExport(ctx context.Context, schema, table string, q Row
 	}
 	wroteHeader := false
 	record := make([]string, len(cols))
-	err = t.execLines(ctx, t.mysql(sql, false, dataExportTimeout, nil, "-N", "-B", "--raw"), func(line []byte) error {
+	err = t.execLines(ctx, t.mysql(sql, false, dataExportTimeout, "-N", "-B", "--raw"), func(line []byte) error {
 		if !wroteHeader {
 			wroteHeader = true
 			if err := cw.Write(header); err != nil {

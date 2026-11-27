@@ -13,6 +13,8 @@ import (
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
+
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // ReplaceContainer recreates container id from image, keeping its name,
@@ -92,18 +94,14 @@ func (c *Client) restart(ctx context.Context, id string, logf func(string, ...an
 	}
 }
 
-// LegacyImage is where releases were published before the repository moved,
-// which compose files still name.
-const LegacyImage = "ghcr.io/mathoyer/kipitiny"
-
-// floating reports whether ref names image's repository, or LegacyImage,
+// floating reports whether ref names image's repository, or domain.LegacyImage,
 // untagged or as latest.
 func floating(ref, image string) bool {
 	repo := image
 	if i := strings.LastIndex(image, ":"); i >= 0 && !strings.Contains(image[i:], "/") {
 		repo = image[:i]
 	}
-	for _, r := range []string{repo, LegacyImage} {
+	for _, r := range []string{repo, domain.LegacyImage} {
 		if ref == r || ref == r+":latest" {
 			return true
 		}

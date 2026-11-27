@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
@@ -68,8 +67,10 @@ func (f *fakeManager) Audit(context.Context, string, string, int, error) {}
 
 func (f *fakeManager) RequireOn(context.Context, string, identity.Perm) error { return nil }
 
-func (f *fakeManager) CleanupSecretHelpers(context.Context, *docker.Client) error { return nil }
-func (f *fakeManager) CleanupRestoreTests(context.Context, *docker.Client) error  { return nil }
+func (f *fakeManager) CleanupSecretHelpers(context.Context, domain.ContainerRuntime) error {
+	return nil
+}
+func (f *fakeManager) CleanupRestoreTests(context.Context, domain.ContainerRuntime) error { return nil }
 
 func (f *fakeManager) EnsureTraefik(context.Context, domain.Server) error  { return nil }
 func (f *fakeManager) EnsureTunnel(context.Context, domain.Server) error   { return nil }
@@ -106,5 +107,5 @@ func (f *fakeManager) DeployLogPath(serviceID, deployID string) string {
 
 func (f *fakeManager) RegistryAuth(context.Context, string) string { return "" }
 
-func (f *fakeManager) RemoveStaleJobContainers(context.Context, *docker.Client, []domain.Container) {
+func (f *fakeManager) RemoveStaleJobContainers(context.Context, domain.ContainerRuntime, []domain.Container) {
 }

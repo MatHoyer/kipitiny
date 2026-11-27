@@ -8,14 +8,13 @@ import (
 	"log/slog"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // Manager is what network uses from the rest of the manager.
 type Manager interface {
 	// DockerFor is the Docker client of a server.
-	DockerFor(serverID string) *docker.Client
+	DockerFor(serverID string) domain.ContainerRuntime
 	// RegistryAuth is the credential to pull image with, "" for none.
 	RegistryAuth(ctx context.Context, image string) string
 	// GoLoop runs f in the background until the manager stops.

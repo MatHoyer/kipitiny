@@ -6,8 +6,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,7 +16,6 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
-	"github.com/moby/moby/api/types/registry"
 	"github.com/moby/moby/client"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
@@ -187,12 +184,6 @@ func Platform(s string) *ocispec.Platform {
 	}
 	parts := append(strings.SplitN(s, "/", 3), "", "")
 	return &ocispec.Platform{OS: parts[0], Architecture: parts[1], Variant: parts[2]}
-}
-
-// RegistryAuth encodes a registry credential for PullImage.
-func RegistryAuth(host, username, password string) string {
-	b, _ := json.Marshal(registry.AuthConfig{Username: username, Password: password, ServerAddress: host})
-	return base64.URLEncoding.EncodeToString(b)
 }
 
 // Login checks a registry credential: the daemon signs in to the registry.

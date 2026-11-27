@@ -10,9 +10,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/client"
-
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 )
@@ -149,7 +146,7 @@ func (c *Data) verify(ctx context.Context, b domain.Backup) (domain.Verification
 	// The image's init scripts may have filled db (PostGIS creates its
 	// extensions there): restore into an empty database, as a restore does.
 	const restored = "restore_test"
-	if err := dk.Exec(ctx, id, docker.ExecOptions{
+	if err := dk.Exec(ctx, id, domain.ExecOptions{
 		Cmd: []string{"psql", "-U", user, "-d", db, "-v", "ON_ERROR_STOP=1", "-qc", "CREATE DATABASE " + restored + " TEMPLATE template0"},
 	}); err != nil {
 		return d, fmt.Errorf("create database: %w", err)
@@ -172,7 +169,7 @@ SELECT (SELECT count(*) FROM pg_stat_user_tables),
        (SELECT coalesce(sum(n_live_tup), 0) FROM pg_stat_user_tables),
        pg_database_size(current_database());`
 	var out strings.Builder
-	if err := dk.Exec(ctx, id, docker.ExecOptions{
+	if err := dk.Exec(ctx, id, domain.ExecOptions{
 		Cmd:    []string{"psql", "-U", user, "-d", restored, "-v", "ON_ERROR_STOP=1", "-tAq", "-c", query},
 		Stdout: &out,
 	}); err != nil {
@@ -185,7 +182,7 @@ SELECT (SELECT count(*) FROM pg_stat_user_tables),
 // b, with the superuser user and the database db, and waits until it's
 // ready; step reports where it's at (VerifyImage, VerifyServer). The caller
 // removes it with removeScratch.
-func (c *Data) scratchPostgres(ctx context.Context, b domain.Backup, name, user, db string, step func(string)) (*docker.Client, string, error) {
+func (c *Data) scratchPostgres(ctx context.Context, b domain.Backup, name, user, db string, step func(string)) (domain.ContainerRuntime, string, error) {
 	image, serverID := c.verifyImage(ctx, b)
 	dk := c.mgr.DockerFor(serverID)
 	step(VerifyImage)
@@ -220,7 +217,7 @@ func (c *Data) scratchPostgres(ctx context.Context, b domain.Backup, name, user,
 
 // removeScratch removes a throwaway server and its data, an anonymous
 // volume.
-func (c *Data) removeScratch(ctx context.Context, dk *docker.Client, id string) {
+func (c *Data) removeScratch(ctx context.Context, dk domain.ContainerRuntime, id string) {
 	if err := dk.RemoveContainerAndVolumes(context.WithoutCancel(ctx), id); err != nil {
 		c.log.Warn("cannot remove throwaway server", "id", id[:12], "err", err)
 	}
@@ -272,7 +269,7 @@ func (c *Data) verifyImage(ctx context.Context, b domain.Backup) (image, serverI
 
 // CleanupRestoreTests removes throwaway containers (restore tests, volume
 // helpers) and staging volumes left by a crash.
-func (c *Data) CleanupRestoreTests(ctx context.Context, dk *docker.Client) error {
+func (c *Data) CleanupRestoreTests(ctx context.Context, dk domain.ContainerRuntime) error {
 	for _, component := range []string{verifyComponent, volumeHelperComponent} {
 		cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: component})
 		if err != nil {
@@ -284,12 +281,11 @@ func (c *Data) CleanupRestoreTests(ctx context.Context, dk *docker.Client) error
 			}
 		}
 	}
-	f := make(client.Filters).Add("label", domain.LabelComponent+"="+volumeStageComponent)
-	vols, err := dk.VolumeList(ctx, client.VolumeListOptions{Filters: f})
+	vols, err := dk.ListVolumes(ctx, domain.Filter{}.Add("label", domain.LabelComponent+"="+volumeStageComponent))
 	if err != nil {
 		return err
 	}
-	for _, v := range vols.Items {
+	for _, v := range vols {
 		if err := dk.RemoveVolume(ctx, v.Name); err != nil {
 			return err
 		}

@@ -15,7 +15,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
 	"github.com/kipit-labs/kipitiny/internal/notify"
@@ -239,7 +238,7 @@ func (c *Data) dump(ctx context.Context, svc domain.Service, containerID string,
 		return fmt.Errorf("extensions: %w", err)
 	}
 	return c.upload(ctx, st, target, b, func(w io.Writer) error {
-		err := c.mgr.DockerFor(svc.ServerID).Exec(ctx, containerID, docker.ExecOptions{
+		err := c.mgr.DockerFor(svc.ServerID).Exec(ctx, containerID, domain.ExecOptions{
 			// Custom format: compressed, and pg_restore can restore selectively.
 			Cmd:    []string{"pg_dump", "-U", svc.Env[PGUser], "-d", backupDatabase(svc, *b), "-Fc"},
 			Stdout: w,
@@ -287,7 +286,7 @@ func (c *Data) upload(ctx context.Context, st storage.Storage, target domain.Bac
 
 	// When the upload fails first, the producer only sees a broken pipe:
 	// report the upload error then.
-	var exitErr *docker.ExecError
+	var exitErr *domain.ExecError
 	switch {
 	case errors.As(err, &exitErr):
 		return err

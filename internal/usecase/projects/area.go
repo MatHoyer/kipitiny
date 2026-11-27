@@ -8,7 +8,6 @@ import (
 	"log/slog"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
@@ -51,7 +50,7 @@ func New(bg context.Context, cfg *config.Config, store domain.Store, cron domain
 // Manager is what projects uses from the rest of the manager.
 type Manager interface {
 	// DockerFor is the Docker client of a server.
-	DockerFor(serverID string) *docker.Client
+	DockerFor(serverID string) domain.ContainerRuntime
 	// GoBackground runs an operation the manager waits for on shutdown,
 	// GoLoop a loop that ends with it.
 	GoBackground(f func()) error
@@ -74,7 +73,7 @@ type Manager interface {
 	ApplyCompose(ctx context.Context, projectID string, data []byte, opts deploy.ApplyOptions) (deploy.ComposePlan, error)
 	ApplyGitCompose(ctx context.Context, projectID string, data []byte, opts deploy.ApplyOptions, files func(path string) ([]domain.ServiceFile, error)) (deploy.ComposePlan, map[string]string, error)
 	PlanCompose(ctx context.Context, project domain.Project, data []byte, opts deploy.ApplyOptions) (deploy.ComposePlan, error)
-	StartJobContainer(ctx context.Context, project domain.Project, svc domain.Service, j domain.Job, runID string, logf func(string, ...any)) (*docker.Client, string, error)
+	StartJobContainer(ctx context.Context, project domain.Project, svc domain.Service, j domain.Job, runID string, logf func(string, ...any)) (domain.ContainerRuntime, string, error)
 	RemoveServiceContainers(ctx context.Context, svc domain.Service) error
 	RemoveDeployLogs(serviceID string)
 }

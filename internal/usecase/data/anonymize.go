@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/storage"
@@ -250,7 +249,7 @@ func (c *Data) anonymizePostgres(ctx context.Context, src domain.Backup, cp *dom
 	defer c.removeScratch(ctx, dk, id)
 	// An empty database, as a restore does (the image may fill db).
 	const anon = "anonymized"
-	if err := dk.Exec(ctx, id, docker.ExecOptions{
+	if err := dk.Exec(ctx, id, domain.ExecOptions{
 		Cmd: []string{"psql", "-U", user, "-d", db, "-v", "ON_ERROR_STOP=1", "-qc", "CREATE DATABASE " + anon + " TEMPLATE template0"},
 	}); err != nil {
 		return fmt.Errorf("create database: %w", err)
@@ -265,7 +264,7 @@ func (c *Data) anonymizePostgres(ctx context.Context, src domain.Backup, cp *dom
 		return err
 	}
 	c.steps.Set(key, AnonymizeRules)
-	if err := dk.Exec(ctx, id, docker.ExecOptions{
+	if err := dk.Exec(ctx, id, domain.ExecOptions{
 		Cmd:    []string{"psql", "-X", "-q", "-1", "-v", "ON_ERROR_STOP=1", "-U", user, "-d", anon},
 		Stdin:  strings.NewReader(script),
 		Stdout: io.Discard,
@@ -273,7 +272,7 @@ func (c *Data) anonymizePostgres(ctx context.Context, src domain.Backup, cp *dom
 		return fmt.Errorf("apply rules: %w", err)
 	}
 	return c.upload(ctx, st, target, cp, func(w io.Writer) error {
-		if err := dk.Exec(ctx, id, docker.ExecOptions{Cmd: []string{"pg_dump", "-U", user, "-d", anon, "-Fc"}, Stdout: w}); err != nil {
+		if err := dk.Exec(ctx, id, domain.ExecOptions{Cmd: []string{"pg_dump", "-U", user, "-d", anon, "-Fc"}, Stdout: w}); err != nil {
 			return fmt.Errorf("pg_dump: %w", err)
 		}
 		return nil
@@ -296,7 +295,7 @@ func (c *Data) anonymizeDump(ctx context.Context, src domain.Backup, cp *domain.
 		return err
 	}
 	c.steps.Set(key, AnonymizeRules)
-	opts := docker.ExecOptions{Stdout: io.Discard}
+	opts := domain.ExecOptions{Stdout: io.Discard}
 	if svc.Kind == domain.ServiceKindMongoDB {
 		script, env, err := anonymize.Mongo(rules, salt, mongoDB)
 		if err != nil {

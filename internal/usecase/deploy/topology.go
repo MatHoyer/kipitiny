@@ -11,10 +11,8 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	dockernet "github.com/moby/moby/api/types/network"
-
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/selfcontainer"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
@@ -197,11 +195,11 @@ func (c *Deployer) serverTopology(ctx context.Context, sv domain.Server, project
 
 	dk := c.mgr.DockerFor(sv.ID)
 	var cts []domain.Container
-	nets := map[string]dockernet.Summary{}
+	nets := map[string]domain.DockerNetwork{}
 	cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelManaged: "true"})
 	if err == nil {
-		var ns []dockernet.Summary
-		if ns, err = dk.ListNetworksMoby(ctx); err == nil {
+		var ns []domain.DockerNetwork
+		if ns, err = dk.ListNetworks(ctx); err == nil {
 			for _, n := range ns {
 				nets[n.Name] = n
 			}
@@ -292,13 +290,13 @@ func (c *Deployer) entrypoints(tunnel bool) []Entrypoint {
 	return []Entrypoint{web, secure}
 }
 
-func (c *Deployer) managerNode(ctx context.Context, dk *docker.Client) *ManagerNode {
+func (c *Deployer) managerNode(ctx context.Context, dk domain.ContainerRuntime) *ManagerNode {
 	m := &ManagerNode{}
 	if c.cfg.Traefik.Enabled {
 		m.Domain = c.cfg.Domain
 	}
 	_, port, _ := net.SplitHostPort(c.cfg.Addr)
-	id := docker.SelfContainerID()
+	id := selfcontainer.ID()
 	if id == "" {
 		m.Upstream = network.ManagerHost + ":" + port
 		return m
@@ -310,21 +308,15 @@ func (c *Deployer) managerNode(ctx context.Context, dk *docker.Client) *ManagerN
 	return m
 }
 
-func topoNetwork(nets map[string]dockernet.Summary, name, projectID string, known bool) TopoNetwork {
+func topoNetwork(nets map[string]domain.DockerNetwork, name, projectID string, known bool) TopoNetwork {
 	tn := TopoNetwork{Name: name, ProjectID: projectID}
 	n, ok := nets[name]
 	if !ok {
 		tn.Missing = known
 		return tn
 	}
-	if len(n.IPAM.Config) > 0 {
-		cfg := n.IPAM.Config[0]
-		if cfg.Subnet.IsValid() {
-			tn.Subnet = cfg.Subnet.String()
-		}
-		if cfg.Gateway.IsValid() {
-			tn.Gateway = cfg.Gateway.String()
-		}
+	if len(n.Subnets) > 0 {
+		tn.Subnet, tn.Gateway = n.Subnets[0].Subnet, n.Subnets[0].Gateway
 	}
 	return tn
 }

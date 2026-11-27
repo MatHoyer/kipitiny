@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 	"github.com/kipit-labs/kipitiny/internal/secrets"
@@ -52,7 +51,7 @@ func NewSecretKind(open func(conn string) secrets.Provider) SecretKind {
 
 // SecretKinds are the password managers this build offers. Their CLIs run in
 // helper containers on the manager's own Docker (none without one, in tests).
-func SecretKinds(cfg config.Config, local *docker.Client) []SecretKind {
+func SecretKinds(cfg config.Config, local domain.ContainerRuntime) []SecretKind {
 	if local == nil {
 		return nil
 	}
@@ -114,7 +113,7 @@ func (c *Identity) CloseSecretProviders(ctx context.Context) error {
 
 // CleanupSecretHelpers removes the helper containers a crash left, of any
 // connection.
-func (c *Identity) CleanupSecretHelpers(ctx context.Context, dk *docker.Client) error {
+func (c *Identity) CleanupSecretHelpers(ctx context.Context, dk domain.ContainerRuntime) error {
 	cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: protonpass.Component})
 	if err != nil {
 		return err

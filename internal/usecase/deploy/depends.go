@@ -6,10 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/client"
-
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -96,23 +92,18 @@ func awaited(svcs []domain.Service) map[string]string {
 
 // waitCondition waits until a container meets a dependency condition,
 // at most dependencyTimeout.
-func (c *Deployer) waitCondition(ctx context.Context, dk *docker.Client, id string, svc domain.Service, cond string) error {
+func (c *Deployer) waitCondition(ctx context.Context, dk domain.ContainerRuntime, id string, svc domain.Service, cond string) error {
 	ctx, cancel := context.WithTimeout(ctx, dependencyTimeout)
 	defer cancel()
 	switch cond {
 	case "healthy":
 		return c.waitReady(ctx, dk, id, svc.Runtime.Restart)
 	case "completed":
-		wait := dk.ContainerWait(ctx, id, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
-		select {
-		case res := <-wait.Result:
-			if res.StatusCode != 0 {
-				return fmt.Errorf("exited with code %d", res.StatusCode)
-			}
-			return nil
-		case err := <-wait.Error:
-			return err
+		code, err := dk.WaitContainer(ctx, id)
+		if err == nil && code != 0 {
+			return fmt.Errorf("exited with code %d", code)
 		}
+		return err
 	}
 	return nil
 }

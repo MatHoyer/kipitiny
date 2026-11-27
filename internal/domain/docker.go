@@ -1,6 +1,10 @@
 package domain
 
-import "strings"
+import (
+	"encoding/base64"
+	"encoding/json"
+	"strings"
+)
 
 // The labels and network names of everything the manager creates on Docker.
 const (
@@ -79,4 +83,19 @@ func LabelFilter(labels map[string]string) Filter {
 		f.Add("label", k+"="+v)
 	}
 	return f
+}
+
+// LegacyImage is where the manager's releases were published before the
+// repository moved, which compose files still name.
+const LegacyImage = "ghcr.io/mathoyer/kipitiny"
+
+// RegistryAuth encodes a registry credential for PullImage, EnsureImage and
+// ImagePlatforms, as the Engine API takes it (X-Registry-Auth).
+func RegistryAuth(server, username, password string) string {
+	b, _ := json.Marshal(struct {
+		Username      string `json:"username,omitempty"`
+		Password      string `json:"password,omitempty"`
+		ServerAddress string `json:"serveraddress,omitempty"`
+	}{username, password, server})
+	return base64.URLEncoding.EncodeToString(b)
 }

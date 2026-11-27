@@ -13,11 +13,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
-	"github.com/moby/moby/client"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-
 	"github.com/kipit-labs/kipitiny/internal/compose"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
@@ -257,7 +253,7 @@ func (a *applier) checkChange(ctx context.Context, old, svc domain.Service) erro
 // under emulation) and refuses one its image doesn't ship. A server or
 // registry that doesn't answer skips the check: the pull would tell.
 func (a *applier) checkPlatform(ctx context.Context, name string, svc domain.Service) error {
-	want := docker.Platform(svc.Runtime.Platform)
+	want := domain.ParsePlatform(svc.Runtime.Platform)
 	dk := a.c.mgr.DockerFor(svc.ServerID)
 	if want == nil || dk == nil {
 		return nil
@@ -266,10 +262,10 @@ func (a *applier) checkPlatform(ctx context.Context, name string, svc domain.Ser
 		a.warn("service %s: platform %s isn't the server's (%s/%s): it runs under emulation, slowly, and needs QEMU (binfmt) on the server",
 			name, svc.Runtime.Platform, info.OS, info.Arch)
 	}
-	res, err := dk.DistributionInspect(ctx, svc.Image, client.DistributionInspectOptions{EncodedRegistryAuth: a.c.RegistryAuth(ctx, svc.Image)})
+	have, err := dk.ImagePlatforms(ctx, svc.Image, a.c.RegistryAuth(ctx, svc.Image))
 	// Without the image's platform list (unreachable registry, single
 	// platform image), there's nothing to check.
-	if others := otherPlatforms(res.Platforms, *want); err == nil && len(res.Platforms) > 0 && others != nil {
+	if others := otherPlatforms(have, *want); err == nil && len(have) > 0 && others != nil {
 		return fmt.Errorf("%w: image %s has no %s platform (it has %s)", ErrInvalid, svc.Image, svc.Runtime.Platform, strings.Join(others, ", "))
 	}
 	return nil
@@ -277,7 +273,7 @@ func (a *applier) checkPlatform(ctx context.Context, name string, svc domain.Ser
 
 // otherPlatforms lists an image's platforms when none is want; nil when one
 // is (arm64 is arm64/v8).
-func otherPlatforms(have []ocispec.Platform, want ocispec.Platform) []string {
+func otherPlatforms(have []domain.Platform, want domain.Platform) []string {
 	others := []string{}
 	for _, p := range have {
 		if p.OS == want.OS && p.Architecture == want.Architecture && (want.Variant == p.Variant || want.Variant == "" || (want.Variant == "v8" && p.Variant == "")) {

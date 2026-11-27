@@ -16,7 +16,6 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
@@ -58,21 +57,35 @@ func (c *Servers) SSHPublicKey(ctx context.Context) (string, error) {
 	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey()))) + " kipitiny", nil
 }
 
-// connectServer builds the Docker client of a remote server (used by the pool).
-func (c *Servers) connectServer(id string) (*docker.Client, error) {
+// RemoteDocker is how the pool reaches a remote server's Docker daemon:
+// its Unix socket through an SSH connection.
+type RemoteDocker struct {
+	Host   string
+	Port   int
+	User   string
+	Socket string
+	Signer ssh.Signer
+	// HostKey pins the server's key (authorized_keys format). When empty the
+	// first key seen is trusted and passed to OnNewHostKey to be pinned.
+	HostKey      string
+	OnNewHostKey func(key string) error
+}
+
+// RemoteDocker returns how to reach a remote server's daemon (for the pool).
+func (c *Servers) RemoteDocker(id string) (RemoteDocker, error) {
 	ctx := context.WithoutCancel(c.bg)
 	sv, err := c.store.GetServer(ctx, id)
 	if err != nil {
-		return nil, err
+		return RemoteDocker{}, err
 	}
 	if sv.Kind != domain.ServerSSH {
-		return nil, fmt.Errorf("server %s is not remote", sv.Name)
+		return RemoteDocker{}, fmt.Errorf("server %s is not remote", sv.Name)
 	}
 	signer, err := c.managerKey(ctx)
 	if err != nil {
-		return nil, err
+		return RemoteDocker{}, err
 	}
-	return docker.NewSSH(docker.SSHConfig{
+	return RemoteDocker{
 		Host: sv.Host, Port: sv.Port, User: sv.SSHUser, Socket: sv.Socket, Signer: signer,
 		HostKey: sv.HostKey,
 		// Trust on first use: pin the key the first connection saw.
@@ -82,7 +95,7 @@ func (c *Servers) connectServer(id string) (*docker.Client, error) {
 			c.log.Info("pinned SSH host key", "server", sv.Name, "key", sv.HostKey)
 			return err
 		},
-	})
+	}, nil
 }
 
 type ServerInput struct {
@@ -101,10 +114,10 @@ type ServerView struct {
 	DetectedIP string `json:"detectedIp,omitempty"`
 	// Tunnel is where its Cloudflare tunnel token comes from: "server"
 	// (set in the UI), "env" (KIPITINY_CLOUDFLARE_TUNNEL_TOKEN) or "".
-	Tunnel      string       `json:"tunnel,omitempty"`
-	Docker      *docker.Info `json:"docker,omitempty"`
-	DockerError string       `json:"dockerError,omitempty"`
-	Projects    int          `json:"projects"`
+	Tunnel      string             `json:"tunnel,omitempty"`
+	Docker      *domain.DockerInfo `json:"docker,omitempty"`
+	DockerError string             `json:"dockerError,omitempty"`
+	Projects    int                `json:"projects"`
 }
 
 // ListServers returns every server with a live status (a short timeout per

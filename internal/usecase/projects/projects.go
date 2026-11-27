@@ -109,7 +109,7 @@ func (c *Projects) RemoveProject(ctx context.Context, p domain.Project) error {
 		c.ForgetServiceJobs(s.ID)
 	}
 	dk := c.mgr.DockerFor(p.ServerID)
-	nets, err := dk.ListNetworksMoby(ctx)
+	nets, err := dk.ListNetworks(ctx)
 	if err != nil {
 		return err
 	}

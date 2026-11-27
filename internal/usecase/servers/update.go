@@ -12,12 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/moby/moby/client"
-
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/registry"
+	"github.com/kipit-labs/kipitiny/internal/selfcontainer"
 	"github.com/kipit-labs/kipitiny/internal/upgrade"
 )
 
@@ -212,16 +210,16 @@ func (c *Servers) inspectPin(ctx context.Context) {
 	u.mu.Lock()
 	done := u.inspected
 	u.mu.Unlock()
-	self := docker.SelfContainerID()
+	self := selfcontainer.ID()
 	if done || self == "" {
 		return
 	}
-	res, err := c.DockerFor(domain.LocalServerID).ContainerInspect(ctx, self, client.ContainerInspectOptions{})
+	res, err := c.DockerFor(domain.LocalServerID).InspectContainer(ctx, self)
 	if err != nil {
 		c.log.Warn("cannot inspect the manager's container", "err", err)
 		return
 	}
-	pinned := composePin(res.Container.Config.Image, res.Container.Config.Labels)
+	pinned := composePin(res.Image, res.Labels)
 	u.mu.Lock()
 	u.pinned, u.inspected = pinned, true
 	u.mu.Unlock()
@@ -266,7 +264,7 @@ func (c *Servers) Update() UpdateInfo {
 		info.CheckedAt = &t
 	}
 	switch {
-	case docker.SelfContainerID() == "":
+	case selfcontainer.ID() == "":
 		info.Reason = "the manager isn't running in a container: update it the way it was installed"
 	case u.pinned != "":
 		info.Reason = "the compose file pins version " + u.pinned + " (KIPITINY_VERSION), which its next up would " +
@@ -279,10 +277,10 @@ func (c *Servers) Update() UpdateInfo {
 
 // ApplyUpdate installs the latest version: it pulls the image, then starts a
 // short-lived updater container that replaces this manager's container (see
-// docker.ReplaceContainer) and restores it if the new one isn't healthy.
+// the docker adapter's ReplaceContainer) and restores it if the new one isn't healthy.
 // Apps, Traefik and databases keep running throughout.
 func (c *Servers) ApplyUpdate(ctx context.Context) (UpdateInfo, error) {
-	self := docker.SelfContainerID()
+	self := selfcontainer.ID()
 	if self == "" {
 		return UpdateInfo{}, fmt.Errorf("%w: the manager isn't running in a container", ErrInvalid)
 	}
@@ -335,9 +333,9 @@ func (c *Servers) launchUpdater(ctx context.Context, self, ref string) error {
 	}
 	// A compose file on :latest (or no tag) would otherwise bring back the
 	// old image on its next `up`, since that's what the tag still names here.
-	if res, err := dk.ContainerInspect(ctx, self, client.ContainerInspectOptions{}); err == nil {
-		if running := res.Container.Config.Image; floatingTag(running, c.cfg.Update.Image) {
-			if _, err := dk.ImageTag(ctx, client.ImageTagOptions{Source: ref, Target: running}); err != nil {
+	if res, err := dk.InspectContainer(ctx, self); err == nil {
+		if running := res.Image; floatingTag(running, c.cfg.Update.Image) {
+			if err := dk.TagImage(ctx, ref, running); err != nil {
 				return fmt.Errorf("tag %s: %w", running, err)
 			}
 		}
@@ -373,7 +371,7 @@ func (c *Servers) launchUpdater(ctx context.Context, self, ref string) error {
 // floatingTag reports whether ref is image (or the image's name before the
 // move to kipit-labs, which compose files still name) without tag or tagged latest.
 func floatingTag(ref, image string) bool {
-	for _, img := range []string{image, docker.LegacyImage} {
+	for _, img := range []string{image, domain.LegacyImage} {
 		if ref == img || ref == img+":latest" {
 			return true
 		}
@@ -383,7 +381,7 @@ func floatingTag(ref, image string) bool {
 
 // cleanupUpdater removes finished updater containers, copying their output
 // into the manager's log first: it is the only record of how an update went.
-func (c *Servers) cleanupUpdater(ctx context.Context, dk *docker.Client) {
+func (c *Servers) cleanupUpdater(ctx context.Context, dk domain.ContainerRuntime) {
 	cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: updaterComponent})
 	if err != nil {
 		return
@@ -392,7 +390,7 @@ func (c *Servers) cleanupUpdater(ctx context.Context, dk *docker.Client) {
 		if ct.State == domain.StateRunning {
 			continue
 		}
-		if lines, err := containerLogs(ctx, dk, ct, client.ContainerLogsOptions{Tail: "50"}); err == nil {
+		if lines, err := containerLogs(ctx, dk, ct, domain.LogOptions{Tail: "50"}); err == nil {
 			for _, l := range lines {
 				c.log.Info("updater: " + strings.TrimSpace(l.Text))
 			}
