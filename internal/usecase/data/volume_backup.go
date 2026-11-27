@@ -260,7 +260,7 @@ func (c *Data) restoreVolumes(ctx context.Context, svc domain.Service, st storag
 	}
 	defer c.removeHelper(ctx, dk, id)
 
-	err = fromStorage(rc, target, b, func(archive io.Reader) error {
+	err = c.fromStorage(rc, target, b, func(archive io.Reader) error {
 		if err := dk.Exec(ctx, id, docker.ExecOptions{
 			Cmd:   []string{"tar", "-xzf", "-", "--numeric-owner", "-C", helperStageRoot},
 			Stdin: archive,
@@ -356,7 +356,7 @@ func (c *Data) verifyVolumes(ctx context.Context, b domain.Backup) (domain.Verif
 	}
 	defer rc.Close()
 	files := &lineCounter{}
-	err = fromStorage(rc, target, b, func(archive io.Reader) error {
+	err = c.fromStorage(rc, target, b, func(archive io.Reader) error {
 		if err := dk.Exec(ctx, id, docker.ExecOptions{Cmd: []string{"tar", "-tzf", "-"}, Stdin: archive, Stdout: files}); err != nil {
 			return fmt.Errorf("read archive: %w", err)
 		}

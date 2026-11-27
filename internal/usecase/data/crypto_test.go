@@ -10,15 +10,15 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
 	"github.com/kipit-labs/kipitiny/internal/storage"
-	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
 func TestUploadEncrypted(t *testing.T) {
 	ctx := context.Background()
 	c := newTestData(t, config.Config{DataDir: t.TempDir()}, nil)
 	st := &storage.Local{Root: t.TempDir()}
-	ageIdentity, recipient, err := identity.NewAgeKey()
+	ageIdentity, recipient, err := age.Encryption{}.NewKey()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestUploadEncrypted(t *testing.T) {
 	if bytes.Contains(stored, []byte("pg_dump output")) {
 		t.Fatal("stored object is not encrypted")
 	}
-	dec, err := identity.DecryptFrom(bytes.NewReader(stored), ageIdentity)
+	dec, err := c.decryptFrom(bytes.NewReader(stored), ageIdentity)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,8 +52,8 @@ func TestUploadEncrypted(t *testing.T) {
 		t.Fatalf("round-trip failed: %v (len %d)", err, len(got))
 	}
 
-	other, _, _ := identity.NewAgeKey()
-	if dec, err := identity.DecryptFrom(bytes.NewReader(stored), other); err == nil {
+	other, _, _ := age.Encryption{}.NewKey()
+	if dec, err := c.decryptFrom(bytes.NewReader(stored), other); err == nil {
 		if _, err := io.ReadAll(dec); err == nil {
 			t.Fatal("decrypted with the wrong key")
 		}

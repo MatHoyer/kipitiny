@@ -214,7 +214,7 @@ func (c *Data) runBackup(svc domain.Service, containerID string, st storage.Stor
 	} else {
 		log.Info("backup succeeded", "bytes", b.SizeBytes, "ms", b.DurationMS)
 		// Without it the backup is fine, only not adoptable by another manager.
-		if err := writeSidecar(ctx, st, target, b); err != nil {
+		if err := c.writeSidecar(ctx, st, target, b); err != nil {
 			log.Warn("cannot write backup sidecar", "err", err)
 		}
 	}
@@ -264,7 +264,7 @@ func (c *Data) upload(ctx context.Context, st storage.Storage, target domain.Bac
 		err := func() error {
 			var w io.Writer = pw
 			if target.Encrypted() {
-				enc, err := identity.EncryptTo(pw, target.AgeRecipient)
+				enc, err := c.encryptTo(pw, target.AgeRecipient)
 				if err != nil {
 					return err
 				}

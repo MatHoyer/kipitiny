@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
@@ -81,7 +82,7 @@ func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logg
 	c.Monitoring = monitoring.New(bg, &c.cfg, s, monitoringPorts{c}, log)
 	c.Identity = identity.New(cfg, s, identity.SecretKinds(cfg, local), c.Monitoring, log)
 	c.Network = network.New(bg, &c.cfg, s, networkPorts{c}, log)
-	c.Data = data.New(bg, &c.cfg, s, &c.steps, dataPorts{c}, log)
+	c.Data = data.New(bg, &c.cfg, s, age.Encryption{}, &c.steps, dataPorts{c}, log)
 	c.Deployer = deploy.New(bg, &c.cfg, s, &c.probes, deployPorts{c}, log)
 	c.Projects = projects.New(bg, &c.cfg, s, projectsPorts{c}, log)
 	return c
