@@ -247,7 +247,7 @@ function ProjectCard({
   return (
     // The checkbox sits over the card, outside the link: a button can't nest in it.
     <div className="relative">
-      <Link to={`/projects/${p.id}`} className="group block h-full rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+      <Link to={`/projects/${p.id}`} aria-label={p.name} className="group block h-full rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
         <Card
           className={cn(
             "h-full gap-3 px-4 transition-all group-hover:-translate-y-px group-hover:shadow-md group-hover:ring-foreground/20",
