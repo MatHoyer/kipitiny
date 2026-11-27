@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
@@ -285,7 +287,7 @@ func jobConflict(err error, name string) error {
 
 func applyJobInput(j *domain.Job, in JobInput) error {
 	in.Name, in.Command, in.Cron = strings.TrimSpace(in.Name), strings.TrimSpace(in.Command), strings.TrimSpace(in.Cron)
-	if !nameRe.MatchString(in.Name) {
+	if !domain.ValidName(in.Name) {
 		return fmt.Errorf("%w: job name must be lowercase letters, digits and dashes", ErrInvalid)
 	}
 	if in.Command == "" {
@@ -376,7 +378,7 @@ func (c *Core) startJobRun(ctx context.Context, id string) (domain.JobRun, error
 	}
 
 	r := domain.JobRun{JobID: j.ID, Status: domain.OpRunning}
-	if a, ok := ActorFrom(ctx); ok {
+	if a, ok := identity.ActorFrom(ctx); ok {
 		r.TriggeredBy = a.String()
 	}
 	if r, err = c.store.CreateJobRun(ctx, r); err != nil {

@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -38,7 +40,7 @@ func TestPushNotifications(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return WithActor(ctx, Actor{Kind: "user", Name: u.Username, UserID: u.ID, Role: role})
+		return identity.WithActor(ctx, identity.Actor{Kind: "user", Name: u.Username, UserID: u.ID, Role: role})
 	}
 	admin, member := actor(domain.RoleAdmin), actor(domain.RoleMember)
 	key, _ := ecdh.P256().GenerateKey(rand.Reader)
@@ -50,7 +52,7 @@ func TestPushNotifications(t *testing.T) {
 		return in
 	}
 
-	if _, err := c.SubscribePush(member, in("https://fcm.googleapis.com/fcm/send/m")); !errors.Is(err, ErrForbidden) {
+	if _, err := c.SubscribePush(member, in("https://fcm.googleapis.com/fcm/send/m")); !errors.Is(err, identity.ErrForbidden) {
 		t.Fatalf("member subscribes: %v", err)
 	}
 	if _, err := c.SubscribePush(admin, in("https://example.com/push")); !errors.Is(err, ErrInvalid) {

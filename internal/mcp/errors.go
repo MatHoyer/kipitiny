@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/analytics"
@@ -17,7 +19,7 @@ type listIssuesIn struct {
 }
 
 func (t *tools) listIssues(ctx context.Context, _ *mcp.CallToolRequest, in listIssuesIn) (*mcp.CallToolResult, core.ErrorsView, error) {
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, core.ErrorsView{}, friendly(err)
 	}
@@ -44,7 +46,7 @@ type getIssueOut struct {
 }
 
 func (t *tools) getIssue(ctx context.Context, _ *mcp.CallToolRequest, in getIssueIn) (*mcp.CallToolResult, getIssueOut, error) {
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, getIssueOut{}, friendly(err)
 	}
@@ -63,7 +65,7 @@ type setIssueStatusIn struct {
 }
 
 func (t *tools) setIssueStatus(ctx context.Context, _ *mcp.CallToolRequest, in setIssueStatusIn) (*mcp.CallToolResult, analytics.Issue, error) {
-	svc, err := t.service(ctx, in.Service, core.PermDeploy)
+	svc, err := t.service(ctx, in.Service, identity.PermDeploy)
 	if err != nil {
 		return nil, analytics.Issue{}, friendly(err)
 	}

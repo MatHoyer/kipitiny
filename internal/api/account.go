@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -27,7 +29,7 @@ func (a *API) confirmAllowed(w http.ResponseWriter, r *http.Request) bool {
 
 // failConfirm counts a wrong password against the caller's IP.
 func (a *API) failConfirm(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, core.ErrWrongPassword) {
+	if errors.Is(err, identity.ErrWrongPassword) {
 		a.limiter.fail(r.Context(), a.clientIP(r))
 	}
 	a.fail(w, err)
@@ -71,7 +73,7 @@ func (a *API) changePassword(w http.ResponseWriter, r *http.Request) {
 		a.failConfirm(w, r, err)
 		return
 	}
-	setSessionCookie(w, r, token, int(core.SessionTTL.Seconds()))
+	setSessionCookie(w, r, token, int(identity.SessionTTL.Seconds()))
 	w.WriteHeader(http.StatusNoContent)
 }
 

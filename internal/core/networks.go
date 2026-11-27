@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
@@ -72,7 +74,7 @@ func (c *Core) ListNetworks(ctx context.Context) ([]NetworkView, error) {
 			if !slices.Contains(s.Networks, n.ID) {
 				continue
 			}
-			if !visible(ctx, s.ProjectID) {
+			if !identity.Visible(ctx, s.ProjectID) {
 				continue
 			}
 			p := byID[s.ProjectID]
@@ -89,7 +91,7 @@ func (c *Core) ListNetworks(ctx context.Context) ([]NetworkView, error) {
 // CreateNetwork records a network and creates it on its server.
 func (c *Core) CreateNetwork(ctx context.Context, in NetworkInput) (NetworkView, error) {
 	name := strings.TrimSpace(in.Name)
-	if !nameRe.MatchString(name) {
+	if !domain.ValidName(name) {
 		return NetworkView{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
 	if in.ServerID == "" {
@@ -266,7 +268,7 @@ func validateProjectNetworks(s domain.Service) error {
 		return fmt.Errorf("%w: an app in the host network can't join other networks", ErrInvalid)
 	}
 	for _, n := range s.ProjectNetworks {
-		if !nameRe.MatchString(n) || len(n) > 30 {
+		if !domain.ValidName(n) || len(n) > 30 {
 			return fmt.Errorf("%w: network name %q: lowercase letters, digits and dashes, at most 30", ErrInvalid, n)
 		}
 	}

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestOverviewTools(t *testing.T) {
@@ -15,7 +15,7 @@ func TestOverviewTools(t *testing.T) {
 	if _, err := e.st.CreateProject(context.Background(), domain.Project{Name: "shop"}); err != nil {
 		t.Fatal(err)
 	}
-	read, admin := e.session(core.PermView), e.session()
+	read, admin := e.session(identity.PermView), e.session()
 
 	if out, isErr := e.call(admin, "list_git_repos", nil); isErr || out != `{"providers":[]}` {
 		t.Errorf("list_git_repos without providers: %s", out)

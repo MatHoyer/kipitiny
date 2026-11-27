@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -28,7 +30,7 @@ type members struct {
 	api    *API
 	member domain.User
 	// IDs by route kind, in shop and in other.
-	shop, other map[core.IDKind]string
+	shop, other map[identity.IDKind]string
 }
 
 func newMembers(t *testing.T) members {
@@ -52,7 +54,7 @@ func newMembers(t *testing.T) members {
 	if m.member, err = st.CreateUser(ctx, domain.User{Username: "alice", PasswordHash: "x", Role: domain.RoleMember}); err != nil {
 		t.Fatal(err)
 	}
-	seed := func(name string) map[core.IDKind]string {
+	seed := func(name string) map[identity.IDKind]string {
 		p, err := st.CreateProject(ctx, domain.Project{Name: name, ServerID: domain.LocalServerID})
 		if err != nil {
 			t.Fatal(err)
@@ -80,8 +82,8 @@ func newMembers(t *testing.T) members {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return map[core.IDKind]string{core.IDProject: p.ID, core.IDService: svc.ID, core.IDDeployment: d.ID,
-			core.IDBackup: b.ID, core.IDSchedule: sc.ID, core.IDJob: job.ID}
+		return map[identity.IDKind]string{identity.IDProject: p.ID, identity.IDService: svc.ID, identity.IDDeployment: d.ID,
+			identity.IDBackup: b.ID, identity.IDSchedule: sc.ID, identity.IDJob: job.ID}
 	}
 	m.shop, m.other = seed("shop"), seed("other")
 	return m
@@ -89,14 +91,14 @@ func newMembers(t *testing.T) members {
 
 // as returns a context acting as the member with these permissions on shop
 // and these features.
-func (m members) as(t *testing.T, perms []core.Perm, features ...core.Feature) context.Context {
+func (m members) as(t *testing.T, perms []identity.Perm, features ...identity.Feature) context.Context {
 	t.Helper()
 	ctx := context.Background()
 	ps := make([]string, len(perms))
 	for i, p := range perms {
 		ps[i] = string(p)
 	}
-	if err := m.st.SetGrant(ctx, domain.ProjectGrant{UserID: m.member.ID, ProjectID: m.shop[core.IDProject], Perms: ps}); err != nil {
+	if err := m.st.SetGrant(ctx, domain.ProjectGrant{UserID: m.member.ID, ProjectID: m.shop[identity.IDProject], Perms: ps}); err != nil {
 		t.Fatal(err)
 	}
 	fs := make([]string, len(features))
@@ -111,21 +113,21 @@ func (m members) as(t *testing.T, perms []core.Perm, features ...core.Feature) c
 	if err != nil {
 		t.Fatal(err)
 	}
-	return core.WithActor(ctx, a)
+	return identity.WithActor(ctx, a)
 }
 
 // token returns an admin-scoped token of the member with these permissions
 // on shop.
-func (m members) token(t *testing.T, perms ...core.Perm) string {
+func (m members) token(t *testing.T, perms ...identity.Perm) string {
 	t.Helper()
-	tok, err := m.c.CreateAPIToken(m.as(t, perms), core.TokenInput{Name: "t"})
+	tok, err := m.c.CreateAPIToken(m.as(t, perms), identity.TokenInput{Name: "t"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return tok.Token
 }
 
-func (m members) authorize(ctx context.Context, pattern string, kind core.IDKind, ids map[core.IDKind]string) error {
+func (m members) authorize(ctx context.Context, pattern string, kind identity.IDKind, ids map[identity.IDKind]string) error {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	if kind != "" {
 		r.SetPathValue("id", ids[kind])
@@ -138,8 +140,8 @@ func (m members) authorize(ctx context.Context, pattern string, kind core.IDKind
 // and on a project they weren't granted.
 func TestMemberRouteAccess(t *testing.T) {
 	m := newMembers(t)
-	others := func(p core.Perm) []core.Perm {
-		return slices.DeleteFunc(slices.Clone(core.Perms), func(q core.Perm) bool { return q == p })
+	others := func(p identity.Perm) []identity.Perm {
+		return slices.DeleteFunc(slices.Clone(identity.Perms), func(q identity.Perm) bool { return q == p })
 	}
 	for pattern, acc := range routeAccess {
 		switch {
@@ -151,32 +153,32 @@ func TestMemberRouteAccess(t *testing.T) {
 			if err := m.authorize(m.as(t, nil, acc.feature), pattern, "", nil); err != nil {
 				t.Errorf("%s: refused with %s: %v", pattern, acc.feature, err)
 			}
-			if err := m.authorize(m.as(t, core.Perms), pattern, "", nil); !errors.Is(err, core.ErrForbidden) {
+			if err := m.authorize(m.as(t, identity.Perms), pattern, "", nil); !errors.Is(err, identity.ErrForbidden) {
 				t.Errorf("%s: allowed without %s: %v", pattern, acc.feature, err)
 			}
 		case acc.perm != "":
-			if err := m.authorize(m.as(t, []core.Perm{acc.perm}), pattern, acc.kind, m.shop); err != nil {
+			if err := m.authorize(m.as(t, []identity.Perm{acc.perm}), pattern, acc.kind, m.shop); err != nil {
 				t.Errorf("%s: refused with %s: %v", pattern, acc.perm, err)
 			}
-			if acc.perm != core.PermView {
-				if err := m.authorize(m.as(t, others(acc.perm)), pattern, acc.kind, m.shop); !errors.Is(err, core.ErrForbidden) {
+			if acc.perm != identity.PermView {
+				if err := m.authorize(m.as(t, others(acc.perm)), pattern, acc.kind, m.shop); !errors.Is(err, identity.ErrForbidden) {
 					t.Errorf("%s: allowed without %s: %v", pattern, acc.perm, err)
 				}
 			}
-			if err := m.authorize(m.as(t, core.Perms), pattern, acc.kind, m.other); !errors.Is(err, domain.ErrNotFound) {
+			if err := m.authorize(m.as(t, identity.Perms), pattern, acc.kind, m.other); !errors.Is(err, domain.ErrNotFound) {
 				t.Errorf("%s: another project's should be not found: %v", pattern, err)
 			}
 		default:
-			if err := m.authorize(m.as(t, core.Perms, core.Features...), pattern, "", nil); !errors.Is(err, core.ErrForbidden) {
+			if err := m.authorize(m.as(t, identity.Perms, identity.Features...), pattern, "", nil); !errors.Is(err, identity.ErrForbidden) {
 				t.Errorf("%s: allowed to a member: %v", pattern, err)
 			}
 		}
 	}
 	// Data and files routes need the service to be visible; core checks the rest.
-	if err := m.authorize(m.as(t, []core.Perm{core.PermView}), "GET /api/services/{id}/data/tables", core.IDService, m.shop); err != nil {
+	if err := m.authorize(m.as(t, []identity.Perm{identity.PermView}), "GET /api/services/{id}/data/tables", identity.IDService, m.shop); err != nil {
 		t.Errorf("data route refused with view: %v", err)
 	}
-	if err := m.authorize(m.as(t, core.Perms), "GET /api/services/{id}/files", core.IDService, m.other); !errors.Is(err, domain.ErrNotFound) {
+	if err := m.authorize(m.as(t, identity.Perms), "GET /api/services/{id}/files", identity.IDService, m.other); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("files route of another project: %v", err)
 	}
 }
@@ -197,18 +199,18 @@ func TestMemberRequests(t *testing.T) {
 		b, _ := io.ReadAll(res.Body)
 		return res.StatusCode, string(b)
 	}
-	shopSvc, otherSvc := m.shop[core.IDService], m.other[core.IDService]
+	shopSvc, otherSvc := m.shop[identity.IDService], m.other[identity.IDService]
 
-	viewer := m.token(t, core.PermView)
+	viewer := m.token(t, identity.PermView)
 	code, body := do(viewer, "GET", "/api/projects", "")
 	var ps []domain.Project
 	if err := json.Unmarshal([]byte(body), &ps); code != http.StatusOK || err != nil || len(ps) != 1 || ps[0].Name != "shop" {
 		t.Fatalf("projects: %d %s", code, body)
 	}
-	if code, body := do(viewer, "GET", "/api/projects/"+m.shop[core.IDProject], ""); code != http.StatusOK {
+	if code, body := do(viewer, "GET", "/api/projects/"+m.shop[identity.IDProject], ""); code != http.StatusOK {
 		t.Errorf("granted project: %d %s", code, body)
 	}
-	if code, body := do(viewer, "GET", "/api/projects/"+m.other[core.IDProject], ""); code != http.StatusNotFound {
+	if code, body := do(viewer, "GET", "/api/projects/"+m.other[identity.IDProject], ""); code != http.StatusNotFound {
 		t.Errorf("another project: %d %s", code, body)
 	}
 	if code, body := do(viewer, "POST", "/api/projects", `{"name":"mine"}`); code != http.StatusForbidden {
@@ -221,7 +223,7 @@ func TestMemberRequests(t *testing.T) {
 	}
 
 	// settings without env or domains: those parts of a change are refused.
-	settings := m.token(t, core.PermSettings)
+	settings := m.token(t, identity.PermSettings)
 	for name, patch := range map[string]string{
 		"env":         `{"env":{"A":"2"}}`,
 		"domain":      `{"domain":"shop.example.com"}`,
@@ -232,7 +234,7 @@ func TestMemberRequests(t *testing.T) {
 		}
 	}
 	// Host access is root on the host: admins only, whatever the grants.
-	all := m.token(t, core.Perms...)
+	all := m.token(t, identity.Perms...)
 	for name, patch := range map[string]string{
 		"host network":  `{"hostNetwork":true}`,
 		"docker socket": `{"dockerSocket":"/var/run/docker.sock"}`,
@@ -243,7 +245,7 @@ func TestMemberRequests(t *testing.T) {
 	}
 	// A restore can't overwrite or read another project's service.
 	restore := `{"serviceId":"` + otherSvc + `","confirm":"web"}`
-	if code, body := do(all, "POST", "/api/backups/"+m.shop[core.IDBackup]+"/restore", restore); code != http.StatusNotFound {
+	if code, body := do(all, "POST", "/api/backups/"+m.shop[identity.IDBackup]+"/restore", restore); code != http.StatusNotFound {
 		t.Errorf("restore into another project: %d %s", code, body)
 	}
 	// Password manager references need the secret-providers feature.
@@ -264,7 +266,7 @@ func TestMemberRequests(t *testing.T) {
 		Endpoint: "s3.example.com", Bucket: "bkt", AccessKey: "AKIAEXAMPLE", SecretKey: "s3cret"}); err != nil {
 		t.Fatal(err)
 	}
-	tok, err := m.c.CreateAPIToken(m.as(t, nil, core.FeatureStorage), core.TokenInput{Name: "storage"})
+	tok, err := m.c.CreateAPIToken(m.as(t, nil, identity.FeatureStorage), identity.TokenInput{Name: "storage"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,12 +287,12 @@ func TestMemberTokens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	adminCtx, memberCtx := core.WithActor(ctx, adminActor), m.as(t, []core.Perm{core.PermView})
-	adminTok, err := m.c.CreateAPIToken(adminCtx, core.TokenInput{Name: "admin's"})
+	adminCtx, memberCtx := identity.WithActor(ctx, adminActor), m.as(t, []identity.Perm{identity.PermView})
+	adminTok, err := m.c.CreateAPIToken(adminCtx, identity.TokenInput{Name: "admin's"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	mine, err := m.c.CreateAPIToken(memberCtx, core.TokenInput{Name: "mine"})
+	mine, err := m.c.CreateAPIToken(memberCtx, identity.TokenInput{Name: "mine"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +307,7 @@ func TestMemberTokens(t *testing.T) {
 	}
 	// An admin-scoped token of a member still has only their permissions.
 	a, err := m.c.AuthenticateToken(ctx, mine.Token)
-	if err != nil || a.Admin() || !a.Can(m.shop[core.IDProject], core.PermView) || a.Can(m.shop[core.IDProject], core.PermDeploy) {
+	if err != nil || a.Admin() || !a.Can(m.shop[identity.IDProject], identity.PermView) || a.Can(m.shop[identity.IDProject], identity.PermDeploy) {
 		t.Fatalf("member's token: %+v %v", a, err)
 	}
 	if err := m.c.DeleteAPIToken(memberCtx, mine.ID); err != nil {
@@ -327,62 +329,62 @@ func TestRestrictedTokens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	adminCtx := core.WithActor(ctx, adminActor)
-	shop, other := m.shop[core.IDProject], m.other[core.IDProject]
-	restricted := func(ctx context.Context, features []string, grants map[string][]string) (core.Actor, error) {
+	adminCtx := identity.WithActor(ctx, adminActor)
+	shop, other := m.shop[identity.IDProject], m.other[identity.IDProject]
+	restricted := func(ctx context.Context, features []string, grants map[string][]string) (identity.Actor, error) {
 		t.Helper()
-		tok, err := m.c.CreateAPIToken(ctx, core.TokenInput{Name: "agent", Restricted: true, Features: features, Grants: grants})
+		tok, err := m.c.CreateAPIToken(ctx, identity.TokenInput{Name: "agent", Restricted: true, Features: features, Grants: grants})
 		if err != nil {
-			return core.Actor{}, err
+			return identity.Actor{}, err
 		}
 		return m.c.AuthenticateToken(ctx, tok.Token)
 	}
 
 	// An admin's restricted token acts as a member with what it was given.
-	a, err := restricted(adminCtx, []string{string(core.FeatureStorage)}, map[string][]string{shop: {"deploy"}})
+	a, err := restricted(adminCtx, []string{string(identity.FeatureStorage)}, map[string][]string{shop: {"deploy"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.Admin() || !a.Can(shop, core.PermView) || !a.Can(shop, core.PermDeploy) || a.Can(shop, core.PermData) ||
-		a.Can(other, core.PermView) || !a.Has(core.FeatureStorage) || a.Has(core.FeatureServers) {
+	if a.Admin() || !a.Can(shop, identity.PermView) || !a.Can(shop, identity.PermDeploy) || a.Can(shop, identity.PermData) ||
+		a.Can(other, identity.PermView) || !a.Has(identity.FeatureStorage) || a.Has(identity.FeatureServers) {
 		t.Fatalf("admin's restricted token: %+v", a)
 	}
-	if err := m.authorize(core.WithActor(ctx, a), "GET /api/users", "", nil); !errors.Is(err, core.ErrForbidden) {
+	if err := m.authorize(identity.WithActor(ctx, a), "GET /api/users", "", nil); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("restricted token reached an admin route: %v", err)
 	}
 
 	// A member's token can't be given more than the member holds.
-	memberCtx := m.as(t, []core.Perm{core.PermView, core.PermDeploy}, core.FeatureStorage)
-	if _, err := restricted(memberCtx, nil, map[string][]string{shop: {"data"}}); !errors.Is(err, core.ErrForbidden) {
+	memberCtx := m.as(t, []identity.Perm{identity.PermView, identity.PermDeploy}, identity.FeatureStorage)
+	if _, err := restricted(memberCtx, nil, map[string][]string{shop: {"data"}}); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("token beyond the member's permissions: %v", err)
 	}
-	if _, err := restricted(memberCtx, nil, map[string][]string{other: {"view"}}); !errors.Is(err, core.ErrForbidden) {
+	if _, err := restricted(memberCtx, nil, map[string][]string{other: {"view"}}); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("token on a project the member can't see: %v", err)
 	}
-	if _, err := restricted(memberCtx, []string{string(core.FeatureServers)}, nil); !errors.Is(err, core.ErrForbidden) {
+	if _, err := restricted(memberCtx, []string{string(identity.FeatureServers)}, nil); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("token with a feature the member lacks: %v", err)
 	}
 	if _, err := restricted(memberCtx, nil, map[string][]string{shop: {"nope"}}); !errors.Is(err, core.ErrInvalid) {
 		t.Errorf("unknown permission: %v", err)
 	}
-	tok, err := m.c.CreateAPIToken(memberCtx, core.TokenInput{Name: "viewer", Restricted: true,
-		Features: []string{string(core.FeatureStorage)}, Grants: map[string][]string{shop: {"view", "deploy"}}})
+	tok, err := m.c.CreateAPIToken(memberCtx, identity.TokenInput{Name: "viewer", Restricted: true,
+		Features: []string{string(identity.FeatureStorage)}, Grants: map[string][]string{shop: {"view", "deploy"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Restricted to nothing, a token sees no project.
 	a, err = restricted(memberCtx, nil, nil)
-	if err != nil || a.Can(shop, core.PermView) || a.Has(core.FeatureStorage) {
+	if err != nil || a.Can(shop, identity.PermView) || a.Has(identity.FeatureStorage) {
 		t.Fatalf("token restricted to nothing: %+v %v", a, err)
 	}
 
 	// Editing a token keeps it within its editor's access, and changes it in place.
-	edit := core.TokenInput{Name: "deployer", Restricted: true, Grants: map[string][]string{shop: {"deploy"}}}
-	if _, err := m.c.UpdateAPIToken(memberCtx, tok.ID, core.TokenInput{Name: "x", Restricted: true,
-		Grants: map[string][]string{shop: {"data"}}}); !errors.Is(err, core.ErrForbidden) {
+	edit := identity.TokenInput{Name: "deployer", Restricted: true, Grants: map[string][]string{shop: {"deploy"}}}
+	if _, err := m.c.UpdateAPIToken(memberCtx, tok.ID, identity.TokenInput{Name: "x", Restricted: true,
+		Grants: map[string][]string{shop: {"data"}}}); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("editing a token beyond the member's permissions: %v", err)
 	}
-	adminTok, err := m.c.CreateAPIToken(adminCtx, core.TokenInput{Name: "admin's"})
+	adminTok, err := m.c.CreateAPIToken(adminCtx, identity.TokenInput{Name: "admin's"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,7 +395,7 @@ func TestRestrictedTokens(t *testing.T) {
 		t.Fatalf("editing a token: %+v %v", u, err)
 	}
 	a, err = m.c.AuthenticateToken(ctx, tok.Token)
-	if err != nil || a.Name != "deployer" || !a.Can(shop, core.PermDeploy) || a.Has(core.FeatureStorage) {
+	if err != nil || a.Name != "deployer" || !a.Can(shop, identity.PermDeploy) || a.Has(identity.FeatureStorage) {
 		t.Fatalf("token after its edit: %+v %v", a, err)
 	}
 
@@ -405,18 +407,18 @@ func TestRestrictedTokens(t *testing.T) {
 	if err != nil || rolled.Token == tok.Token {
 		t.Fatalf("rolling a token: %+v %v", rolled, err)
 	}
-	if _, err := m.c.AuthenticateToken(ctx, tok.Token); !errors.Is(err, core.ErrUnauthorized) {
+	if _, err := m.c.AuthenticateToken(ctx, tok.Token); !errors.Is(err, identity.ErrUnauthorized) {
 		t.Errorf("the rolled-over secret still works: %v", err)
 	}
-	if a, err = m.c.AuthenticateToken(ctx, rolled.Token); err != nil || !a.Can(shop, core.PermDeploy) {
+	if a, err = m.c.AuthenticateToken(ctx, rolled.Token); err != nil || !a.Can(shop, identity.PermDeploy) {
 		t.Fatalf("token after its roll: %+v %v", a, err)
 	}
 	tok = rolled
 
 	// The owner losing a permission or feature takes it from the token.
-	m.as(t, []core.Perm{core.PermView})
+	m.as(t, []identity.Perm{identity.PermView})
 	a, err = m.c.AuthenticateToken(ctx, tok.Token)
-	if err != nil || !a.Can(shop, core.PermView) || a.Can(shop, core.PermDeploy) || a.Has(core.FeatureStorage) {
+	if err != nil || !a.Can(shop, identity.PermView) || a.Can(shop, identity.PermDeploy) || a.Has(identity.FeatureStorage) {
 		t.Fatalf("token after the owner lost deploy: %+v %v", a, err)
 	}
 }

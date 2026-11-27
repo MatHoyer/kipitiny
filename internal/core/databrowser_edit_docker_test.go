@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -65,7 +67,7 @@ CREATE VIEW v AS SELECT id FROM items;"`)
 	if _, err = c.ApplyRowChanges(ctx, svc.ID, "", "public", "missing", RowChanges{Inserts: []map[string]*string{{}}}, true); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("missing table: %v", err)
 	}
-	read := WithActor(ctx, Actor{Kind: "token", Name: "read"})
+	read := identity.WithActor(ctx, identity.Actor{Kind: "token", Name: "read"})
 	if _, err = c.ApplyRowChanges(read, svc.ID, "", "public", "items", ch, false); err == nil {
 		t.Error("a stranger previewed changes")
 	}
@@ -75,7 +77,7 @@ func TestRowChangesDockerMySQL(t *testing.T) {
 	for _, kind := range []domain.ServiceKind{domain.ServiceKindMySQL, domain.ServiceKindMariaDB} {
 		t.Run(string(kind), func(t *testing.T) {
 			c, ctx, svc, exec := dumpTestDB(t, kind)
-			ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
+			ctx = identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
 			client := `MYSQL_PWD="$MYSQL_PASSWORD" ` + mysqlBin(kind, "mysql") + ` -h 127.0.0.1 -u"$MYSQL_USER" "$MYSQL_DATABASE" `
 			exec(client + `-e "
 CREATE TABLE items (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL DEFAULT 'none', b BLOB, n INT NULL);
@@ -119,7 +121,7 @@ CREATE VIEW v AS SELECT id FROM items;"`)
 
 func TestDocChangesDockerMongo(t *testing.T) {
 	c, ctx, svc, exec := dumpTestDB(t, domain.ServiceKindMongoDB)
-	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
+	ctx = identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
 	shell := `mongosh --quiet "mongodb://$MONGO_INITDB_ROOT_USERNAME:$MONGO_INITDB_ROOT_PASSWORD@127.0.0.1/app?authSource=admin" --eval `
 	exec(shell + `'
 db.items.insertMany([{ _id: 1, n: NumberLong(5), name: "one", tags: ["a"] }, { _id: 2, name: "two" }, { _id: 3, name: "three" }]);

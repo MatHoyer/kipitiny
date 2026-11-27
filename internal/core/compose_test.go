@@ -7,6 +7,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"strings"
 	"testing"
 
@@ -316,8 +318,8 @@ func TestComposeDryRunPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	member := WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: domain.RoleMember,
-		Grants: map[string][]string{p.ID: {string(PermView), string(PermSettings), string(PermDeploy)}}})
+	member := identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "alice", Role: domain.RoleMember,
+		Grants: map[string][]string{p.ID: {string(identity.PermView), string(identity.PermSettings), string(identity.PermDeploy)}}})
 	plain := "services:\n  web: {image: busybox}\n"
 	if _, err := c.ApplyCompose(member, p.ID, []byte(plain), ApplyOptions{DryRun: true}); err != nil {
 		t.Fatalf("plain app: %v", err)
@@ -327,7 +329,7 @@ func TestComposeDryRunPermissions(t *testing.T) {
 		"services:\n  web: {image: busybox, network_mode: host}\n":        "only admins",
 		"services:\n  web: {image: busybox, environment: {API_KEY: x}}\n": "env",
 	} {
-		if _, err := c.ApplyCompose(member, p.ID, []byte(src), ApplyOptions{DryRun: true}); !errors.Is(err, ErrForbidden) || !strings.Contains(err.Error(), want) {
+		if _, err := c.ApplyCompose(member, p.ID, []byte(src), ApplyOptions{DryRun: true}); !errors.Is(err, identity.ErrForbidden) || !strings.Contains(err.Error(), want) {
 			t.Errorf("dry run of %q: err = %v, want forbidden %q", src, err, want)
 		}
 	}

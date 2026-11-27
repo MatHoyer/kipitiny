@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
@@ -58,7 +60,7 @@ func (c *Core) openTerminal(ctx context.Context, target string, tty *docker.TTY,
 // OpenServiceTerminal starts a shell in one of the service's running
 // containers (by ID prefix or name; the first replica when empty). Admin only.
 func (c *Core) OpenServiceTerminal(ctx context.Context, serviceID, containerRef, shell string, cols, rows uint) (*Terminal, error) {
-	if err := c.requireOn(ctx, serviceID, PermTerminal); err != nil {
+	if err := c.RequireOn(ctx, serviceID, identity.PermTerminal); err != nil {
 		return nil, err
 	}
 	if shell == "" {
@@ -133,7 +135,7 @@ var hostShell = []string{"nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--
 // privileged helper container sharing its PID namespace (Docker access is
 // root on the host anyway). Admin only.
 func (c *Core) OpenServerTerminal(ctx context.Context, serverID string, cols, rows uint) (*Terminal, error) {
-	if err := RequireAdmin(ctx); err != nil {
+	if err := identity.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
 	sv, err := c.store.GetServer(ctx, serverID)

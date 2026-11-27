@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
@@ -81,7 +83,7 @@ func dataTestDB(t *testing.T, kind domain.ServiceKind, cfg *container.Config) (*
 		t.Fatalf("%s: %v", cmd, err)
 		return ""
 	}
-	return c, WithActor(ctx, Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin}), svc, exec
+	return c, identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin}), svc, exec
 }
 
 func TestDataBrowserDockerPostgres(t *testing.T) {
@@ -189,7 +191,7 @@ CREATE TABLE tags (note int REFERENCES notes, a int, b int, FOREIGN KEY (a, b) R
 			t.Errorf("create %q: %v", name, err)
 		}
 	}
-	if _, err := c.CreatePgDatabase(WithActor(context.Background(), reader(svc, "data")), svc.ID, "nope", ""); !errors.Is(err, ErrForbidden) {
+	if _, err := c.CreatePgDatabase(identity.WithActor(context.Background(), reader(svc, "data")), svc.ID, "nope", ""); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("data reader create: %v", err)
 	}
 	for _, db := range []string{"missing", "host=example.com dbname=app", "template0"} {
@@ -198,10 +200,10 @@ CREATE TABLE tags (note int REFERENCES notes, a int, b int, FOREIGN KEY (a, b) R
 		}
 	}
 
-	if _, err := c.PgTables(WithActor(context.Background(), reader(svc, "data")), svc.ID, ""); err != nil {
+	if _, err := c.PgTables(identity.WithActor(context.Background(), reader(svc, "data")), svc.ID, ""); err != nil {
 		t.Errorf("data reader: %v", err)
 	}
-	if _, err := c.PgTables(context.Background(), svc.ID, ""); !errors.Is(err, ErrUnauthorized) {
+	if _, err := c.PgTables(context.Background(), svc.ID, ""); !errors.Is(err, identity.ErrUnauthorized) {
 		t.Errorf("no actor: %v", err)
 	}
 }
@@ -339,7 +341,7 @@ func TestDataConsoleDockerPostgres(t *testing.T) {
 	if len(audit) != 7 || audit[0].Action != "data console (write)" || audit[0].Target != svc.ID {
 		t.Errorf("audit: %+v", audit)
 	}
-	if _, err := c.DataConsole(WithActor(context.Background(), reader(svc)), svc.ID, "", "SELECT 1", false); !errors.Is(err, ErrForbidden) {
+	if _, err := c.DataConsole(identity.WithActor(context.Background(), reader(svc)), svc.ID, "", "SELECT 1", false); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("viewer console: %v", err)
 	}
 }
@@ -474,6 +476,6 @@ func TestBackupDockerOtherDatabase(t *testing.T) {
 }
 
 // reader is a member who may view svc's project, plus perms.
-func reader(svc domain.Service, perms ...string) Actor {
-	return Actor{Kind: "user", Role: domain.RoleMember, Grants: map[string][]string{svc.ProjectID: append([]string{"view"}, perms...)}}
+func reader(svc domain.Service, perms ...string) identity.Actor {
+	return identity.Actor{Kind: "user", Role: domain.RoleMember, Grants: map[string][]string{svc.ProjectID: append([]string{"view"}, perms...)}}
 }

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
@@ -31,10 +33,10 @@ type listGitReposOut struct {
 }
 
 func (t *tools) listGitRepos(ctx context.Context, _ *mcp.CallToolRequest, in listGitReposIn) (*mcp.CallToolResult, listGitReposOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, listGitReposOut{}, err
 	}
-	if err := core.RequireFeature(ctx, core.FeatureGitProviders); err != nil {
+	if err := identity.RequireFeature(ctx, identity.FeatureGitProviders); err != nil {
 		return nil, listGitReposOut{}, err
 	}
 	ps, err := t.c.ListGitProviders(ctx)
@@ -70,10 +72,10 @@ type listGitBranchesOut struct {
 }
 
 func (t *tools) listGitBranches(ctx context.Context, _ *mcp.CallToolRequest, in listGitBranchesIn) (*mcp.CallToolResult, listGitBranchesOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, listGitBranchesOut{}, err
 	}
-	if err := core.RequireFeature(ctx, core.FeatureGitProviders); err != nil {
+	if err := identity.RequireFeature(ctx, identity.FeatureGitProviders); err != nil {
 		return nil, listGitBranchesOut{}, err
 	}
 	ps, err := t.c.ListGitProviders(ctx)
@@ -93,7 +95,7 @@ type getTopologyIn struct {
 }
 
 func (t *tools) getTopology(ctx context.Context, _ *mcp.CallToolRequest, in getTopologyIn) (*mcp.CallToolResult, core.Topology, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, core.Topology{}, err
 	}
 	id := ""
@@ -115,7 +117,7 @@ type managerStatusOut struct {
 }
 
 func (t *tools) getManagerStatus(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, managerStatusOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, managerStatusOut{}, err
 	}
 	out := managerStatusOut{Status: t.c.Status(ctx), Usage: map[string]core.Usage{}}
@@ -151,7 +153,7 @@ type getAuditLogOut struct {
 
 // getAuditLog is admin only, like the REST route: it maps who can do what.
 func (t *tools) getAuditLog(ctx context.Context, _ *mcp.CallToolRequest, in getAuditLogIn) (*mcp.CallToolResult, getAuditLogOut, error) {
-	if err := core.RequireAdmin(ctx); err != nil {
+	if err := identity.RequireAdmin(ctx); err != nil {
 		return nil, getAuditLogOut{}, err
 	}
 	n := in.Limit

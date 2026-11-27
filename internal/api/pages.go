@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
@@ -27,7 +29,7 @@ func Pages(c *core.Core, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET "+core.PagesPath+"traefik/{server}", func(w http.ResponseWriter, r *http.Request) {
 		token, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 		b, err := c.TraefikConfig(r.Context(), r.PathValue("server"), token)
-		if errors.Is(err, core.ErrUnauthorized) {
+		if errors.Is(err, identity.ErrUnauthorized) {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -56,7 +58,7 @@ func TestSchemaDockerPostgres(t *testing.T) {
 
 func TestSchemaDockerMySQL(t *testing.T) {
 	c, ctx, svc, _ := dumpTestDB(t, domain.ServiceKindMariaDB)
-	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
+	ctx = identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
 	cols := []NewColumn{{Name: "id", Type: "bigint auto_increment", PrimaryKey: true}, {Name: "at", Type: "datetime", Default: "CURRENT_TIMESTAMP"}}
 	if _, err := c.CreateTable(ctx, svc.ID, "", "", "items", cols, true); err != nil {
 		t.Fatal(err)
@@ -72,7 +74,7 @@ func TestSchemaDockerMySQL(t *testing.T) {
 
 func TestSchemaDockerMongo(t *testing.T) {
 	c, ctx, svc, _ := dumpTestDB(t, domain.ServiceKindMongoDB)
-	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
+	ctx = identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
 	if _, err := c.CreateCollection(ctx, svc.ID, "", "events", true); err != nil {
 		t.Fatal(err)
 	}

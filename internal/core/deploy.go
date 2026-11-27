@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/distribution/reference"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/moby/moby/api/types/container"
@@ -110,7 +112,7 @@ func RetagOptions(current, image string) (DeployOptions, error) {
 		return DeployOptions{}, fmt.Errorf("%w: image %q: %v", ErrInvalid, image, err)
 	}
 	if named.Name() != cur.Name() {
-		return DeployOptions{}, fmt.Errorf("%w: needs the settings permission to change the image repository (%s)", ErrForbidden, reference.FamiliarName(cur))
+		return DeployOptions{}, fmt.Errorf("%w: needs the settings permission to change the image repository (%s)", identity.ErrForbidden, reference.FamiliarName(cur))
 	}
 	var opts DeployOptions
 	if d, ok := named.(reference.Digested); ok {
@@ -193,7 +195,7 @@ func (c *Core) startDeploy(ctx context.Context, serviceID string, req deployRequ
 		GitCommit: req.commit,
 		Config:    svc,
 	}
-	if a, ok := ActorFrom(ctx); ok {
+	if a, ok := identity.ActorFrom(ctx); ok {
 		d.TriggeredBy = a.String()
 	}
 	dep, err := c.store.CreateDeployment(ctx, d)

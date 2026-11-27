@@ -9,6 +9,8 @@ import (
 	"testing"
 	"testing/synctest"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -150,7 +152,7 @@ func routerName(t *testing.T, labels map[string]string) string {
 func TestMasked(t *testing.T) {
 	s := domain.Service{Env: map[string]string{"SECRET": "hunter2", "VAR": "v"}, Secrets: []string{"SECRET"}}
 	m := masked(s)
-	if m.Env["SECRET"] != SecretMask || m.Env["VAR"] != "v" {
+	if m.Env["SECRET"] != identity.SecretMask || m.Env["VAR"] != "v" {
 		t.Errorf("env = %v, want the secret masked and the variable readable", m.Env)
 	}
 	if s.Env["SECRET"] != "hunter2" {

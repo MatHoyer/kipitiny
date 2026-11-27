@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 
@@ -40,7 +42,7 @@ var mongoManagedKeys = []string{mongoUser, mongoPassword, mongoDatabase}
 func newMongoEnv() map[string]string {
 	return map[string]string{
 		mongoUser:     "app",
-		mongoPassword: randomPassword(),
+		mongoPassword: identity.RandomPassword(),
 		mongoDatabase: "app",
 	}
 }

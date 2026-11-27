@@ -1,11 +1,9 @@
-package core
+package identity
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
-	"reflect"
 	"slices"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -120,23 +118,23 @@ func RequireAdmin(ctx context.Context) error {
 	return nil
 }
 
-// visible reports whether the context's actor may see the project. Work
+// Visible reports whether the context's actor may see the project. Work
 // without an actor (loops, the CLI) sees everything.
-func visible(ctx context.Context, projectID string) bool {
+func Visible(ctx context.Context, projectID string) bool {
 	a, ok := ActorFrom(ctx)
 	return !ok || a.Can(projectID, PermView)
 }
 
-// isMember reports whether the context's actor is a member, who sees
+// IsMember reports whether the context's actor is a member, who sees
 // server-level resources without how they connect (hosts, accounts, URLs).
-func isMember(ctx context.Context) bool {
+func IsMember(ctx context.Context) bool {
 	a, ok := ActorFrom(ctx)
 	return ok && !a.Admin()
 }
 
-// visibleProjects is nil when every project is visible, else the IDs of
+// VisibleProjects is nil when every project is visible, else the IDs of
 // the visible ones.
-func visibleProjects(ctx context.Context) []string {
+func VisibleProjects(ctx context.Context) []string {
 	a, ok := ActorFrom(ctx)
 	if !ok || a.Admin() {
 		return nil
@@ -162,7 +160,7 @@ const (
 
 // ProjectOf returns the project the resource belongs to. Manager backups
 // and schedules belong to none (empty).
-func (c *Core) ProjectOf(ctx context.Context, kind IDKind, id string) (string, error) {
+func (c *Identity) ProjectOf(ctx context.Context, kind IDKind, id string) (string, error) {
 	switch kind {
 	case IDProject:
 		p, err := c.store.GetProject(ctx, id)
@@ -197,7 +195,7 @@ func (c *Core) ProjectOf(ctx context.Context, kind IDKind, id string) (string, e
 
 // AuthorizeService resolves a service (ID or project/service) and checks p
 // on its project.
-func (c *Core) AuthorizeService(ctx context.Context, ref string, p Perm) (domain.Service, error) {
+func (c *Identity) AuthorizeService(ctx context.Context, ref string, p Perm) (domain.Service, error) {
 	s, err := c.ResolveService(ctx, ref)
 	if err != nil {
 		return domain.Service{}, err
@@ -209,12 +207,12 @@ func (c *Core) AuthorizeService(ctx context.Context, ref string, p Perm) (domain
 }
 
 // UserActor is the actor of a signed-in user, with their grants.
-func (c *Core) UserActor(ctx context.Context, u domain.User) (Actor, error) {
+func (c *Identity) UserActor(ctx context.Context, u domain.User) (Actor, error) {
 	a := Actor{Kind: "user", Name: u.Username, UserID: u.ID, Role: u.Role, Features: u.Features}
 	return c.withGrants(ctx, a)
 }
 
-func (c *Core) withGrants(ctx context.Context, a Actor) (Actor, error) {
+func (c *Identity) withGrants(ctx context.Context, a Actor) (Actor, error) {
 	if a.Admin() {
 		return a, nil
 	}
@@ -231,7 +229,7 @@ func (c *Core) withGrants(ctx context.Context, a Actor) (Actor, error) {
 
 // withPreviews adds to grants the previews of the projects in it: a
 // project's previews come with it.
-func (c *Core) withPreviews(ctx context.Context, grants map[string][]string) error {
+func (c *Identity) withPreviews(ctx context.Context, grants map[string][]string) error {
 	if len(grants) == 0 {
 		return nil
 	}
@@ -247,98 +245,26 @@ func (c *Core) withPreviews(ctx context.Context, grants map[string][]string) err
 	return nil
 }
 
-// check is Authorize for work that may run without an actor (loops, the
+// Check is Authorize for work that may run without an actor (loops, the
 // CLI, a git sync), which is allowed everything.
-func check(ctx context.Context, projectID string, p Perm) error {
+func Check(ctx context.Context, projectID string, p Perm) error {
 	if _, ok := ActorFrom(ctx); !ok {
 		return nil
 	}
 	return Authorize(ctx, projectID, p)
 }
 
-// checkServiceChange checks what a change from old to svc needs beyond the
-// settings permission: env and domains have their own, and host access
-// (the host's network or Docker socket) is root on the host, so only
-// admins give it.
-func checkServiceChange(ctx context.Context, old, svc domain.Service) error {
-	a, ok := ActorFrom(ctx)
-	if !ok || a.Admin() {
-		return nil
-	}
-	if (svc.HostNetwork && !old.HostNetwork) || (svc.DockerSocket != "" && svc.DockerSocket != old.DockerSocket) {
-		return fmt.Errorf("%w: only admins give an app the host's network or Docker socket", ErrForbidden)
-	}
-	if svc.Runtime.HostAccess() && !reflect.DeepEqual(runtimeHostAccess(svc.Runtime), runtimeHostAccess(old.Runtime)) {
-		return fmt.Errorf("%w: only admins give an app capabilities, devices, privileged mode, security options or host paths", ErrForbidden)
-	}
-	if hv := volumesHostAccess(svc.Volumes); len(hv) > 0 && !reflect.DeepEqual(hv, volumesHostAccess(old.Volumes)) {
-		return fmt.Errorf("%w: only admins mount external volumes or set volume driver options", ErrForbidden)
-	}
-	for _, v := range svc.Volumes {
-		if i := slices.IndexFunc(old.Volumes, func(o domain.Volume) bool { return o.Name == v.Name }); v.HostAccess() && !v.ReadOnly && i >= 0 && old.Volumes[i].ReadOnly {
-			return fmt.Errorf("%w: only admins make volume %s writable: it reaches outside the project", ErrForbidden, v.Name)
-		}
-	}
-	// Secret files resolve references like env vars do.
-	if env, oldEnv := refEnv(svc), refEnv(old); !maps.Equal(env, oldEnv) || !slices.Equal(svc.Secrets, old.Secrets) {
-		if err := Authorize(ctx, svc.ProjectID, PermEnv); err != nil {
-			return err
-		}
-		if err := checkSecretRefs(ctx, oldEnv, env); err != nil {
-			return err
-		}
-	}
-	if svc.Domain != old.Domain || !reflect.DeepEqual(svc.Middlewares, old.Middlewares) || !sameRoutes(svc.Routes, old.Routes) {
-		if err := Authorize(ctx, svc.ProjectID, PermDomains); err != nil {
-			return err
-		}
-		if err := checkSecretRefs(ctx, basicAuthRefs(old.Middlewares), basicAuthRefs(svc.Middlewares)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// basicAuthRefs holds m's basic auth password references, in the shape
-// checkSecretRefs reads.
-func basicAuthRefs(m domain.Middlewares) map[string]string {
-	out := map[string]string{}
-	for _, u := range m.BasicAuth {
-		if u.Ref != "" {
-			out[u.Name] = u.Ref
-		}
-	}
-	return out
-}
-
-// checkSecretRefs fails when a member references a password manager item
-// that wasn't referenced before without the secret-providers feature: the
-// app would read it.
-func checkSecretRefs(ctx context.Context, old, env map[string]string) error {
-	a, ok := ActorFrom(ctx)
-	if !ok || a.Admin() {
-		return nil
-	}
-	had := secretRefs(old, nil)
-	for _, ref := range secretRefs(env, nil) {
-		if !slices.Contains(had, ref) {
-			return RequireFeature(ctx, FeatureSecretProviders)
-		}
-	}
-	return nil
-}
-
-// checkFeature is RequireFeature for work that may run without an actor.
-func checkFeature(ctx context.Context, f Feature) error {
+// CheckFeature is RequireFeature for work that may run without an actor.
+func CheckFeature(ctx context.Context, f Feature) error {
 	if _, ok := ActorFrom(ctx); !ok {
 		return nil
 	}
 	return RequireFeature(ctx, f)
 }
 
-// grantCreator gives a member who created a project every permission on
+// GrantCreator gives a member who created a project every permission on
 // it, for this request too.
-func (c *Core) grantCreator(ctx context.Context, projectID string) error {
+func (c *Identity) GrantCreator(ctx context.Context, projectID string) error {
 	a, ok := ActorFrom(ctx)
 	if !ok || a.Admin() {
 		return nil
@@ -356,8 +282,8 @@ func (c *Core) grantCreator(ctx context.Context, projectID string) error {
 	return nil
 }
 
-// requireOn checks the actor's permission on the service's project.
-func (c *Core) requireOn(ctx context.Context, serviceID string, p Perm) error {
+// RequireOn checks the actor's permission on the service's project.
+func (c *Identity) RequireOn(ctx context.Context, serviceID string, p Perm) error {
 	projectID, err := c.ProjectOf(ctx, IDService, serviceID)
 	if err != nil {
 		return err

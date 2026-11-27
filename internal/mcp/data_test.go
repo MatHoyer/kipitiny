@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/api"
@@ -28,9 +30,9 @@ type env struct {
 	c  *core.Core
 	// session is a session with a token of an admin, restricted to perms on
 	// every existing project when some are given.
-	session func(perms ...core.Perm) *mcp.ClientSession
+	session func(perms ...identity.Perm) *mcp.ClientSession
 	// sessionOf is the same with a token of the context's user.
-	sessionOf func(owner context.Context, perms ...core.Perm) *mcp.ClientSession
+	sessionOf func(owner context.Context, perms ...identity.Perm) *mcp.ClientSession
 	// call returns the structured output, or the error text and true.
 	call func(cs *mcp.ClientSession, name string, args map[string]any) (string, bool)
 }
@@ -50,8 +52,8 @@ func newEnv(t *testing.T) env {
 	t.Cleanup(srv.Close)
 	e := env{st: st, c: c}
 	admin, _ := asUser(t, c, st, "admin", domain.RoleAdmin)
-	e.sessionOf = func(owner context.Context, perms ...core.Perm) *mcp.ClientSession {
-		in := core.TokenInput{Name: "agent", Restricted: len(perms) > 0, Grants: map[string][]string{}}
+	e.sessionOf = func(owner context.Context, perms ...identity.Perm) *mcp.ClientSession {
+		in := identity.TokenInput{Name: "agent", Restricted: len(perms) > 0, Grants: map[string][]string{}}
 		ps, _ := st.ListProjects(ctx)
 		for _, p := range ps {
 			for _, perm := range perms {
@@ -71,7 +73,7 @@ func newEnv(t *testing.T) env {
 		t.Cleanup(func() { cs.Close() })
 		return cs
 	}
-	e.session = func(perms ...core.Perm) *mcp.ClientSession { return e.sessionOf(admin, perms...) }
+	e.session = func(perms ...identity.Perm) *mcp.ClientSession { return e.sessionOf(admin, perms...) }
 	e.call = func(cs *mcp.ClientSession, name string, args map[string]any) (string, bool) {
 		t.Helper()
 		res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
@@ -98,7 +100,7 @@ func TestDataTools(t *testing.T) {
 	if _, err := e.st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
-	read, admin := e.session(core.PermView), e.session()
+	read, admin := e.session(identity.PermView), e.session()
 
 	for name, args := range map[string]map[string]any{
 		"create_database": {"service": "shop/db", "name": "analytics"},
@@ -120,7 +122,7 @@ func TestDataTools(t *testing.T) {
 	}
 
 	// The browser checks the kind before reaching Docker.
-	reader := e.session(core.PermView, core.PermData)
+	reader := e.session(identity.PermView, identity.PermData)
 	for name, args := range map[string]map[string]any{
 		"list_databases":  {"service": "shop/web"},
 		"list_tables":     {"service": "shop/web"},

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 
@@ -43,9 +45,9 @@ var mysqlManagedKeys = []string{mysqlUser, mysqlPassword, mysqlDatabase, mysqlRo
 func newMySQLEnv() map[string]string {
 	return map[string]string{
 		mysqlUser:         "app",
-		mysqlPassword:     randomPassword(),
+		mysqlPassword:     identity.RandomPassword(),
 		mysqlDatabase:     "app",
-		mysqlRootPassword: randomPassword(),
+		mysqlRootPassword: identity.RandomPassword(),
 	}
 }
 

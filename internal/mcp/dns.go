@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
@@ -16,7 +18,7 @@ type syncDNSOut struct {
 
 func (t *tools) syncDNS(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, syncDNSOut, error) {
 	out, err := mutate(ctx, t.c, "sync_dns", "cloudflare", func() (syncDNSOut, error) {
-		if err := core.RequireAdmin(ctx); err != nil {
+		if err := identity.RequireAdmin(ctx); err != nil {
 			return syncDNSOut{}, err
 		}
 		v, err := t.c.SyncDNS(ctx)
@@ -33,10 +35,10 @@ type listDomainsOut struct {
 }
 
 func (t *tools) listDomains(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listDomainsOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, listDomainsOut{}, err
 	}
-	if err := core.RequireFeature(ctx, core.FeatureDomains); err != nil {
+	if err := identity.RequireFeature(ctx, identity.FeatureDomains); err != nil {
 		return nil, listDomainsOut{}, err
 	}
 	ds, err := t.c.DomainViews(ctx)

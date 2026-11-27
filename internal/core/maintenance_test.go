@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -132,7 +134,7 @@ func TestTraefikConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := c.TraefikConfig(ctx, domain.LocalServerID, "nope"); !errors.Is(err, ErrUnauthorized) {
+	if _, err := c.TraefikConfig(ctx, domain.LocalServerID, "nope"); !errors.Is(err, identity.ErrUnauthorized) {
 		t.Fatalf("bad token: %v", err)
 	}
 	token, err := c.providerToken(ctx, domain.LocalServerID)
@@ -145,7 +147,7 @@ func TestTraefikConfig(t *testing.T) {
 	if again, _ := c.providerToken(ctx, domain.LocalServerID); again != token {
 		t.Error("the token must be stable: it is in Traefik's command")
 	}
-	if _, err := c.TraefikConfig(ctx, "01OTHER", token); !errors.Is(err, ErrUnauthorized) {
+	if _, err := c.TraefikConfig(ctx, "01OTHER", token); !errors.Is(err, identity.ErrUnauthorized) {
 		t.Error("a server's token must not read another's configuration")
 	}
 

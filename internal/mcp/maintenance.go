@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
@@ -24,7 +26,7 @@ type setMaintenanceIn struct {
 
 func (t *tools) setMaintenance(ctx context.Context, _ *mcp.CallToolRequest, in setMaintenanceIn) (*mcp.CallToolResult, domain.Maintenance, error) {
 	out, err := mutate(ctx, t.c, "set_maintenance", in.Project, func() (domain.Maintenance, error) {
-		p, err := t.project(ctx, in.Project, core.PermDeploy)
+		p, err := t.project(ctx, in.Project, identity.PermDeploy)
 		if err != nil {
 			return domain.Maintenance{}, err
 		}

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
@@ -264,7 +266,7 @@ func (c *Core) upload(ctx context.Context, st storage.Storage, target domain.Bac
 		err := func() error {
 			var w io.Writer = pw
 			if target.Encrypted() {
-				enc, err := encryptTo(pw, target.AgeRecipient)
+				enc, err := identity.EncryptTo(pw, target.AgeRecipient)
 				if err != nil {
 					return err
 				}
@@ -384,10 +386,10 @@ func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, con
 		return domain.Restore{}, err
 	}
 	// Restoring reads the backup's project and overwrites the target's.
-	if err := check(ctx, b.ProjectID, PermRestore); err != nil {
+	if err := identity.Check(ctx, b.ProjectID, identity.PermRestore); err != nil {
 		return domain.Restore{}, err
 	}
-	if err := check(ctx, svc.ProjectID, PermRestore); err != nil {
+	if err := identity.Check(ctx, svc.ProjectID, identity.PermRestore); err != nil {
 		return domain.Restore{}, err
 	}
 	if b.Kind == domain.BackupKindVolume {
@@ -712,7 +714,7 @@ func fromStorage(rc io.Reader, target domain.BackupTarget, b domain.Backup, cons
 	var content io.Reader = stored
 	if b.Encrypted {
 		var err error
-		if content, err = decryptFrom(stored, target.AgeIdentity); err != nil {
+		if content, err = identity.DecryptFrom(stored, target.AgeIdentity); err != nil {
 			return err
 		}
 	}
@@ -797,10 +799,10 @@ func (c *Core) ListBackups(ctx context.Context, f domain.BackupFilter) ([]domain
 	if f.Limit == 0 {
 		f.Limit = 100
 	}
-	if f.ProjectID != "" && !visible(ctx, f.ProjectID) {
+	if f.ProjectID != "" && !identity.Visible(ctx, f.ProjectID) {
 		return []domain.Backup{}, nil
 	}
-	f.ProjectIn = visibleProjects(ctx)
+	f.ProjectIn = identity.VisibleProjects(ctx)
 	bs, err := c.store.ListBackups(ctx, f)
 	for i := range bs {
 		c.fillSteps(&bs[i])

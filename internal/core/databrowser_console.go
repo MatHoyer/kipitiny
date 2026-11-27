@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -50,11 +52,11 @@ var pgTagRe = regexp.MustCompile(`^[A-Z]+( [A-Z]+)*( [0-9]+){0,2}$`)
 // mariadb, mongodb) or commands that write are refused (redis). Every run is audited, without its text, which
 // may hold secrets.
 func (c *Core) DataConsole(ctx context.Context, id, database, query string, write bool) (res ConsoleResult, err error) {
-	perm := PermData
+	perm := identity.PermData
 	if write {
-		perm = PermDataEdit
+		perm = identity.PermDataEdit
 	}
-	if err := c.requireOn(ctx, id, perm); err != nil {
+	if err := c.RequireOn(ctx, id, perm); err != nil {
 		return ConsoleResult{}, err
 	}
 	action := "data console"

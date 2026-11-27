@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
@@ -64,7 +66,7 @@ func newFlow(t *testing.T) flow {
 	}
 	f := flow{dk: dk, dbPath: filepath.Join(t.TempDir(), "t.db"), cfg: config.Config{DataDir: t.TempDir()}}
 	f.c = f.core(t)
-	f.ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
+	f.ctx = identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
 	return f
 }
 

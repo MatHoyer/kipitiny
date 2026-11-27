@@ -5,7 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -13,7 +14,7 @@ func TestPreviewSettingsTools(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	p, _ := e.st.CreateProject(ctx, domain.Project{Name: "shop"})
-	read, admin := e.session(core.PermView), e.session()
+	read, admin := e.session(identity.PermView), e.session()
 
 	if out, isErr := e.call(read, "set_preview_settings", map[string]any{"project": "shop", "ttl": "72h"}); !isErr || !strings.Contains(out, "forbidden") {
 		t.Errorf("set with a read token: %s", out)
@@ -43,7 +44,7 @@ func TestAnonymizeRulesTools(t *testing.T) {
 	e := newEnv(t)
 	p, _ := e.st.CreateProject(ctx, domain.Project{Name: "shop"})
 	db, _ := e.st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "db", Kind: domain.ServiceKindPostgres, Image: "postgres:17"})
-	read, admin := e.session(core.PermView), e.session()
+	read, admin := e.session(identity.PermView), e.session()
 
 	rules := map[string]any{"users": map[string]any{"email": "fake:email"}, "sessions": "truncate"}
 	if out, isErr := e.call(read, "set_anonymize_rules", map[string]any{"project": "shop", "service": "db", "rules": rules}); !isErr || !strings.Contains(out, "forbidden") {

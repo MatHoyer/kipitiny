@@ -16,6 +16,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -81,7 +83,7 @@ func TestVolumeFilesDockerHTTP(t *testing.T) {
 		_ = c.Shutdown(context.Background()) // removes the file helper
 		_ = dk.RemoveVolume(context.Background(), core.AppVolume(svc.ID, "data"))
 	})
-	tok, err := c.CreateAPIToken(core.WithActor(ctx, core.Actor{Kind: "user"}), core.TokenInput{Name: "t"})
+	tok, err := c.CreateAPIToken(identity.WithActor(ctx, identity.Actor{Kind: "user"}), identity.TokenInput{Name: "t"})
 	if err != nil {
 		t.Fatal(err)
 	}

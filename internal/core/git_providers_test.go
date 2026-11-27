@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -70,7 +72,7 @@ func TestGitProviders(t *testing.T) {
 		t.Errorf("github created directly: %v", err)
 	}
 	p, err := c.CreateGitProvider(ctx, GitProviderInput{Kind: domain.GitLab, Name: "gl", ClientID: "id", ClientSecret: "s"})
-	if err != nil || p.BaseURL != "https://gitlab.com" || p.ClientSecret != SecretMask || p.Connected {
+	if err != nil || p.BaseURL != "https://gitlab.com" || p.ClientSecret != identity.SecretMask || p.Connected {
 		t.Fatalf("create = %+v, %v", p, err)
 	}
 	if _, err := c.CreateGitProvider(ctx, GitProviderInput{Kind: domain.Gitea, Name: "gl", BaseURL: "git.example.com", ClientID: "id", ClientSecret: "s"}); !errors.Is(err, ErrInvalid) {
@@ -83,10 +85,10 @@ func TestGitProviders(t *testing.T) {
 	if _, err := c.store.UpdateGitProvider(ctx, sp); err != nil {
 		t.Fatal(err)
 	}
-	if v, err := c.UpdateGitProvider(ctx, p.ID, GitProviderInput{Name: "GitLab", ClientID: "id", ClientSecret: SecretMask}); err != nil || !v.Connected || v.Name != "GitLab" {
+	if v, err := c.UpdateGitProvider(ctx, p.ID, GitProviderInput{Name: "GitLab", ClientID: "id", ClientSecret: identity.SecretMask}); err != nil || !v.Connected || v.Name != "GitLab" {
 		t.Errorf("rename = %+v, %v", v, err)
 	}
-	if v, err := c.UpdateGitProvider(ctx, p.ID, GitProviderInput{Name: "GitLab", ClientID: "other", ClientSecret: SecretMask}); err != nil || v.Connected || v.Account != "" {
+	if v, err := c.UpdateGitProvider(ctx, p.ID, GitProviderInput{Name: "GitLab", ClientID: "other", ClientSecret: identity.SecretMask}); err != nil || v.Connected || v.Account != "" {
 		t.Errorf("new application = %+v, %v", v, err)
 	}
 	sp, _ = c.store.GetGitProvider(ctx, p.ID)
@@ -194,19 +196,19 @@ func TestGitProviderWebhook(t *testing.T) {
 	}
 	push := `{"ref":"refs/heads/main","repository":{"clone_url":"https://github.com/Me/infra.git"}}`
 	unread := func() ([]byte, error) { t.Error("body read before the sender was known"); return nil, nil }
-	if err := c.HandleGitProviderWebhook(ctx, "nope", http.Header{"X-Hub-Signature-256": {"sha256=00"}}.Get, unread); !errors.Is(err, ErrUnauthorized) {
+	if err := c.HandleGitProviderWebhook(ctx, "nope", http.Header{"X-Hub-Signature-256": {"sha256=00"}}.Get, unread); !errors.Is(err, identity.ErrUnauthorized) {
 		t.Errorf("unknown provider: %v", err)
 	}
-	if err := c.HandleGitProviderWebhook(ctx, p.ID, http.Header{}.Get, unread); !errors.Is(err, ErrUnauthorized) {
+	if err := c.HandleGitProviderWebhook(ctx, p.ID, http.Header{}.Get, unread); !errors.Is(err, identity.ErrUnauthorized) {
 		t.Errorf("unsigned: %v", err)
 	}
-	if err := c.HandleGitWebhook(ctx, proj.ID, http.Header{}.Get, unread); !errors.Is(err, ErrUnauthorized) {
+	if err := c.HandleGitWebhook(ctx, proj.ID, http.Header{}.Get, unread); !errors.Is(err, identity.ErrUnauthorized) {
 		t.Errorf("unsigned project hook: %v", err)
 	}
-	if err := c.HandleGitWebhook(ctx, "nope", http.Header{"X-Gitlab-Token": {"w"}}.Get, unread); !errors.Is(err, ErrUnauthorized) {
+	if err := c.HandleGitWebhook(ctx, "nope", http.Header{"X-Gitlab-Token": {"w"}}.Get, unread); !errors.Is(err, identity.ErrUnauthorized) {
 		t.Errorf("unknown project: %v", err)
 	}
-	if err := send("push", push, "wrong"); !errors.Is(err, ErrUnauthorized) {
+	if err := send("push", push, "wrong"); !errors.Is(err, identity.ErrUnauthorized) {
 		t.Errorf("bad signature: %v", err)
 	}
 	if err := send("installation", `{}`, "s3cret"); !errors.Is(err, ErrIgnored) {

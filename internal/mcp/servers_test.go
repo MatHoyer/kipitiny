@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
 // TestRebootServerConfirm covers the refusals; rebooting needs a host.
 func TestRebootServerConfirm(t *testing.T) {
 	e := newEnv(t)
-	read, admin := e.session(core.PermView), e.session()
+	read, admin := e.session(identity.PermView), e.session()
 	if out, isErr := e.call(read, "reboot_server", map[string]any{"confirm": "local"}); !isErr || !strings.Contains(out, "forbidden") {
 		t.Errorf("read token: %s", out)
 	}

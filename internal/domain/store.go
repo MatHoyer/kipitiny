@@ -3,15 +3,7 @@
 // It imports only the standard library (and the anonymization rules).
 package domain
 
-import (
-	"context"
-	"errors"
-)
-
-var (
-	ErrNotFound = errors.New("not found")
-	ErrConflict = errors.New("conflict")
-)
+import "context"
 
 // Store is every repository, plus what spans them.
 type Store interface {

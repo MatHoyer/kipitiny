@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
@@ -291,13 +293,13 @@ type tools struct{ c *core.Core }
 // mutate checks there is an actor, runs f and records the outcome in the audit log.
 func mutate[T any](ctx context.Context, c *core.Core, action, target string, f func() (T, error)) (T, error) {
 	var zero T
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		c.Audit(ctx, "mcp "+action, target, http.StatusForbidden, err) // denied attempts matter too
 		return zero, err
 	}
 	out, err := f()
 	status := http.StatusOK
-	if errors.Is(err, core.ErrForbidden) {
+	if errors.Is(err, identity.ErrForbidden) {
 		status = http.StatusForbidden
 	} else if err != nil {
 		status = http.StatusBadRequest
@@ -338,7 +340,7 @@ type listServicesOut struct {
 }
 
 func (t *tools) listServices(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listServicesOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, listServicesOut{}, err
 	}
 	projects, err := t.c.ListProjects(ctx)
@@ -398,10 +400,10 @@ type appStatusOut struct {
 }
 
 func (t *tools) getAppStatus(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, appStatusOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, appStatusOut{}, err
 	}
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, appStatusOut{}, friendly(err)
 	}
@@ -439,10 +441,10 @@ type getLogsOut struct {
 }
 
 func (t *tools) getLogs(ctx context.Context, _ *mcp.CallToolRequest, in getLogsIn) (*mcp.CallToolResult, getLogsOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, getLogsOut{}, err
 	}
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, getLogsOut{}, friendly(err)
 	}
@@ -471,7 +473,7 @@ type deployIn struct {
 
 func (t *tools) deploy(ctx context.Context, _ *mcp.CallToolRequest, in deployIn) (*mcp.CallToolResult, domain.Deployment, error) {
 	dep, err := mutate(ctx, t.c, "deploy", in.Service, func() (domain.Deployment, error) {
-		svc, err := t.service(ctx, in.Service, core.PermDeploy)
+		svc, err := t.service(ctx, in.Service, identity.PermDeploy)
 		if err != nil {
 			return domain.Deployment{}, err
 		}
@@ -535,7 +537,7 @@ func (in deployImageIn) ports() []domain.PublishedPort {
 func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in deployImageIn) (*mcp.CallToolResult, domain.Deployment, error) {
 	dep, err := mutate(ctx, t.c, "deploy_image", in.Project+"/"+in.Name, func() (domain.Deployment, error) {
 		project, err := t.findProject(ctx, in.Project)
-		if err == nil && core.Authorize(ctx, project.ID, core.PermSettings) != nil {
+		if err == nil && identity.Authorize(ctx, project.ID, identity.PermSettings) != nil {
 			return t.retag(ctx, in)
 		}
 		if errors.Is(err, domain.ErrNotFound) {
@@ -591,9 +593,9 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 // retag is deploy_image without the settings permission: the app must exist
 // and only its image tag or digest may change.
 func (t *tools) retag(ctx context.Context, in deployImageIn) (domain.Deployment, error) {
-	svc, err := t.service(ctx, in.Project+"/"+in.Name, core.PermDeploy)
+	svc, err := t.service(ctx, in.Project+"/"+in.Name, identity.PermDeploy)
 	if errors.Is(err, domain.ErrNotFound) {
-		return domain.Deployment{}, fmt.Errorf("%w: needs the settings permission to create an app", core.ErrForbidden)
+		return domain.Deployment{}, fmt.Errorf("%w: needs the settings permission to create an app", identity.ErrForbidden)
 	}
 	if err != nil {
 		return domain.Deployment{}, err
@@ -603,7 +605,7 @@ func (t *tools) retag(ctx context.Context, in deployImageIn) (domain.Deployment,
 	}
 	if in.Env != nil || in.PublishedPorts != nil || in.StopGraceSeconds != nil || in.Routes != nil ||
 		(in.Domain != "" && in.Domain != svc.Domain) || (in.Port != 0 && in.Port != svc.Port) {
-		return domain.Deployment{}, fmt.Errorf("%w: needs the settings permission to change anything but the image tag", core.ErrForbidden)
+		return domain.Deployment{}, fmt.Errorf("%w: needs the settings permission to change anything but the image tag", identity.ErrForbidden)
 	}
 	opts, err := core.RetagOptions(svc.Image, in.Image)
 	if err != nil {
@@ -627,7 +629,7 @@ type setProjectEnvOut struct {
 
 func (t *tools) setProjectEnv(ctx context.Context, _ *mcp.CallToolRequest, in setProjectEnvIn) (*mcp.CallToolResult, setProjectEnvOut, error) {
 	out, err := mutate(ctx, t.c, "set_project_env", in.Project, func() (setProjectEnvOut, error) {
-		project, err := t.project(ctx, in.Project, core.PermEnv)
+		project, err := t.project(ctx, in.Project, identity.PermEnv)
 		if err != nil {
 			return setProjectEnvOut{}, err
 		}
@@ -664,10 +666,10 @@ type getProjectComposeOut struct {
 }
 
 func (t *tools) getProjectCompose(ctx context.Context, _ *mcp.CallToolRequest, in getProjectComposeIn) (*mcp.CallToolResult, getProjectComposeOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, getProjectComposeOut{}, err
 	}
-	project, err := t.project(ctx, in.Project, core.PermView)
+	project, err := t.project(ctx, in.Project, identity.PermView)
 	if err != nil {
 		return nil, getProjectComposeOut{}, friendly(err)
 	}
@@ -688,7 +690,7 @@ type applyProjectComposeIn struct {
 
 func (t *tools) applyProjectCompose(ctx context.Context, _ *mcp.CallToolRequest, in applyProjectComposeIn) (*mcp.CallToolResult, core.ComposePlan, error) {
 	out, err := mutate(ctx, t.c, "apply_project_compose", in.Project, func() (core.ComposePlan, error) {
-		project, err := t.project(ctx, in.Project, core.PermSettings)
+		project, err := t.project(ctx, in.Project, identity.PermSettings)
 		if err != nil {
 			return core.ComposePlan{}, err
 		}
@@ -714,30 +716,30 @@ func (t *tools) findProject(ctx context.Context, name string) (domain.Project, e
 }
 
 // project finds a project by name and checks p on it.
-func (t *tools) project(ctx context.Context, name string, p core.Perm) (domain.Project, error) {
+func (t *tools) project(ctx context.Context, name string, p identity.Perm) (domain.Project, error) {
 	pr, err := t.findProject(ctx, name)
 	if err != nil {
 		return domain.Project{}, err
 	}
-	return pr, core.Authorize(ctx, pr.ID, p)
+	return pr, identity.Authorize(ctx, pr.ID, p)
 }
 
 // service resolves a service (project/service or ID) and checks p on its
 // project.
-func (t *tools) service(ctx context.Context, ref string, p core.Perm) (domain.Service, error) {
+func (t *tools) service(ctx context.Context, ref string, p identity.Perm) (domain.Service, error) {
 	return t.c.AuthorizeService(ctx, ref, p)
 }
 
 // backup checks p on a backup's project; the manager's own are admin only.
-func (t *tools) backup(ctx context.Context, id string, p core.Perm) error {
-	projectID, err := t.c.ProjectOf(ctx, core.IDBackup, id)
+func (t *tools) backup(ctx context.Context, id string, p identity.Perm) error {
+	projectID, err := t.c.ProjectOf(ctx, identity.IDBackup, id)
 	if err != nil {
 		return err
 	}
 	if projectID == "" {
-		return core.RequireAdmin(ctx)
+		return identity.RequireAdmin(ctx)
 	}
-	return core.Authorize(ctx, projectID, p)
+	return identity.Authorize(ctx, projectID, p)
 }
 
 type rollbackIn struct {
@@ -747,7 +749,7 @@ type rollbackIn struct {
 
 func (t *tools) rollback(ctx context.Context, _ *mcp.CallToolRequest, in rollbackIn) (*mcp.CallToolResult, domain.Deployment, error) {
 	dep, err := mutate(ctx, t.c, "rollback", in.Service, func() (domain.Deployment, error) {
-		svc, err := t.service(ctx, in.Service, core.PermDeploy)
+		svc, err := t.service(ctx, in.Service, identity.PermDeploy)
 		if err != nil {
 			return domain.Deployment{}, err
 		}
@@ -765,7 +767,7 @@ type backupIn struct {
 
 func (t *tools) backupDatabase(ctx context.Context, _ *mcp.CallToolRequest, in backupIn) (*mcp.CallToolResult, domain.Backup, error) {
 	b, err := mutate(ctx, t.c, "backup_database", in.Database, func() (domain.Backup, error) {
-		svc, err := t.service(ctx, in.Database, core.PermBackups)
+		svc, err := t.service(ctx, in.Database, identity.PermBackups)
 		if err != nil {
 			return domain.Backup{}, err
 		}
@@ -787,10 +789,10 @@ type listStorageOut struct {
 }
 
 func (t *tools) listStorage(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listStorageOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, listStorageOut{}, err
 	}
-	if err := core.RequireFeature(ctx, core.FeatureStorage); err != nil {
+	if err := identity.RequireFeature(ctx, identity.FeatureStorage); err != nil {
 		return nil, listStorageOut{}, err
 	}
 	ts, err := t.c.ListBackupTargets(ctx)
@@ -810,7 +812,7 @@ type scanStorageIn struct {
 
 func (t *tools) scanStorage(ctx context.Context, _ *mcp.CallToolRequest, in scanStorageIn) (*mcp.CallToolResult, core.ScanResult, error) {
 	out, err := mutate(ctx, t.c, "scan_storage", in.Storage, func() (core.ScanResult, error) {
-		if err := core.RequireAdmin(ctx); err != nil {
+		if err := identity.RequireAdmin(ctx); err != nil {
 			return core.ScanResult{}, err
 		}
 		return t.c.ScanBackupTarget(ctx, in.Storage)
@@ -827,10 +829,10 @@ type listBackupsOut struct {
 }
 
 func (t *tools) listBackups(ctx context.Context, _ *mcp.CallToolRequest, in listBackupsIn) (*mcp.CallToolResult, listBackupsOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, listBackupsOut{}, err
 	}
-	svc, err := t.service(ctx, in.Database, core.PermView)
+	svc, err := t.service(ctx, in.Database, identity.PermView)
 	if err != nil {
 		return nil, listBackupsOut{}, friendly(err)
 	}
@@ -846,7 +848,7 @@ type restoreIn struct {
 
 func (t *tools) restoreDatabase(ctx context.Context, _ *mcp.CallToolRequest, in restoreIn) (*mcp.CallToolResult, domain.Restore, error) {
 	r, err := mutate(ctx, t.c, "restore_database", in.Database, func() (domain.Restore, error) {
-		svc, err := t.service(ctx, in.Database, core.PermRestore)
+		svc, err := t.service(ctx, in.Database, identity.PermRestore)
 		if err != nil {
 			return domain.Restore{}, err
 		}

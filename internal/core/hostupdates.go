@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
 )
@@ -118,7 +120,7 @@ func installError(log, unit string) string {
 // all of them, in the background; the security report follows it and the
 // host is checked again when it's done. Admin only.
 func (c *Core) InstallUpdates(ctx context.Context, serverID string, all bool) (SecurityReport, error) {
-	if err := RequireAdmin(ctx); err != nil {
+	if err := identity.RequireAdmin(ctx); err != nil {
 		return SecurityReport{}, err
 	}
 	sv, err := c.store.GetServer(ctx, serverID)
@@ -237,7 +239,7 @@ func (c *Core) pendingReboot(ctx context.Context, serverID string, r SecurityRep
 // RebootServer reboots a server's host a few seconds from now, then checks
 // it again once it's back. Every container on it restarts. Admin only.
 func (c *Core) RebootServer(ctx context.Context, serverID string) (SecurityReport, error) {
-	if err := RequireAdmin(ctx); err != nil {
+	if err := identity.RequireAdmin(ctx); err != nil {
 		return SecurityReport{}, err
 	}
 	sv, err := c.store.GetServer(ctx, serverID)

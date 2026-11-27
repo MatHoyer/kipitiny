@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/go-git/go-git/v5"
 	gitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -179,7 +181,7 @@ func (c *Core) gitFromInput(ctx context.Context, projectID string, in GitInput) 
 		PollSeconds:   in.PollSeconds,
 		WebhookSecret: old.WebhookSecret,
 	}
-	if a, ok := ActorFrom(ctx); ok {
+	if a, ok := identity.ActorFrom(ctx); ok {
 		g.LinkedBy, g.LinkedToken = a.UserID, a.TokenID
 	}
 	if g.Branch == "" {
@@ -192,7 +194,7 @@ func (c *Core) gitFromInput(ctx context.Context, projectID string, in GitInput) 
 		g.PollSeconds = defaultGitPoll
 	}
 	if g.WebhookSecret == "" {
-		g.WebhookSecret = randomToken(24)
+		g.WebhookSecret = identity.RandomToken(24)
 	}
 	if err := validateGit(g); err != nil {
 		return domain.ProjectGit{}, err
@@ -240,7 +242,7 @@ func validateGit(g domain.ProjectGit) error {
 // metadata endpoint). A git provider's repositories are on the host an
 // admin set up, and admins may link anything.
 func checkRepoHost(ctx context.Context, g domain.ProjectGit) error {
-	a, ok := ActorFrom(ctx)
+	a, ok := identity.ActorFrom(ctx)
 	if !ok || a.Admin() || g.ProviderID != "" {
 		return nil
 	}
@@ -254,7 +256,7 @@ func checkRepoHost(ctx context.Context, g domain.ProjectGit) error {
 	}
 	for _, ip := range ips {
 		if privateAddr(ip) {
-			return fmt.Errorf("%w: %s is a private address; only admins link repositories there", ErrForbidden, u.Hostname())
+			return fmt.Errorf("%w: %s is a private address; only admins link repositories there", identity.ErrForbidden, u.Hostname())
 		}
 	}
 	return nil
@@ -335,12 +337,12 @@ func (c *Core) syncGit(ctx context.Context, g domain.ProjectGit, force, dryRun b
 // user who linked the repository, within the restriction of the token that
 // did if it was a restricted one.
 func (c *Core) asLinker(ctx context.Context, g domain.ProjectGit) (context.Context, error) {
-	if _, ok := ActorFrom(ctx); ok || g.LinkedBy == "" {
+	if _, ok := identity.ActorFrom(ctx); ok || g.LinkedBy == "" {
 		return ctx, nil
 	}
 	u, err := c.store.GetUser(ctx, g.LinkedBy)
 	if errors.Is(err, domain.ErrNotFound) {
-		return ctx, fmt.Errorf("%w: the user who linked this repository was removed; link it again", ErrForbidden)
+		return ctx, fmt.Errorf("%w: the user who linked this repository was removed; link it again", identity.ErrForbidden)
 	} else if err != nil {
 		return ctx, err
 	}
@@ -355,15 +357,15 @@ func (c *Core) asLinker(ctx context.Context, g domain.ProjectGit) (context.Conte
 		}
 		i := slices.IndexFunc(ts, func(t domain.APIToken) bool { return t.ID == g.LinkedToken })
 		if i < 0 {
-			return ctx, fmt.Errorf("%w: the token that linked this repository was removed; link it again", ErrForbidden)
+			return ctx, fmt.Errorf("%w: the token that linked this repository was removed; link it again", identity.ErrForbidden)
 		}
 		if ts[i].Restricted {
-			if a, err = c.restricted(ctx, a, ts[i]); err != nil {
+			if a, err = c.Restricted(ctx, a, ts[i]); err != nil {
 				return ctx, err
 			}
 		}
 	}
-	return WithActor(ctx, a), nil
+	return identity.WithActor(ctx, a), nil
 }
 
 // gitSynced records a sync's outcome and notifies changes of state; it
@@ -670,17 +672,17 @@ func (c *Core) kickGit(projectID string) {
 func (c *Core) HandleGitWebhook(ctx context.Context, projectID string, header func(string) string, readBody func() ([]byte, error)) error {
 	g, err := c.store.GetProjectGit(ctx, projectID)
 	if err != nil || g.WebhookSecret == "" {
-		return ErrUnauthorized // don't reveal which IDs exist
+		return identity.ErrUnauthorized // don't reveal which IDs exist
 	}
 	if header("X-Hub-Signature-256") == "" && header("X-Gitlab-Token") == "" && !strings.HasPrefix(header("Authorization"), "Bearer ") {
-		return ErrUnauthorized
+		return identity.ErrUnauthorized
 	}
 	body, err := readBody()
 	if err != nil {
 		return err
 	}
 	if !webhookAuthorized(g.WebhookSecret, header, body) {
-		return ErrUnauthorized
+		return identity.ErrUnauthorized
 	}
 	if header("X-GitHub-Event") == "ping" {
 		return ErrIgnored

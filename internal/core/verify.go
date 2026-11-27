@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
@@ -196,7 +198,7 @@ func (c *Core) scratchPostgres(ctx context.Context, b domain.Backup, name, user,
 		Name: name,
 		Config: &container.Config{
 			Image: image,
-			Env:   []string{"POSTGRES_USER=" + user, "POSTGRES_DB=" + db, "POSTGRES_PASSWORD=" + randomToken(16)},
+			Env:   []string{"POSTGRES_USER=" + user, "POSTGRES_DB=" + db, "POSTGRES_PASSWORD=" + identity.RandomToken(16)},
 			Labels: map[string]string{
 				docker.LabelManaged:   "true",
 				docker.LabelComponent: verifyComponent,

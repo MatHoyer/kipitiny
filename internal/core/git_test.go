@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
@@ -43,8 +45,8 @@ func TestWebhookAuthorized(t *testing.T) {
 
 func TestCheckRepoHost(t *testing.T) {
 	ctx := context.Background()
-	member := WithActor(ctx, Actor{Role: domain.RoleMember})
-	admin := WithActor(ctx, Actor{Role: domain.RoleAdmin})
+	member := identity.WithActor(ctx, identity.Actor{Role: domain.RoleMember})
+	admin := identity.WithActor(ctx, identity.Actor{Role: domain.RoleAdmin})
 	for _, tc := range []struct {
 		ctx      context.Context
 		url, via string
@@ -60,7 +62,7 @@ func TestCheckRepoHost(t *testing.T) {
 		{ctx, "http://10.0.0.5/me/infra.git", "", false},
 	} {
 		err := checkRepoHost(tc.ctx, domain.ProjectGit{RepoURL: tc.url, ProviderID: tc.via})
-		if refused := errors.Is(err, ErrForbidden); refused != tc.refused {
+		if refused := errors.Is(err, identity.ErrForbidden); refused != tc.refused {
 			t.Errorf("%s (provider %q): err = %v", tc.url, tc.via, err)
 		}
 	}
@@ -256,7 +258,7 @@ func TestGitSyncAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	tok, err := c.store.CreateAPIToken(ctx, domain.APIToken{Name: "agent", UserID: admin.ID, TokenHash: "h", Restricted: true,
-		Features: []string{}, Grants: map[string][]string{p.ID: {string(PermView), string(PermGit)}}})
+		Features: []string{}, Grants: map[string][]string{p.ID: {string(identity.PermView), string(identity.PermGit)}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,17 +267,17 @@ func TestGitSyncAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a, _ := ActorFrom(linker); a.Admin() || a.Can(p.ID, PermSettings) || !a.Can(p.ID, PermGit) {
+	if a, _ := identity.ActorFrom(linker); a.Admin() || a.Can(p.ID, identity.PermSettings) || !a.Can(p.ID, identity.PermGit) {
 		t.Errorf("sync actor of a restricted token = %+v", a)
 	}
 	file := []byte("services:\n  web: {image: 'nginx'}\n")
-	if _, err := c.applyCompose(fromGitSync(linker), p.ID, file, ApplyOptions{DryRun: true}, true); !errors.Is(err, ErrForbidden) {
+	if _, err := c.applyCompose(fromGitSync(linker), p.ID, file, ApplyOptions{DryRun: true}, true); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("git-only sync adding a service: %v", err)
 	}
 	if err := c.store.DeleteAPIToken(ctx, tok.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.asLinker(ctx, g); !errors.Is(err, ErrForbidden) {
+	if _, err := c.asLinker(ctx, g); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("sync after the token was deleted: %v", err)
 	}
 	g.LinkedToken = ""

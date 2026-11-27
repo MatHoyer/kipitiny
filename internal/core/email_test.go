@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/mail"
@@ -92,11 +94,11 @@ func TestEmailPasswordMasked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v, _ := c.Email(ctx); v.Providers[0].Password != SecretMask {
+	if v, _ := c.Email(ctx); v.Providers[0].Password != identity.SecretMask {
 		t.Errorf("password leaked: %+v", v)
 	}
 	// A masked password keeps the stored one; the server check fails, nothing is saved.
-	if _, err := c.UpdateEmailProvider(ctx, p.ID, EmailProviderInput{Name: "x", Config: mail.Config{Host: "127.0.0.1", Port: 1, Security: mail.StartTLS, Username: "u", Password: SecretMask, From: "ops@example.com"}}); !errors.Is(err, ErrInvalid) {
+	if _, err := c.UpdateEmailProvider(ctx, p.ID, EmailProviderInput{Name: "x", Config: mail.Config{Host: "127.0.0.1", Port: 1, Security: mail.StartTLS, Username: "u", Password: identity.SecretMask, From: "ops@example.com"}}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("unreachable: %v", err)
 	}
 	if got, _ := c.store.GetEmailProvider(ctx, p.ID); got.Password != "secret" || got.Host != "smtp.example.com" {
@@ -178,8 +180,8 @@ func TestInviteEmail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := WithActor(context.Background(), Actor{Kind: "user", UserID: admin.ID, Role: domain.RoleAdmin})
-	in := InviteInput{UserAccess: UserAccess{Role: domain.RoleAdmin}, Email: "new@example.com", Link: "https://kipitiny.example.com/invite"}
+	ctx := identity.WithActor(context.Background(), identity.Actor{Kind: "user", UserID: admin.ID, Role: domain.RoleAdmin})
+	in := identity.InviteInput{UserAccess: identity.UserAccess{Role: domain.RoleAdmin}, Email: "new@example.com", Link: "https://kipitiny.example.com/invite"}
 	if _, err := c.CreateInvite(ctx, in); !errors.Is(err, ErrNoEmail) {
 		t.Fatalf("without SMTP: %v", err)
 	}
@@ -187,7 +189,7 @@ func TestInviteEmail(t *testing.T) {
 	if _, err := c.CreateEmailProvider(ctx, localProvider("relay", srv)); err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range []InviteInput{
+	for _, bad := range []identity.InviteInput{
 		{UserAccess: in.UserAccess, Email: "nope", Link: in.Link},
 		{UserAccess: in.UserAccess, Email: in.Email, Link: "javascript:alert(1)"},
 		{UserAccess: in.UserAccess, Email: in.Email, Link: in.Link + "#x"},
@@ -210,7 +212,7 @@ func TestInviteEmail(t *testing.T) {
 	}
 
 	// Without an email, nothing is sent: the admin copies the link.
-	if inv, err := c.CreateInvite(ctx, InviteInput{UserAccess: in.UserAccess}); err != nil || inv.Email != "" {
+	if inv, err := c.CreateInvite(ctx, identity.InviteInput{UserAccess: in.UserAccess}); err != nil || inv.Email != "" {
 		t.Fatalf("plain invite = %+v, %v", inv, err)
 	}
 	select {

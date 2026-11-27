@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/templates"
 )
@@ -51,10 +53,10 @@ func (c *Core) InstallTemplate(ctx context.Context, id string, in TemplateInstal
 		return TemplateResult{}, fmt.Errorf("%w: give either a project or a new project", ErrInvalid)
 	}
 	if in.ProjectID != "" {
-		if err := check(ctx, in.ProjectID, PermSettings); err != nil {
+		if err := identity.Check(ctx, in.ProjectID, identity.PermSettings); err != nil {
 			return TemplateResult{}, err
 		}
-	} else if err := checkFeature(ctx, FeatureCreateProjects); err != nil {
+	} else if err := identity.CheckFeature(ctx, identity.FeatureCreateProjects); err != nil {
 		return TemplateResult{}, err
 	}
 	env, err := t.Render(in.Values, func(n int) []byte {
@@ -85,7 +87,7 @@ func (c *Core) InstallTemplate(ctx context.Context, id string, in TemplateInstal
 	}
 
 	np := *in.NewProject
-	if !nameRe.MatchString(np.Name) {
+	if !domain.ValidName(np.Name) {
 		return TemplateResult{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
 	if np.ServerID == "" {

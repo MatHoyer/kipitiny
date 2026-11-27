@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/api"
@@ -51,7 +53,7 @@ func TestProjectTools(t *testing.T) {
 
 	owner, _ := asUser(t, c, st, "admin", domain.RoleAdmin)
 	session := func(perms ...string) *mcp.ClientSession {
-		in := core.TokenInput{Name: "agent", Restricted: len(perms) > 0, Grants: map[string][]string{}}
+		in := identity.TokenInput{Name: "agent", Restricted: len(perms) > 0, Grants: map[string][]string{}}
 		ps, _ := st.ListProjects(ctx)
 		for _, p := range ps {
 			in.Grants[p.ID] = perms

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
@@ -17,10 +19,10 @@ type listJobsOut struct {
 }
 
 func (t *tools) listJobs(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, listJobsOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, listJobsOut{}, err
 	}
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, listJobsOut{}, friendly(err)
 	}
@@ -41,7 +43,7 @@ type setJobIn struct {
 
 func (t *tools) setJob(ctx context.Context, _ *mcp.CallToolRequest, in setJobIn) (*mcp.CallToolResult, core.JobView, error) {
 	out, err := mutate(ctx, t.c, "set_job", in.Service, func() (core.JobView, error) {
-		svc, err := t.service(ctx, in.Service, core.PermSettings)
+		svc, err := t.service(ctx, in.Service, identity.PermSettings)
 		if err != nil {
 			return core.JobView{}, err
 		}
@@ -76,7 +78,7 @@ type jobArg struct {
 
 func (t *tools) deleteJob(ctx context.Context, _ *mcp.CallToolRequest, in jobArg) (*mcp.CallToolResult, deleted, error) {
 	out, err := mutate(ctx, t.c, "delete_job", in.Service, func() (deleted, error) {
-		svc, err := t.service(ctx, in.Service, core.PermSettings)
+		svc, err := t.service(ctx, in.Service, identity.PermSettings)
 		if err != nil {
 			return deleted{}, err
 		}
@@ -91,7 +93,7 @@ func (t *tools) deleteJob(ctx context.Context, _ *mcp.CallToolRequest, in jobArg
 
 func (t *tools) runJob(ctx context.Context, _ *mcp.CallToolRequest, in jobArg) (*mcp.CallToolResult, domain.JobRun, error) {
 	out, err := mutate(ctx, t.c, "run_job", in.Service, func() (domain.JobRun, error) {
-		svc, err := t.service(ctx, in.Service, core.PermDeploy)
+		svc, err := t.service(ctx, in.Service, identity.PermDeploy)
 		if err != nil {
 			return domain.JobRun{}, err
 		}
@@ -119,10 +121,10 @@ type listJobRunsOut struct {
 }
 
 func (t *tools) listJobRuns(ctx context.Context, _ *mcp.CallToolRequest, in listJobRunsIn) (*mcp.CallToolResult, listJobRunsOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, listJobRunsOut{}, err
 	}
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, listJobRunsOut{}, friendly(err)
 	}

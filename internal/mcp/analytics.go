@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/analytics"
@@ -19,7 +21,7 @@ type analyticsIn struct {
 }
 
 func (t *tools) getAnalytics(ctx context.Context, _ *mcp.CallToolRequest, in analyticsIn) (*mcp.CallToolResult, core.AnalyticsView, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, core.AnalyticsView{}, err
 	}
 	days := in.Days
@@ -29,13 +31,13 @@ func (t *tools) getAnalytics(ctx context.Context, _ *mcp.CallToolRequest, in ana
 	now := time.Now()
 	q := core.AnalyticsQuery{From: now.AddDate(0, 0, -min(days, 730)), To: now, Interval: 86400, Filters: in.Filters}
 	if in.Tracker != "" {
-		if err := core.RequireAdmin(ctx); err != nil {
+		if err := identity.RequireAdmin(ctx); err != nil {
 			return nil, core.AnalyticsView{}, err
 		}
 		v, err := t.c.TrackerAnalytics(ctx, in.Tracker, q)
 		return nil, core.AnalyticsView{Stats: v.Stats, Script: v.Tracker.URL}, friendly(err)
 	}
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, core.AnalyticsView{}, friendly(err)
 	}
@@ -55,10 +57,10 @@ type exportAnalyticsOut struct {
 }
 
 func (t *tools) exportAnalytics(ctx context.Context, _ *mcp.CallToolRequest, in exportAnalyticsIn) (*mcp.CallToolResult, exportAnalyticsOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, exportAnalyticsOut{}, err
 	}
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, exportAnalyticsOut{}, friendly(err)
 	}
@@ -84,10 +86,10 @@ type funnelOut struct {
 }
 
 func (t *tools) getFunnel(ctx context.Context, _ *mcp.CallToolRequest, in funnelIn) (*mcp.CallToolResult, funnelOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, funnelOut{}, err
 	}
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, funnelOut{}, friendly(err)
 	}
@@ -105,7 +107,7 @@ type trackersOut struct {
 }
 
 func (t *tools) listTrackers(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, trackersOut, error) {
-	if err := core.RequireAdmin(ctx); err != nil {
+	if err := identity.RequireAdmin(ctx); err != nil {
 		return nil, trackersOut{}, err
 	}
 	ts, err := t.c.Trackers(ctx)
@@ -121,7 +123,7 @@ type createTrackerIn struct {
 
 func (t *tools) createTracker(ctx context.Context, _ *mcp.CallToolRequest, in createTrackerIn) (*mcp.CallToolResult, analytics.Tracker, error) {
 	out, err := mutate(ctx, t.c, "create_tracker", in.Name, func() (analytics.Tracker, error) {
-		if err := core.RequireAdmin(ctx); err != nil {
+		if err := identity.RequireAdmin(ctx); err != nil {
 			return analytics.Tracker{}, err
 		}
 		return t.c.CreateTracker(ctx, analytics.Tracker{Kind: in.Kind, Name: in.Name, Slug: in.Slug, Target: in.Target})
@@ -135,7 +137,7 @@ type deleteTrackerIn struct {
 
 func (t *tools) deleteTracker(ctx context.Context, _ *mcp.CallToolRequest, in deleteTrackerIn) (*mcp.CallToolResult, struct{}, error) {
 	_, err := mutate(ctx, t.c, "delete_tracker", in.ID, func() (struct{}, error) {
-		if err := core.RequireAdmin(ctx); err != nil {
+		if err := identity.RequireAdmin(ctx); err != nil {
 			return struct{}{}, err
 		}
 		return struct{}{}, t.c.DeleteTracker(ctx, in.ID)
@@ -156,10 +158,10 @@ type visitsOut struct {
 }
 
 func (t *tools) listVisits(ctx context.Context, _ *mcp.CallToolRequest, in visitsIn) (*mcp.CallToolResult, visitsOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, visitsOut{}, err
 	}
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, visitsOut{}, friendly(err)
 	}
@@ -178,10 +180,10 @@ type visitIn struct {
 }
 
 func (t *tools) getVisit(ctx context.Context, _ *mcp.CallToolRequest, in visitIn) (*mcp.CallToolResult, analytics.VisitDetail, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, analytics.VisitDetail{}, err
 	}
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, analytics.VisitDetail{}, friendly(err)
 	}

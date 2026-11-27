@@ -6,6 +6,8 @@ import (
 	"math"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -157,7 +159,7 @@ func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
 // can't see.
 func (c *Core) hiddenCanvasNodes(ctx context.Context) (map[string]bool, error) {
 	hidden := map[string]bool{}
-	if visibleProjects(ctx) == nil {
+	if identity.VisibleProjects(ctx) == nil {
 		return hidden, nil
 	}
 	projects, err := c.store.ListProjects(ctx)
@@ -165,14 +167,14 @@ func (c *Core) hiddenCanvasNodes(ctx context.Context) (map[string]bool, error) {
 		return nil, err
 	}
 	for _, p := range projects {
-		hidden["project:"+p.ID] = !visible(ctx, p.ID)
+		hidden["project:"+p.ID] = !identity.Visible(ctx, p.ID)
 	}
 	svcs, err := c.store.ListAllServices(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, s := range svcs {
-		hidden["svc:"+s.ID] = !visible(ctx, s.ProjectID)
+		hidden["svc:"+s.ID] = !identity.Visible(ctx, s.ProjectID)
 	}
 	return hidden, nil
 }

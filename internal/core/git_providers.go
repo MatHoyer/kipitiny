@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"golang.org/x/oauth2"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -66,7 +68,7 @@ type GitProviderView struct {
 func gitProviderView(p domain.GitProvider) GitProviderView {
 	v := GitProviderView{GitProvider: p, Connected: p.Connected(), Webhooks: p.WebhookSecret != ""}
 	if v.ClientSecret != "" {
-		v.ClientSecret = SecretMask
+		v.ClientSecret = identity.SecretMask
 	}
 	return v
 }
@@ -76,7 +78,7 @@ func (c *Core) ListGitProviders(ctx context.Context) ([]GitProviderView, error) 
 	out := make([]GitProviderView, len(ps))
 	for i, p := range ps {
 		out[i] = gitProviderView(p)
-		if isMember(ctx) { // enough to pick one
+		if identity.IsMember(ctx) { // enough to pick one
 			out[i].GitProvider = domain.GitProvider{ID: p.ID, Kind: p.Kind, Name: p.Name, BaseURL: p.BaseURL, Account: p.Account}
 		}
 	}
@@ -137,7 +139,7 @@ func (c *Core) UpdateGitProvider(ctx context.Context, id string, in GitProviderI
 func applyGitProviderInput(p *domain.GitProvider, in GitProviderInput) error {
 	p.Name = strings.TrimSpace(in.Name)
 	p.ClientID = strings.TrimSpace(in.ClientID)
-	if in.ClientSecret != SecretMask {
+	if in.ClientSecret != identity.SecretMask {
 		p.ClientSecret = strings.TrimSpace(in.ClientSecret)
 	}
 	base, err := normalizeForgeURL(p.Kind, in.BaseURL)
@@ -256,7 +258,7 @@ func (c *Core) StartGitHubApp(ctx context.Context, managerURL string, in GitHubA
 	flow := gitFlow{step: gitStepManifest, providerID: id, name: name, baseURL: base}
 	m := gitprovider.ManifestInput{
 		// App names are unique on GitHub.
-		Name:        "kipitiny-" + strings.ToLower(randomToken(4)),
+		Name:        "kipitiny-" + strings.ToLower(identity.RandomToken(4)),
 		ManagerURL:  managerURL,
 		RedirectURL: managerURL + "/api/git-providers/github/created",
 		SetupURL:    managerURL + "/api/git-providers/github/installed",
@@ -266,16 +268,16 @@ func (c *Core) StartGitHubApp(ctx context.Context, managerURL string, in GitHubA
 		flow.webhooks = true
 	}
 	// The manifest URL carries the state GitHub hands back.
-	state := randomToken(24)
+	state := identity.RandomToken(24)
 	flow.manifest, flow.manifestURL = gitprovider.Manifest(m), gitprovider.ManifestURL(base, org, state)
-	c.gitFlows.put(state, flow, time.Now().Add(gitFlowTTL))
+	c.gitFlows.Put(state, flow, time.Now().Add(gitFlowTTL))
 	return GitHubAppStart{URL: managerURL + "/api/git-providers/github/launch?state=" + url.QueryEscape(state)}, nil
 }
 
 // LaunchGitHubApp returns the manifest form of a started creation, without
 // consuming it: GitHub sends the same state back once the app exists.
 func (c *Core) LaunchGitHubApp(state string) (GitHubAppLaunch, error) {
-	f, ok := c.gitFlows.peek(state)
+	f, ok := c.gitFlows.Peek(state)
 	if !ok || f.step != gitStepManifest || f.manifestURL == "" {
 		return GitHubAppLaunch{}, fmt.Errorf("%w: this connection expired or was already used; start again", ErrInvalid)
 	}
@@ -409,13 +411,13 @@ func setOAuthToken(p *domain.GitProvider, tok *oauth2.Token) {
 }
 
 func (c *Core) putGitFlow(f gitFlow) string {
-	state := randomToken(24)
-	c.gitFlows.put(state, f, time.Now().Add(gitFlowTTL))
+	state := identity.RandomToken(24)
+	c.gitFlows.Put(state, f, time.Now().Add(gitFlowTTL))
 	return state
 }
 
 func (c *Core) takeGitFlow(state, step string) (gitFlow, error) {
-	f, _, ok := c.gitFlows.take(state)
+	f, _, ok := c.gitFlows.Take(state)
 	if !ok || f.step != step {
 		return gitFlow{}, fmt.Errorf("%w: this connection expired or was already used; start again", ErrInvalid)
 	}
@@ -525,11 +527,11 @@ func checkProviderRepo(p domain.GitProvider, repoURL string) error {
 func (c *Core) HandleGitProviderWebhook(ctx context.Context, providerID string, header func(string) string, readBody func() ([]byte, error)) error {
 	p, err := c.store.GetGitProvider(ctx, providerID)
 	if err != nil || p.WebhookSecret == "" {
-		return ErrUnauthorized // don't reveal which IDs exist
+		return identity.ErrUnauthorized // don't reveal which IDs exist
 	}
 	sig, ok := strings.CutPrefix(header("X-Hub-Signature-256"), "sha256=")
 	if !ok {
-		return ErrUnauthorized
+		return identity.ErrUnauthorized
 	}
 	body, err := readBody()
 	if err != nil {
@@ -538,7 +540,7 @@ func (c *Core) HandleGitProviderWebhook(ctx context.Context, providerID string, 
 	mac := hmac.New(sha256.New, []byte(p.WebhookSecret))
 	mac.Write(body)
 	if !hmac.Equal([]byte(sig), []byte(hex.EncodeToString(mac.Sum(nil)))) {
-		return ErrUnauthorized
+		return identity.ErrUnauthorized
 	}
 	if header("X-GitHub-Event") != "push" {
 		return ErrIgnored

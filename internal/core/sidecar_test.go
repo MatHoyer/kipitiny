@@ -9,11 +9,12 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/storage"
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
 func TestSidecar(t *testing.T) {
 	ctx := context.Background()
-	identity, recipient, _ := newAgeKey()
+	ageIdentity, recipient, _ := identity.NewAgeKey()
 	created := time.Date(2026, 10, 1, 3, 0, 0, 0, time.UTC)
 	b := domain.Backup{
 		ID: "b1", ServiceID: "s1", ProjectID: "p1", TargetID: "t1", ScheduleID: "sc1",
@@ -22,7 +23,7 @@ func TestSidecar(t *testing.T) {
 		SizeBytes: 42, SHA256: "ff", PGVersion: "17.2", Image: "postgres:17", Extensions: []string{"vector"},
 		CreatedAt: created, Verification: domain.Verification{VerifyStatus: domain.OpSucceeded},
 	}
-	for _, target := range []domain.BackupTarget{{}, {AgeRecipient: recipient, AgeIdentity: identity}} {
+	for _, target := range []domain.BackupTarget{{}, {AgeRecipient: recipient, AgeIdentity: ageIdentity}} {
 		st := &storage.Local{Root: t.TempDir()}
 		if err := writeSidecar(ctx, st, target, b); err != nil {
 			t.Fatal(err)
@@ -34,7 +35,7 @@ func TestSidecar(t *testing.T) {
 			t.Errorf("encrypted %v, stored %.40q", target.Encrypted(), raw)
 		}
 
-		got, err := readSidecar(ctx, st, b.ObjectKey+".json", identity)
+		got, err := readSidecar(ctx, st, b.ObjectKey+".json", ageIdentity)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -46,7 +47,7 @@ func TestSidecar(t *testing.T) {
 			t.Errorf("record: %+v", got)
 		}
 		if target.Encrypted() {
-			other, _, _ := newAgeKey()
+			other, _, _ := identity.NewAgeKey()
 			if _, err := readSidecar(ctx, st, b.ObjectKey+".json", other); err == nil {
 				t.Error("read with the wrong key")
 			}

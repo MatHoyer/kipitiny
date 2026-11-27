@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/distribution/reference"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -23,8 +25,8 @@ type RegistryInput struct {
 func (c *Core) ListRegistries(ctx context.Context) ([]domain.Registry, error) {
 	rs, err := c.store.ListRegistries(ctx)
 	for i := range rs {
-		rs[i].Password = SecretMask
-		if isMember(ctx) {
+		rs[i].Password = identity.SecretMask
+		if identity.IsMember(ctx) {
 			rs[i].Username = ""
 		}
 	}
@@ -38,7 +40,7 @@ func (c *Core) CreateRegistry(ctx context.Context, in RegistryInput) (domain.Reg
 		return domain.Registry{}, err
 	}
 	r, err := c.store.CreateRegistry(ctx, r)
-	r.Password = SecretMask
+	r.Password = identity.SecretMask
 	return r, err
 }
 
@@ -51,7 +53,7 @@ func (c *Core) UpdateRegistry(ctx context.Context, id string, in RegistryInput) 
 		return domain.Registry{}, err
 	}
 	r, err = c.store.UpdateRegistry(ctx, r)
-	r.Password = SecretMask
+	r.Password = identity.SecretMask
 	return r, err
 }
 
@@ -77,7 +79,7 @@ func (c *Core) TestRegistry(ctx context.Context, id string) error {
 func (c *Core) applyRegistry(ctx context.Context, r *domain.Registry, in RegistryInput) error {
 	r.Host = normalizeRegistryHost(in.Host)
 	r.Username = strings.TrimSpace(in.Username)
-	if in.Password != SecretMask {
+	if in.Password != identity.SecretMask {
 		r.Password = strings.TrimSpace(in.Password)
 	}
 	if r.Host == "" || r.Username == "" || r.Password == "" {

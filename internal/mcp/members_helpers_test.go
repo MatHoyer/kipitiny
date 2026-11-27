@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -42,14 +43,14 @@ func (e env) seed(t *testing.T, name string) seeded {
 
 // member creates a member and returns a function that grants them perms on
 // the project and features, then connects a session with their token.
-func (e env) member(t *testing.T, name, projectID string) func(perms []core.Perm, features ...core.Feature) *mcp.ClientSession {
+func (e env) member(t *testing.T, name, projectID string) func(perms []identity.Perm, features ...identity.Feature) *mcp.ClientSession {
 	t.Helper()
 	ctx := context.Background()
 	m, err := e.st.CreateUser(ctx, domain.User{Username: name, PasswordHash: "x", Role: domain.RoleMember})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return func(perms []core.Perm, features ...core.Feature) *mcp.ClientSession {
+	return func(perms []identity.Perm, features ...identity.Feature) *mcp.ClientSession {
 		ps := make([]string, len(perms))
 		for i, p := range perms {
 			ps[i] = string(p)
@@ -69,7 +70,7 @@ func (e env) member(t *testing.T, name, projectID string) func(perms []core.Perm
 		if err != nil {
 			t.Fatal(err)
 		}
-		return e.sessionOf(core.WithActor(ctx, a))
+		return e.sessionOf(identity.WithActor(ctx, a))
 	}
 }
 

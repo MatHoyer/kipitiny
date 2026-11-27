@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
@@ -55,7 +57,7 @@ func TestTemplatesDocker(t *testing.T) {
 	// up for a few seconds.
 	c.probes.Store(domain.LocalServerID, (*mount.Mount)(nil))
 	t.Cleanup(c.cancel)
-	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
+	ctx = identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
 
 	for _, tpl := range templates.List() {
 		t.Run(tpl.ID, func(t *testing.T) {

@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -64,7 +66,7 @@ func rowChanged(label string) string {
 // SQLite database, or with apply unset only returns the statements it would run.
 // Admin only.
 func (c *Core) ApplyRowChanges(ctx context.Context, id, database, schema, table string, ch RowChanges, apply bool) (res ChangeResult, err error) {
-	if err := c.requireOn(ctx, id, PermDataEdit); err != nil {
+	if err := c.RequireOn(ctx, id, identity.PermDataEdit); err != nil {
 		return ChangeResult{}, err
 	}
 	if apply {

@@ -9,13 +9,14 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/storage"
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
 func TestScanBackupTarget(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir() // the storage both managers use
-	identity, recipient, _ := newAgeKey()
-	target := domain.BackupTarget{AgeRecipient: recipient, AgeIdentity: identity}
+	ageIdentity, recipient, _ := identity.NewAgeKey()
+	target := domain.BackupTarget{AgeRecipient: recipient, AgeIdentity: ageIdentity}
 	st := &storage.Local{Root: dir + "/backups"}
 	created := time.Date(2026, 9, 30, 3, 0, 0, 0, time.UTC)
 
@@ -23,7 +24,7 @@ func TestScanBackupTarget(t *testing.T) {
 	put := func(b domain.Backup) {
 		t.Helper()
 		var sealed strings.Builder
-		w, _ := encryptTo(&sealed, recipient)
+		w, _ := identity.EncryptTo(&sealed, recipient)
 		w.Write([]byte("dump"))
 		w.Close()
 		b.Status, b.Encrypted, b.CreatedAt = domain.OpSucceeded, true, created
@@ -58,7 +59,7 @@ func TestScanBackupTarget(t *testing.T) {
 	if _, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.EncryptBackupTarget(ctx, domain.LocalTargetID, identity); err != nil {
+	if _, err := c.EncryptBackupTarget(ctx, domain.LocalTargetID, ageIdentity); err != nil {
 		t.Fatal(err)
 	}
 

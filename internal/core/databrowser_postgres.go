@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -102,7 +104,7 @@ type PgDatabase struct {
 // the server's own, templates and restore leftovers aside. An app's are the
 // SQLite files in its volumes.
 func (c *Core) PgDatabases(ctx context.Context, id string) ([]PgDatabase, error) {
-	if err := c.requireOn(ctx, id, PermData); err != nil {
+	if err := c.RequireOn(ctx, id, identity.PermData); err != nil {
 		return nil, err
 	}
 	if svc, err := c.store.GetService(ctx, id); err != nil {
@@ -143,7 +145,7 @@ var pgDatabaseNameRe = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
 // its first collection (a database without one doesn't exist there).
 // Admin only.
 func (c *Core) CreatePgDatabase(ctx context.Context, id, name, collection string) (PgDatabase, error) {
-	if err := c.requireOn(ctx, id, PermDataEdit); err != nil {
+	if err := c.RequireOn(ctx, id, identity.PermDataEdit); err != nil {
 		return PgDatabase{}, err
 	}
 	if !pgDatabaseNameRe.MatchString(name) {
@@ -190,7 +192,7 @@ func (c *Core) CreatePgDatabase(ctx context.Context, id, name, collection string
 // MariaDB (whose schema is the database), MongoDB collections (no columns),
 // an app's SQLite file (schema main).
 func (c *Core) PgTables(ctx context.Context, id, database string) ([]PgTable, error) {
-	if err := c.requireOn(ctx, id, PermData); err != nil {
+	if err := c.RequireOn(ctx, id, identity.PermData); err != nil {
 		return nil, err
 	}
 	t, err := c.databaseTarget(ctx, id, database)
@@ -248,7 +250,7 @@ ORDER BY n.nspname, c.relname;`, func(row []json.RawMessage) error {
 // PgRows returns one page of a table's rows with its columns (PostgreSQL,
 // MySQL, MariaDB, SQLite; MongoDB has MongoDocuments).
 func (c *Core) PgRows(ctx context.Context, id, database, schema, table string, q RowQuery) (PgRows, error) {
-	if err := c.requireOn(ctx, id, PermData); err != nil {
+	if err := c.RequireOn(ctx, id, identity.PermData); err != nil {
 		return PgRows{}, err
 	}
 	t, err := c.sqlTarget(ctx, id, database)
@@ -302,7 +304,7 @@ func (c *Core) PgRows(ctx context.Context, id, database, schema, table string, q
 // PgExport streams a table's rows matching q (all of them: no paging) to w
 // as CSV with a header.
 func (c *Core) PgExport(ctx context.Context, id, database, schema, table string, q RowQuery, w io.Writer) error {
-	if err := c.requireOn(ctx, id, PermData); err != nil {
+	if err := c.RequireOn(ctx, id, identity.PermData); err != nil {
 		return err
 	}
 	t, err := c.sqlTarget(ctx, id, database)

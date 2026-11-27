@@ -8,6 +8,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
@@ -24,10 +26,10 @@ type listPreviewsOut struct {
 }
 
 func (t *tools) listPreviews(ctx context.Context, _ *mcp.CallToolRequest, in listPreviewsIn) (*mcp.CallToolResult, listPreviewsOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, listPreviewsOut{}, err
 	}
-	p, err := t.project(ctx, in.Project, core.PermView)
+	p, err := t.project(ctx, in.Project, identity.PermView)
 	if err != nil {
 		return nil, listPreviewsOut{}, friendly(err)
 	}
@@ -48,7 +50,7 @@ type deployPreviewIn struct {
 
 func (t *tools) deployPreview(ctx context.Context, _ *mcp.CallToolRequest, in deployPreviewIn) (*mcp.CallToolResult, core.PreviewView, error) {
 	out, err := mutate(ctx, t.c, "deploy_preview", in.Project+"/"+in.Name, func() (core.PreviewView, error) {
-		p, err := t.project(ctx, in.Project, core.PermDeploy)
+		p, err := t.project(ctx, in.Project, identity.PermDeploy)
 		if err != nil {
 			return core.PreviewView{}, err
 		}
@@ -76,7 +78,7 @@ type closePreviewOut struct {
 
 func (t *tools) closePreview(ctx context.Context, _ *mcp.CallToolRequest, in closePreviewIn) (*mcp.CallToolResult, closePreviewOut, error) {
 	out, err := mutate(ctx, t.c, "close_preview", in.Project+"/"+in.Name, func() (closePreviewOut, error) {
-		p, err := t.project(ctx, in.Project, core.PermDeploy)
+		p, err := t.project(ctx, in.Project, identity.PermDeploy)
 		if err != nil {
 			return closePreviewOut{}, err
 		}
@@ -90,10 +92,10 @@ type getPreviewSettingsIn struct {
 }
 
 func (t *tools) getPreviewSettings(ctx context.Context, _ *mcp.CallToolRequest, in getPreviewSettingsIn) (*mcp.CallToolResult, domain.PreviewSettings, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, domain.PreviewSettings{}, err
 	}
-	p, err := t.project(ctx, in.Project, core.PermView)
+	p, err := t.project(ctx, in.Project, identity.PermView)
 	if err != nil {
 		return nil, domain.PreviewSettings{}, friendly(err)
 	}
@@ -117,7 +119,7 @@ type setPreviewSettingsIn struct {
 // replace, so an agent can't drop secrets it can't read.
 func (t *tools) setPreviewSettings(ctx context.Context, _ *mcp.CallToolRequest, in setPreviewSettingsIn) (*mcp.CallToolResult, domain.PreviewSettings, error) {
 	out, err := mutate(ctx, t.c, "set_preview_settings", in.Project, func() (domain.PreviewSettings, error) {
-		p, err := t.project(ctx, in.Project, core.PermEnv)
+		p, err := t.project(ctx, in.Project, identity.PermEnv)
 		if err != nil {
 			return domain.PreviewSettings{}, err
 		}
@@ -176,10 +178,10 @@ type previewSeedOut struct {
 }
 
 func (t *tools) getPreviewSeed(ctx context.Context, _ *mcp.CallToolRequest, in previewSeedIn) (*mcp.CallToolResult, previewSeedOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, previewSeedOut{}, err
 	}
-	p, err := t.project(ctx, in.Project, core.PermView)
+	p, err := t.project(ctx, in.Project, identity.PermView)
 	if err != nil {
 		return nil, previewSeedOut{}, friendly(err)
 	}
@@ -196,7 +198,7 @@ type setAnonymizeRulesIn struct {
 
 func (t *tools) setAnonymizeRules(ctx context.Context, _ *mcp.CallToolRequest, in setAnonymizeRulesIn) (*mcp.CallToolResult, core.SeedDatabase, error) {
 	out, err := mutate(ctx, t.c, "set_anonymize_rules", in.Project+"/"+in.Service, func() (core.SeedDatabase, error) {
-		p, err := t.project(ctx, in.Project, core.PermEnv)
+		p, err := t.project(ctx, in.Project, identity.PermEnv)
 		if err != nil {
 			return core.SeedDatabase{}, err
 		}
@@ -220,7 +222,7 @@ type anonymizeNowIn struct {
 
 func (t *tools) anonymizeNow(ctx context.Context, _ *mcp.CallToolRequest, in anonymizeNowIn) (*mcp.CallToolResult, domain.Backup, error) {
 	out, err := mutate(ctx, t.c, "anonymize_now", in.Project+"/"+in.Service, func() (domain.Backup, error) {
-		p, err := t.project(ctx, in.Project, core.PermEnv)
+		p, err := t.project(ctx, in.Project, identity.PermEnv)
 		if err != nil {
 			return domain.Backup{}, err
 		}

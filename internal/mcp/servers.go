@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
@@ -31,17 +33,17 @@ type getServerStatusOut struct {
 }
 
 func (t *tools) getServerStatus(ctx context.Context, _ *mcp.CallToolRequest, in getServerStatusIn) (*mcp.CallToolResult, getServerStatusOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, getServerStatusOut{}, err
 	}
-	if err := core.RequireFeature(ctx, core.FeatureServers); err != nil {
+	if err := identity.RequireFeature(ctx, identity.FeatureServers); err != nil {
 		return nil, getServerStatusOut{}, err
 	}
 	servers, err := t.c.ListServers(ctx)
 	if err != nil {
 		return nil, getServerStatusOut{}, friendly(err)
 	}
-	admin := core.RequireAdmin(ctx) == nil
+	admin := identity.RequireAdmin(ctx) == nil
 	out := getServerStatusOut{Servers: []ServerStatus{}}
 	for _, sv := range servers {
 		if in.Server != "" && sv.Name != in.Server {
@@ -69,7 +71,7 @@ func (t *tools) getServerStatus(ctx context.Context, _ *mcp.CallToolRequest, in 
 }
 
 func (t *tools) getCleanup(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, core.CleanupView, error) {
-	if err := core.RequireAdmin(ctx); err != nil {
+	if err := identity.RequireAdmin(ctx); err != nil {
 		return nil, core.CleanupView{}, err
 	}
 	return nil, t.c.Cleanup(ctx), nil
@@ -77,7 +79,7 @@ func (t *tools) getCleanup(ctx context.Context, _ *mcp.CallToolRequest, _ struct
 
 func (t *tools) runCleanup(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, core.CleanupView, error) {
 	out, err := mutate(ctx, t.c, "run_cleanup", "cleanup", func() (core.CleanupView, error) {
-		if err := core.RequireAdmin(ctx); err != nil {
+		if err := identity.RequireAdmin(ctx); err != nil {
 			return core.CleanupView{}, err
 		}
 		v, err := t.c.RunCleanup(ctx)
@@ -116,7 +118,7 @@ type rebootServerIn struct {
 
 func (t *tools) rebootServer(ctx context.Context, _ *mcp.CallToolRequest, in rebootServerIn) (*mcp.CallToolResult, core.SecurityReport, error) {
 	out, err := mutate(ctx, t.c, "reboot_server", in.Server, func() (core.SecurityReport, error) {
-		if err := core.RequireAdmin(ctx); err != nil {
+		if err := identity.RequireAdmin(ctx); err != nil {
 			return core.SecurityReport{}, err
 		}
 		id, err := t.serverID(ctx, in.Server)

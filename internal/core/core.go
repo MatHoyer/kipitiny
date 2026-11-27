@@ -9,32 +9,33 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
+	"github.com/kipit-labs/kipitiny/internal/usecase/pending"
+
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
-	"github.com/kipit-labs/kipitiny/internal/secrets"
 )
 
+// The errors use cases share, under the names handlers know them by.
 var (
-	ErrInvalid = errors.New("invalid input")
-	// ErrBusy means another operation (usually a deploy) holds the service.
-	ErrBusy = errors.New("operation in progress")
-	// ErrShuttingDown is returned for work submitted during shutdown.
-	ErrShuttingDown = errors.New("manager is shutting down")
+	ErrInvalid      = domain.ErrInvalid
+	ErrBusy         = domain.ErrBusy
+	ErrShuttingDown = domain.ErrShuttingDown
 )
-
-// Names end up in container, network and DNS names, so keep them DNS-safe.
-var nameRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 
 type Core struct {
+	// Users, sign-in, tokens, permissions and password managers.
+	*identity.Identity
+
 	cfg   config.Config
 	store domain.Store
 	pool  *docker.Pool
@@ -53,9 +54,6 @@ type Core struct {
 	locks   sync.Map // service ID -> *serviceLock
 	busy    sync.Map // service ID -> struct{}: its lock is held
 
-	setupMu    sync.Mutex
-	setupToken string // set while no admin exists
-
 	sched     scheduler
 	verifySem chan struct{}
 	// anonymizeMu makes starting an anonymized copy check-then-create.
@@ -68,7 +66,7 @@ type Core struct {
 	dns            dnsState
 	dnsKick        chan struct{}
 	gitKick        chan string // project IDs to sync
-	gitFlows       pending[gitFlow]
+	gitFlows       pending.Map[gitFlow]
 	gitTokens      gitTokens
 	proxy          proxyState
 	cleaning       atomic.Bool  // a cleanup is running
@@ -77,19 +75,8 @@ type Core struct {
 	notified       sync.Map     // notification key -> time.Time last sent
 	notifyHTTP     *http.Client // nil: notify's default; tests redirect it
 	pushMu         sync.Mutex   // generating the VAPID keys
-	secretKinds    []secretKind
-	secretsMu      sync.Mutex
 	analyticsMu    sync.Mutex
-	analyticsSites string                      // container ID and hostnames last sent to the analytics server
-	secrets        map[string]secrets.Provider // by kind + "\x00" + connection name
-	secretListings secretListings
-	mfaTickets     pending[mfaTicket]
-	totpSetups     pending[string] // user ID -> secret awaiting its first code
-	ceremonies     pending[ceremony]
-	sso            ssoState
-	confirmations  pending[struct{}] // session hash -> confirmed by a fresh sign-in
-	ssoFlows       pending[ssoFlow]
-	ssoHTTP        *http.Client // nil: a client with ssoTimeout; tests redirect it
+	analyticsSites string // container ID and hostnames last sent to the analytics server
 	stats          statsState
 	sleep          sleepState
 	uptime         uptimeState
@@ -115,7 +102,7 @@ func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logg
 	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1), dnsKick: make(chan struct{}, 1), gitKick: make(chan string, 16),
 		errorsSeq: -1, spiked: map[string]bool{}}
 	c.pool = docker.NewPool(local, c.connectServer)
-	c.secretKinds = secretKinds(cfg, local)
+	c.Identity = identity.New(cfg, s, identity.SecretKinds(cfg, local), c, log)
 	return c
 }
 
@@ -170,7 +157,7 @@ func (c *Core) bootstrapServer(ctx context.Context, sv domain.Server) error {
 	}
 	if sv.Kind == domain.ServerLocal {
 		c.cleanupUpdater(ctx, dk)
-		if err := c.cleanupSecretHelpers(ctx, dk); err != nil {
+		if err := c.CleanupSecretHelpers(ctx, dk); err != nil {
 			c.log.Warn("removing password manager helpers failed", "err", err)
 		}
 	}
@@ -217,7 +204,7 @@ func (c *Core) Shutdown(ctx context.Context) error {
 	}
 	c.cancel()
 	c.closeFilesHelpers()
-	if cerr := c.closeSecretProviders(context.WithoutCancel(ctx)); cerr != nil {
+	if cerr := c.CloseSecretProviders(context.WithoutCancel(ctx)); cerr != nil {
 		c.log.Warn("removing password manager helpers failed", "err", cerr)
 	}
 	select {
@@ -357,7 +344,7 @@ func (c *Core) databaseSize() *DatabaseSize {
 }
 
 func (c *Core) Status(ctx context.Context) Status {
-	if a, ok := ActorFrom(ctx); ok && !a.Admin() {
+	if a, ok := identity.ActorFrom(ctx); ok && !a.Admin() {
 		return Status{Version: c.cfg.Version} // the rest is about the server
 	}
 	st := Status{Version: c.cfg.Version, Update: c.Update(), Database: c.databaseSize()}
@@ -372,7 +359,7 @@ func (c *Core) Status(ctx context.Context) Status {
 
 func (c *Core) ListProjects(ctx context.Context) ([]domain.Project, error) {
 	ps, err := c.store.ListProjects(ctx)
-	ps = slices.DeleteFunc(ps, func(p domain.Project) bool { return !visible(ctx, p.ID) })
+	ps = slices.DeleteFunc(ps, func(p domain.Project) bool { return !identity.Visible(ctx, p.ID) })
 	for i := range ps {
 		ps[i] = maskedProject(ps[i])
 	}
@@ -381,10 +368,10 @@ func (c *Core) ListProjects(ctx context.Context) ([]domain.Project, error) {
 
 // CreateProject creates a project on a server (this one when serverID is empty).
 func (c *Core) CreateProject(ctx context.Context, name, serverID string) (domain.Project, error) {
-	if err := checkFeature(ctx, FeatureCreateProjects); err != nil {
+	if err := identity.CheckFeature(ctx, identity.FeatureCreateProjects); err != nil {
 		return domain.Project{}, err
 	}
-	if !nameRe.MatchString(name) {
+	if !domain.ValidName(name) {
 		return domain.Project{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
 	if serverID == "" {
@@ -399,7 +386,7 @@ func (c *Core) CreateProject(ctx context.Context, name, serverID string) (domain
 	if err != nil {
 		return domain.Project{}, err
 	}
-	if err := c.grantCreator(ctx, p.ID); err != nil {
+	if err := c.GrantCreator(ctx, p.ID); err != nil {
 		return p, err
 	}
 	if err := c.dockerFor(p.ServerID).EnsureNetwork(ctx, docker.ProjectNetwork(p.ID)); err != nil {

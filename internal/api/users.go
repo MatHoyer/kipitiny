@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
 func (a *API) listUsers(w http.ResponseWriter, r *http.Request) {
@@ -16,7 +16,7 @@ func (a *API) listUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) setUserAccess(w http.ResponseWriter, r *http.Request) {
-	var body core.UserAccess
+	var body identity.UserAccess
 	if !decode(w, r, &body) {
 		return
 	}
@@ -46,7 +46,7 @@ func (a *API) listInvites(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createInvite(w http.ResponseWriter, r *http.Request) {
-	var body core.InviteInput
+	var body identity.InviteInput
 	if !decode(w, r, &body) {
 		return
 	}
@@ -111,6 +111,6 @@ func (a *API) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	setSessionCookie(w, r, token, int(core.SessionTTL.Seconds()))
+	setSessionCookie(w, r, token, int(identity.SessionTTL.Seconds()))
 	writeJSON(w, http.StatusCreated, u)
 }

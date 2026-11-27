@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
@@ -86,7 +88,7 @@ func writableEntry(svc domain.Service, p string) (vol fileVolume, abs string, re
 
 // writableService loads a service whose volumes may be written.
 func (c *Core) writableService(ctx context.Context, id string) (domain.Service, error) {
-	if err := c.requireOn(ctx, id, PermFilesEdit); err != nil {
+	if err := c.RequireOn(ctx, id, identity.PermFilesEdit); err != nil {
 		return domain.Service{}, err
 	}
 	svc, err := c.store.GetService(ctx, id)

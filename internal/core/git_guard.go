@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/go-git/go-git/v5/plumbing/transport/client"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 
@@ -25,7 +27,7 @@ type repoGuardKey struct{}
 // guardRepo marks ctx for fetches checkRepoHost would refuse at a private
 // address.
 func guardRepo(ctx context.Context, g domain.ProjectGit) context.Context {
-	if a, ok := ActorFrom(ctx); ok && !a.Admin() && g.ProviderID == "" {
+	if a, ok := identity.ActorFrom(ctx); ok && !a.Admin() && g.ProviderID == "" {
 		return context.WithValue(ctx, repoGuardKey{}, true)
 	}
 	return ctx
@@ -58,7 +60,7 @@ func repoDialControl(ctx context.Context, _, addr string, _ syscall.RawConn) err
 		return err
 	}
 	if privateAddr(ip) {
-		return fmt.Errorf("%w: %s is a private address; only admins link repositories there", ErrForbidden, ip)
+		return fmt.Errorf("%w: %s is a private address; only admins link repositories there", identity.ErrForbidden, ip)
 	}
 	return nil
 }

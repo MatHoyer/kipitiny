@@ -10,6 +10,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/mail"
 	"github.com/kipit-labs/kipitiny/internal/notify"
@@ -49,7 +51,7 @@ type EmailProviderInput struct {
 
 func maskedEmailProvider(p domain.EmailProvider) domain.EmailProvider {
 	if p.Password != "" {
-		p.Password = SecretMask
+		p.Password = identity.SecretMask
 	}
 	return p
 }
@@ -158,7 +160,7 @@ func (c *Core) checkEmailProvider(ctx context.Context, p domain.EmailProvider, i
 	cfg.Host = strings.TrimSpace(cfg.Host)
 	cfg.Username = strings.TrimSpace(cfg.Username)
 	cfg.From = strings.TrimSpace(cfg.From)
-	if cfg.Password == SecretMask {
+	if cfg.Password == identity.SecretMask {
 		cfg.Password = p.Password
 	}
 	if err := cfg.Validate(); err != nil {

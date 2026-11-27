@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
 func (a *API) listTokens(w http.ResponseWriter, r *http.Request) {
@@ -17,7 +17,7 @@ func (a *API) listTokens(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createToken(w http.ResponseWriter, r *http.Request) {
-	var body core.TokenInput
+	var body identity.TokenInput
 	if !decode(w, r, &body) {
 		return
 	}
@@ -31,7 +31,7 @@ func (a *API) createToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateToken(w http.ResponseWriter, r *http.Request) {
-	var body core.TokenInput
+	var body identity.TokenInput
 	if !decode(w, r, &body) {
 		return
 	}

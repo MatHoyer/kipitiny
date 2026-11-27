@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
@@ -173,8 +175,8 @@ func (c *Core) restoreVolumeBackup(ctx context.Context, b domain.Backup, svc dom
 	// An admin attaches host data read-only on purpose: only an admin overwrites it.
 	for _, v := range svc.Volumes {
 		if v.ReadOnly && v.HostAccess() && slices.Contains(b.Volumes, v.Name) {
-			if err := RequireAdmin(ctx); err != nil {
-				return domain.Restore{}, fmt.Errorf("%w: volume %s is attached read-only; only an admin restores it", ErrForbidden, v.Name)
+			if err := identity.RequireAdmin(ctx); err != nil {
+				return domain.Restore{}, fmt.Errorf("%w: volume %s is attached read-only; only an admin restores it", identity.ErrForbidden, v.Name)
 			}
 		}
 	}

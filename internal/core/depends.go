@@ -30,7 +30,7 @@ func validateDependsOn(s domain.Service) error {
 	seen := map[string]bool{}
 	for _, d := range s.DependsOn {
 		switch {
-		case !nameRe.MatchString(d.Service):
+		case !domain.ValidName(d.Service):
 			return fmt.Errorf("%w: depends on %q: not a service name", ErrInvalid, d.Service)
 		case d.Service == s.Name:
 			return fmt.Errorf("%w: a service can't depend on itself", ErrInvalid)

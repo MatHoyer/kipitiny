@@ -13,6 +13,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -144,7 +146,7 @@ func (c *Core) BrandingLogo(ctx context.Context) ([]byte, string, error) {
 
 // SetBranding replaces the manager's branding.
 func (c *Core) SetBranding(ctx context.Context, in BrandingInput) (Branding, error) {
-	if err := RequireAdmin(ctx); err != nil {
+	if err := identity.RequireAdmin(ctx); err != nil {
 		return Branding{}, err
 	}
 	s := c.brandingSettings(ctx)
@@ -182,7 +184,7 @@ func (c *Core) SetBranding(ctx context.Context, in BrandingInput) (Branding, err
 
 // ResetBranding goes back to kipitiny's own name, colours and logo.
 func (c *Core) ResetBranding(ctx context.Context) error {
-	if err := RequireAdmin(ctx); err != nil {
+	if err := identity.RequireAdmin(ctx); err != nil {
 		return err
 	}
 	if err := c.store.SetSetting(ctx, brandingLogoSetting, ""); err != nil {

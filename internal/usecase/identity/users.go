@@ -1,4 +1,4 @@
-package core
+package identity
 
 import (
 	"context"
@@ -40,9 +40,9 @@ type UserAccess struct {
 
 // normalized validates a and drops what doesn't apply: an admin has no
 // features or grants, a project without permissions no grant.
-func (c *Core) normalized(ctx context.Context, a UserAccess) (UserAccess, error) {
+func (c *Identity) normalized(ctx context.Context, a UserAccess) (UserAccess, error) {
 	if a.Role != domain.RoleAdmin && a.Role != domain.RoleMember {
-		return UserAccess{}, fmt.Errorf("%w: role must be admin or member", ErrInvalid)
+		return UserAccess{}, fmt.Errorf("%w: role must be admin or member", domain.ErrInvalid)
 	}
 	out := UserAccess{Role: a.Role, Features: []string{}, Grants: map[string][]string{}}
 	if a.Role == domain.RoleAdmin {
@@ -50,7 +50,7 @@ func (c *Core) normalized(ctx context.Context, a UserAccess) (UserAccess, error)
 	}
 	for _, f := range a.Features {
 		if !slices.Contains(Features, Feature(f)) {
-			return UserAccess{}, fmt.Errorf("%w: unknown feature %q", ErrInvalid, f)
+			return UserAccess{}, fmt.Errorf("%w: unknown feature %q", domain.ErrInvalid, f)
 		}
 		if !slices.Contains(out.Features, f) {
 			out.Features = append(out.Features, f)
@@ -60,7 +60,7 @@ func (c *Core) normalized(ctx context.Context, a UserAccess) (UserAccess, error)
 		var ps []string
 		for _, p := range perms {
 			if !slices.Contains(Perms, Perm(p)) {
-				return UserAccess{}, fmt.Errorf("%w: unknown permission %q", ErrInvalid, p)
+				return UserAccess{}, fmt.Errorf("%w: unknown permission %q", domain.ErrInvalid, p)
 			}
 			if !slices.Contains(ps, p) {
 				ps = append(ps, p)
@@ -77,7 +77,7 @@ func (c *Core) normalized(ctx context.Context, a UserAccess) (UserAccess, error)
 	return out, nil
 }
 
-func (c *Core) userView(ctx context.Context, u domain.User) (UserView, error) {
+func (c *Identity) userView(ctx context.Context, u domain.User) (UserView, error) {
 	v := UserView{User: u, Grants: map[string][]string{}, TOTPEnabled: u.TOTPSecret != ""}
 	gs, err := c.store.ListGrants(ctx, u.ID)
 	for _, g := range gs {
@@ -87,7 +87,7 @@ func (c *Core) userView(ctx context.Context, u domain.User) (UserView, error) {
 }
 
 // ListUsers returns every user with their access; admins only.
-func (c *Core) ListUsers(ctx context.Context) ([]UserView, error) {
+func (c *Identity) ListUsers(ctx context.Context) ([]UserView, error) {
 	if err := RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (c *Core) ListUsers(ctx context.Context) ([]UserView, error) {
 
 // SetUserAccess replaces a user's role, features and grants; admins only.
 // The last admin stays one.
-func (c *Core) SetUserAccess(ctx context.Context, id string, in UserAccess) (UserView, error) {
+func (c *Identity) SetUserAccess(ctx context.Context, id string, in UserAccess) (UserView, error) {
 	if err := RequireAdmin(ctx); err != nil {
 		return UserView{}, err
 	}
@@ -149,12 +149,12 @@ func (c *Core) SetUserAccess(ctx context.Context, id string, in UserAccess) (Use
 
 // DeleteUser removes a user with their sessions and tokens; admins only,
 // not themselves.
-func (c *Core) DeleteUser(ctx context.Context, id string) error {
+func (c *Identity) DeleteUser(ctx context.Context, id string) error {
 	if err := RequireAdmin(ctx); err != nil {
 		return err
 	}
 	if a, _ := ActorFrom(ctx); a.UserID == id {
-		return fmt.Errorf("%w: you can't delete your own account", ErrInvalid)
+		return fmt.Errorf("%w: you can't delete your own account", domain.ErrInvalid)
 	}
 	c.setupMu.Lock()
 	defer c.setupMu.Unlock()
@@ -171,19 +171,19 @@ func (c *Core) DeleteUser(ctx context.Context, id string) error {
 }
 
 // keepAnAdmin fails when id is the only admin.
-func (c *Core) keepAnAdmin(ctx context.Context, id string) error {
+func (c *Identity) keepAnAdmin(ctx context.Context, id string) error {
 	us, err := c.store.ListUsers(ctx)
 	if err != nil {
 		return err
 	}
 	if !slices.ContainsFunc(us, func(u domain.User) bool { return u.Role == domain.RoleAdmin && u.ID != id }) {
-		return fmt.Errorf("%w: this is the last admin; make another user admin first", ErrInvalid)
+		return fmt.Errorf("%w: this is the last admin; make another user admin first", domain.ErrInvalid)
 	}
 	return nil
 }
 
 // MakeAdmin makes a user an admin, for the CLI when no admin can sign in.
-func (c *Core) MakeAdmin(ctx context.Context, username string) error {
+func (c *Identity) MakeAdmin(ctx context.Context, username string) error {
 	u, err := c.store.GetUserByUsername(ctx, username)
 	if err != nil {
 		return err
@@ -215,7 +215,7 @@ type InviteInput struct {
 
 // CreateInvite makes a single-use link that creates an account with this
 // access, and emails it when asked; admins only.
-func (c *Core) CreateInvite(ctx context.Context, in InviteInput) (NewInvite, error) {
+func (c *Identity) CreateInvite(ctx context.Context, in InviteInput) (NewInvite, error) {
 	if err := RequireAdmin(ctx); err != nil {
 		return NewInvite{}, err
 	}
@@ -226,18 +226,18 @@ func (c *Core) CreateInvite(ctx context.Context, in InviteInput) (NewInvite, err
 	var to *netmail.Address
 	if in.Email = strings.TrimSpace(in.Email); in.Email != "" {
 		if to, err = mail.ParseAddress(in.Email); err != nil {
-			return NewInvite{}, mailErr(err)
+			return NewInvite{}, invalidAddress(err)
 		}
 		if u, err := url.Parse(in.Link); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.Fragment != "" {
-			return NewInvite{}, fmt.Errorf("%w: link must be the http(s) URL of the invite page", ErrInvalid)
+			return NewInvite{}, fmt.Errorf("%w: link must be the http(s) URL of the invite page", domain.ErrInvalid)
 		}
-		if _, err := c.emailProvider(ctx, ""); err != nil {
+		if err := c.mail.CheckMailer(ctx); err != nil {
 			return NewInvite{}, err
 		}
 		in.Email = to.Address
 	}
 	a, _ := ActorFrom(ctx)
-	token := randomToken(32)
+	token := RandomToken(32)
 	i, err := c.store.CreateInvite(ctx, domain.Invite{TokenHash: hashToken(token), Role: access.Role, Features: access.Features,
 		Grants: access.Grants, CreatedBy: a.UserID, Email: in.Email, ExpiresAt: time.Now().Add(InviteTTL)})
 	if err != nil {
@@ -245,7 +245,7 @@ func (c *Core) CreateInvite(ctx context.Context, in InviteInput) (NewInvite, err
 	}
 	out := NewInvite{Invite: i, Token: token}
 	if to != nil {
-		if err := c.sendMail(ctx, "", []*netmail.Address{to}, c.inviteBody(ctx, i, in.Link+"#"+token), ""); err != nil {
+		if err := c.mail.MailInvite(ctx, to, i, in.Link+"#"+token); err != nil {
 			c.log.Warn("invite not emailed", "to", in.Email, "err", err)
 			out.EmailError = err.Error()
 		}
@@ -253,47 +253,8 @@ func (c *Core) CreateInvite(ctx context.Context, in InviteInput) (NewInvite, err
 	return out, nil
 }
 
-// inviteBody is the email carrying an invite link.
-func (c *Core) inviteBody(ctx context.Context, i domain.Invite, link string) mail.Body {
-	who := "An admin"
-	if u, err := c.store.GetUser(ctx, i.CreatedBy); err == nil {
-		who = u.Username
-	}
-	brand := c.BrandName(ctx)
-	where := "a " + brand + " server"
-	switch {
-	case brand != DefaultBrandName && c.cfg.Domain != "":
-		where = brand + " (" + c.cfg.Domain + ")"
-	case brand != DefaultBrandName:
-		where = brand
-	case c.cfg.Domain != "":
-		where = "the kipitiny server " + c.cfg.Domain
-	}
-	b := mail.Body{
-		Title: "You're invited to " + brand,
-		Paragraphs: []string{
-			fmt.Sprintf("%s invited you to %s. Open the link to pick your username and password.", who, where),
-			fmt.Sprintf("It works once, until %s. If you weren't expecting it, ignore this email.", i.ExpiresAt.UTC().Format("January 2, 2006 15:04 UTC")),
-		},
-		Button: &mail.Link{Label: "Accept the invite", URL: link},
-		Footer: c.mailFooter(ctx),
-	}
-	if i.Role == domain.RoleAdmin {
-		b.Fields = []mail.Field{{Name: "Role", Value: "Admin"}}
-	} else {
-		var names []string
-		for _, id := range slices.Sorted(maps.Keys(i.Grants)) {
-			if p, err := c.store.GetProject(ctx, id); err == nil {
-				names = append(names, p.Name)
-			}
-		}
-		b.Fields = []mail.Field{{Name: "Role", Value: "Member"}, {Name: "Projects", Value: strings.Join(names, ", ")}}
-	}
-	return b
-}
-
 // ListInvites returns the invites not used yet; admins only.
-func (c *Core) ListInvites(ctx context.Context) ([]domain.Invite, error) {
+func (c *Identity) ListInvites(ctx context.Context) ([]domain.Invite, error) {
 	if err := RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -301,7 +262,7 @@ func (c *Core) ListInvites(ctx context.Context) ([]domain.Invite, error) {
 }
 
 // DeleteInvite revokes an invite; admins only.
-func (c *Core) DeleteInvite(ctx context.Context, id string) error {
+func (c *Identity) DeleteInvite(ctx context.Context, id string) error {
 	if err := RequireAdmin(ctx); err != nil {
 		return err
 	}
@@ -322,7 +283,7 @@ type InviteInfo struct {
 
 // Invite describes a valid invite; ErrNotFound for an unknown, used or
 // expired one.
-func (c *Core) Invite(ctx context.Context, token string) (InviteInfo, error) {
+func (c *Identity) Invite(ctx context.Context, token string) (InviteInfo, error) {
 	i, err := c.store.GetInviteByHash(ctx, hashToken(strings.TrimSpace(token)))
 	if err != nil {
 		return InviteInfo{}, inviteErr(err)
@@ -337,7 +298,7 @@ func (c *Core) Invite(ctx context.Context, token string) (InviteInfo, error) {
 }
 
 // AcceptInvite creates the invited account and returns a session for it.
-func (c *Core) AcceptInvite(ctx context.Context, token, username, password string) (domain.User, string, error) {
+func (c *Identity) AcceptInvite(ctx context.Context, token, username, password string) (domain.User, string, error) {
 	if c.SSORequired(ctx) {
 		return domain.User{}, "", ErrSSORequired
 	}
@@ -364,12 +325,12 @@ func (c *Core) AcceptInvite(ctx context.Context, token, username, password strin
 }
 
 // checkNewUsername fails unless username is valid and free.
-func (c *Core) checkNewUsername(ctx context.Context, username string) error {
-	if !nameRe.MatchString(username) {
-		return fmt.Errorf("%w: username must be lowercase letters, digits and dashes", ErrInvalid)
+func (c *Identity) checkNewUsername(ctx context.Context, username string) error {
+	if !domain.ValidName(username) {
+		return fmt.Errorf("%w: username must be lowercase letters, digits and dashes", domain.ErrInvalid)
 	}
 	if _, err := c.store.GetUserByUsername(ctx, username); err == nil {
-		return fmt.Errorf("%w: username %s is taken", ErrInvalid, username)
+		return fmt.Errorf("%w: username %s is taken", domain.ErrInvalid, username)
 	}
 	return nil
 }
@@ -379,4 +340,9 @@ func inviteErr(err error) error {
 		return fmt.Errorf("%w: this invite link is invalid, used or expired; ask for a new one", domain.ErrNotFound)
 	}
 	return err
+}
+
+// invalidAddress is a malformed email address, as ErrInvalid.
+func invalidAddress(err error) error {
+	return fmt.Errorf("%w: %s", domain.ErrInvalid, strings.TrimPrefix(err.Error(), mail.ErrConfig.Error()+": "))
 }

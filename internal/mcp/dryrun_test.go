@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/api"
@@ -70,7 +72,7 @@ func TestDryRunMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	admin, _ := asUser(t, c, st, "admin", domain.RoleAdmin)
-	tok, err := c.CreateAPIToken(admin, core.TokenInput{Name: "agent"})
+	tok, err := c.CreateAPIToken(admin, identity.TokenInput{Name: "agent"})
 	if err != nil {
 		t.Fatal(err)
 	}

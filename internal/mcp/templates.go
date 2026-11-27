@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
@@ -18,7 +20,7 @@ type listTemplatesOut struct {
 }
 
 func (t *tools) listTemplates(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listTemplatesOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, listTemplatesOut{}, err
 	}
 	return nil, listTemplatesOut{Templates: t.c.ListTemplates()}, nil

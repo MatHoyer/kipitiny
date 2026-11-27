@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
@@ -296,7 +298,7 @@ func (c *Core) SetServerNetwork(ctx context.Context, id string, in ServerNetwork
 		return ServerView{}, err
 	}
 	sv.PublicIP = ip
-	if token := strings.TrimSpace(in.TunnelToken); token != SecretMask {
+	if token := strings.TrimSpace(in.TunnelToken); token != identity.SecretMask {
 		if token != "" {
 			if _, err := cloudflare.ParseTunnelToken(token); err != nil {
 				return ServerView{}, fmt.Errorf("%w: %v", ErrInvalid, err)

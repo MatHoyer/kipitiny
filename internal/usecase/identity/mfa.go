@@ -1,4 +1,4 @@
-package core
+package identity
 
 import (
 	"context"
@@ -15,12 +15,12 @@ import (
 
 // ErrWrongPassword is a failed password confirmation on an account change.
 // It's not ErrUnauthorized: the session is still valid.
-var ErrWrongPassword = fmt.Errorf("%w: wrong password", ErrInvalid)
+var ErrWrongPassword = fmt.Errorf("%w: wrong password", domain.ErrInvalid)
 
 // ErrConfirmFirst asks a user without a password to confirm who they are
 // at their provider (or with a passkey) before a sensitive change.
 var ErrConfirmFirst = fmt.Errorf("%w: confirm it's you by signing in at your provider, then retry within %d minutes",
-	ErrInvalid, int(confirmWindow.Minutes()))
+	domain.ErrInvalid, int(confirmWindow.Minutes()))
 
 // confirmWindow is how long a fresh sign-in at a provider (or a passkey
 // sign-in) confirms the changes of an account without a password, in place
@@ -43,8 +43,8 @@ type mfaTicket struct {
 }
 
 // LoginMFA completes a password sign-in with a TOTP code or a recovery code.
-func (c *Core) LoginMFA(ctx context.Context, ticket, code string) (domain.User, string, error) {
-	t, exp, ok := c.mfaTickets.take(ticket)
+func (c *Identity) LoginMFA(ctx context.Context, ticket, code string) (domain.User, string, error) {
+	t, exp, ok := c.mfaTickets.Take(ticket)
 	if !ok {
 		return domain.User{}, "", fmt.Errorf("%w: the sign-in expired, enter your password again", ErrUnauthorized)
 	}
@@ -57,7 +57,7 @@ func (c *Core) LoginMFA(ctx context.Context, ticket, code string) (domain.User, 
 	}
 	if err := c.checkSecondFactor(ctx, u, code); err != nil {
 		if t.attempts++; t.attempts < mfaTicketAttempts && errors.Is(err, ErrUnauthorized) {
-			c.mfaTickets.put(ticket, t, exp)
+			c.mfaTickets.Put(ticket, t, exp)
 		}
 		return domain.User{}, "", err
 	}
@@ -67,7 +67,7 @@ func (c *Core) LoginMFA(ctx context.Context, ticket, code string) (domain.User, 
 }
 
 // checkSecondFactor accepts a current TOTP code or an unused recovery code.
-func (c *Core) checkSecondFactor(ctx context.Context, u domain.User, code string) error {
+func (c *Identity) checkSecondFactor(ctx context.Context, u domain.User, code string) error {
 	if u.TOTPSecret == "" {
 		return ErrUnauthorized
 	}
@@ -140,22 +140,22 @@ type Account struct {
 
 // confirmed reports whether the request's session was confirmed by a
 // fresh sign-in within confirmWindow.
-func (c *Core) confirmed(ctx context.Context) bool {
+func (c *Identity) confirmed(ctx context.Context) bool {
 	a, _ := ActorFrom(ctx)
 	if a.Session == "" {
 		return false
 	}
-	_, ok := c.confirmations.peek(a.Session)
+	_, ok := c.confirmations.Peek(a.Session)
 	return ok
 }
 
 // confirm marks a session as confirmed for confirmWindow.
-func (c *Core) confirm(session string) {
-	c.confirmations.put(hashToken(session), struct{}{}, time.Now().Add(confirmWindow))
+func (c *Identity) confirm(session string) {
+	c.confirmations.Put(hashToken(session), struct{}{}, time.Now().Add(confirmWindow))
 }
 
-// currentUser is the signed-in user making the request; API tokens have none.
-func (c *Core) currentUser(ctx context.Context) (domain.User, error) {
+// CurrentUser is the signed-in user making the request; API tokens have none.
+func (c *Identity) CurrentUser(ctx context.Context) (domain.User, error) {
 	a, ok := ActorFrom(ctx)
 	if !ok || a.UserID == "" {
 		return domain.User{}, ErrUnauthorized
@@ -164,21 +164,21 @@ func (c *Core) currentUser(ctx context.Context) (domain.User, error) {
 }
 
 // SetPreferences replaces the current user's preferences.
-func (c *Core) SetPreferences(ctx context.Context, p domain.Preferences) (domain.Preferences, error) {
+func (c *Identity) SetPreferences(ctx context.Context, p domain.Preferences) (domain.Preferences, error) {
 	if p.MapView != "" && p.MapView != "3d" {
-		return domain.Preferences{}, fmt.Errorf("%w: map view must be empty (2D) or 3d", ErrInvalid)
+		return domain.Preferences{}, fmt.Errorf("%w: map view must be empty (2D) or 3d", domain.ErrInvalid)
 	}
-	u, err := c.currentUser(ctx)
+	u, err := c.CurrentUser(ctx)
 	if err != nil {
 		return domain.Preferences{}, err
 	}
 	return p, c.store.SetUserPreferences(ctx, u.ID, p)
 }
 
-// confirmedUser is the current user, once they re-entered their password:
+// ConfirmedUser is the current user, once they re-entered their password:
 // a stolen session alone can't change how the account signs in.
-func (c *Core) confirmedUser(ctx context.Context, password string) (domain.User, error) {
-	u, err := c.currentUser(ctx)
+func (c *Identity) ConfirmedUser(ctx context.Context, password string) (domain.User, error) {
+	u, err := c.CurrentUser(ctx)
 	if err != nil {
 		return domain.User{}, err
 	}
@@ -194,8 +194,8 @@ func (c *Core) confirmedUser(ctx context.Context, password string) (domain.User,
 	return u, nil
 }
 
-func (c *Core) Account(ctx context.Context) (Account, error) {
-	u, err := c.currentUser(ctx)
+func (c *Identity) Account(ctx context.Context) (Account, error) {
+	u, err := c.CurrentUser(ctx)
 	if err != nil {
 		return Account{}, err
 	}
@@ -226,8 +226,8 @@ func (c *Core) Account(ctx context.Context) (Account, error) {
 
 // ChangePassword signs the user out everywhere and returns a new session
 // for the caller.
-func (c *Core) ChangePassword(ctx context.Context, current, password string) (string, error) {
-	u, err := c.confirmedUser(ctx, current)
+func (c *Identity) ChangePassword(ctx context.Context, current, password string) (string, error) {
+	u, err := c.ConfirmedUser(ctx, current)
 	if err != nil {
 		return "", err
 	}
@@ -252,34 +252,34 @@ type TOTPSetup struct {
 
 // BeginTOTP generates a secret; it's enabled once a code from it is
 // confirmed with EnableTOTP.
-func (c *Core) BeginTOTP(ctx context.Context, password string) (TOTPSetup, error) {
-	u, err := c.confirmedUser(ctx, password)
+func (c *Identity) BeginTOTP(ctx context.Context, password string) (TOTPSetup, error) {
+	u, err := c.ConfirmedUser(ctx, password)
 	if err != nil {
 		return TOTPSetup{}, err
 	}
 	if u.TOTPSecret != "" {
-		return TOTPSetup{}, fmt.Errorf("%w: two-factor authentication is already on", ErrInvalid)
+		return TOTPSetup{}, fmt.Errorf("%w: two-factor authentication is already on", domain.ErrInvalid)
 	}
 	secret := newTOTPSecret()
-	c.totpSetups.put(u.ID, secret, time.Now().Add(totpSetupTTL))
+	c.totpSetups.Put(u.ID, secret, time.Now().Add(totpSetupTTL))
 	return TOTPSetup{Secret: secret, URI: totpURI(secret, u.Username)}, nil
 }
 
 // EnableTOTP turns two-factor authentication on and returns the recovery
 // codes, shown once.
-func (c *Core) EnableTOTP(ctx context.Context, code string) ([]string, error) {
-	u, err := c.currentUser(ctx)
+func (c *Identity) EnableTOTP(ctx context.Context, code string) ([]string, error) {
+	u, err := c.CurrentUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	secret, exp, ok := c.totpSetups.take(u.ID)
+	secret, exp, ok := c.totpSetups.Take(u.ID)
 	if !ok {
-		return nil, fmt.Errorf("%w: the setup expired, start again", ErrInvalid)
+		return nil, fmt.Errorf("%w: the setup expired, start again", domain.ErrInvalid)
 	}
 	step, ok := totpMatch(secret, code, time.Now())
 	if !ok {
-		c.totpSetups.put(u.ID, secret, exp)
-		return nil, fmt.Errorf("%w: wrong code, check the authenticator app's clock", ErrInvalid)
+		c.totpSetups.Put(u.ID, secret, exp)
+		return nil, fmt.Errorf("%w: wrong code, check the authenticator app's clock", domain.ErrInvalid)
 	}
 	codes, hashes := newRecoveryCodes()
 	if err := c.store.SetTOTP(ctx, u.ID, secret, hashes); err != nil {
@@ -290,21 +290,21 @@ func (c *Core) EnableTOTP(ctx context.Context, code string) ([]string, error) {
 	return codes, nil
 }
 
-func (c *Core) DisableTOTP(ctx context.Context, password string) error {
-	u, err := c.confirmedUser(ctx, password)
+func (c *Identity) DisableTOTP(ctx context.Context, password string) error {
+	u, err := c.ConfirmedUser(ctx, password)
 	if err != nil {
 		return err
 	}
 	return c.store.SetTOTP(ctx, u.ID, "", nil)
 }
 
-func (c *Core) RegenerateRecoveryCodes(ctx context.Context, password string) ([]string, error) {
-	u, err := c.confirmedUser(ctx, password)
+func (c *Identity) RegenerateRecoveryCodes(ctx context.Context, password string) ([]string, error) {
+	u, err := c.ConfirmedUser(ctx, password)
 	if err != nil {
 		return nil, err
 	}
 	if u.TOTPSecret == "" {
-		return nil, fmt.Errorf("%w: two-factor authentication is off", ErrInvalid)
+		return nil, fmt.Errorf("%w: two-factor authentication is off", domain.ErrInvalid)
 	}
 	codes, hashes := newRecoveryCodes()
 	return codes, c.store.SetRecoveryCodes(ctx, u.ID, hashes)
@@ -312,7 +312,7 @@ func (c *Core) RegenerateRecoveryCodes(ctx context.Context, password string) ([]
 
 // ResetTOTP turns two-factor authentication off, for an admin who lost both
 // the authenticator and the recovery codes (CLI only).
-func (c *Core) ResetTOTP(ctx context.Context, username string) error {
+func (c *Identity) ResetTOTP(ctx context.Context, username string) error {
 	u, err := c.store.GetUserByUsername(ctx, username)
 	if err != nil {
 		return err
