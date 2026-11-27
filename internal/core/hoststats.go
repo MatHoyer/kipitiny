@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 // HostUsage is a server's resource use at one moment.
@@ -54,7 +55,7 @@ const hostScript = `for f in stat meminfo loadavg uptime; do echo "== $f"; cat /
 // helper container if it ever ships without a shell.
 func sampleHost(ctx context.Context, dk *docker.Client) (hostSample, error) {
 	var out bytes.Buffer
-	if err := dk.Exec(ctx, traefikName, docker.ExecOptions{Cmd: []string{"sh", "-c", hostScript}, Stdout: &out}); err != nil {
+	if err := dk.Exec(ctx, network.TraefikName, docker.ExecOptions{Cmd: []string{"sh", "-c", hostScript}, Stdout: &out}); err != nil {
 		return hostSample{}, err
 	}
 	return parseHost(out.String())

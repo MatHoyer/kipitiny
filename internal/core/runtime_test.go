@@ -13,6 +13,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 func TestComposeRuntime(t *testing.T) {
@@ -50,7 +51,7 @@ services:
 		t.Errorf("command = %q", w.Runtime.Command)
 	}
 
-	spec := containerSpec(p, w, envSources{}, "D1", 1, route{})
+	spec := containerSpec(p, w, envSources{}, "D1", 1, network.Routing{})
 	if w.Runtime.Platform != "linux/amd64" || spec.Platform == nil || spec.Platform.Architecture != "amd64" {
 		t.Errorf("platform = %q, spec %+v", w.Runtime.Platform, spec.Platform)
 	}
@@ -122,7 +123,7 @@ func TestRuntimeHostAccess(t *testing.T) {
 	if err := validateService(app); err != nil {
 		t.Fatal(err)
 	}
-	host := containerSpec(domain.Project{ID: "P1", Name: "vpn"}, app, envSources{}, "D1", 1, route{}).HostConfig
+	host := containerSpec(domain.Project{ID: "P1", Name: "vpn"}, app, envSources{}, "D1", 1, network.Routing{}).HostConfig
 	if !slices.Equal(host.CapAdd, []string{"NET_ADMIN"}) || !slices.Equal(host.CapDrop, []string{"NET_RAW", "MKNOD"}) ||
 		!slices.Equal(host.SecurityOpt, []string{"apparmor=unconfined"}) || len(host.Devices) != 2 ||
 		host.Devices[0].PathInContainer != "/dev/net/tun" || host.Devices[0].CgroupPermissions != "rwm" ||
@@ -131,7 +132,7 @@ func TestRuntimeHostAccess(t *testing.T) {
 	}
 	raw := app
 	raw.Runtime = domain.Runtime{CapAdd: []string{"NET_RAW"}}
-	if host := containerSpec(domain.Project{ID: "P1"}, raw, envSources{}, "D1", 1, route{}).HostConfig; slices.Contains(host.CapDrop, "NET_RAW") {
+	if host := containerSpec(domain.Project{ID: "P1"}, raw, envSources{}, "D1", 1, network.Routing{}).HostConfig; slices.Contains(host.CapDrop, "NET_RAW") {
 		t.Errorf("NET_RAW added back is still dropped: %v", host.CapDrop)
 	}
 	for _, r := range []domain.Runtime{{CapAdd: []string{"net admin"}}, {Devices: []string{"dev/x"}}, {Devices: []string{"/dev/x:/dev/x:rwx"}}} {
@@ -164,7 +165,7 @@ func TestRuntimeHostAccess(t *testing.T) {
 
 func TestPortsAndVolumesHostAccess(t *testing.T) {
 	app := domain.Service{ID: "S1", ProjectID: "P1", Kind: domain.ServiceKindApp, Image: "x", Replicas: 1, Env: map[string]string{},
-		PublishedPorts: normalizePorts([]domain.PublishedPort{{HostIP: "127.0.0.1", HostPort: 5432}, {HostIP: "0.0.0.0", HostPort: 80},
+		PublishedPorts: network.NormalizePorts([]domain.PublishedPort{{HostIP: "127.0.0.1", HostPort: 5432}, {HostIP: "0.0.0.0", HostPort: 80},
 			{HostIP: "10.0.0.1", HostPort: 5432}}),
 		Volumes: normalizeVolumes([]domain.Volume{{Name: "conf", Path: "/conf", ReadOnly: true}, {Name: "media", Path: "/media", External: "nas"},
 			{Name: "nfs", Path: "/nfs", DriverOpts: map[string]string{"type": "nfs", "o": "addr=10.0.0.5", "device": ":/x"}}})}
@@ -174,7 +175,7 @@ func TestPortsAndVolumesHostAccess(t *testing.T) {
 	if app.PublishedPorts[1].HostIP != "" {
 		t.Errorf("0.0.0.0 is every address: %+v", app.PublishedPorts[1])
 	}
-	host := containerSpec(domain.Project{ID: "P1"}, app, envSources{}, "D1", 1, route{}).HostConfig
+	host := containerSpec(domain.Project{ID: "P1"}, app, envSources{}, "D1", 1, network.Routing{}).HostConfig
 	var ips []string
 	for _, bs := range host.PortBindings {
 		for _, b := range bs {

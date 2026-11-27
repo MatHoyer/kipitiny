@@ -10,6 +10,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 // checkServiceChange checks what a change from old to svc needs beyond the
@@ -44,7 +45,7 @@ func checkServiceChange(ctx context.Context, old, svc domain.Service) error {
 			return err
 		}
 	}
-	if svc.Domain != old.Domain || !reflect.DeepEqual(svc.Middlewares, old.Middlewares) || !sameRoutes(svc.Routes, old.Routes) {
+	if svc.Domain != old.Domain || !reflect.DeepEqual(svc.Middlewares, old.Middlewares) || !network.SameRoutes(svc.Routes, old.Routes) {
 		if err := identity.Authorize(ctx, svc.ProjectID, identity.PermDomains); err != nil {
 			return err
 		}

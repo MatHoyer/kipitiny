@@ -17,6 +17,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 // applier plans then applies one compose file.
@@ -132,7 +133,7 @@ func (a *applier) prepare(ctx context.Context, f compose.File) error {
 			continue
 		}
 		inputs[name] = in
-		a.hashes[name] = specHash(f.Services[name])
+		a.hashes[name] = network.SpecHash(f.Services[name])
 		a.images[name] = in.Image
 		a.uptimes[name] = f.Services[name].X.Uptime
 		a.jobs[name] = f.Services[name].X.Jobs
@@ -198,7 +199,7 @@ func (a *applier) checkDomains(ctx context.Context) error {
 	// Each pair once: a service is checked against the ones before it.
 	for _, name := range slices.Sorted(maps.Keys(a.planned)) {
 		s := a.planned[name]
-		if err := a.c.checkDomain(ctx, s, a.project.ServerID, others); err != nil {
+		if err := a.c.CheckDomain(ctx, s, a.project.ServerID, others); err != nil {
 			return fmt.Errorf("service %s: %s", name, strings.TrimPrefix(err.Error(), ErrInvalid.Error()+": "))
 		}
 		others = append(others, s)

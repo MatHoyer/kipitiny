@@ -1,4 +1,4 @@
-package core
+package network
 
 import (
 	"context"
@@ -23,57 +23,57 @@ import (
 )
 
 const (
-	traefikName       = "kipitiny-traefik"
-	traefikComponent  = "traefik"
+	TraefikName       = "kipitiny-traefik"
+	TraefikComponent  = "traefik"
 	traefikACMEVolume = "kipitiny-traefik-acme"
-	certResolver      = "letsencrypt"
+	CertResolverTLS   = "letsencrypt"
 
-	// managerAlias names the manager on the proxy network when it runs in a
+	// ManagerAlias names the manager on the proxy network when it runs in a
 	// container; otherwise Traefik reaches it on the host.
-	managerAlias = "kipitiny-manager"
-	managerHost  = "host.docker.internal"
+	ManagerAlias = "kipitiny-manager"
+	ManagerHost  = "host.docker.internal"
 	// dynamicFile is Traefik's file provider: the manager's route and the
 	// maintenance pages' service and middleware.
 	dynamicFile = "/etc/traefik/kipitiny-manager.yml"
 )
 
-// ensureTraefik makes sure exactly one Traefik container runs with the
+// EnsureTraefik makes sure exactly one Traefik container runs with the
 // current configuration, recreating it when the configuration changed.
-func (c *Core) ensureTraefik(ctx context.Context, sv domain.Server) error {
+func (c *Network) EnsureTraefik(ctx context.Context, sv domain.Server) error {
 	cfg := c.cfg.Traefik
-	socket := socketPath(sv, c.cfg)
-	dk := c.dockerFor(sv.ID)
-	o := traefikOpts{Tunnel: c.tunnelToken(sv) != "", CFToken: c.cfToken(ctx)}
+	socket := socketPath(sv, *c.cfg)
+	dk := c.mgr.DockerFor(sv.ID)
+	o := TraefikOpts{Tunnel: c.TunnelToken(sv) != "", CFToken: c.cfToken(ctx)}
 	if c.cfg.Domain != "" && sv.Kind == domain.ServerLocal {
-		u, err := c.managerUpstream(ctx, dk)
+		u, err := c.ManagerUpstream(ctx, dk)
 		if err != nil {
 			return err
 		}
 		o.ManagerURL = u
-		o.ManagerResolver = c.certResolver(ctx, sv.ID, c.cfg.Domain)
+		o.ManagerResolver = c.CertResolver(ctx, sv.ID, c.cfg.Domain)
 	}
-	pages, err := c.pagesUpstream(ctx, sv, o.ManagerURL)
+	pages, err := c.mgr.PagesUpstream(ctx, sv, o.ManagerURL)
 	if err != nil {
 		return err
 	}
 	if pages != "" {
-		token, err := c.providerToken(ctx, sv.ID)
+		token, err := c.mgr.ProviderToken(ctx, sv.ID)
 		if err != nil {
 			return err
 		}
-		o.Pages = &pagesOpts{Upstream: pages, ServerID: sv.ID, Token: token}
+		o.Pages = &PagesOpts{Upstream: pages, ServerID: sv.ID, Token: token}
 	}
-	opts, files := c.traefikSpec(socket, o)
+	opts, files := c.TraefikSpec(socket, o)
 	// Keep this formula stable: any change recreates Traefik on every server
 	// at upgrade, a short outage for all apps. Tunnel mode changes Cmd.
 	parts := []any{cfg.Image, opts.Config.Cmd, cfg.HTTPPort, cfg.HTTPSPort, socket, files}
 	if o.CFToken != "" && !o.Tunnel {
 		parts = append(parts, o.CFToken) // a new token must reach Traefik
 	}
-	hash := specHash(parts...)
+	hash := SpecHash(parts...)
 	opts.Config.Labels[docker.LabelConfigHash] = hash
 
-	existing, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: traefikComponent})
+	existing, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: TraefikComponent})
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func (c *Core) ensureTraefik(ctx context.Context, sv domain.Server) error {
 		}
 	}
 
-	if err := dk.EnsureImage(ctx, cfg.Image, c.registryAuth(ctx, cfg.Image), ""); err != nil {
+	if err := dk.EnsureImage(ctx, cfg.Image, c.mgr.RegistryAuth(ctx, cfg.Image), ""); err != nil {
 		return fmt.Errorf("pull %s: %w", cfg.Image, err)
 	}
 	if _, err := dk.Run(ctx, opts, files...); err != nil {
@@ -110,45 +110,45 @@ func socketPath(sv domain.Server, cfg config.Config) string {
 	return cfg.Traefik.DockerSocket
 }
 
-// managerUpstream is the URL Traefik uses to reach the manager. In a container
+// ManagerUpstream is the URL Traefik uses to reach the manager. In a container
 // the manager joins the proxy network itself, so its port needn't be published.
-func (c *Core) managerUpstream(ctx context.Context, dk *docker.Client) (string, error) {
+func (c *Network) ManagerUpstream(ctx context.Context, dk *docker.Client) (string, error) {
 	_, port, err := net.SplitHostPort(c.cfg.Addr)
 	if err != nil {
 		return "", fmt.Errorf("KIPITINY_ADDR %q: %w", c.cfg.Addr, err)
 	}
 	if id := docker.SelfContainerID(); id != "" {
-		if err := dk.ConnectNetwork(ctx, docker.ProxyNetwork, id, managerAlias); err != nil {
+		if err := dk.ConnectNetwork(ctx, docker.ProxyNetwork, id, ManagerAlias); err != nil {
 			return "", err
 		}
-		return "http://" + managerAlias + ":" + port, nil
+		return "http://" + ManagerAlias + ":" + port, nil
 	}
-	return "http://" + managerHost + ":" + port, nil
+	return "http://" + ManagerHost + ":" + port, nil
 }
 
-type traefikOpts struct {
+type TraefikOpts struct {
 	// ManagerURL, when set, routes the manager's domain to it through a file
 	// provider, with a certificate from ManagerResolver.
 	ManagerURL      string
 	ManagerResolver string
 	// Tunnel: behind the Cloudflare tunnel, publish no ports and run no ACME.
 	Tunnel bool
-	// CFToken enables the Cloudflare DNS challenge (certResolverDNS).
+	// CFToken enables the Cloudflare DNS challenge (CertResolverDNS).
 	CFToken string
 	// Pages, when set, serves the manager's maintenance pages.
-	Pages *pagesOpts
+	Pages *PagesOpts
 }
 
-// pagesOpts are how a Traefik reaches the manager's maintenance pages and
+// PagesOpts are how a Traefik reaches the manager's maintenance pages and
 // fetches its dynamic configuration (Core.TraefikConfig).
-type pagesOpts struct {
+type PagesOpts struct {
 	Upstream string
 	ServerID string
 	Token    string
 }
 
-// traefikSpec builds the Traefik container.
-func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreateOptions, []docker.File) {
+// TraefikSpec builds the Traefik container.
+func (c *Network) TraefikSpec(socket string, o TraefikOpts) (client.ContainerCreateOptions, []docker.File) {
 	cfg := c.cfg.Traefik
 	tunnel := o.Tunnel
 
@@ -177,7 +177,7 @@ func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreate
 		"--entrypoints.websecure.address=:443",
 		// Request counters per router, for sleep mode (sleep.go): on loopback,
 		// read by an exec in the container.
-		"--entrypoints.metrics.address=" + metricsAddr,
+		"--entrypoints.metrics.address=" + MetricsAddr,
 		"--metrics.prometheus=true",
 		"--metrics.prometheus.entrypoint=metrics",
 		"--metrics.prometheus.addrouterslabels=true",
@@ -189,7 +189,7 @@ func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreate
 		args = append(args, "--entrypoints.websecure.transport.respondingTimeouts.readTimeout="+cfg.ReadTimeout)
 	}
 	// Keep X-Forwarded-For from Cloudflare, so IP allowlists and rate
-	// limits can see the client behind it (see route.behindProxy).
+	// limits can see the client behind it (see Routing.BehindProxy).
 	if tunnel {
 		// Only cloudflared, on the proxy network, can reach Traefik.
 		args = append(args, "--entrypoints.websecure.forwardedheaders.trustedips="+strings.Join(privateRanges, ","))
@@ -198,23 +198,23 @@ func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreate
 	}
 	if !tunnel {
 		args = append(args,
-			"--certificatesresolvers."+certResolver+".acme.tlschallenge=true",
-			"--certificatesresolvers."+certResolver+".acme.storage=/acme/acme.json",
+			"--certificatesresolvers."+CertResolverTLS+".acme.tlschallenge=true",
+			"--certificatesresolvers."+CertResolverTLS+".acme.storage=/acme/acme.json",
 		)
 		if cfg.ACMEEmail != "" {
-			args = append(args, "--certificatesresolvers."+certResolver+".acme.email="+cfg.ACMEEmail)
+			args = append(args, "--certificatesresolvers."+CertResolverTLS+".acme.email="+cfg.ACMEEmail)
 		}
 	}
 	var env []string
 	if !tunnel && o.CFToken != "" {
 		args = append(args,
-			"--certificatesresolvers."+certResolverDNS+".acme.dnschallenge.provider=cloudflare",
+			"--certificatesresolvers."+CertResolverDNS+".acme.dnschallenge.provider=cloudflare",
 			// Public resolvers see the challenge record sooner than a cache.
-			"--certificatesresolvers."+certResolverDNS+".acme.dnschallenge.resolvers=1.1.1.1:53,1.0.0.1:53",
-			"--certificatesresolvers."+certResolverDNS+".acme.storage=/acme/acme.json",
+			"--certificatesresolvers."+CertResolverDNS+".acme.dnschallenge.resolvers=1.1.1.1:53,1.0.0.1:53",
+			"--certificatesresolvers."+CertResolverDNS+".acme.storage=/acme/acme.json",
 		)
 		if cfg.ACMEEmail != "" {
-			args = append(args, "--certificatesresolvers."+certResolverDNS+".acme.email="+cfg.ACMEEmail)
+			args = append(args, "--certificatesresolvers."+CertResolverDNS+".acme.email="+cfg.ACMEEmail)
 		}
 		env = append(env, "CF_DNS_API_TOKEN="+o.CFToken)
 	}
@@ -226,7 +226,7 @@ func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreate
 	}
 	if p := o.Pages; p != nil {
 		// Sections (routers, services…) are merged: both define services.
-		for k, v := range pagesFileConfig(p.Upstream) {
+		for k, v := range PagesFileConfig(p.Upstream) {
 			if cur, ok := dynamic[k].(map[string]any); ok {
 				maps.Copy(cur, v.(map[string]any))
 			} else {
@@ -234,7 +234,7 @@ func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreate
 			}
 		}
 		args = append(args,
-			"--entrypoints.websecure.http.middlewares="+pagesDown+"@file",
+			"--entrypoints.websecure.http.middlewares="+PagesDown+"@file",
 			"--providers.http.endpoint="+p.Upstream+PagesPath+"traefik/"+p.ServerID,
 			"--providers.http.headers.Authorization=Bearer "+p.Token,
 		)
@@ -246,8 +246,8 @@ func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreate
 		files = append(files, docker.File{Path: dynamicFile, Content: b})
 	}
 	for _, u := range []string{o.ManagerURL, pagesUpstream(o)} {
-		if strings.Contains(u, "//"+managerHost+":") {
-			extraHosts = append(extraHosts, managerHost+":host-gateway")
+		if strings.Contains(u, "//"+ManagerHost+":") {
+			extraHosts = append(extraHosts, ManagerHost+":host-gateway")
 			break
 		}
 	}
@@ -261,7 +261,7 @@ func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreate
 		ports = nil // cloudflared reaches Traefik over the proxy network
 	}
 	return client.ContainerCreateOptions{
-		Name: traefikName,
+		Name: TraefikName,
 		Config: &container.Config{
 			Image:        cfg.Image,
 			Cmd:          args,
@@ -269,7 +269,7 @@ func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreate
 			ExposedPorts: network.PortSet{http: {}, https: {}},
 			Labels: map[string]string{
 				docker.LabelManaged:   "true",
-				docker.LabelComponent: traefikComponent,
+				docker.LabelComponent: TraefikComponent,
 			},
 		},
 		HostConfig: &container.HostConfig{
@@ -288,7 +288,7 @@ func (c *Core) traefikSpec(socket string, o traefikOpts) (client.ContainerCreate
 	}, files
 }
 
-func pagesUpstream(o traefikOpts) string {
+func pagesUpstream(o TraefikOpts) string {
 	if o.Pages == nil {
 		return ""
 	}
@@ -303,42 +303,42 @@ func managerRoute(domain, url, resolver string) map[string]any {
 		tls["certResolver"] = resolver
 	}
 	return map[string]any{
-		"routers": map[string]any{managerAlias: map[string]any{
+		"routers": map[string]any{ManagerAlias: map[string]any{
 			"rule":        "Host(`" + domain + "`)",
 			"entryPoints": []string{"websecure"},
-			"service":     managerAlias,
+			"service":     ManagerAlias,
 			"tls":         tls,
 		}},
-		"services": map[string]any{managerAlias: map[string]any{
+		"services": map[string]any{ManagerAlias: map[string]any{
 			"loadBalancer": map[string]any{"servers": []map[string]string{{"url": url}}},
 		}},
 	}
 }
 
-// route is how a public service's requests reach Traefik.
-type route struct {
-	// resolver issues the certificate, "" for Traefik's default one.
-	resolver string
-	// behindProxy: requests come through Cloudflare (tunnel or proxied
+// Routing is how a public service's requests reach Traefik.
+type Routing struct {
+	// Resolver issues the certificate, "" for Traefik's default one.
+	Resolver string
+	// BehindProxy: requests come through Cloudflare (tunnel or proxied
 	// record), which puts the client IP last in X-Forwarded-For.
-	behindProxy bool
-	// dockerSocket is the socket's path on the server's host, for an app
+	BehindProxy bool
+	// DockerSocket is the socket's path on the server's host, for an app
 	// that mounts it.
-	dockerSocket string
+	DockerSocket string
 }
 
-func (c *Core) routeFor(ctx context.Context, svc domain.Service) route {
-	return route{
-		resolver: c.certResolver(ctx, svc.ServerID, svc.Domain),
+func (c *Network) RouteFor(ctx context.Context, svc domain.Service) Routing {
+	return Routing{
+		Resolver: c.CertResolver(ctx, svc.ServerID, svc.Domain),
 		// A domain with published ports (on any of its apps) is never proxied.
-		behindProxy:  !c.domainDirect(ctx, svc) && c.behindCloudflare(ctx, svc.ServerID, svc.Domain),
-		dockerSocket: c.dockerSocketFor(ctx, svc),
+		BehindProxy:  !c.domainDirect(ctx, svc) && c.behindCloudflare(ctx, svc.ServerID, svc.Domain),
+		DockerSocket: c.DockerSocketFor(ctx, svc),
 	}
 }
 
-// dockerSocketFor is the Docker socket's path on svc's server, when svc
+// DockerSocketFor is the Docker socket's path on svc's server, when svc
 // mounts it.
-func (c *Core) dockerSocketFor(ctx context.Context, svc domain.Service) string {
+func (c *Network) DockerSocketFor(ctx context.Context, svc domain.Service) string {
 	if svc.DockerSocket == "" {
 		return ""
 	}
@@ -346,17 +346,17 @@ func (c *Core) dockerSocketFor(ctx context.Context, svc domain.Service) string {
 	if err != nil {
 		c.log.Warn("server unavailable, using the default Docker socket", "server", svc.ServerID, "err", err)
 	}
-	return socketPath(sv, c.cfg)
+	return socketPath(sv, *c.cfg)
 }
 
-// httpRouted reports whether Traefik routes the service's domain: it has a
+// HTTPRouted reports whether Traefik routes the service's domain: it has a
 // container port. An app with published ports may have a domain only for
 // DNS.
-func httpRouted(svc domain.Service) bool {
+func HTTPRouted(svc domain.Service) bool {
 	return svc.Domain != "" && svc.Port > 0
 }
 
-// traefikLabels routes HTTPS traffic for svc.Domain to svc.Port through the
+// TraefikLabels routes HTTPS traffic for svc.Domain to svc.Port through the
 // service's middlewares; with routes, only their paths, each to its scheme
 // and port.
 //
@@ -364,14 +364,14 @@ func httpRouted(svc domain.Service) bool {
 // and old and new replicas run side by side during a rollout, so the router
 // and its middlewares are named after their configuration: a change adds a
 // new router next to the old one instead of conflicting with it.
-func traefikLabels(svc domain.Service, rt route) map[string]string {
+func TraefikLabels(svc domain.Service, rt Routing) map[string]string {
 	name := "kipitiny-" + strings.ToLower(svc.ID)
-	mws := middlewareLabels(svc.Middlewares, rt.behindProxy)
-	spec := []any{svc.Domain, rt.resolver, mws}
+	mws := MiddlewareLabels(svc.Middlewares, rt.BehindProxy)
+	spec := []any{svc.Domain, rt.Resolver, mws}
 	if len(svc.Routes) > 0 {
 		spec = append(spec, svc.Routes) // without, the name of every app stays the same
 	}
-	router := name + "-" + specHash(spec...)[:8]
+	router := name + "-" + SpecHash(spec...)[:8]
 	labels := map[string]string{
 		"traefik.enable":         "true",
 		"traefik.docker.network": docker.ProxyNetwork,
@@ -395,10 +395,10 @@ func traefikLabels(svc domain.Service, rt route) map[string]string {
 		if len(chain) > 0 {
 			labels["traefik.http.routers."+r+".middlewares"] = strings.Join(chain, ",")
 		}
-		if rt.resolver == "" {
+		if rt.Resolver == "" {
 			labels["traefik.http.routers."+r+".tls"] = "true"
 		} else {
-			labels["traefik.http.routers."+r+".tls.certresolver"] = rt.resolver
+			labels["traefik.http.routers."+r+".tls.certresolver"] = rt.Resolver
 		}
 	}
 	retry := append(slices.Clone(chain), name+"-retry@docker")
@@ -409,7 +409,7 @@ func traefikLabels(svc domain.Service, rt route) map[string]string {
 	}
 	i := 0
 	for _, r := range svc.Routes {
-		service := routeService(name, svc, r)
+		service := RouteService(name, svc, r)
 		labels["traefik.http.services."+service+".loadbalancer.server.port"] = fmt.Sprint(routePort(svc, r))
 		c := retry
 		if r.Scheme == "h2c" {
@@ -420,8 +420,8 @@ func traefikLabels(svc domain.Service, rt route) map[string]string {
 		}
 		for _, p := range r.Paths {
 			pr := fmt.Sprintf("%s-p%d", router, i)
-			addRouter(pr, pathRule(svc.Domain, p), service, c)
-			labels["traefik.http.routers."+pr+".priority"] = fmt.Sprint(pathPriority(p, true))
+			addRouter(pr, PathRule(svc.Domain, p), service, c)
+			labels["traefik.http.routers."+pr+".priority"] = fmt.Sprint(PathPriority(p, true))
 			i++
 		}
 	}
@@ -441,12 +441,12 @@ var cloudflareRanges = []string{
 	"2a06:98c0::/29", "2c0f:f248::/32",
 }
 
-func specHash(parts ...any) string {
+func SpecHash(parts ...any) string {
 	b, _ := json.Marshal(parts)
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:8])
 }
 
-func isLocalDomain(d string) bool {
+func IsLocalDomain(d string) bool {
 	return d == "localhost" || strings.HasSuffix(d, ".localhost")
 }

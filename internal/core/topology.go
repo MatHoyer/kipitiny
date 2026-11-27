@@ -11,11 +11,12 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/network"
+	dockernet "github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 // Topology is what runs where: per server, how traffic gets in (entrypoints,
@@ -126,8 +127,8 @@ type TopoService struct {
 	// service view reports them.
 	NetworkIssues []string `json:"networkIssues,omitempty"`
 	// DNS is set when the manager manages the domain's Cloudflare record.
-	DNS        *DNSStatus `json:"dns,omitempty"`
-	Containers []TopoNode `json:"containers"`
+	DNS        *network.DNSStatus `json:"dns,omitempty"`
+	Containers []TopoNode         `json:"containers"`
 }
 
 // Topology maps every server, or only the server and project of projectID.
@@ -191,16 +192,16 @@ func (c *Core) Topology(ctx context.Context, projectID string) (Topology, error)
 func (c *Core) serverTopology(ctx context.Context, sv domain.Server, projects []domain.Project, svcs []domain.Service, gitPaths map[string]string) ServerTopology {
 	t := ServerTopology{ID: sv.ID, Name: sv.Name, Kind: sv.Kind, Traefik: c.cfg.Traefik.Enabled, Entrypoints: []Entrypoint{}, Networks: []TopoNetwork{}, Projects: []TopoProject{}}
 	if t.Traefik {
-		t.Tunnel = c.tunnelToken(sv) != ""
+		t.Tunnel = c.TunnelToken(sv) != ""
 		t.Entrypoints = c.entrypoints(t.Tunnel)
 	}
 
 	dk := c.dockerFor(sv.ID)
 	var cts []container.Summary
-	nets := map[string]network.Summary{}
+	nets := map[string]dockernet.Summary{}
 	cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelManaged: "true"})
 	if err == nil {
-		var ns []network.Summary
+		var ns []dockernet.Summary
 		if ns, err = dk.ListNetworks(ctx); err == nil {
 			for _, n := range ns {
 				nets[n.Name] = n
@@ -223,9 +224,9 @@ func (c *Core) serverTopology(ctx context.Context, sv domain.Server, projects []
 	}
 	for _, ct := range cts {
 		switch ct.Labels[docker.LabelComponent] {
-		case traefikComponent:
+		case network.TraefikComponent:
 			t.Proxy = topoNode(ct, componentView(ct))
-		case tunnelComponent:
+		case network.TunnelComponent:
 			t.Cloudflared = topoNode(ct, componentView(ct))
 		}
 	}
@@ -258,7 +259,7 @@ func (c *Core) serverTopology(ctx context.Context, sv domain.Server, projects []
 				NetworkIssues: networkIssues(p, s, byService[s.ID]),
 			}
 			if s.Domain != "" {
-				ts.DNS = c.dnsStatus(ctx, s.Domain)
+				ts.DNS = c.DNSStatusOf(ctx, s.Domain)
 			}
 			if ts.Networks == nil {
 				ts.Networks = []string{}
@@ -300,10 +301,10 @@ func (c *Core) managerNode(ctx context.Context, dk *docker.Client) *ManagerNode 
 	_, port, _ := net.SplitHostPort(c.cfg.Addr)
 	id := docker.SelfContainerID()
 	if id == "" {
-		m.Upstream = managerHost + ":" + port
+		m.Upstream = network.ManagerHost + ":" + port
 		return m
 	}
-	m.Upstream = managerAlias + ":" + port
+	m.Upstream = network.ManagerAlias + ":" + port
 	f := make(client.Filters)
 	f.Add("id", id)
 	if res, err := dk.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: f}); err == nil && len(res.Items) == 1 {
@@ -312,7 +313,7 @@ func (c *Core) managerNode(ctx context.Context, dk *docker.Client) *ManagerNode 
 	return m
 }
 
-func topoNetwork(nets map[string]network.Summary, name, projectID string, known bool) TopoNetwork {
+func topoNetwork(nets map[string]dockernet.Summary, name, projectID string, known bool) TopoNetwork {
 	tn := TopoNetwork{Name: name, ProjectID: projectID}
 	n, ok := nets[name]
 	if !ok {
@@ -362,7 +363,7 @@ func usedDatabases(svc domain.Service, p domain.Project, dbs map[string]domain.S
 	seen := map[string]bool{}
 	var scan func(v string, depth int)
 	scan = func(v string, depth int) {
-		for _, m := range envRefRe.FindAllStringSubmatch(v, -1) {
+		for _, m := range domain.EnvRefRe.FindAllStringSubmatch(v, -1) {
 			if db, ok := dbs[m[2]]; ok && db.ID != svc.ID {
 				seen[db.ID] = true
 			}

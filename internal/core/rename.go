@@ -211,8 +211,8 @@ func onNetwork(ct container.Summary, name string) bool {
 func renameAppRefs(env map[string]string, old, new string) map[string]string {
 	out := make(map[string]string, len(env))
 	for k, v := range env {
-		out[k] = envRefRe.ReplaceAllStringFunc(v, func(m string) string {
-			sub := envRefRe.FindStringSubmatch(m)
+		out[k] = domain.EnvRefRe.ReplaceAllStringFunc(v, func(m string) string {
+			sub := domain.EnvRefRe.FindStringSubmatch(m)
 			if sub[5] != old {
 				return m
 			}
@@ -226,8 +226,8 @@ func renameAppRefs(env map[string]string, old, new string) map[string]string {
 func renameDatabaseRefs(env map[string]string, old, new string) map[string]string {
 	out := make(map[string]string, len(env))
 	for k, v := range env {
-		out[k] = envRefRe.ReplaceAllStringFunc(v, func(m string) string {
-			sub := envRefRe.FindStringSubmatch(m)
+		out[k] = domain.EnvRefRe.ReplaceAllStringFunc(v, func(m string) string {
+			sub := domain.EnvRefRe.FindStringSubmatch(m)
 			if sub[2] != old {
 				return m
 			}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 func TestSetMaintenanceValidation(t *testing.T) {
@@ -169,7 +170,7 @@ func TestTraefikConfig(t *testing.T) {
 		t.Fatalf("routers = %v", cfg.HTTP.Routers)
 	}
 	r := cfg.HTTP.Routers[name+"-page"]
-	if r.Rule != "Host(`shop.example.com`)" || r.Priority != 1 || r.Service != pagesService+"@file" || r.TLS["certResolver"] != certResolver ||
+	if r.Rule != "Host(`shop.example.com`)" || r.Priority != 1 || r.Service != network.PagesService+"@file" || r.TLS["certResolver"] != network.CertResolverTLS ||
 		!slices.Equal(r.Middlewares, []string{name + "-page"}) {
 		t.Errorf("fallback router = %+v", r)
 	}
@@ -181,48 +182,7 @@ func TestTraefikConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	r = get().HTTP.Routers[name+"-maintenance"]
-	if r.Priority != maintenancePriority || r.Service != pagesService+"@file" || r.Rule != "Host(`shop.example.com`)" {
+	if r.Priority != maintenancePriority || r.Service != network.PagesService+"@file" || r.Rule != "Host(`shop.example.com`)" {
 		t.Errorf("maintenance router = %+v", r)
-	}
-}
-
-func TestTraefikPages(t *testing.T) {
-	c := &Core{cfg: config.Config{Domain: "kipitiny.example.com"}}
-	o := traefikOpts{
-		ManagerURL: "http://kipitiny-manager:3000", ManagerResolver: certResolver,
-		Pages: &pagesOpts{Upstream: "http://kipitiny-manager:3000", ServerID: "01LOCAL", Token: "tok"},
-	}
-	opts, files := c.traefikSpec("/var/run/docker.sock", o)
-	for _, a := range []string{
-		"--entrypoints.websecure.http.middlewares=" + pagesDown + "@file",
-		"--providers.http.endpoint=http://kipitiny-manager:3000/api/pages/traefik/01LOCAL",
-		"--providers.http.headers.Authorization=Bearer tok",
-	} {
-		if !slices.Contains(opts.Config.Cmd, a) {
-			t.Errorf("missing %s in %v", a, opts.Config.Cmd)
-		}
-	}
-	if len(files) != 1 {
-		t.Fatalf("files = %d", len(files))
-	}
-	var cfg struct {
-		HTTP struct {
-			Routers     map[string]any
-			Services    map[string]any
-			Middlewares map[string]any
-		}
-	}
-	if err := json.Unmarshal(files[0].Content, &cfg); err != nil {
-		t.Fatal(err)
-	}
-	if cfg.HTTP.Routers[managerAlias] == nil || cfg.HTTP.Services[managerAlias] == nil || cfg.HTTP.Services[pagesService] == nil || cfg.HTTP.Middlewares[pagesDown] == nil {
-		t.Errorf("file provider must keep the manager route next to the pages:\n%s", files[0].Content)
-	}
-
-	// A remote server: no manager route, pages through the public domain.
-	o = traefikOpts{Pages: &pagesOpts{Upstream: "https://kipitiny.example.com", ServerID: "01W", Token: "tok"}}
-	opts, files = c.traefikSpec("/var/run/docker.sock", o)
-	if len(files) != 1 || strings.Contains(string(files[0].Content), managerAlias) || len(opts.HostConfig.ExtraHosts) != 0 {
-		t.Errorf("remote: %s %v", files[0].Content, opts.HostConfig.ExtraHosts)
 	}
 }

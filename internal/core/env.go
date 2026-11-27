@@ -4,25 +4,14 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
-
-// envRefRe matches a reference in a service env value, spaces optional:
-// {{ project.NAME }} for a project variable or secret, {{ db.SERVICE.FIELD }}
-// for a credential of a database service of the project (see dbFields),
-// {{ scheme://… }} for a secret in a password manager (internal/secrets),
-// {{ app.SERVICE.URL }} or {{ app.SERVICE.DOMAIN }} for where an app of the
-// project is public (so a copy of the project points at its own apps).
-var envRefRe = regexp.MustCompile(`\{\{\s*(?:project\.([A-Za-z_][A-Za-z0-9_]*)|db\.([a-z0-9-]+)\.([A-Z]+)|([a-z][a-z0-9+.-]*://[^{}]+?)|app\.([a-z0-9-]+)\.(URL|DOMAIN))\s*\}\}`)
-
-// soleRefRe matches a value that is exactly one reference.
-var soleRefRe = regexp.MustCompile(`^\s*` + envRefRe.String() + `\s*$`)
 
 // dbFields are the credentials a database reference can name.
 var dbFields = []string{"URL", "HOST", "PORT", "USER", "PASSWORD", "DATABASE"}
@@ -66,7 +55,7 @@ func databasesOf(svcs []domain.Service) map[string]domain.Service {
 func (c *Core) appURLs(svcs []domain.Service) map[string]string {
 	urls := map[string]string{}
 	for _, s := range svcs {
-		if s.Kind == domain.ServiceKindApp && httpRouted(s) {
+		if s.Kind == domain.ServiceKindApp && network.HTTPRouted(s) {
 			u := "https://" + s.Domain
 			if p := c.cfg.Traefik.HTTPSPort; p != "" && p != "443" {
 				u += ":" + p
@@ -77,7 +66,7 @@ func (c *Core) appURLs(svcs []domain.Service) map[string]string {
 	return urls
 }
 
-// lookup resolves one envRefRe match (its submatches).
+// lookup resolves one domain.EnvRefRe match (its submatches).
 func (src envSources) lookup(m []string) (string, bool) {
 	if m[5] != "" {
 		if src.apps == nil {
@@ -110,8 +99,8 @@ func (src envSources) lookup(m []string) (string, bool) {
 // expandSecrets substitutes the password manager and app references in
 // v, leaving the others as they are.
 func (src envSources) expandSecrets(v string) string {
-	return envRefRe.ReplaceAllStringFunc(v, func(ref string) string {
-		m := envRefRe.FindStringSubmatch(ref)
+	return domain.EnvRefRe.ReplaceAllStringFunc(v, func(ref string) string {
+		m := domain.EnvRefRe.FindStringSubmatch(ref)
 		switch {
 		case m[4] != "" && src.secrets != nil:
 			return src.secrets[m[4]]
@@ -128,7 +117,7 @@ func (src envSources) expandSecrets(v string) string {
 func secretRefs(env map[string]string, project map[string]string) []string {
 	var out []string
 	add := func(v string) {
-		for _, m := range envRefRe.FindAllStringSubmatch(v, -1) {
+		for _, m := range domain.EnvRefRe.FindAllStringSubmatch(v, -1) {
 			if m[4] != "" {
 				out = append(out, m[4])
 			}
@@ -136,7 +125,7 @@ func secretRefs(env map[string]string, project map[string]string) []string {
 	}
 	for _, v := range env {
 		add(v)
-		for _, m := range envRefRe.FindAllStringSubmatch(v, -1) {
+		for _, m := range domain.EnvRefRe.FindAllStringSubmatch(v, -1) {
 			if m[1] != "" {
 				add(project[m[1]])
 			}
@@ -149,7 +138,7 @@ func secretRefs(env map[string]string, project map[string]string) []string {
 // checkSecretSchemes refuses references no password manager handles.
 func (c *Core) checkSecretSchemes(ctx context.Context, env map[string]string) error {
 	for k, v := range env {
-		for _, m := range envRefRe.FindAllStringSubmatch(v, -1) {
+		for _, m := range domain.EnvRefRe.FindAllStringSubmatch(v, -1) {
 			if m[4] == "" {
 				continue
 			}
@@ -197,7 +186,7 @@ func refName(m []string) string {
 func unresolved(env map[string]string, src envSources) []string {
 	var out []string
 	for _, v := range env {
-		for _, m := range envRefRe.FindAllStringSubmatch(v, -1) {
+		for _, m := range domain.EnvRefRe.FindAllStringSubmatch(v, -1) {
 			if _, ok := src.lookup(m); !ok {
 				out = append(out, refName(m))
 			}
@@ -217,7 +206,7 @@ func checkRefs(env map[string]string, src envSources) error {
 // usesDatabase reports whether env references the database named name.
 func usesDatabase(env map[string]string, name string) bool {
 	for _, v := range env {
-		for _, m := range envRefRe.FindAllStringSubmatch(v, -1) {
+		for _, m := range domain.EnvRefRe.FindAllStringSubmatch(v, -1) {
 			if m[2] == name {
 				return true
 			}
@@ -231,8 +220,8 @@ func usesDatabase(env map[string]string, name string) bool {
 func resolveEnv(env map[string]string, src envSources) map[string]string {
 	out := make(map[string]string, len(env))
 	for k, v := range env {
-		out[k] = envRefRe.ReplaceAllStringFunc(v, func(m string) string {
-			r, _ := src.lookup(envRefRe.FindStringSubmatch(m))
+		out[k] = domain.EnvRefRe.ReplaceAllStringFunc(v, func(m string) string {
+			r, _ := src.lookup(domain.EnvRefRe.FindStringSubmatch(m))
 			return r
 		})
 	}
@@ -244,7 +233,7 @@ func resolveEnv(env map[string]string, src envSources) map[string]string {
 func maskEnv(env map[string]string, secrets []string) map[string]string {
 	out := make(map[string]string, len(env))
 	for k, v := range env {
-		if slices.Contains(secrets, k) && !soleRefRe.MatchString(v) {
+		if slices.Contains(secrets, k) && !domain.SoleRefRe.MatchString(v) {
 			v = identity.SecretMask
 		}
 		out[k] = v
@@ -255,7 +244,7 @@ func maskEnv(env map[string]string, secrets []string) map[string]string {
 // managerRef reports whether v is exactly one password manager reference. It
 // only says where the secret lives, so it's stored as a readable variable.
 func managerRef(v string) bool {
-	m := soleRefRe.FindStringSubmatch(v)
+	m := domain.SoleRefRe.FindStringSubmatch(v)
 	return m != nil && m[4] != ""
 }
 

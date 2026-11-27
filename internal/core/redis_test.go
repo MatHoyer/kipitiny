@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 func redisService() domain.Service {
@@ -73,7 +74,7 @@ func TestRedisRefs(t *testing.T) {
 func TestRedisContainerSpec(t *testing.T) {
 	p := domain.Project{ID: "P1", Name: "shop"}
 	svc := redisService()
-	spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, route{resolver: certResolver})
+	spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, network.Routing{Resolver: network.CertResolverTLS})
 
 	if spec.Name != "shop-cache-1" {
 		t.Errorf("name = %q, want no deploy suffix", spec.Name)

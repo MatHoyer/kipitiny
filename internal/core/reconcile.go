@@ -157,13 +157,13 @@ func (c *Core) reconcileServer(ctx context.Context, sv domain.Server, svcs []dom
 		return err // server unreachable: nothing else will work either
 	}
 	if c.cfg.Traefik.Enabled {
-		if err := c.ensureTraefik(ctx, sv); err != nil {
+		if err := c.EnsureTraefik(ctx, sv); err != nil {
 			c.log.Warn("reconcile: traefik", "server", sv.Name, "err", err)
 		}
 		if sv.Kind == domain.ServerLocal {
-			c.refreshProxy(ctx)
+			c.RefreshProxy(ctx)
 		}
-		if err := c.ensureTunnel(ctx, sv); err != nil {
+		if err := c.EnsureTunnel(ctx, sv); err != nil {
 			c.log.Warn("reconcile: cloudflared", "server", sv.Name, "err", err)
 		}
 		if sv.Kind == domain.ServerLocal {
@@ -358,6 +358,6 @@ func (c *Core) recreateReplica(ctx context.Context, project domain.Project, svc 
 	if err != nil {
 		return err
 	}
-	_, err = c.runContainer(ctx, dk, replicaSpec(project, svc, src, deployID, replica, probe, c.routeFor(ctx, svc)), serviceFiles(svc, src)...)
+	_, err = c.runContainer(ctx, dk, replicaSpec(project, svc, src, deployID, replica, probe, c.RouteFor(ctx, svc)), serviceFiles(svc, src)...)
 	return err
 }

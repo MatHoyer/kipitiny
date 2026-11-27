@@ -17,16 +17,13 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 const (
 	// sleepEvery is how often request counters are read: idle times are
 	// known to about that.
 	sleepEvery = time.Minute
-	// metricsAddr is Traefik's Prometheus entrypoint, on loopback only: the
-	// manager reads it with an exec in the container, so it works the same on
-	// remote servers and apps on the proxy network can't read it.
-	metricsAddr = "127.0.0.1:8082"
 	// routerRequests is the counter of requests per router.
 	routerRequests = "traefik_router_requests_total{"
 )
@@ -123,7 +120,7 @@ func sleepBlocker(svcs []domain.Service) error {
 			return fmt.Errorf("%w: %s has published ports: their traffic can't wake the project", ErrInvalid, s.Name)
 		case s.HostNetwork:
 			return fmt.Errorf("%w: %s uses the host network: its traffic can't wake the project", ErrInvalid, s.Name)
-		case httpRouted(s):
+		case network.HTTPRouted(s):
 			routed = true
 		}
 	}
@@ -140,7 +137,7 @@ func (c *Core) checkSleepServer(ctx context.Context, project domain.Project) err
 	if err != nil {
 		return err
 	}
-	if sv.Kind != domain.ServerLocal && (c.cfg.Domain == "" || isLocalDomain(c.cfg.Domain)) {
+	if sv.Kind != domain.ServerLocal && (c.cfg.Domain == "" || network.IsLocalDomain(c.cfg.Domain)) {
 		return fmt.Errorf("%w: on a remote server, sleep mode needs the manager's domain (KIPITINY_DOMAIN): requests wake the project through its pages", ErrInvalid)
 	}
 	return nil
@@ -427,7 +424,7 @@ func (c *Core) wakeFor(ctx context.Context, svc domain.Service) error {
 // ID), over the routers of its replicas (one per configuration hash).
 func (c *Core) routerRequests(ctx context.Context, serverID string) (map[string]float64, error) {
 	dk := c.dockerFor(serverID)
-	cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: traefikComponent})
+	cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: network.TraefikComponent})
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +443,7 @@ func (c *Core) routerRequests(ctx context.Context, serverID string) (map[string]
 		done <- err
 	}()
 	err = dk.Exec(ctx, cts[0].ID, docker.ExecOptions{
-		Cmd:    []string{"wget", "-qO-", "http://" + metricsAddr + "/metrics"},
+		Cmd:    []string{"wget", "-qO-", "http://" + network.MetricsAddr + "/metrics"},
 		Stdout: pw,
 	})
 	pw.CloseWithError(err)

@@ -21,7 +21,7 @@ import (
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
-	"github.com/moby/moby/api/types/network"
+	dockernet "github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 	"github.com/opencontainers/go-digest"
 
@@ -29,6 +29,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 const (
@@ -292,7 +293,7 @@ func (c *Core) deploy(ctx context.Context, project domain.Project, svc domain.Se
 	if err != nil {
 		return err
 	}
-	if n, err := c.hashBasicAuth(ctx, &svc); err != nil {
+	if n, err := c.HashBasicAuth(ctx, &svc); err != nil {
 		return err
 	} else if n > 0 {
 		logf("Fetched %d basic auth password(s) from password managers", n)
@@ -399,7 +400,7 @@ func (c *Core) recreate(ctx context.Context, project domain.Project, svc domain.
 			return err
 		}
 	}
-	spec := containerSpec(project, svc, src, dep.ID, 1, c.routeFor(ctx, svc))
+	spec := containerSpec(project, svc, src, dep.ID, 1, c.RouteFor(ctx, svc))
 	logf("Starting %s", spec.Name)
 	id, err := c.runContainer(ctx, dk, spec, serviceFiles(svc, src)...)
 	if err != nil {
@@ -445,7 +446,7 @@ func (c *Core) rollout(ctx context.Context, project domain.Project, svc domain.S
 		}
 	}
 	for i := 1; i <= svc.Replicas; i++ {
-		spec := replicaSpec(project, svc, src, dep.ID, i, probe, c.routeFor(ctx, svc))
+		spec := replicaSpec(project, svc, src, dep.ID, i, probe, c.RouteFor(ctx, svc))
 		logf("Starting %s", spec.Name)
 		id, err := c.runContainer(ctx, dk, spec, serviceFiles(svc, src)...)
 		if err != nil {
@@ -564,7 +565,7 @@ func (c *Core) swap(ctx context.Context, project domain.Project, svc domain.Serv
 		stopped = append(stopped, old)
 	}
 
-	spec := replicaSpec(project, svc, src, dep.ID, 1, probe, c.routeFor(ctx, svc))
+	spec := replicaSpec(project, svc, src, dep.ID, 1, probe, c.RouteFor(ctx, svc))
 	logf("Starting %s", spec.Name)
 	id, err := c.runContainer(ctx, dk, spec, serviceFiles(svc, src)...)
 	if err == nil {
@@ -609,15 +610,15 @@ func readinessMode(svc domain.Service) string {
 		return "its healthcheck passing"
 	case svc.HealthPath != "":
 		return fmt.Sprintf("HTTP GET :%d%s", svc.Port, svc.HealthPath)
-	case probePort(svc) > 0:
-		return fmt.Sprintf("port %d accepting connections", probePort(svc))
+	case network.ProbePort(svc) > 0:
+		return fmt.Sprintf("port %d accepting connections", network.ProbePort(svc))
 	}
 	return "running for 5s"
 }
 
 // containerSpec builds the container for one replica. src resolves env
 // references.
-func containerSpec(project domain.Project, svc domain.Service, src envSources, deployID string, replica int, rt route) client.ContainerCreateOptions {
+func containerSpec(project domain.Project, svc domain.Service, src envSources, deployID string, replica int, rt network.Routing) client.ContainerCreateOptions {
 	labels := map[string]string{
 		docker.LabelManaged: "true",
 		docker.LabelProject: project.ID,
@@ -625,20 +626,20 @@ func containerSpec(project domain.Project, svc domain.Service, src envSources, d
 		docker.LabelReplica: strconv.Itoa(replica),
 		docker.LabelDeploy:  deployID,
 	}
-	endpoints := map[string]*network.EndpointSettings{}
+	endpoints := map[string]*dockernet.EndpointSettings{}
 	for _, n := range projectNetworks(project, svc) {
 		// Other services of the project reach this one by its service name.
-		endpoints[n] = &network.EndpointSettings{Aliases: []string{svc.Name}}
+		endpoints[n] = &dockernet.EndpointSettings{Aliases: []string{svc.Name}}
 	}
 	for _, id := range svc.Networks {
-		endpoints[docker.CustomNetwork(id)] = &network.EndpointSettings{Aliases: []string{networkAlias(project, svc)}}
+		endpoints[docker.CustomNetwork(id)] = &dockernet.EndpointSettings{Aliases: []string{networkAlias(project, svc)}}
 	}
 	if svc.HostNetwork {
-		endpoints = map[string]*network.EndpointSettings{}
+		endpoints = map[string]*dockernet.EndpointSettings{}
 	}
-	if httpRouted(svc) {
-		maps.Copy(labels, traefikLabels(svc, rt))
-		endpoints[docker.ProxyNetwork] = &network.EndpointSettings{}
+	if network.HTTPRouted(svc) {
+		maps.Copy(labels, network.TraefikLabels(svc, rt))
+		endpoints[docker.ProxyNetwork] = &dockernet.EndpointSettings{}
 	}
 
 	envMap := resolveEnv(svc.Env, src)
@@ -682,12 +683,12 @@ func containerSpec(project domain.Project, svc domain.Service, src envSources, d
 		if svc.HostNetwork {
 			host.NetworkMode = "host"
 		}
-		if svc.DockerSocket != "" && rt.dockerSocket != "" {
+		if svc.DockerSocket != "" && rt.DockerSocket != "" {
 			host.Mounts = append(host.Mounts, mount.Mount{
-				Type: mount.TypeBind, Source: rt.dockerSocket, Target: compose.DockerSocket, ReadOnly: svc.DockerSocket == "ro",
+				Type: mount.TypeBind, Source: rt.DockerSocket, Target: compose.DockerSocket, ReadOnly: svc.DockerSocket == "ro",
 			})
 		}
-		cfg.ExposedPorts, host.PortBindings = portBindings(svc.PublishedPorts)
+		cfg.ExposedPorts, host.PortBindings = network.PortBindings(svc.PublishedPorts)
 		if svc.Healthcheck.Set() {
 			cfg.Healthcheck = healthConfig(svc.Healthcheck)
 		}
@@ -706,7 +707,7 @@ func containerSpec(project domain.Project, svc domain.Service, src envSources, d
 		Name:             name,
 		Config:           cfg,
 		HostConfig:       host,
-		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: endpoints},
+		NetworkingConfig: &dockernet.NetworkingConfig{EndpointsConfig: endpoints},
 		Platform:         docker.Platform(svc.Runtime.Platform),
 	}
 }

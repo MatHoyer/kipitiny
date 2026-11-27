@@ -10,6 +10,7 @@ import (
 	"github.com/distribution/reference"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 const (
@@ -25,7 +26,6 @@ const (
 )
 
 var (
-	domainRe = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$|^localhost$|^([a-z0-9-]+\.)+localhost$`)
 	envKeyRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	iconRe   = regexp.MustCompile(`^([a-z0-9][a-z0-9-]{0,39})?$`)
 )
@@ -48,7 +48,7 @@ func (c *Core) validate(ctx context.Context, s domain.Service) error {
 		return err
 	}
 	others := slices.DeleteFunc(all, func(o domain.Service) bool { return s.ID != "" && o.ID == s.ID })
-	return c.checkDomain(ctx, s, project.ServerID, others)
+	return c.CheckDomain(ctx, s, project.ServerID, others)
 }
 
 // validateIn is validate against a project's variables and databases as
@@ -79,15 +79,15 @@ func (c *Core) validateIn(ctx context.Context, s domain.Service, project domain.
 	if err := c.checkSecretSchemes(ctx, refEnv(s)); err != nil {
 		return err
 	}
-	if err := c.checkBasicAuthSchemes(ctx, s.Middlewares); err != nil {
+	if err := c.CheckBasicAuthSchemes(ctx, s.Middlewares); err != nil {
 		return err
 	}
-	if err := c.checkPortsFree(ctx, s); err != nil {
+	if err := c.CheckPortsFree(ctx, s); err != nil {
 		return err
 	}
 	// Its record points at the server, which publishes no HTTP port behind
 	// a tunnel.
-	if httpRouted(s) && len(s.PublishedPorts) > 0 && c.viaTunnel(ctx, project.ServerID) {
+	if network.HTTPRouted(s) && len(s.PublishedPorts) > 0 && c.ViaTunnel(ctx, project.ServerID) {
 		return fmt.Errorf("%w: behind a Cloudflare tunnel, an app with published ports can't also route HTTP on its domain: "+
 			"its record must point at the server; clear the container port, or serve HTTP from another service", ErrInvalid)
 	}
@@ -125,7 +125,7 @@ func validateService(s domain.Service) error {
 	if s.Errors && s.Kind.IsDatabase() {
 		return fmt.Errorf("%w: error tracking is for apps, whose Sentry SDK reports their errors", ErrInvalid)
 	}
-	if s.Analytics && (s.Kind.IsDatabase() || !httpRouted(s)) {
+	if s.Analytics && (s.Kind.IsDatabase() || !network.HTTPRouted(s)) {
 		return fmt.Errorf("%w: analytics count the visits of an app's domain: set a domain and a container port", ErrInvalid)
 	}
 	if err := validateAnalyticsPaths(s.AnalyticsScript, s.AnalyticsHit); err != nil {
@@ -166,13 +166,13 @@ func validateService(s domain.Service) error {
 	if err := validateVolumes(s.Volumes); err != nil {
 		return err
 	}
-	if err := validateMiddlewares(s.Middlewares); err != nil {
+	if err := network.ValidateMiddlewares(s.Middlewares); err != nil {
 		return err
 	}
-	if err := validatePorts(s); err != nil {
+	if err := network.ValidatePorts(s); err != nil {
 		return err
 	}
-	if err := validateHostAccess(s); err != nil {
+	if err := network.ValidateHostAccess(s); err != nil {
 		return err
 	}
 	if err := validateRuntime(s); err != nil {
@@ -184,7 +184,7 @@ func validateService(s domain.Service) error {
 	if err := validateDependsOn(s); err != nil {
 		return err
 	}
-	if err := validateRoutes(s); err != nil {
+	if err := network.ValidateRoutes(s); err != nil {
 		return err
 	}
 	if s.StopGraceSeconds < 0 || s.StopGraceSeconds > maxStopGraceSeconds {
@@ -205,7 +205,7 @@ func validateService(s domain.Service) error {
 		return fmt.Errorf("%w: replicas must be between 1 and %d", ErrInvalid, maxReplicas)
 	}
 	if s.Domain != "" {
-		if !domainRe.MatchString(s.Domain) {
+		if !domain.ValidDomain(s.Domain) {
 			return fmt.Errorf("%w: domain %q is not a valid hostname", ErrInvalid, s.Domain)
 		}
 		// With published ports and no container port, the domain only gets

@@ -14,6 +14,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 const (
@@ -30,7 +31,7 @@ func (c *Core) preDeploy(ctx context.Context, project domain.Project, svc domain
 	ctx, cancel := context.WithTimeout(ctx, preDeployTimeout)
 	defer cancel()
 
-	spec := containerSpec(project, svc, src, dep.ID, 0, route{dockerSocket: c.dockerSocketFor(ctx, svc)}) // never routed
+	spec := containerSpec(project, svc, src, dep.ID, 0, network.Routing{DockerSocket: c.DockerSocketFor(ctx, svc)}) // never routed
 	spec.Name = fmt.Sprintf("%s-%s-predeploy-%s", project.Name, svc.Name, deploySuffix(dep.ID))
 	spec.Config.Cmd = []string{"sh", "-c", svc.PreDeploy}
 	spec.Config.Entrypoint = []string{}

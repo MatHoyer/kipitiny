@@ -11,6 +11,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 func TestValidateRoutes(t *testing.T) {
@@ -20,7 +21,7 @@ func TestValidateRoutes(t *testing.T) {
 		wantErr string
 	}{
 		"valid": {func(s domain.Service) domain.Service {
-			s.Routes = normalizeRoutes([]domain.Route{{Paths: []string{"/a.B/", " /api "}, Scheme: "H2C"}, {Paths: []string{"/relay"}, Scheme: "http", Port: 33080}})
+			s.Routes = network.NormalizeRoutes([]domain.Route{{Paths: []string{"/a.B/", " /api "}, Scheme: "H2C"}, {Paths: []string{"/relay"}, Scheme: "http", Port: 33080}})
 			return s
 		}, ""},
 		"no domain": {func(s domain.Service) domain.Service {
@@ -52,12 +53,12 @@ func TestValidateRoutes(t *testing.T) {
 			return s
 		}, "out of range"},
 	} {
-		err := validateRoutes(tc.svc(ok))
+		err := network.ValidateRoutes(tc.svc(ok))
 		if tc.wantErr == "" && err != nil || tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
 			t.Errorf("%s: err = %v, want %q", name, err, tc.wantErr)
 		}
 	}
-	if got := normalizeRoutes([]domain.Route{{Paths: []string{" /x "}, Scheme: "HTTP"}}); got[0].Scheme != "" || got[0].Paths[0] != "/x" {
+	if got := network.NormalizeRoutes([]domain.Route{{Paths: []string{" /x "}, Scheme: "HTTP"}}); got[0].Scheme != "" || got[0].Paths[0] != "/x" {
 		t.Errorf("normalize = %+v", got)
 	}
 }
@@ -67,7 +68,7 @@ func TestTraefikLabelsRoutes(t *testing.T) {
 		{Paths: []string{"/signalexchange.SignalExchange/", "/management.ManagementService/"}, Scheme: "h2c"},
 		{Paths: []string{"/relay"}, Port: 8080},
 	}}
-	l := traefikLabels(svc, route{resolver: "letsencrypt"})
+	l := network.TraefikLabels(svc, network.Routing{Resolver: "letsencrypt"})
 	rules := map[string]string{}
 	for k, v := range l {
 		if r, ok := strings.CutSuffix(strings.TrimPrefix(k, "traefik.http.routers."), ".rule"); ok && strings.HasPrefix(k, "traefik.http.routers.") {
@@ -81,7 +82,7 @@ func TestTraefikLabelsRoutes(t *testing.T) {
 		t.Error("an app with routes must not take the whole domain")
 	}
 	at := func(path string) (string, string) {
-		r := rules[pathRule("nb.example.com", path)]
+		r := rules[network.PathRule("nb.example.com", path)]
 		if r == "" {
 			t.Fatalf("no router for %s in %v", path, rules)
 		}
@@ -115,13 +116,13 @@ func TestTraefikLabelsRoutes(t *testing.T) {
 		}
 		return n
 	}
-	if prio(relay) != pathPriority("/relay", true) || prio(relay) >= prio(grpc) {
+	if prio(relay) != network.PathPriority("/relay", true) || prio(relay) >= prio(grpc) {
 		t.Error("longer paths need a higher priority")
 	}
 
 	// Without routes, labels (and so router names) are what they were.
-	plain := traefikLabels(domain.Service{ID: "01ABC", Domain: "nb.example.com", Port: 80}, route{})
-	if plain["traefik.http.routers.kipitiny-01abc-"+specHash("nb.example.com", "", middlewareLabels(domain.Middlewares{}, false))[:8]+".rule"] != "Host(`nb.example.com`)" {
+	plain := network.TraefikLabels(domain.Service{ID: "01ABC", Domain: "nb.example.com", Port: 80}, network.Routing{})
+	if plain["traefik.http.routers.kipitiny-01abc-"+network.SpecHash("nb.example.com", "", network.MiddlewareLabels(domain.Middlewares{}, false))[:8]+".rule"] != "Host(`nb.example.com`)" {
 		t.Errorf("plain labels = %v", plain)
 	}
 }
@@ -165,8 +166,8 @@ func TestTraefikConfigRoutes(t *testing.T) {
 	}
 	for _, path := range []string{"/grpc.Svc/", "/api"} {
 		// Just below the app's own router, above any catch-all.
-		if got, ok := pages[pathRule("nb.example.com", path)]; !ok || got != pathPriority(path, false) {
-			t.Errorf("page for %s: priority %d, want %d", path, got, pathPriority(path, false))
+		if got, ok := pages[network.PathRule("nb.example.com", path)]; !ok || got != network.PathPriority(path, false) {
+			t.Errorf("page for %s: priority %d, want %d", path, got, network.PathPriority(path, false))
 		}
 	}
 
@@ -179,7 +180,7 @@ func TestTraefikConfigRoutes(t *testing.T) {
 	for k, r := range d.HTTP.Routers {
 		if strings.HasPrefix(k, name+"-maintenance") {
 			n++
-			if r.Service != pagesService+"@file" || r.Priority <= maintenancePriority {
+			if r.Service != network.PagesService+"@file" || r.Priority <= maintenancePriority {
 				t.Errorf("%s = %+v", k, r)
 			}
 		}
@@ -214,7 +215,7 @@ services:
 	}
 	svcs, _ := c.store.ListServices(ctx, p.ID)
 	want := []domain.Route{{Paths: []string{"/signalexchange.SignalExchange/", "/management.ManagementService/"}, Scheme: "h2c"}, {Paths: []string{"/relay", "/api"}}}
-	if !sameRoutes(svcs[0].Routes, want) {
+	if !network.SameRoutes(svcs[0].Routes, want) {
 		t.Errorf("routes = %+v", svcs[0].Routes)
 	}
 

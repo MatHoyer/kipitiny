@@ -1,4 +1,4 @@
-package core
+package network
 
 import (
 	"context"
@@ -24,7 +24,7 @@ func TestMergeMiddlewares(t *testing.T) {
 		RateLimit:   &domain.RateLimit{Average: 5},
 		Headers:     map[string]string{" X-Robots-Tag ": " noindex "},
 	}
-	m, err := mergeMiddlewares(in, domain.Middlewares{})
+	m, err := MergeMiddlewares(in, domain.Middlewares{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,12 +40,12 @@ func TestMergeMiddlewares(t *testing.T) {
 	}
 
 	// An empty password keeps the user's current one.
-	kept, err := mergeMiddlewares(MiddlewaresInput{BasicAuth: []BasicAuthInput{{Name: "ann"}, {Name: "bob"}}}, m)
+	kept, err := MergeMiddlewares(MiddlewaresInput{BasicAuth: []BasicAuthInput{{Name: "ann"}, {Name: "bob"}}}, m)
 	if err != nil || !slices.Equal(kept.BasicAuth, m.BasicAuth) {
 		t.Errorf("kept = %+v, %v", kept.BasicAuth, err)
 	}
 	for _, u := range []BasicAuthInput{{Name: "new"}, {Name: "x", Password: "short"}, {Name: "x", Password: "{{ project.PW }}"}} {
-		if _, err := mergeMiddlewares(MiddlewaresInput{BasicAuth: []BasicAuthInput{u}}, m); !errors.Is(err, ErrInvalid) {
+		if _, err := MergeMiddlewares(MiddlewaresInput{BasicAuth: []BasicAuthInput{u}}, m); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("%+v accepted: %v", u, err)
 		}
 	}
@@ -58,7 +58,7 @@ func TestValidateMiddlewares(t *testing.T) {
 		RateLimit:   &domain.RateLimit{Average: 1, Burst: 1},
 		Headers:     map[string]string{"X-Robots-Tag": "noindex", "Server": ""},
 	}
-	if err := validateMiddlewares(ok); err != nil {
+	if err := ValidateMiddlewares(ok); err != nil {
 		t.Fatal(err)
 	}
 	for name, m := range map[string]domain.Middlewares{
@@ -69,7 +69,7 @@ func TestValidateMiddlewares(t *testing.T) {
 		"dotted header":   {Headers: map[string]string{"X.Y": "1"}},
 		"multiline value": {Headers: map[string]string{"X-Y": "a\r\nSet-Cookie: x"}},
 	} {
-		if err := validateMiddlewares(m); !errors.Is(err, ErrInvalid) {
+		if err := ValidateMiddlewares(m); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("%s accepted: %v", name, err)
 		}
 	}
@@ -82,7 +82,7 @@ func TestMiddlewareLabels(t *testing.T) {
 		RateLimit:   &domain.RateLimit{Average: 10, Burst: 20},
 		Headers:     map[string]string{"X-Robots-Tag": "noindex"},
 	}}
-	l := traefikLabels(svc, route{})
+	l := TraefikLabels(svc, Routing{})
 	r := routerName(t, l)
 	mw := func(suffix, key string) string { return l["traefik.http.middlewares."+r+"-"+suffix+"."+key] }
 
@@ -104,7 +104,7 @@ func TestMiddlewareLabels(t *testing.T) {
 	}
 
 	// Behind Cloudflare the client IP is the last X-Forwarded-For entry.
-	l = traefikLabels(svc, route{behindProxy: true})
+	l = TraefikLabels(svc, Routing{BehindProxy: true})
 	r = routerName(t, l)
 	if mw("allow", "ipallowlist.ipstrategy.depth") != "1" || mw("ratelimit", "ratelimit.sourcecriterion.ipstrategy.depth") != "1" {
 		t.Error("behind the proxy, the client IP must come from X-Forwarded-For")
@@ -112,49 +112,20 @@ func TestMiddlewareLabels(t *testing.T) {
 
 	// Same configuration, same router; any change, a new one, so old and
 	// new replicas never define the same router differently.
-	if r2 := routerName(t, traefikLabels(svc, route{behindProxy: true})); r2 != r {
+	if r2 := routerName(t, TraefikLabels(svc, Routing{BehindProxy: true})); r2 != r {
 		t.Errorf("router name unstable: %s, %s", r, r2)
 	}
 	changed := svc
 	changed.Middlewares.Headers = map[string]string{"X-Robots-Tag": "all"}
-	if r2 := routerName(t, traefikLabels(changed, route{behindProxy: true})); r2 == r {
+	if r2 := routerName(t, TraefikLabels(changed, Routing{BehindProxy: true})); r2 == r {
 		t.Error("changed middlewares kept the router name")
 	}
 }
 
-func TestHashBasicAuth(t *testing.T) {
-	ctx := context.Background()
-	c := newTestCore(t, config.Config{})
-	useSecretProvider(t, c, &fakeProvider{})("")
-	svc := domain.Service{Middlewares: domain.Middlewares{BasicAuth: []domain.BasicAuthUser{
-		{Name: "ann", Hash: "kept"},
-		{Name: "bob", Ref: "{{ fake://bob }}"},
-	}}}
-	stored := slices.Clone(svc.Middlewares.BasicAuth)
-	n, err := c.hashBasicAuth(ctx, &svc)
-	if err != nil || n != 1 {
-		t.Fatalf("hashBasicAuth = %d, %v", n, err)
-	}
-	if svc.Middlewares.BasicAuth[0].Hash != "kept" ||
-		bcrypt.CompareHashAndPassword([]byte(svc.Middlewares.BasicAuth[1].Hash), []byte("value-of-bob")) != nil {
-		t.Errorf("users = %+v", svc.Middlewares.BasicAuth)
-	}
-	if stored[1].Hash != "" {
-		t.Error("hashing mutated the stored users")
-	}
-
-	if err := c.checkBasicAuthSchemes(ctx, domain.Middlewares{BasicAuth: []domain.BasicAuthUser{{Name: "x", Ref: "{{ op://v/i/f }}"}}}); !errors.Is(err, ErrInvalid) {
-		t.Errorf("unknown scheme accepted: %v", err)
-	}
-	if m := masked(svc).Middlewares; m.BasicAuth[0].Hash != "" || svc.Middlewares.BasicAuth[0].Hash != "kept" {
-		t.Error("masking must hide hashes without touching the service")
-	}
-}
-
 func TestTraefikTrustsCloudflare(t *testing.T) {
-	c := &Core{}
-	trusted := func(o traefikOpts) string {
-		opts, _ := c.traefikSpec("/var/run/docker.sock", o)
+	c := &Network{cfg: &config.Config{}}
+	trusted := func(o TraefikOpts) string {
+		opts, _ := c.TraefikSpec("/var/run/docker.sock", o)
 		for _, a := range opts.Config.Cmd {
 			if v, ok := strings.CutPrefix(a, "--entrypoints.websecure.forwardedheaders.trustedips="); ok {
 				return v
@@ -162,20 +133,20 @@ func TestTraefikTrustsCloudflare(t *testing.T) {
 		}
 		return ""
 	}
-	if got := trusted(traefikOpts{}); got != "" {
+	if got := trusted(TraefikOpts{}); got != "" {
 		t.Errorf("direct traffic trusts %s", got)
 	}
-	if got := trusted(traefikOpts{Tunnel: true}); !strings.Contains(got, "172.16.0.0/12") {
+	if got := trusted(TraefikOpts{Tunnel: true}); !strings.Contains(got, "172.16.0.0/12") {
 		t.Errorf("tunnel trusts %q, want the proxy network", got)
 	}
-	if got := trusted(traefikOpts{CFToken: "tok"}); !strings.Contains(got, "173.245.48.0/20") {
+	if got := trusted(TraefikOpts{CFToken: "tok"}); !strings.Contains(got, "173.245.48.0/20") {
 		t.Errorf("Cloudflare connected trusts %q, want its edge", got)
 	}
 }
 
 func TestBehindCloudflare(t *testing.T) {
 	ctx := context.Background()
-	c := newTestCore(t, config.Config{})
+	c := newTestNetwork(t, config.Config{})
 	if c.behindCloudflare(ctx, domain.LocalServerID, "shop.example.com") {
 		t.Error("not connected")
 	}

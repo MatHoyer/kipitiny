@@ -1,4 +1,4 @@
-package core
+package network
 
 import (
 	"context"
@@ -16,9 +16,9 @@ import (
 
 const maxPublishedPorts = 20
 
-// normalizePorts fills what users leave out: TCP, and the container port
+// NormalizePorts fills what users leave out: TCP, and the container port
 // equal to the host port. nil becomes empty.
-func normalizePorts(ports []domain.PublishedPort) []domain.PublishedPort {
+func NormalizePorts(ports []domain.PublishedPort) []domain.PublishedPort {
 	out := make([]domain.PublishedPort, 0, len(ports))
 	for _, p := range ports {
 		p.Protocol = strings.ToLower(strings.TrimSpace(p.Protocol))
@@ -36,38 +36,38 @@ func normalizePorts(ports []domain.PublishedPort) []domain.PublishedPort {
 	return out
 }
 
-// validatePorts checks an app's published ports. Two containers can't bind
+// ValidatePorts checks an app's published ports. Two containers can't bind
 // the same host port, so an app publishing ports runs a single replica.
-func validatePorts(s domain.Service) error {
+func ValidatePorts(s domain.Service) error {
 	if len(s.PublishedPorts) == 0 {
 		return nil
 	}
 	if len(s.PublishedPorts) > maxPublishedPorts {
-		return fmt.Errorf("%w: at most %d published ports", ErrInvalid, maxPublishedPorts)
+		return fmt.Errorf("%w: at most %d published ports", domain.ErrInvalid, maxPublishedPorts)
 	}
 	if s.Replicas != 1 {
-		return fmt.Errorf("%w: an app with published ports runs a single replica: two containers can't bind the same host port", ErrInvalid)
+		return fmt.Errorf("%w: an app with published ports runs a single replica: two containers can't bind the same host port", domain.ErrInvalid)
 	}
 	for i, p := range s.PublishedPorts {
 		if p.Protocol != "tcp" && p.Protocol != "udp" {
-			return fmt.Errorf("%w: port protocol must be tcp or udp, not %q", ErrInvalid, p.Protocol)
+			return fmt.Errorf("%w: port protocol must be tcp or udp, not %q", domain.ErrInvalid, p.Protocol)
 		}
 		if p.HostPort < 1 || p.HostPort > 65535 || p.ContainerPort < 1 || p.ContainerPort > 65535 {
-			return fmt.Errorf("%w: published ports must be between 1 and 65535", ErrInvalid)
+			return fmt.Errorf("%w: published ports must be between 1 and 65535", domain.ErrInvalid)
 		}
 		if _, err := netip.ParseAddr(p.HostIP); p.HostIP != "" && err != nil {
-			return fmt.Errorf("%w: host IP %q is not an IP address", ErrInvalid, p.HostIP)
+			return fmt.Errorf("%w: host IP %q is not an IP address", domain.ErrInvalid, p.HostIP)
 		}
 		if slices.ContainsFunc(s.PublishedPorts[:i], func(o domain.PublishedPort) bool { return portsClash(o, p) }) {
-			return fmt.Errorf("%w: host port %s is published twice", ErrInvalid, portKey(p))
+			return fmt.Errorf("%w: host port %s is published twice", domain.ErrInvalid, portKey(p))
 		}
 	}
 	return nil
 }
 
-// checkPortsFree refuses host ports Traefik or another service of the same
+// CheckPortsFree refuses host ports Traefik or another service of the same
 // server already publishes. Docker would only fail at deploy.
-func (c *Core) checkPortsFree(ctx context.Context, s domain.Service) error {
+func (c *Network) CheckPortsFree(ctx context.Context, s domain.Service) error {
 	if len(s.PublishedPorts) == 0 {
 		return nil
 	}
@@ -105,7 +105,7 @@ func (c *Core) checkPortsFree(ctx context.Context, s domain.Service) error {
 	for _, p := range s.PublishedPorts {
 		for _, t := range taken {
 			if portsClash(t.port, p) {
-				return fmt.Errorf("%w: host port %s is already published by %s", ErrInvalid, portKey(p), t.by)
+				return fmt.Errorf("%w: host port %s is already published by %s", domain.ErrInvalid, portKey(p), t.by)
 			}
 		}
 	}
@@ -126,9 +126,9 @@ func portKey(p domain.PublishedPort) string {
 	return key
 }
 
-// portBindings publishes the app's ports, on every host address unless
+// PortBindings publishes the app's ports, on every host address unless
 // one is given.
-func portBindings(ports []domain.PublishedPort) (network.PortSet, network.PortMap) {
+func PortBindings(ports []domain.PublishedPort) (network.PortSet, network.PortMap) {
 	if len(ports) == 0 {
 		return nil, nil
 	}
@@ -146,9 +146,9 @@ func portBindings(ports []domain.PublishedPort) (network.PortSet, network.PortMa
 	return exposed, bindings
 }
 
-// probePort is the container port the health probe connects to: the HTTP
+// ProbePort is the container port the health probe connects to: the HTTP
 // port, else the first published TCP port; 0 when there is none.
-func probePort(svc domain.Service) int {
+func ProbePort(svc domain.Service) int {
 	if svc.Port > 0 {
 		return svc.Port
 	}
@@ -160,25 +160,25 @@ func probePort(svc domain.Service) int {
 	return 0
 }
 
-// validateHostAccess checks an app's host network and Docker socket. In
+// ValidateHostAccess checks an app's host network and Docker socket. In
 // the host's network the app has no project network to be reached on and
 // listens on host ports itself: one replica, no domain, nothing to publish.
-func validateHostAccess(s domain.Service) error {
+func ValidateHostAccess(s domain.Service) error {
 	if s.DockerSocket != "" && s.DockerSocket != "ro" && s.DockerSocket != "rw" {
-		return fmt.Errorf("%w: Docker socket access must be ro or rw", ErrInvalid)
+		return fmt.Errorf("%w: Docker socket access must be ro or rw", domain.ErrInvalid)
 	}
 	if !s.HostNetwork {
 		return nil
 	}
 	switch {
 	case s.Replicas != 1:
-		return fmt.Errorf("%w: an app in the host network runs one replica", ErrInvalid)
+		return fmt.Errorf("%w: an app in the host network runs one replica", domain.ErrInvalid)
 	case len(s.PublishedPorts) > 0:
-		return fmt.Errorf("%w: an app in the host network listens on host ports itself; remove its published ports", ErrInvalid)
+		return fmt.Errorf("%w: an app in the host network listens on host ports itself; remove its published ports", domain.ErrInvalid)
 	case s.Domain != "" || !s.Middlewares.IsZero():
-		return fmt.Errorf("%w: an app in the host network can't have a domain: Traefik reaches apps on their project network", ErrInvalid)
+		return fmt.Errorf("%w: an app in the host network can't have a domain: Traefik reaches apps on their project network", domain.ErrInvalid)
 	case len(s.Networks) > 0:
-		return fmt.Errorf("%w: an app in the host network can't join other networks; leave them first", ErrInvalid)
+		return fmt.Errorf("%w: an app in the host network can't join other networks; leave them first", domain.ErrInvalid)
 	}
 	return nil
 }

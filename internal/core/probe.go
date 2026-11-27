@@ -20,6 +20,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 const (
@@ -160,7 +161,7 @@ func imageHealthcheck(ctx context.Context, dk *docker.Client, image, platform st
 // containers, so a new replica gets traffic once it actually serves, and one
 // that stops answering is taken out of rotation.
 func withProbe(spec *client.ContainerCreateOptions, svc domain.Service, m mount.Mount) {
-	target := fmt.Sprintf("tcp://127.0.0.1:%d", probePort(svc))
+	target := fmt.Sprintf("tcp://127.0.0.1:%d", network.ProbePort(svc))
 	if svc.HealthPath != "" {
 		target = fmt.Sprintf("http://127.0.0.1:%d%s", svc.Port, svc.HealthPath)
 	}
@@ -202,7 +203,7 @@ func healthConfig(h domain.Healthcheck) *container.HealthConfig {
 // no TCP port, or
 // the probe can't run on that server.
 func (c *Core) probeFor(ctx context.Context, svc domain.Service) (*mount.Mount, error) {
-	if svc.Kind != domain.ServiceKindApp || probePort(svc) == 0 || svc.Healthcheck.Set() {
+	if svc.Kind != domain.ServiceKindApp || network.ProbePort(svc) == 0 || svc.Healthcheck.Set() {
 		return nil, nil
 	}
 	has, err := imageHealthcheck(ctx, c.dockerFor(svc.ServerID), svc.Image, svc.Runtime.Platform)
@@ -213,7 +214,7 @@ func (c *Core) probeFor(ctx context.Context, svc domain.Service) (*mount.Mount, 
 }
 
 // replicaSpec is containerSpec plus the injected health probe, if any.
-func replicaSpec(project domain.Project, svc domain.Service, src envSources, deployID string, replica int, probe *mount.Mount, rt route) client.ContainerCreateOptions {
+func replicaSpec(project domain.Project, svc domain.Service, src envSources, deployID string, replica int, probe *mount.Mount, rt network.Routing) client.ContainerCreateOptions {
 	spec := containerSpec(project, svc, src, deployID, replica, rt)
 	if probe != nil {
 		withProbe(&spec, svc, *probe)

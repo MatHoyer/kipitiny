@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
 )
@@ -26,7 +27,7 @@ const (
 // an app that is down too).
 func Pages(c *core.Core, log *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET "+core.PagesPath+"traefik/{server}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET "+network.PagesPath+"traefik/{server}", func(w http.ResponseWriter, r *http.Request) {
 		token, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 		b, err := c.TraefikConfig(r.Context(), r.PathValue("server"), token)
 		if errors.Is(err, identity.ErrUnauthorized) {
@@ -43,10 +44,10 @@ func Pages(c *core.Core, log *slog.Logger) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write(b)
 	})
-	mux.HandleFunc(core.PagesPath+"down", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(network.PagesPath+"down", func(w http.ResponseWriter, r *http.Request) {
 		writePage(w, r, c.MaintenancePage(r.Context(), "", r.URL.Query().Get("url")))
 	})
-	mux.HandleFunc(core.PagesPath+"{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(network.PagesPath+"{id}", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("page") == "starting" { // to see it, without waking the app
 			writePage(w, r, c.StartingPage(r.Context(), r.PathValue("id")))
 			return

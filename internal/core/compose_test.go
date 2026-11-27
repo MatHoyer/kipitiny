@@ -16,6 +16,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 func TestExportFile(t *testing.T) {
@@ -256,7 +257,7 @@ services:
 		t.Errorf("healthcheck = %+v", h)
 	}
 
-	spec := containerSpec(p, web, envSources{project: p.Env}, "D1", 1, route{})
+	spec := containerSpec(p, web, envSources{project: p.Env}, "D1", 1, network.Routing{})
 	if hc := spec.Config.Healthcheck; hc == nil || hc.Test[0] != "CMD" || hc.StartPeriod != readyTimeout || hc.StartInterval != time.Second {
 		t.Errorf("container healthcheck = %+v", hc)
 	}

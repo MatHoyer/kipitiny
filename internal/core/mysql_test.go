@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 func mysqlService(kind domain.ServiceKind) domain.Service {
@@ -82,7 +83,7 @@ func TestMySQLAndMongoRefs(t *testing.T) {
 func TestMySQLAndMongoContainerSpec(t *testing.T) {
 	p := domain.Project{ID: "P1", Name: "shop"}
 	for _, svc := range []domain.Service{mysqlService(domain.ServiceKindMySQL), mysqlService(domain.ServiceKindMariaDB), mongoService()} {
-		spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, route{resolver: certResolver})
+		spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, network.Routing{Resolver: network.CertResolverTLS})
 		if spec.Name != "shop-"+svc.Name+"-1" {
 			t.Errorf("%s: name = %q, want no deploy suffix", svc.Kind, spec.Name)
 		}
@@ -111,7 +112,7 @@ func TestMySQLAndMongoContainerSpec(t *testing.T) {
 		}
 	}
 	// Mongo's config VOLUME would leave an anonymous volume per recreate.
-	spec := containerSpec(p, mongoService(), envSources{}, "D1", 1, route{resolver: certResolver})
+	spec := containerSpec(p, mongoService(), envSources{}, "D1", 1, network.Routing{Resolver: network.CertResolverTLS})
 	if _, ok := spec.HostConfig.Tmpfs[mongoConfigMount]; !ok {
 		t.Errorf("tmpfs = %v", spec.HostConfig.Tmpfs)
 	}

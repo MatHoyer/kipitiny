@@ -15,13 +15,14 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
-	"github.com/moby/moby/api/types/network"
+	dockernet "github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/analytics"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 const (
@@ -91,7 +92,7 @@ func (c *Core) SetAnalytics(ctx context.Context, in AnalyticsSettings) (Analytic
 		return AnalyticsSettings{}, fmt.Errorf("%w: analytics need a domain for the tracker script", ErrInvalid)
 	}
 	if in.Domain != "" {
-		if !domainRe.MatchString(in.Domain) {
+		if !domain.ValidDomain(in.Domain) {
 			return AnalyticsSettings{}, fmt.Errorf("%w: invalid domain %q", ErrInvalid, in.Domain)
 		}
 		if in.Domain == c.cfg.Domain {
@@ -121,7 +122,7 @@ func (c *Core) SetAnalytics(ctx context.Context, in AnalyticsSettings) (Analytic
 	if err := c.saveAnalytics(ctx, st); err != nil {
 		return AnalyticsSettings{}, err
 	}
-	c.kickDNS()
+	c.KickDNS()
 	if err := c.ensureAnalytics(ctx); err != nil {
 		// Back to how it was, so a failed enable leaves analytics off
 		// instead of retried by the reconciler.
@@ -191,7 +192,7 @@ func (c *Core) trackedApps(ctx context.Context) ([]domain.Service, error) {
 		return nil, err
 	}
 	return slices.DeleteFunc(svcs, func(s domain.Service) bool {
-		return !s.Analytics || s.ServerID != domain.LocalServerID || !httpRouted(s)
+		return !s.Analytics || s.ServerID != domain.LocalServerID || !network.HTTPRouted(s)
 	}), nil
 }
 
@@ -210,7 +211,7 @@ func (c *Core) analyticsSpec(ctx context.Context, st analyticsState, apps []doma
 		"traefik.http.routers." + analyticsRouter + ".service":                   analyticsRouter,
 		"traefik.http.services." + analyticsRouter + ".loadbalancer.server.port": strconv.Itoa(analytics.PublicPort),
 	}
-	if r := c.certResolver(ctx, domain.LocalServerID, st.Domain); r != "" {
+	if r := c.CertResolver(ctx, domain.LocalServerID, st.Domain); r != "" {
 		labels["traefik.http.routers."+analyticsRouter+".tls.certresolver"] = r
 	} else {
 		labels["traefik.http.routers."+analyticsRouter+".tls"] = "true"
@@ -226,7 +227,7 @@ func (c *Core) analyticsSpec(ctx context.Context, st analyticsState, apps []doma
 		labels["traefik.http.routers."+r+".entrypoints"] = "websecure"
 		labels["traefik.http.routers."+r+".service"] = analyticsRouter
 		labels["traefik.http.routers."+r+".priority"] = strconv.Itoa(ownPathsPriority)
-		if res := c.certResolver(ctx, s.ServerID, s.Domain); res != "" {
+		if res := c.CertResolver(ctx, s.ServerID, s.Domain); res != "" {
 			labels["traefik.http.routers."+r+".tls.certresolver"] = res
 		} else {
 			labels["traefik.http.routers."+r+".tls"] = "true"
@@ -266,8 +267,8 @@ func (c *Core) analyticsSpec(ctx context.Context, st analyticsState, apps []doma
 				}},
 			}},
 		},
-		NetworkingConfig: &network.NetworkingConfig{
-			EndpointsConfig: map[string]*network.EndpointSettings{docker.ProxyNetwork: {}},
+		NetworkingConfig: &dockernet.NetworkingConfig{
+			EndpointsConfig: map[string]*dockernet.EndpointSettings{docker.ProxyNetwork: {}},
 		},
 	}
 }
@@ -289,7 +290,7 @@ func (c *Core) ensureAnalytics(ctx context.Context) error {
 		return err
 	}
 	opts := c.analyticsSpec(ctx, st, apps)
-	hash := specHash(opts.Config.Image, opts.Config.Env, opts.Config.Labels)
+	hash := network.SpecHash(opts.Config.Image, opts.Config.Env, opts.Config.Labels)
 	opts.Config.Labels[docker.LabelConfigHash] = hash
 	existing, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: analyticsComponent})
 	if err != nil {

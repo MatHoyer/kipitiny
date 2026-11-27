@@ -84,7 +84,7 @@ func (c *Core) SetPreviewSettings(ctx context.Context, projectID string, in Prev
 		SeedMode:          in.Seed,
 		Salt:              old.Salt,
 	}
-	if ps.BaseDomain != "" && !domainRe.MatchString(ps.BaseDomain) {
+	if ps.BaseDomain != "" && !domain.ValidDomain(ps.BaseDomain) {
 		return domain.PreviewSettings{}, fmt.Errorf("%w: base domain %q is not a valid hostname", ErrInvalid, ps.BaseDomain)
 	}
 	if !slices.Contains([]domain.SeedMode{domain.SeedOff, domain.SeedAnonymized, domain.SeedRaw}, ps.SeedMode) {
@@ -227,7 +227,7 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 		if !envKeyRe.MatchString(k) {
 			return PreviewView{}, fmt.Errorf("%w: invalid env var name %q", ErrInvalid, k)
 		}
-		if envRefRe.MatchString(v) {
+		if domain.EnvRefRe.MatchString(v) {
 			// CI with the deploy permission must not reach secrets through a reference.
 			return PreviewView{}, fmt.Errorf("%w: %s: CI's values are plain text, references go in the preview settings", ErrInvalid, k)
 		}
@@ -657,7 +657,7 @@ func checkPreviewEnv(f compose.File, env map[string]string, settings domain.Prev
 		for _, k := range slices.Sorted(maps.Keys(s.Environment)) {
 			v := s.Environment[k]
 			var via []string // the project variables v uses
-			for _, m := range envRefRe.FindAllStringSubmatch(v, -1) {
+			for _, m := range domain.EnvRefRe.FindAllStringSubmatch(v, -1) {
 				if m[1] != "" {
 					via = append(via, m[1])
 				}

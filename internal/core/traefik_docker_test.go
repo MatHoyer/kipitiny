@@ -10,6 +10,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 // TestTraefikImageUpgradeDocker checks a manager update that changes the
@@ -50,14 +51,14 @@ func TestTraefikImageUpgradeDocker(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		cts, _ := dk.ListContainers(context.Background(), map[string]string{docker.LabelComponent: traefikComponent})
+		cts, _ := dk.ListContainers(context.Background(), map[string]string{docker.LabelComponent: network.TraefikComponent})
 		for _, ct := range cts {
 			_ = dk.RemoveContainer(context.Background(), ct.ID, 0)
 		}
 	})
 	running := func() (id, image string) {
 		t.Helper()
-		cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: traefikComponent})
+		cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: network.TraefikComponent})
 		if err != nil || len(cts) != 1 {
 			t.Fatalf("traefik containers: %v %v", cts, err)
 		}
@@ -72,7 +73,7 @@ func TestTraefikImageUpgradeDocker(t *testing.T) {
 		return res.ID
 	}
 
-	if err := c.ensureTraefik(ctx, sv); err != nil {
+	if err := c.EnsureTraefik(ctx, sv); err != nil {
 		t.Fatal(err)
 	}
 	oldID, img := running()
@@ -80,7 +81,7 @@ func TestTraefikImageUpgradeDocker(t *testing.T) {
 		t.Fatalf("old server runs %s, want v3.7.0's image", img)
 	}
 	// Reconciling again with the same tag keeps the old build: the bug.
-	if err := c.ensureTraefik(ctx, sv); err != nil {
+	if err := c.EnsureTraefik(ctx, sv); err != nil {
 		t.Fatal(err)
 	}
 	if id, _ := running(); id != oldID {
@@ -89,7 +90,7 @@ func TestTraefikImageUpgradeDocker(t *testing.T) {
 
 	// The manager update: the new default names an exact patch release.
 	c.cfg.Traefik.Image = config.Load().Traefik.Image
-	if err := c.ensureTraefik(ctx, sv); err != nil {
+	if err := c.EnsureTraefik(ctx, sv); err != nil {
 		t.Fatal(err)
 	}
 	newID, img := running()

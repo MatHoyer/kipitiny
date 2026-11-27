@@ -1,15 +1,12 @@
-package core
+package network
 
 import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -17,53 +14,42 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 )
-
-func newTestCore(t *testing.T, cfg config.Config) *Core {
-	t.Helper()
-	st, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { st.Close() })
-	return New(cfg, st, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
-}
 
 func TestCertResolver(t *testing.T) {
 	ctx := context.Background()
-	c := newTestCore(t, config.Config{})
-	if got := c.certResolver(ctx, domain.LocalServerID, "shop.example.com"); got != certResolver {
+	c := newTestNetwork(t, config.Config{})
+	if got := c.CertResolver(ctx, domain.LocalServerID, "shop.example.com"); got != CertResolverTLS {
 		t.Errorf("not connected: %q", got)
 	}
-	if got := c.certResolver(ctx, domain.LocalServerID, "shop.localhost"); got != "" {
+	if got := c.CertResolver(ctx, domain.LocalServerID, "shop.localhost"); got != "" {
 		t.Errorf(".localhost: %q", got)
 	}
 
 	s := c.cf(ctx)
 	s.token, s.zones = "tok", []cloudflare.Zone{{ID: "z", Name: "example.com"}}
-	if got := c.certResolver(ctx, "01REMOTE", "shop.example.com"); got != certResolverDNS {
+	if got := c.CertResolver(ctx, "01REMOTE", "shop.example.com"); got != CertResolverDNS {
 		t.Errorf("cloudflare zone: %q", got)
 	}
-	if got := c.certResolver(ctx, "01REMOTE", "shop.other.org"); got != certResolver {
+	if got := c.CertResolver(ctx, "01REMOTE", "shop.other.org"); got != CertResolverTLS {
 		t.Errorf("other zone: %q", got)
 	}
 
 	c.cfg.Tunnel.Token = "t"
-	if got := c.certResolver(ctx, domain.LocalServerID, "shop.example.com"); got != "" {
+	if got := c.CertResolver(ctx, domain.LocalServerID, "shop.example.com"); got != "" {
 		t.Errorf("behind the tunnel: %q", got)
 	}
 }
 
 func TestZoneNamesSurviveRestart(t *testing.T) {
 	ctx := context.Background()
-	c := newTestCore(t, config.Config{})
+	c := newTestNetwork(t, config.Config{})
 	if err := c.store.SetSetting(ctx, cfTokenSetting, "tok"); err != nil {
 		t.Fatal(err)
 	}
 	c.saveZoneNames(ctx, []cloudflare.Zone{{ID: "z", Name: "example.com"}})
 
-	restarted := New(config.Config{}, c.store, nil, c.log)
+	restarted := New(context.Background(), &config.Config{}, c.store, fakeManager{}, c.log)
 	if !restarted.onCloudflare(ctx, "shop.example.com") {
 		t.Error("certificates would use the wrong challenge until the first sync")
 	}
@@ -103,7 +89,7 @@ func TestProxiedFor(t *testing.T) {
 func TestWantedRecords(t *testing.T) {
 	ctx := context.Background()
 	tok := base64.StdEncoding.EncodeToString([]byte(`{"a":"acc","t":"tid","s":"x"}`))
-	c := newTestCore(t, config.Config{Tunnel: config.Tunnel{Token: tok}, Traefik: config.Traefik{Enabled: true}})
+	c := newTestNetwork(t, config.Config{Tunnel: config.Tunnel{Token: tok}, Traefik: config.Traefik{Enabled: true}})
 	remote, err := c.store.CreateServer(ctx, domain.Server{Name: "w1", Kind: domain.ServerSSH, Host: "w1", Port: 22, PublicIP: "203.0.113.9"})
 	if err != nil {
 		t.Fatal(err)
@@ -124,24 +110,24 @@ func TestWantedRecords(t *testing.T) {
 		}
 	}
 
-	wants, err := c.wantedRecords(ctx, []cloudflare.Zone{{ID: "z", Name: "example.com"}})
+	wants, err := c.WantedRecords(ctx, []cloudflare.Zone{{ID: "z", Name: "example.com"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(wants) != 3 {
 		t.Fatalf("wants = %+v (a domain outside the zones must be left alone)", wants)
 	}
-	if w := wants["tunnelled.example.com"]; w.tunnel != "tid" || w.record.Type != "CNAME" || w.record.Content != "tid.cfargotunnel.com" || !w.record.Proxied {
+	if w := wants["tunnelled.example.com"]; w.Tunnel != "tid" || w.Record.Type != "CNAME" || w.Record.Content != "tid.cfargotunnel.com" || !w.Record.Proxied {
 		t.Errorf("tunnelled = %+v", w)
 	}
-	if w := wants["direct.example.com"]; w.tunnel != "" || w.record.Type != "A" || w.record.Content != "203.0.113.9" || !w.record.Proxied {
+	if w := wants["direct.example.com"]; w.Tunnel != "" || w.Record.Type != "A" || w.Record.Content != "203.0.113.9" || !w.Record.Proxied {
 		t.Errorf("direct = %+v", w)
 	}
-	if w := wants["direct.example.com"]; w.warning != "" {
-		t.Errorf("one level under the zone is covered: %q", w.warning)
+	if w := wants["direct.example.com"]; w.Warning != "" {
+		t.Errorf("one level under the zone is covered: %q", w.Warning)
 	}
-	if w := wants["a.b.example.com"]; !strings.Contains(w.warning, "a-b.example.com") {
-		t.Errorf("a proxied second-level name needs a warning: %q", w.warning)
+	if w := wants["a.b.example.com"]; !strings.Contains(w.Warning, "a-b.example.com") {
+		t.Errorf("a proxied second-level name needs a warning: %q", w.Warning)
 	}
 }
 
@@ -245,7 +231,7 @@ func TestSyncDNS(t *testing.T) {
 	cloudflare.BaseURL = srv.URL
 
 	tok := base64.StdEncoding.EncodeToString([]byte(`{"a":"acc","t":"tid","s":"x"}`))
-	c := newTestCore(t, config.Config{Tunnel: config.Tunnel{Token: tok}, Traefik: config.Traefik{Enabled: true}})
+	c := newTestNetwork(t, config.Config{Tunnel: config.Tunnel{Token: tok}, Traefik: config.Traefik{Enabled: true}})
 	if err := c.store.SetSetting(ctx, cfTokenSetting, "cf-token"); err != nil {
 		t.Fatal(err)
 	}
@@ -291,10 +277,10 @@ func TestSyncDNS(t *testing.T) {
 	if _, ok := fake.records["mx"]; !ok {
 		t.Error("an unrelated record was deleted")
 	}
-	if st := c.dnsStatus(ctx, "handmade.example.com"); st == nil || st.State != "conflict" {
+	if st := c.DNSStatusOf(ctx, "handmade.example.com"); st == nil || st.State != "conflict" {
 		t.Errorf("handmade status = %+v", st)
 	}
-	if st := c.dnsStatus(ctx, "direct.example.com"); st == nil || st.State != "synced" {
+	if st := c.DNSStatusOf(ctx, "direct.example.com"); st == nil || st.State != "synced" {
 		t.Errorf("direct status = %+v", st)
 	}
 
@@ -359,7 +345,7 @@ func TestConnectCloudflareAddsZones(t *testing.T) {
 	defer func(old string) { cloudflare.BaseURL = old }(cloudflare.BaseURL)
 	cloudflare.BaseURL = srv.URL
 
-	c := newTestCore(t, config.Config{})
+	c := newTestNetwork(t, config.Config{})
 	for range 2 { // reconnecting keeps the listed domain
 		if _, err := c.ConnectCloudflare(ctx, "cf-token"); err != nil {
 			t.Fatal(err)

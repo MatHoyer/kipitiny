@@ -4,16 +4,15 @@ import (
 	"context"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 type syncDNSOut struct {
-	Cloudflare core.CloudflareView `json:"cloudflare"`
+	Cloudflare network.CloudflareView `json:"cloudflare"`
 	// Records is each managed hostname's state: synced, warning, conflict or error.
-	Records map[string]core.DNSStatus `json:"records"`
+	Records map[string]network.DNSStatus `json:"records"`
 }
 
 func (t *tools) syncDNS(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, syncDNSOut, error) {
@@ -31,7 +30,7 @@ func (t *tools) syncDNS(ctx context.Context, _ *mcp.CallToolRequest, _ struct{})
 }
 
 type listDomainsOut struct {
-	Domains []core.DomainView `json:"domains"`
+	Domains []network.DomainView `json:"domains"`
 }
 
 func (t *tools) listDomains(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listDomainsOut, error) {

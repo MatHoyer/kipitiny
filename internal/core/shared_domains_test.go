@@ -11,6 +11,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 const sharedFile = `
@@ -51,17 +52,17 @@ func TestSharedDomain(t *testing.T) {
 	dash := svcs[0] // by name
 
 	// One record for the hostname, direct: the server publishes STUN.
-	wants, err := c.wantedRecords(ctx, []cloudflare.Zone{{ID: "z", Name: "example.com"}})
+	wants, err := c.WantedRecords(ctx, []cloudflare.Zone{{ID: "z", Name: "example.com"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w := wants["nb.example.com"]; w.record.Type != "A" || w.record.Proxied {
-		t.Errorf("record = %+v, want a direct A record", w.record)
+	if w := wants["nb.example.com"]; w.Record.Type != "A" || w.Record.Proxied {
+		t.Errorf("record = %+v, want a direct A record", w.Record)
 	}
-	if c.routeFor(ctx, dash).behindProxy {
+	if c.RouteFor(ctx, dash).BehindProxy {
 		t.Error("the dashboard shares a direct record: not behind Cloudflare")
 	}
-	if l := traefikLabels(dash, c.routeFor(ctx, dash)); !strings.Contains(strings.Join(mapValues(l), " "), "Host(`nb.example.com`)") {
+	if l := network.TraefikLabels(dash, c.RouteFor(ctx, dash)); !strings.Contains(strings.Join(mapValues(l), " "), "Host(`nb.example.com`)") {
 		t.Errorf("the catch-all keeps the whole domain: %v", l)
 	}
 
