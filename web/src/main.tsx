@@ -10,18 +10,18 @@ import { TooltipProvider } from "@kipit-labs/kipitidy/tooltip";
 import "./index.css";
 import { DocsRedirect } from "./lib/docs";
 import { friendlyError } from "./lib/errors";
-import { AccountPage } from "./routes/Account";
-import { PreferencesPage } from "./routes/Preferences";
-import { Backup } from "./routes/Backup";
-import { Backups } from "./routes/Backups";
-import { Layout } from "./routes/Layout";
-import { MapPage } from "./routes/MapPage";
-import { Project } from "./routes/Project";
-import { Projects } from "./routes/Projects";
-import { Service } from "./routes/Service";
-import { SharedAnalytics } from "./routes/SharedAnalytics";
-import { SettingsShell, settingsPages } from "./routes/settings";
-import { ServerPage } from "./routes/settings/Servers";
+import { AccountPage } from "./features/account/Account";
+import { PreferencesPage } from "./features/account/Preferences";
+import { Backup } from "./features/backups/Backup";
+import { Backups } from "./features/backups/Backups";
+import { Layout } from "./features/layout/Layout";
+import { MapPage } from "./features/map/MapPage";
+import { Project } from "./features/projects/Project";
+import { Projects } from "./features/projects/Projects";
+import { Service } from "./features/services/Service";
+import { SharedAnalytics } from "./features/analytics/SharedAnalytics";
+import { SettingsShell, settingsPages } from "./features/settings";
+import { ServerPage } from "./features/settings/Servers";
 
 // A 401 anywhere means the session is gone: re-check auth to show the login.
 const onError = (err: Error) => {
