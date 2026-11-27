@@ -1,4 +1,4 @@
-package core
+package identity
 
 import (
 	"context"
@@ -27,7 +27,7 @@ type RelyingParty struct {
 func (rp RelyingParty) webauthn() (*webauthn.WebAuthn, error) {
 	w, err := webauthn.New(&webauthn.Config{RPID: rp.ID, RPDisplayName: "kipitiny", RPOrigins: []string{rp.Origin}})
 	if err != nil {
-		return nil, fmt.Errorf("%w: passkeys need the manager to be opened at a domain name (not an IP address): %v", ErrInvalid, err)
+		return nil, fmt.Errorf("%w: passkeys need the manager to be opened at a domain name (not an IP address): %s", domain.ErrInvalid, err.Error())
 	}
 	return w, nil
 }
@@ -50,7 +50,7 @@ func (w webauthnUser) WebAuthnName() string                       { return w.u.U
 func (w webauthnUser) WebAuthnDisplayName() string                { return w.u.Username }
 func (w webauthnUser) WebAuthnCredentials() []webauthn.Credential { return w.creds }
 
-func (c *Core) webauthnUser(ctx context.Context, u domain.User) (webauthnUser, error) {
+func (c *Identity) webauthnUser(ctx context.Context, u domain.User) (webauthnUser, error) {
 	ps, err := c.store.ListPasskeys(ctx, u.ID)
 	if err != nil {
 		return webauthnUser{}, err
@@ -77,8 +77,8 @@ type PasskeyOptions struct {
 
 // BeginPasskeyRegistration adds a passkey to the current user, once they
 // re-entered their password.
-func (c *Core) BeginPasskeyRegistration(ctx context.Context, rp RelyingParty, password string) (PasskeyOptions, error) {
-	u, err := c.confirmedUser(ctx, password)
+func (c *Identity) BeginPasskeyRegistration(ctx context.Context, rp RelyingParty, password string) (PasskeyOptions, error) {
+	u, err := c.ConfirmedUser(ctx, password)
 	if err != nil {
 		return PasskeyOptions{}, err
 	}
@@ -101,27 +101,27 @@ func (c *Core) BeginPasskeyRegistration(ctx context.Context, rp RelyingParty, pa
 	if err != nil {
 		return PasskeyOptions{}, err
 	}
-	id := randomToken(16)
-	c.ceremonies.put(id, ceremony{rp: rp, session: *session, userID: u.ID}, time.Now().Add(ceremonyTTL))
+	id := RandomToken(16)
+	c.ceremonies.Put(id, ceremony{rp: rp, session: *session, userID: u.ID}, time.Now().Add(ceremonyTTL))
 	return PasskeyOptions{Ceremony: id, Options: creation}, nil
 }
 
-func (c *Core) FinishPasskeyRegistration(ctx context.Context, ceremonyID, name string, response []byte) (domain.Passkey, error) {
+func (c *Identity) FinishPasskeyRegistration(ctx context.Context, ceremonyID, name string, response []byte) (domain.Passkey, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 60 {
-		return domain.Passkey{}, fmt.Errorf("%w: give the passkey a name (max 60 characters)", ErrInvalid)
+		return domain.Passkey{}, fmt.Errorf("%w: give the passkey a name (max 60 characters)", domain.ErrInvalid)
 	}
-	u, err := c.currentUser(ctx)
+	u, err := c.CurrentUser(ctx)
 	if err != nil {
 		return domain.Passkey{}, err
 	}
-	cer, _, ok := c.ceremonies.take(ceremonyID)
+	cer, _, ok := c.ceremonies.Take(ceremonyID)
 	if !ok || cer.userID != u.ID {
-		return domain.Passkey{}, fmt.Errorf("%w: the passkey setup expired, start again", ErrInvalid)
+		return domain.Passkey{}, fmt.Errorf("%w: the passkey setup expired, start again", domain.ErrInvalid)
 	}
 	parsed, err := protocol.ParseCredentialCreationResponseBytes(response)
 	if err != nil {
-		return domain.Passkey{}, fmt.Errorf("%w: %s", ErrInvalid, err.Error())
+		return domain.Passkey{}, fmt.Errorf("%w: %s", domain.ErrInvalid, err.Error())
 	}
 	w, err := cer.rp.webauthn()
 	if err != nil {
@@ -133,7 +133,7 @@ func (c *Core) FinishPasskeyRegistration(ctx context.Context, ceremonyID, name s
 	}
 	cred, err := w.CreateCredential(wu, cer.session, parsed)
 	if err != nil {
-		return domain.Passkey{}, fmt.Errorf("%w: the passkey was refused: %s", ErrInvalid, err.Error())
+		return domain.Passkey{}, fmt.Errorf("%w: the passkey was refused: %s", domain.ErrInvalid, err.Error())
 	}
 	raw, err := json.Marshal(cred)
 	if err != nil {
@@ -142,8 +142,8 @@ func (c *Core) FinishPasskeyRegistration(ctx context.Context, ceremonyID, name s
 	return c.store.CreatePasskey(ctx, domain.Passkey{UserID: u.ID, Name: name, CredentialID: credentialID(cred.ID), Credential: string(raw)})
 }
 
-func (c *Core) DeletePasskey(ctx context.Context, id string) error {
-	u, err := c.currentUser(ctx)
+func (c *Identity) DeletePasskey(ctx context.Context, id string) error {
+	u, err := c.CurrentUser(ctx)
 	if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func (c *Core) DeletePasskey(ctx context.Context, id string) error {
 
 // BeginPasskeyLogin starts a passwordless sign-in: the browser offers the
 // passkeys it holds for this domain.
-func (c *Core) BeginPasskeyLogin(ctx context.Context, rp RelyingParty) (PasskeyOptions, error) {
+func (c *Identity) BeginPasskeyLogin(ctx context.Context, rp RelyingParty) (PasskeyOptions, error) {
 	if c.SSORequired(ctx) {
 		return PasskeyOptions{}, ErrSSORequired
 	}
@@ -167,15 +167,15 @@ func (c *Core) BeginPasskeyLogin(ctx context.Context, rp RelyingParty) (PasskeyO
 	if err != nil {
 		return PasskeyOptions{}, err
 	}
-	id := randomToken(16)
-	c.ceremonies.put(id, ceremony{rp: rp, session: *session}, time.Now().Add(ceremonyTTL))
+	id := RandomToken(16)
+	c.ceremonies.Put(id, ceremony{rp: rp, session: *session}, time.Now().Add(ceremonyTTL))
 	return PasskeyOptions{Ceremony: id, Options: assertion}, nil
 }
 
 // FinishPasskeyLogin signs in with a passkey. It counts as both factors (the
 // device and its PIN or biometric), so TOTP isn't asked for.
-func (c *Core) FinishPasskeyLogin(ctx context.Context, ceremonyID string, response []byte) (domain.User, string, error) {
-	cer, _, ok := c.ceremonies.take(ceremonyID)
+func (c *Identity) FinishPasskeyLogin(ctx context.Context, ceremonyID string, response []byte) (domain.User, string, error) {
+	cer, _, ok := c.ceremonies.Take(ceremonyID)
 	if !ok || cer.userID != "" {
 		return domain.User{}, "", fmt.Errorf("%w: the sign-in expired, try again", ErrUnauthorized)
 	}
@@ -184,7 +184,7 @@ func (c *Core) FinishPasskeyLogin(ctx context.Context, ceremonyID string, respon
 	}
 	parsed, err := protocol.ParseCredentialRequestResponseBytes(response)
 	if err != nil {
-		return domain.User{}, "", fmt.Errorf("%w: %s", ErrInvalid, err.Error())
+		return domain.User{}, "", fmt.Errorf("%w: %s", domain.ErrInvalid, err.Error())
 	}
 	w, err := cer.rp.webauthn()
 	if err != nil {

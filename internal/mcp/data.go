@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
@@ -17,7 +19,7 @@ type listDatabasesOut struct {
 }
 
 func (t *tools) listDatabases(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, listDatabasesOut, error) {
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, listDatabasesOut{}, friendly(err)
 	}
@@ -33,7 +35,7 @@ type createDatabaseIn struct {
 
 func (t *tools) createDatabase(ctx context.Context, _ *mcp.CallToolRequest, in createDatabaseIn) (*mcp.CallToolResult, core.PgDatabase, error) {
 	db, err := mutate(ctx, t.c, "create_database", in.Service+"/"+in.Name, func() (core.PgDatabase, error) {
-		svc, err := t.service(ctx, in.Service, core.PermView)
+		svc, err := t.service(ctx, in.Service, identity.PermView)
 		if err != nil {
 			return core.PgDatabase{}, err
 		}
@@ -52,7 +54,7 @@ type listTablesOut struct {
 }
 
 func (t *tools) listTables(ctx context.Context, _ *mcp.CallToolRequest, in listTablesIn) (*mcp.CallToolResult, listTablesOut, error) {
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, listTablesOut{}, friendly(err)
 	}
@@ -74,7 +76,7 @@ type readTableIn struct {
 }
 
 func (t *tools) readTable(ctx context.Context, _ *mcp.CallToolRequest, in readTableIn) (*mcp.CallToolResult, core.PgRows, error) {
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, core.PgRows{}, friendly(err)
 	}
@@ -104,7 +106,7 @@ type findDocumentsIn struct {
 }
 
 func (t *tools) findDocuments(ctx context.Context, _ *mcp.CallToolRequest, in findDocumentsIn) (*mcp.CallToolResult, core.MongoDocs, error) {
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, core.MongoDocs{}, friendly(err)
 	}
@@ -126,7 +128,7 @@ type scanRedisKeysIn struct {
 }
 
 func (t *tools) scanRedisKeys(ctx context.Context, _ *mcp.CallToolRequest, in scanRedisKeysIn) (*mcp.CallToolResult, core.RedisKeys, error) {
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, core.RedisKeys{}, friendly(err)
 	}
@@ -142,7 +144,7 @@ type getRedisKeyIn struct {
 }
 
 func (t *tools) getRedisKey(ctx context.Context, _ *mcp.CallToolRequest, in getRedisKeyIn) (*mcp.CallToolResult, core.RedisValue, error) {
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, core.RedisValue{}, friendly(err)
 	}
@@ -159,7 +161,7 @@ type queryDatabaseIn struct {
 
 // queryDatabase is audited by the core, without the query's text.
 func (t *tools) queryDatabase(ctx context.Context, _ *mcp.CallToolRequest, in queryDatabaseIn) (*mcp.CallToolResult, core.ConsoleResult, error) {
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, core.ConsoleResult{}, friendly(err)
 	}
@@ -169,7 +171,7 @@ func (t *tools) queryDatabase(ctx context.Context, _ *mcp.CallToolRequest, in qu
 
 // getConnection reveals credentials, like the REST route.
 func (t *tools) getConnection(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, core.Connection, error) {
-	svc, err := t.service(ctx, in.Service, core.PermEnv)
+	svc, err := t.service(ctx, in.Service, identity.PermEnv)
 	if err != nil {
 		return nil, core.Connection{}, friendly(err)
 	}

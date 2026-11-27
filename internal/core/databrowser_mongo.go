@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -154,7 +156,7 @@ func (t dataTarget) mongoCreateDatabase(ctx context.Context, name, collection st
 
 // MongoDocuments returns one page of a collection's documents.
 func (c *Core) MongoDocuments(ctx context.Context, id, database, collection string, q DocQuery) (MongoDocs, error) {
-	if err := c.requireOn(ctx, id, PermData); err != nil {
+	if err := c.RequireOn(ctx, id, identity.PermData); err != nil {
 		return MongoDocs{}, err
 	}
 	t, err := c.databaseTarget(ctx, id, database)

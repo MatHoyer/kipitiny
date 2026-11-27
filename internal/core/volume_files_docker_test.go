@@ -14,6 +14,8 @@ import (
 	"testing/iotest"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
@@ -71,7 +73,7 @@ func filesTestService(t *testing.T, svc domain.Service, vol, seed string) (*Core
 	if err != nil || code != 0 {
 		t.Fatalf("seed: %d %v %s", code, err, out.String())
 	}
-	return c, WithActor(ctx, reader(svc, "files")), svc
+	return c, identity.WithActor(ctx, reader(svc, "files")), svc
 }
 
 func TestVolumeFilesDockerApp(t *testing.T) {
@@ -129,17 +131,17 @@ ln -s mods/a.jar ok-link`)
 	}
 
 	// Contents need the files permission, like listing.
-	viewer := WithActor(ctx, reader(svc))
-	if _, err := c.ReadVolumeFile(viewer, svc.ID, "data/server.properties"); !errors.Is(err, ErrForbidden) {
+	viewer := identity.WithActor(ctx, reader(svc))
+	if _, err := c.ReadVolumeFile(viewer, svc.ID, "data/server.properties"); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("read as a viewer: %v", err)
 	}
-	if err := c.DownloadVolumeFile(viewer, svc.ID, "data/server.properties", io.Discard); !errors.Is(err, ErrForbidden) {
+	if err := c.DownloadVolumeFile(viewer, svc.ID, "data/server.properties", io.Discard); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("download as a viewer: %v", err)
 	}
-	if err := c.ArchiveVolumeFiles(viewer, svc.ID, "data", nil, io.Discard); !errors.Is(err, ErrForbidden) {
+	if err := c.ArchiveVolumeFiles(viewer, svc.ID, "data", nil, io.Discard); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("archive as a viewer: %v", err)
 	}
-	ctx = WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
+	ctx = identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 
 	f, err := c.ReadVolumeFile(ctx, svc.ID, "data/server.properties")
 	if err != nil || f.Content != "motd=hi\n" || f.Type != "file" || f.Path != "data/server.properties" {
@@ -202,7 +204,7 @@ ln -s mods/a.jar ok-link`)
 		t.Error("helper kept after close")
 	}
 
-	if _, err := c.ListVolumeFiles(WithActor(context.Background(), Actor{Kind: "token"}), svc.ID, ""); !errors.Is(err, domain.ErrNotFound) {
+	if _, err := c.ListVolumeFiles(identity.WithActor(context.Background(), identity.Actor{Kind: "token"}), svc.ID, ""); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("no access: %v", err)
 	}
 }
@@ -257,9 +259,9 @@ chown 1000:1000 ops.json
 chmod 600 ops.json
 ln -s /etc etc-link
 ln -s .. up`)
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
+	ctx := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 
-	if err := c.MakeVolumeDir(readCtx, svc.ID, "data/x"); !errors.Is(err, ErrForbidden) {
+	if err := c.MakeVolumeDir(readCtx, svc.ID, "data/x"); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("mkdir with only the files permission: %v", err)
 	}
 	if err := c.MakeVolumeDir(ctx, svc.ID, "data/mods/new/deep"); err != nil {
@@ -388,7 +390,7 @@ ln -s .. up`)
 
 func TestVolumeFilesDockerDatabaseWrite(t *testing.T) {
 	c, _, svc := filesTestService(t, domain.Service{Name: "db", Kind: domain.ServiceKindRedis}, "", `printf x > /seed/dump.rdb`)
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
+	ctx := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 	if err := c.DeleteVolumePaths(ctx, svc.ID, []string{"data/dump.rdb"}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("delete in a database: %v", err)
 	}
@@ -430,7 +432,7 @@ func containerFilesTest(t *testing.T, kind domain.ServiceKind, image string, cmd
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = dk.RemoveContainerAndVolumes(context.Background(), id) })
-	return c, WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin}), svc, id
+	return c, identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin}), svc, id
 }
 
 func TestVolumeFilesDockerContainer(t *testing.T) {

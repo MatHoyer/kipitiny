@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/mail/mailtest"
@@ -21,7 +23,7 @@ func ptr[T any](v T) *T { return &v }
 
 func TestSetBranding(t *testing.T) {
 	c := newTestCore(t, config.Config{})
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
+	ctx := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 	if got := c.Branding(ctx); got != (Branding{}) || c.BrandName(ctx) != DefaultBrandName {
 		t.Fatalf("default: %+v", got)
 	}
@@ -60,7 +62,7 @@ func TestSetBranding(t *testing.T) {
 
 func TestSetBrandingValidates(t *testing.T) {
 	c := newTestCore(t, config.Config{})
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
+	ctx := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 	b64 := func(s string) *string { return ptr(base64.StdEncoding.EncodeToString([]byte(s))) }
 	tests := []struct {
 		name    string
@@ -97,18 +99,18 @@ func TestSetBrandingValidates(t *testing.T) {
 		})
 	}
 
-	member := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", Role: domain.RoleMember})
-	if _, err := c.SetBranding(member, BrandingInput{Name: "x"}); !errors.Is(err, ErrForbidden) {
+	member := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "alice", Role: domain.RoleMember})
+	if _, err := c.SetBranding(member, BrandingInput{Name: "x"}); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("member: %v", err)
 	}
-	if err := c.ResetBranding(member); !errors.Is(err, ErrForbidden) {
+	if err := c.ResetBranding(member); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("member reset: %v", err)
 	}
 }
 
 func TestBrandedEmail(t *testing.T) {
 	c := newTestCore(t, config.Config{Domain: "ops.example.com"})
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
+	ctx := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 	srv := mailtest.NewServer(t)
 	p, err := c.CreateEmailProvider(ctx, localProvider("relay", srv))
 	if err != nil {

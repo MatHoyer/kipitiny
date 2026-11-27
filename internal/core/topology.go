@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
@@ -142,7 +144,7 @@ func (c *Core) Topology(ctx context.Context, projectID string) (Topology, error)
 		if err != nil {
 			return Topology{}, err
 		}
-		projects = slices.DeleteFunc(ps, func(p domain.Project) bool { return !visible(ctx, p.ID) })
+		projects = slices.DeleteFunc(ps, func(p domain.Project) bool { return !identity.Visible(ctx, p.ID) })
 	}
 	servers, err := c.store.ListServers(ctx)
 	if err != nil {

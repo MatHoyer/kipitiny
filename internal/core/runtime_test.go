@@ -6,6 +6,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
@@ -140,22 +142,22 @@ func TestRuntimeHostAccess(t *testing.T) {
 		}
 	}
 
-	member := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", Role: domain.RoleMember})
-	admin := WithActor(context.Background(), Actor{Kind: "user", Name: "root", Role: domain.RoleAdmin})
+	member := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "alice", Role: domain.RoleMember})
+	admin := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "root", Role: domain.RoleAdmin})
 	plain := app
 	plain.Runtime = domain.Runtime{}
-	if err := checkServiceChange(member, plain, app); !errors.Is(err, ErrForbidden) {
+	if err := checkServiceChange(member, plain, app); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("member adding host access: %v", err)
 	}
 	if err := checkServiceChange(admin, plain, app); err != nil {
 		t.Errorf("admin: %v", err)
 	}
-	if err := checkServiceChange(member, app, plain); errors.Is(err, ErrForbidden) {
+	if err := checkServiceChange(member, app, plain); errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("member removing host access: %v", err)
 	}
 	cmd := app
 	cmd.Runtime.Command = []string{"run"}
-	if err := checkServiceChange(member, app, cmd); errors.Is(err, ErrForbidden) {
+	if err := checkServiceChange(member, app, cmd); errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("member changing the command of an app with host access: %v", err)
 	}
 }
@@ -202,22 +204,22 @@ func TestPortsAndVolumesHostAccess(t *testing.T) {
 		}
 	}
 
-	member := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", Role: domain.RoleMember})
+	member := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "alice", Role: domain.RoleMember})
 	plain := app
 	plain.Volumes = app.Volumes[:1]
-	if err := checkServiceChange(member, plain, app); !errors.Is(err, ErrForbidden) {
+	if err := checkServiceChange(member, plain, app); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("member adding an external volume: %v", err)
 	}
 	ro := app
 	ro.Volumes = slices.Clone(app.Volumes)
 	ro.Volumes[1].ReadOnly = true
-	if err := checkServiceChange(member, app, ro); errors.Is(err, ErrForbidden) {
+	if err := checkServiceChange(member, app, ro); errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("member changing an external volume's mount: %v", err)
 	}
-	if err := checkServiceChange(member, ro, app); !errors.Is(err, ErrForbidden) {
+	if err := checkServiceChange(member, ro, app); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("member making a read-only external volume writable: %v", err)
 	}
-	admin := WithActor(context.Background(), Actor{Kind: "user", Name: "root", Role: domain.RoleAdmin})
+	admin := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "root", Role: domain.RoleAdmin})
 	if err := checkServiceChange(admin, ro, app); err != nil {
 		t.Errorf("admin making a read-only external volume writable: %v", err)
 	}

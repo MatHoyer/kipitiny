@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/client"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
@@ -281,7 +283,7 @@ func varName(prefix, key string) string {
 // project to another manager. The signed-in user must re-enter their
 // password: the .env holds every credential of the project.
 func (c *Core) ExportWithSecrets(ctx context.Context, projectID, service, password string) (Export, error) {
-	if _, err := c.confirmedUser(ctx, password); err != nil {
+	if _, err := c.ConfirmedUser(ctx, password); err != nil {
 		return Export{}, err
 	}
 	return c.ExportCompose(ctx, projectID, ExportOptions{Service: service, Secrets: true})
@@ -376,11 +378,11 @@ func (c *Core) applyCompose(ctx context.Context, projectID string, data []byte, 
 	// The compose route needs settings; a sync, run with the git permission,
 	// needs what applying the file by hand would.
 	if git && (len(a.plan.Create) > 0 || len(a.plan.Update) > 0) {
-		if err := check(ctx, projectID, PermSettings); err != nil {
+		if err := identity.Check(ctx, projectID, identity.PermSettings); err != nil {
 			return a, err
 		}
 		if opts.Deploy {
-			if err := check(ctx, projectID, PermDeploy); err != nil {
+			if err := identity.Check(ctx, projectID, identity.PermDeploy); err != nil {
 				return a, err
 			}
 		}
@@ -389,7 +391,7 @@ func (c *Core) applyCompose(ctx context.Context, projectID string, data []byte, 
 		return a, nil
 	}
 	if len(a.deletes) > 0 { // pruning deletes apps with their data
-		if err := check(ctx, projectID, PermDelete); err != nil {
+		if err := identity.Check(ctx, projectID, identity.PermDelete); err != nil {
 			return a, err
 		}
 	}
@@ -569,9 +571,9 @@ func (a *applier) prepare(ctx context.Context, f compose.File) error {
 		if !ok {
 			continue
 		}
-		if err := a.prepareService(ctx, name, in, prospect, dbs); errors.Is(err, ErrForbidden) {
+		if err := a.prepareService(ctx, name, in, prospect, dbs); errors.Is(err, identity.ErrForbidden) {
 			// The apply would be refused, not invalid: answer as it would.
-			return fmt.Errorf("%w: service %s: %s", ErrForbidden, name, strings.TrimPrefix(err.Error(), ErrForbidden.Error()+": "))
+			return fmt.Errorf("%w: service %s: %s", identity.ErrForbidden, name, strings.TrimPrefix(err.Error(), identity.ErrForbidden.Error()+": "))
 		} else if err != nil {
 			errs = append(errs, fmt.Sprintf("service %s: %v", name, err))
 		}

@@ -9,6 +9,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
@@ -31,7 +33,7 @@ type listProjectsOut struct {
 }
 
 func (t *tools) listProjects(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listProjectsOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, listProjectsOut{}, err
 	}
 	projects, err := t.c.ListProjects(ctx)
@@ -104,7 +106,7 @@ type renamed struct {
 
 func (t *tools) renameProject(ctx context.Context, _ *mcp.CallToolRequest, in renameProjectIn) (*mcp.CallToolResult, renamed, error) {
 	out, err := mutate(ctx, t.c, "rename_project", in.Project, func() (renamed, error) {
-		p, err := t.project(ctx, in.Project, core.PermSettings)
+		p, err := t.project(ctx, in.Project, identity.PermSettings)
 		if err != nil {
 			return renamed{}, err
 		}
@@ -121,7 +123,7 @@ type renameServiceIn struct {
 
 func (t *tools) renameService(ctx context.Context, _ *mcp.CallToolRequest, in renameServiceIn) (*mcp.CallToolResult, renamed, error) {
 	out, err := mutate(ctx, t.c, "rename_service", in.Service, func() (renamed, error) {
-		svc, err := t.service(ctx, in.Service, core.PermSettings)
+		svc, err := t.service(ctx, in.Service, identity.PermSettings)
 		if err != nil {
 			return renamed{}, err
 		}
@@ -147,7 +149,7 @@ type tagsOut struct {
 
 func (t *tools) setProjectTags(ctx context.Context, _ *mcp.CallToolRequest, in projectTagsIn) (*mcp.CallToolResult, tagsOut, error) {
 	out, err := mutate(ctx, t.c, "set_project_tags", in.Project, func() (tagsOut, error) {
-		p, err := t.project(ctx, in.Project, core.PermSettings)
+		p, err := t.project(ctx, in.Project, identity.PermSettings)
 		if err != nil {
 			return tagsOut{}, err
 		}
@@ -159,7 +161,7 @@ func (t *tools) setProjectTags(ctx context.Context, _ *mcp.CallToolRequest, in p
 
 func (t *tools) setServiceTags(ctx context.Context, _ *mcp.CallToolRequest, in serviceTagsIn) (*mcp.CallToolResult, tagsOut, error) {
 	out, err := mutate(ctx, t.c, "set_service_tags", in.Service, func() (tagsOut, error) {
-		svc, err := t.service(ctx, in.Service, core.PermSettings)
+		svc, err := t.service(ctx, in.Service, identity.PermSettings)
 		if err != nil {
 			return tagsOut{}, err
 		}
@@ -206,10 +208,10 @@ func (t *tools) gitLink(ctx context.Context, g core.GitStatus) (GitLink, error) 
 }
 
 func (t *tools) getProjectGit(ctx context.Context, _ *mcp.CallToolRequest, in projectArg) (*mcp.CallToolResult, GitLink, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, GitLink{}, err
 	}
-	p, err := t.project(ctx, in.Project, core.PermGit)
+	p, err := t.project(ctx, in.Project, identity.PermGit)
 	if err != nil {
 		return nil, GitLink{}, friendly(err)
 	}
@@ -242,7 +244,7 @@ type linkProjectGitOut struct {
 
 func (t *tools) linkProjectGit(ctx context.Context, _ *mcp.CallToolRequest, in linkProjectGitIn) (*mcp.CallToolResult, linkProjectGitOut, error) {
 	out, err := mutate(ctx, t.c, "link_project_git", in.Project, func() (linkProjectGitOut, error) {
-		p, err := t.project(ctx, in.Project, core.PermGit)
+		p, err := t.project(ctx, in.Project, identity.PermGit)
 		if err != nil {
 			return linkProjectGitOut{}, err
 		}
@@ -279,7 +281,7 @@ type syncProjectGitIn struct {
 
 func (t *tools) syncProjectGit(ctx context.Context, _ *mcp.CallToolRequest, in syncProjectGitIn) (*mcp.CallToolResult, core.ComposePlan, error) {
 	out, err := mutate(ctx, t.c, "sync_project_git", in.Project, func() (core.ComposePlan, error) {
-		p, err := t.project(ctx, in.Project, core.PermGit)
+		p, err := t.project(ctx, in.Project, identity.PermGit)
 		if err != nil {
 			return core.ComposePlan{}, err
 		}
@@ -303,7 +305,7 @@ func (t *tools) serviceAction(ctx context.Context, _ *mcp.CallToolRequest, in se
 		if !slices.Contains([]core.Action{core.ActionStart, core.ActionStop, core.ActionRestart}, action) {
 			return serviceActionOut{}, fmt.Errorf("action must be start, stop or restart")
 		}
-		svc, err := t.service(ctx, in.Service, core.PermDeploy)
+		svc, err := t.service(ctx, in.Service, identity.PermDeploy)
 		if err != nil {
 			return serviceActionOut{}, err
 		}
@@ -325,7 +327,7 @@ type getDeploymentLogOut struct {
 }
 
 func (t *tools) getDeploymentLog(ctx context.Context, _ *mcp.CallToolRequest, in getDeploymentLogIn) (*mcp.CallToolResult, getDeploymentLogOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, getDeploymentLogOut{}, err
 	}
 	id := in.DeploymentID
@@ -333,7 +335,7 @@ func (t *tools) getDeploymentLog(ctx context.Context, _ *mcp.CallToolRequest, in
 		if in.Service == "" {
 			return nil, getDeploymentLogOut{}, errors.New("give a service or a deployment_id")
 		}
-		svc, err := t.service(ctx, in.Service, core.PermView)
+		svc, err := t.service(ctx, in.Service, identity.PermView)
 		if err != nil {
 			return nil, getDeploymentLogOut{}, friendly(err)
 		}
@@ -346,11 +348,11 @@ func (t *tools) getDeploymentLog(ctx context.Context, _ *mcp.CallToolRequest, in
 		}
 		id = deps[0].ID
 	}
-	projectID, err := t.c.ProjectOf(ctx, core.IDDeployment, id)
+	projectID, err := t.c.ProjectOf(ctx, identity.IDDeployment, id)
 	if err != nil {
 		return nil, getDeploymentLogOut{}, friendly(err)
 	}
-	if err := core.Authorize(ctx, projectID, core.PermView); err != nil {
+	if err := identity.Authorize(ctx, projectID, identity.PermView); err != nil {
 		return nil, getDeploymentLogOut{}, friendly(err)
 	}
 	dep, err := t.c.GetDeployment(ctx, id)
@@ -397,7 +399,7 @@ type deleted struct {
 // data: an agent deleting the wrong service is costly either way.
 func (t *tools) deleteService(ctx context.Context, _ *mcp.CallToolRequest, in deleteServiceIn) (*mcp.CallToolResult, deleted, error) {
 	out, err := mutate(ctx, t.c, "delete_service", in.Service, func() (deleted, error) {
-		svc, err := t.service(ctx, in.Service, core.PermDelete)
+		svc, err := t.service(ctx, in.Service, identity.PermDelete)
 		if err != nil {
 			return deleted{}, err
 		}
@@ -416,7 +418,7 @@ type deleteProjectIn struct {
 
 func (t *tools) deleteProject(ctx context.Context, _ *mcp.CallToolRequest, in deleteProjectIn) (*mcp.CallToolResult, deleted, error) {
 	out, err := mutate(ctx, t.c, "delete_project", in.Project, func() (deleted, error) {
-		p, err := t.project(ctx, in.Project, core.PermDelete)
+		p, err := t.project(ctx, in.Project, identity.PermDelete)
 		if err != nil {
 			return deleted{}, err
 		}

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"filippo.io/age"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -41,7 +43,7 @@ func (c *Core) ListBackupTargets(ctx context.Context) ([]domain.BackupTarget, er
 	ts, err := c.store.ListBackupTargets(ctx)
 	for i, t := range ts {
 		ts[i] = maskedTarget(t)
-		if isMember(ctx) { // enough to pick one
+		if identity.IsMember(ctx) { // enough to pick one
 			ts[i] = domain.BackupTarget{ID: t.ID, Name: t.Name, Kind: t.Kind, AgeRecipient: t.AgeRecipient, CreatedAt: t.CreatedAt}
 		}
 	}
@@ -99,10 +101,10 @@ func (c *Core) DeleteBackupTarget(ctx context.Context, id string) error {
 }
 
 // EncryptBackupTarget gives a target (the local one too) an age key, a new
-// one or identity: backups made from now on are encrypted, earlier ones
+// one or ageIdentity: backups made from now on are encrypted, earlier ones
 // stay readable as they are. It can't be turned off: the key must outlive
 // the backups it encrypted.
-func (c *Core) EncryptBackupTarget(ctx context.Context, id, identity string) (domain.BackupTarget, error) {
+func (c *Core) EncryptBackupTarget(ctx context.Context, id, ageIdentity string) (domain.BackupTarget, error) {
 	t, err := c.store.GetBackupTarget(ctx, id)
 	if err != nil {
 		return domain.BackupTarget{}, err
@@ -110,11 +112,11 @@ func (c *Core) EncryptBackupTarget(ctx context.Context, id, identity string) (do
 	if t.Encrypted() {
 		return domain.BackupTarget{}, fmt.Errorf("%w: this storage is already encrypted", ErrInvalid)
 	}
-	identity, recipient, err := c.targetKey(ctx, t, identity)
+	ageIdentity, recipient, err := c.targetKey(ctx, t, ageIdentity)
 	if err != nil {
 		return domain.BackupTarget{}, err
 	}
-	if err := c.store.SetBackupTargetKey(ctx, id, identity, recipient); errors.Is(err, domain.ErrConflict) {
+	if err := c.store.SetBackupTargetKey(ctx, id, ageIdentity, recipient); errors.Is(err, domain.ErrConflict) {
 		return domain.BackupTarget{}, fmt.Errorf("%w: this storage is already encrypted", ErrInvalid)
 	} else if err != nil {
 		return domain.BackupTarget{}, err
@@ -123,14 +125,14 @@ func (c *Core) EncryptBackupTarget(ctx context.Context, id, identity string) (do
 	return maskedTarget(t), err
 }
 
-// targetKey returns a new age key, or identity's once it opens the encrypted
+// targetKey returns a new age key, or ageIdentity's once it opens the encrypted
 // objects already on t: a wrong key would only show at the first restore.
-func (c *Core) targetKey(ctx context.Context, t domain.BackupTarget, identity string) (string, string, error) {
-	identity = strings.TrimSpace(identity)
-	if identity == "" {
-		return newAgeKey()
+func (c *Core) targetKey(ctx context.Context, t domain.BackupTarget, ageIdentity string) (string, string, error) {
+	ageIdentity = strings.TrimSpace(ageIdentity)
+	if ageIdentity == "" {
+		return identity.NewAgeKey()
 	}
-	id, err := age.ParseX25519Identity(identity)
+	id, err := age.ParseX25519Identity(ageIdentity)
 	if err != nil {
 		return "", "", fmt.Errorf("%w: not an age key (AGE-SECRET-KEY-1…): %v", ErrInvalid, err)
 	}
@@ -197,7 +199,7 @@ func (c *Core) applyTargetInput(t *domain.BackupTarget, in TargetInput) error {
 	t.Region = strings.TrimSpace(in.Region)
 	t.Bucket = strings.TrimSpace(in.Bucket)
 	t.AccessKey = strings.TrimSpace(in.AccessKey)
-	if in.SecretKey != SecretMask {
+	if in.SecretKey != identity.SecretMask {
 		t.SecretKey = in.SecretKey
 	}
 	t.UseSSL = in.UseSSL
@@ -246,7 +248,7 @@ func (c *Core) TestBackupTarget(ctx context.Context, id string) error {
 // maskedTarget hides credentials.
 func maskedTarget(t domain.BackupTarget) domain.BackupTarget {
 	if t.SecretKey != "" {
-		t.SecretKey = SecretMask
+		t.SecretKey = identity.SecretMask
 	}
 	return t
 }

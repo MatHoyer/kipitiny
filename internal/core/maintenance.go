@@ -17,6 +17,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -397,7 +399,7 @@ func (c *Core) TraefikConfig(ctx context.Context, serverID, token string) ([]byt
 		return nil, err
 	}
 	if subtle.ConstantTimeCompare([]byte(token), []byte(want)) != 1 {
-		return nil, ErrUnauthorized
+		return nil, identity.ErrUnauthorized
 	}
 	svcs, err := c.store.ListAllServices(ctx)
 	if err != nil {

@@ -1,4 +1,4 @@
-package core
+package identity
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"filippo.io/age"
 )
 
-func encryptTo(w io.Writer, recipient string) (io.WriteCloser, error) {
+func EncryptTo(w io.Writer, recipient string) (io.WriteCloser, error) {
 	r, err := age.ParseX25519Recipient(recipient)
 	if err != nil {
 		return nil, fmt.Errorf("age recipient: %w", err)
@@ -15,7 +15,7 @@ func encryptTo(w io.Writer, recipient string) (io.WriteCloser, error) {
 	return age.Encrypt(w, r)
 }
 
-func decryptFrom(r io.Reader, identity string) (io.Reader, error) {
+func DecryptFrom(r io.Reader, identity string) (io.Reader, error) {
 	if identity == "" {
 		return nil, fmt.Errorf("backup is encrypted but its target has no key")
 	}
@@ -30,7 +30,7 @@ func decryptFrom(r io.Reader, identity string) (io.Reader, error) {
 	return dec, nil
 }
 
-func newAgeKey() (identity, recipient string, err error) {
+func NewAgeKey() (identity, recipient string, err error) {
 	id, err := age.GenerateX25519Identity()
 	if err != nil {
 		return "", "", err

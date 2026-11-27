@@ -1,4 +1,4 @@
-package core
+package identity
 
 import (
 	"context"
@@ -44,9 +44,9 @@ func (f *fakeProvider) Resolve(_ context.Context, refs []string) (map[string]str
 
 // useSecretProvider makes p the only password manager, one instance for
 // every connection, and returns a function connecting it as name.
-func useSecretProvider(t *testing.T, c *Core, p secrets.Provider) func(name string) SecretConnectionView {
+func useSecretProvider(t *testing.T, c *Identity, p secrets.Provider) func(name string) SecretConnectionView {
 	t.Helper()
-	c.secretKinds = []secretKind{newSecretKind(func(string) secrets.Provider { return p })}
+	c.secretKinds = []SecretKind{NewSecretKind(func(string) secrets.Provider { return p })}
 	return func(name string) SecretConnectionView {
 		t.Helper()
 		v, err := c.CreateSecretConnection(context.Background(), "fake", name, "good")
@@ -59,9 +59,9 @@ func useSecretProvider(t *testing.T, c *Core, p secrets.Provider) func(name stri
 
 func TestSecretConnections(t *testing.T) {
 	ctx := context.Background()
-	c := newTestCore(t, config.Config{})
+	c := newTestIdentity(t, config.Config{})
 	fakes := map[string]*fakeProvider{}
-	c.secretKinds = []secretKind{newSecretKind(func(name string) secrets.Provider {
+	c.secretKinds = []SecretKind{NewSecretKind(func(name string) secrets.Provider {
 		fakes[name] = &fakeProvider{}
 		return fakes[name]
 	})}
@@ -69,7 +69,7 @@ func TestSecretConnections(t *testing.T) {
 	if _, err := c.CreateSecretConnection(ctx, "nope", "", "good"); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("unknown provider: %v", err)
 	}
-	if _, err := c.CreateSecretConnection(ctx, "fake", "", "bad"); !errors.Is(err, ErrInvalid) {
+	if _, err := c.CreateSecretConnection(ctx, "fake", "", "bad"); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("bad token: %v", err)
 	}
 	if cs, _ := c.SecretConnections(ctx); len(cs) != 0 {
@@ -79,10 +79,10 @@ func TestSecretConnections(t *testing.T) {
 	if err != nil || def.Scheme != "fake" || def.Token != "good" {
 		t.Fatalf("default = %+v, %v", def, err)
 	}
-	if _, err := c.CreateSecretConnection(ctx, "fake", "", "good"); !errors.Is(err, ErrInvalid) {
+	if _, err := c.CreateSecretConnection(ctx, "fake", "", "good"); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("second default: %v", err)
 	}
-	if _, err := c.CreateSecretConnection(ctx, "fake", "Work!", "good"); !errors.Is(err, ErrInvalid) {
+	if _, err := c.CreateSecretConnection(ctx, "fake", "Work!", "good"); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("bad name: %v", err)
 	}
 	work, err := c.CreateSecretConnection(ctx, "fake", "work", "good")
@@ -95,14 +95,14 @@ func TestSecretConnections(t *testing.T) {
 
 	// Each reference resolves through its own connection.
 	fakes[""].session = "" // expired: logs in again with the stored token
-	got, err := c.resolveSecrets(ctx, []string{"fake://a", "fake+work://b"})
+	got, err := c.ResolveSecrets(ctx, []string{"fake://a", "fake+work://b"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got["fake://a"] != "value-of-a" || got["fake+work://b"] != "value-of-b" || fakes[""].logins != 3 {
 		t.Errorf("got %v after %d logins", got, fakes[""].logins)
 	}
-	if _, err := c.resolveSecrets(ctx, []string{"fake+home://a"}); err == nil {
+	if _, err := c.ResolveSecrets(ctx, []string{"fake+home://a"}); err == nil {
 		t.Error("unknown connection resolved")
 	}
 
@@ -115,35 +115,8 @@ func TestSecretConnections(t *testing.T) {
 	if fakes["work"].session != "" {
 		t.Error("still logged in after delete")
 	}
-	if _, err := c.resolveSecrets(ctx, []string{"fake+work://b"}); err == nil {
+	if _, err := c.ResolveSecrets(ctx, []string{"fake+work://b"}); err == nil {
 		t.Error("deleted connection resolved")
-	}
-}
-
-func TestResolveSecrets(t *testing.T) {
-	ctx := context.Background()
-	c := newTestCore(t, config.Config{})
-	connect := useSecretProvider(t, c, &fakeProvider{})
-
-	if _, err := c.resolveSecrets(ctx, []string{"fake://a"}); err == nil {
-		t.Errorf("not connected: %v", err)
-	}
-	if _, err := c.resolveSecrets(ctx, []string{"op://x/y/z"}); err == nil {
-		t.Errorf("unknown scheme: %v", err)
-	}
-	connect("")
-
-	if err := c.checkSecretSchemes(ctx, map[string]string{"A": "{{ fake://x }}"}); err != nil {
-		t.Error(err)
-	}
-	for _, ref := range []string{"op://x/y/z", "fake+work://x"} {
-		if err := c.checkSecretSchemes(ctx, map[string]string{"A": "{{ " + ref + " }}"}); !errors.Is(err, ErrInvalid) {
-			t.Errorf("%s accepted: %v", ref, err)
-		}
-	}
-	connect("work")
-	if err := c.checkSecretSchemes(ctx, map[string]string{"A": "{{ fake+work://x }}"}); err != nil {
-		t.Error(err)
 	}
 }
 
@@ -171,7 +144,7 @@ func (f *fakeBrowser) Items(_ context.Context, vault string) ([]secrets.Item, er
 
 func TestSecretListingsCache(t *testing.T) {
 	ctx := context.Background()
-	c := newTestCore(t, config.Config{})
+	c := newTestIdentity(t, config.Config{})
 	fake := &fakeBrowser{}
 	id := useSecretProvider(t, c, fake)("").ID
 	for range 2 {
@@ -188,7 +161,7 @@ func TestSecretListingsCache(t *testing.T) {
 	if _, err := c.SecretVaults(ctx, id, true); err != nil || fake.lists != 3 {
 		t.Errorf("refresh: %v, %d lists", err, fake.lists)
 	}
-	if _, err := c.SecretItems(ctx, id, "", false); !errors.Is(err, ErrInvalid) {
+	if _, err := c.SecretItems(ctx, id, "", false); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("no vault: %v", err)
 	}
 	// Logging in again drops the listings.
@@ -224,12 +197,12 @@ func (b *browsingProvider) Items(context.Context, string) ([]secrets.Item, error
 
 func TestTestSecretProviderProgress(t *testing.T) {
 	ctx := context.Background()
-	c := newTestCore(t, config.Config{})
+	c := newTestIdentity(t, config.Config{})
 	b := &browsingProvider{}
 	id := useSecretProvider(t, c, b)("").ID
 	test := func() ([]string, error) {
 		var steps []string
-		err := c.TestSecretConnection(WithProgress(ctx, func(s string) { steps = append(steps, s) }), id)
+		err := c.TestSecretConnection(progress.With(ctx, func(s string) { steps = append(steps, s) }), id)
 		return steps, err
 	}
 

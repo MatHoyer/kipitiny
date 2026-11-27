@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
@@ -462,7 +464,7 @@ func (c *Core) StartSecurityChecks() error {
 // ServerSecurity returns a server's last security check; CheckedAt is zero
 // before the first. Admin only.
 func (c *Core) ServerSecurity(ctx context.Context, serverID string) (SecurityReport, error) {
-	if err := RequireAdmin(ctx); err != nil {
+	if err := identity.RequireAdmin(ctx); err != nil {
 		return SecurityReport{}, err
 	}
 	if _, err := c.store.GetServer(ctx, serverID); err != nil {
@@ -494,7 +496,7 @@ func (c *Core) ServerSecurity(ctx context.Context, serverID string) (SecurityRep
 // CheckServerSecurity checks a server's host now; a host that can't be
 // checked has Error set. Admin only.
 func (c *Core) CheckServerSecurity(ctx context.Context, serverID string) (SecurityReport, error) {
-	if err := RequireAdmin(ctx); err != nil {
+	if err := identity.RequireAdmin(ctx); err != nil {
 		return SecurityReport{}, err
 	}
 	sv, err := c.store.GetServer(ctx, serverID)

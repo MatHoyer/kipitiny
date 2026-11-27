@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -137,14 +139,14 @@ func (c *Core) SetTagColor(ctx context.Context, name, color string) (Tag, error)
 	if color != "" && !slices.Contains(TagColors, color) {
 		return Tag{}, fmt.Errorf("%w: color must be one of %s", ErrInvalid, strings.Join(TagColors, ", "))
 	}
-	a, ok := ActorFrom(ctx)
+	a, ok := identity.ActorFrom(ctx)
 	if ok && !a.Admin() {
-		used, err := c.tagUse(ctx, func(projectID string) bool { return a.Can(projectID, PermSettings) })
+		used, err := c.tagUse(ctx, func(projectID string) bool { return a.Can(projectID, identity.PermSettings) })
 		if err != nil {
 			return Tag{}, err
 		}
 		if used[name] == nil {
-			return Tag{}, fmt.Errorf("%w: needs the settings permission on a project using the tag", ErrForbidden)
+			return Tag{}, fmt.Errorf("%w: needs the settings permission on a project using the tag", identity.ErrForbidden)
 		}
 	}
 	if err := c.store.SetTagColor(ctx, name, color); err != nil {
@@ -175,7 +177,7 @@ func (c *Core) tagUse(ctx context.Context, keep func(projectID string) bool) (ma
 	if err != nil {
 		return nil, err
 	}
-	ok := func(projectID string) bool { return visible(ctx, projectID) && keep(projectID) }
+	ok := func(projectID string) bool { return identity.Visible(ctx, projectID) && keep(projectID) }
 	byName := map[string]*Tag{}
 	get := func(name string) *Tag {
 		if byName[name] == nil {

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 )
@@ -111,12 +113,12 @@ func (c *Core) Notifications(ctx context.Context) (NotificationsView, error) {
 	}
 	for i := range chs {
 		chs[i] = maskedChannel(chs[i])
-		if isMember(ctx) { // where alerts go is the admins'
+		if identity.IsMember(ctx) { // where alerts go is the admins'
 			chs[i].Config = map[string]string{}
 		}
 	}
 	kinds := notify.Kinds()
-	if !isMember(ctx) {
+	if !identity.IsMember(ctx) {
 		if kinds, err = c.withEmailProviders(ctx, kinds); err != nil {
 			return NotificationsView{}, err
 		}
@@ -230,7 +232,7 @@ func applyChannelInput(ch *domain.NotificationChannel, in ChannelInput) error {
 	cfg := map[string]string{}
 	for _, f := range kind.Fields {
 		v := strings.TrimSpace(in.Config[f.Key])
-		if f.Secret && v == SecretMask {
+		if f.Secret && v == identity.SecretMask {
 			v = ch.Config[f.Key]
 		}
 		if v != "" {
@@ -274,7 +276,7 @@ func maskedChannel(ch domain.NotificationChannel) domain.NotificationChannel {
 	}
 	for _, f := range kind.Fields {
 		if f.Secret && cfg[f.Key] != "" {
-			cfg[f.Key] = SecretMask
+			cfg[f.Key] = identity.SecretMask
 		}
 	}
 	ch.Config = cfg

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -154,13 +156,13 @@ func TestRestoreReadOnlyHostVolume(t *testing.T) {
 	if err := c.store.FinishBackup(ctx, b); err != nil {
 		t.Fatal(err)
 	}
-	member := WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: domain.RoleMember,
-		Grants: map[string][]string{p.ID: {string(PermView), string(PermRestore)}}})
-	if _, err := c.RestoreBackup(member, b.ID, "", "web"); !errors.Is(err, ErrForbidden) {
+	member := identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "alice", Role: domain.RoleMember,
+		Grants: map[string][]string{p.ID: {string(identity.PermView), string(identity.PermRestore)}}})
+	if _, err := c.RestoreBackup(member, b.ID, "", "web"); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("member restoring a read-only external volume: %v", err)
 	}
 	// The wrong name stops the admin before any Docker work.
-	admin := WithActor(ctx, Actor{Kind: "user", Name: "root", Role: domain.RoleAdmin})
+	admin := identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "root", Role: domain.RoleAdmin})
 	if _, err := c.RestoreBackup(admin, b.ID, "", "wrong"); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "confirm") {
 		t.Errorf("admin restoring a read-only external volume: %v", err)
 	}

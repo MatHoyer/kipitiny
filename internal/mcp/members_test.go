@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
 // TestMemberTools calls every tool as a member: with view only on a
@@ -15,14 +15,14 @@ func TestMemberTools(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	shop, secret := e.seed(t, "shop"), e.seed(t, "secretproj")
-	shopID, err := e.c.ProjectOf(ctx, core.IDBackup, shop.backup)
+	shopID, err := e.c.ProjectOf(ctx, identity.IDBackup, shop.backup)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	session := e.member(t, "alice", shopID)
 
-	viewer := session([]core.Perm{core.PermView})
+	viewer := session([]identity.Perm{identity.PermView})
 	tools, err := viewer.ListTools(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestMemberTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	all := session(core.Perms, core.Features...)
+	all := session(identity.Perms, identity.Features...)
 	for _, tool := range tools.Tools {
 		if tool.Name == "create_project" { // with the feature: a new project of their own
 			continue

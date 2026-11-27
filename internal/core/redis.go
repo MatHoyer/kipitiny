@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 
@@ -33,7 +35,7 @@ const (
 var redisPasswordRe = regexp.MustCompile(`^[A-Za-z0-9_-]{16,}$`)
 
 func newRedisEnv() map[string]string {
-	return map[string]string{redisPassword: randomPassword()}
+	return map[string]string{redisPassword: identity.RandomPassword()}
 }
 
 // RedisVolume is the named volume holding a redis service's data.

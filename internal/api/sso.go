@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
@@ -20,7 +22,7 @@ func (a *API) listSSOProviders(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createSSOProvider(w http.ResponseWriter, r *http.Request) {
-	var in core.SSOProviderInput
+	var in identity.SSOProviderInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -33,7 +35,7 @@ func (a *API) createSSOProvider(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateSSOProvider(w http.ResponseWriter, r *http.Request) {
-	var in core.SSOProviderInput
+	var in identity.SSOProviderInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -63,7 +65,7 @@ func setSSOCookie(w http.ResponseWriter, r *http.Request, state string, maxAge i
 	http.SetCookie(w, &http.Cookie{
 		Name:     ssoCookie,
 		Value:    state,
-		Path:     core.SSOCallbackPath,
+		Path:     identity.SSOCallbackPath,
 		MaxAge:   maxAge,
 		HttpOnly: true,
 		Secure:   isHTTPS(r),
@@ -73,7 +75,7 @@ func setSSOCookie(w http.ResponseWriter, r *http.Request, state string, maxAge i
 }
 
 // startSSO answers with the provider's page, the flow's state in a cookie.
-func (a *API) startSSO(w http.ResponseWriter, r *http.Request, start core.SSOStart) {
+func (a *API) startSSO(w http.ResponseWriter, r *http.Request, start identity.SSOStart) {
 	setSSOCookie(w, r, start.State, int((10 * time.Minute).Seconds()))
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, start)
@@ -156,7 +158,7 @@ func (a *API) ssoCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	setSSOCookie(w, r, "", -1)
 	w.Header().Set("Cache-Control", "no-store")
-	var res core.SSOResult
+	var res identity.SSOResult
 	var err error
 	if e := q.Get("error"); e != "" {
 		msg := q.Get("error_description")
@@ -174,7 +176,7 @@ func (a *API) ssoCallback(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		if res.User.ID != "" {
 			if actor, aerr := a.core.UserActor(ctx, res.User); aerr == nil {
-				ctx = core.WithActor(ctx, actor)
+				ctx = identity.WithActor(ctx, actor)
 			}
 		}
 		status := http.StatusSeeOther
@@ -204,7 +206,7 @@ func (a *API) ssoCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil {
-		setSessionCookie(w, r, res.Session, int(core.SessionTTL.Seconds()))
+		setSessionCookie(w, r, res.Session, int(identity.SessionTTL.Seconds()))
 	}
 	to := res.ReturnTo
 	if to == "" {
@@ -224,8 +226,8 @@ func (a *API) ssoRedirect(w http.ResponseWriter, r *http.Request, page, done str
 		switch {
 		case errors.Is(err, core.ErrInvalid):
 			msg = reason(err, core.ErrInvalid)
-		case errors.Is(err, core.ErrUnauthorized):
-			msg = reason(err, core.ErrUnauthorized)
+		case errors.Is(err, identity.ErrUnauthorized):
+			msg = reason(err, identity.ErrUnauthorized)
 		default:
 			a.log.Error("sso sign-in failed", "err", err)
 		}

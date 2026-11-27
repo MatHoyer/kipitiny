@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/config"
@@ -153,12 +155,12 @@ func TestPreviewSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ps.BaseDomain != "preview.example.com" || ps.Env["STRIPE_KEY"] != SecretMask || ps.Env["LOG_LEVEL"] != "debug" {
+	if ps.BaseDomain != "preview.example.com" || ps.Env["STRIPE_KEY"] != identity.SecretMask || ps.Env["LOG_LEVEL"] != "debug" {
 		t.Errorf("saved %+v", ps)
 	}
 	// The mask sent back keeps the secret.
 	if _, err := c.SetPreviewSettings(ctx, parent.ID, PreviewSettingsInput{BaseDomain: "preview.example.com",
-		Env: map[string]string{"STRIPE_KEY": SecretMask}, Secrets: []string{"STRIPE_KEY"}}); err != nil {
+		Env: map[string]string{"STRIPE_KEY": identity.SecretMask}, Secrets: []string{"STRIPE_KEY"}}); err != nil {
 		t.Fatal(err)
 	}
 	if stored, _ := c.store.GetPreviewSettings(ctx, parent.ID); stored.Env["STRIPE_KEY"] != "sk_test" || len(stored.Inherit) != 0 {
@@ -181,10 +183,10 @@ func TestPreviewSettings(t *testing.T) {
 
 	// Password manager references need the secret-providers feature.
 	useSecretProvider(t, c, &fakeProvider{})("")
-	member := WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: domain.RoleMember,
-		Grants: map[string][]string{parent.ID: {string(PermView), string(PermSettings), string(PermEnv)}}})
+	member := identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "alice", Role: domain.RoleMember,
+		Grants: map[string][]string{parent.ID: {string(identity.PermView), string(identity.PermSettings), string(identity.PermEnv)}}})
 	ref := PreviewSettingsInput{Env: map[string]string{"KEY": "{{ fake://prod/key }}"}}
-	if _, err := c.SetPreviewSettings(member, parent.ID, ref); !errors.Is(err, ErrForbidden) {
+	if _, err := c.SetPreviewSettings(member, parent.ID, ref); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("member referencing a password manager item: %v", err)
 	}
 	if _, err := c.SetPreviewSettings(ctx, parent.ID, ref); err != nil {

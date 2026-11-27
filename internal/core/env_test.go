@@ -7,6 +7,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -70,7 +72,7 @@ func TestResolveDatabaseRefs(t *testing.T) {
 func TestMaskEnv(t *testing.T) {
 	got := maskEnv(map[string]string{"VAR": "v", "KEY": "k", "REF": "{{ project.KEY }}", "MIX": "x{{ project.KEY }}"},
 		[]string{"KEY", "REF", "MIX"})
-	want := map[string]string{"VAR": "v", "KEY": SecretMask, "REF": "{{ project.KEY }}", "MIX": SecretMask}
+	want := map[string]string{"VAR": "v", "KEY": identity.SecretMask, "REF": "{{ project.KEY }}", "MIX": identity.SecretMask}
 	if !maps.Equal(got, want) {
 		t.Errorf("maskEnv = %v, want %v", got, want)
 	}
@@ -80,7 +82,7 @@ func TestMergeEnv(t *testing.T) {
 	old := map[string]string{"VAR": "v", "KEY": "k", "TOKEN": "t"}
 	oldSecrets := []string{"KEY", "TOKEN"}
 
-	env, secrets, err := mergeEnv(map[string]string{"VAR": "v2", "KEY": SecretMask, "TOKEN": "new", "NEW": "n"},
+	env, secrets, err := mergeEnv(map[string]string{"VAR": "v2", "KEY": identity.SecretMask, "TOKEN": "new", "NEW": "n"},
 		[]string{"KEY", "NEW"}, old, oldSecrets)
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +95,7 @@ func TestMergeEnv(t *testing.T) {
 	}
 
 	// A masked secret can't become a variable: that would reveal it.
-	if _, _, err := mergeEnv(map[string]string{"KEY": SecretMask}, []string{}, old, oldSecrets); !errors.Is(err, ErrInvalid) {
+	if _, _, err := mergeEnv(map[string]string{"KEY": identity.SecretMask}, []string{}, old, oldSecrets); !errors.Is(err, ErrInvalid) {
 		t.Errorf("unmasking a secret: got %v, want ErrInvalid", err)
 	}
 
@@ -108,7 +110,7 @@ func TestMergeEnv(t *testing.T) {
 	}
 
 	// Without flags, stored ones are kept and new entries are secrets.
-	_, secrets, err = mergeEnv(map[string]string{"VAR": "v", "KEY": SecretMask, "NEW": "n"}, nil, old, oldSecrets)
+	_, secrets, err = mergeEnv(map[string]string{"VAR": "v", "KEY": identity.SecretMask, "NEW": "n"}, nil, old, oldSecrets)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +131,7 @@ func TestSetProjectEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Env["PASS"] != SecretMask || got.Env["HOST"] != "db" {
+	if got.Env["PASS"] != identity.SecretMask || got.Env["HOST"] != "db" {
 		t.Errorf("returned env: %v, want the secret masked and the variable readable", got.Env)
 	}
 	if _, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"BAD-KEY": "1"}, nil); !errors.Is(err, ErrInvalid) {
@@ -143,7 +145,7 @@ func TestSetProjectEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A variable referenced by a service can't go.
-	if _, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"PASS": SecretMask}, []string{"PASS"}); !errors.Is(err, ErrInvalid) {
+	if _, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"PASS": identity.SecretMask}, []string{"PASS"}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("removing a referenced variable: got %v, want ErrInvalid", err)
 	}
 	if _, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"HOST": "db"}, []string{}); err != nil {
@@ -186,7 +188,7 @@ func TestSecretRefs(t *testing.T) {
 	}
 
 	// A secret that only references a password manager stays readable.
-	if got := maskEnv(env, []string{"A", "B"}); got["A"] != env["A"] || got["B"] != SecretMask {
+	if got := maskEnv(env, []string{"A", "B"}); got["A"] != env["A"] || got["B"] != identity.SecretMask {
 		t.Errorf("maskEnv = %v", got)
 	}
 }

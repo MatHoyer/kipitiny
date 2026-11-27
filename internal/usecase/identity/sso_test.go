@@ -1,4 +1,4 @@
-package core
+package identity
 
 import (
 	"context"
@@ -104,7 +104,7 @@ func asAdmin(ctx context.Context) context.Context {
 
 func TestSSOProviders(t *testing.T) {
 	ctx := asAdmin(context.Background())
-	c := newTestCore(t, config.Config{})
+	c := newTestIdentity(t, config.Config{})
 	idp := newFakeIssuer(t)
 	c.ssoHTTP = idp.Client()
 
@@ -116,7 +116,7 @@ func TestSSOProviders(t *testing.T) {
 		"no secret":    {Name: "x", Issuer: idp.URL, ClientID: "client"},
 		"wrong issuer": {Name: "x", Issuer: idp.URL + "/other", ClientID: "client", ClientSecret: "secret"},
 	} {
-		if _, err := c.CreateSSOProvider(ctx, bad); !errors.Is(err, ErrInvalid) {
+		if _, err := c.CreateSSOProvider(ctx, bad); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
@@ -132,7 +132,7 @@ func TestSSOProviders(t *testing.T) {
 	if p.Name != "Authentik" || p.ClientSecret != SecretMask {
 		t.Errorf("created = %+v", p)
 	}
-	if _, err := c.CreateSSOProvider(ctx, in); !errors.Is(err, ErrInvalid) {
+	if _, err := c.CreateSSOProvider(ctx, in); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("same name: %v", err)
 	}
 
@@ -184,7 +184,7 @@ func (f *fakeIssuer) answerAt(t *testing.T, start SSOStart, code, sub string, au
 
 func TestSSOSignIn(t *testing.T) {
 	ctx := asAdmin(context.Background())
-	c := newTestCore(t, config.Config{})
+	c := newTestIdentity(t, config.Config{})
 	idp := newFakeIssuer(t)
 	c.ssoHTTP = idp.Client()
 	p, err := c.CreateSSOProvider(ctx, SSOProviderInput{Name: "Company", Issuer: idp.URL, ClientID: "client", ClientSecret: "secret"})
@@ -224,10 +224,10 @@ func TestSSOSignIn(t *testing.T) {
 		t.Fatal(err)
 	}
 	state = idp.answer(t, start, "c1", "alice-sub")
-	if _, err := c.FinishSSO(context.Background(), state, "other", "c1"); !errors.Is(err, ErrInvalid) {
+	if _, err := c.FinishSSO(context.Background(), state, "other", "c1"); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("other browser: %v", err)
 	}
-	if _, err := c.FinishSSO(context.Background(), state, state, "c1"); !errors.Is(err, ErrInvalid) {
+	if _, err := c.FinishSSO(context.Background(), state, state, "c1"); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("state reused: %v", err)
 	}
 	start, _ = c.BeginSSOConnect(as(alice), p.ID, origin, "correct horse")
@@ -244,7 +244,7 @@ func TestSSOSignIn(t *testing.T) {
 	// The same identity can't be linked to bob.
 	start, _ = c.BeginSSOConnect(as(bob), p.ID, origin, "correct horse")
 	state = idp.answer(t, start, "c3", "alice-sub")
-	if _, err := c.FinishSSO(context.Background(), state, state, "c3"); !errors.Is(err, ErrInvalid) {
+	if _, err := c.FinishSSO(context.Background(), state, state, "c3"); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("linked twice: %v", err)
 	}
 
@@ -264,7 +264,7 @@ func TestSSOSignIn(t *testing.T) {
 	u, _ := url.Parse(start.URL)
 	state = u.Query().Get("state")
 	idp.code("c5", map[string]any{"sub": "alice-sub", "nonce": "other"})
-	if _, err := c.FinishSSO(context.Background(), state, state, "c5"); !errors.Is(err, ErrInvalid) {
+	if _, err := c.FinishSSO(context.Background(), state, state, "c5"); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("nonce: %v", err)
 	}
 
@@ -300,7 +300,7 @@ func TestLocalPath(t *testing.T) {
 
 func TestSSOInvite(t *testing.T) {
 	ctx := asAdmin(context.Background())
-	c := newTestCore(t, config.Config{})
+	c := newTestIdentity(t, config.Config{})
 	idp := newFakeIssuer(t)
 	c.ssoHTTP = idp.Client()
 	p, err := c.CreateSSOProvider(ctx, SSOProviderInput{Name: "Company", Issuer: idp.URL, ClientID: "client", ClientSecret: "secret"})
@@ -318,7 +318,7 @@ func TestSSOInvite(t *testing.T) {
 	if _, err := c.BeginSSOInvite(ctx, p.ID, origin, "nope", "carol"); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("unknown invite: %v", err)
 	}
-	if _, err := c.BeginSSOInvite(ctx, p.ID, origin, inv.Token, "Carol!"); !errors.Is(err, ErrInvalid) {
+	if _, err := c.BeginSSOInvite(ctx, p.ID, origin, inv.Token, "Carol!"); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("bad username: %v", err)
 	}
 
@@ -355,7 +355,7 @@ func TestSSOInvite(t *testing.T) {
 	inv2, _ := c.CreateInvite(ctx, InviteInput{UserAccess: UserAccess{Role: domain.RoleMember}})
 	start, _ = c.BeginSSOInvite(ctx, p.ID, origin, inv2.Token, "carol2")
 	state = idp.answer(t, start, "c3", "carol-sub")
-	if res, err := c.FinishSSO(context.Background(), state, state, "c3"); !errors.Is(err, ErrInvalid) || res.Invite != inv2.Token {
+	if res, err := c.FinishSSO(context.Background(), state, state, "c3"); !errors.Is(err, domain.ErrInvalid) || res.Invite != inv2.Token {
 		t.Fatalf("second account: %+v %v", res, err)
 	}
 
@@ -375,13 +375,13 @@ func TestSSOInvite(t *testing.T) {
 	}
 	// A provider that reused its session (old auth_time) doesn't confirm.
 	state = idp.answerAt(t, start, "c4", "carol-sub", time.Now().Add(-time.Hour))
-	if _, err := c.FinishSSO(context.Background(), state, state, "c4"); !errors.Is(err, ErrInvalid) {
+	if _, err := c.FinishSSO(context.Background(), state, state, "c4"); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("stale sign-in: %v", err)
 	}
 	// Nor does another identity.
 	start, _ = c.BeginSSOConfirm(as, p.ID, origin, "/")
 	state = idp.answerAt(t, start, "c5", "someone-else", time.Now())
-	if _, err := c.FinishSSO(context.Background(), state, state, "c5"); !errors.Is(err, ErrInvalid) {
+	if _, err := c.FinishSSO(context.Background(), state, state, "c5"); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("other identity: %v", err)
 	}
 	start, _ = c.BeginSSOConfirm(as, p.ID, origin, "/projects/x")
@@ -399,7 +399,7 @@ func TestSSOInvite(t *testing.T) {
 
 	// The only way to sign in can't be unlinked until there is a password.
 	acc, _ := c.Account(recent)
-	if err := c.UnlinkSSOIdentity(recent, acc.SSO[0].ID); !errors.Is(err, ErrInvalid) {
+	if err := c.UnlinkSSOIdentity(recent, acc.SSO[0].ID); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("last sign-in unlinked: %v", err)
 	}
 	session, err := c.ChangePassword(recent, "", "a long password")
@@ -419,7 +419,7 @@ func TestSSOInvite(t *testing.T) {
 
 func TestSSORequired(t *testing.T) {
 	ctx := asAdmin(context.Background())
-	c := newTestCore(t, config.Config{})
+	c := newTestIdentity(t, config.Config{})
 	idp := newFakeIssuer(t)
 	c.ssoHTTP = idp.Client()
 	p, err := c.CreateSSOProvider(ctx, SSOProviderInput{Name: "Company", Issuer: idp.URL, ClientID: "client", ClientSecret: "secret"})
@@ -432,7 +432,7 @@ func TestSSORequired(t *testing.T) {
 	as := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", UserID: admin.ID, Role: domain.RoleAdmin})
 
 	// Not without a linked identity of one's own.
-	if err := c.SetSSORequired(as, true); !errors.Is(err, ErrInvalid) {
+	if err := c.SetSSORequired(as, true); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("unlinked admin: %v", err)
 	}
 	start, _ := c.BeginSSOConnect(as, p.ID, origin, "correct horse")
@@ -454,10 +454,10 @@ func TestSSORequired(t *testing.T) {
 	if _, _, err := c.AcceptInvite(context.Background(), inv.Token, "dave", "a long password"); !errors.Is(err, ErrSSORequired) {
 		t.Errorf("invite with a password: %v", err)
 	}
-	if st, _ := c.AuthState(context.Background(), ""); !st.SSORequired {
+	if !c.SSORequired(context.Background()) { // what the auth state says (core's TestAuthStateSSORequired)
 		t.Error("auth state doesn't say")
 	}
-	if err := c.DeleteSSOProvider(as, p.ID); !errors.Is(err, ErrInvalid) {
+	if err := c.DeleteSSOProvider(as, p.ID); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("last provider removed: %v", err)
 	}
 	start, _ = c.BeginSSO(context.Background(), p.ID, origin, "/")

@@ -21,7 +21,7 @@ import (
 // RenameProject changes a project's name and renames its containers.
 func (c *Core) RenameProject(ctx context.Context, id, name string) (domain.Project, error) {
 	name = strings.TrimSpace(name)
-	if !nameRe.MatchString(name) {
+	if !domain.ValidName(name) {
 		return domain.Project{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
 	p, err := c.store.GetProject(ctx, id)
@@ -68,7 +68,7 @@ func (c *Core) RenameProject(ctx context.Context, id, name string) (domain.Proje
 // database rewrites the references to it and redeploys the apps using it.
 func (c *Core) RenameService(ctx context.Context, id, name string) (ServiceView, error) {
 	name = strings.TrimSpace(name)
-	if !nameRe.MatchString(name) {
+	if !domain.ValidName(name) {
 		return ServiceView{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
 	svc, err := c.store.GetService(ctx, id)

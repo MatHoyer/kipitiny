@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -31,7 +33,7 @@ func TestBrandingLogo(t *testing.T) {
 	}
 
 	svg := `<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`
-	admin := core.WithActor(context.Background(), core.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
+	admin := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 	logo := base64.StdEncoding.EncodeToString([]byte(svg))
 	if _, err := m.c.SetBranding(admin, core.BrandingInput{Logo: &logo}); err != nil {
 		t.Fatal(err)
@@ -76,7 +78,7 @@ func TestManifest(t *testing.T) {
 		t.Fatalf("default manifest: %+v", mf)
 	}
 
-	admin := core.WithActor(context.Background(), core.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
+	admin := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 	logo := base64.StdEncoding.EncodeToString([]byte(`<svg xmlns="http://www.w3.org/2000/svg"></svg>`))
 	if _, err := m.c.SetBranding(admin, core.BrandingInput{Name: "Acme", Theme: core.Theme{Accent: "#4f46e5"}, Logo: &logo}); err != nil {
 		t.Fatal(err)

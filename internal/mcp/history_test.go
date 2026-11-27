@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -26,7 +27,7 @@ func TestHistoryTools(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	read, deploy, admin := e.session(core.PermView), e.session(core.PermView, core.PermDeploy, core.PermBackups), e.session()
+	read, deploy, admin := e.session(identity.PermView), e.session(identity.PermView, identity.PermDeploy, identity.PermBackups), e.session()
 
 	out, isErr := e.call(read, "list_deployments", map[string]any{"service": "shop/web", "limit": 2})
 	var deps listDeploymentsOut

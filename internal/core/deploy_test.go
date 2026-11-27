@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
@@ -166,7 +168,7 @@ func TestRetagOptions(t *testing.T) {
 		{"nginx:1.25", "nginx", DeployOptions{Tag: "latest"}, nil},
 		{"ghcr.io/org/app:v1", "ghcr.io/org/app@" + dgst, DeployOptions{Digest: dgst}, nil},
 		{"ghcr.io/org/app:v1", "ghcr.io/org/app:v2@" + dgst, DeployOptions{Tag: "v2", Digest: dgst}, nil},
-		{"ghcr.io/org/app:v1", "ghcr.io/evil/app:v1", DeployOptions{}, ErrForbidden},
+		{"ghcr.io/org/app:v1", "ghcr.io/evil/app:v1", DeployOptions{}, identity.ErrForbidden},
 		{"ghcr.io/org/app:v1", "Not An Image", DeployOptions{}, ErrInvalid},
 	} {
 		got, err := RetagOptions(tc.current, tc.image)

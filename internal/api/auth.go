@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
 const sessionCookie = "kipitiny_session"
@@ -76,7 +76,7 @@ func (a *API) protect(mux *http.ServeMux) http.Handler {
 			writeError(w, http.StatusForbidden, "not available to API tokens")
 			return
 		}
-		ctx := core.WithActor(r.Context(), actor)
+		ctx := identity.WithActor(r.Context(), actor)
 		if r.Method == http.MethodGet || r.Method == http.MethodHead {
 			mux.ServeHTTP(w, r.WithContext(ctx))
 			return
@@ -104,12 +104,12 @@ func (a *API) Authenticated(next http.Handler) http.Handler {
 			a.fail(w, err)
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(core.WithActor(r.Context(), actor)))
+		next.ServeHTTP(w, r.WithContext(identity.WithActor(r.Context(), actor)))
 	})
 }
 
 // authenticate resolves the caller from a bearer token or the session cookie.
-func (a *API) authenticate(r *http.Request) (core.Actor, bool, error) {
+func (a *API) authenticate(r *http.Request) (identity.Actor, bool, error) {
 	if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
 		actor, err := a.core.AuthenticateToken(r.Context(), strings.TrimSpace(token))
 		return actor, true, err
@@ -196,7 +196,7 @@ func (a *API) setup(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	setSessionCookie(w, r, token, int(core.SessionTTL.Seconds()))
+	setSessionCookie(w, r, token, int(identity.SessionTTL.Seconds()))
 	writeJSON(w, http.StatusCreated, u)
 }
 
@@ -223,7 +223,7 @@ func (a *API) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.limiter.reset(ip)
-	setSessionCookie(w, r, res.Session, int(core.SessionTTL.Seconds()))
+	setSessionCookie(w, r, res.Session, int(identity.SessionTTL.Seconds()))
 	writeJSON(w, http.StatusOK, res.User)
 }
 
@@ -247,7 +247,7 @@ func (a *API) loginMFA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.limiter.reset(ip)
-	setSessionCookie(w, r, token, int(core.SessionTTL.Seconds()))
+	setSessionCookie(w, r, token, int(identity.SessionTTL.Seconds()))
 	writeJSON(w, http.StatusOK, u)
 }
 
@@ -286,13 +286,13 @@ func (a *API) finishPasskeyLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.limiter.reset(ip)
-	setSessionCookie(w, r, token, int(core.SessionTTL.Seconds()))
+	setSessionCookie(w, r, token, int(identity.SessionTTL.Seconds()))
 	writeJSON(w, http.StatusOK, u)
 }
 
 // relyingParty is the origin the browser is on, which passkeys are bound to.
 // sameOrigin already checked that Origin matches the host.
-func relyingParty(r *http.Request) core.RelyingParty {
+func relyingParty(r *http.Request) identity.RelyingParty {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
 		scheme := "http"
@@ -305,7 +305,7 @@ func relyingParty(r *http.Request) core.RelyingParty {
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
-	return core.RelyingParty{ID: host, Origin: origin}
+	return identity.RelyingParty{ID: host, Origin: origin}
 }
 
 func (a *API) logout(w http.ResponseWriter, r *http.Request) {

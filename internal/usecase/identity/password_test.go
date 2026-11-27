@@ -1,4 +1,4 @@
-package core
+package identity
 
 import (
 	"strings"
@@ -9,7 +9,7 @@ import (
 // tokens do): tools would read it as an option.
 func TestRandomPasswordNoLeadingDash(t *testing.T) {
 	for range 2000 {
-		if p := randomPassword(); strings.HasPrefix(p, "-") || len(p) != 32 {
+		if p := RandomPassword(); strings.HasPrefix(p, "-") || len(p) != 32 {
 			t.Fatalf("password %q", p)
 		}
 	}

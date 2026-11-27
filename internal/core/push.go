@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 )
@@ -51,10 +53,10 @@ type PushDevices struct {
 
 // PushDevices lists the signed-in admin's browsers that receive pushes.
 func (c *Core) PushDevices(ctx context.Context) (PushDevices, error) {
-	if err := RequireAdmin(ctx); err != nil {
+	if err := identity.RequireAdmin(ctx); err != nil {
 		return PushDevices{}, err
 	}
-	u, err := c.currentUser(ctx)
+	u, err := c.CurrentUser(ctx)
 	if err != nil {
 		return PushDevices{}, err
 	}
@@ -78,10 +80,10 @@ type PushSubscribeInput struct {
 
 // SubscribePush adds the browser the signed-in admin uses.
 func (c *Core) SubscribePush(ctx context.Context, in PushSubscribeInput) (domain.PushSubscription, error) {
-	if err := RequireAdmin(ctx); err != nil {
+	if err := identity.RequireAdmin(ctx); err != nil {
 		return domain.PushSubscription{}, err
 	}
-	u, err := c.currentUser(ctx)
+	u, err := c.CurrentUser(ctx)
 	if err != nil {
 		return domain.PushSubscription{}, err
 	}
@@ -112,7 +114,7 @@ func pushKeyLen(s string, n int) bool {
 
 // UnsubscribePush removes one of the signed-in user's browsers.
 func (c *Core) UnsubscribePush(ctx context.Context, id string) error {
-	u, err := c.currentUser(ctx)
+	u, err := c.CurrentUser(ctx)
 	if err != nil {
 		return err
 	}

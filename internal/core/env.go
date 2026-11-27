@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -151,7 +153,7 @@ func (c *Core) checkSecretSchemes(ctx context.Context, env map[string]string) er
 			if m[4] == "" {
 				continue
 			}
-			if err := c.checkSecretScheme(ctx, m[4]); err != nil {
+			if err := c.CheckSecretScheme(ctx, m[4]); err != nil {
 				return fmt.Errorf("%w: %s: %v", ErrInvalid, k, err)
 			}
 		}
@@ -169,7 +171,7 @@ func (c *Core) envSources(ctx context.Context, project domain.Project, svc domai
 	src := envSources{project: project.Env, dbs: databasesOf(svcs), apps: c.appURLs(svcs), secrets: map[string]string{},
 		errors: c.errorsEnv(ctx, project, svc)}
 	if refs := secretRefs(refEnv(svc), project.Env); len(refs) > 0 {
-		if src.secrets, err = c.resolveSecrets(ctx, refs); err != nil {
+		if src.secrets, err = c.ResolveSecrets(ctx, refs); err != nil {
 			return envSources{}, err
 		}
 	}
@@ -243,7 +245,7 @@ func maskEnv(env map[string]string, secrets []string) map[string]string {
 	out := make(map[string]string, len(env))
 	for k, v := range env {
 		if slices.Contains(secrets, k) && !soleRefRe.MatchString(v) {
-			v = SecretMask
+			v = identity.SecretMask
 		}
 		out[k] = v
 	}
@@ -274,7 +276,7 @@ func mergeEnv(in map[string]string, secrets []string, old map[string]string, old
 	out := []string{}
 	for k, v := range in {
 		secret := slices.Contains(secrets, k)
-		if prev, had := old[k]; had && v == SecretMask && slices.Contains(oldSecrets, k) {
+		if prev, had := old[k]; had && v == identity.SecretMask && slices.Contains(oldSecrets, k) {
 			if !secret {
 				return nil, nil, fmt.Errorf("%w: enter a new value to turn secret %s into a variable", ErrInvalid, k)
 			}
@@ -310,7 +312,7 @@ func (c *Core) SetProjectEnv(ctx context.Context, id string, env map[string]stri
 		return domain.Project{}, err
 	}
 	if !maps.Equal(env, p.Env) || !slices.Equal(secrets, p.Secrets) {
-		if err := check(ctx, id, PermEnv); err != nil {
+		if err := identity.Check(ctx, id, identity.PermEnv); err != nil {
 			return domain.Project{}, err
 		}
 		if err := checkSecretRefs(ctx, p.Env, env); err != nil {

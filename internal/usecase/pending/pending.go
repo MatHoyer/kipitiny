@@ -1,13 +1,13 @@
-package core
+package pending
 
 import (
 	"sync"
 	"time"
 )
 
-// pending holds short-lived sign-in state (second-factor tickets, WebAuthn
+// Map holds short-lived sign-in state (second-factor tickets, WebAuthn
 // ceremonies) in memory: a restart only means starting over.
-type pending[T any] struct {
+type Map[T any] struct {
 	mu sync.Mutex
 	m  map[string]pendingEntry[T]
 }
@@ -22,7 +22,7 @@ type pendingEntry[T any] struct {
 // without limit.
 const maxPending = 1024
 
-func (p *pending[T]) put(key string, v T, exp time.Time) {
+func (p *Map[T]) Put(key string, v T, exp time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.m == nil {
@@ -37,7 +37,7 @@ func (p *pending[T]) put(key string, v T, exp time.Time) {
 // evict drops expired entries, then the one closest to expiry if the map is
 // still full. Callers hold mu; it only runs when the map is full, so puts
 // stay O(1) in the common case.
-func (p *pending[T]) evict() {
+func (p *Map[T]) evict() {
 	now := time.Now()
 	var oldest string
 	var oldestExp time.Time
@@ -54,7 +54,7 @@ func (p *pending[T]) evict() {
 }
 
 // peek returns the entry without removing it, unless it expired.
-func (p *pending[T]) peek(key string) (T, bool) {
+func (p *Map[T]) Peek(key string) (T, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	e, ok := p.m[key]
@@ -66,7 +66,7 @@ func (p *pending[T]) peek(key string) (T, bool) {
 }
 
 // take removes and returns the entry, unless it expired.
-func (p *pending[T]) take(key string) (T, time.Time, bool) {
+func (p *Map[T]) Take(key string) (T, time.Time, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	e, ok := p.m[key]

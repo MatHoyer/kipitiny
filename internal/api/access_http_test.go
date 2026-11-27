@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
 // TestRouteAccessOverHTTP sends every route of routeAccess through the real
@@ -24,7 +24,7 @@ func TestRouteAccessOverHTTP(t *testing.T) {
 	srv := httptest.NewServer(m.api)
 	t.Cleanup(srv.Close)
 	param := regexp.MustCompile(`\{[a-zA-Z]+(\.\.\.)?\}`)
-	path := func(pattern string, kind core.IDKind, ids map[string]string) (string, string) {
+	path := func(pattern string, kind identity.IDKind, ids map[string]string) (string, string) {
 		method, p, _ := strings.Cut(pattern, " ")
 		return method, strings.Replace(param.ReplaceAllStringFunc(p, func(s string) string {
 			if s == "{id}" && kind != "" {
@@ -33,7 +33,7 @@ func TestRouteAccessOverHTTP(t *testing.T) {
 			return "x"
 		}), "//", "/", -1)
 	}
-	do := func(tok, pattern string, kind core.IDKind, ids map[string]string) (int, string) {
+	do := func(tok, pattern string, kind identity.IDKind, ids map[string]string) (int, string) {
 		t.Helper()
 		method, p := path(pattern, kind, ids)
 		req, _ := http.NewRequest(method, srv.URL+p, strings.NewReader("{}"))
@@ -47,7 +47,7 @@ func TestRouteAccessOverHTTP(t *testing.T) {
 		b, _ := io.ReadAll(res.Body)
 		return res.StatusCode, string(b)
 	}
-	ids := func(byKind map[core.IDKind]string) map[string]string {
+	ids := func(byKind map[identity.IDKind]string) map[string]string {
 		out := map[string]string{}
 		for k, v := range byKind {
 			out[string(k)] = v
@@ -55,14 +55,14 @@ func TestRouteAccessOverHTTP(t *testing.T) {
 		return out
 	}
 	shop, other := ids(m.shop), ids(m.other)
-	restricted := func(perms []core.Perm) string {
+	restricted := func(perms []identity.Perm) string {
 		t.Helper()
 		ps := make([]string, len(perms))
 		for i, p := range perms {
 			ps[i] = string(p)
 		}
-		tok, err := m.c.CreateAPIToken(m.as(t, core.Perms, core.Features...), core.TokenInput{Name: "t", Restricted: true,
-			Features: []string{}, Grants: map[string][]string{m.shop[core.IDProject]: ps}})
+		tok, err := m.c.CreateAPIToken(m.as(t, identity.Perms, identity.Features...), identity.TokenInput{Name: "t", Restricted: true,
+			Features: []string{}, Grants: map[string][]string{m.shop[identity.IDProject]: ps}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -72,7 +72,7 @@ func TestRouteAccessOverHTTP(t *testing.T) {
 	for pattern, acc := range routeAccess {
 		t.Run(pattern, func(t *testing.T) {
 			if sessionOnly(pattern) {
-				if code, body := do(m.token(t, core.Perms...), pattern, acc.kind, shop); code != http.StatusForbidden || !strings.Contains(body, "API tokens") {
+				if code, body := do(m.token(t, identity.Perms...), pattern, acc.kind, shop); code != http.StatusForbidden || !strings.Contains(body, "API tokens") {
 					t.Errorf("token on a session-only route: %d %s", code, body)
 				}
 				return
@@ -80,12 +80,12 @@ func TestRouteAccessOverHTTP(t *testing.T) {
 			switch {
 			case acc.anyone:
 			case acc.feature != "":
-				if code, body := do(m.token(t, core.Perms...), pattern, acc.kind, shop); code != http.StatusForbidden {
+				if code, body := do(m.token(t, identity.Perms...), pattern, acc.kind, shop); code != http.StatusForbidden {
 					t.Errorf("member without %s: %d %s", acc.feature, code, body)
 				}
 			case acc.perm != "":
-				if acc.perm != core.PermView {
-					without := slices.DeleteFunc(slices.Clone(core.Perms), func(p core.Perm) bool { return p == acc.perm })
+				if acc.perm != identity.PermView {
+					without := slices.DeleteFunc(slices.Clone(identity.Perms), func(p identity.Perm) bool { return p == acc.perm })
 					want := "needs the " + string(acc.perm) + " permission"
 					if code, body := do(m.token(t, without...), pattern, acc.kind, shop); code != http.StatusForbidden || !strings.Contains(body, want) {
 						t.Errorf("member without %s: %d %s", acc.perm, code, body)
@@ -94,11 +94,11 @@ func TestRouteAccessOverHTTP(t *testing.T) {
 						t.Errorf("restricted token without %s: %d %s", acc.perm, code, body)
 					}
 				}
-				if code, body := do(m.token(t, core.Perms...), pattern, acc.kind, other); code != http.StatusNotFound {
+				if code, body := do(m.token(t, identity.Perms...), pattern, acc.kind, other); code != http.StatusNotFound {
 					t.Errorf("another project's: %d %s", code, body)
 				}
 			default:
-				if code, body := do(m.token(t, core.Perms...), pattern, acc.kind, shop); code != http.StatusForbidden || !strings.Contains(body, "admins only") {
+				if code, body := do(m.token(t, identity.Perms...), pattern, acc.kind, shop); code != http.StatusForbidden || !strings.Contains(body, "admins only") {
 					t.Errorf("member: %d %s", code, body)
 				}
 			}

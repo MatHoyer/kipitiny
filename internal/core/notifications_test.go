@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 )
@@ -41,16 +43,16 @@ func TestChannelValidationAndMasking(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ch.Config["webhookUrl"] != SecretMask {
+	if ch.Config["webhookUrl"] != identity.SecretMask {
 		t.Errorf("created channel leaks its webhook: %v", ch.Config)
 	}
 	v, err := c.Notifications(ctx)
-	if err != nil || len(v.Channels) != 1 || v.Channels[0].Config["webhookUrl"] != SecretMask {
+	if err != nil || len(v.Channels) != 1 || v.Channels[0].Config["webhookUrl"] != identity.SecretMask {
 		t.Fatalf("list = %+v, %v", v.Channels, err)
 	}
 
 	// Sending the mask back keeps the stored webhook.
-	in.Config["webhookUrl"], in.Name, in.Events = SecretMask, "alerts", []string{EventBackupFailed, EventBackupFailed}
+	in.Config["webhookUrl"], in.Name, in.Events = identity.SecretMask, "alerts", []string{EventBackupFailed, EventBackupFailed}
 	if _, err := c.UpdateChannel(ctx, ch.ID, in); err != nil {
 		t.Fatal(err)
 	}

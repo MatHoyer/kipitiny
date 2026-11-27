@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"golang.org/x/net/websocket"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
@@ -115,8 +117,8 @@ func (a *API) terminal(w http.ResponseWriter, r *http.Request, open func(ctx con
 // message is the user-facing text of an error, as fail would send it.
 func (a *API) message(err error) string {
 	switch {
-	case errors.Is(err, core.ErrForbidden):
-		return reason(err, core.ErrForbidden)
+	case errors.Is(err, identity.ErrForbidden):
+		return reason(err, identity.ErrForbidden)
 	case errors.Is(err, core.ErrInvalid):
 		return reason(err, core.ErrInvalid)
 	case errors.Is(err, domain.ErrNotFound):

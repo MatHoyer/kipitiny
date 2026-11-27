@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/api"
@@ -41,7 +43,7 @@ func asUser(t *testing.T, c *core.Core, st domain.Store, name string, role domai
 	if err != nil {
 		t.Fatal(err)
 	}
-	return core.WithActor(ctx, a), u
+	return identity.WithActor(ctx, a), u
 }
 
 func TestTools(t *testing.T) {
@@ -66,7 +68,7 @@ func TestTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	admin, _ := asUser(t, c, st, "admin", domain.RoleAdmin)
-	readTok, _ := c.CreateAPIToken(admin, core.TokenInput{Name: "agent", Restricted: true, Grants: map[string][]string{p.ID: {"view"}}})
+	readTok, _ := c.CreateAPIToken(admin, identity.TokenInput{Name: "agent", Restricted: true, Grants: map[string][]string{p.ID: {"view"}}})
 
 	connect := func(tok string) *mcp.ClientSession {
 		client := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil)
@@ -136,7 +138,7 @@ func TestTools(t *testing.T) {
 		Image: "ghcr.io/org/web:v1", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
-	deployTok, _ := c.CreateAPIToken(admin, core.TokenInput{Name: "ci", Restricted: true, Grants: map[string][]string{p.ID: {"view", "deploy"}}})
+	deployTok, _ := c.CreateAPIToken(admin, identity.TokenInput{Name: "ci", Restricted: true, Grants: map[string][]string{p.ID: {"view", "deploy"}}})
 	ds := connect(deployTok.Token)
 	defer ds.Close()
 	for name, args := range map[string]map[string]any{
@@ -184,7 +186,7 @@ func TestDeployImageKeepsSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	admin, _ := asUser(t, c, st, "admin", domain.RoleAdmin)
-	tok, _ := c.CreateAPIToken(admin, core.TokenInput{Name: "agent"})
+	tok, _ := c.CreateAPIToken(admin, identity.TokenInput{Name: "agent"})
 	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(ctx, &mcp.StreamableClientTransport{
 		Endpoint: srv.URL, HTTPClient: &http.Client{Transport: bearer{tok.Token}},
 	}, nil)

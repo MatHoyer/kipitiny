@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
@@ -19,10 +21,10 @@ type listSchedulesOut struct {
 }
 
 func (t *tools) listBackupSchedules(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, listSchedulesOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, listSchedulesOut{}, err
 	}
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, listSchedulesOut{}, friendly(err)
 	}
@@ -47,7 +49,7 @@ type setScheduleIn struct {
 
 func (t *tools) setBackupSchedule(ctx context.Context, _ *mcp.CallToolRequest, in setScheduleIn) (*mcp.CallToolResult, core.ScheduleView, error) {
 	out, err := mutate(ctx, t.c, "set_backup_schedule", in.Service, func() (core.ScheduleView, error) {
-		svc, err := t.service(ctx, in.Service, core.PermBackups)
+		svc, err := t.service(ctx, in.Service, identity.PermBackups)
 		if err != nil {
 			return core.ScheduleView{}, err
 		}
@@ -106,7 +108,7 @@ type deleteScheduleIn struct {
 
 func (t *tools) deleteBackupSchedule(ctx context.Context, _ *mcp.CallToolRequest, in deleteScheduleIn) (*mcp.CallToolResult, deleted, error) {
 	out, err := mutate(ctx, t.c, "delete_backup_schedule", in.Service, func() (deleted, error) {
-		svc, err := t.service(ctx, in.Service, core.PermBackups)
+		svc, err := t.service(ctx, in.Service, identity.PermBackups)
 		if err != nil {
 			return deleted{}, err
 		}
@@ -129,7 +131,7 @@ type setUptimeIn struct {
 
 func (t *tools) setUptimeCheck(ctx context.Context, _ *mcp.CallToolRequest, in setUptimeIn) (*mcp.CallToolResult, core.UptimeView, error) {
 	out, err := mutate(ctx, t.c, "set_uptime_check", in.Service, func() (core.UptimeView, error) {
-		svc, err := t.service(ctx, in.Service, core.PermSettings)
+		svc, err := t.service(ctx, in.Service, identity.PermSettings)
 		if err != nil {
 			return core.UptimeView{}, err
 		}
@@ -141,7 +143,7 @@ func (t *tools) setUptimeCheck(ctx context.Context, _ *mcp.CallToolRequest, in s
 
 func (t *tools) deleteUptimeCheck(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, deleted, error) {
 	out, err := mutate(ctx, t.c, "delete_uptime_check", in.Service, func() (deleted, error) {
-		svc, err := t.service(ctx, in.Service, core.PermSettings)
+		svc, err := t.service(ctx, in.Service, identity.PermSettings)
 		if err != nil {
 			return deleted{}, err
 		}

@@ -3,9 +3,10 @@ package mcp
 import (
 	"context"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -17,7 +18,7 @@ type backupArg struct {
 
 func (t *tools) verifyBackup(ctx context.Context, _ *mcp.CallToolRequest, in backupArg) (*mcp.CallToolResult, domain.Backup, error) {
 	b, err := mutate(ctx, t.c, "verify_backup", in.BackupID, func() (domain.Backup, error) {
-		if err := t.backup(ctx, in.BackupID, core.PermBackups); err != nil {
+		if err := t.backup(ctx, in.BackupID, identity.PermBackups); err != nil {
 			return domain.Backup{}, err
 		}
 		return t.c.VerifyBackup(ctx, in.BackupID)
@@ -27,7 +28,7 @@ func (t *tools) verifyBackup(ctx context.Context, _ *mcp.CallToolRequest, in bac
 
 func (t *tools) deleteBackup(ctx context.Context, _ *mcp.CallToolRequest, in backupArg) (*mcp.CallToolResult, deleted, error) {
 	out, err := mutate(ctx, t.c, "delete_backup", in.BackupID, func() (deleted, error) {
-		if err := t.backup(ctx, in.BackupID, core.PermBackups); err != nil {
+		if err := t.backup(ctx, in.BackupID, identity.PermBackups); err != nil {
 			return deleted{}, err
 		}
 		return deleted{Deleted: in.BackupID}, t.c.DeleteBackup(ctx, in.BackupID)
@@ -50,7 +51,7 @@ type backupProjectOut struct {
 // as the REST route does.
 func (t *tools) backupProject(ctx context.Context, _ *mcp.CallToolRequest, in backupProjectIn) (*mcp.CallToolResult, backupProjectOut, error) {
 	out, err := mutate(ctx, t.c, "backup_project", in.Project, func() (backupProjectOut, error) {
-		p, err := t.project(ctx, in.Project, core.PermBackups)
+		p, err := t.project(ctx, in.Project, identity.PermBackups)
 		if err != nil {
 			return backupProjectOut{}, err
 		}
@@ -72,10 +73,10 @@ type listRestoresOut struct {
 }
 
 func (t *tools) listRestores(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, listRestoresOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, listRestoresOut{}, err
 	}
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, listRestoresOut{}, friendly(err)
 	}
@@ -93,10 +94,10 @@ type listDeploymentsOut struct {
 }
 
 func (t *tools) listDeployments(ctx context.Context, _ *mcp.CallToolRequest, in listDeploymentsIn) (*mcp.CallToolResult, listDeploymentsOut, error) {
-	if err := core.Authenticated(ctx); err != nil {
+	if err := identity.Authenticated(ctx); err != nil {
 		return nil, listDeploymentsOut{}, err
 	}
-	svc, err := t.service(ctx, in.Service, core.PermView)
+	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
 		return nil, listDeploymentsOut{}, friendly(err)
 	}

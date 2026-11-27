@@ -6,6 +6,8 @@ import (
 	"math"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -35,7 +37,7 @@ func TestCanvasLayout(t *testing.T) {
 	}
 
 	// A member sees no position of a project they can't see, nor of its map.
-	if got, err := c.CanvasLayout(WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: domain.RoleMember})); err != nil || len(got) != 1 {
+	if got, err := c.CanvasLayout(identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "alice", Role: domain.RoleMember})); err != nil || len(got) != 1 {
 		t.Errorf("member's layout = %v, %v", got, err)
 	}
 

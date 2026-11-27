@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -86,8 +88,8 @@ func mergeMiddlewares(in MiddlewaresInput, old domain.Middlewares) (domain.Middl
 			}
 			user.Ref = pw
 		default:
-			if len(pw) < minPasswordLength || len(pw) > maxPasswordBytes {
-				return domain.Middlewares{}, fmt.Errorf("%w: basic auth passwords must be %d to %d characters", ErrInvalid, minPasswordLength, maxPasswordBytes)
+			if len(pw) < identity.MinPasswordLength || len(pw) > identity.MaxPasswordBytes {
+				return domain.Middlewares{}, fmt.Errorf("%w: basic auth passwords must be %d to %d characters", ErrInvalid, identity.MinPasswordLength, identity.MaxPasswordBytes)
 			}
 			h, err := bcrypt.GenerateFromPassword([]byte(pw), basicAuthCost)
 			if err != nil {
@@ -146,7 +148,7 @@ func validateMiddlewares(m domain.Middlewares) error {
 func (c *Core) checkBasicAuthSchemes(ctx context.Context, m domain.Middlewares) error {
 	for _, u := range m.BasicAuth {
 		if ref := basicAuthRef(u); ref != "" {
-			if err := c.checkSecretScheme(ctx, ref); err != nil {
+			if err := c.CheckSecretScheme(ctx, ref); err != nil {
 				return fmt.Errorf("%w: basic auth user %s: %v", ErrInvalid, u.Name, err)
 			}
 		}
@@ -175,7 +177,7 @@ func (c *Core) hashBasicAuth(ctx context.Context, svc *domain.Service) (int, err
 	if len(refs) == 0 {
 		return 0, nil
 	}
-	vals, err := c.resolveSecrets(ctx, refs)
+	vals, err := c.ResolveSecrets(ctx, refs)
 	if err != nil {
 		return 0, err
 	}
@@ -186,8 +188,8 @@ func (c *Core) hashBasicAuth(ctx context.Context, svc *domain.Service) (int, err
 			continue
 		}
 		pw := vals[ref]
-		if pw == "" || len(pw) > maxPasswordBytes {
-			return 0, fmt.Errorf("basic auth user %s: %s must hold a password of at most %d bytes", u.Name, ref, maxPasswordBytes)
+		if pw == "" || len(pw) > identity.MaxPasswordBytes {
+			return 0, fmt.Errorf("basic auth user %s: %s must hold a password of at most %d bytes", u.Name, ref, identity.MaxPasswordBytes)
 		}
 		h, err := bcrypt.GenerateFromPassword([]byte(pw), basicAuthCost)
 		if err != nil {

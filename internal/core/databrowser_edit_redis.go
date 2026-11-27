@@ -10,6 +10,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -66,7 +68,7 @@ type redisCheck struct {
 // ApplyKeyChanges saves edits to a Redis key, or with apply unset only
 // returns the commands it would run. Admin only.
 func (c *Core) ApplyKeyChanges(ctx context.Context, id, key string, ch KeyChanges, apply bool) (res ChangeResult, err error) {
-	if err := c.requireOn(ctx, id, PermDataEdit); err != nil {
+	if err := c.RequireOn(ctx, id, identity.PermDataEdit); err != nil {
 		return ChangeResult{}, err
 	}
 	if apply {

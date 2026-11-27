@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/distribution/reference"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
@@ -41,7 +43,7 @@ var pgManagedKeys = []string{pgUser, pgPassword, pgDatabase}
 func newPostgresEnv() map[string]string {
 	return map[string]string{
 		pgUser:     "app",
-		pgPassword: randomPassword(),
+		pgPassword: identity.RandomPassword(),
 		pgDatabase: "postgres",
 	}
 }

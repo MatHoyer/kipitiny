@@ -8,6 +8,8 @@ import (
 	"net/netip"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -19,12 +21,12 @@ func TestRepoDialGuard(t *testing.T) {
 	defer srv.Close()
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
 	g := domain.ProjectGit{RepoURL: srv.URL + "/r.git", Branch: "main", Path: "compose.yaml"}
-	member := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", Role: domain.RoleMember})
-	if _, err := c.gitHead(member, g); !errors.Is(err, ErrForbidden) {
+	member := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "alice", Role: domain.RoleMember})
+	if _, err := c.gitHead(member, g); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("member fetching from loopback: %v", err)
 	}
-	admin := WithActor(context.Background(), Actor{Kind: "user", Name: "root", Role: domain.RoleAdmin})
-	if _, err := c.gitHead(admin, g); err == nil || errors.Is(err, ErrForbidden) {
+	admin := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "root", Role: domain.RoleAdmin})
+	if _, err := c.gitHead(admin, g); err == nil || errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("admin fetching from loopback reaches the server: %v", err)
 	}
 	for addr, private := range map[string]bool{"127.0.0.1": true, "10.1.2.3": true, "169.254.169.254": true, "100.100.1.1": true,

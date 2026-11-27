@@ -1,4 +1,4 @@
-package core
+package identity
 
 import (
 	"context"
@@ -10,14 +10,14 @@ import (
 )
 
 func TestSetPreferences(t *testing.T) {
-	c := newTestCore(t, config.Config{})
+	c := newTestIdentity(t, config.Config{})
 	u, err := c.store.CreateUser(context.Background(), domain.User{Username: "alice"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", UserID: u.ID, Role: domain.RoleMember})
 
-	if _, err := c.SetPreferences(ctx, domain.Preferences{MapView: "4d"}); !errors.Is(err, ErrInvalid) {
+	if _, err := c.SetPreferences(ctx, domain.Preferences{MapView: "4d"}); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("bad view: %v", err)
 	}
 	if _, err := c.SetPreferences(ctx, domain.Preferences{MapView: "3d"}); err != nil {

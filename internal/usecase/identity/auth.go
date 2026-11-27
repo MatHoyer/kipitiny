@@ -1,4 +1,4 @@
-package core
+package identity
 
 import (
 	"context"
@@ -22,35 +22,25 @@ var ErrUnauthorized = errors.New("unauthorized")
 
 const (
 	SessionTTL        = 30 * 24 * time.Hour
-	minPasswordLength = 10
+	MinPasswordLength = 10
 	// bcrypt ignores everything past 72 bytes; refuse rather than truncate.
-	maxPasswordBytes = 72
+	MaxPasswordBytes = 72
 )
 
 // dummyHash keeps login timing the same whether or not the user exists.
 var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("kipitiny-dummy-password"), bcrypt.DefaultCost)
 
-type AuthState struct {
-	SetupRequired bool         `json:"setupRequired"`
-	User          *domain.User `json:"user,omitempty"`
-	// SSO lists the providers to sign in with; with SSORequired, the only
-	// way to sign in.
-	SSO         []SSOButton `json:"sso"`
-	SSORequired bool        `json:"ssoRequired"`
-	Branding    Branding    `json:"branding"`
-}
-
 // InitAuth creates the one-time token required to create the first
 // admin, so whoever reaches a fresh instance first can't claim it without
 // access to the server logs.
-func (c *Core) InitAuth(ctx context.Context) error {
+func (c *Identity) InitAuth(ctx context.Context) error {
 	n, err := c.store.CountUsers(ctx)
 	if err != nil || n > 0 {
 		return err
 	}
 	token := c.cfg.SetupToken
 	if token == "" {
-		token = randomToken(16)
+		token = RandomToken(16)
 	}
 	c.setupMu.Lock()
 	c.setupToken = token
@@ -59,39 +49,21 @@ func (c *Core) InitAuth(ctx context.Context) error {
 	return nil
 }
 
-func (c *Core) AuthState(ctx context.Context, sessionToken string) (AuthState, error) {
-	n, err := c.store.CountUsers(ctx)
-	if err != nil {
-		return AuthState{}, err
-	}
-	if n == 0 {
-		return AuthState{SetupRequired: true, SSO: []SSOButton{}, Branding: c.Branding(ctx)}, nil
-	}
-	u, err := c.Authenticate(ctx, sessionToken)
-	if errors.Is(err, ErrUnauthorized) {
-		return AuthState{SSO: c.SSOButtons(ctx), SSORequired: c.SSORequired(ctx), Branding: c.Branding(ctx)}, nil
-	}
-	if err != nil {
-		return AuthState{}, err
-	}
-	return AuthState{User: &u, SSO: []SSOButton{}, Branding: c.Branding(ctx)}, nil
-}
-
 // Setup creates the first admin account and returns a session token.
-func (c *Core) Setup(ctx context.Context, setupToken, username, password string) (domain.User, string, error) {
+func (c *Identity) Setup(ctx context.Context, setupToken, username, password string) (domain.User, string, error) {
 	c.setupMu.Lock()
 	defer c.setupMu.Unlock()
 
 	if n, err := c.store.CountUsers(ctx); err != nil {
 		return domain.User{}, "", err
 	} else if n > 0 {
-		return domain.User{}, "", fmt.Errorf("%w: setup already completed", ErrInvalid)
+		return domain.User{}, "", fmt.Errorf("%w: setup already completed", domain.ErrInvalid)
 	}
 	if c.setupToken == "" || subtle.ConstantTimeCompare([]byte(strings.TrimSpace(setupToken)), []byte(c.setupToken)) != 1 {
 		return domain.User{}, "", fmt.Errorf("%w: wrong setup token (see the manager logs)", ErrUnauthorized)
 	}
-	if !nameRe.MatchString(username) {
-		return domain.User{}, "", fmt.Errorf("%w: username must be lowercase letters, digits and dashes", ErrInvalid)
+	if !domain.ValidName(username) {
+		return domain.User{}, "", fmt.Errorf("%w: username must be lowercase letters, digits and dashes", domain.ErrInvalid)
 	}
 	if err := validatePassword(password); err != nil {
 		return domain.User{}, "", err
@@ -110,7 +82,7 @@ func (c *Core) Setup(ctx context.Context, setupToken, username, password string)
 }
 
 // ResetPassword sets a new password and signs the user out everywhere.
-func (c *Core) ResetPassword(ctx context.Context, username, password string) error {
+func (c *Identity) ResetPassword(ctx context.Context, username, password string) error {
 	u, err := c.store.GetUserByUsername(ctx, username)
 	if err != nil {
 		return err
@@ -126,11 +98,11 @@ func (c *Core) ResetPassword(ctx context.Context, username, password string) err
 }
 
 func validatePassword(p string) error {
-	if utf8.RuneCountInString(p) < minPasswordLength {
-		return fmt.Errorf("%w: password must be at least %d characters", ErrInvalid, minPasswordLength)
+	if utf8.RuneCountInString(p) < MinPasswordLength {
+		return fmt.Errorf("%w: password must be at least %d characters", domain.ErrInvalid, MinPasswordLength)
 	}
-	if len(p) > maxPasswordBytes {
-		return fmt.Errorf("%w: password must be at most %d bytes", ErrInvalid, maxPasswordBytes)
+	if len(p) > MaxPasswordBytes {
+		return fmt.Errorf("%w: password must be at most %d bytes", domain.ErrInvalid, MaxPasswordBytes)
 	}
 	return nil
 }
@@ -144,7 +116,7 @@ type LoginResult struct {
 	MFATicket string
 }
 
-func (c *Core) Login(ctx context.Context, username, password string) (LoginResult, error) {
+func (c *Identity) Login(ctx context.Context, username, password string) (LoginResult, error) {
 	if c.SSORequired(ctx) {
 		return LoginResult{}, ErrSSORequired
 	}
@@ -164,8 +136,8 @@ func (c *Core) Login(ctx context.Context, username, password string) (LoginResul
 		return LoginResult{}, ErrUnauthorized
 	}
 	if u.TOTPSecret != "" {
-		ticket := randomToken(32)
-		c.mfaTickets.put(ticket, mfaTicket{userID: u.ID}, time.Now().Add(mfaTicketTTL))
+		ticket := RandomToken(32)
+		c.mfaTickets.Put(ticket, mfaTicket{userID: u.ID}, time.Now().Add(mfaTicketTTL))
 		return LoginResult{MFATicket: ticket}, nil
 	}
 	_ = c.store.DeleteExpiredSessions(ctx)
@@ -173,7 +145,7 @@ func (c *Core) Login(ctx context.Context, username, password string) (LoginResul
 	return LoginResult{User: u, Session: token}, err
 }
 
-func (c *Core) Authenticate(ctx context.Context, sessionToken string) (domain.User, error) {
+func (c *Identity) Authenticate(ctx context.Context, sessionToken string) (domain.User, error) {
 	if sessionToken == "" {
 		return domain.User{}, ErrUnauthorized
 	}
@@ -192,7 +164,7 @@ func (c *Core) Authenticate(ctx context.Context, sessionToken string) (domain.Us
 }
 
 // SessionActor is the actor of a signed-in user's request.
-func (c *Core) SessionActor(ctx context.Context, sessionToken string) (Actor, error) {
+func (c *Identity) SessionActor(ctx context.Context, sessionToken string) (Actor, error) {
 	u, err := c.Authenticate(ctx, sessionToken)
 	if err != nil {
 		return Actor{}, err
@@ -202,15 +174,15 @@ func (c *Core) SessionActor(ctx context.Context, sessionToken string) (Actor, er
 	return a, err
 }
 
-func (c *Core) Logout(ctx context.Context, sessionToken string) error {
+func (c *Identity) Logout(ctx context.Context, sessionToken string) error {
 	if sessionToken == "" {
 		return nil
 	}
 	return c.store.DeleteSession(ctx, hashToken(sessionToken))
 }
 
-func (c *Core) newSession(ctx context.Context, userID string) (string, error) {
-	token := randomToken(32)
+func (c *Identity) newSession(ctx context.Context, userID string) (string, error) {
+	token := RandomToken(32)
 	err := c.store.CreateSession(ctx, domain.Session{
 		TokenHash: hashToken(token),
 		UserID:    userID,
@@ -219,17 +191,17 @@ func (c *Core) newSession(ctx context.Context, userID string) (string, error) {
 	return token, err
 }
 
-func randomToken(n int) string {
+func RandomToken(n int) string {
 	b := make([]byte, n)
 	_, _ = rand.Read(b) // never fails (crypto/rand panics on failure since Go 1.24)
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-// randomPassword is a database password: a randomToken that never starts
+// RandomPassword is a database password: a RandomToken that never starts
 // with "-", which command line tools (the user's own too) read as an option.
-func randomPassword() string {
+func RandomPassword() string {
 	for {
-		if p := randomToken(24); p[0] != '-' {
+		if p := RandomToken(24); p[0] != '-' {
 			return p
 		}
 	}

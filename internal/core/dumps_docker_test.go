@@ -13,6 +13,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
 // dumpTestDB runs a database service of kind against the local Docker
@@ -211,8 +212,8 @@ func TestDashPasswordDocker(t *testing.T) {
 		domain.ServiceKindMariaDB, domain.ServiceKindMongoDB} {
 		t.Run(string(kind), func(t *testing.T) {
 			c, ctx, projectID := dumpTestCore(t)
-			ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
-			svc, _ := startTestDB(ctx, t, c, projectID, ServiceInput{Name: "db", Kind: kind, Password: "--dash" + randomToken(12)})
+			ctx = identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
+			svc, _ := startTestDB(ctx, t, c, projectID, ServiceInput{Name: "db", Kind: kind, Password: "--dash" + identity.RandomToken(12)})
 			if kind == domain.ServiceKindRedis {
 				if _, err := c.RedisScan(ctx, svc.ID, "0", "*", 10); err != nil {
 					t.Fatalf("scan: %v", err)

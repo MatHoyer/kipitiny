@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -24,7 +26,7 @@ func TestScheduleTools(t *testing.T) {
 	if _, err := e.st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "worker", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
-	read, admin := e.session(core.PermView), e.session()
+	read, admin := e.session(identity.PermView), e.session()
 
 	for name, args := range map[string]map[string]any{
 		"set_backup_schedule":    {"service": "shop/db", "cron": "@daily"},

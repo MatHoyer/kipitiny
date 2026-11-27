@@ -75,7 +75,7 @@ func (c *Core) StartScheduler(ctx context.Context) error {
 	if err := c.scheduleCleanup(ctx); err != nil {
 		return err
 	}
-	if _, err := c.sched.cron.AddFunc("@daily", func() { c.pruneAudit(c.bg) }); err != nil {
+	if _, err := c.sched.cron.AddFunc("@daily", func() { c.PruneAudit(c.bg) }); err != nil {
 		return err
 	}
 	c.sched.cron.Start()

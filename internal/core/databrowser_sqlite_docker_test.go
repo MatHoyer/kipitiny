@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -54,7 +56,7 @@ func TestDataBrowserSQLiteDocker(t *testing.T) {
 		Volumes: []domain.Volume{{Name: "data", Path: "/data"}}}, "data", sqliteSeed(t))
 	name, tag, _ := strings.Cut(image, ":")
 	c.cfg.Update.Image, c.cfg.Version = name, tag
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
+	ctx := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
 
 	dbs, err := c.PgDatabases(ctx, svc.ID)
 	if err != nil || len(dbs) != 1 || dbs[0].Name != "data/db/app.db" || dbs[0].Bytes == 0 {

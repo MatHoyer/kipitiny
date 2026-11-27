@@ -5,16 +5,16 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
 // access is what a route needs from a user or token: a permission on the
 // project its {id} belongs to, a server feature, or being an admin. Routes
 // for anyone signed in show only what core lets the caller see.
 type access struct {
-	perm    core.Perm
-	kind    core.IDKind
-	feature core.Feature
+	perm    identity.Perm
+	kind    identity.IDKind
+	feature identity.Feature
 	anyone  bool
 }
 
@@ -23,13 +23,13 @@ var (
 	admin  = access{}
 )
 
-func onProject(p core.Perm) access    { return access{perm: p, kind: core.IDProject} }
-func onService(p core.Perm) access    { return access{perm: p, kind: core.IDService} }
-func onBackup(p core.Perm) access     { return access{perm: p, kind: core.IDBackup} }
-func onDeployment(p core.Perm) access { return access{perm: p, kind: core.IDDeployment} }
-func onSchedule(p core.Perm) access   { return access{perm: p, kind: core.IDSchedule} }
-func onJob(p core.Perm) access        { return access{perm: p, kind: core.IDJob} }
-func feature(f core.Feature) access   { return access{feature: f} }
+func onProject(p identity.Perm) access    { return access{perm: p, kind: identity.IDProject} }
+func onService(p identity.Perm) access    { return access{perm: p, kind: identity.IDService} }
+func onBackup(p identity.Perm) access     { return access{perm: p, kind: identity.IDBackup} }
+func onDeployment(p identity.Perm) access { return access{perm: p, kind: identity.IDDeployment} }
+func onSchedule(p identity.Perm) access   { return access{perm: p, kind: identity.IDSchedule} }
+func onJob(p identity.Perm) access        { return access{perm: p, kind: identity.IDJob} }
+func feature(f identity.Feature) access   { return access{feature: f} }
 
 // routeAccess lists every authenticated route (TestRouteAccess checks it);
 // one missing would be admin only.
@@ -68,95 +68,95 @@ var routeAccess = map[string]access{
 	"GET /api/templates/logos":           anyone,
 	"POST /api/templates/{id}/install":   anyone,
 	"GET /api/backups":                   anyone,
-	"POST /api/projects":                 feature(core.FeatureCreateProjects),
+	"POST /api/projects":                 feature(identity.FeatureCreateProjects),
 	"GET /api/projects":                  anyone,
 	// Core lists the tags of the visible projects and checks who may color one.
 	"GET /api/tags":                       anyone,
 	"PUT /api/tags/{name}":                anyone,
-	"GET /api/projects/{id}":              onProject(core.PermView),
-	"DELETE /api/projects/{id}":           onProject(core.PermDelete),
-	"PUT /api/projects/{id}/env":          onProject(core.PermEnv),
-	"PUT /api/projects/{id}/name":         onProject(core.PermSettings),
-	"PUT /api/projects/{id}/sleep":        onProject(core.PermSettings),
-	"PUT /api/projects/{id}/tags":         onProject(core.PermSettings),
-	"PUT /api/projects/{id}/maintenance":  onProject(core.PermDeploy),
-	"GET /api/projects/{id}/compose":      onProject(core.PermView),
-	"POST /api/projects/{id}/compose":     onProject(core.PermSettings),
-	"POST /api/projects/{id}/export":      onProject(core.PermDownload),
-	"GET /api/projects/{id}/git":          onProject(core.PermGit),
-	"PUT /api/projects/{id}/git":          onProject(core.PermGit),
-	"DELETE /api/projects/{id}/git":       onProject(core.PermGit),
-	"POST /api/projects/{id}/git/preview": onProject(core.PermGit),
-	"POST /api/projects/{id}/git/sync":    onProject(core.PermGit),
-	"GET /api/projects/{id}/topology":     onProject(core.PermView),
+	"GET /api/projects/{id}":              onProject(identity.PermView),
+	"DELETE /api/projects/{id}":           onProject(identity.PermDelete),
+	"PUT /api/projects/{id}/env":          onProject(identity.PermEnv),
+	"PUT /api/projects/{id}/name":         onProject(identity.PermSettings),
+	"PUT /api/projects/{id}/sleep":        onProject(identity.PermSettings),
+	"PUT /api/projects/{id}/tags":         onProject(identity.PermSettings),
+	"PUT /api/projects/{id}/maintenance":  onProject(identity.PermDeploy),
+	"GET /api/projects/{id}/compose":      onProject(identity.PermView),
+	"POST /api/projects/{id}/compose":     onProject(identity.PermSettings),
+	"POST /api/projects/{id}/export":      onProject(identity.PermDownload),
+	"GET /api/projects/{id}/git":          onProject(identity.PermGit),
+	"PUT /api/projects/{id}/git":          onProject(identity.PermGit),
+	"DELETE /api/projects/{id}/git":       onProject(identity.PermGit),
+	"POST /api/projects/{id}/git/preview": onProject(identity.PermGit),
+	"POST /api/projects/{id}/git/sync":    onProject(identity.PermGit),
+	"GET /api/projects/{id}/topology":     onProject(identity.PermView),
 	// Previews of a project come with its deploy permission: CI opens and
 	// closes them. Their settings hold the secrets they get instead of
 	// production's.
-	"GET /api/projects/{id}/previews":           onProject(core.PermView),
-	"PUT /api/projects/{id}/previews/{name}":    onProject(core.PermDeploy),
-	"DELETE /api/projects/{id}/previews/{name}": onProject(core.PermDeploy),
-	"GET /api/projects/{id}/preview-settings":   onProject(core.PermView),
-	"PUT /api/projects/{id}/preview-settings":   onProject(core.PermEnv),
+	"GET /api/projects/{id}/previews":           onProject(identity.PermView),
+	"PUT /api/projects/{id}/previews/{name}":    onProject(identity.PermDeploy),
+	"DELETE /api/projects/{id}/previews/{name}": onProject(identity.PermDeploy),
+	"GET /api/projects/{id}/preview-settings":   onProject(identity.PermView),
+	"PUT /api/projects/{id}/preview-settings":   onProject(identity.PermEnv),
 	// What previews are seeded with: anonymize rules and copies.
-	"GET /api/projects/{id}/preview-seed":                      onProject(core.PermView),
-	"PUT /api/projects/{id}/preview-seed/{service}":            onProject(core.PermEnv),
-	"POST /api/projects/{id}/preview-seed/{service}/anonymize": onProject(core.PermEnv),
-	"GET /api/projects/{id}/services":                          onProject(core.PermView),
-	"POST /api/projects/{id}/services":                         onProject(core.PermSettings),
-	"POST /api/projects/{id}/backups":                          onProject(core.PermBackups),
-	"GET /api/services/{id}":                                   onService(core.PermView),
-	"PATCH /api/services/{id}":                                 onService(core.PermSettings),
-	"DELETE /api/services/{id}":                                onService(core.PermDelete),
-	"PUT /api/services/{id}/name":                              onService(core.PermSettings),
-	"PUT /api/services/{id}/networks":                          onService(core.PermSettings),
-	"PUT /api/services/{id}/tags":                              onService(core.PermSettings),
-	"POST /api/services/{id}/deploy":                           onService(core.PermDeploy),
-	"POST /api/services/{id}/rollback":                         onService(core.PermDeploy),
-	"POST /api/services/{id}/{action}":                         onService(core.PermDeploy),
-	"GET /api/services/{id}/deployments":                       onService(core.PermView),
-	"GET /api/services/{id}/logs":                              onService(core.PermView),
-	"GET /api/services/{id}/stats":                             onService(core.PermView),
-	"GET /api/services/{id}/uptime":                            onService(core.PermView),
-	"GET /api/services/{id}/analytics":                         onService(core.PermView),
-	"PUT /api/services/{id}/uptime":                            onService(core.PermSettings),
-	"DELETE /api/services/{id}/uptime":                         onService(core.PermSettings),
-	"GET /api/services/{id}/terminal":                          onService(core.PermTerminal),
-	"GET /api/services/{id}/connection":                        onService(core.PermEnv),
-	"GET /api/services/{id}/backups":                           onService(core.PermView),
-	"POST /api/services/{id}/backups":                          onService(core.PermBackups),
-	"GET /api/services/{id}/restores":                          onService(core.PermView),
-	"GET /api/services/{id}/schedules":                         onService(core.PermView),
-	"POST /api/services/{id}/schedules":                        onService(core.PermBackups),
-	"PUT /api/schedules/{id}":                                  onSchedule(core.PermBackups),
-	"DELETE /api/schedules/{id}":                               onSchedule(core.PermBackups),
-	"GET /api/services/{id}/jobs":                              onService(core.PermView),
-	"POST /api/services/{id}/jobs":                             onService(core.PermSettings),
-	"PUT /api/jobs/{id}":                                       onJob(core.PermSettings),
-	"DELETE /api/jobs/{id}":                                    onJob(core.PermSettings),
-	"POST /api/jobs/{id}/run":                                  onJob(core.PermDeploy),
-	"GET /api/jobs/{id}/runs":                                  onJob(core.PermView),
-	"GET /api/jobs/{id}/runs/{run}/log":                        onJob(core.PermView),
-	"GET /api/backups/{id}":                                    onBackup(core.PermView),
-	"DELETE /api/backups/{id}":                                 onBackup(core.PermBackups),
-	"GET /api/backups/{id}/download":                           onBackup(core.PermDownload),
-	"POST /api/backups/{id}/restore":                           onBackup(core.PermRestore),
-	"POST /api/backups/{id}/verify":                            onBackup(core.PermBackups),
-	"GET /api/deployments/{id}":                                onDeployment(core.PermView),
-	"GET /api/deployments/{id}/log":                            onDeployment(core.PermView),
-	"GET /api/storage":                                         feature(core.FeatureStorage),
-	"GET /api/registries":                                      feature(core.FeatureRegistries),
-	"GET /api/git-providers":                                   feature(core.FeatureGitProviders),
-	"GET /api/git-providers/{id}/repos":                        feature(core.FeatureGitProviders),
-	"GET /api/git-providers/{id}/branches":                     feature(core.FeatureGitProviders),
-	"GET /api/secret-providers":                                feature(core.FeatureSecretProviders),
-	"GET /api/secret-connections":                              feature(core.FeatureSecretProviders),
-	"GET /api/secret-connections/{id}/vaults":                  feature(core.FeatureSecretProviders),
-	"GET /api/secret-connections/{id}/items":                   feature(core.FeatureSecretProviders),
-	"GET /api/servers":                                         feature(core.FeatureServers),
-	"GET /api/ssh-key":                                         feature(core.FeatureServers),
-	"GET /api/networks":                                        feature(core.FeatureNetworks),
-	"GET /api/notifications":                                   feature(core.FeatureNotifications),
-	"GET /api/domains":                                         feature(core.FeatureDomains),
+	"GET /api/projects/{id}/preview-seed":                      onProject(identity.PermView),
+	"PUT /api/projects/{id}/preview-seed/{service}":            onProject(identity.PermEnv),
+	"POST /api/projects/{id}/preview-seed/{service}/anonymize": onProject(identity.PermEnv),
+	"GET /api/projects/{id}/services":                          onProject(identity.PermView),
+	"POST /api/projects/{id}/services":                         onProject(identity.PermSettings),
+	"POST /api/projects/{id}/backups":                          onProject(identity.PermBackups),
+	"GET /api/services/{id}":                                   onService(identity.PermView),
+	"PATCH /api/services/{id}":                                 onService(identity.PermSettings),
+	"DELETE /api/services/{id}":                                onService(identity.PermDelete),
+	"PUT /api/services/{id}/name":                              onService(identity.PermSettings),
+	"PUT /api/services/{id}/networks":                          onService(identity.PermSettings),
+	"PUT /api/services/{id}/tags":                              onService(identity.PermSettings),
+	"POST /api/services/{id}/deploy":                           onService(identity.PermDeploy),
+	"POST /api/services/{id}/rollback":                         onService(identity.PermDeploy),
+	"POST /api/services/{id}/{action}":                         onService(identity.PermDeploy),
+	"GET /api/services/{id}/deployments":                       onService(identity.PermView),
+	"GET /api/services/{id}/logs":                              onService(identity.PermView),
+	"GET /api/services/{id}/stats":                             onService(identity.PermView),
+	"GET /api/services/{id}/uptime":                            onService(identity.PermView),
+	"GET /api/services/{id}/analytics":                         onService(identity.PermView),
+	"PUT /api/services/{id}/uptime":                            onService(identity.PermSettings),
+	"DELETE /api/services/{id}/uptime":                         onService(identity.PermSettings),
+	"GET /api/services/{id}/terminal":                          onService(identity.PermTerminal),
+	"GET /api/services/{id}/connection":                        onService(identity.PermEnv),
+	"GET /api/services/{id}/backups":                           onService(identity.PermView),
+	"POST /api/services/{id}/backups":                          onService(identity.PermBackups),
+	"GET /api/services/{id}/restores":                          onService(identity.PermView),
+	"GET /api/services/{id}/schedules":                         onService(identity.PermView),
+	"POST /api/services/{id}/schedules":                        onService(identity.PermBackups),
+	"PUT /api/schedules/{id}":                                  onSchedule(identity.PermBackups),
+	"DELETE /api/schedules/{id}":                               onSchedule(identity.PermBackups),
+	"GET /api/services/{id}/jobs":                              onService(identity.PermView),
+	"POST /api/services/{id}/jobs":                             onService(identity.PermSettings),
+	"PUT /api/jobs/{id}":                                       onJob(identity.PermSettings),
+	"DELETE /api/jobs/{id}":                                    onJob(identity.PermSettings),
+	"POST /api/jobs/{id}/run":                                  onJob(identity.PermDeploy),
+	"GET /api/jobs/{id}/runs":                                  onJob(identity.PermView),
+	"GET /api/jobs/{id}/runs/{run}/log":                        onJob(identity.PermView),
+	"GET /api/backups/{id}":                                    onBackup(identity.PermView),
+	"DELETE /api/backups/{id}":                                 onBackup(identity.PermBackups),
+	"GET /api/backups/{id}/download":                           onBackup(identity.PermDownload),
+	"POST /api/backups/{id}/restore":                           onBackup(identity.PermRestore),
+	"POST /api/backups/{id}/verify":                            onBackup(identity.PermBackups),
+	"GET /api/deployments/{id}":                                onDeployment(identity.PermView),
+	"GET /api/deployments/{id}/log":                            onDeployment(identity.PermView),
+	"GET /api/storage":                                         feature(identity.FeatureStorage),
+	"GET /api/registries":                                      feature(identity.FeatureRegistries),
+	"GET /api/git-providers":                                   feature(identity.FeatureGitProviders),
+	"GET /api/git-providers/{id}/repos":                        feature(identity.FeatureGitProviders),
+	"GET /api/git-providers/{id}/branches":                     feature(identity.FeatureGitProviders),
+	"GET /api/secret-providers":                                feature(identity.FeatureSecretProviders),
+	"GET /api/secret-connections":                              feature(identity.FeatureSecretProviders),
+	"GET /api/secret-connections/{id}/vaults":                  feature(identity.FeatureSecretProviders),
+	"GET /api/secret-connections/{id}/items":                   feature(identity.FeatureSecretProviders),
+	"GET /api/servers":                                         feature(identity.FeatureServers),
+	"GET /api/ssh-key":                                         feature(identity.FeatureServers),
+	"GET /api/networks":                                        feature(identity.FeatureNetworks),
+	"GET /api/notifications":                                   feature(identity.FeatureNotifications),
+	"GET /api/domains":                                         feature(identity.FeatureDomains),
 	// Unknown routes answer 404 to anyone.
 	"/api/": anyone,
 	// The server itself and its settings.
@@ -177,7 +177,7 @@ var routeAccess = map[string]access{
 	"PUT /api/servers/{id}":                      admin,
 	"DELETE /api/servers/{id}":                   admin,
 	"GET /api/servers/{id}/terminal":             admin,
-	"GET /api/servers/{id}/stats":                feature(core.FeatureServers),
+	"GET /api/servers/{id}/stats":                feature(identity.FeatureServers),
 	"GET /api/servers/{id}/security":             admin,
 	"POST /api/servers/{id}/security/check":      admin,
 	"POST /api/servers/{id}/security/updates":    admin,
@@ -246,18 +246,18 @@ var routeAccess = map[string]access{
 	"DELETE /api/invites/{id}":                   admin,
 	"GET /api/audit":                             admin,
 
-	"GET /api/services/{id}/analytics/visits":         onService(core.PermView),
-	"GET /api/services/{id}/errors":                   onService(core.PermView),
-	"GET /api/services/{id}/errors/series":            onService(core.PermView),
-	"GET /api/services/{id}/errors/deploy":            onService(core.PermView),
-	"GET /api/services/{id}/errors/{issue}":           onService(core.PermView),
-	"GET /api/services/{id}/errors/{issue}/event":     onService(core.PermView),
-	"PUT /api/services/{id}/errors/{issue}/status":    onService(core.PermDeploy),
-	"GET /api/services/{id}/analytics/export":         onService(core.PermView),
-	"GET /api/services/{id}/analytics/funnel":         onService(core.PermView),
-	"POST /api/services/{id}/analytics/share":         onService(core.PermSettings),
-	"DELETE /api/services/{id}/analytics/share":       onService(core.PermSettings),
-	"GET /api/services/{id}/analytics/visits/{visit}": onService(core.PermView),
+	"GET /api/services/{id}/analytics/visits":         onService(identity.PermView),
+	"GET /api/services/{id}/errors":                   onService(identity.PermView),
+	"GET /api/services/{id}/errors/series":            onService(identity.PermView),
+	"GET /api/services/{id}/errors/deploy":            onService(identity.PermView),
+	"GET /api/services/{id}/errors/{issue}":           onService(identity.PermView),
+	"GET /api/services/{id}/errors/{issue}/event":     onService(identity.PermView),
+	"PUT /api/services/{id}/errors/{issue}/status":    onService(identity.PermDeploy),
+	"GET /api/services/{id}/analytics/export":         onService(identity.PermView),
+	"GET /api/services/{id}/analytics/funnel":         onService(identity.PermView),
+	"POST /api/services/{id}/analytics/share":         onService(identity.PermSettings),
+	"DELETE /api/services/{id}/analytics/share":       onService(identity.PermSettings),
+	"GET /api/services/{id}/analytics/visits/{visit}": onService(identity.PermView),
 	"GET /api/analytics/trackers":                     admin,
 	"POST /api/analytics/trackers":                    admin,
 	"PUT /api/analytics/trackers/{id}":                admin,
@@ -289,36 +289,36 @@ func (a *API) authorized(pattern string, h http.HandlerFunc) http.Handler {
 
 // authorize checks the route's access for the context's actor.
 func (a *API) authorize(ctx context.Context, pattern string, r *http.Request) error {
-	actor, _ := core.ActorFrom(ctx)
+	actor, _ := identity.ActorFrom(ctx)
 	if actor.Admin() {
 		return nil
 	}
 	if dataRoute(pattern) {
 		// Core checks data and files permissions, shared with MCP; the
 		// service must still be visible.
-		projectID, err := a.core.ProjectOf(ctx, core.IDService, r.PathValue("id"))
+		projectID, err := a.core.ProjectOf(ctx, identity.IDService, r.PathValue("id"))
 		if err != nil {
 			return err
 		}
-		return core.Authorize(ctx, projectID, core.PermView)
+		return identity.Authorize(ctx, projectID, identity.PermView)
 	}
 	acc, ok := routeAccess[pattern]
 	switch {
 	case !ok:
-		return core.RequireAdmin(ctx)
+		return identity.RequireAdmin(ctx)
 	case acc.anyone:
 		return nil
 	case acc.feature != "":
-		return core.RequireFeature(ctx, acc.feature)
+		return identity.RequireFeature(ctx, acc.feature)
 	case acc.perm != "":
 		projectID, err := a.core.ProjectOf(ctx, acc.kind, r.PathValue("id"))
 		if err != nil {
 			return err
 		}
 		if projectID == "" { // the manager's own backups and schedules
-			return core.RequireAdmin(ctx)
+			return identity.RequireAdmin(ctx)
 		}
-		return core.Authorize(ctx, projectID, acc.perm)
+		return identity.Authorize(ctx, projectID, acc.perm)
 	}
-	return core.RequireAdmin(ctx)
+	return identity.RequireAdmin(ctx)
 }

@@ -5,7 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -22,7 +23,7 @@ func TestVolumeFileTools(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	read, admin := e.session(core.PermView, core.PermFiles), e.session()
+	read, admin := e.session(identity.PermView, identity.PermFiles), e.session()
 
 	// The volumes themselves come from the settings, without Docker.
 	out, isErr := e.call(read, "list_volume_files", map[string]any{"service": "game/mc"})

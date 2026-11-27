@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"golang.org/x/crypto/ssh"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -138,7 +140,7 @@ func (c *Core) ListServers(ctx context.Context) ([]ServerView, error) {
 	for range servers {
 		<-done
 	}
-	if isMember(ctx) { // how to reach a server is the admins'
+	if identity.IsMember(ctx) { // how to reach a server is the admins'
 		for i, v := range views {
 			views[i] = ServerView{Server: domain.Server{ID: v.ID, Name: v.Name, Kind: v.Kind, PublicIP: v.PublicIP, CreatedAt: v.CreatedAt},
 				DetectedIP: v.DetectedIP, Projects: v.Projects}

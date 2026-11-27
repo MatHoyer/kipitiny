@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -35,7 +37,7 @@ func TestNormalizeTags(t *testing.T) {
 func TestTags(t *testing.T) {
 	c := newTestCore(t, config.Config{})
 	ctx := context.Background()
-	admin := WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
+	admin := identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 	shop, _ := c.store.CreateProject(ctx, domain.Project{Name: "shop"})
 	blog, _ := c.store.CreateProject(ctx, domain.Project{Name: "blog"})
 	web, err := c.store.CreateService(ctx, domain.Service{ProjectID: shop.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1})
@@ -63,16 +65,16 @@ func TestTags(t *testing.T) {
 
 	// A member sees the tags of their projects, and colors those of the
 	// projects they may change.
-	member := WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: domain.RoleMember,
-		Grants: map[string][]string{shop.ID: {string(PermSettings)}, blog.ID: {string(PermView)}}})
-	viewer := WithActor(ctx, Actor{Kind: "user", Name: "bob", Role: domain.RoleMember, Grants: map[string][]string{blog.ID: {string(PermView)}}})
+	member := identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "alice", Role: domain.RoleMember,
+		Grants: map[string][]string{shop.ID: {string(identity.PermSettings)}, blog.ID: {string(identity.PermView)}}})
+	viewer := identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "bob", Role: domain.RoleMember, Grants: map[string][]string{blog.ID: {string(identity.PermView)}}})
 	if tags, _ := c.ListTags(viewer); len(tags) != 2 || tags[0].Name != "blog" || tags[1].Projects != 1 {
 		t.Errorf("viewer's tags = %+v", tags)
 	}
-	if _, err := c.SetTagColor(viewer, "prod", "red"); !errors.Is(err, ErrForbidden) {
+	if _, err := c.SetTagColor(viewer, "prod", "red"); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("viewer colors a tag: %v", err)
 	}
-	if _, err := c.SetTagColor(member, "blog", "red"); !errors.Is(err, ErrForbidden) {
+	if _, err := c.SetTagColor(member, "blog", "red"); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("member colors a tag of a project they only see: %v", err)
 	}
 	if tag, err := c.SetTagColor(member, " Front ", "red"); err != nil || tag != (Tag{Name: "front", Color: "red", Custom: true, Services: 1}) {

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -200,7 +202,7 @@ func (c *Core) findPreview(ctx context.Context, parentID, name string) (domain.P
 // system: a preview is a project of its own, which the actor has no grant on
 // until it exists.
 func withoutActor(ctx context.Context) context.Context {
-	return context.WithValue(ctx, actorKey{}, nil)
+	return context.WithValue(ctx, identity.ActorKey{}, nil)
 }
 
 // DeployPreview creates or updates the parent's preview named name: a copy
@@ -218,7 +220,7 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 		return PreviewView{}, fmt.Errorf("%w: a preview has no previews of its own", ErrInvalid)
 	}
 	projectName := parent.Name + "-" + name
-	if !nameRe.MatchString(name) || !nameRe.MatchString(projectName) {
+	if !domain.ValidName(name) || !domain.ValidName(projectName) {
 		return PreviewView{}, fmt.Errorf("%w: the preview name must be lowercase letters, digits and dashes, and fit in %s-<name> (max 40)", ErrInvalid, parent.Name)
 	}
 	for k, v := range opts.Env {

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -484,10 +486,10 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 // failure maps err to the status and message the API answers with.
 func (a *API) failure(err error) (int, string) {
 	switch {
-	case errors.Is(err, core.ErrUnauthorized):
-		return http.StatusUnauthorized, reason(err, core.ErrUnauthorized)
-	case errors.Is(err, core.ErrForbidden):
-		return http.StatusForbidden, reason(err, core.ErrForbidden)
+	case errors.Is(err, identity.ErrUnauthorized):
+		return http.StatusUnauthorized, reason(err, identity.ErrUnauthorized)
+	case errors.Is(err, identity.ErrForbidden):
+		return http.StatusForbidden, reason(err, identity.ErrForbidden)
 	case errors.Is(err, core.ErrInvalid):
 		return http.StatusBadRequest, reason(err, core.ErrInvalid)
 	case errors.Is(err, domain.ErrNotFound):

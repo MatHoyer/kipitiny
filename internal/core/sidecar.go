@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/storage"
 )
@@ -29,7 +31,7 @@ func writeSidecar(ctx context.Context, st storage.Storage, target domain.BackupT
 	var buf bytes.Buffer
 	var w io.WriteCloser = nopCloser{&buf}
 	if target.Encrypted() {
-		if w, err = encryptTo(&buf, target.AgeRecipient); err != nil {
+		if w, err = identity.EncryptTo(&buf, target.AgeRecipient); err != nil {
 			return err
 		}
 	}
@@ -43,9 +45,9 @@ func writeSidecar(ctx context.Context, st storage.Storage, target domain.BackupT
 }
 
 // readSidecar reads the record stored next to a backup, decrypting it with
-// identity when it is encrypted. Its ObjectKey is the one the other manager
+// ageIdentity when it is encrypted. Its ObjectKey is the one the other manager
 // used, relative to its own prefix.
-func readSidecar(ctx context.Context, st storage.Storage, key, identity string) (domain.Backup, error) {
+func readSidecar(ctx context.Context, st storage.Storage, key, ageIdentity string) (domain.Backup, error) {
 	rc, err := st.Get(ctx, key)
 	if err != nil {
 		return domain.Backup{}, err
@@ -56,7 +58,7 @@ func readSidecar(ctx context.Context, st storage.Storage, key, identity string) 
 		return domain.Backup{}, err
 	}
 	if bytes.HasPrefix(data, []byte("age-encryption.org/")) {
-		r, err := decryptFrom(bytes.NewReader(data), identity)
+		r, err := identity.DecryptFrom(bytes.NewReader(data), ageIdentity)
 		if err != nil {
 			return domain.Backup{}, err
 		}

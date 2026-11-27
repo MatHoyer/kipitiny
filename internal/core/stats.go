@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
@@ -370,6 +372,6 @@ func (c *Core) ServiceStats(ctx context.Context, id string) (ServiceStats, error
 // by service ID.
 func (c *Core) CurrentUsage(ctx context.Context) map[string]ServiceUsage {
 	out := c.stats.current(time.Now())
-	maps.DeleteFunc(out, func(_ string, u ServiceUsage) bool { return !visible(ctx, u.ProjectID) })
+	maps.DeleteFunc(out, func(_ string, u ServiceUsage) bool { return !identity.Visible(ctx, u.ProjectID) })
 	return out
 }

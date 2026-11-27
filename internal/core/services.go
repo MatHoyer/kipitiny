@@ -20,10 +20,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
-// SecretMask replaces env values in read responses. Sending it back in an
-// update keeps the stored value.
-const SecretMask = "********"
-
 const (
 	maxReplicas = 10
 	// maxStopGraceSeconds bounds how long a stop (and so a deploy) may wait.
@@ -275,7 +271,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (domain.Servi
 		}
 		svc.Middlewares = mw
 	}
-	if !nameRe.MatchString(svc.Name) {
+	if !domain.ValidName(svc.Name) {
 		return domain.Service{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
 	switch svc.Kind {
