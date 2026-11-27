@@ -9,7 +9,6 @@
   "overrides": [
     {
       "files": [
-        "src/demo/backend.ts",
         "src/features/services/Service.tsx",
         "src/features/projects/Project.tsx",
         "src/features/account/Account.tsx",
