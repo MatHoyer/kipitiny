@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
@@ -22,7 +23,7 @@ func (a *API) listServices(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createService(w http.ResponseWriter, r *http.Request) {
-	var in core.ServiceInput
+	var in deploy.ServiceInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -44,7 +45,7 @@ func (a *API) getService(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateService(w http.ResponseWriter, r *http.Request) {
-	var p core.ServicePatch
+	var p deploy.ServicePatch
 	if !decode(w, r, &p) {
 		return
 	}
@@ -134,7 +135,7 @@ func (a *API) deleteUptime(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) deployService(w http.ResponseWriter, r *http.Request) {
-	var opts core.DeployOptions // optional: an empty body deploys the current settings
+	var opts deploy.DeployOptions // optional: an empty body deploys the current settings
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&opts); err != nil && !errors.Is(err, io.EOF) {
@@ -165,9 +166,9 @@ func (a *API) rollbackService(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) serviceAction(w http.ResponseWriter, r *http.Request) {
-	action := core.Action(r.PathValue("action"))
+	action := deploy.Action(r.PathValue("action"))
 	switch action {
-	case core.ActionStart, core.ActionStop, core.ActionRestart:
+	case deploy.ActionStart, deploy.ActionStop, deploy.ActionRestart:
 	default:
 		writeError(w, http.StatusNotFound, "not found")
 		return

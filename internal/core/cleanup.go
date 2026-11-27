@@ -17,6 +17,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 )
 
 const (
@@ -472,7 +473,7 @@ func isAnonymousVolume(labels map[string]string) bool {
 
 // removeStaleProbes removes unused probe volumes left by older manager binaries.
 func (c *Core) removeStaleProbes(ctx context.Context, dk *docker.Client) (int, error) {
-	_, current, err := ownBinary()
+	_, current, err := deploy.OwnBinary()
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return 0, err
 	}
@@ -511,7 +512,7 @@ func (c *Core) trimDeployments(ctx context.Context, svcs []domain.Service, keep 
 				c.log.Warn("cleanup: delete deployment", "deployment", d.ID, "err", err)
 				continue
 			}
-			if err := os.Remove(c.deployLogPath(svc.ID, d.ID)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			if err := os.Remove(c.DeployLogPath(svc.ID, d.ID)); err != nil && !errors.Is(err, os.ErrNotExist) {
 				c.log.Warn("cleanup: delete deployment log", "deployment", d.ID, "err", err)
 			}
 			n++

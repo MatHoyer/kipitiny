@@ -34,7 +34,7 @@ func (c *Core) StreamLogs(ctx context.Context, serviceID string, tail int, emit 
 	if err != nil {
 		return err
 	}
-	cts, err := c.activeContainers(ctx, svc)
+	cts, err := c.ActiveContainers(ctx, svc)
 	if err != nil {
 		return err
 	}
@@ -121,7 +121,7 @@ func (c *Core) RecentLogs(ctx context.Context, serviceID string, tail int) ([]Lo
 	if err != nil {
 		return nil, err
 	}
-	cts, err := c.activeContainers(ctx, svc)
+	cts, err := c.ActiveContainers(ctx, svc)
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,238 @@
+package deploy
+
+import (
+	"context"
+	"errors"
+	"maps"
+	"slices"
+	"testing"
+
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
+	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+
+	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/domain"
+)
+
+func TestResolveEnv(t *testing.T) {
+	project := map[string]string{"HOST": "db.internal", "PASS": "s3cret"}
+	env := map[string]string{
+		"A": "{{ project.HOST }}",
+		"B": "postgres://app:{{project.PASS}}@{{  project.HOST  }}/app",
+		"C": "{{ project.NOPE }}",
+		"D": "{{ other.HOST }}",
+	}
+	want := map[string]string{
+		"A": "db.internal",
+		"B": "postgres://app:s3cret@db.internal/app",
+		"C": "",
+		"D": "{{ other.HOST }}",
+	}
+	src := envSources{project: project}
+	if got := resolveEnv(env, src); !maps.Equal(got, want) {
+		t.Errorf("resolveEnv = %v, want %v", got, want)
+	}
+	if got := unresolved(env, src); !slices.Equal(got, []string{"project.NOPE"}) {
+		t.Errorf("unresolved = %v", got)
+	}
+}
+
+func TestResolveDatabaseRefs(t *testing.T) {
+	db := pgService()
+	src := envSources{dbs: map[string]domain.Service{db.Name: db}}
+	env := map[string]string{
+		"DATABASE_URL": "{{ db." + db.Name + ".URL }}",
+		"PGHOST":       "{{ db." + db.Name + ".HOST }}",
+		"PGPORT":       "{{db." + db.Name + ".PORT}}",
+		"PGUSER":       "{{ db." + db.Name + ".USER }}",
+		"PGPASSWORD":   "{{ db." + db.Name + ".PASSWORD }}",
+		"PGDATABASE":   "{{ db." + db.Name + ".DATABASE }}",
+		"BAD_FIELD":    "{{ db." + db.Name + ".NOPE }}",
+		"BAD_DB":       "{{ db.gone.URL }}",
+	}
+	got := resolveEnv(env, src)
+	want := map[string]string{
+		"DATABASE_URL": data.DatabaseURL(db), "PGHOST": db.Name, "PGPORT": "5432",
+		"PGUSER": db.Env[data.PGUser], "PGPASSWORD": db.Env[data.PGPassword], "PGDATABASE": db.Env[data.PGDatabase],
+		"BAD_FIELD": "", "BAD_DB": "",
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("resolveEnv = %v, want %v", got, want)
+	}
+	if got, want := unresolved(env, src), []string{"db." + db.Name + ".NOPE", "db.gone.URL"}; !slices.Equal(got, want) {
+		t.Errorf("unresolved = %v, want %v", got, want)
+	}
+	if !domain.UsesDatabase(env, db.Name) || domain.UsesDatabase(map[string]string{"A": "{{ project.X }}"}, db.Name) {
+		t.Error("usesDatabase")
+	}
+	if !domain.SoleRefRe.MatchString(env["PGHOST"]) {
+		t.Error("a database reference must count as a sole reference (not masked)")
+	}
+}
+
+func TestMaskEnv(t *testing.T) {
+	got := maskEnv(map[string]string{"VAR": "v", "KEY": "k", "REF": "{{ project.KEY }}", "MIX": "x{{ project.KEY }}"},
+		[]string{"KEY", "REF", "MIX"})
+	want := map[string]string{"VAR": "v", "KEY": identity.SecretMask, "REF": "{{ project.KEY }}", "MIX": identity.SecretMask}
+	if !maps.Equal(got, want) {
+		t.Errorf("maskEnv = %v, want %v", got, want)
+	}
+}
+
+func TestMergeEnv(t *testing.T) {
+	old := map[string]string{"VAR": "v", "KEY": "k", "TOKEN": "t"}
+	oldSecrets := []string{"KEY", "TOKEN"}
+
+	env, secrets, err := mergeEnv(map[string]string{"VAR": "v2", "KEY": identity.SecretMask, "TOKEN": "new", "NEW": "n"},
+		[]string{"KEY", "NEW"}, old, oldSecrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]string{"VAR": "v2", "KEY": "k", "TOKEN": "new", "NEW": "n"}; !maps.Equal(env, want) {
+		t.Errorf("env = %v, want %v", env, want)
+	}
+	if want := []string{"KEY", "NEW"}; !slices.Equal(secrets, want) {
+		t.Errorf("secrets = %v, want %v (TOKEN became a variable with a new value)", secrets, want)
+	}
+
+	// A masked secret can't become a variable: that would reveal it.
+	if _, _, err := mergeEnv(map[string]string{"KEY": identity.SecretMask}, []string{}, old, oldSecrets); !errors.Is(err, ErrInvalid) {
+		t.Errorf("unmasking a secret: got %v, want ErrInvalid", err)
+	}
+
+	// A password manager reference holds no secret: it's stored as a variable.
+	_, secrets, err = mergeEnv(map[string]string{"KEY": "{{ pass://Vault/Item/password }}", "MIX": "x{{ pass://V/I/f }}"},
+		[]string{"KEY", "MIX"}, old, oldSecrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"MIX"}; !slices.Equal(secrets, want) {
+		t.Errorf("secrets with a reference = %v, want %v", secrets, want)
+	}
+
+	// Without flags, stored ones are kept and new entries are secrets.
+	_, secrets, err = mergeEnv(map[string]string{"VAR": "v", "KEY": identity.SecretMask, "NEW": "n"}, nil, old, oldSecrets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"KEY", "NEW"}; !slices.Equal(secrets, want) {
+		t.Errorf("default secrets = %v, want %v", secrets, want)
+	}
+}
+
+func TestSetProjectEnv(t *testing.T) {
+	ctx := context.Background()
+	c := newTestCore(t, config.Config{})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"HOST": "db", "PASS": "s3cret"}, []string{"PASS"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Env["PASS"] != identity.SecretMask || got.Env["HOST"] != "db" {
+		t.Errorf("returned env: %v, want the secret masked and the variable readable", got.Env)
+	}
+	if _, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"BAD-KEY": "1"}, nil); !errors.Is(err, ErrInvalid) {
+		t.Errorf("bad key: got %v, want ErrInvalid", err)
+	}
+
+	if _, err := c.store.CreateService(ctx, domain.Service{
+		ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1,
+		Env: map[string]string{"DB_HOST": "{{ project.HOST }}"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A variable referenced by a service can't go.
+	if _, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"PASS": identity.SecretMask}, []string{"PASS"}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("removing a referenced variable: got %v, want ErrInvalid", err)
+	}
+	if _, err := c.SetProjectEnv(ctx, p.ID, map[string]string{"HOST": "db"}, []string{}); err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := c.store.GetProject(ctx, p.ID)
+	if !maps.Equal(stored.Env, map[string]string{"HOST": "db"}) {
+		t.Errorf("stored env = %v", stored.Env)
+	}
+
+	svc := domain.Service{ProjectID: p.ID, Image: "nginx", Replicas: 1, Env: map[string]string{"X": "{{ project.MISSING }}"}}
+	if err := c.validate(ctx, svc); !errors.Is(err, ErrInvalid) {
+		t.Errorf("unknown reference: got %v, want ErrInvalid", err)
+	}
+}
+
+func TestSecretRefs(t *testing.T) {
+	project := map[string]string{"TOKEN": "{{ pass://Work/API/token }}", "PLAIN": "p"}
+	env := map[string]string{
+		"A": "{{ pass://My Vault/My Item/password }}",
+		"B": "user:{{pass://Work/DB/password}}@{{ project.PLAIN }}",
+		"C": "{{ project.TOKEN }}",
+	}
+	want := []string{"pass://My Vault/My Item/password", "pass://Work/API/token", "pass://Work/DB/password"}
+	if got := secretRefs(env, project); !slices.Equal(got, want) {
+		t.Errorf("secretRefs = %v, want %v", got, want)
+	}
+
+	// Checking references doesn't fetch secrets: they count as resolvable.
+	if got := unresolved(env, envSources{project: project}); len(got) != 0 {
+		t.Errorf("unresolved = %v", got)
+	}
+
+	src := envSources{project: project, secrets: map[string]string{
+		want[0]: "s3cret", want[1]: "tok", want[2]: "dbpw",
+	}}
+	wantEnv := map[string]string{"A": "s3cret", "B": "user:dbpw@p", "C": "tok"}
+	if got := resolveEnv(env, src); !maps.Equal(got, wantEnv) {
+		t.Errorf("resolveEnv = %v, want %v", got, wantEnv)
+	}
+
+	// A secret that only references a password manager stays readable.
+	if got := maskEnv(env, []string{"A", "B"}); got["A"] != env["A"] || got["B"] != identity.SecretMask {
+		t.Errorf("maskEnv = %v", got)
+	}
+}
+
+func TestResolveAppRefs(t *testing.T) {
+	c := &Deployer{cfg: &config.Config{Traefik: config.Traefik{HTTPSPort: "443"}}}
+	svcs := []domain.Service{
+		{Name: "web", Kind: domain.ServiceKindApp, Domain: "shop.example.com", Port: 3000},
+		{Name: "worker", Kind: domain.ServiceKindApp},
+		pgService(),
+	}
+	src := envSources{project: map[string]string{"PUBLIC_URL": "{{ app.web.URL }}/"}, dbs: databasesOf(svcs), apps: c.appURLs(svcs)}
+	env := map[string]string{
+		"APP_URL":  "{{ app.web.URL }}",
+		"HOST":     "{{app.web.DOMAIN}}",
+		"CALLBACK": "{{ app.web.URL }}/auth/callback",
+		"VIA_VAR":  "{{ project.PUBLIC_URL }}",
+		"NO_HOST":  "{{ app.worker.URL }}",
+		"GONE":     "{{ app.gone.DOMAIN }}",
+	}
+	want := map[string]string{
+		"APP_URL": "https://shop.example.com", "HOST": "shop.example.com", "CALLBACK": "https://shop.example.com/auth/callback",
+		"VIA_VAR": "https://shop.example.com/", "NO_HOST": "", "GONE": "",
+	}
+	if got := resolveEnv(env, src); !maps.Equal(got, want) {
+		t.Errorf("resolveEnv = %v, want %v", got, want)
+	}
+	if got, want := unresolved(env, src), []string{"app.gone.DOMAIN", "app.worker.URL"}; !slices.Equal(got, want) {
+		t.Errorf("unresolved = %v, want %v", got, want)
+	}
+	// Before the apps exist (a compose file being checked), app references pass.
+	if got := unresolved(env, envSources{project: src.project}); len(got) != 0 {
+		t.Errorf("unchecked apps: unresolved = %v", got)
+	}
+
+	c.cfg.Traefik.HTTPSPort = "8443"
+	src.apps = c.appURLs(svcs)
+	if got := resolveEnv(map[string]string{"U": "{{ app.web.URL }}", "D": "{{ app.web.DOMAIN }}"}, src); got["U"] != "https://shop.example.com:8443" || got["D"] != "shop.example.com" {
+		t.Errorf("dev HTTPS port: %v", got)
+	}
+
+	renamed := renameAppRefs(map[string]string{"A": "{{ app.web.URL }}/x", "B": "{{ app.webby.URL }}"}, "web", "front")
+	if renamed["A"] != "{{ app.front.URL }}/x" || renamed["B"] != "{{ app.webby.URL }}" {
+		t.Errorf("renameAppRefs = %v", renamed)
+	}
+}

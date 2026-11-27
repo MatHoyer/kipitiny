@@ -6,11 +6,10 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 type setProjectEnvIn struct {
@@ -72,7 +71,7 @@ func (t *tools) getProjectCompose(ctx context.Context, _ *mcp.CallToolRequest, i
 	if err != nil {
 		return nil, getProjectComposeOut{}, friendly(err)
 	}
-	out, err := t.c.ExportCompose(ctx, project.ID, core.ExportOptions{Service: in.Service})
+	out, err := t.c.ExportCompose(ctx, project.ID, deploy.ExportOptions{Service: in.Service})
 	if err != nil {
 		return nil, getProjectComposeOut{}, friendly(err)
 	}
@@ -87,16 +86,16 @@ type applyProjectComposeIn struct {
 	Confirm string `json:"confirm,omitempty" jsonschema:"the project name, required with prune"`
 }
 
-func (t *tools) applyProjectCompose(ctx context.Context, _ *mcp.CallToolRequest, in applyProjectComposeIn) (*mcp.CallToolResult, core.ComposePlan, error) {
-	out, err := mutate(ctx, t.c, "apply_project_compose", in.Project, func() (core.ComposePlan, error) {
+func (t *tools) applyProjectCompose(ctx context.Context, _ *mcp.CallToolRequest, in applyProjectComposeIn) (*mcp.CallToolResult, deploy.ComposePlan, error) {
+	out, err := mutate(ctx, t.c, "apply_project_compose", in.Project, func() (deploy.ComposePlan, error) {
 		project, err := t.project(ctx, in.Project, identity.PermSettings)
 		if err != nil {
-			return core.ComposePlan{}, err
+			return deploy.ComposePlan{}, err
 		}
 		if in.Prune && !in.DryRun && in.Confirm != project.Name {
-			return core.ComposePlan{}, errors.New("prune deletes apps and their data: confirm must repeat the project name")
+			return deploy.ComposePlan{}, errors.New("prune deletes apps and their data: confirm must repeat the project name")
 		}
-		return t.c.ApplyCompose(ctx, project.ID, []byte(in.Compose), core.ApplyOptions{DryRun: in.DryRun, Prune: in.Prune, Deploy: true})
+		return t.c.ApplyCompose(ctx, project.ID, []byte(in.Compose), deploy.ApplyOptions{DryRun: in.DryRun, Prune: in.Prune, Deploy: true})
 	})
 	return nil, out, err
 }

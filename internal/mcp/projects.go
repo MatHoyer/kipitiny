@@ -9,6 +9,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -238,8 +239,8 @@ type linkProjectGitIn struct {
 
 type linkProjectGitOut struct {
 	// Plan is what the first sync changes (dry run), or nil once linked.
-	Plan *core.ComposePlan `json:"plan,omitempty"`
-	Link *GitLink          `json:"link,omitempty"`
+	Plan *deploy.ComposePlan `json:"plan,omitempty"`
+	Link *GitLink            `json:"link,omitempty"`
 }
 
 func (t *tools) linkProjectGit(ctx context.Context, _ *mcp.CallToolRequest, in linkProjectGitIn) (*mcp.CallToolResult, linkProjectGitOut, error) {
@@ -279,11 +280,11 @@ type syncProjectGitIn struct {
 	DryRun  bool   `json:"dry_run,omitempty" jsonschema:"only return what the sync would change"`
 }
 
-func (t *tools) syncProjectGit(ctx context.Context, _ *mcp.CallToolRequest, in syncProjectGitIn) (*mcp.CallToolResult, core.ComposePlan, error) {
-	out, err := mutate(ctx, t.c, "sync_project_git", in.Project, func() (core.ComposePlan, error) {
+func (t *tools) syncProjectGit(ctx context.Context, _ *mcp.CallToolRequest, in syncProjectGitIn) (*mcp.CallToolResult, deploy.ComposePlan, error) {
+	out, err := mutate(ctx, t.c, "sync_project_git", in.Project, func() (deploy.ComposePlan, error) {
 		p, err := t.project(ctx, in.Project, identity.PermGit)
 		if err != nil {
-			return core.ComposePlan{}, err
+			return deploy.ComposePlan{}, err
 		}
 		return t.c.SyncProjectGit(ctx, p.ID, in.DryRun)
 	})
@@ -301,8 +302,8 @@ type serviceActionOut struct {
 
 func (t *tools) serviceAction(ctx context.Context, _ *mcp.CallToolRequest, in serviceActionIn) (*mcp.CallToolResult, serviceActionOut, error) {
 	out, err := mutate(ctx, t.c, "service_action", in.Service, func() (serviceActionOut, error) {
-		action := core.Action(in.Action)
-		if !slices.Contains([]core.Action{core.ActionStart, core.ActionStop, core.ActionRestart}, action) {
+		action := deploy.Action(in.Action)
+		if !slices.Contains([]deploy.Action{deploy.ActionStart, deploy.ActionStop, deploy.ActionRestart}, action) {
 			return serviceActionOut{}, fmt.Errorf("action must be start, stop or restart")
 		}
 		svc, err := t.service(ctx, in.Service, identity.PermDeploy)

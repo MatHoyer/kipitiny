@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/moby/moby/api/types/container"
@@ -99,7 +100,7 @@ func (f flow) project(t *testing.T, name string) domain.Project {
 	return p
 }
 
-func (f flow) service(t *testing.T, projectID string, in ServiceInput) domain.Service {
+func (f flow) service(t *testing.T, projectID string, in deploy.ServiceInput) domain.Service {
 	t.Helper()
 	if in.Replicas == 0 {
 		in.Replicas = 1
@@ -174,7 +175,7 @@ func (f flow) log(t *testing.T, deploymentID string) {
 // running lists the deployments of svc's running containers.
 func (f flow) running(t *testing.T, svc domain.Service) []string {
 	t.Helper()
-	cts, err := f.c.serviceContainers(f.ctx, svc)
+	cts, err := f.c.ServiceContainers(f.ctx, svc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,14 +202,14 @@ func (f flow) current(t *testing.T, svc domain.Service) string {
 func TestDeployRolloutRollbackFlowDocker(t *testing.T) {
 	f := newFlow(t)
 	p := f.project(t, "shop")
-	web := f.service(t, p.ID, ServiceInput{Name: "web", Kind: domain.ServiceKindApp, Image: "nginx:1.29-alpine", Port: 80})
+	web := f.service(t, p.ID, deploy.ServiceInput{Name: "web", Kind: domain.ServiceKindApp, Image: "nginx:1.29-alpine", Port: 80})
 
-	first := f.ok(t)(f.c.Deploy(f.ctx, web.ID, DeployOptions{}))
+	first := f.ok(t)(f.c.Deploy(f.ctx, web.ID, deploy.DeployOptions{}))
 	if got := f.running(t, web); len(got) != 1 || got[0] != first.ID || f.current(t, web) != first.ID {
 		t.Fatalf("after the first deploy: running %v, current %s, want %s", got, f.current(t, web), first.ID)
 	}
 
-	second := f.ok(t)(f.c.Deploy(f.ctx, web.ID, DeployOptions{Tag: "1.28-alpine"}))
+	second := f.ok(t)(f.c.Deploy(f.ctx, web.ID, deploy.DeployOptions{Tag: "1.28-alpine"}))
 	if got := f.running(t, web); len(got) != 1 || got[0] != second.ID || f.current(t, web) != second.ID {
 		t.Fatalf("after the rollout: running %v, current %s, want %s", got, f.current(t, web), second.ID)
 	}
@@ -217,7 +218,7 @@ func TestDeployRolloutRollbackFlowDocker(t *testing.T) {
 	}
 
 	// A tag that doesn't exist never deploys: the running version stays.
-	broken, err := f.c.Deploy(f.ctx, web.ID, DeployOptions{Tag: "x"})
+	broken, err := f.c.Deploy(f.ctx, web.ID, deploy.DeployOptions{Tag: "x"})
 	if err == nil {
 		if broken = f.deployed(t, broken.ID); broken.Status == domain.DeploymentSucceeded {
 			t.Fatalf("a missing tag deployed")
@@ -241,9 +242,9 @@ func TestDeployRolloutRollbackFlowDocker(t *testing.T) {
 func TestReconcileAfterRestartFlowDocker(t *testing.T) {
 	f := newFlow(t)
 	p := f.project(t, "shop")
-	web := f.service(t, p.ID, ServiceInput{Name: "web", Kind: domain.ServiceKindApp, Image: "nginx:1.29-alpine", Port: 80, Replicas: 2})
-	dep := f.ok(t)(f.c.Deploy(f.ctx, web.ID, DeployOptions{}))
-	cts, err := f.c.serviceContainers(f.ctx, web)
+	web := f.service(t, p.ID, deploy.ServiceInput{Name: "web", Kind: domain.ServiceKindApp, Image: "nginx:1.29-alpine", Port: 80, Replicas: 2})
+	dep := f.ok(t)(f.c.Deploy(f.ctx, web.ID, deploy.DeployOptions{}))
+	cts, err := f.c.ServiceContainers(f.ctx, web)
 	if err != nil || len(cts) != 2 {
 		t.Fatalf("replicas: %d, %v", len(cts), err)
 	}
@@ -277,11 +278,11 @@ func TestReconcileAfterRestartFlowDocker(t *testing.T) {
 		t.Errorf("orphan kept: %d", len(left))
 	}
 	// A second pass changes nothing.
-	before, _ := f.c.serviceContainers(f.ctx, web)
+	before, _ := f.c.ServiceContainers(f.ctx, web)
 	if err := restarted.reconcile(f.ctx); err != nil {
 		t.Fatal(err)
 	}
-	after, _ := f.c.serviceContainers(f.ctx, web)
+	after, _ := f.c.ServiceContainers(f.ctx, web)
 	if containerIDs(before) != containerIDs(after) {
 		t.Errorf("a second reconcile touched running replicas: %s, then %s", containerIDs(before), containerIDs(after))
 	}
@@ -308,7 +309,7 @@ func TestComposeFlowDocker(t *testing.T) {
     image: nginx:1.29-alpine
     depends_on: [db]
 `
-	plan, err := f.c.ApplyCompose(f.ctx, p.ID, []byte(compose), ApplyOptions{Deploy: true})
+	plan, err := f.c.ApplyCompose(f.ctx, p.ID, []byte(compose), deploy.ApplyOptions{Deploy: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,12 +338,12 @@ func TestComposeFlowDocker(t *testing.T) {
 func TestDatabaseBackupFlowDocker(t *testing.T) {
 	f := newFlow(t)
 	p := f.project(t, "shop")
-	db := f.service(t, p.ID, ServiceInput{Name: "db", Kind: domain.ServiceKindPostgres, Image: data.DefaultPostgresImage})
-	f.ok(t)(f.c.Deploy(f.ctx, db.ID, DeployOptions{}))
+	db := f.service(t, p.ID, deploy.ServiceInput{Name: "db", Kind: domain.ServiceKindPostgres, Image: data.DefaultPostgresImage})
+	f.ok(t)(f.c.Deploy(f.ctx, db.ID, deploy.DeployOptions{}))
 	db, _ = f.c.store.GetService(f.ctx, db.ID)
 	psql := func(sql string) string {
 		t.Helper()
-		cts, err := f.c.serviceContainers(f.ctx, db)
+		cts, err := f.c.ServiceContainers(f.ctx, db)
 		if err != nil || len(cts) != 1 {
 			t.Fatalf("db containers: %d, %v", len(cts), err)
 		}
@@ -401,16 +402,16 @@ func TestDatabaseBackupFlowDocker(t *testing.T) {
 func TestPreviewFlowDocker(t *testing.T) {
 	f := newFlow(t)
 	p := f.project(t, "shop")
-	web := f.service(t, p.ID, ServiceInput{Name: "web", Kind: domain.ServiceKindApp, Image: "nginx:1.29-alpine", Port: 80, Domain: "shop.localhost"})
-	parent := f.ok(t)(f.c.Deploy(f.ctx, web.ID, DeployOptions{}))
+	web := f.service(t, p.ID, deploy.ServiceInput{Name: "web", Kind: domain.ServiceKindApp, Image: "nginx:1.29-alpine", Port: 80, Domain: "shop.localhost"})
+	parent := f.ok(t)(f.c.Deploy(f.ctx, web.ID, deploy.DeployOptions{}))
 
-	if _, err := f.c.DeployPreview(f.ctx, p.ID, "pr-1", PreviewOptions{}); err == nil {
+	if _, err := f.c.DeployPreview(f.ctx, p.ID, "pr-1", deploy.PreviewOptions{}); err == nil {
 		t.Error("a preview without a base domain")
 	}
-	if _, err := f.c.SetPreviewSettings(f.ctx, p.ID, PreviewSettingsInput{BaseDomain: "preview.localhost"}); err != nil {
+	if _, err := f.c.SetPreviewSettings(f.ctx, p.ID, deploy.PreviewSettingsInput{BaseDomain: "preview.localhost"}); err != nil {
 		t.Fatal(err)
 	}
-	v, err := f.c.DeployPreview(f.ctx, p.ID, "pr-1", PreviewOptions{})
+	v, err := f.c.DeployPreview(f.ctx, p.ID, "pr-1", deploy.PreviewOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

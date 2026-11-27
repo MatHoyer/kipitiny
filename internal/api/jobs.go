@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 )
 
 func (a *API) listJobs(w http.ResponseWriter, r *http.Request) {
@@ -17,7 +17,7 @@ func (a *API) listJobs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createJob(w http.ResponseWriter, r *http.Request) {
-	var in core.JobInput
+	var in deploy.JobInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -30,7 +30,7 @@ func (a *API) createJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateJob(w http.ResponseWriter, r *http.Request) {
-	var in core.JobInput
+	var in deploy.JobInput
 	if !decode(w, r, &in) {
 		return
 	}

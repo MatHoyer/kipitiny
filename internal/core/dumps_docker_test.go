@@ -14,6 +14,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
@@ -24,7 +25,7 @@ import (
 func dumpTestDB(t *testing.T, kind domain.ServiceKind) (*Core, context.Context, domain.Service, func(string) string) {
 	t.Helper()
 	c, ctx, projectID := dumpTestCore(t)
-	svc, exec := startTestDB(ctx, t, c, projectID, ServiceInput{Name: "db", Kind: kind})
+	svc, exec := startTestDB(ctx, t, c, projectID, deploy.ServiceInput{Name: "db", Kind: kind})
 	return c, ctx, svc, exec
 }
 
@@ -53,15 +54,15 @@ func dumpTestCore(t *testing.T) (*Core, context.Context, string) {
 
 // startTestDB creates the database service in in project projectID and
 // runs it like a deploy would; exec runs a shell command in its container.
-func startTestDB(ctx context.Context, t *testing.T, c *Core, projectID string, in ServiceInput) (domain.Service, func(string) string) {
+func startTestDB(ctx context.Context, t *testing.T, c *Core, projectID string, in deploy.ServiceInput) (domain.Service, func(string) string) {
 	t.Helper()
 	dk := c.dockerFor(domain.LocalServerID)
-	svc, err := c.serviceFromInput(projectID, in)
+	v, err := c.CreateService(ctx, projectID, in)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.ServerID = domain.LocalServerID
-	if svc, err = c.store.CreateService(ctx, svc); err != nil {
+	svc, err := c.store.GetService(ctx, v.ID) // unmasked, on the project's server
+	if err != nil {
 		t.Fatal(err)
 	}
 	if err := c.store.SetCurrentDeployment(ctx, svc.ID, "D1"); err != nil {
@@ -214,7 +215,7 @@ func TestDashPasswordDocker(t *testing.T) {
 		t.Run(string(kind), func(t *testing.T) {
 			c, ctx, projectID := dumpTestCore(t)
 			ctx = identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
-			svc, _ := startTestDB(ctx, t, c, projectID, ServiceInput{Name: "db", Kind: kind, Password: "--dash" + identity.RandomToken(12)})
+			svc, _ := startTestDB(ctx, t, c, projectID, deploy.ServiceInput{Name: "db", Kind: kind, Password: "--dash" + identity.RandomToken(12)})
 			if kind == domain.ServiceKindRedis {
 				if _, err := c.RedisScan(ctx, svc.ID, "0", "*", 10); err != nil {
 					t.Fatalf("scan: %v", err)

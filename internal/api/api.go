@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
@@ -458,7 +459,7 @@ func (a *API) setProjectSleep(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) setMaintenance(w http.ResponseWriter, r *http.Request) {
-	var in core.MaintenanceInput
+	var in deploy.MaintenanceInput
 	if !decode(w, r, &in) {
 		return
 	}

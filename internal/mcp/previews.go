@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -23,7 +24,7 @@ type listPreviewsIn struct {
 }
 
 type listPreviewsOut struct {
-	Previews []core.PreviewView `json:"previews"`
+	Previews []deploy.PreviewView `json:"previews"`
 }
 
 func (t *tools) listPreviews(ctx context.Context, _ *mcp.CallToolRequest, in listPreviewsIn) (*mcp.CallToolResult, listPreviewsOut, error) {
@@ -49,17 +50,17 @@ type deployPreviewIn struct {
 	Seed    bool              `json:"seed,omitempty" jsonschema:"fill the databases a new preview gets with the project's latest backups, anonymized or as is, as the preview settings say (refused when they say nothing)"`
 }
 
-func (t *tools) deployPreview(ctx context.Context, _ *mcp.CallToolRequest, in deployPreviewIn) (*mcp.CallToolResult, core.PreviewView, error) {
-	out, err := mutate(ctx, t.c, "deploy_preview", in.Project+"/"+in.Name, func() (core.PreviewView, error) {
+func (t *tools) deployPreview(ctx context.Context, _ *mcp.CallToolRequest, in deployPreviewIn) (*mcp.CallToolResult, deploy.PreviewView, error) {
+	out, err := mutate(ctx, t.c, "deploy_preview", in.Project+"/"+in.Name, func() (deploy.PreviewView, error) {
 		p, err := t.project(ctx, in.Project, identity.PermDeploy)
 		if err != nil {
-			return core.PreviewView{}, err
+			return deploy.PreviewView{}, err
 		}
-		opts := core.PreviewOptions{Tags: in.Tags, Branch: in.Branch, Commit: in.Commit, Env: in.Env, Seed: in.Seed}
+		opts := deploy.PreviewOptions{Tags: in.Tags, Branch: in.Branch, Commit: in.Commit, Env: in.Env, Seed: in.Seed}
 		if in.TTL != "" {
 			d, err := time.ParseDuration(in.TTL)
 			if err != nil {
-				return core.PreviewView{}, err
+				return deploy.PreviewView{}, err
 			}
 			opts.TTLSeconds = int(d.Seconds())
 		}
@@ -128,7 +129,7 @@ func (t *tools) setPreviewSettings(ctx context.Context, _ *mcp.CallToolRequest, 
 		if err != nil {
 			return domain.PreviewSettings{}, err
 		}
-		next := core.PreviewSettingsInput{BaseDomain: ps.BaseDomain, Env: ps.Env, Inherit: ps.Inherit,
+		next := deploy.PreviewSettingsInput{BaseDomain: ps.BaseDomain, Env: ps.Env, Inherit: ps.Inherit,
 			TTLSeconds: ps.TTLSeconds, SleepAfterSeconds: ps.SleepAfterSeconds, Seed: ps.SeedMode}
 		next.Secrets = slices.DeleteFunc(ps.Secrets, func(k string) bool { _, set := in.Set[k]; return set })
 		maps.Copy(next.Env, in.Set)

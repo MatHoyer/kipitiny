@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/moby/moby/api/types/container"
@@ -191,7 +192,7 @@ func sampleServer(ctx context.Context, dk *docker.Client, svcs map[string]domain
 	)
 	for _, ct := range res.Items {
 		svc, ok := svcs[ct.Labels[docker.LabelService]]
-		if !ok || !isActive(ct, svc) {
+		if !ok || !deploy.IsActive(ct, svc) {
 			continue
 		}
 		wg.Go(func() {

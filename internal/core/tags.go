@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -13,15 +12,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
-// Tags group projects and services in the UI. They are free-form names;
-// a tag's color is the one a user picked, else one derived from its name.
-
-const (
-	maxTags   = 10
-	maxTagLen = 32
-)
-
-var tagRe = regexp.MustCompile(`^[\p{L}\p{N}][\p{L}\p{N} ._/:-]*$`)
+// A tag's color is the one a user picked, else one derived from its name.
 
 // TagColors is the palette tags take their color from, named as the UI's
 // color scale so both themes have a shade of each.
@@ -50,34 +41,9 @@ func AutoTagColor(name string) string {
 	return TagColors[h.Sum32()%uint32(len(TagColors)-1)]
 }
 
-// normalizeTag lowercases a tag and collapses its spaces.
-func normalizeTag(t string) string {
-	return strings.ToLower(strings.Join(strings.Fields(t), " "))
-}
-
-// normalizeTags returns the valid, distinct tags, sorted.
-func normalizeTags(tags []string) ([]string, error) {
-	out := []string{}
-	for _, t := range tags {
-		t = normalizeTag(t)
-		if t == "" || slices.Contains(out, t) {
-			continue
-		}
-		if len([]rune(t)) > maxTagLen || !tagRe.MatchString(t) {
-			return nil, fmt.Errorf("%w: tag %q must be up to %d letters, digits, spaces and . _ / : -", ErrInvalid, t, maxTagLen)
-		}
-		out = append(out, t)
-	}
-	if len(out) > maxTags {
-		return nil, fmt.Errorf("%w: up to %d tags", ErrInvalid, maxTags)
-	}
-	slices.Sort(out)
-	return out, nil
-}
-
 // SetProjectTags replaces a project's tags.
 func (c *Core) SetProjectTags(ctx context.Context, projectID string, tags []string) (domain.Project, error) {
-	tags, err := normalizeTags(tags)
+	tags, err := domain.NormalizeTags(tags)
 	if err != nil {
 		return domain.Project{}, err
 	}
@@ -85,27 +51,6 @@ func (c *Core) SetProjectTags(ctx context.Context, projectID string, tags []stri
 		return domain.Project{}, err
 	}
 	return c.GetProject(ctx, projectID)
-}
-
-// SetServiceTags replaces a service's tags. A git-linked project's compose
-// file owns its services' tags (x-kipitiny.tags).
-func (c *Core) SetServiceTags(ctx context.Context, serviceID string, tags []string) (ServiceView, error) {
-	tags, err := normalizeTags(tags)
-	if err != nil {
-		return ServiceView{}, err
-	}
-	svc, err := c.store.GetService(ctx, serviceID)
-	if err != nil {
-		return ServiceView{}, err
-	}
-	if err := c.checkGitOwned(ctx, svc.ProjectID); err != nil {
-		return ServiceView{}, err
-	}
-	if err := c.store.SetServiceTags(ctx, svc.ID, tags); err != nil {
-		return ServiceView{}, err
-	}
-	svc.Tags = tags
-	return c.view(ctx, svc)
 }
 
 // ListTags returns the tags of the projects and services the caller sees,
@@ -135,7 +80,7 @@ func (c *Core) ListTags(ctx context.Context) ([]Tag, error) {
 // the one derived from its name. Admins may color any tag, members those
 // on a project they may change the settings of.
 func (c *Core) SetTagColor(ctx context.Context, name, color string) (Tag, error) {
-	name = normalizeTag(name)
+	name = domain.NormalizeTag(name)
 	if color != "" && !slices.Contains(TagColors, color) {
 		return Tag{}, fmt.Errorf("%w: color must be one of %s", ErrInvalid, strings.Join(TagColors, ", "))
 	}

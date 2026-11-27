@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 )
 
 func (a *API) listPreviews(w http.ResponseWriter, r *http.Request) {
@@ -19,7 +19,7 @@ func (a *API) listPreviews(w http.ResponseWriter, r *http.Request) {
 // deployPreview creates or updates a preview; changed services deploy in
 // the background (the CLI waits for them).
 func (a *API) deployPreview(w http.ResponseWriter, r *http.Request) {
-	var opts core.PreviewOptions
+	var opts deploy.PreviewOptions
 	if !decode(w, r, &opts) {
 		return
 	}
@@ -49,7 +49,7 @@ func (a *API) previewSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) setPreviewSettings(w http.ResponseWriter, r *http.Request) {
-	var in core.PreviewSettingsInput
+	var in deploy.PreviewSettingsInput
 	if !decode(w, r, &in) {
 		return
 	}

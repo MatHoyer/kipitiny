@@ -74,10 +74,10 @@ func (c *Core) OpenServiceTerminal(ctx context.Context, serviceID, containerRef,
 	if err != nil {
 		return nil, err
 	}
-	if err := c.wakeFor(ctx, svc); err != nil {
+	if err := c.WakeFor(ctx, svc); err != nil {
 		return nil, err
 	}
-	cts, err := c.activeContainers(ctx, svc)
+	cts, err := c.ActiveContainers(ctx, svc)
 	if err != nil {
 		return nil, err
 	}

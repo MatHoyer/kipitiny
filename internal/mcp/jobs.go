@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -52,9 +53,9 @@ func (t *tools) setJob(ctx context.Context, _ *mcp.CallToolRequest, in setJobIn)
 		if err != nil && !errors.Is(err, domain.ErrNotFound) {
 			return core.JobView{}, err
 		}
-		j := core.JobInput{Name: in.Job, Enabled: true}
+		j := deploy.JobInput{Name: in.Job, Enabled: true}
 		if exists {
-			j = core.JobInput{Name: cur.Name, Command: cur.Command, Cron: cur.Cron, TimeoutSec: cur.TimeoutSec, Enabled: cur.Enabled}
+			j = deploy.JobInput{Name: cur.Name, Command: cur.Command, Cron: cur.Cron, TimeoutSec: cur.TimeoutSec, Enabled: cur.Enabled}
 		} else if in.Command == nil || in.Cron == nil {
 			return core.JobView{}, fmt.Errorf("a new job needs a command and a cron")
 		}

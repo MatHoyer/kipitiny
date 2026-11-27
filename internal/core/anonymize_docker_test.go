@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 )
 
 // anonymizeRoundTrip backs svc up (seed writes its data), turns on
@@ -33,7 +35,7 @@ func anonymizeRoundTrip(ctx context.Context, t *testing.T, c *Core, svc, into do
 		t.Fatal(err)
 	}
 	// Turning anonymized seeds on makes the copy.
-	if _, err := c.SetPreviewSettings(ctx, svc.ProjectID, PreviewSettingsInput{Seed: domain.SeedAnonymized}); err != nil {
+	if _, err := c.SetPreviewSettings(ctx, svc.ProjectID, deploy.PreviewSettingsInput{Seed: domain.SeedAnonymized}); err != nil {
 		t.Fatal(err)
 	}
 	cp := waitCopy(t, c, b.ID, "")
@@ -107,8 +109,20 @@ func restoreAndWait(ctx context.Context, t *testing.T, c *Core, backupID string,
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := c.waitRestore(ctx, svc.ID, r.ID); err != nil {
-		t.Fatalf("restore: %v", err)
+	for deadline := time.Now().Add(data.RestoreTimeout); ; time.Sleep(time.Second) {
+		rs, err := c.store.ListRestores(ctx, svc.ID, 5)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i := slices.IndexFunc(rs, func(x domain.Restore) bool { return x.ID == r.ID && x.Status != domain.OpRunning }); i >= 0 {
+			if rs[i].Status != domain.OpSucceeded {
+				t.Fatalf("restore: %s", rs[i].Error)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("restore: still running")
+		}
 	}
 }
 
@@ -194,7 +208,7 @@ func TestAnonymizeDockerMongo(t *testing.T) {
 	c, ctx, svc, prodExec := dumpTestDB(t, domain.ServiceKindMongoDB)
 	// A restore keeps the collections an archive lacks: into a fresh
 	// database, as a preview's.
-	fresh, exec := startTestDB(ctx, t, c, svc.ProjectID, ServiceInput{Name: "fresh", Kind: domain.ServiceKindMongoDB})
+	fresh, exec := startTestDB(ctx, t, c, svc.ProjectID, deploy.ServiceInput{Name: "fresh", Kind: domain.ServiceKindMongoDB})
 	mongo := func(exec func(string) string, js string) string {
 		return exec(`mongosh --quiet "mongodb://$MONGO_INITDB_ROOT_USERNAME:$MONGO_INITDB_ROOT_PASSWORD@127.0.0.1/app?authSource=admin" --eval '` + js + `'`)
 	}

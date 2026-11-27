@@ -7,13 +7,13 @@ import (
 	"net/http"
 
 	"github.com/kipit-labs/kipitiny/internal/compose"
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 )
 
 // exportCompose returns a project (or ?service=name) as a compose file,
 // secrets as ${NAME} variables without values.
 func (a *API) exportCompose(w http.ResponseWriter, r *http.Request) {
-	out, err := a.core.ExportCompose(r.Context(), r.PathValue("id"), core.ExportOptions{Service: r.URL.Query().Get("service")})
+	out, err := a.core.ExportCompose(r.Context(), r.PathValue("id"), deploy.ExportOptions{Service: r.URL.Query().Get("service")})
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -83,7 +83,7 @@ func (a *API) applyCompose(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	plan, err := a.core.ApplyCompose(r.Context(), r.PathValue("id"), []byte(body.Compose), core.ApplyOptions{
+	plan, err := a.core.ApplyCompose(r.Context(), r.PathValue("id"), []byte(body.Compose), deploy.ApplyOptions{
 		Env: env, Prune: body.Prune, DryRun: body.DryRun, Deploy: body.Deploy,
 	})
 	if err != nil {

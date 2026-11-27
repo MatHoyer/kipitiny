@@ -14,6 +14,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 )
 
 // TestScheduledJobsDocker runs jobs of an app on the local Docker daemon:
@@ -65,7 +66,7 @@ func TestScheduledJobsDocker(t *testing.T) {
 		{"fail", "echo oops >&2; exit 3", 60, domain.OpFailed, 3, "oops", "exited with code 3"},
 		{"slow", "echo started; sleep 60", 2, domain.OpFailed, -1, "started", "timed out after 2s"},
 	} {
-		j, err := c.CreateJob(ctx, svc.ID, JobInput{Name: tc.name, Command: tc.command, Cron: "@yearly", TimeoutSec: tc.timeout})
+		j, err := c.CreateJob(ctx, svc.ID, deploy.JobInput{Name: tc.name, Command: tc.command, Cron: "@yearly", TimeoutSec: tc.timeout})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -98,7 +99,7 @@ func TestScheduledJobsDocker(t *testing.T) {
 	}
 	// The run's goroutine removes the container once it recorded the run.
 	time.Sleep(time.Second)
-	if cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: jobComponent, docker.LabelProject: p.ID}); err != nil || len(cts) > 0 {
+	if cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: deploy.JobComponent, docker.LabelProject: p.ID}); err != nil || len(cts) > 0 {
 		t.Errorf("job containers left: %d %v", len(cts), err)
 	}
 }

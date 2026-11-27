@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -31,8 +32,8 @@ type NewProject struct {
 
 // TemplateResult is what installing a template did, or would do.
 type TemplateResult struct {
-	ProjectID string      `json:"projectId,omitempty"`
-	Plan      ComposePlan `json:"plan"`
+	ProjectID string             `json:"projectId,omitempty"`
+	Plan      deploy.ComposePlan `json:"plan"`
 }
 
 func (c *Core) ListTemplates() []templates.Template { return templates.List() }
@@ -67,12 +68,12 @@ func (c *Core) InstallTemplate(ctx context.Context, id string, in TemplateInstal
 	if err != nil {
 		return TemplateResult{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
-	opts := ApplyOptions{Env: env, Deploy: true}
+	opts := deploy.ApplyOptions{Env: env, Deploy: true}
 	data := []byte(t.Compose)
 	if in.ProjectID != "" {
 		// Only adds: a service of the template's name already there would
 		// be changed by the apply.
-		plan, err := c.ApplyCompose(ctx, in.ProjectID, data, ApplyOptions{Env: env, DryRun: true})
+		plan, err := c.ApplyCompose(ctx, in.ProjectID, data, deploy.ApplyOptions{Env: env, DryRun: true})
 		if err != nil {
 			return TemplateResult{ProjectID: in.ProjectID, Plan: plan}, err
 		}
@@ -96,23 +97,19 @@ func (c *Core) InstallTemplate(ctx context.Context, id string, in TemplateInstal
 	if _, err := c.store.GetServer(ctx, np.ServerID); err != nil {
 		return TemplateResult{}, fmt.Errorf("%w: unknown server", ErrInvalid)
 	}
-	a, err := c.planCompose(ctx, domain.Project{Name: np.Name, ServerID: np.ServerID}, nil, data, ApplyOptions{Env: env, DryRun: true}, false)
-	if a == nil || err != nil || in.DryRun {
-		var plan ComposePlan
-		if a != nil {
-			plan = a.plan
-		}
+	plan, err := c.PlanCompose(ctx, domain.Project{Name: np.Name, ServerID: np.ServerID}, data, deploy.ApplyOptions{Env: env, DryRun: true})
+	if err != nil || in.DryRun {
 		return TemplateResult{Plan: plan}, err
 	}
 	p, err := c.CreateProject(ctx, np.Name, np.ServerID)
 	if err != nil {
 		return TemplateResult{}, err
 	}
-	plan, err := c.ApplyCompose(ctx, p.ID, data, opts)
+	plan, err = c.ApplyCompose(ctx, p.ID, data, opts)
 	return TemplateResult{ProjectID: p.ID, Plan: plan}, err
 }
 
-func serviceNames(cs []ServiceChange) []string {
+func serviceNames(cs []deploy.ServiceChange) []string {
 	names := make([]string, len(cs))
 	for i, c := range cs {
 		names[i] = c.Name

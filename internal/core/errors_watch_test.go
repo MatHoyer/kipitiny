@@ -17,6 +17,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/analytics"
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
@@ -64,9 +65,9 @@ func TestErrorAlerts(t *testing.T) {
 
 	p, _ := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	pr, _ := c.store.CreateProject(ctx, domain.Project{Name: "shop-pr-1", ParentID: p.ID, ServerID: domain.LocalServerID, Preview: domain.Preview{Name: "pr-1"}})
-	v, _ := c.CreateService(ctx, p.ID, ServiceInput{Name: "web", Image: "shop:v2", Errors: true})
+	v, _ := c.CreateService(ctx, p.ID, deploy.ServiceInput{Name: "web", Image: "shop:v2", Errors: true})
 	web, _ := c.store.GetService(ctx, v.ID)
-	v, _ = c.CreateService(ctx, pr.ID, ServiceInput{Name: "web", Image: "shop:v2", Errors: true})
+	v, _ = c.CreateService(ctx, pr.ID, deploy.ServiceInput{Name: "web", Image: "shop:v2", Errors: true})
 	preview, _ := c.store.GetService(ctx, v.ID)
 	if err := cl.SetErrorProjects(ctx, []analytics.ErrorProject{{ID: web.ErrorsProject, Key: web.ErrorsKey}, {ID: preview.ErrorsProject, Key: preview.ErrorsKey}}); err != nil {
 		t.Fatal(err)

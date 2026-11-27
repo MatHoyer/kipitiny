@@ -12,6 +12,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
+	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
@@ -98,7 +99,10 @@ func TestTemplatesDocker(t *testing.T) {
 					}
 					if st := res.Container.State; !st.Running || res.Container.RestartCount > 0 || (st.Health != nil && st.Health.Status == container.Unhealthy) {
 						t.Errorf("%s: %s, %d restart(s)", s.Name, st.Status, res.Container.RestartCount)
-						copyContainerLogs(ctx, dk, []string{ct.ID}, testWriter{t})
+						if rc, err := dk.ContainerLogs(ctx, ct.ID, client.ContainerLogsOptions{ShowStdout: true, ShowStderr: true, Tail: "50"}); err == nil {
+							_, _ = stdcopy.StdCopy(testWriter{t}, testWriter{t}, rc)
+							rc.Close()
+						}
 					}
 				}
 			}

@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 )
 
 func (a *API) listNetworks(w http.ResponseWriter, r *http.Request) {
@@ -16,7 +16,7 @@ func (a *API) listNetworks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createNetwork(w http.ResponseWriter, r *http.Request) {
-	var in core.NetworkInput
+	var in deploy.NetworkInput
 	if !decode(w, r, &in) {
 		return
 	}

@@ -81,11 +81,13 @@ func TestTrimDeployments(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		f, err := c.createDeployLog(svc.ID, d.ID)
-		if err != nil {
+		path := c.DeployLogPath(svc.ID, d.ID)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		f.Close()
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
 		deps = append(deps, d)
 	}
 	// The oldest is current, e.g. after a rollback to it.
@@ -111,7 +113,7 @@ func TestTrimDeployments(t *testing.T) {
 		}
 	}
 	for _, d := range deps[2:4] {
-		if _, err := os.Stat(filepath.Join(c.deployLogDir(svc.ID), d.ID+".log")); !errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(c.DeployLogPath(svc.ID, d.ID)); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("log of trimmed deployment %s still there: %v", d.ID, err)
 		}
 	}

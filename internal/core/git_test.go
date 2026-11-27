@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
@@ -158,20 +159,20 @@ func TestGitApply(t *testing.T) {
 	}
 	gitCtx := fromGitSync(ctx)
 	v1 := "services:\n  web: {image: 'ghcr.io/me/web:1'}\n  api: {image: 'ghcr.io/me/api:1'}\n  db: {image: 'postgres:17-alpine'}\n"
-	if _, err := c.applyCompose(gitCtx, p.ID, []byte(v1), ApplyOptions{}, true); err != nil {
+	if _, _, err := c.ApplyGitCompose(gitCtx, p.ID, []byte(v1), deploy.ApplyOptions{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	svcs := servicesByName(t, c, p.ID)
 
 	// Edits outside the sync are refused; ApplyCompose too.
 	img := "nginx"
-	if _, err := c.UpdateService(ctx, svcs["web"].ID, ServicePatch{Image: &img}); !errors.Is(err, ErrGitManaged) {
+	if _, err := c.UpdateService(ctx, svcs["web"].ID, deploy.ServicePatch{Image: &img}); !errors.Is(err, ErrGitManaged) {
 		t.Errorf("update: %v", err)
 	}
-	if _, err := c.CreateService(ctx, p.ID, ServiceInput{Name: "x", Image: "nginx"}); !errors.Is(err, ErrGitManaged) {
+	if _, err := c.CreateService(ctx, p.ID, deploy.ServiceInput{Name: "x", Image: "nginx"}); !errors.Is(err, ErrGitManaged) {
 		t.Errorf("create: %v", err)
 	}
-	if _, err := c.ApplyCompose(ctx, p.ID, []byte(v1), ApplyOptions{}); !errors.Is(err, ErrGitManaged) {
+	if _, err := c.ApplyCompose(ctx, p.ID, []byte(v1), deploy.ApplyOptions{}); !errors.Is(err, ErrGitManaged) {
 		t.Errorf("apply: %v", err)
 	}
 	if _, err := c.SetUptime(ctx, svcs["web"].ID, monitoring.UptimeInput{Enabled: true}); !errors.Is(err, ErrGitManaged) {
@@ -187,7 +188,7 @@ func TestGitApply(t *testing.T) {
 		t.Fatal(err)
 	}
 	v2 := "services:\n  web: {image: 'ghcr.io/me/web:1'}\n  api: {image: 'ghcr.io/me/api:3'}\n"
-	a, err := c.applyCompose(gitCtx, p.ID, []byte(v2), ApplyOptions{Prune: true}, true)
+	plan, images, err := c.ApplyGitCompose(gitCtx, p.ID, []byte(v2), deploy.ApplyOptions{Prune: true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,11 +196,11 @@ func TestGitApply(t *testing.T) {
 	if svcs["web"].Image != "ghcr.io/me/web:2" || svcs["api"].Image != "ghcr.io/me/api:3" {
 		t.Errorf("images: web %s, api %s", svcs["web"].Image, svcs["api"].Image)
 	}
-	if !svcs["db"].Orphaned || len(a.plan.Orphaned) != 1 {
-		t.Errorf("db not orphaned: %+v", a.plan)
+	if !svcs["db"].Orphaned || len(plan.Orphaned) != 1 {
+		t.Errorf("db not orphaned: %+v", plan)
 	}
 	g, _ := c.store.GetProjectGit(ctx, p.ID)
-	g.Applied = a.images
+	g.Applied = images
 	if err := c.store.SetProjectGitSync(ctx, g); err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +209,7 @@ func TestGitApply(t *testing.T) {
 	}
 
 	v3 := "services:\n  web: {image: 'ghcr.io/me/web:4'}\n  api: {image: 'ghcr.io/me/api:3'}\n"
-	if _, err := c.applyCompose(gitCtx, p.ID, []byte(v3), ApplyOptions{Prune: true}, true); err != nil {
+	if _, _, err := c.ApplyGitCompose(gitCtx, p.ID, []byte(v3), deploy.ApplyOptions{Prune: true}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := servicesByName(t, c, p.ID)["web"].Image; got != "ghcr.io/me/web:4" {
@@ -272,7 +273,7 @@ func TestGitSyncAuthority(t *testing.T) {
 		t.Errorf("sync actor of a restricted token = %+v", a)
 	}
 	file := []byte("services:\n  web: {image: 'nginx'}\n")
-	if _, err := c.applyCompose(fromGitSync(linker), p.ID, file, ApplyOptions{DryRun: true}, true); !errors.Is(err, identity.ErrForbidden) {
+	if _, _, err := c.ApplyGitCompose(fromGitSync(linker), p.ID, file, deploy.ApplyOptions{DryRun: true}, nil); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("git-only sync adding a service: %v", err)
 	}
 	if err := c.store.DeleteAPIToken(ctx, tok.ID); err != nil {
@@ -285,7 +286,7 @@ func TestGitSyncAuthority(t *testing.T) {
 	if linker, err = c.asLinker(ctx, g); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.applyCompose(fromGitSync(linker), p.ID, file, ApplyOptions{DryRun: true}, true); err != nil {
+	if _, _, err := c.ApplyGitCompose(fromGitSync(linker), p.ID, file, deploy.ApplyOptions{DryRun: true}, nil); err != nil {
 		t.Errorf("admin sync: %v", err)
 	}
 }

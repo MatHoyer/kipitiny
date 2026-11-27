@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
@@ -13,19 +12,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
-func TestNormalizeTags(t *testing.T) {
-	got, err := normalizeTags([]string{" Prod ", "prod", "", "client  A", "v1.2/eu:west_x-y"})
-	if err != nil || !slices.Equal(got, []string{"client a", "prod", "v1.2/eu:west_x-y"}) {
-		t.Errorf("normalizeTags = %q, %v", got, err)
-	}
-	if got, err := normalizeTags(nil); err != nil || got == nil || len(got) != 0 {
-		t.Errorf("no tags = %#v, %v", got, err)
-	}
-	for _, bad := range [][]string{{"-x"}, {"a,b"}, {strings.Repeat("a", maxTagLen+1)}, {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"}} {
-		if _, err := normalizeTags(bad); !errors.Is(err, ErrInvalid) {
-			t.Errorf("normalizeTags(%q) = %v, want ErrInvalid", bad, err)
-		}
-	}
+func TestAutoTagColor(t *testing.T) {
 	// web/src/lib/tags.ts derives the same colors.
 	for name, want := range map[string]string{"prod": "green", "staging": "amber", "client a": "rose", "été": "red"} {
 		if got := AutoTagColor(name); got != want {
