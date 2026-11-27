@@ -4,39 +4,20 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
+
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
-type ExecOptions struct {
-	Cmd []string
-	Env []string
-	// User runs the process as this user (e.g. "0"); empty is the container's.
-	User string
-	// Stdin, if set, is streamed to the process and then closed.
-	Stdin io.Reader
-	// Stdout receives the process's stdout; nil discards it.
-	Stdout io.Writer
-}
-
-// ExecError is returned when the process exits non-zero.
-type ExecError struct {
-	ExitCode int
-	Stderr   string
-}
-
-func (e *ExecError) Error() string {
-	msg := strings.TrimSpace(e.Stderr)
-	if msg == "" {
-		return fmt.Sprintf("exit code %d", e.ExitCode)
-	}
-	return fmt.Sprintf("exit code %d: %s", e.ExitCode, msg)
-}
+type (
+	ExecOptions = domain.ExecOptions
+	ExecError   = domain.ExecError
+)
 
 // Exec runs a command in a running container, streaming stdin/stdout in
 // constant memory. A non-zero exit yields *ExecError with the stderr tail.
@@ -124,10 +105,10 @@ func (t *tailBuffer) Write(p []byte) (int, error) {
 
 func (t *tailBuffer) String() string { return string(t.buf) }
 
-// RunAttached creates and starts a one-off container, streams stdin into it
+// RunAttachedMoby creates and starts a one-off container, streams stdin into it
 // and its output to out, waits for it to exit and removes it. It returns the
 // exit code.
-func (c *Client) RunAttached(ctx context.Context, opts client.ContainerCreateOptions, stdin io.Reader, out io.Writer) (int, error) {
+func (c *Client) RunAttachedMoby(ctx context.Context, opts client.ContainerCreateOptions, stdin io.Reader, out io.Writer) (int, error) {
 	opts.Config.OpenStdin = stdin != nil
 	opts.Config.StdinOnce = stdin != nil
 	opts.Config.AttachStdin = stdin != nil

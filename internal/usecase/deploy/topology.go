@@ -200,10 +200,10 @@ func (c *Deployer) serverTopology(ctx context.Context, sv domain.Server, project
 	dk := c.mgr.DockerFor(sv.ID)
 	var cts []container.Summary
 	nets := map[string]dockernet.Summary{}
-	cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelManaged: "true"})
+	cts, err := dk.ListSummaries(ctx, map[string]string{docker.LabelManaged: "true"})
 	if err == nil {
 		var ns []dockernet.Summary
-		if ns, err = dk.ListNetworks(ctx); err == nil {
+		if ns, err = dk.ListNetworksMoby(ctx); err == nil {
 			for _, n := range ns {
 				nets[n.Name] = n
 			}

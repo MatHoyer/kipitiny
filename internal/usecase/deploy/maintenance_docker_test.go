@@ -113,7 +113,7 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 	opts.HostConfig.Mounts = opts.HostConfig.Mounts[:1] // the socket, not the real Traefik's ACME volume
 	opts.HostConfig.PortBindings = dockernet.PortMap{dockernet.MustParsePort("443/tcp"): {{HostIP: netip.MustParseAddr("127.0.0.1")}}}
 	opts.NetworkingConfig.EndpointsConfig = map[string]*dockernet.EndpointSettings{netName: {}}
-	traefikID, err := dk.Run(ctx, opts, files...)
+	traefikID, err := dk.RunMoby(ctx, opts, files...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 		labels["traefik.docker.network"] = netName
 		labels[constraint] = "true"
 		labels[docker.LabelProject], labels[docker.LabelService] = p.ID, svc.ID
-		id, err := dk.Run(ctx, client.ContainerCreateOptions{
+		id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{
 			Config:           &container.Config{Image: "busybox", Cmd: []string{"sh", "-c", cmd}, Labels: labels},
 			NetworkingConfig: &dockernet.NetworkingConfig{EndpointsConfig: map[string]*dockernet.EndpointSettings{netName: {}}},
 		})

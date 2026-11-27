@@ -8,6 +8,8 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
+
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // TTY is an interactive process on a pseudo-terminal: an exec in a running
@@ -55,7 +57,7 @@ func consoleSize(cols, rows uint) client.ConsoleSize {
 }
 
 // ExecTTY starts cmd in a running container on a pseudo-terminal.
-func (c *Client) ExecTTY(ctx context.Context, containerID string, cmd, env []string, cols, rows uint) (*TTY, error) {
+func (c *Client) ExecTTY(ctx context.Context, containerID string, cmd, env []string, cols, rows uint) (domain.TTY, error) {
 	size := consoleSize(cols, rows)
 	created, err := c.ExecCreate(ctx, containerID, client.ExecCreateOptions{
 		Cmd:          cmd,
@@ -98,9 +100,9 @@ func (c *Client) ExecTTY(ctx context.Context, containerID string, cmd, env []str
 	}, nil
 }
 
-// RunTTY creates and starts a one-off container on a pseudo-terminal. Close
+// RunTTYMoby creates and starts a one-off container on a pseudo-terminal. Close
 // removes it.
-func (c *Client) RunTTY(ctx context.Context, opts client.ContainerCreateOptions, cols, rows uint) (*TTY, error) {
+func (c *Client) RunTTYMoby(ctx context.Context, opts client.ContainerCreateOptions, cols, rows uint) (*TTY, error) {
 	opts.Config.Tty = true
 	opts.Config.OpenStdin, opts.Config.StdinOnce = true, true
 	opts.Config.AttachStdin, opts.Config.AttachStdout, opts.Config.AttachStderr = true, true, true

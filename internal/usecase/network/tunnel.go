@@ -63,7 +63,7 @@ func (c *Network) ViaTunnel(ctx context.Context, serverID string) bool {
 func (c *Network) EnsureTunnel(ctx context.Context, sv domain.Server) error {
 	dk := c.mgr.DockerFor(sv.ID)
 	token := c.TunnelToken(sv)
-	existing, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: TunnelComponent})
+	existing, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: TunnelComponent})
 	if err != nil {
 		return err
 	}
@@ -95,7 +95,7 @@ func (c *Network) EnsureTunnel(ctx context.Context, sv domain.Server) error {
 	if err := dk.EnsureImage(ctx, opts.Config.Image, c.mgr.RegistryAuth(ctx, opts.Config.Image), ""); err != nil {
 		return fmt.Errorf("pull %s: %w", opts.Config.Image, err)
 	}
-	if _, err := dk.Run(ctx, opts); err != nil {
+	if _, err := dk.RunMoby(ctx, opts); err != nil {
 		return err
 	}
 	c.log.Info("cloudflare tunnel started", "server", sv.Name, "image", opts.Config.Image)

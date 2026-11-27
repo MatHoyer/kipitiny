@@ -30,7 +30,7 @@ func (c *Servers) cleanServer(ctx context.Context, sv domain.Server, svcs []doma
 	}
 	step := func(name string) { c.steps.SetOn(cleanupKey, name, sv.Name) }
 	step(CleanupConnect)
-	if _, err := dk.Ping(ctx, client.PingOptions{}); err != nil {
+	if _, err := dk.Client.Ping(ctx, client.PingOptions{}); err != nil {
 		fail("docker", err)
 		return r
 	}

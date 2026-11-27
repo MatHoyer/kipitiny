@@ -21,51 +21,30 @@ import (
 	"github.com/moby/moby/api/types/registry"
 	"github.com/moby/moby/client"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
+// The label and network conventions are domain's; these names stay until
+// the use cases use domain's.
 const (
-	// ProxyNetwork is shared by Traefik and every public-facing container.
-	ProxyNetwork = "kipitiny-proxy"
-
-	LabelManaged   = "kipitiny.managed"
-	LabelComponent = "kipitiny.component"
-	LabelProject   = "kipitiny.project"
-	LabelService   = "kipitiny.service"
-	LabelReplica   = "kipitiny.replica"
-	LabelDeploy    = "kipitiny.deploy"
-	LabelJob       = "kipitiny.job"
-	// LabelConfigHash lets the manager detect when a container it owns needs
-	// to be recreated because its desired configuration changed.
-	LabelConfigHash = "kipitiny.config-hash"
+	ProxyNetwork    = domain.ProxyNetwork
+	LabelManaged    = domain.LabelManaged
+	LabelComponent  = domain.LabelComponent
+	LabelProject    = domain.LabelProject
+	LabelService    = domain.LabelService
+	LabelReplica    = domain.LabelReplica
+	LabelDeploy     = domain.LabelDeploy
+	LabelJob        = domain.LabelJob
+	LabelConfigHash = domain.LabelConfigHash
 )
 
-// ProjectNetwork is the private network shared by all containers of a project.
-func ProjectNetwork(projectID string) string {
-	return "kipitiny-" + projectID
-}
-
-// ProjectNetworkNamed is a project's network of a compose file: name
-// "default" is the project network.
-func ProjectNetworkNamed(projectID, name string) string {
-	if name == "default" {
-		return ProjectNetwork(projectID)
-	}
-	return ProjectNetwork(projectID) + "-" + name
-}
-
-// customNetworkPrefix starts the names of networks created by hand; project
-// IDs never start with "net-".
-const customNetworkPrefix = "kipitiny-net-"
-
-// CustomNetwork is the Docker name of a network created by hand.
-func CustomNetwork(networkID string) string {
-	return customNetworkPrefix + networkID
-}
-
-// IsCustomNetwork tells whether a Docker network name is one created by hand.
-func IsCustomNetwork(name string) bool {
-	return strings.HasPrefix(name, customNetworkPrefix)
-}
+var (
+	ProjectNetwork      = domain.ProjectNetwork
+	ProjectNetworkNamed = domain.ProjectNetworkNamed
+	CustomNetwork       = domain.CustomNetwork
+	IsCustomNetwork     = domain.IsCustomNetwork
+)
 
 type Client struct {
 	*client.Client
@@ -92,12 +71,7 @@ func New() (*Client, error) {
 	return &Client{Client: c}, nil
 }
 
-type Info struct {
-	Version    string `json:"version"`
-	APIVersion string `json:"apiVersion"`
-	OS         string `json:"os"`
-	Arch       string `json:"arch"`
-}
+type Info = domain.DockerInfo
 
 func (c *Client) Info(ctx context.Context) (Info, error) {
 	v, err := c.ServerVersion(ctx, client.ServerVersionOptions{})
@@ -145,8 +119,8 @@ func (c *Client) DisconnectNetwork(ctx context.Context, name, containerID string
 	return nil
 }
 
-// ListContainers returns all containers (running or not) matching every label.
-func (c *Client) ListContainers(ctx context.Context, labels map[string]string) ([]container.Summary, error) {
+// ListSummaries returns all containers (running or not) matching every label.
+func (c *Client) ListSummaries(ctx context.Context, labels map[string]string) ([]container.Summary, error) {
 	f := make(client.Filters)
 	for k, v := range labels {
 		f.Add("label", k+"="+v)
@@ -205,7 +179,7 @@ func (c *Client) PullImage(ctx context.Context, ref, auth, platform string, w io
 // EnsureImage pulls ref (with auth and platform, see PullImage) only if it
 // is not present locally.
 func (c *Client) EnsureImage(ctx context.Context, ref, auth, platform string) error {
-	if _, err := c.InspectImage(ctx, ref, platform); err == nil {
+	if _, err := c.InspectImageMoby(ctx, ref, platform); err == nil {
 		return nil
 	} else if !cerrdefs.IsNotFound(err) {
 		return err
@@ -213,8 +187,8 @@ func (c *Client) EnsureImage(ctx context.Context, ref, auth, platform string) er
 	return c.PullImage(ctx, ref, auth, platform, io.Discard)
 }
 
-// InspectImage inspects platform's image of ref ("" is the server's).
-func (c *Client) InspectImage(ctx context.Context, ref, platform string) (client.ImageInspectResult, error) {
+// InspectImageMoby inspects platform's image of ref ("" is the server's).
+func (c *Client) InspectImageMoby(ctx context.Context, ref, platform string) (client.ImageInspectResult, error) {
 	p := Platform(platform)
 	if p == nil {
 		return c.ImageInspect(ctx, ref)
@@ -249,15 +223,11 @@ func (c *Client) Login(ctx context.Context, server, username, password string) e
 }
 
 // File is written into a container before it starts.
-type File struct {
-	Path    string // absolute
-	Content []byte
-	Mode    int64 // 0 is 0644
-}
+type File = domain.ContainerFile
 
-// Run creates and starts a container, first writing files into it. If
+// RunMoby creates and starts a container, first writing files into it. If
 // anything fails the container is removed.
-func (c *Client) Run(ctx context.Context, opts client.ContainerCreateOptions, files ...File) (string, error) {
+func (c *Client) RunMoby(ctx context.Context, opts client.ContainerCreateOptions, files ...File) (string, error) {
 	res, err := c.ContainerCreate(ctx, opts)
 	if err != nil {
 		return "", fmt.Errorf("create container %s: %w", opts.Name, err)
@@ -268,7 +238,7 @@ func (c *Client) Run(ctx context.Context, opts client.ContainerCreateOptions, fi
 	if len(files) > 0 {
 		archive, err := tarFiles(files)
 		if err == nil {
-			_, err = c.CopyToContainer(ctx, res.ID, client.CopyToContainerOptions{DestinationPath: "/", Content: archive})
+			_, err = c.Client.CopyToContainer(ctx, res.ID, client.CopyToContainerOptions{DestinationPath: "/", Content: archive})
 		}
 		if err != nil {
 			remove()
@@ -388,8 +358,8 @@ func (c *Client) RemoveContainerAndVolumes(ctx context.Context, id string) error
 	return nil
 }
 
-// ListNetworks returns the networks the manager created.
-func (c *Client) ListNetworks(ctx context.Context) ([]network.Summary, error) {
+// ListNetworksMoby returns the networks the manager created.
+func (c *Client) ListNetworksMoby(ctx context.Context) ([]network.Summary, error) {
 	f := make(client.Filters)
 	f.Add("label", LabelManaged+"=true")
 	res, err := c.NetworkList(ctx, client.NetworkListOptions{Filters: f})

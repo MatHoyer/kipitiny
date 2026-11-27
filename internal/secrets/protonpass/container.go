@@ -188,7 +188,7 @@ func (r *ContainerRunner) start(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("session volume: %w", err)
 	}
 	progress.Report(ctx, secrets.StepHelper)
-	id, err := r.dk.Run(ctx, client.ContainerCreateOptions{
+	id, err := r.dk.RunMoby(ctx, client.ContainerCreateOptions{
 		Name: r.name,
 		Config: &container.Config{
 			Image:      r.image,

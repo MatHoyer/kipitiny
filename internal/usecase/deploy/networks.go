@@ -345,7 +345,7 @@ func (c *Deployer) runContainer(ctx context.Context, dk *docker.Client, spec cli
 			}
 		}
 	}
-	return dk.Run(ctx, spec, files...)
+	return dk.RunMoby(ctx, spec, files...)
 }
 
 // EnsureNetworks creates a server's networks that are missing, e.g. after

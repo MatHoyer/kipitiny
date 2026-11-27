@@ -93,7 +93,7 @@ func startVolumeHelper(ctx context.Context, dk *docker.Client, name string, moun
 	if err := dk.EnsureImage(ctx, volumeHelperImage, "", ""); err != nil {
 		return "", fmt.Errorf("pull %s: %w", volumeHelperImage, err)
 	}
-	return dk.Run(ctx, client.ContainerCreateOptions{
+	return dk.RunMoby(ctx, client.ContainerCreateOptions{
 		Name: name,
 		Config: &container.Config{
 			Image:  volumeHelperImage,

@@ -43,7 +43,7 @@ func TestNetworksDocker(t *testing.T) {
 	}
 	// Not kipitiny.managed: a manager running on this daemon would remove
 	// it as an orphan.
-	id, err := dk.Run(ctx, client.ContainerCreateOptions{
+	id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{
 		Name:   "kipitiny-test-" + strings.ToLower(svc.ID),
 		Config: &container.Config{Image: "busybox", Cmd: []string{"sleep", "300"}, Labels: map[string]string{docker.LabelProject: p.ID, docker.LabelService: svc.ID}},
 	})

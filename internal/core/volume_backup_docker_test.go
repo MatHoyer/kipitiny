@@ -51,7 +51,7 @@ func TestVolumeBackupDocker(t *testing.T) {
 	t.Cleanup(func() { _ = data.RemoveServiceVolumes(context.Background(), dk, svc) })
 
 	// A running replica writing to the volume, stopped during the restore.
-	replica, err := dk.Run(ctx, client.ContainerCreateOptions{
+	replica, err := dk.RunMoby(ctx, client.ContainerCreateOptions{
 		Name: "kipitiny-test-" + strings.ToLower(svc.ID),
 		Config: &container.Config{
 			Image: "busybox:stable",

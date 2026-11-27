@@ -307,7 +307,7 @@ func (c *Deployer) deploy(ctx context.Context, project domain.Project, svc domai
 	if err := dk.PullImage(ctx, svc.Image, c.RegistryAuth(ctx, svc.Image), svc.Runtime.Platform, out); err != nil {
 		return fmt.Errorf("pull %s: %w%s", svc.Image, err, pullHint(err))
 	}
-	if res, err := dk.InspectImage(ctx, svc.Image, svc.Runtime.Platform); err != nil {
+	if res, err := dk.InspectImageMoby(ctx, svc.Image, svc.Runtime.Platform); err != nil {
 		return err
 	} else if err := checkImageLabels(res.Config); err != nil {
 		return err
