@@ -14,8 +14,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 )
 
@@ -194,7 +194,7 @@ type GitLink struct {
 	Drift []string `json:"drift,omitempty"`
 }
 
-func (t *tools) gitLink(ctx context.Context, g core.GitStatus) (GitLink, error) {
+func (t *tools) gitLink(ctx context.Context, g projects.GitStatus) (GitLink, error) {
 	out := GitLink{RepoURL: g.RepoURL, Branch: g.Branch, Path: g.Path, AutoSync: g.AutoSync, PollSeconds: g.PollSeconds,
 		LastCommit: g.LastCommit, LastSynced: g.LastSyncedAt, LastError: g.LastError, Warnings: g.Warnings, Drift: g.Drift}
 	if g.ProviderID != "" {
@@ -202,7 +202,7 @@ func (t *tools) gitLink(ctx context.Context, g core.GitStatus) (GitLink, error) 
 		if err != nil {
 			return GitLink{}, err
 		}
-		if i := slices.IndexFunc(ps, func(p core.GitProviderView) bool { return p.ID == g.ProviderID }); i >= 0 {
+		if i := slices.IndexFunc(ps, func(p projects.GitProviderView) bool { return p.ID == g.ProviderID }); i >= 0 {
 			out.Provider = ps[i].Name
 		}
 	}
@@ -250,13 +250,13 @@ func (t *tools) linkProjectGit(ctx context.Context, _ *mcp.CallToolRequest, in l
 		if err != nil {
 			return linkProjectGitOut{}, err
 		}
-		gi := core.GitInput{RepoURL: in.RepoURL, Branch: in.Branch, Path: in.Path, AutoSync: !in.ManualSync, PollSeconds: in.PollSeconds}
+		gi := projects.GitInput{RepoURL: in.RepoURL, Branch: in.Branch, Path: in.Path, AutoSync: !in.ManualSync, PollSeconds: in.PollSeconds}
 		if in.Provider != "" {
 			ps, err := t.c.ListGitProviders(ctx)
 			if err != nil {
 				return linkProjectGitOut{}, err
 			}
-			i := slices.IndexFunc(ps, func(gp core.GitProviderView) bool { return gp.Name == in.Provider })
+			i := slices.IndexFunc(ps, func(gp projects.GitProviderView) bool { return gp.Name == in.Provider })
 			if i < 0 {
 				return linkProjectGitOut{}, fmt.Errorf("%w: git provider %s", domain.ErrNotFound, in.Provider)
 			}

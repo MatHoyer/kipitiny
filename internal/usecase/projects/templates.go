@@ -1,4 +1,4 @@
-package core
+package projects
 
 import (
 	"context"
@@ -36,16 +36,16 @@ type TemplateResult struct {
 	Plan      deploy.ComposePlan `json:"plan"`
 }
 
-func (c *Core) ListTemplates() []templates.Template { return templates.List() }
+func (c *Projects) ListTemplates() []templates.Template { return templates.List() }
 
 // TemplateLogos are the service logos templates bring, for the UI.
-func (c *Core) TemplateLogos() []templates.Logo { return templates.Logos() }
+func (c *Projects) TemplateLogos() []templates.Logo { return templates.Logos() }
 
 // InstallTemplate applies a template's compose file with the user's inputs
 // as its .env, then deploys what it created. Nothing is pruned: a template
 // only adds to a project. A new project is created only once the file is
 // known to apply.
-func (c *Core) InstallTemplate(ctx context.Context, id string, in TemplateInstall) (TemplateResult, error) {
+func (c *Projects) InstallTemplate(ctx context.Context, id string, in TemplateInstall) (TemplateResult, error) {
 	t, ok := templates.Get(id)
 	if !ok {
 		return TemplateResult{}, fmt.Errorf("%w: template %s", domain.ErrNotFound, id)
@@ -66,14 +66,14 @@ func (c *Core) InstallTemplate(ctx context.Context, id string, in TemplateInstal
 		return b
 	})
 	if err != nil {
-		return TemplateResult{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+		return TemplateResult{}, fmt.Errorf("%w: %s", ErrInvalid, err.Error())
 	}
 	opts := deploy.ApplyOptions{Env: env, Deploy: true}
 	data := []byte(t.Compose)
 	if in.ProjectID != "" {
 		// Only adds: a service of the template's name already there would
 		// be changed by the apply.
-		plan, err := c.ApplyCompose(ctx, in.ProjectID, data, deploy.ApplyOptions{Env: env, DryRun: true})
+		plan, err := c.mgr.ApplyCompose(ctx, in.ProjectID, data, deploy.ApplyOptions{Env: env, DryRun: true})
 		if err != nil {
 			return TemplateResult{ProjectID: in.ProjectID, Plan: plan}, err
 		}
@@ -83,7 +83,7 @@ func (c *Core) InstallTemplate(ctx context.Context, id string, in TemplateInstal
 		if in.DryRun {
 			return TemplateResult{ProjectID: in.ProjectID, Plan: plan}, nil
 		}
-		plan, err = c.ApplyCompose(ctx, in.ProjectID, data, opts)
+		plan, err = c.mgr.ApplyCompose(ctx, in.ProjectID, data, opts)
 		return TemplateResult{ProjectID: in.ProjectID, Plan: plan}, err
 	}
 
@@ -97,7 +97,7 @@ func (c *Core) InstallTemplate(ctx context.Context, id string, in TemplateInstal
 	if _, err := c.store.GetServer(ctx, np.ServerID); err != nil {
 		return TemplateResult{}, fmt.Errorf("%w: unknown server", ErrInvalid)
 	}
-	plan, err := c.PlanCompose(ctx, domain.Project{Name: np.Name, ServerID: np.ServerID}, data, deploy.ApplyOptions{Env: env, DryRun: true})
+	plan, err := c.mgr.PlanCompose(ctx, domain.Project{Name: np.Name, ServerID: np.ServerID}, data, deploy.ApplyOptions{Env: env, DryRun: true})
 	if err != nil || in.DryRun {
 		return TemplateResult{Plan: plan}, err
 	}
@@ -105,7 +105,7 @@ func (c *Core) InstallTemplate(ctx context.Context, id string, in TemplateInstal
 	if err != nil {
 		return TemplateResult{}, err
 	}
-	plan, err = c.ApplyCompose(ctx, p.ID, data, opts)
+	plan, err = c.mgr.ApplyCompose(ctx, p.ID, data, opts)
 	return TemplateResult{ProjectID: p.ID, Plan: plan}, err
 }
 

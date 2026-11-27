@@ -12,8 +12,8 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 )
 
 func TestBrandingLogo(t *testing.T) {
@@ -35,7 +35,7 @@ func TestBrandingLogo(t *testing.T) {
 	svg := `<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`
 	admin := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 	logo := base64.StdEncoding.EncodeToString([]byte(svg))
-	if _, err := m.c.SetBranding(admin, core.BrandingInput{Logo: &logo}); err != nil {
+	if _, err := m.c.SetBranding(admin, projects.BrandingInput{Logo: &logo}); err != nil {
 		t.Fatal(err)
 	}
 	resp := get() // without a session
@@ -58,7 +58,7 @@ func TestManifest(t *testing.T) {
 	m := newMembers(t)
 	srv := httptest.NewServer(m.api)
 	t.Cleanup(srv.Close)
-	get := func() core.Manifest {
+	get := func() projects.Manifest {
 		resp, err := http.Get(srv.URL + "/api/manifest.webmanifest") // without a session
 		if err != nil {
 			t.Fatal(err)
@@ -67,7 +67,7 @@ func TestManifest(t *testing.T) {
 		if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "application/manifest+json" {
 			t.Fatalf("manifest: %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
 		}
-		var mf core.Manifest
+		var mf projects.Manifest
 		if err := json.NewDecoder(resp.Body).Decode(&mf); err != nil {
 			t.Fatal(err)
 		}
@@ -80,7 +80,7 @@ func TestManifest(t *testing.T) {
 
 	admin := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 	logo := base64.StdEncoding.EncodeToString([]byte(`<svg xmlns="http://www.w3.org/2000/svg"></svg>`))
-	if _, err := m.c.SetBranding(admin, core.BrandingInput{Name: "Acme", Theme: core.Theme{Accent: "#4f46e5"}, Logo: &logo}); err != nil {
+	if _, err := m.c.SetBranding(admin, projects.BrandingInput{Name: "Acme", Theme: projects.Theme{Accent: "#4f46e5"}, Logo: &logo}); err != nil {
 		t.Fatal(err)
 	}
 	mf = get()

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 )
 
 // brandingLogo serves the manager's logo, public for the sign-in page and
@@ -35,7 +35,7 @@ func (a *API) manifest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) setBranding(w http.ResponseWriter, r *http.Request) {
-	var body core.BrandingInput
+	var body projects.BrandingInput
 	if !decode(w, r, &body) {
 		return
 	}

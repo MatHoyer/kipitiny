@@ -1,4 +1,4 @@
-package core
+package projects
 
 import (
 	"context"
@@ -29,7 +29,7 @@ const maxCanvasNodes = 5000
 var serverNodeKinds = []string{"server", "internet", "tunnel", "traefik", "manager"}
 
 // canvasNodes is the set of node keys that exist now.
-func (c *Core) canvasNodes(ctx context.Context) (map[string]bool, error) {
+func (c *Projects) canvasNodes(ctx context.Context) (map[string]bool, error) {
 	known := map[string]bool{}
 	servers, err := c.store.ListServers(ctx)
 	if err != nil {
@@ -75,7 +75,7 @@ func knownNode(known map[string]bool, node string) bool {
 }
 
 // CanvasLayout returns the saved positions of the nodes that still exist.
-func (c *Core) CanvasLayout(ctx context.Context) (map[string]Point, error) {
+func (c *Projects) CanvasLayout(ctx context.Context) (map[string]Point, error) {
 	known, err := c.canvasNodes(ctx)
 	if err != nil {
 		return nil, err
@@ -100,7 +100,7 @@ func (c *Core) CanvasLayout(ctx context.Context) (map[string]Point, error) {
 
 // SaveCanvasLayout records where nodes were dragged to, and forgets the
 // positions of nodes that no longer exist.
-func (c *Core) SaveCanvasLayout(ctx context.Context, positions map[string]Point) error {
+func (c *Projects) SaveCanvasLayout(ctx context.Context, positions map[string]Point) error {
 	if len(positions) > maxCanvasNodes {
 		return fmt.Errorf("%w: too many nodes", ErrInvalid)
 	}
@@ -127,7 +127,7 @@ func (c *Core) SaveCanvasLayout(ctx context.Context, positions map[string]Point)
 
 // ResetCanvasLayout forgets every position, so the canvas lays all nodes
 // out again.
-func (c *Core) ResetCanvasLayout(ctx context.Context) error {
+func (c *Projects) ResetCanvasLayout(ctx context.Context) error {
 	ps, err := c.store.ListCanvasPositions(ctx)
 	if err != nil {
 		return err
@@ -139,7 +139,7 @@ func (c *Core) ResetCanvasLayout(ctx context.Context) error {
 	return c.store.SaveCanvasPositions(ctx, nil, remove)
 }
 
-func (c *Core) staleCanvasNodes(ctx context.Context, known map[string]bool) ([]string, error) {
+func (c *Projects) staleCanvasNodes(ctx context.Context, known map[string]bool) ([]string, error) {
 	ps, err := c.store.ListCanvasPositions(ctx)
 	if err != nil {
 		return nil, err
@@ -157,7 +157,7 @@ func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
 
 // hiddenCanvasNodes are the project and service nodes the context's actor
 // can't see.
-func (c *Core) hiddenCanvasNodes(ctx context.Context) (map[string]bool, error) {
+func (c *Projects) hiddenCanvasNodes(ctx context.Context) (map[string]bool, error) {
 	hidden := map[string]bool{}
 	if identity.VisibleProjects(ctx) == nil {
 		return hidden, nil

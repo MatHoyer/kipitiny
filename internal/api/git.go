@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 )
 
 func (a *API) projectGit(w http.ResponseWriter, r *http.Request) {
@@ -21,7 +22,7 @@ func (a *API) projectGit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) linkProjectGit(w http.ResponseWriter, r *http.Request) {
-	var in core.GitInput
+	var in projects.GitInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -34,7 +35,7 @@ func (a *API) linkProjectGit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) previewProjectGit(w http.ResponseWriter, r *http.Request) {
-	var in core.GitInput
+	var in projects.GitInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -85,7 +86,7 @@ func webhookBody(w http.ResponseWriter, r *http.Request, max int64) func() ([]by
 func (a *API) gitHook(w http.ResponseWriter, r *http.Request) {
 	err := a.core.HandleGitWebhook(r.Context(), r.PathValue("id"), r.Header.Get, webhookBody(w, r, 5<<20))
 	switch {
-	case errors.Is(err, core.ErrIgnored):
+	case errors.Is(err, projects.ErrIgnored):
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
 	case err != nil:
 		a.fail(w, err)

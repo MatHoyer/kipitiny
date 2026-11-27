@@ -28,7 +28,7 @@ func (p monitoringPorts) BrandName(ctx context.Context) string { return p.c.Bran
 func (p monitoringPorts) BrandLogo(ctx context.Context) string { return p.c.Branding(ctx).Logo }
 
 func (p monitoringPorts) BrandAccent(ctx context.Context) string {
-	return p.c.brandingSettings(ctx).Accent
+	return p.c.BrandAccent(ctx)
 }
 
 func (p monitoringPorts) CurrentUser(ctx context.Context) (domain.User, error) {
@@ -36,7 +36,7 @@ func (p monitoringPorts) CurrentUser(ctx context.Context) (domain.User, error) {
 }
 
 func (p monitoringPorts) CheckGitOwned(ctx context.Context, projectID string) error {
-	return p.c.checkGitOwned(ctx, projectID)
+	return p.c.CheckGitOwned(ctx, projectID)
 }
 
 func (p monitoringPorts) ResourceAlerts(ctx context.Context) domain.ResourceAlerts {

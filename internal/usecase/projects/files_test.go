@@ -1,4 +1,4 @@
-package core
+package projects
 
 import (
 	"context"
@@ -45,9 +45,9 @@ func TestGitRepoFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := New(config.Config{DataDir: t.TempDir()}, nil, nil, nil)
+	c := New(ctx, &config.Config{DataDir: t.TempDir()}, nil, nil, nil)
 	g := domain.ProjectGit{RepoURL: dir, Branch: "main", Path: "deploy/compose.yaml"}
-	err = c.withGitFile(ctx, g, func(_ []byte, _ string, files repoFiles) error {
+	err = c.WithGitFile(ctx, g, func(_ []byte, _ string, files repoFiles) error {
 		f, err := files("./nginx.conf")
 		if err != nil || len(f) != 1 || f[0].Path != "" || string(f[0].Content) != "server {}" {
 			t.Errorf("file = %+v, %v", f, err)

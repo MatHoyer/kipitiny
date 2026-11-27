@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 )
 
 func (a *API) canvasLayout(w http.ResponseWriter, r *http.Request) {
@@ -17,7 +17,7 @@ func (a *API) canvasLayout(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) saveCanvasLayout(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Positions map[string]core.Point `json:"positions"`
+		Positions map[string]projects.Point `json:"positions"`
 	}
 	if !decode(w, r, &in) {
 		return

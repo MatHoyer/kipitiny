@@ -38,6 +38,12 @@ func (c *Network) TunnelToken(sv domain.Server) string {
 	return ""
 }
 
+// BehindTunnel reports whether the manager's traffic arrives through a
+// Cloudflare tunnel.
+func (c *Network) BehindTunnel(ctx context.Context) bool {
+	return c.cfg.Traefik.Enabled && c.ViaTunnel(ctx, domain.LocalServerID)
+}
+
 // ViaTunnel reports whether a server's public traffic comes through a
 // Cloudflare tunnel ("" is the manager's server).
 func (c *Network) ViaTunnel(ctx context.Context, serverID string) bool {

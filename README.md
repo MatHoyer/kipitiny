@@ -151,7 +151,7 @@ cmd/kipitiny/          entrypoint
 internal/config/       env config
 internal/domain/       entities, repository interfaces (one per area), shared errors
 internal/usecase/      use cases by area, each its own package
-internal/core/         the remaining use cases; embeds each area for the handlers
+internal/core/         wiring and lifecycle; embeds each area for the handlers
 internal/infrastructure/sqlite/ SQLite store (bun + goose migrations)
 internal/api/          JSON HTTP handlers
 internal/mcp/          MCP tools, one file per group

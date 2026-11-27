@@ -5,10 +5,7 @@ package core
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,9 +15,8 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
+	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
-
-	"github.com/kipit-labs/kipitiny/internal/usecase/pending"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -49,6 +45,9 @@ type Core struct {
 	// Servers and their Docker clients, the reconciler, host checks and
 	// updates, stats, the cleanup, terminals, logs, the manager's updates.
 	*servers.Servers
+	// Projects, their git repositories and providers, jobs, templates,
+	// tags, the canvas and the branding.
+	*projects.Projects
 
 	cfg   config.Config
 	store domain.Store
@@ -67,28 +66,24 @@ type Core struct {
 	locks   sync.Map // service ID -> *serviceLock
 	busy    sync.Map // service ID -> struct{}: its lock is held
 
-	sched scheduler
 	// steps: what the running operations are at (backups and restores in
 	// data, the cleanup in servers).
-	steps     progress.Steps
-	probes    sync.Map    // server ID -> *mount.Mount (nil: no probe there)
-	gitKick   chan string // project IDs to sync
-	gitFlows  pending.Map[gitFlow]
-	gitTokens gitTokens
-	jobs      jobsState
+	steps  progress.Steps
+	probes sync.Map // server ID -> *mount.Mount (nil: no probe there)
 }
 
 // New builds the core around the local Docker client; remote servers are
 // connected on demand over SSH.
 func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logger) *Core {
 	bg, cancel := context.WithCancel(context.Background())
-	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, gitKick: make(chan string, 16)}
+	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel}
 	c.Servers = servers.New(bg, &c.cfg, s, local, &c.steps, &c.probes, serversPorts{c}, log)
 	c.Monitoring = monitoring.New(bg, &c.cfg, s, monitoringPorts{c}, log)
 	c.Identity = identity.New(cfg, s, identity.SecretKinds(cfg, local), c.Monitoring, log)
 	c.Network = network.New(bg, &c.cfg, s, networkPorts{c}, log)
 	c.Data = data.New(bg, &c.cfg, s, &c.steps, dataPorts{c}, log)
 	c.Deployer = deploy.New(bg, &c.cfg, s, &c.probes, deployPorts{c}, log)
+	c.Projects = projects.New(bg, &c.cfg, s, projectsPorts{c}, log)
 	return c
 }
 
@@ -130,12 +125,6 @@ func waitDone(wg *sync.WaitGroup) <-chan struct{} {
 	done := make(chan struct{})
 	go func() { wg.Wait(); close(done) }()
 	return done
-}
-
-// BehindTunnel reports whether the manager's traffic arrives through a
-// Cloudflare tunnel.
-func (c *Core) BehindTunnel(ctx context.Context) bool {
-	return c.cfg.Traefik.Enabled && c.ViaTunnel(ctx, domain.LocalServerID)
 }
 
 // dockerFor returns the Docker client of a server ("" or "local": this one).
@@ -224,117 +213,6 @@ func (c *Core) acquireService(id string, background bool) (func(), error) {
 		l.mu.Unlock()
 		l.released.Broadcast()
 	}, nil
-}
-
-func (c *Core) ListProjects(ctx context.Context) ([]domain.Project, error) {
-	ps, err := c.store.ListProjects(ctx)
-	ps = slices.DeleteFunc(ps, func(p domain.Project) bool { return !identity.Visible(ctx, p.ID) })
-	for i := range ps {
-		ps[i] = deploy.MaskedProject(ps[i])
-	}
-	return ps, err
-}
-
-// CreateProject creates a project on a server (this one when serverID is empty).
-func (c *Core) CreateProject(ctx context.Context, name, serverID string) (domain.Project, error) {
-	if err := identity.CheckFeature(ctx, identity.FeatureCreateProjects); err != nil {
-		return domain.Project{}, err
-	}
-	if !domain.ValidName(name) {
-		return domain.Project{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
-	}
-	if serverID == "" {
-		serverID = domain.LocalServerID
-	}
-	if _, err := c.store.GetServer(ctx, serverID); errors.Is(err, domain.ErrNotFound) {
-		return domain.Project{}, fmt.Errorf("%w: unknown server", ErrInvalid)
-	} else if err != nil {
-		return domain.Project{}, err
-	}
-	p, err := c.store.CreateProject(ctx, domain.Project{Name: name, ServerID: serverID})
-	if err != nil {
-		return domain.Project{}, err
-	}
-	if err := c.GrantCreator(ctx, p.ID); err != nil {
-		return p, err
-	}
-	if err := c.dockerFor(p.ServerID).EnsureNetwork(ctx, docker.ProjectNetwork(p.ID)); err != nil {
-		return p, fmt.Errorf("project created but network setup failed: %w", err)
-	}
-	return p, nil
-}
-
-func (c *Core) GetProject(ctx context.Context, id string) (domain.Project, error) {
-	p, err := c.store.GetProject(ctx, id)
-	return deploy.MaskedProject(p), err
-}
-
-// DeleteProject removes every container and volume of the project's services,
-// its record and its private network. The caller must confirm with the name.
-func (c *Core) DeleteProject(ctx context.Context, id, confirm string) error {
-	p, err := c.store.GetProject(ctx, id)
-	if err != nil {
-		return err
-	}
-	if confirm != p.Name {
-		return fmt.Errorf("%w: confirm with the project name", ErrInvalid)
-	}
-	return c.deleteProject(ctx, p)
-}
-
-// deleteProject is DeleteProject without the confirmation; a project's
-// previews go first.
-func (c *Core) deleteProject(ctx context.Context, p domain.Project) error {
-	id := p.ID
-	all, err := c.store.ListProjects(ctx)
-	if err != nil {
-		return err
-	}
-	for _, child := range all {
-		if child.ParentID == id {
-			if err := c.deleteProject(ctx, child); err != nil {
-				return fmt.Errorf("preview %s: %w", child.Preview.Name, err)
-			}
-		}
-	}
-	svcs, err := c.store.ListServices(ctx, id)
-	if err != nil {
-		return err
-	}
-	// Hold every service so nothing (deploy, backup, reconciler) recreates
-	// containers while the project goes away.
-	for _, s := range svcs {
-		unlock, err := c.lockService(s.ID)
-		if err != nil {
-			return fmt.Errorf("%s: %w", s.Name, err)
-		}
-		defer unlock()
-	}
-	for _, s := range svcs {
-		if err := c.RemoveServiceContainers(ctx, s); err != nil {
-			return err
-		}
-	}
-	if err := c.store.DeleteProject(ctx, id); err != nil {
-		return err
-	}
-	for _, s := range svcs {
-		c.RemoveDeployLogs(s.ID)
-		c.forgetServiceJobs(s.ID)
-	}
-	dk := c.dockerFor(p.ServerID)
-	nets, err := dk.ListNetworks(ctx)
-	if err != nil {
-		return err
-	}
-	for _, n := range nets { // the networks of its compose file
-		if strings.HasPrefix(n.Name, docker.ProjectNetwork(id)+"-") {
-			if err := dk.RemoveNetwork(ctx, n.Name); err != nil {
-				return err
-			}
-		}
-	}
-	return dk.RemoveNetwork(ctx, docker.ProjectNetwork(id))
 }
 
 // SetServerNetwork sets a server's public IP and tunnel, returning the

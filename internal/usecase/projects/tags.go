@@ -1,4 +1,4 @@
-package core
+package projects
 
 import (
 	"context"
@@ -42,7 +42,7 @@ func AutoTagColor(name string) string {
 }
 
 // SetProjectTags replaces a project's tags.
-func (c *Core) SetProjectTags(ctx context.Context, projectID string, tags []string) (domain.Project, error) {
+func (c *Projects) SetProjectTags(ctx context.Context, projectID string, tags []string) (domain.Project, error) {
 	tags, err := domain.NormalizeTags(tags)
 	if err != nil {
 		return domain.Project{}, err
@@ -55,7 +55,7 @@ func (c *Core) SetProjectTags(ctx context.Context, projectID string, tags []stri
 
 // ListTags returns the tags of the projects and services the caller sees,
 // by name.
-func (c *Core) ListTags(ctx context.Context) ([]Tag, error) {
+func (c *Projects) ListTags(ctx context.Context) ([]Tag, error) {
 	byName, err := c.tagUse(ctx, func(string) bool { return true })
 	if err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func (c *Core) ListTags(ctx context.Context) ([]Tag, error) {
 // SetTagColor sets a tag's color, one of TagColors; empty goes back to
 // the one derived from its name. Admins may color any tag, members those
 // on a project they may change the settings of.
-func (c *Core) SetTagColor(ctx context.Context, name, color string) (Tag, error) {
+func (c *Projects) SetTagColor(ctx context.Context, name, color string) (Tag, error) {
 	name = domain.NormalizeTag(name)
 	if color != "" && !slices.Contains(TagColors, color) {
 		return Tag{}, fmt.Errorf("%w: color must be one of %s", ErrInvalid, strings.Join(TagColors, ", "))
@@ -113,7 +113,7 @@ func (c *Core) SetTagColor(ctx context.Context, name, color string) (Tag, error)
 
 // tagUse counts the tags of the visible projects that pass keep, and of
 // their services.
-func (c *Core) tagUse(ctx context.Context, keep func(projectID string) bool) (map[string]*Tag, error) {
+func (c *Projects) tagUse(ctx context.Context, keep func(projectID string) bool) (map[string]*Tag, error) {
 	ps, err := c.store.ListProjects(ctx)
 	if err != nil {
 		return nil, err

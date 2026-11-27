@@ -11,12 +11,12 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 )
 
 type listJobsOut struct {
-	Jobs []core.JobView `json:"jobs"`
+	Jobs []projects.JobView `json:"jobs"`
 }
 
 func (t *tools) listJobs(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, listJobsOut, error) {
@@ -42,22 +42,22 @@ type setJobIn struct {
 	Enabled    *bool   `json:"enabled,omitempty" jsonschema:"default true; false keeps the job and its history but stops scheduling it"`
 }
 
-func (t *tools) setJob(ctx context.Context, _ *mcp.CallToolRequest, in setJobIn) (*mcp.CallToolResult, core.JobView, error) {
-	out, err := mutate(ctx, t.c, "set_job", in.Service, func() (core.JobView, error) {
+func (t *tools) setJob(ctx context.Context, _ *mcp.CallToolRequest, in setJobIn) (*mcp.CallToolResult, projects.JobView, error) {
+	out, err := mutate(ctx, t.c, "set_job", in.Service, func() (projects.JobView, error) {
 		svc, err := t.service(ctx, in.Service, identity.PermSettings)
 		if err != nil {
-			return core.JobView{}, err
+			return projects.JobView{}, err
 		}
 		cur, err := t.job(ctx, svc.ID, in.Job)
 		exists := err == nil
 		if err != nil && !errors.Is(err, domain.ErrNotFound) {
-			return core.JobView{}, err
+			return projects.JobView{}, err
 		}
 		j := deploy.JobInput{Name: in.Job, Enabled: true}
 		if exists {
 			j = deploy.JobInput{Name: cur.Name, Command: cur.Command, Cron: cur.Cron, TimeoutSec: cur.TimeoutSec, Enabled: cur.Enabled}
 		} else if in.Command == nil || in.Cron == nil {
-			return core.JobView{}, fmt.Errorf("a new job needs a command and a cron")
+			return projects.JobView{}, fmt.Errorf("a new job needs a command and a cron")
 		}
 		set(&j.Name, in.Rename)
 		set(&j.Command, in.Command)
@@ -154,14 +154,14 @@ func (t *tools) listJobRuns(ctx context.Context, _ *mcp.CallToolRequest, in list
 }
 
 // job finds one of the service's jobs by name.
-func (t *tools) job(ctx context.Context, serviceID, name string) (core.JobView, error) {
+func (t *tools) job(ctx context.Context, serviceID, name string) (projects.JobView, error) {
 	js, err := t.c.ListJobs(ctx, serviceID)
 	if err != nil {
-		return core.JobView{}, err
+		return projects.JobView{}, err
 	}
-	i := slices.IndexFunc(js, func(j core.JobView) bool { return j.Name == name })
+	i := slices.IndexFunc(js, func(j projects.JobView) bool { return j.Name == name })
 	if i < 0 {
-		return core.JobView{}, fmt.Errorf("%w: job %s of this service", domain.ErrNotFound, name)
+		return projects.JobView{}, fmt.Errorf("%w: job %s of this service", domain.ErrNotFound, name)
 	}
 	return js[i], nil
 }
