@@ -43,9 +43,9 @@ var mysqlManagedKeys = []string{mysqlUser, mysqlPassword, mysqlDatabase, mysqlRo
 func newMySQLEnv() map[string]string {
 	return map[string]string{
 		mysqlUser:         "app",
-		mysqlPassword:     randomToken(24),
+		mysqlPassword:     randomPassword(),
 		mysqlDatabase:     "app",
-		mysqlRootPassword: randomToken(24),
+		mysqlRootPassword: randomPassword(),
 	}
 }
 

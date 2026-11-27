@@ -33,7 +33,7 @@ const (
 var redisPasswordRe = regexp.MustCompile(`^[A-Za-z0-9_-]{16,}$`)
 
 func newRedisEnv() map[string]string {
-	return map[string]string{redisPassword: randomToken(24)}
+	return map[string]string{redisPassword: randomPassword()}
 }
 
 // RedisVolume is the named volume holding a redis service's data.

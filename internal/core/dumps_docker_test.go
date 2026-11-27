@@ -21,6 +21,14 @@ import (
 //	KIPITINY_TEST_DOCKER=1 go test ./internal/core/ -run DumpDocker
 func dumpTestDB(t *testing.T, kind store.ServiceKind) (*Core, context.Context, store.Service, func(string) string) {
 	t.Helper()
+	c, ctx, projectID := dumpTestCore(t)
+	svc, exec := startTestDB(t, c, ctx, projectID, ServiceInput{Name: "db", Kind: kind})
+	return c, ctx, svc, exec
+}
+
+// dumpTestCore is a core on the local Docker daemon with a dumptest project.
+func dumpTestCore(t *testing.T) (*Core, context.Context, string) {
+	t.Helper()
 	if os.Getenv("KIPITINY_TEST_DOCKER") == "" {
 		t.Skip("KIPITINY_TEST_DOCKER not set")
 	}
@@ -38,8 +46,7 @@ func dumpTestDB(t *testing.T, kind store.ServiceKind) (*Core, context.Context, s
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, exec := startTestDB(t, c, ctx, p.ID, ServiceInput{Name: "db", Kind: kind})
-	return c, ctx, svc, exec
+	return c, ctx, p.ID
 }
 
 // startTestDB creates the database service in in project projectID and
@@ -194,4 +201,34 @@ func TestDumpDockerMongo(t *testing.T) {
 			return read()
 		},
 		read, 2, 5)
+}
+
+// A password starting with "-" (even "--") must not reach a database tool as an option
+// (mongosh: "unrecognized option"): the backup, the data browser and the
+// healthcheck all authenticate with it.
+func TestDashPasswordDocker(t *testing.T) {
+	for _, kind := range []store.ServiceKind{store.ServiceKindPostgres, store.ServiceKindRedis, store.ServiceKindMySQL,
+		store.ServiceKindMariaDB, store.ServiceKindMongoDB} {
+		t.Run(string(kind), func(t *testing.T) {
+			c, ctx, projectID := dumpTestCore(t)
+			ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin})
+			svc, _ := startTestDB(t, c, ctx, projectID, ServiceInput{Name: "db", Kind: kind, Password: "--dash" + randomToken(12)})
+			if kind == store.ServiceKindRedis {
+				if _, err := c.RedisScan(ctx, svc.ID, "0", "*", 10); err != nil {
+					t.Fatalf("scan: %v", err)
+				}
+				return
+			}
+			if _, err := c.PgDatabases(ctx, svc.ID); err != nil {
+				t.Fatalf("databases: %v", err)
+			}
+			b, err := c.BackupService(ctx, svc.ID, "", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if b = waitBackup(t, c, b.ID, func(b store.Backup) bool { return b.Status != store.OpRunning }); b.Status != store.OpSucceeded {
+				t.Fatalf("backup = %+v", b)
+			}
+		})
+	}
 }
