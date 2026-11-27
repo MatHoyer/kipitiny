@@ -13,6 +13,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/templates"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 )
 
 type listTemplatesOut struct {
@@ -47,15 +48,15 @@ func (t *tools) installTemplate(ctx context.Context, _ *mcp.CallToolRequest, in 
 		case errors.Is(err, domain.ErrNotFound):
 			req.NewProject = &core.NewProject{Name: in.Project}
 			if in.Server != "" {
-				servers, err := t.c.ListServers(ctx)
+				svs, err := t.c.ListServers(ctx)
 				if err != nil {
 					return core.TemplateResult{}, err
 				}
-				i := slices.IndexFunc(servers, func(sv core.ServerView) bool { return sv.Name == in.Server })
+				i := slices.IndexFunc(svs, func(sv servers.ServerView) bool { return sv.Name == in.Server })
 				if i < 0 {
 					return core.TemplateResult{}, fmt.Errorf("%w: server %s", domain.ErrNotFound, in.Server)
 				}
-				req.NewProject.ServerID = servers[i].ID
+				req.NewProject.ServerID = svs[i].ID
 			}
 		default:
 			return core.TemplateResult{}, err

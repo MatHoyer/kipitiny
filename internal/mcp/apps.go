@@ -8,10 +8,10 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -88,7 +88,7 @@ type appStatusOut struct {
 	Status      string              `json:"status"`
 	Deployments []domain.Deployment `json:"recentDeployments"`
 	// Usage is the current CPU, memory and network use; nil when not running.
-	Usage *core.Usage `json:"usage,omitempty"`
+	Usage *servers.Usage `json:"usage,omitempty"`
 	// Uptime is the uptime check and its results, when the service has one.
 	Uptime *monitoring.UptimeView `json:"uptime,omitempty"`
 }
@@ -131,7 +131,7 @@ type getLogsIn struct {
 }
 
 type getLogsOut struct {
-	Lines []core.LogLine `json:"lines"`
+	Lines []servers.LogLine `json:"lines"`
 }
 
 func (t *tools) getLogs(ctx context.Context, _ *mcp.CallToolRequest, in getLogsIn) (*mcp.CallToolResult, getLogsOut, error) {
@@ -150,7 +150,7 @@ func (t *tools) getLogs(ctx context.Context, _ *mcp.CallToolRequest, in getLogsI
 	if err != nil {
 		return nil, getLogsOut{}, err
 	}
-	out := getLogsOut{Lines: []core.LogLine{}}
+	out := getLogsOut{Lines: []servers.LogLine{}}
 	needle := strings.ToLower(in.Filter)
 	for _, l := range lines {
 		if needle == "" || strings.Contains(strings.ToLower(l.Text), needle) {

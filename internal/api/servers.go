@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 )
 
 func (a *API) listServers(w http.ResponseWriter, r *http.Request) {
@@ -17,7 +17,7 @@ func (a *API) listServers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
-	var in core.ServerInput
+	var in servers.ServerInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -34,7 +34,7 @@ func (a *API) createServer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateServer(w http.ResponseWriter, r *http.Request) {
-	var in core.ServerInput
+	var in servers.ServerInput
 	if !decode(w, r, &in) {
 		return
 	}

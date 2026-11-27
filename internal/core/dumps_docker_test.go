@@ -41,7 +41,7 @@ func dumpTestCore(t *testing.T) (*Core, context.Context, string) {
 		t.Fatal(err)
 	}
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
-	c.pool = docker.NewPool(dk, c.connectServer)
+	c.useDocker(dk)
 	if _, err := c.EncryptBackupTarget(ctx, domain.LocalTargetID, ""); err != nil {
 		t.Fatal(err)
 	}

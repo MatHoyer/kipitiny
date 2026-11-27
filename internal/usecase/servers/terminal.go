@@ -1,4 +1,4 @@
-package core
+package servers
 
 import (
 	"context"
@@ -44,23 +44,23 @@ func (t *Terminal) Close() error {
 
 // openTerminal records the session's start (or failure to start) and wraps
 // tty so closing it records the end.
-func (c *Core) openTerminal(ctx context.Context, target string, tty *docker.TTY, err error) (*Terminal, error) {
+func (c *Servers) openTerminal(ctx context.Context, target string, tty *docker.TTY, err error) (*Terminal, error) {
 	if err != nil {
-		c.Audit(ctx, "terminal open", target, http.StatusBadGateway, err)
+		c.mgr.Audit(ctx, "terminal open", target, http.StatusBadGateway, err)
 		return nil, err
 	}
-	c.Audit(ctx, "terminal open", target, http.StatusSwitchingProtocols, nil)
+	c.mgr.Audit(ctx, "terminal open", target, http.StatusSwitchingProtocols, nil)
 	start := time.Now()
 	return &Terminal{TTY: tty, close: func() {
 		_ = tty.Close()
-		c.Audit(ctx, "terminal close", fmt.Sprintf("%s after %s", target, time.Since(start).Round(time.Second)), http.StatusOK, nil)
+		c.mgr.Audit(ctx, "terminal close", fmt.Sprintf("%s after %s", target, time.Since(start).Round(time.Second)), http.StatusOK, nil)
 	}}, nil
 }
 
 // OpenServiceTerminal starts a shell in one of the service's running
 // containers (by ID prefix or name; the first replica when empty). Admin only.
-func (c *Core) OpenServiceTerminal(ctx context.Context, serviceID, containerRef, shell string, cols, rows uint) (*Terminal, error) {
-	if err := c.RequireOn(ctx, serviceID, identity.PermTerminal); err != nil {
+func (c *Servers) OpenServiceTerminal(ctx context.Context, serviceID, containerRef, shell string, cols, rows uint) (*Terminal, error) {
+	if err := c.mgr.RequireOn(ctx, serviceID, identity.PermTerminal); err != nil {
 		return nil, err
 	}
 	if shell == "" {
@@ -74,10 +74,10 @@ func (c *Core) OpenServiceTerminal(ctx context.Context, serviceID, containerRef,
 	if err != nil {
 		return nil, err
 	}
-	if err := c.WakeFor(ctx, svc); err != nil {
+	if err := c.mgr.WakeFor(ctx, svc); err != nil {
 		return nil, err
 	}
-	cts, err := c.ActiveContainers(ctx, svc)
+	cts, err := c.mgr.ActiveContainers(ctx, svc)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (c *Core) OpenServiceTerminal(ctx context.Context, serviceID, containerRef,
 		}
 		return nil, fmt.Errorf("%w: container %s is not running", ErrInvalid, containerRef)
 	}
-	tty, err := c.dockerFor(svc.ServerID).ExecTTY(ctx, ct.ID, cmd, terminalEnv, cols, rows)
+	tty, err := c.DockerFor(svc.ServerID).ExecTTY(ctx, ct.ID, cmd, terminalEnv, cols, rows)
 	return c.openTerminal(ctx, containerName(ct), tty, err)
 }
 
@@ -134,7 +134,7 @@ var hostShell = []string{"nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--
 // OpenServerTerminal starts a root shell on a server's host, through a
 // privileged helper container sharing its PID namespace (Docker access is
 // root on the host anyway). Admin only.
-func (c *Core) OpenServerTerminal(ctx context.Context, serverID string, cols, rows uint) (*Terminal, error) {
+func (c *Servers) OpenServerTerminal(ctx context.Context, serverID string, cols, rows uint) (*Terminal, error) {
 	if err := identity.RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (c *Core) OpenServerTerminal(ctx context.Context, serverID string, cols, ro
 		return nil, err
 	}
 	target := "server " + sv.Name
-	dk := c.dockerFor(sv.ID)
+	dk := c.DockerFor(sv.ID)
 	if err := dk.EnsureImage(ctx, hostShellImage, "", ""); err != nil {
 		return c.openTerminal(ctx, target, nil, fmt.Errorf("pull %s: %w", hostShellImage, err))
 	}
@@ -168,7 +168,7 @@ func (c *Core) OpenServerTerminal(ctx context.Context, serverID string, cols, ro
 }
 
 // cleanupTerminals removes host shell and host check helpers left by a crash.
-func (c *Core) cleanupTerminals(ctx context.Context, dk *docker.Client) error {
+func (c *Servers) cleanupTerminals(ctx context.Context, dk *docker.Client) error {
 	for _, component := range []string{terminalComponent, hostCheckComponent} {
 		cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: component})
 		if err != nil {

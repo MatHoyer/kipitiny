@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -21,11 +22,11 @@ type getServerStatusIn struct {
 // ServerStatus is a server with its host's current use and last security
 // check.
 type ServerStatus struct {
-	core.ServerView
+	servers.ServerView
 	// Usage is nil while the host can't be read.
-	Usage *core.HostUsage `json:"usage"`
+	Usage *servers.HostUsage `json:"usage"`
 	// Security is only shown to admins.
-	Security *core.SecurityReport `json:"security,omitempty"`
+	Security *servers.SecurityReport `json:"security,omitempty"`
 }
 
 type getServerStatusOut struct {
@@ -70,17 +71,17 @@ func (t *tools) getServerStatus(ctx context.Context, _ *mcp.CallToolRequest, in 
 	return nil, out, nil
 }
 
-func (t *tools) getCleanup(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, core.CleanupView, error) {
+func (t *tools) getCleanup(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, servers.CleanupView, error) {
 	if err := identity.RequireAdmin(ctx); err != nil {
-		return nil, core.CleanupView{}, err
+		return nil, servers.CleanupView{}, err
 	}
 	return nil, t.c.Cleanup(ctx), nil
 }
 
-func (t *tools) runCleanup(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, core.CleanupView, error) {
-	out, err := mutate(ctx, t.c, "run_cleanup", "cleanup", func() (core.CleanupView, error) {
+func (t *tools) runCleanup(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, servers.CleanupView, error) {
+	out, err := mutate(ctx, t.c, "run_cleanup", "cleanup", func() (servers.CleanupView, error) {
 		if err := identity.RequireAdmin(ctx); err != nil {
-			return core.CleanupView{}, err
+			return servers.CleanupView{}, err
 		}
 		v, err := t.c.RunCleanup(ctx)
 		if errors.Is(err, core.ErrBusy) {
@@ -96,11 +97,11 @@ type installServerUpdatesIn struct {
 	All    bool   `json:"all,omitempty" jsonschema:"every pending update, not only security ones"`
 }
 
-func (t *tools) installServerUpdates(ctx context.Context, _ *mcp.CallToolRequest, in installServerUpdatesIn) (*mcp.CallToolResult, core.SecurityReport, error) {
-	out, err := mutate(ctx, t.c, "install_server_updates", in.Server, func() (core.SecurityReport, error) {
+func (t *tools) installServerUpdates(ctx context.Context, _ *mcp.CallToolRequest, in installServerUpdatesIn) (*mcp.CallToolResult, servers.SecurityReport, error) {
+	out, err := mutate(ctx, t.c, "install_server_updates", in.Server, func() (servers.SecurityReport, error) {
 		id, err := t.serverID(ctx, in.Server)
 		if err != nil {
-			return core.SecurityReport{}, err
+			return servers.SecurityReport{}, err
 		}
 		rep, err := t.c.InstallUpdates(ctx, id, in.All)
 		if errors.Is(err, core.ErrBusy) {
@@ -116,21 +117,21 @@ type rebootServerIn struct {
 	Confirm string `json:"confirm" jsonschema:"must equal the server's name"`
 }
 
-func (t *tools) rebootServer(ctx context.Context, _ *mcp.CallToolRequest, in rebootServerIn) (*mcp.CallToolResult, core.SecurityReport, error) {
-	out, err := mutate(ctx, t.c, "reboot_server", in.Server, func() (core.SecurityReport, error) {
+func (t *tools) rebootServer(ctx context.Context, _ *mcp.CallToolRequest, in rebootServerIn) (*mcp.CallToolResult, servers.SecurityReport, error) {
+	out, err := mutate(ctx, t.c, "reboot_server", in.Server, func() (servers.SecurityReport, error) {
 		if err := identity.RequireAdmin(ctx); err != nil {
-			return core.SecurityReport{}, err
+			return servers.SecurityReport{}, err
 		}
 		id, err := t.serverID(ctx, in.Server)
 		if err != nil {
-			return core.SecurityReport{}, err
+			return servers.SecurityReport{}, err
 		}
 		names, err := t.serverNames(ctx)
 		if err != nil {
-			return core.SecurityReport{}, err
+			return servers.SecurityReport{}, err
 		}
 		if in.Confirm == "" || in.Confirm != names[id] {
-			return core.SecurityReport{}, fmt.Errorf("rebooting stops every app on the server: confirm must repeat the server name (%s)", names[id])
+			return servers.SecurityReport{}, fmt.Errorf("rebooting stops every app on the server: confirm must repeat the server name (%s)", names[id])
 		}
 		rep, err := t.c.RebootServer(ctx, id)
 		if errors.Is(err, core.ErrBusy) {

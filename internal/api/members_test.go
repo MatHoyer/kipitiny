@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/core"
@@ -217,7 +218,7 @@ func TestMemberRequests(t *testing.T) {
 		t.Errorf("create project without the feature: %d %s", code, body)
 	}
 	code, body = do(viewer, "GET", "/api/status", "")
-	var st core.Status
+	var st servers.Status
 	if err := json.Unmarshal([]byte(body), &st); code != http.StatusOK || err != nil || st.Docker != nil || st.DockerError != "" || st.Database != nil {
 		t.Errorf("status shows a member only the version: %d %s", code, body)
 	}

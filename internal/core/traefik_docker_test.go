@@ -45,7 +45,7 @@ func TestTraefikImageUpgradeDocker(t *testing.T) {
 	c := newTestCore(t, config.Config{Addr: ":3000", DataDir: t.TempDir(), Traefik: config.Traefik{
 		Image: floating, DockerSocket: "/var/run/docker.sock", HTTPPort: "0", HTTPSPort: "0",
 	}})
-	c.pool = docker.NewPool(dk, c.connectServer)
+	c.useDocker(dk)
 	sv, err := c.store.GetServer(ctx, domain.LocalServerID)
 	if err != nil {
 		t.Fatal(err)

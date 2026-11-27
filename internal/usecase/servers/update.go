@@ -1,4 +1,4 @@
-package core
+package servers
 
 import (
 	"context"
@@ -28,10 +28,17 @@ const (
 	updaterName      = "kipitiny-updater"
 	updaterComponent = "updater"
 
+	// DrainTimeout bounds how long the manager's shutdown waits for running
+	// operations. The container's stop timeout must exceed it plus
+	// ShutdownCancelGrace.
+	DrainTimeout = 4*time.Minute + 30*time.Second
+	// ShutdownCancelGrace is how long cancelled work gets to clean up.
+	ShutdownCancelGrace = 15 * time.Second
+
 	// StopTimeout is how long the manager's container gets to stop: enough
 	// to drain running operations. The updater and the compose file's
 	// stop_grace_period use it.
-	StopTimeout = DrainTimeout + shutdownCancelGrace + 15*time.Second
+	StopTimeout = DrainTimeout + ShutdownCancelGrace + 15*time.Second
 	// UpdateHealthTimeout is how long a new version gets to become healthy
 	// before the updater restores the previous one.
 	UpdateHealthTimeout = 3 * time.Minute
@@ -113,7 +120,7 @@ func latestVersion(tags []string) string {
 
 // StartUpdateChecker looks for a newer published version now and every six
 // hours. Development builds (no x.y.z version) never check.
-func (c *Core) StartUpdateChecker() error {
+func (c *Servers) StartUpdateChecker() error {
 	if !c.cfg.Update.Check {
 		return nil
 	}
@@ -121,7 +128,7 @@ func (c *Core) StartUpdateChecker() error {
 		c.log.Debug("update checks are off for development builds", "version", c.cfg.Version)
 		return nil
 	}
-	return c.goLoop(func() {
+	return c.mgr.GoLoop(func() {
 		timer := time.NewTimer(0)
 		defer timer.Stop()
 		for {
@@ -137,12 +144,12 @@ func (c *Core) StartUpdateChecker() error {
 }
 
 // CheckUpdate looks for a newer published version now, on demand.
-func (c *Core) CheckUpdate(ctx context.Context) UpdateInfo {
+func (c *Servers) CheckUpdate(ctx context.Context) UpdateInfo {
 	c.checkUpdate(ctx)
 	return c.Update()
 }
 
-func (c *Core) checkUpdate(ctx context.Context) {
+func (c *Servers) checkUpdate(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	c.inspectPin(ctx)
@@ -173,7 +180,7 @@ func (c *Core) checkUpdate(ctx context.Context) {
 		c.log.Info("a new version is available", "current", c.cfg.Version, "latest", u.latest)
 		if u.notified != u.latest {
 			u.notified = u.latest
-			c.Notify(updateEvent(c.cfg.Version, u.latest, notices), "/about", "")
+			c.mgr.Notify(updateEvent(c.cfg.Version, u.latest, notices), "/about", "")
 		}
 	}
 }
@@ -202,7 +209,7 @@ func updateEvent(current, latest string, notices []upgrade.Notice) notify.Event 
 
 // inspectPin records once whether compose pins the manager's version: the
 // container's image can't change while this process runs.
-func (c *Core) inspectPin(ctx context.Context) {
+func (c *Servers) inspectPin(ctx context.Context) {
 	u := &c.update
 	u.mu.Lock()
 	done := u.inspected
@@ -211,7 +218,7 @@ func (c *Core) inspectPin(ctx context.Context) {
 	if done || self == "" {
 		return
 	}
-	res, err := c.dockerFor(domain.LocalServerID).ContainerInspect(ctx, self, client.ContainerInspectOptions{})
+	res, err := c.DockerFor(domain.LocalServerID).ContainerInspect(ctx, self, client.ContainerInspectOptions{})
 	if err != nil {
 		c.log.Warn("cannot inspect the manager's container", "err", err)
 		return
@@ -241,7 +248,7 @@ func composePin(ref string, labels map[string]string) string {
 }
 
 // Update reports the known update state; it never calls the registry.
-func (c *Core) Update() UpdateInfo {
+func (c *Servers) Update() UpdateInfo {
 	u := &c.update
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -276,7 +283,7 @@ func (c *Core) Update() UpdateInfo {
 // short-lived updater container that replaces this manager's container (see
 // docker.ReplaceContainer) and restores it if the new one isn't healthy.
 // Apps, Traefik and databases keep running throughout.
-func (c *Core) ApplyUpdate(ctx context.Context) (UpdateInfo, error) {
+func (c *Servers) ApplyUpdate(ctx context.Context) (UpdateInfo, error) {
 	self := docker.SelfContainerID()
 	if self == "" {
 		return UpdateInfo{}, fmt.Errorf("%w: the manager isn't running in a container", ErrInvalid)
@@ -311,7 +318,7 @@ func (c *Core) ApplyUpdate(ctx context.Context) (UpdateInfo, error) {
 		u.mu.Unlock()
 	}
 	ref := c.cfg.Update.Image + ":" + latest
-	if err := c.goBackground(func() {
+	if err := c.mgr.GoBackground(func() {
 		if err := c.launchUpdater(c.bg, self, ref); err != nil {
 			fail(err)
 		}
@@ -322,10 +329,10 @@ func (c *Core) ApplyUpdate(ctx context.Context) (UpdateInfo, error) {
 	return c.Update(), nil
 }
 
-func (c *Core) launchUpdater(ctx context.Context, self, ref string) error {
-	dk := c.dockerFor(domain.LocalServerID)
+func (c *Servers) launchUpdater(ctx context.Context, self, ref string) error {
+	dk := c.DockerFor(domain.LocalServerID)
 	c.log.Info("updating the manager", "image", ref)
-	if err := dk.PullImage(ctx, ref, c.RegistryAuth(ctx, ref), "", io.Discard); err != nil {
+	if err := dk.PullImage(ctx, ref, c.mgr.RegistryAuth(ctx, ref), "", io.Discard); err != nil {
 		return fmt.Errorf("pull %s: %w", ref, err)
 	}
 	// A compose file on :latest (or no tag) would otherwise bring back the
@@ -382,7 +389,7 @@ func floatingTag(ref, image string) bool {
 
 // cleanupUpdater removes finished updater containers, copying their output
 // into the manager's log first: it is the only record of how an update went.
-func (c *Core) cleanupUpdater(ctx context.Context, dk *docker.Client) {
+func (c *Servers) cleanupUpdater(ctx context.Context, dk *docker.Client) {
 	cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: updaterComponent})
 	if err != nil {
 		return
@@ -404,11 +411,11 @@ func (c *Core) cleanupUpdater(ctx context.Context, dk *docker.Client) {
 
 var releaseRe = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
-// ownImageRef is the manager's own image at this version (:dev for
+// OwnImageRef is the manager's own image at this version (:dev for
 // builds between releases, `make docker`; :dev-<branch> for a test
 // environment's): its commands run the analytics server and the SQLite
 // helper.
-func (c *Core) ownImageRef() string {
+func (c *Servers) OwnImageRef() string {
 	if releaseRe.MatchString(c.cfg.Version) || strings.HasPrefix(c.cfg.Version, "dev-") {
 		return c.cfg.Update.Image + ":" + c.cfg.Version
 	}

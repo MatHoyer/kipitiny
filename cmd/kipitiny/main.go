@@ -24,6 +24,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/probe"
 	"github.com/kipit-labs/kipitiny/internal/sqlitehelper"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 	"github.com/kipit-labs/kipitiny/web"
 )
 
@@ -198,7 +199,7 @@ func serve() error {
 	srvErr := srv.Shutdown(httpCtx)
 	// Running deploys and backups get to finish, within Docker's stop timeout
 	// (stop_grace_period in the compose file; the updater uses the same).
-	drainCtx, cancelDrain := context.WithTimeout(context.Background(), core.DrainTimeout)
+	drainCtx, cancelDrain := context.WithTimeout(context.Background(), servers.DrainTimeout)
 	defer cancelDrain()
 	if err := c.Shutdown(drainCtx); err != nil {
 		log.Warn("background work did not stop in time", "err", err)
@@ -223,7 +224,7 @@ func selfUpdate() error {
 	}
 	defer dc.Close()
 	logf := func(format string, args ...any) { slog.Info(fmt.Sprintf(format, args...)) }
-	return dc.ReplaceContainer(context.Background(), os.Args[2], os.Args[3], core.StopTimeout, core.UpdateHealthTimeout, logf)
+	return dc.ReplaceContainer(context.Background(), os.Args[2], os.Args[3], servers.StopTimeout, servers.UpdateHealthTimeout, logf)
 }
 
 // healthURL is the manager's health endpoint as seen from inside its container.

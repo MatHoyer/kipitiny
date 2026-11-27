@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 
 	"golang.org/x/net/websocket"
 
@@ -35,13 +36,13 @@ type terminalEnd struct {
 
 func (a *API) serviceTerminal(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	a.terminal(w, r, func(ctx context.Context, cols, rows uint) (*core.Terminal, error) {
+	a.terminal(w, r, func(ctx context.Context, cols, rows uint) (*servers.Terminal, error) {
 		return a.core.OpenServiceTerminal(ctx, r.PathValue("id"), q.Get("container"), q.Get("shell"), cols, rows)
 	})
 }
 
 func (a *API) serverTerminal(w http.ResponseWriter, r *http.Request) {
-	a.terminal(w, r, func(ctx context.Context, cols, rows uint) (*core.Terminal, error) {
+	a.terminal(w, r, func(ctx context.Context, cols, rows uint) (*servers.Terminal, error) {
 		return a.core.OpenServerTerminal(ctx, r.PathValue("id"), cols, rows)
 	})
 }
@@ -49,7 +50,7 @@ func (a *API) serverTerminal(w http.ResponseWriter, r *http.Request) {
 // terminal upgrades to a websocket and bridges it to the shell open returns.
 // Errors after the upgrade go to the browser as an "error" message, since a
 // WebSocket can't read the HTTP status.
-func (a *API) terminal(w http.ResponseWriter, r *http.Request, open func(ctx context.Context, cols, rows uint) (*core.Terminal, error)) {
+func (a *API) terminal(w http.ResponseWriter, r *http.Request, open func(ctx context.Context, cols, rows uint) (*servers.Terminal, error)) {
 	cols, _ := strconv.ParseUint(r.URL.Query().Get("cols"), 10, 16)
 	rows, _ := strconv.ParseUint(r.URL.Query().Get("rows"), 10, 16)
 	srv := websocket.Server{

@@ -1,4 +1,4 @@
-package core
+package servers
 
 import (
 	"context"
@@ -22,7 +22,7 @@ func defaultResourceAlerts() domain.ResourceAlerts {
 	return domain.ResourceAlerts{MemoryPercent: 90, MemoryMinutes: 5, CPUPercent: 90, CPUMinutes: 10, DiskFreePercent: 10}
 }
 
-func (c *Core) resourceAlerts(ctx context.Context) domain.ResourceAlerts {
+func (c *Servers) ResourceAlerts(ctx context.Context) domain.ResourceAlerts {
 	a := defaultResourceAlerts()
 	if v, err := c.store.GetSetting(ctx, resourceAlertsSetting); err == nil && v != "" {
 		_ = json.Unmarshal([]byte(v), &a)
@@ -30,7 +30,7 @@ func (c *Core) resourceAlerts(ctx context.Context) domain.ResourceAlerts {
 	return a
 }
 
-func (c *Core) SetResourceAlerts(ctx context.Context, a domain.ResourceAlerts) (domain.ResourceAlerts, error) {
+func (c *Servers) SetResourceAlerts(ctx context.Context, a domain.ResourceAlerts) (domain.ResourceAlerts, error) {
 	switch {
 	case a.MemoryPercent < 1 || a.MemoryPercent > 100, a.CPUPercent < 1 || a.CPUPercent > 100:
 		return domain.ResourceAlerts{}, fmt.Errorf("%w: memory and CPU thresholds are 1 to 100%%", ErrInvalid)
@@ -168,8 +168,8 @@ func (s *statsState) checkResources(now time.Time, th domain.ResourceAlerts, svc
 }
 
 // alertResources sends the transitions of this round.
-func (c *Core) alertResources(ctx context.Context, now time.Time, svcs map[string]domain.Service, servers []domain.Server) {
-	th := c.resourceAlerts(ctx)
+func (c *Servers) alertResources(ctx context.Context, now time.Time, svcs map[string]domain.Service, servers []domain.Server) {
+	th := c.ResourceAlerts(ctx)
 	for _, a := range c.stats.checkResources(now, th, svcs) {
 		if a.serviceID == "" {
 			name := a.serverID
@@ -184,7 +184,7 @@ func (c *Core) alertResources(ctx context.Context, now time.Time, svcs map[strin
 			if a.event == domain.EventDiskOK {
 				e.Level, e.Title, e.Message = notify.Success, name+" has disk space again", fmt.Sprintf("Back above %d%% free.", th.DiskFreePercent)
 			}
-			c.Notify(e, "/servers/"+a.serverID, "")
+			c.mgr.Notify(e, "/servers/"+a.serverID, "")
 			continue
 		}
 		svc := svcs[a.serviceID]
@@ -223,13 +223,13 @@ func (c *Core) alertResources(ctx context.Context, now time.Time, svcs map[strin
 			e = notify.Event{Level: notify.Success, Title: name + " CPU is back to normal", Message: fmt.Sprintf("Below %d%% %s.", th.CPUPercent, of)}
 		}
 		e.Type, e.Fields = a.event, fields
-		c.Notify(e, "/services/"+svc.ID, "")
+		c.mgr.Notify(e, "/services/"+svc.ID, "")
 	}
 }
 
-// notifyOOM reports a replica the kernel killed for memory. Keyed: a service
+// NotifyOOM reports a replica the kernel killed for memory. Keyed: a service
 // stuck in a loop of kills is reported once per monitoring.NotifyCooldown.
-func (c *Core) notifyOOM(ctx context.Context, serviceID, replica string) {
+func (c *Servers) NotifyOOM(ctx context.Context, serviceID, replica string) {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
 		return
@@ -242,7 +242,7 @@ func (c *Core) notifyOOM(ctx context.Context, serviceID, replica string) {
 	if svc.MemoryMB > 0 {
 		limit = fmt.Sprintf("its memory limit is %d MiB", svc.MemoryMB)
 	}
-	c.Notify(notify.Event{
+	c.mgr.Notify(notify.Event{
 		Type:    domain.EventServiceOOMKilled,
 		Level:   notify.Error,
 		Title:   fmt.Sprintf("%s/%s ran out of memory", project.Name, svc.Name),

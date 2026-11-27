@@ -1,4 +1,4 @@
-package core
+package servers
 
 import (
 	"context"
@@ -106,8 +106,8 @@ type sample struct {
 
 // StartStats samples the resource use of every running replica, on every
 // server, every ten seconds.
-func (c *Core) StartStats() error {
-	return c.goLoop(func() {
+func (c *Servers) StartStats() error {
+	return c.mgr.GoLoop(func() {
 		tick := time.NewTicker(statsEvery)
 		defer tick.Stop()
 		for {
@@ -121,7 +121,7 @@ func (c *Core) StartStats() error {
 	})
 }
 
-func (c *Core) sampleStats(ctx context.Context) {
+func (c *Servers) sampleStats(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, statsEvery)
 	defer cancel()
 	servers, err := c.store.ListServers(ctx)
@@ -145,7 +145,7 @@ func (c *Core) sampleStats(ctx context.Context) {
 	)
 	for _, sv := range servers {
 		wg.Go(func() {
-			h, err := sampleHost(ctx, c.dockerFor(sv.ID))
+			h, err := sampleHost(ctx, c.DockerFor(sv.ID))
 			if err != nil {
 				c.log.Debug("host stats", "server", sv.Name, "err", err)
 			} else {
@@ -155,7 +155,7 @@ func (c *Core) sampleStats(ctx context.Context) {
 			}
 		})
 		wg.Go(func() {
-			s, o, err := sampleServer(ctx, c.dockerFor(sv.ID), byID)
+			s, o, err := sampleServer(ctx, c.DockerFor(sv.ID), byID)
 			if err != nil {
 				c.log.Debug("container stats", "server", sv.Name, "err", err)
 				return
@@ -362,7 +362,7 @@ func (s *statsState) current(now time.Time) map[string]ServiceUsage {
 
 // ServiceStats returns a service's current resource use and the last five
 // minutes of it.
-func (c *Core) ServiceStats(ctx context.Context, id string) (ServiceStats, error) {
+func (c *Servers) ServiceStats(ctx context.Context, id string) (ServiceStats, error) {
 	if _, err := c.store.GetService(ctx, id); err != nil {
 		return ServiceStats{}, err
 	}
@@ -371,7 +371,7 @@ func (c *Core) ServiceStats(ctx context.Context, id string) (ServiceStats, error
 
 // CurrentUsage returns the current resource use of every running service,
 // by service ID.
-func (c *Core) CurrentUsage(ctx context.Context) map[string]ServiceUsage {
+func (c *Servers) CurrentUsage(ctx context.Context) map[string]ServiceUsage {
 	out := c.stats.current(time.Now())
 	maps.DeleteFunc(out, func(_ string, u ServiceUsage) bool { return !identity.Visible(ctx, u.ProjectID) })
 	return out

@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 )
 
 func (a *API) getCleanup(w http.ResponseWriter, r *http.Request) {
@@ -11,7 +11,7 @@ func (a *API) getCleanup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) setCleanup(w http.ResponseWriter, r *http.Request) {
-	var body core.CleanupSettings
+	var body servers.CleanupSettings
 	if !decode(w, r, &body) {
 		return
 	}

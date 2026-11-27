@@ -1,4 +1,4 @@
-package core
+package servers
 
 import (
 	"context"
@@ -81,7 +81,7 @@ func TestTrimDeployments(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		path := c.DeployLogPath(svc.ID, d.ID)
+		path := c.mgr.DeployLogPath(svc.ID, d.ID)
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -113,7 +113,7 @@ func TestTrimDeployments(t *testing.T) {
 		}
 	}
 	for _, d := range deps[2:4] {
-		if _, err := os.Stat(c.DeployLogPath(svc.ID, d.ID)); !errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(c.mgr.DeployLogPath(svc.ID, d.ID)); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("log of trimmed deployment %s still there: %v", d.ID, err)
 		}
 	}

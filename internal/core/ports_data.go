@@ -21,7 +21,7 @@ func (p dataPorts) RegistryAuth(ctx context.Context, image string) string {
 	return p.c.RegistryAuth(ctx, image)
 }
 
-func (p dataPorts) OwnImageRef() string { return p.c.ownImageRef() }
+func (p dataPorts) OwnImageRef() string { return p.c.OwnImageRef() }
 
 func (p dataPorts) GoBackground(f func()) error { return p.c.goBackground(f) }
 

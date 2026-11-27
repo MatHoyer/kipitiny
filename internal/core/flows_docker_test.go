@@ -24,6 +24,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
@@ -81,7 +82,7 @@ func (f flow) core(t *testing.T) *Core {
 		t.Fatal(err)
 	}
 	c := New(f.cfg, st, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	c.pool = docker.NewPool(f.dk, c.connectServer)
+	c.useDocker(f.dk)
 	// The injected health probe is the test binary, which can't probe: apps
 	// are ready on their own healthcheck, or once up for a few seconds.
 	c.probes.Store(domain.LocalServerID, (*mount.Mount)(nil))
@@ -268,7 +269,7 @@ func TestReconcileAfterRestartFlowDocker(t *testing.T) {
 	t.Cleanup(func() { _ = f.dk.RemoveContainer(context.Background(), stray, 0) })
 
 	restarted := f.core(t)
-	if err := restarted.reconcile(f.ctx); err != nil {
+	if err := restarted.Reconcile(f.ctx); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.running(t, web); len(got) != 2 || got[0] != dep.ID || got[1] != dep.ID {
@@ -279,7 +280,7 @@ func TestReconcileAfterRestartFlowDocker(t *testing.T) {
 	}
 	// A second pass changes nothing.
 	before, _ := f.c.ServiceContainers(f.ctx, web)
-	if err := restarted.reconcile(f.ctx); err != nil {
+	if err := restarted.Reconcile(f.ctx); err != nil {
 		t.Fatal(err)
 	}
 	after, _ := f.c.ServiceContainers(f.ctx, web)
@@ -445,7 +446,7 @@ func TestPreviewFlowDocker(t *testing.T) {
 // The upgrade preflight sees Docker, and wants a recent manager backup.
 func TestUpdatePreflightFlowDocker(t *testing.T) {
 	f := newFlow(t)
-	check := func(id string) PreflightCheck {
+	check := func(id string) servers.PreflightCheck {
 		t.Helper()
 		for _, c := range f.c.UpdatePreflight(f.ctx).Checks {
 			if c.ID == id {
@@ -453,7 +454,7 @@ func TestUpdatePreflightFlowDocker(t *testing.T) {
 			}
 		}
 		t.Fatalf("no %s check", id)
-		return PreflightCheck{}
+		return servers.PreflightCheck{}
 	}
 	if c := check("docker"); c.State != "ok" {
 		t.Errorf("docker check: %+v", c)

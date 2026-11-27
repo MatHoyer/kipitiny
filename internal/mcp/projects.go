@@ -16,6 +16,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 )
 
 // Projects, their git link, renames, start/stop and deploy logs.
@@ -41,15 +42,15 @@ func (t *tools) listProjects(ctx context.Context, _ *mcp.CallToolRequest, _ stru
 	if err != nil {
 		return nil, listProjectsOut{}, err
 	}
-	servers, err := t.c.ListServers(ctx)
+	svs, err := t.c.ListServers(ctx)
 	if err != nil {
 		return nil, listProjectsOut{}, err
 	}
 	out := listProjectsOut{Projects: []ProjectSummary{}}
 	for _, p := range projects {
 		s := ProjectSummary{Name: p.Name, Server: p.ServerID, Tags: p.Tags, Services: []string{}}
-		if i := slices.IndexFunc(servers, func(sv core.ServerView) bool { return sv.ID == p.ServerID }); i >= 0 {
-			s.Server = servers[i].Name
+		if i := slices.IndexFunc(svs, func(sv servers.ServerView) bool { return sv.ID == p.ServerID }); i >= 0 {
+			s.Server = svs[i].Name
 		}
 		svcs, err := t.c.ListServices(ctx, p.ID)
 		if err != nil {
@@ -77,15 +78,15 @@ func (t *tools) createProject(ctx context.Context, _ *mcp.CallToolRequest, in cr
 	out, err := mutate(ctx, t.c, "create_project", in.Name, func() (ProjectSummary, error) {
 		serverID := ""
 		if in.Server != "" {
-			servers, err := t.c.ListServers(ctx)
+			svs, err := t.c.ListServers(ctx)
 			if err != nil {
 				return ProjectSummary{}, err
 			}
-			i := slices.IndexFunc(servers, func(sv core.ServerView) bool { return sv.Name == in.Server })
+			i := slices.IndexFunc(svs, func(sv servers.ServerView) bool { return sv.Name == in.Server })
 			if i < 0 {
 				return ProjectSummary{}, fmt.Errorf("%w: server %s", domain.ErrNotFound, in.Server)
 			}
-			serverID = servers[i].ID
+			serverID = svs[i].ID
 		}
 		p, err := t.c.CreateProject(ctx, in.Name, serverID)
 		if err != nil {

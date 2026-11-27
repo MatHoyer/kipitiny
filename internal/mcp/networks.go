@@ -12,6 +12,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 )
 
 // NetworkSummary is a network created by hand and the services on it, by the
@@ -163,24 +164,24 @@ func (t *tools) serverID(ctx context.Context, name string) (string, error) {
 	if name == "" {
 		return domain.LocalServerID, nil
 	}
-	servers, err := t.c.ListServers(ctx)
+	svs, err := t.c.ListServers(ctx)
 	if err != nil {
 		return "", err
 	}
-	i := slices.IndexFunc(servers, func(sv core.ServerView) bool { return sv.Name == name })
+	i := slices.IndexFunc(svs, func(sv servers.ServerView) bool { return sv.Name == name })
 	if i < 0 {
 		return "", fmt.Errorf("%w: server %s", domain.ErrNotFound, name)
 	}
-	return servers[i].ID, nil
+	return svs[i].ID, nil
 }
 
 func (t *tools) serverNames(ctx context.Context) (map[string]string, error) {
-	servers, err := t.c.ListServers(ctx)
+	svs, err := t.c.ListServers(ctx)
 	if err != nil {
 		return nil, err
 	}
-	names := make(map[string]string, len(servers))
-	for _, sv := range servers {
+	names := make(map[string]string, len(svs))
+	for _, sv := range svs {
 		names[sv.ID] = sv.Name
 	}
 	return names, nil

@@ -1,4 +1,4 @@
-package core
+package servers
 
 import (
 	"os/exec"

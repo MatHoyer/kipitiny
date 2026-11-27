@@ -150,7 +150,7 @@ updates.
 cmd/kipitiny/          entrypoint
 internal/config/       env config
 internal/domain/       entities, repository interfaces (one per area), shared errors
-internal/usecase/      use cases by area (identity so far), each its own package
+internal/usecase/      use cases by area, each its own package
 internal/core/         the remaining use cases; embeds each area for the handlers
 internal/infrastructure/sqlite/ SQLite store (bun + goose migrations)
 internal/api/          JSON HTTP handlers

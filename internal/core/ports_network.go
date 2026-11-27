@@ -19,7 +19,7 @@ func (p networkPorts) RegistryAuth(ctx context.Context, image string) string {
 
 func (p networkPorts) GoLoop(f func()) error { return p.c.goLoop(f) }
 
-func (p networkPorts) Kick() { p.c.kick() }
+func (p networkPorts) Kick() { p.c.Kick() }
 
 func (p networkPorts) PagesUpstream(ctx context.Context, sv domain.Server, managerURL string) (string, error) {
 	return p.c.PagesUpstream(ctx, sv, managerURL)

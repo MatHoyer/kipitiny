@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 )
 
 func (a *API) listServices(w http.ResponseWriter, r *http.Request) {
@@ -228,7 +228,7 @@ func (a *API) streamLogs(w http.ResponseWriter, r *http.Request) {
 			started = true
 		}
 	}
-	err := a.core.StreamLogs(r.Context(), r.PathValue("id"), tail, func(l core.LogLine) {
+	err := a.core.StreamLogs(r.Context(), r.PathValue("id"), tail, func(l servers.LogLine) {
 		start()
 		b, _ := json.Marshal(l)
 		fmt.Fprintf(w, "data: %s\n\n", b)

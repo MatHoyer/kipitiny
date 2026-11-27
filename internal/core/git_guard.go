@@ -34,6 +34,8 @@ func guardRepo(ctx context.Context, g domain.ProjectGit) context.Context {
 }
 
 var (
+	// cgnat is where Tailscale and carrier-grade NAT addresses live.
+	cgnat   = netip.MustParsePrefix("100.64.0.0/10")
 	thisNet = netip.MustParsePrefix("0.0.0.0/8")
 	nat64   = netip.MustParsePrefix("64:ff9b::/96")
 )

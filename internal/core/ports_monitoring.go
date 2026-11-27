@@ -17,7 +17,7 @@ func (p monitoringPorts) RegistryAuth(ctx context.Context, image string) string 
 	return p.c.RegistryAuth(ctx, image)
 }
 
-func (p monitoringPorts) OwnImageRef() string { return p.c.ownImageRef() }
+func (p monitoringPorts) OwnImageRef() string { return p.c.OwnImageRef() }
 
 func (p monitoringPorts) GoLoop(f func()) error { return p.c.goLoop(f) }
 
@@ -40,7 +40,7 @@ func (p monitoringPorts) CheckGitOwned(ctx context.Context, projectID string) er
 }
 
 func (p monitoringPorts) ResourceAlerts(ctx context.Context) domain.ResourceAlerts {
-	return p.c.resourceAlerts(ctx)
+	return p.c.ResourceAlerts(ctx)
 }
 
 func (p monitoringPorts) CertResolver(ctx context.Context, serverID, domain string) string {
