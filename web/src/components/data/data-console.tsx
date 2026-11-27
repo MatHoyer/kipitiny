@@ -96,7 +96,7 @@ export function PgConsole({ serviceId, database, dialect }: { serviceId: string;
             onRun={submit}
             schema={schema}
             dialect={dialect}
-            defaultSchema={dialect === "postgres" ? "public" : database}
+            defaultSchema={dialect === "postgres" ? "public" : dialect === "sqlite" ? "main" : database}
             label="SQL"
             placeholder={placeholder}
           />
@@ -108,7 +108,15 @@ export function PgConsole({ serviceId, database, dialect }: { serviceId: string;
           <WriteMode write={write} onChange={setWrite} />
           <QueryHistory items={hist.items} onPick={setQuery} />
           <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">
-            {dialect === "postgres" ? (write ? "Runs as one transaction" : "Session is read only") : write ? "Runs as root" : "Runs as a read-only user"}
+            {dialect === "postgres" || dialect === "sqlite"
+              ? write
+                ? "Runs as one transaction"
+                : dialect === "sqlite"
+                  ? "File opened read only"
+                  : "Session is read only"
+              : write
+                ? "Runs as root"
+                : "Runs as a read-only user"}
           </span>
           <Button size="sm" variant={write ? "destructive" : "default"} loading={run.isPending} disabled={!query.trim()} onClick={submit}>
             <Play /> Run

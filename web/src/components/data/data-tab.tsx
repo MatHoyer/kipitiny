@@ -1,7 +1,8 @@
 import { Database, SquareTerminal } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState, type CSSProperties } from "react";
-import { Empty } from "@/components/common";
+import { Empty, ErrorText } from "@/components/common";
+import { Loading } from "@kipit-labs/kipitidy/loading";
 import { serviceLogos } from "@/components/service-icon";
 import { Segmented, SegmentedItem } from "@kipit-labs/kipitidy/segmented";
 import { api, isDatabase, type Service } from "../../api";
@@ -12,9 +13,13 @@ import { MongoBrowser } from "./mongo-browser";
 import { PgBrowser } from "./pg-browser";
 import { RedisBrowser } from "./redis-browser";
 
+/** SQLite's light blue: its navy disappears on dark backgrounds. */
+const sqliteColor = "#0F80CC";
+
 /**
  * A database's data: browse (and edit) it, or run queries in a console.
- * Accents take the database's brand hue (--db).
+ * An app's databases are the SQLite files in its volumes. Accents take the
+ * database's brand hue (--db).
  */
 export function DataTab({ svc }: { svc: Service }) {
   return (
@@ -28,7 +33,8 @@ function Data({ svc }: { svc: Service }) {
   const { confirm } = useUnsaved();
   const [view, setView] = useState<"browse" | "console">("browse");
   // SQL kinds share the PostgreSQL browser and console; MongoDB has its own.
-  const sql = svc.kind === "postgres" || svc.kind === "mysql" || svc.kind === "mariadb" ? svc.kind : null;
+  const app = svc.kind === "app";
+  const sql = app ? "sqlite" : svc.kind === "postgres" || svc.kind === "mysql" || svc.kind === "mariadb" ? svc.kind : null;
   useEffect(() => {
     if (sql) preloadSqlEditor();
   }, [sql]);
@@ -37,16 +43,26 @@ function Data({ svc }: { svc: Service }) {
   const databases = useQuery({
     queryKey: ["data", svc.id, "databases"],
     queryFn: () => api.pgDatabases(svc.id),
-    enabled: multi && isDatabase(svc.kind),
+    enabled: multi && (app || isDatabase(svc.kind)),
   });
   const [picked, setPicked] = useState("");
   const dbs = databases.data ?? [];
-  const database = dbs.some((d) => d.name === picked) ? picked : (dbs.find((d) => d.main)?.name ?? "");
+  // An app has no main database: its first file is the default.
+  const database = dbs.some((d) => d.name === picked) ? picked : (dbs.find((d) => d.main)?.name ?? (app ? (dbs[0]?.name ?? "") : ""));
 
-  if (!isDatabase(svc.kind)) return null;
-  if (!svc.containers.some((c) => !c.retired && c.state === "running"))
-    return <Empty>The database is stopped. Start it to see its data.</Empty>;
-  const hue = { "--db": serviceLogos[svc.kind].color } as CSSProperties;
+  if (app) {
+    // Its files are read through a helper: the app may be stopped.
+    if (databases.isPending) return <Loading />;
+    if (databases.error) return <ErrorText error={databases.error} />;
+    if (dbs.length === 0)
+      return (
+        <Empty>
+          No SQLite database in this app&apos;s volumes. One kept in the container&apos;s own files is lost on the next deploy: keep it in a volume.
+        </Empty>
+      );
+  } else if (!isDatabase(svc.kind)) return null;
+  else if (!svc.containers.some((c) => !c.retired && c.state === "running")) return <Empty>The database is stopped. Start it to see its data.</Empty>;
+  const hue = { "--db": app ? sqliteColor : serviceLogos[svc.kind].color } as CSSProperties;
 
   return (
     <div className="space-y-5" style={hue}>
@@ -67,7 +83,7 @@ function Data({ svc }: { svc: Service }) {
         {multi && (
           <div className="ml-auto flex items-center gap-1.5">
             <DatabasePicker databases={dbs} value={database} onChange={(d) => confirm(() => setPicked(d))} />
-            <NewDatabaseButton serviceId={svc.id} mongo={svc.kind === "mongodb"} onCreated={(d) => confirm(() => setPicked(d))} />
+            {!app && <NewDatabaseButton serviceId={svc.id} mongo={svc.kind === "mongodb"} onCreated={(d) => confirm(() => setPicked(d))} />}
           </div>
         )}
       </div>
@@ -75,7 +91,13 @@ function Data({ svc }: { svc: Service }) {
         view === "console" ? (
           <PgConsole key={database} serviceId={svc.id} database={database} dialect={sql} />
         ) : (
-          <PgBrowser key={database} serviceId={svc.id} database={database} defaultSchema={sql === "postgres" ? "public" : database} dialect={sql} />
+          <PgBrowser
+            key={database}
+            serviceId={svc.id}
+            database={database}
+            defaultSchema={sql === "postgres" ? "public" : sql === "sqlite" ? "main" : database}
+            dialect={sql}
+          />
         )
       ) : svc.kind === "mongodb" ? (
         view === "console" ? (

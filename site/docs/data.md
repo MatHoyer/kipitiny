@@ -8,8 +8,9 @@ Every database's **Data** tab shows what it holds without deploying pgAdmin,
 Adminer, Compass or RedisInsight next to it. The manager runs the database's own
 client (`psql`, `mysql`/`mariadb`, `mongosh`, `redis-cli`) inside its container,
 like backups do: nothing is exposed, nothing is installed, and the client always
-matches the server. The database must be running. Agents get the same through
-[MCP](/docs/api) tools, with the same permissions.
+matches the server. The database must be running. An app with volumes gets the
+tab too, for the [SQLite](#sqlite) files it keeps there. Agents get the same
+through [MCP](/docs/api) tools, with the same permissions.
 
 On MySQL, MariaDB and MongoDB, browsing and the read-only console use a
 **read-only user** the manager creates in the database (`kipitiny_read`, with
@@ -43,6 +44,11 @@ from the root one). The server itself refuses writes there.
   10 to 100 per page. *Filter* and *Sort* take a query and a sort as JSON
   (`{ "status": "active", "age": { "$gte": 18 } }`, `{ "createdAt": -1 }`),
   applied with Enter.
+- **SQLite** (an app): the database picker lists the SQLite files found in the
+  app's volumes, as `<volume>/<path>`. Then it's the same browser, with a few
+  SQLite differences. Blobs show as `0x…` hex, `ilike` is SQLite's `LIKE`
+  (case-insensitive for ASCII only), and the page count is unknown: SQLite keeps
+  no row estimate. See [SQLite](#sqlite).
 - **Redis**: keys are listed with `SCAN` (never `KEYS`), grouped by their `:`
   segments (`user:42` under `user:`), with their type; a clock marks keys that
   expire. *Match keys* takes a word (matched anywhere) or a glob such as `user:*`.
@@ -60,7 +66,7 @@ Browse is read-only until you switch it to **Allow writes** (it asks first; the
 frame turns red, as the console's does). Changes then stay **pending** in your
 browser, marked in the grid, until you save them:
 
-- **PostgreSQL, MySQL and MariaDB**: click a cell to edit it (Enter or leaving it
+- **PostgreSQL, MySQL, MariaDB and SQLite**: click a cell to edit it (Enter or leaving it
   keeps the text, Escape drops it, Tab moves to the next cell). An edited cell
   turns amber, its old value in its tooltip. **+ Row** adds a row at the top, in
   green, its cells on `DEFAULT` until you fill them. The bin marks a row for
@@ -68,7 +74,8 @@ browser, marked in the grid, until you save them:
   expand button opens the row whole, to edit long values or set a field to
   `NULL` (or back to `DEFAULT` on a new row). Only a table with a primary key
   can be edited: it is how a row is found again. Views, values cut at 4 KiB and,
-  on MySQL and MariaDB, binary columns are left to the console.
+  on MySQL, MariaDB and SQLite, binary columns (SQLite: a declared type naming
+  `BLOB`) are left to the console.
 - **MongoDB**: the pencil opens a document as Extended JSON, as shown. Only the
   top-level fields you change are saved (`$set`, and `$unset` for those you
   remove), so the others keep their exact types (an `int64` stays one). **+
@@ -86,8 +93,8 @@ browser, marked in the grid, until you save them:
   if the name is taken.
 - **Save** (or *Ctrl+S*) first shows the statements the manager wrote for your
   changes (SQL, `mongosh` calls or Redis commands): deletes, then updates, then
-  inserts. Nothing runs until you confirm. On PostgreSQL, MySQL and MariaDB they
-  run as **one transaction**, as the service's own user (root on MySQL and
+  inserts. Nothing runs until you confirm. On PostgreSQL, MySQL, MariaDB and
+  SQLite they run as **one transaction**, as the service's own user (root on MySQL and
   MariaDB): if one fails, nothing is saved and your changes stay pending, to fix
   and save again. On Redis they run in one script, atomically, after checking
   the values you changed. MongoDB has no transactions on a single server: every
@@ -112,7 +119,7 @@ browser, marked in the grid, until you save them:
 
 ## Console
 
-*Console* runs SQL against PostgreSQL, MySQL and MariaDB, JavaScript against
+*Console* runs SQL against PostgreSQL, MySQL, MariaDB and SQLite, JavaScript against
 MongoDB (as in `mongosh`, `db` being the picked database), or a command against
 Redis, and shows the result (at most 200 rows or 1 MiB of output; add a `LIMIT`,
 or export the table).
@@ -124,16 +131,49 @@ queries are kept per database in this browser only (*History*). `psql`
 meta-commands (`\dt`, `\!`…) don't run: query `information_schema` instead.
 
 - By default the console is **read-only**: the PostgreSQL session refuses writes,
-  MySQL, MariaDB and MongoDB run as the read-only user, and Redis commands that
+  a SQLite file is opened read-only, MySQL, MariaDB and MongoDB run as the
+  read-only user, and Redis commands that
   change data or the server (`SET`, `DEL`, `CONFIG`…) are refused. It guards
   against mistakes; the admin can lift it.
-- **Allow writes** (asks first) lifts that. On PostgreSQL the whole input then
-  runs in **one transaction**: if a statement fails, nothing is applied. MySQL,
+- **Allow writes** (asks first) lifts that. On PostgreSQL and SQLite the whole
+  input then runs in **one transaction**: if a statement fails, nothing is applied. MySQL,
   MariaDB and MongoDB then run as root (statements apply one by one). Only the
   last statement's result is shown.
 - Statements time out after 30 s. Redis commands that block or never return
   (`MONITOR`, `SUBSCRIBE`, `BLPOP`, `XREAD BLOCK`…) are always refused: use the
   [terminal](/docs/services) and `redis-cli` for those.
+
+## SQLite
+
+Many apps keep a SQLite file in a [volume](/docs/files) (`/data/app.db`). Most
+images have no `sqlite3`, so the manager brings its own SQLite client. It runs
+in a helper container of the manager's own image that mounts the app's volumes,
+with no network. On another server, its first use pulls that image.
+
+- **Finding the files**: opening the tab scans the app's volumes for files that
+  start with SQLite's header, whatever their name (`.db`, `.sqlite`, none).
+  The scan goes 8 folders deep, looks at up to 50,000 entries and lists up to
+  200 databases. The app doesn't need to be running.
+- **Alongside the app**: SQLite's own locks keep the app and the browser apart,
+  as with any second client. A read waits up to 5 s for an app's write to finish,
+  and a save waits for the app's other writes. An app that holds an
+  exclusive lock (`PRAGMA locking_mode = EXCLUSIVE`) can't be browsed while it
+  runs: stop it first.
+- **As the file's owner**: the helper opens the file as the user and group that
+  own it. Any journal, `-wal` or `-shm` file it creates beside it is the app's,
+  not root's, so the app can still open its own database.
+- **Read-only** until you allow writes: the file is opened read-only, and SQLite
+  refuses any write, `PRAGMA` included. With writes allowed, a save or console
+  run takes SQLite's write lock (`BEGIN IMMEDIATE`) for one transaction.
+- **One file at a time**: `ATTACH` is refused, with or without writes, since it
+  could create or change any file of the volumes. So is `VACUUM` (it attaches a
+  copy): run it from the app, or from its [terminal](/docs/services). The browser leaves `foreign_keys` off, SQLite's default: turn it
+  on in the console if your app relies on it.
+- **Only in a volume**: a database in the container's own filesystem isn't
+  browsed. It's lost on the next deploy anyway: keep it in a volume.
+- In the console, `DATE`, `DATETIME` and `TIMESTAMP` columns selected as they
+  are show as `2026-01-02 15:04:05+00:00` whatever text they hold. Browsing shows
+  the stored text.
 
 ## Access
 
@@ -159,4 +199,6 @@ makes a new key),
 `GET /api/services/{id}/data/key` (`key`, `cursor`),
 `GET /api/services/{id}/data/collections/{collection}/documents` (`database`,
 `filter`, `sort`, `limit`, `skip`) and
-`POST /api/services/{id}/data/console` (`{query, write, database}`).
+`POST /api/services/{id}/data/console` (`{query, write, database}`). For an app,
+`GET /api/services/{id}/data/databases` lists its SQLite files, `database` is
+one of them (`<volume>/<path>`), and the schema is `main`.

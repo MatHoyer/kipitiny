@@ -39,7 +39,8 @@ order: 3
   `mongodb://app:…@docs:27017/app?authSource=admin`. A MySQL or MariaDB app
   user owns the database `app`; root's password stays with the manager, for
   backups. A MongoDB user is the instance's root, so an app may use other
-  databases than `app`. The data browser covers PostgreSQL and Redis only.
+  databases than `app`. The [data browser](/docs/data) covers them all, and an
+  app's SQLite files.
 - **Environment**: variables are readable, secrets write-only. A project holds shared
   ones that services reference as `{{ project.NAME }}`. References resolve at deploy.
   Values can also come from a password manager, see below.

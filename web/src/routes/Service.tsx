@@ -258,7 +258,7 @@ export function Service() {
             <TabsTrigger value="deployments">Deployments</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
             {may("terminal") && <TabsTrigger value="terminal">Terminal</TabsTrigger>}
-            {isDb && may("data") && <TabsTrigger value="data">Data</TabsTrigger>}
+            {hasData && may("data") && <TabsTrigger value="data">Data</TabsTrigger>}
             {may("files") && <TabsTrigger value="files">Files</TabsTrigger>}
             <TabsTrigger value="environment">Environment</TabsTrigger>
             {svc.kind === "app" && <TabsTrigger value="jobs">Jobs</TabsTrigger>}
@@ -304,7 +304,7 @@ export function Service() {
               <ServiceTerminal svc={svc} />
             </TabsContent>
           )}
-          {isDb && may("data") && (
+          {hasData && may("data") && (
             <TabsContent value="data">
               <DataTab svc={svc} />
             </TabsContent>

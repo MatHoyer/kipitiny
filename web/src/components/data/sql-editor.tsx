@@ -1,6 +1,6 @@
 import { autocompletion, closeBrackets, closeBracketsKeymap, closeCompletion, completionKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { MariaSQL, MySQL, PostgreSQL, sql, type SQLDialect, type SQLNamespace } from "@codemirror/lang-sql";
+import { MariaSQL, MySQL, PostgreSQL, SQLite, sql, type SQLDialect, type SQLNamespace } from "@codemirror/lang-sql";
 import { bracketMatching, HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { Compartment, EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap, placeholder as placeholderExt } from "@codemirror/view";
@@ -35,8 +35,8 @@ const theme = EditorView.theme({
   ".cm-completionDetail": { color: "var(--muted-foreground)", fontStyle: "normal", marginLeft: "0.75rem" },
 });
 
-const dialects: Record<SqlDialect, SQLDialect> = { postgres: PostgreSQL, mysql: MySQL, mariadb: MariaSQL };
-export type SqlDialect = "postgres" | "mysql" | "mariadb";
+const dialects: Record<SqlDialect, SQLDialect> = { postgres: PostgreSQL, mysql: MySQL, mariadb: MariaSQL, sqlite: SQLite };
+export type SqlDialect = "postgres" | "mysql" | "mariadb" | "sqlite";
 
 /**
  * A SQL editor with the database's highlighting and completion of its own
@@ -57,7 +57,7 @@ export default function SqlEditor({
   onRun: () => void;
   schema: SQLNamespace;
   dialect: SqlDialect;
-  /** Where unqualified names are looked up: public, or MySQL's current database. */
+  /** Where unqualified names are looked up: public, MySQL's current database, or SQLite's main. */
   defaultSchema: string;
   placeholder: string;
   label: string;
