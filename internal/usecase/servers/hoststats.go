@@ -1,4 +1,4 @@
-package core
+package servers
 
 import (
 	"bufio"
@@ -191,7 +191,7 @@ func (s *statsState) host(id string, now time.Time) ServerStats {
 
 // ServerStats returns a server's current host resource use and the last
 // five minutes of it.
-func (c *Core) ServerStats(ctx context.Context, id string) (ServerStats, error) {
+func (c *Servers) ServerStats(ctx context.Context, id string) (ServerStats, error) {
 	if _, err := c.store.GetServer(ctx, id); err != nil {
 		return ServerStats{}, err
 	}

@@ -52,7 +52,7 @@ func TestTemplatesDocker(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
-	c.pool = docker.NewPool(dk, c.connectServer)
+	c.useDocker(dk)
 	// The injected health probe is the running binary, here the test's,
 	// which can't probe: apps are ready on their own healthcheck, or once
 	// up for a few seconds.

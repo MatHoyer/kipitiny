@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -64,11 +65,11 @@ func (t *Theme) normalize() error {
 		}
 	}
 	switch {
-	case !oneOf(t.Radius, themeRadii...):
+	case !slices.Contains(themeRadii, t.Radius):
 		return fmt.Errorf("%w: corners must be one of %s", ErrInvalid, strings.Join(themeRadii[1:], ", "))
-	case !oneOf(t.Font, themeFonts...):
+	case !slices.Contains(themeFonts, t.Font):
 		return fmt.Errorf("%w: the font must be one of %s", ErrInvalid, strings.Join(themeFonts[1:], ", "))
-	case !oneOf(t.Density, themeDensities...):
+	case !slices.Contains(themeDensities, t.Density):
 		return fmt.Errorf("%w: density must be one of %s", ErrInvalid, strings.Join(themeDensities[1:], ", "))
 	}
 	return nil

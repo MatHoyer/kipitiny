@@ -1,4 +1,4 @@
-package core
+package servers
 
 import (
 	"context"
@@ -30,7 +30,7 @@ type PreflightCheck struct {
 // without a warning: the update keeps the data, but a backup is the way back.
 const managerBackupFresh = 24 * time.Hour
 
-func (c *Core) UpdatePreflight(ctx context.Context) UpdatePreflight {
+func (c *Servers) UpdatePreflight(ctx context.Context) UpdatePreflight {
 	u := c.Update()
 	var checks []PreflightCheck
 	add := func(id, state, detail string) {
@@ -54,7 +54,7 @@ func (c *Core) UpdatePreflight(ctx context.Context) UpdatePreflight {
 		add("tasks", "ok", "no deploy, backup, restore or cleanup running")
 	}
 
-	if info, err := c.dockerFor(domain.LocalServerID).Info(ctx); err != nil {
+	if info, err := c.DockerFor(domain.LocalServerID).Info(ctx); err != nil {
 		add("docker", "block", "Docker doesn't answer: "+err.Error())
 	} else {
 		add("docker", "ok", "Docker "+info.Version+" answers")
@@ -79,18 +79,17 @@ func (c *Core) UpdatePreflight(ctx context.Context) UpdatePreflight {
 // runningTasks names what the manager is doing that an update would cut
 // short: the services with an operation (deploy, backup, restore…), restore
 // tests, the cleanup, and any other background operation.
-func (c *Core) runningTasks(ctx context.Context) []string {
+func (c *Servers) runningTasks(ctx context.Context) []string {
 	var out []string
-	c.busy.Range(func(k, _ any) bool {
-		if svc, err := c.store.GetService(ctx, k.(string)); err == nil {
+	for _, id := range c.mgr.BusyServices() {
+		if svc, err := c.store.GetService(ctx, id); err == nil {
 			name := svc.Name
 			if p, err := c.store.GetProject(ctx, svc.ProjectID); err == nil {
 				name = p.Name + "/" + name
 			}
 			out = append(out, name)
 		}
-		return true
-	})
+	}
 	slices.Sort(out)
 	if n := len(c.steps.Running("verify/")); n > 0 {
 		out = append(out, plural(n, "a restore test", "restore tests"))
@@ -99,7 +98,7 @@ func (c *Core) runningTasks(ctx context.Context) []string {
 		out = append(out, "the cleanup")
 	}
 	if len(out) == 0 {
-		if n := int(c.running.Load()); n > 0 {
+		if n := c.mgr.RunningOperations(); n > 0 {
 			out = append(out, plural(n, "a background task", "background tasks"))
 		}
 	}

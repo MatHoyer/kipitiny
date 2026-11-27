@@ -7,6 +7,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -112,16 +113,16 @@ func (t *tools) getTopology(ctx context.Context, _ *mcp.CallToolRequest, in getT
 }
 
 type managerStatusOut struct {
-	core.Status
+	servers.Status
 	// Usage is the current use of each running service, by project/service.
-	Usage map[string]core.Usage `json:"usage"`
+	Usage map[string]servers.Usage `json:"usage"`
 }
 
 func (t *tools) getManagerStatus(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, managerStatusOut, error) {
 	if err := identity.Authenticated(ctx); err != nil {
 		return nil, managerStatusOut{}, err
 	}
-	out := managerStatusOut{Status: t.c.Status(ctx), Usage: map[string]core.Usage{}}
+	out := managerStatusOut{Status: t.c.Status(ctx), Usage: map[string]servers.Usage{}}
 	usage := t.c.CurrentUsage(ctx)
 	if len(usage) == 0 {
 		return nil, out, nil

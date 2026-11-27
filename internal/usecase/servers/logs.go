@@ -1,4 +1,4 @@
-package core
+package servers
 
 import (
 	"bufio"
@@ -29,19 +29,19 @@ const maxLogTail = 5000
 // for each line (from a single goroutine). The backlog comes first, merged
 // across replicas in time order, then live lines as they arrive. It returns
 // when all containers' streams end or ctx is cancelled.
-func (c *Core) StreamLogs(ctx context.Context, serviceID string, tail int, emit func(LogLine)) error {
+func (c *Servers) StreamLogs(ctx context.Context, serviceID string, tail int, emit func(LogLine)) error {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
 		return err
 	}
-	cts, err := c.ActiveContainers(ctx, svc)
+	cts, err := c.mgr.ActiveContainers(ctx, svc)
 	if err != nil {
 		return err
 	}
 	if tail <= 0 || tail > maxLogTail {
 		tail = 200
 	}
-	dk := c.dockerFor(svc.ServerID)
+	dk := c.DockerFor(svc.ServerID)
 
 	// Read each backlog to its end, then follow from its last line, so the
 	// merged backlog can be sorted before anything is sent.
@@ -116,18 +116,18 @@ func followContainer(ctx context.Context, dk *docker.Client, ct container.Summar
 
 // RecentLogs returns the last lines of every active container of a service,
 // merged across containers in time order.
-func (c *Core) RecentLogs(ctx context.Context, serviceID string, tail int) ([]LogLine, error) {
+func (c *Servers) RecentLogs(ctx context.Context, serviceID string, tail int) ([]LogLine, error) {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
 		return nil, err
 	}
-	cts, err := c.ActiveContainers(ctx, svc)
+	cts, err := c.mgr.ActiveContainers(ctx, svc)
 	if err != nil {
 		return nil, err
 	}
 	var lines []LogLine
 	for _, ct := range cts {
-		l, err := containerLogs(ctx, c.dockerFor(svc.ServerID), ct, client.ContainerLogsOptions{Tail: strconv.Itoa(tail)})
+		l, err := containerLogs(ctx, c.DockerFor(svc.ServerID), ct, client.ContainerLogsOptions{Tail: strconv.Itoa(tail)})
 		if err != nil {
 			return nil, err
 		}

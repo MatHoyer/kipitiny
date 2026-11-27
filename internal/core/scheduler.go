@@ -10,13 +10,12 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 )
 
-// scheduler runs the jobs, the cleanup and the audit pruning; backup
-// schedules run in data.
+// scheduler runs the jobs; backup schedules run in data, the cleanup and
+// the audit pruning in servers.
 type scheduler struct {
-	mu      sync.Mutex
-	cron    *cron.Cron
-	jobs    map[string]cron.EntryID // job ID -> entry
-	cleanup cron.EntryID            // 0 when cleanup is off
+	mu   sync.Mutex
+	cron *cron.Cron
+	jobs map[string]cron.EntryID // job ID -> entry
 }
 
 // StartScheduler loads every enabled schedule. Times are UTC unless the
@@ -32,10 +31,7 @@ func (c *Core) StartScheduler(ctx context.Context) error {
 	if err := c.reloadJobs(ctx); err != nil {
 		return err
 	}
-	if err := c.scheduleCleanup(ctx); err != nil {
-		return err
-	}
-	if _, err := c.sched.cron.AddFunc("@daily", func() { c.PruneAudit(c.bg) }); err != nil {
+	if err := c.Servers.StartScheduler(ctx); err != nil {
 		return err
 	}
 	c.sched.cron.Start()
@@ -44,6 +40,7 @@ func (c *Core) StartScheduler(ctx context.Context) error {
 
 func (c *Core) stopScheduler() {
 	c.StopSchedules()
+	c.StopScheduler()
 	c.sched.mu.Lock()
 	defer c.sched.mu.Unlock()
 	if c.sched.cron != nil {

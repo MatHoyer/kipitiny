@@ -1,4 +1,4 @@
-package core
+package servers
 
 import (
 	"context"
@@ -28,7 +28,7 @@ var sshUserRe = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 
 // managerKey returns the manager's SSH key, generating it on first use. Its
 // public half goes into ~/.ssh/authorized_keys on every remote server.
-func (c *Core) managerKey(ctx context.Context) (ssh.Signer, error) {
+func (c *Servers) managerKey(ctx context.Context) (ssh.Signer, error) {
 	pemText, err := c.store.GetSetting(ctx, sshKeySetting)
 	if errors.Is(err, domain.ErrNotFound) {
 		_, priv, err := ed25519.GenerateKey(rand.Reader)
@@ -50,7 +50,7 @@ func (c *Core) managerKey(ctx context.Context) (ssh.Signer, error) {
 }
 
 // SSHPublicKey is the line to add to authorized_keys on remote servers.
-func (c *Core) SSHPublicKey(ctx context.Context) (string, error) {
+func (c *Servers) SSHPublicKey(ctx context.Context) (string, error) {
 	signer, err := c.managerKey(ctx)
 	if err != nil {
 		return "", err
@@ -59,7 +59,7 @@ func (c *Core) SSHPublicKey(ctx context.Context) (string, error) {
 }
 
 // connectServer builds the Docker client of a remote server (used by the pool).
-func (c *Core) connectServer(id string) (*docker.Client, error) {
+func (c *Servers) connectServer(id string) (*docker.Client, error) {
 	ctx := context.WithoutCancel(c.bg)
 	sv, err := c.store.GetServer(ctx, id)
 	if err != nil {
@@ -109,7 +109,7 @@ type ServerView struct {
 
 // ListServers returns every server with a live status (a short timeout per
 // server, queried in parallel).
-func (c *Core) ListServers(ctx context.Context) ([]ServerView, error) {
+func (c *Servers) ListServers(ctx context.Context) ([]ServerView, error) {
 	servers, err := c.store.ListServers(ctx)
 	if err != nil {
 		return nil, err
@@ -131,7 +131,7 @@ func (c *Core) ListServers(ctx context.Context) ([]ServerView, error) {
 			defer func() { done <- struct{}{} }()
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
-			if info, err := c.dockerFor(sv.ID).Info(ctx); err != nil {
+			if info, err := c.DockerFor(sv.ID).Info(ctx); err != nil {
 				views[i].DockerError = err.Error()
 			} else {
 				views[i].Docker = &info
@@ -153,7 +153,7 @@ func (c *Core) ListServers(ctx context.Context) ([]ServerView, error) {
 // CreateServer registers a remote server, connects to it (pinning its host
 // key) and prepares it (proxy network, Traefik). A server that can't be
 // reached is not saved.
-func (c *Core) CreateServer(ctx context.Context, in ServerInput) (ServerView, error) {
+func (c *Servers) CreateServer(ctx context.Context, in ServerInput) (ServerView, error) {
 	sv := domain.Server{Kind: domain.ServerSSH}
 	if err := applyServerInput(&sv, in); err != nil {
 		return ServerView{}, err
@@ -168,11 +168,11 @@ func (c *Core) CreateServer(ctx context.Context, in ServerInput) (ServerView, er
 		_ = c.store.DeleteServer(context.WithoutCancel(ctx), sv.ID)
 		return ServerView{}, err
 	}
-	c.kick() // start watching its events
+	c.Kick() // start watching its events
 	return view, nil
 }
 
-func (c *Core) UpdateServer(ctx context.Context, id string, in ServerInput) (ServerView, error) {
+func (c *Servers) UpdateServer(ctx context.Context, id string, in ServerInput) (ServerView, error) {
 	sv, err := c.store.GetServer(ctx, id)
 	if err != nil {
 		return ServerView{}, err
@@ -195,7 +195,7 @@ func (c *Core) UpdateServer(ctx context.Context, id string, in ServerInput) (Ser
 
 // DeleteServer forgets a server without projects and removes what the
 // manager put there (Traefik, proxy network).
-func (c *Core) DeleteServer(ctx context.Context, id string) error {
+func (c *Servers) DeleteServer(ctx context.Context, id string) error {
 	sv, err := c.store.GetServer(ctx, id)
 	if err != nil {
 		return err
@@ -208,7 +208,7 @@ func (c *Core) DeleteServer(ctx context.Context, id string) error {
 	} else if err != nil {
 		return err
 	}
-	dk := c.dockerFor(id)
+	dk := c.DockerFor(id)
 	for _, component := range []string{network.TraefikComponent, network.TunnelComponent} {
 		cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: component})
 		if err != nil {
@@ -237,11 +237,11 @@ const (
 	ServerStepTunnel = "tunnel"
 )
 
-func (c *Core) checkServer(ctx context.Context, sv domain.Server) (ServerView, error) {
+func (c *Servers) checkServer(ctx context.Context, sv domain.Server) (ServerView, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	progress.Report(ctx, ServerStepConnect)
-	info, err := c.dockerFor(sv.ID).Info(ctx)
+	info, err := c.DockerFor(sv.ID).Info(ctx)
 	if err != nil {
 		return ServerView{}, fmt.Errorf("%w: cannot reach Docker on %s: %v", ErrInvalid, sv.Name, err)
 	}
@@ -288,8 +288,8 @@ func applyServerInput(sv *domain.Server, in ServerInput) error {
 
 // SetServerNetwork sets a server's public IP and tunnel
 // (network.SetServerNetwork), returning the server as clients see it.
-func (c *Core) SetServerNetwork(ctx context.Context, id string, in network.ServerNetwork) (ServerView, error) {
-	sv, err := c.Network.SetServerNetwork(ctx, id, in)
+func (c *Servers) SetServerNetwork(ctx context.Context, id string, in network.ServerNetwork) (ServerView, error) {
+	sv, err := c.mgr.SetServerNetwork(ctx, id, in)
 	if err != nil {
 		return ServerView{}, err
 	}
@@ -297,8 +297,8 @@ func (c *Core) SetServerNetwork(ctx context.Context, id string, in network.Serve
 }
 
 // serverView is a server as clients see it, without live status.
-func (c *Core) serverView(sv domain.Server) ServerView {
-	v := ServerView{Server: sv, DetectedIP: c.DetectedPublicIP(sv.ID)}
+func (c *Servers) serverView(sv domain.Server) ServerView {
+	v := ServerView{Server: sv, DetectedIP: c.mgr.DetectedPublicIP(sv.ID)}
 	switch {
 	case sv.TunnelToken != "":
 		v.Tunnel = "server"

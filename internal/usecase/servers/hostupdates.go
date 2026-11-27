@@ -1,4 +1,4 @@
-package core
+package servers
 
 import (
 	"context"
@@ -34,7 +34,7 @@ type UpdateRun struct {
 
 func updateRunSetting(serverID string) string { return "security-install/" + serverID }
 
-func (c *Core) updateRun(ctx context.Context, serverID string) (UpdateRun, error) {
+func (c *Servers) updateRun(ctx context.Context, serverID string) (UpdateRun, error) {
 	var run UpdateRun
 	v, err := c.store.GetSetting(ctx, updateRunSetting(serverID))
 	if errors.Is(err, domain.ErrNotFound) || err == nil && v == "" {
@@ -46,7 +46,7 @@ func (c *Core) updateRun(ctx context.Context, serverID string) (UpdateRun, error
 	return run, json.Unmarshal([]byte(v), &run)
 }
 
-func (c *Core) saveUpdateRun(ctx context.Context, serverID string, run UpdateRun) error {
+func (c *Servers) saveUpdateRun(ctx context.Context, serverID string, run UpdateRun) error {
 	b, err := json.Marshal(run)
 	if err != nil {
 		return err
@@ -119,7 +119,7 @@ func installError(log, unit string) string {
 // InstallUpdates starts installing a server's pending security updates, or
 // all of them, in the background; the security report follows it and the
 // host is checked again when it's done. Admin only.
-func (c *Core) InstallUpdates(ctx context.Context, serverID string, all bool) (SecurityReport, error) {
+func (c *Servers) InstallUpdates(ctx context.Context, serverID string, all bool) (SecurityReport, error) {
 	if err := identity.RequireAdmin(ctx); err != nil {
 		return SecurityReport{}, err
 	}
@@ -146,7 +146,7 @@ func (c *Core) InstallUpdates(ctx context.Context, serverID string, all bool) (S
 	if err := c.saveUpdateRun(ctx, serverID, run); err != nil {
 		return SecurityReport{}, err
 	}
-	if err := c.goLoop(func() { c.waitUpdates(sv, run) }); err != nil {
+	if err := c.mgr.GoLoop(func() { c.waitUpdates(sv, run) }); err != nil {
 		return SecurityReport{}, err
 	}
 	return c.ServerSecurity(ctx, serverID)
@@ -155,7 +155,7 @@ func (c *Core) InstallUpdates(ctx context.Context, serverID string, all bool) (S
 // waitUpdates follows an install until it ends. The helper waiting for it
 // dies when Docker restarts, so it's started again; a manager restart
 // resumes it from resumeUpdates.
-func (c *Core) waitUpdates(sv domain.Server, run UpdateRun) {
+func (c *Servers) waitUpdates(sv domain.Server, run UpdateRun) {
 	ctx, cancel := context.WithDeadline(c.bg, run.StartedAt.Add(updatesTimeout))
 	defer cancel()
 	for {
@@ -190,14 +190,14 @@ func (c *Core) waitUpdates(sv domain.Server, run UpdateRun) {
 
 // resumeUpdates follows the installs a previous run of the manager started,
 // for instance before an upgrade of Docker restarted it.
-func (c *Core) resumeUpdates() {
+func (c *Servers) resumeUpdates() {
 	servers, err := c.store.ListServers(c.bg)
 	if err != nil {
 		return
 	}
 	for _, sv := range servers {
 		if run, err := c.updateRun(c.bg, sv.ID); err == nil && run.Running {
-			_ = c.goLoop(func() { c.waitUpdates(sv, run) })
+			_ = c.mgr.GoLoop(func() { c.waitUpdates(sv, run) })
 		}
 	}
 }
@@ -217,7 +217,7 @@ func rebootSetting(serverID string) string { return "security-reboot/" + serverI
 
 // pendingReboot returns the reboot started from kipitiny that the report
 // doesn't show over yet, or nil.
-func (c *Core) pendingReboot(ctx context.Context, serverID string, r SecurityReport) (*hostReboot, error) {
+func (c *Servers) pendingReboot(ctx context.Context, serverID string, r SecurityReport) (*hostReboot, error) {
 	v, err := c.store.GetSetting(ctx, rebootSetting(serverID))
 	if errors.Is(err, domain.ErrNotFound) || err == nil && v == "" {
 		return nil, nil
@@ -238,7 +238,7 @@ func (c *Core) pendingReboot(ctx context.Context, serverID string, r SecurityRep
 
 // RebootServer reboots a server's host a few seconds from now, then checks
 // it again once it's back. Every container on it restarts. Admin only.
-func (c *Core) RebootServer(ctx context.Context, serverID string) (SecurityReport, error) {
+func (c *Servers) RebootServer(ctx context.Context, serverID string) (SecurityReport, error) {
 	if err := identity.RequireAdmin(ctx); err != nil {
 		return SecurityReport{}, err
 	}
@@ -279,7 +279,7 @@ systemd-run --quiet --on-active=5 --unit=kipitiny-reboot-`+strings.ToLower(ids.N
 	if err := c.store.SetSetting(context.WithoutCancel(ctx), rebootSetting(serverID), string(b)); err != nil {
 		return SecurityReport{}, err
 	}
-	if err := c.goLoop(func() { c.waitReboot(sv) }); err != nil {
+	if err := c.mgr.GoLoop(func() { c.waitReboot(sv) }); err != nil {
 		return SecurityReport{}, err
 	}
 	return c.ServerSecurity(ctx, serverID)
@@ -288,7 +288,7 @@ systemd-run --quiet --on-active=5 --unit=kipitiny-reboot-`+strings.ToLower(ids.N
 // waitReboot checks a rebooting server until it's back on a new boot. When
 // the manager runs there, it goes down too and StartSecurityChecks checks
 // the server once it's back.
-func (c *Core) waitReboot(sv domain.Server) {
+func (c *Servers) waitReboot(sv domain.Server) {
 	for {
 		select {
 		case <-c.bg.Done():

@@ -10,10 +10,8 @@ import (
 // deployPorts is what the deploy use cases reach of the rest of core
 // (deploy.Manager). The other areas' methods come with the embedded Core;
 // a Manager method must never be one the Deployer defines (it would call
-// itself).
+// itself). DockerFor, Kick and NotifyOOM come with Core's servers.
 type deployPorts struct{ *Core }
-
-func (p deployPorts) DockerFor(serverID string) *docker.Client { return p.dockerFor(serverID) }
 
 func (p deployPorts) GoBackground(f func()) error { return p.goBackground(f) }
 
@@ -24,8 +22,6 @@ func (p deployPorts) LockService(id string) (func(), error) { return p.lockServi
 func (p deployPorts) LockServiceBackground(id string) (func(), error) {
 	return p.lockServiceBackground(id)
 }
-
-func (p deployPorts) Kick() { p.kick() }
 
 func (p deployPorts) RemoveProject(ctx context.Context, project domain.Project) error {
 	return p.deleteProject(ctx, project)
@@ -50,7 +46,3 @@ func (p deployPorts) RemoveJobContainers(ctx context.Context, dk *docker.Client,
 }
 
 func (p deployPorts) JobRunningIn(projectID string) bool { return p.jobRunningIn(projectID) }
-
-func (p deployPorts) NotifyOOM(ctx context.Context, serviceID, replica string) {
-	p.notifyOOM(ctx, serviceID, replica)
-}

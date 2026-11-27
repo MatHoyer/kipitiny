@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -19,6 +18,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/pending"
 
@@ -46,10 +46,12 @@ type Core struct {
 	*data.Data
 	// Services, compose files, deploys, previews, networks and sleep.
 	*deploy.Deployer
+	// Servers and their Docker clients, the reconciler, host checks and
+	// updates, stats, the cleanup, terminals, logs, the manager's updates.
+	*servers.Servers
 
 	cfg   config.Config
 	store domain.Store
-	pool  *docker.Pool
 	log   *slog.Logger
 
 	// Background work runs under bg. On Shutdown, operations (deploys,
@@ -67,27 +69,21 @@ type Core struct {
 
 	sched scheduler
 	// steps: what the running operations are at (backups and restores in
-	// data, the cleanup here).
-	steps         progress.Steps
-	reconcileKick chan struct{}
-	probes        sync.Map // server ID -> *mount.Mount (nil: no probe there)
-	update        updateState
-	gitKick       chan string // project IDs to sync
-	gitFlows      pending.Map[gitFlow]
-	gitTokens     gitTokens
-	cleaning      atomic.Bool // a cleanup is running
-	securityBusy  atomic.Bool // a security check started by hand is running
-	hostActionMu  sync.Mutex  // starting an update install or a reboot is check-then-start
-	stats         statsState
-	jobs          jobsState
+	// data, the cleanup in servers).
+	steps     progress.Steps
+	probes    sync.Map    // server ID -> *mount.Mount (nil: no probe there)
+	gitKick   chan string // project IDs to sync
+	gitFlows  pending.Map[gitFlow]
+	gitTokens gitTokens
+	jobs      jobsState
 }
 
 // New builds the core around the local Docker client; remote servers are
 // connected on demand over SSH.
 func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logger) *Core {
 	bg, cancel := context.WithCancel(context.Background())
-	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, reconcileKick: make(chan struct{}, 1), gitKick: make(chan string, 16)}
-	c.pool = docker.NewPool(local, c.connectServer)
+	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, gitKick: make(chan string, 16)}
+	c.Servers = servers.New(bg, &c.cfg, s, local, &c.steps, &c.probes, serversPorts{c}, log)
 	c.Monitoring = monitoring.New(bg, &c.cfg, s, monitoringPorts{c}, log)
 	c.Identity = identity.New(cfg, s, identity.SecretKinds(cfg, local), c.Monitoring, log)
 	c.Network = network.New(bg, &c.cfg, s, networkPorts{c}, log)
@@ -95,81 +91,6 @@ func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logg
 	c.Deployer = deploy.New(bg, &c.cfg, s, &c.probes, deployPorts{c}, log)
 	return c
 }
-
-// Bootstrap prepares host-level resources the manager relies on.
-func (c *Core) Bootstrap(ctx context.Context) error {
-	if n, err := c.store.FailRunningDeployments(ctx, "interrupted by manager restart"); err != nil {
-		return err
-	} else if n > 0 {
-		c.log.Warn("marked interrupted deployments as failed", "count", n)
-	}
-	if err := c.store.FailRunningOperations(ctx, "interrupted by manager restart"); err != nil {
-		return err
-	}
-	if err := c.MigrateSMTPSetting(ctx); err != nil {
-		return err
-	}
-	if c.cfg.Domain != "" && !c.cfg.Traefik.Enabled {
-		c.log.Warn("KIPITINY_DOMAIN is ignored without the managed Traefik; route it in your own proxy", "domain", c.cfg.Domain)
-	}
-	if c.cfg.Tunnel.Token != "" && !c.cfg.Traefik.Enabled {
-		c.log.Warn("KIPITINY_CLOUDFLARE_TUNNEL_TOKEN is ignored without the managed Traefik")
-	}
-	servers, err := c.store.ListServers(ctx)
-	if err != nil {
-		return err
-	}
-	var errs []error
-	for _, sv := range servers {
-		// Nothing runs yet: what restore tests and volume helpers left
-		// behind is from a crash. (Later bootstraps must not touch them.)
-		if err := c.CleanupRestoreTests(ctx, c.dockerFor(sv.ID)); err != nil {
-			errs = append(errs, fmt.Errorf("server %s: %w", sv.Name, err))
-			continue
-		}
-		if err := c.bootstrapServer(ctx, sv); err != nil {
-			errs = append(errs, fmt.Errorf("server %s: %w", sv.Name, err))
-		}
-	}
-	return errors.Join(errs...)
-}
-
-// bootstrapServer prepares a Docker host: proxy network, Traefik, and
-// cleanup of terminals left by a crash.
-func (c *Core) bootstrapServer(ctx context.Context, sv domain.Server) error {
-	dk := c.dockerFor(sv.ID)
-	progress.Report(ctx, ServerStepNetwork)
-	if err := dk.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil {
-		return err
-	}
-	if err := c.cleanupTerminals(ctx, dk); err != nil {
-		return err
-	}
-	if sv.Kind == domain.ServerLocal {
-		c.cleanupUpdater(ctx, dk)
-		if err := c.CleanupSecretHelpers(ctx, dk); err != nil {
-			c.log.Warn("removing password manager helpers failed", "err", err)
-		}
-	}
-	if c.cfg.Traefik.Enabled {
-		progress.Report(ctx, ServerStepTraefik)
-		if err := c.EnsureTraefik(ctx, sv); err != nil {
-			return fmt.Errorf("traefik: %w", err)
-		}
-		progress.Report(ctx, ServerStepTunnel)
-		if err := c.EnsureTunnel(ctx, sv); err != nil {
-			return fmt.Errorf("cloudflared: %w", err)
-		}
-	}
-	return nil
-}
-
-// DrainTimeout bounds how long Shutdown waits for running operations. The
-// container's stop timeout must exceed it plus shutdownCancelGrace.
-const DrainTimeout = 4*time.Minute + 30*time.Second
-
-// shutdownCancelGrace is how long cancelled work gets to clean up.
-const shutdownCancelGrace = 15 * time.Second
 
 // Shutdown refuses new operations, waits until ctx for running ones (a deploy
 // cut short by an upgrade would have to be redone), then cancels whatever is
@@ -199,7 +120,7 @@ func (c *Core) Shutdown(ctx context.Context) error {
 	}
 	select {
 	case <-waitDone(&c.wg):
-	case <-time.After(shutdownCancelGrace):
+	case <-time.After(servers.ShutdownCancelGrace):
 		err = errors.New("background work did not stop after cancellation")
 	}
 	return err
@@ -219,7 +140,7 @@ func (c *Core) BehindTunnel(ctx context.Context) bool {
 
 // dockerFor returns the Docker client of a server ("" or "local": this one).
 func (c *Core) dockerFor(serverID string) *docker.Client {
-	return c.pool.For(serverID)
+	return c.DockerFor(serverID)
 }
 
 // goBackground runs f as an operation that Shutdown lets finish, unless
@@ -303,48 +224,6 @@ func (c *Core) acquireService(id string, background bool) (func(), error) {
 		l.mu.Unlock()
 		l.released.Broadcast()
 	}, nil
-}
-
-type Status struct {
-	Version     string       `json:"version"`
-	Update      UpdateInfo   `json:"update"`
-	Docker      *docker.Info `json:"docker"`
-	DockerError string       `json:"dockerError,omitempty"`
-	// Database is the size of the manager's SQLite files, absent when they
-	// can't be read.
-	Database *DatabaseSize `json:"database,omitempty"`
-}
-
-type DatabaseSize struct {
-	SizeBytes int64 `json:"sizeBytes"`
-	// WALBytes is the write-ahead log not yet checkpointed into the file.
-	WALBytes int64 `json:"walBytes"`
-}
-
-func (c *Core) databaseSize() *DatabaseSize {
-	fi, err := os.Stat(c.cfg.DBPath())
-	if err != nil {
-		return nil
-	}
-	d := &DatabaseSize{SizeBytes: fi.Size()}
-	if wal, err := os.Stat(c.cfg.DBPath() + "-wal"); err == nil {
-		d.WALBytes = wal.Size()
-	}
-	return d
-}
-
-func (c *Core) Status(ctx context.Context) Status {
-	if a, ok := identity.ActorFrom(ctx); ok && !a.Admin() {
-		return Status{Version: c.cfg.Version} // the rest is about the server
-	}
-	st := Status{Version: c.cfg.Version, Update: c.Update(), Database: c.databaseSize()}
-	info, err := c.dockerFor(domain.LocalServerID).Info(ctx)
-	if err != nil {
-		st.DockerError = err.Error()
-		return st
-	}
-	st.Docker = &info
-	return st
 }
 
 func (c *Core) ListProjects(ctx context.Context) ([]domain.Project, error) {
@@ -456,4 +335,10 @@ func (c *Core) deleteProject(ctx context.Context, p domain.Project) error {
 		}
 	}
 	return dk.RemoveNetwork(ctx, docker.ProjectNetwork(id))
+}
+
+// SetServerNetwork sets a server's public IP and tunnel, returning the
+// server as clients see it (servers; network's returns the bare record).
+func (c *Core) SetServerNetwork(ctx context.Context, id string, in network.ServerNetwork) (servers.ServerView, error) {
+	return c.Servers.SetServerNetwork(ctx, id, in)
 }

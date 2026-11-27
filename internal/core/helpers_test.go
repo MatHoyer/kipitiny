@@ -11,10 +11,12 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 	"github.com/kipit-labs/kipitiny/internal/mail"
 	"github.com/kipit-labs/kipitiny/internal/mail/mailtest"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 )
 
 func newTestCore(t *testing.T, cfg config.Config) *Core {
@@ -41,4 +43,9 @@ func (r redirect) RoundTrip(req *http.Request) (*http.Response, error) {
 // localProvider is an email provider sending to a fake server.
 func localProvider(name string, srv *mailtest.Server) monitoring.EmailProviderInput {
 	return monitoring.EmailProviderInput{Name: name, Config: mail.Config{Host: "127.0.0.1", Port: srv.Port, Security: mail.None, From: "ops@example.com"}}
+}
+
+// useDocker has c's servers reach dk for the local server.
+func (c *Core) useDocker(dk *docker.Client) {
+	c.Servers = servers.New(c.bg, &c.cfg, c.store, dk, &c.steps, &c.probes, serversPorts{c}, c.log)
 }
