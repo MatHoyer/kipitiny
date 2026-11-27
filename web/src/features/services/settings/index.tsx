@@ -10,7 +10,8 @@ import { AccessCard } from "./access";
 import { ContainerCard } from "./container";
 import { GeneralCard, PreviewCard } from "./general";
 import { HostAccessCard } from "./host-access";
-import { AnalyticsCard, DomainCard, ErrorsCard, NetworksCard, PortsCard } from "./networking";
+import { AnalyticsCard, ErrorsCard } from "./analytics";
+import { DomainCard, NetworksCard, PortsCard } from "./networking";
 import { GitOwned } from "./parts";
 import { VolumesCard } from "./volumes";
 

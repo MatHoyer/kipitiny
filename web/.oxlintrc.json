@@ -9,15 +9,11 @@
   "overrides": [
     {
       "files": [
-        "src/features/services/Service.tsx",
         "src/features/projects/Project.tsx",
         "src/features/account/Account.tsx",
         "src/features/settings/Servers.tsx",
-        "src/features/services/env-entry-dialog.tsx",
-        "src/features/services/errors-tab.tsx",
         "src/features/files/files-tab.tsx",
-        "src/features/map/canvas/map3d.tsx",
-        "src/features/services/settings/networking.tsx"
+        "src/features/map/canvas/map3d.tsx"
       ],
       "rules": { "max-lines": "off" }
     },
