@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // Branding is how the manager presents itself: its name, logo and theme
@@ -125,11 +125,11 @@ func (c *Core) BrandName(ctx context.Context) string {
 	return DefaultBrandName
 }
 
-// BrandingLogo returns the logo and its content type, or store.ErrNotFound.
+// BrandingLogo returns the logo and its content type, or domain.ErrNotFound.
 func (c *Core) BrandingLogo(ctx context.Context) ([]byte, string, error) {
 	s := c.brandingSettings(ctx)
 	if s.LogoHash == "" {
-		return nil, "", store.ErrNotFound
+		return nil, "", domain.ErrNotFound
 	}
 	v, err := c.store.GetSetting(ctx, brandingLogoSetting)
 	if err != nil {
@@ -137,7 +137,7 @@ func (c *Core) BrandingLogo(ctx context.Context) ([]byte, string, error) {
 	}
 	data, err := base64.StdEncoding.DecodeString(v)
 	if err != nil || len(data) == 0 {
-		return nil, "", store.ErrNotFound
+		return nil, "", domain.ErrNotFound
 	}
 	return data, s.LogoType, nil
 }

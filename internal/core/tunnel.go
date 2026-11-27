@@ -10,7 +10,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -20,11 +20,11 @@ const (
 
 // tunnelToken is a server's Cloudflare tunnel token: its own, or for the
 // manager's server KIPITINY_CLOUDFLARE_TUNNEL_TOKEN. Empty: public ports.
-func (c *Core) tunnelToken(sv store.Server) string {
+func (c *Core) tunnelToken(sv domain.Server) string {
 	if sv.TunnelToken != "" {
 		return sv.TunnelToken
 	}
-	if sv.Kind == store.ServerLocal {
+	if sv.Kind == domain.ServerLocal {
 		return c.cfg.Tunnel.Token
 	}
 	return ""
@@ -34,11 +34,11 @@ func (c *Core) tunnelToken(sv store.Server) string {
 // Cloudflare tunnel ("" is the manager's server).
 func (c *Core) viaTunnel(ctx context.Context, serverID string) bool {
 	if serverID == "" {
-		serverID = store.LocalServerID
+		serverID = domain.LocalServerID
 	}
 	sv, err := c.store.GetServer(ctx, serverID)
 	if err != nil {
-		return serverID == store.LocalServerID && c.cfg.Tunnel.Token != ""
+		return serverID == domain.LocalServerID && c.cfg.Tunnel.Token != ""
 	}
 	return c.tunnelToken(sv) != ""
 }
@@ -46,7 +46,7 @@ func (c *Core) viaTunnel(ctx context.Context, serverID string) bool {
 // ensureTunnel runs cloudflared on a server with a tunnel token, and removes
 // it otherwise. It forwards to https://kipitiny-traefik:443; hostnames are
 // routed by the DNS sync (with Cloudflare connected) or in the dashboard.
-func (c *Core) ensureTunnel(ctx context.Context, sv store.Server) error {
+func (c *Core) ensureTunnel(ctx context.Context, sv domain.Server) error {
 	dk := c.dockerFor(sv.ID)
 	token := c.tunnelToken(sv)
 	existing, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: tunnelComponent})

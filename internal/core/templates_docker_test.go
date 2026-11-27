@@ -17,7 +17,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/templates"
 )
 
@@ -53,9 +53,9 @@ func TestTemplatesDocker(t *testing.T) {
 	// The injected health probe is the running binary, here the test's,
 	// which can't probe: apps are ready on their own healthcheck, or once
 	// up for a few seconds.
-	c.probes.Store(store.LocalServerID, (*mount.Mount)(nil))
+	c.probes.Store(domain.LocalServerID, (*mount.Mount)(nil))
 	t.Cleanup(c.cancel)
-	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin})
+	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
 
 	for _, tpl := range templates.List() {
 		t.Run(tpl.ID, func(t *testing.T) {
@@ -106,7 +106,7 @@ func TestTemplatesDocker(t *testing.T) {
 
 // waitDeployed waits for the service's deployment to finish, and fails with
 // its log unless it succeeded.
-func waitDeployed(t *testing.T, c *Core, s store.Service) {
+func waitDeployed(t *testing.T, c *Core, s domain.Service) {
 	t.Helper()
 	ctx := context.Background()
 	for deadline := time.Now().Add(15 * time.Minute); ; time.Sleep(2 * time.Second) {
@@ -114,8 +114,8 @@ func waitDeployed(t *testing.T, c *Core, s store.Service) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(deps) == 1 && deps[0].Status != store.DeploymentRunning {
-			if deps[0].Status != store.DeploymentSucceeded {
+		if len(deps) == 1 && deps[0].Status != domain.DeploymentRunning {
+			if deps[0].Status != domain.DeploymentSucceeded {
 				if rc, err := c.DeploymentLog(ctx, deps[0].ID); err == nil {
 					log, _ := io.ReadAll(rc)
 					rc.Close()

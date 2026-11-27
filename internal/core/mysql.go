@@ -11,7 +11,7 @@ import (
 	"github.com/moby/moby/api/types/mount"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // MySQL and MariaDB share this file: same environment, protocol and dump
@@ -54,8 +54,8 @@ func MySQLVolume(serviceID string) string {
 	return "kipitiny-mysqldata-" + strings.ToLower(serviceID)
 }
 
-func defaultMySQLImage(k store.ServiceKind) string {
-	if k == store.ServiceKindMariaDB {
+func defaultMySQLImage(k domain.ServiceKind) string {
+	if k == domain.ServiceKindMariaDB {
 		return DefaultMariaDBImage
 	}
 	return DefaultMySQLImage
@@ -63,8 +63,8 @@ func defaultMySQLImage(k store.ServiceKind) string {
 
 // mysqlBin names a client tool in the kind's image: MariaDB's images only
 // ship the mariadb-* names.
-func mysqlBin(k store.ServiceKind, tool string) string {
-	if k != store.ServiceKindMariaDB {
+func mysqlBin(k domain.ServiceKind, tool string) string {
+	if k != domain.ServiceKindMariaDB {
 		return tool
 	}
 	switch tool {
@@ -78,14 +78,14 @@ func mysqlBin(k store.ServiceKind, tool string) string {
 	return tool
 }
 
-func mysqlLabel(k store.ServiceKind) string {
-	if k == store.ServiceKindMariaDB {
+func mysqlLabel(k domain.ServiceKind) string {
+	if k == domain.ServiceKindMariaDB {
 		return "MariaDB"
 	}
 	return "MySQL"
 }
 
-func validateMySQL(s store.Service) error {
+func validateMySQL(s domain.Service) error {
 	if s.MemoryMB < minMySQLMemoryMB {
 		return fmt.Errorf("%w: %s needs at least %d MB of memory", ErrInvalid, mysqlLabel(s.Kind), minMySQLMemoryMB)
 	}
@@ -97,7 +97,7 @@ func validateMySQL(s store.Service) error {
 	return nil
 }
 
-func mysqlURL(db store.Service) string {
+func mysqlURL(db domain.Service) string {
 	u := url.URL{
 		Scheme: "mysql",
 		User:   url.UserPassword(db.Env[mysqlUser], db.Env[mysqlPassword]),
@@ -108,7 +108,7 @@ func mysqlURL(db store.Service) string {
 }
 
 // mysqlField resolves {{ db.NAME.FIELD }} for a MySQL or MariaDB service.
-func mysqlField(db store.Service, field string) (string, bool) {
+func mysqlField(db domain.Service, field string) (string, bool) {
 	switch field {
 	case "URL":
 		return mysqlURL(db), true
@@ -137,7 +137,7 @@ func mysqlArgs(memoryMB int) []string {
 	}
 }
 
-func applyMySQLSpec(cfg *container.Config, host *container.HostConfig, svc store.Service) {
+func applyMySQLSpec(cfg *container.Config, host *container.HostConfig, svc domain.Service) {
 	cfg.Cmd = mysqlArgs(svc.MemoryMB)
 	cfg.Healthcheck = mysqlHealthcheck(svc.Kind)
 	host.Mounts = append(host.Mounts, mount.Mount{
@@ -151,7 +151,7 @@ func applyMySQLSpec(cfg *container.Config, host *container.HostConfig, svc store
 // mysqlHealthcheck pings over TCP: the image initializes the data directory
 // with a temporary server started with --skip-networking, which must not
 // count as ready. The ping succeeds as soon as the server answers.
-func mysqlHealthcheck(k store.ServiceKind) *container.HealthConfig {
+func mysqlHealthcheck(k domain.ServiceKind) *container.HealthConfig {
 	return &container.HealthConfig{
 		Test:          []string{"CMD-SHELL", `MYSQL_PWD="$MYSQL_ROOT_PASSWORD" ` + mysqlBin(k, "mysqladmin") + " -h 127.0.0.1 -uroot --silent ping"},
 		Interval:      10 * time.Second,
@@ -164,7 +164,7 @@ func mysqlHealthcheck(k store.ServiceKind) *container.HealthConfig {
 
 // mysqlExecEnv authenticates the client tools as root without the password
 // on the command line.
-func mysqlExecEnv(svc store.Service) []string {
+func mysqlExecEnv(svc domain.Service) []string {
 	return []string{"MYSQL_PWD=" + svc.Env[mysqlRootPassword]}
 }
 

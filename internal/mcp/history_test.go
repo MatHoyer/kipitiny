@@ -7,22 +7,22 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestHistoryTools(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
-	p, _ := e.st.CreateProject(ctx, store.Project{Name: "shop"})
-	if _, err := e.st.CreateProject(ctx, store.Project{Name: "site"}); err != nil {
+	p, _ := e.st.CreateProject(ctx, domain.Project{Name: "shop"})
+	if _, err := e.st.CreateProject(ctx, domain.Project{Name: "site"}); err != nil {
 		t.Fatal(err)
 	}
-	web, err := e.st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1})
+	web, err := e.st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, img := range []string{"nginx:1", "nginx:2", "nginx:3"} {
-		if _, err := e.st.CreateDeployment(ctx, store.Deployment{ServiceID: web.ID, Image: img, Status: store.DeploymentSucceeded}); err != nil {
+		if _, err := e.st.CreateDeployment(ctx, domain.Deployment{ServiceID: web.ID, Image: img, Status: domain.DeploymentSucceeded}); err != nil {
 			t.Fatal(err)
 		}
 	}

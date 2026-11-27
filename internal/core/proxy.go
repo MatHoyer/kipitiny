@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // proxyRefreshEvery bounds how often a request from an unknown private peer
@@ -62,7 +62,7 @@ func (c *Core) refreshProxyLocked(ctx context.Context) {
 	c.proxy.refreshed = time.Now()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	cts, err := c.dockerFor(store.LocalServerID).ListContainers(ctx, map[string]string{docker.LabelComponent: traefikComponent})
+	cts, err := c.dockerFor(domain.LocalServerID).ListContainers(ctx, map[string]string{docker.LabelComponent: traefikComponent})
 	if err != nil {
 		c.log.Warn("read traefik addresses", "err", err)
 		return // keep the last known ones

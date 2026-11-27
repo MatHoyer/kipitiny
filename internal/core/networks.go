@@ -11,7 +11,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // Networks created by hand sit next to the automatic ones (proxy, one per
@@ -25,7 +25,7 @@ type NetworkInput struct {
 }
 
 type NetworkView struct {
-	store.Network
+	domain.Network
 	// DockerName is the network's name on the server.
 	DockerName string          `json:"dockerName"`
 	Services   []NetworkMember `json:"services"`
@@ -34,17 +34,17 @@ type NetworkView struct {
 // NetworkMember is a service that joins a network, and the name the others
 // reach it by.
 type NetworkMember struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	Kind        store.ServiceKind `json:"kind"`
-	ProjectID   string            `json:"projectId"`
-	ProjectName string            `json:"projectName"`
-	Alias       string            `json:"alias"`
+	ID          string             `json:"id"`
+	Name        string             `json:"name"`
+	Kind        domain.ServiceKind `json:"kind"`
+	ProjectID   string             `json:"projectId"`
+	ProjectName string             `json:"projectName"`
+	Alias       string             `json:"alias"`
 }
 
 // networkAlias names a service on the networks created by hand, which
 // services of several projects share.
-func networkAlias(project store.Project, svc store.Service) string {
+func networkAlias(project domain.Project, svc domain.Service) string {
 	return project.Name + "-" + svc.Name
 }
 
@@ -57,7 +57,7 @@ func (c *Core) ListNetworks(ctx context.Context) ([]NetworkView, error) {
 	if err != nil {
 		return nil, err
 	}
-	byID := map[string]store.Project{}
+	byID := map[string]domain.Project{}
 	for _, p := range projects {
 		byID[p.ID] = p
 	}
@@ -93,16 +93,16 @@ func (c *Core) CreateNetwork(ctx context.Context, in NetworkInput) (NetworkView,
 		return NetworkView{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
 	if in.ServerID == "" {
-		in.ServerID = store.LocalServerID
+		in.ServerID = domain.LocalServerID
 	}
 	if _, err := c.store.GetServer(ctx, in.ServerID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.Is(err, domain.ErrNotFound) {
 			return NetworkView{}, fmt.Errorf("%w: unknown server", ErrInvalid)
 		}
 		return NetworkView{}, err
 	}
-	n, err := c.store.CreateNetwork(ctx, store.Network{ServerID: in.ServerID, Name: name})
-	if errors.Is(err, store.ErrConflict) {
+	n, err := c.store.CreateNetwork(ctx, domain.Network{ServerID: in.ServerID, Name: name})
+	if errors.Is(err, domain.ErrConflict) {
 		return NetworkView{}, fmt.Errorf("%w: this server already has a network named %s", ErrInvalid, name)
 	}
 	if err != nil {
@@ -172,7 +172,7 @@ func (c *Core) SetServiceNetworks(ctx context.Context, serviceID string, network
 			continue
 		}
 		n, err := c.store.GetNetwork(ctx, id)
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.Is(err, domain.ErrNotFound) {
 			return ServiceView{}, fmt.Errorf("%w: unknown network %s", ErrInvalid, id)
 		}
 		if err != nil {
@@ -208,7 +208,7 @@ func (c *Core) SetServiceNetworks(ctx context.Context, serviceID string, network
 // created by hand it joins and detaches them from the others. renamed also
 // moves the containers already attached to the current alias (which resets
 // their connections there); container lists don't report aliases.
-func (c *Core) syncNetworks(ctx context.Context, project store.Project, svc store.Service, cts []container.Summary, renamed bool) error {
+func (c *Core) syncNetworks(ctx context.Context, project domain.Project, svc domain.Service, cts []container.Summary, renamed bool) error {
 	if svc.HostNetwork {
 		return nil
 	}
@@ -258,7 +258,7 @@ func normalizeProjectNetworks(names []string) []string {
 	return out
 }
 
-func validateProjectNetworks(s store.Service) error {
+func validateProjectNetworks(s domain.Service) error {
 	if len(s.ProjectNetworks) > maxProjectNetworks {
 		return fmt.Errorf("%w: at most %d project networks", ErrInvalid, maxProjectNetworks)
 	}
@@ -274,7 +274,7 @@ func validateProjectNetworks(s store.Service) error {
 }
 
 // projectNetworks are the Docker names of the project networks svc is on.
-func projectNetworks(project store.Project, svc store.Service) []string {
+func projectNetworks(project domain.Project, svc domain.Service) []string {
 	if len(svc.ProjectNetworks) == 0 {
 		return []string{docker.ProjectNetwork(project.ID)}
 	}
@@ -288,7 +288,7 @@ func projectNetworks(project store.Project, svc store.Service) []string {
 // wantNetworks maps the networks a service's container should be on to its
 // aliases there, as containerSpec attaches them: the project's, the ones
 // created by hand it joins, and the proxy's when Traefik routes it.
-func wantNetworks(project store.Project, svc store.Service, ct container.Summary) map[string][]string {
+func wantNetworks(project domain.Project, svc domain.Service, ct container.Summary) map[string][]string {
 	if svc.HostNetwork {
 		return nil
 	}
@@ -307,7 +307,7 @@ func wantNetworks(project store.Project, svc store.Service, ct container.Summary
 
 // networkIssues says which networks the service's running containers miss,
 // e.g. after one was removed outside kipitiny (the reconciler puts them back).
-func networkIssues(project store.Project, svc store.Service, cts []container.Summary) []string {
+func networkIssues(project domain.Project, svc domain.Service, cts []container.Summary) []string {
 	var out []string
 	for _, ct := range cts {
 		if !isActive(ct, svc) || ct.State != container.StateRunning {
@@ -348,7 +348,7 @@ func (c *Core) runContainer(ctx context.Context, dk *docker.Client, spec client.
 
 // ensureNetworks creates a server's networks that are missing, e.g. after
 // the server was reinstalled.
-func (c *Core) ensureNetworks(ctx context.Context, sv store.Server) error {
+func (c *Core) ensureNetworks(ctx context.Context, sv domain.Server) error {
 	nets, err := c.store.ListNetworks(ctx)
 	if err != nil {
 		return err

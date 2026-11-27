@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestPublicURL(t *testing.T) {
@@ -37,22 +37,22 @@ func TestNormalizeForgeURL(t *testing.T) {
 		"git.example.com/":           "https://git.example.com",
 		"https://Git.Example.com/gl": "https://git.example.com/gl",
 	} {
-		if got, err := normalizeForgeURL(store.GitLab, in); err != nil || got != want {
+		if got, err := normalizeForgeURL(domain.GitLab, in); err != nil || got != want {
 			t.Errorf("%q: %q, %v", in, got, err)
 		}
 	}
 	for _, in := range []string{"http://git.example.com", "https://u:p@git.example.com"} {
-		if _, err := normalizeForgeURL(store.GitLab, in); !errors.Is(err, ErrInvalid) {
+		if _, err := normalizeForgeURL(domain.GitLab, in); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%q: %v", in, err)
 		}
 	}
-	if _, err := normalizeForgeURL(store.Gitea, ""); !errors.Is(err, ErrInvalid) {
+	if _, err := normalizeForgeURL(domain.Gitea, ""); !errors.Is(err, ErrInvalid) {
 		t.Errorf("gitea without URL: %v", err)
 	}
 }
 
 func TestCheckProviderRepo(t *testing.T) {
-	p := store.GitProvider{Name: "gh", BaseURL: "https://github.com"}
+	p := domain.GitProvider{Name: "gh", BaseURL: "https://github.com"}
 	if err := checkProviderRepo(p, "https://github.com/me/infra.git"); err != nil {
 		t.Error(err)
 	}
@@ -66,14 +66,14 @@ func TestCheckProviderRepo(t *testing.T) {
 func TestGitProviders(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	if _, err := c.CreateGitProvider(ctx, GitProviderInput{Kind: store.GitHub, Name: "gh"}); !errors.Is(err, ErrInvalid) {
+	if _, err := c.CreateGitProvider(ctx, GitProviderInput{Kind: domain.GitHub, Name: "gh"}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("github created directly: %v", err)
 	}
-	p, err := c.CreateGitProvider(ctx, GitProviderInput{Kind: store.GitLab, Name: "gl", ClientID: "id", ClientSecret: "s"})
+	p, err := c.CreateGitProvider(ctx, GitProviderInput{Kind: domain.GitLab, Name: "gl", ClientID: "id", ClientSecret: "s"})
 	if err != nil || p.BaseURL != "https://gitlab.com" || p.ClientSecret != SecretMask || p.Connected {
 		t.Fatalf("create = %+v, %v", p, err)
 	}
-	if _, err := c.CreateGitProvider(ctx, GitProviderInput{Kind: store.Gitea, Name: "gl", BaseURL: "git.example.com", ClientID: "id", ClientSecret: "s"}); !errors.Is(err, ErrInvalid) {
+	if _, err := c.CreateGitProvider(ctx, GitProviderInput{Kind: domain.Gitea, Name: "gl", BaseURL: "git.example.com", ClientID: "id", ClientSecret: "s"}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("duplicate name: %v", err)
 	}
 
@@ -96,7 +96,7 @@ func TestGitProviders(t *testing.T) {
 
 	// A project's repository must be on the provider's host, and the
 	// provider can't go while a project uses it.
-	proj, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	proj, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,15 +174,15 @@ func TestGitHubAppFlowState(t *testing.T) {
 func TestGitProviderWebhook(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateGitProvider(ctx, store.GitProvider{Kind: store.GitHub, Name: "gh", BaseURL: "https://github.com", WebhookSecret: "s3cret", InstallationID: 1})
+	p, err := c.store.CreateGitProvider(ctx, domain.GitProvider{Kind: domain.GitHub, Name: "gh", BaseURL: "https://github.com", WebhookSecret: "s3cret", InstallationID: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	proj, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	proj, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.store.SaveProjectGit(ctx, store.ProjectGit{ProjectID: proj.ID, ProviderID: p.ID, RepoURL: "https://github.com/me/infra.git",
+	if _, err := c.store.SaveProjectGit(ctx, domain.ProjectGit{ProjectID: proj.ID, ProviderID: p.ID, RepoURL: "https://github.com/me/infra.git",
 		Branch: "main", Path: "compose.yaml", PollSeconds: 300, WebhookSecret: "w"}); err != nil {
 		t.Fatal(err)
 	}

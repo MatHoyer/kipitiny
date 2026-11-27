@@ -13,7 +13,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // TestRuntimeDocker runs a container with an app's runtime settings on the
@@ -32,20 +32,20 @@ func TestRuntimeDocker(t *testing.T) {
 	if err := dk.EnsureImage(ctx, "busybox", "", ""); err != nil {
 		t.Fatal(err)
 	}
-	svc := store.Service{ID: "01RUNTIMETEST", Name: "rt", Kind: store.ServiceKindApp, Image: "busybox", Replicas: 1,
-		Runtime: store.Runtime{
+	svc := domain.Service{ID: "01RUNTIMETEST", Name: "rt", Kind: domain.ServiceKindApp, Image: "busybox", Replicas: 1,
+		Runtime: domain.Runtime{
 			Entrypoint: []string{"sh", "-c"},
 			Command:    []string{"id -u; pwd; ulimit -n; grep db.local /etc/hosts; touch /x 2>/dev/null || echo ro; touch /cache/x && echo tmpfs; df -m /dev/shm | tail -1"},
 			User:       "1234", WorkingDir: "/tmp", ReadOnly: true, Init: true, ShmSizeMB: 128,
 			Tmpfs:      map[string]string{"/cache": "size=8m,mode=1777"},
-			Ulimits:    map[string]store.Ulimit{"nofile": {Soft: 1111, Hard: 2222}},
+			Ulimits:    map[string]domain.Ulimit{"nofile": {Soft: 1111, Hard: 2222}},
 			ExtraHosts: []string{"db.local:10.1.2.3"},
 			Labels:     map[string]string{"com.example.test": "1"},
 		}}
 	if err := validateService(svc); err != nil {
 		t.Fatal(err)
 	}
-	spec := containerSpec(store.Project{ID: "P", Name: "kipitiny-test"}, svc, envSources{}, "D1", 1, route{})
+	spec := containerSpec(domain.Project{ID: "P", Name: "kipitiny-test"}, svc, envSources{}, "D1", 1, route{})
 	// Not kipitiny.managed: a manager running on this daemon would remove
 	// it as an orphan. No project network either.
 	delete(spec.Config.Labels, docker.LabelManaged)
@@ -95,14 +95,14 @@ func TestFilesDocker(t *testing.T) {
 	if err := dk.EnsureImage(ctx, "busybox", "", ""); err != nil {
 		t.Fatal(err)
 	}
-	svc := store.Service{ID: "01FILESTEST", Name: "files", Kind: store.ServiceKindApp, Image: "busybox", Replicas: 1,
-		Runtime: store.Runtime{Command: []string{"sh", "-c", "cat /etc/kip/a.conf /run/secrets/token; stat -c %a /etc/kip/a.conf /bin/run.sh /tmp; stat -c %u /home/app; cat /home/app/c/x && echo made"}, User: "0"},
-		Files: []store.ServiceFile{{Path: "/etc/kip/a.conf", Content: []byte("conf\n"), Mode: 0o640},
+	svc := domain.Service{ID: "01FILESTEST", Name: "files", Kind: domain.ServiceKindApp, Image: "busybox", Replicas: 1,
+		Runtime: domain.Runtime{Command: []string{"sh", "-c", "cat /etc/kip/a.conf /run/secrets/token; stat -c %a /etc/kip/a.conf /bin/run.sh /tmp; stat -c %u /home/app; cat /home/app/c/x && echo made"}, User: "0"},
+		Files: []domain.ServiceFile{{Path: "/etc/kip/a.conf", Content: []byte("conf\n"), Mode: 0o640},
 			{Path: "/run/secrets/token", Content: []byte("{{ project.T }}\n"), Secret: true}, {Path: "/bin/run.sh", Content: []byte("#!/bin/sh"), Mode: 0o755}, {Path: "/tmp/x"}, {Path: "/home/app/c/x"}}}
 	if err := validateService(svc); err != nil {
 		t.Fatal(err)
 	}
-	spec := containerSpec(store.Project{ID: "P", Name: "kipitiny-test"}, svc, envSources{}, "D1", 1, route{})
+	spec := containerSpec(domain.Project{ID: "P", Name: "kipitiny-test"}, svc, envSources{}, "D1", 1, route{})
 	delete(spec.Config.Labels, docker.LabelManaged)
 	spec.NetworkingConfig = &network.NetworkingConfig{}
 	spec.HostConfig.RestartPolicy = container.RestartPolicy{}
@@ -151,9 +151,9 @@ func TestJobsDocker(t *testing.T) {
 		{"on-failure:1", "exit 1", false},
 		{"", "exit 0", false},
 	} {
-		svc := store.Service{ID: "01JOBTEST" + strconv.Itoa(i), Name: "job", Kind: store.ServiceKindApp, Image: "busybox", Replicas: 1,
-			Runtime: store.Runtime{Command: []string{"sh", "-c", tc.script}, Restart: tc.restart}}
-		spec := containerSpec(store.Project{ID: "P", Name: "kipitiny-test"}, svc, envSources{}, "D1", 1, route{})
+		svc := domain.Service{ID: "01JOBTEST" + strconv.Itoa(i), Name: "job", Kind: domain.ServiceKindApp, Image: "busybox", Replicas: 1,
+			Runtime: domain.Runtime{Command: []string{"sh", "-c", tc.script}, Restart: tc.restart}}
+		spec := containerSpec(domain.Project{ID: "P", Name: "kipitiny-test"}, svc, envSources{}, "D1", 1, route{})
 		delete(spec.Config.Labels, docker.LabelManaged)
 		spec.NetworkingConfig = &network.NetworkingConfig{}
 		spec.Name += strconv.Itoa(i)
@@ -185,15 +185,15 @@ func TestProjectNetworksDocker(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := &Core{}
-	p := store.Project{ID: "01NETTEST00000000000000000", Name: "kipitiny-nettest"}
+	p := domain.Project{ID: "01NETTEST00000000000000000", Name: "kipitiny-nettest"}
 	t.Cleanup(func() {
 		for _, n := range []string{"default", "front", "back"} {
 			_ = dk.RemoveNetwork(context.Background(), docker.ProjectNetworkNamed(p.ID, n))
 		}
 	})
 	run := func(name string, nets []string, script string) string {
-		svc := store.Service{ID: "01NET" + name, Name: name, Kind: store.ServiceKindApp, Image: "busybox", Replicas: 1, ProjectNetworks: nets,
-			Runtime: store.Runtime{Command: []string{"sh", "-c", script}}}
+		svc := domain.Service{ID: "01NET" + name, Name: name, Kind: domain.ServiceKindApp, Image: "busybox", Replicas: 1, ProjectNetworks: nets,
+			Runtime: domain.Runtime{Command: []string{"sh", "-c", script}}}
 		spec := containerSpec(p, svc, envSources{}, "D1", 1, route{})
 		delete(spec.Config.Labels, docker.LabelManaged)
 		spec.HostConfig.RestartPolicy = container.RestartPolicy{}

@@ -8,7 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // NetworkSummary is a network created by hand and the services on it, by the
@@ -113,7 +113,7 @@ func (t *tools) setServiceNetworks(ctx context.Context, _ *mcp.CallToolRequest, 
 		for _, name := range in.Networks {
 			i := slices.IndexFunc(nets, func(n core.NetworkView) bool { return n.Name == name && n.ServerID == svc.ServerID })
 			if i < 0 {
-				return serviceNetworksOut{}, fmt.Errorf("%w: network %s on the service's server", store.ErrNotFound, name)
+				return serviceNetworksOut{}, fmt.Errorf("%w: network %s on the service's server", domain.ErrNotFound, name)
 			}
 			ids = append(ids, nets[i].ID)
 		}
@@ -148,7 +148,7 @@ func (t *tools) findNetwork(ctx context.Context, name, server string) (core.Netw
 	}
 	switch len(found) {
 	case 0:
-		return core.NetworkView{}, fmt.Errorf("%w: network %s", store.ErrNotFound, name)
+		return core.NetworkView{}, fmt.Errorf("%w: network %s", domain.ErrNotFound, name)
 	case 1:
 		return found[0], nil
 	}
@@ -158,7 +158,7 @@ func (t *tools) findNetwork(ctx context.Context, name, server string) (core.Netw
 // serverID resolves a server by name; empty is this one.
 func (t *tools) serverID(ctx context.Context, name string) (string, error) {
 	if name == "" {
-		return store.LocalServerID, nil
+		return domain.LocalServerID, nil
 	}
 	servers, err := t.c.ListServers(ctx)
 	if err != nil {
@@ -166,7 +166,7 @@ func (t *tools) serverID(ctx context.Context, name string) (string, error) {
 	}
 	i := slices.IndexFunc(servers, func(sv core.ServerView) bool { return sv.Name == name })
 	if i < 0 {
-		return "", fmt.Errorf("%w: server %s", store.ErrNotFound, name)
+		return "", fmt.Errorf("%w: server %s", domain.ErrNotFound, name)
 	}
 	return servers[i].ID, nil
 }
@@ -183,14 +183,14 @@ func (t *tools) serverNames(ctx context.Context) (map[string]string, error) {
 	return names, nil
 }
 
-func (t *tools) findProjectByID(ctx context.Context, id string) (store.Project, error) {
+func (t *tools) findProjectByID(ctx context.Context, id string) (domain.Project, error) {
 	projects, err := t.c.ListProjects(ctx)
 	if err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
-	i := slices.IndexFunc(projects, func(p store.Project) bool { return p.ID == id })
+	i := slices.IndexFunc(projects, func(p domain.Project) bool { return p.ID == id })
 	if i < 0 {
-		return store.Project{}, fmt.Errorf("%w: project %s", store.ErrNotFound, id)
+		return domain.Project{}, fmt.Errorf("%w: project %s", domain.ErrNotFound, id)
 	}
 	return projects[i], nil
 }

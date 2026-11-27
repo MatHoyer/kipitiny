@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/analytics"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const (
@@ -52,15 +52,15 @@ func (c *Core) ServiceDeployErrors(ctx context.Context, serviceID string) (Deplo
 	return c.deployErrors(ctx, cl, svc, time.Now())
 }
 
-func (c *Core) deployErrors(ctx context.Context, cl *analytics.Client, svc store.Service, now time.Time) (DeployErrors, error) {
+func (c *Core) deployErrors(ctx context.Context, cl *analytics.Client, svc domain.Service, now time.Time) (DeployErrors, error) {
 	deps, err := c.store.ListDeployments(ctx, svc.ID, 20)
 	if err != nil {
 		return DeployErrors{}, err
 	}
-	var cur, prev *store.Deployment
+	var cur, prev *domain.Deployment
 	for i := range deps {
 		d := &deps[i]
-		if d.Status != store.DeploymentSucceeded || d.FinishedAt == nil {
+		if d.Status != domain.DeploymentSucceeded || d.FinishedAt == nil {
 			continue
 		}
 		if cur == nil {
@@ -146,7 +146,7 @@ func (c *Core) alertErrors(ctx context.Context, cl *analytics.Client, now time.T
 	if err != nil {
 		return err
 	}
-	byProject := map[int64]store.Service{}
+	byProject := map[int64]domain.Service{}
 	for _, s := range svcs {
 		if s.Errors && s.ErrorsProject != 0 {
 			byProject[s.ErrorsProject] = s
@@ -155,8 +155,8 @@ func (c *Core) alertErrors(ctx context.Context, cl *analytics.Client, now time.T
 	if len(byProject) == 0 {
 		return nil
 	}
-	projects := map[string]store.Project{}
-	project := func(id string) store.Project {
+	projects := map[string]domain.Project{}
+	project := func(id string) domain.Project {
 		if p, ok := projects[id]; ok {
 			return p
 		}
@@ -199,7 +199,7 @@ func (c *Core) alertErrors(ctx context.Context, cl *analytics.Client, now time.T
 	return nil
 }
 
-func (c *Core) notifyIssue(p store.Project, svc store.Service, x analytics.ErrorChange) {
+func (c *Core) notifyIssue(p domain.Project, svc domain.Service, x analytics.ErrorChange) {
 	e := notify.Event{Type: EventErrorNew, Level: notify.Error, Title: fmt.Sprintf("New error in %s/%s", p.Name, svc.Name)}
 	if x.Kind == "regression" {
 		e.Type, e.Level, e.Title = EventErrorRegression, notify.Warning, fmt.Sprintf("Error back in %s/%s", p.Name, svc.Name)
@@ -209,7 +209,7 @@ func (c *Core) notifyIssue(p store.Project, svc store.Service, x analytics.Error
 	c.notify(e, "/services/"+svc.ID+"?tab=errors&issue="+strconv.FormatInt(x.Issue, 10), "")
 }
 
-func (c *Core) notifySpike(p store.Project, svc store.Service, de DeployErrors) {
+func (c *Core) notifySpike(p domain.Project, svc domain.Service, de DeployErrors) {
 	msg := fmt.Sprintf("%d errors in the first %.0f minutes of %s (%.1f a minute", de.Events, de.Minutes, de.Release, de.Rate)
 	if de.PreviousRelease != "" {
 		msg += fmt.Sprintf(", %.1f before with %s", de.PreviousRate, de.PreviousRelease)

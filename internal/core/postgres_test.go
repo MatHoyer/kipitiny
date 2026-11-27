@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestPostgresMajor(t *testing.T) {
@@ -27,9 +27,9 @@ func TestPostgresMajor(t *testing.T) {
 	}
 }
 
-func pgService() store.Service {
-	return store.Service{
-		ID: "01DB", ProjectID: "P1", Name: "db", Kind: store.ServiceKindPostgres,
+func pgService() domain.Service {
+	return domain.Service{
+		ID: "01DB", ProjectID: "P1", Name: "db", Kind: domain.ServiceKindPostgres,
 		Image: DefaultPostgresImage, Replicas: 1, MemoryMB: 512, Env: newPostgresEnv(),
 	}
 }
@@ -38,14 +38,14 @@ func TestValidatePostgres(t *testing.T) {
 	if err := validateService(pgService()); err != nil {
 		t.Fatalf("valid service rejected: %v", err)
 	}
-	for name, mutate := range map[string]func(*store.Service){
-		"replicas":         func(s *store.Service) { s.Replicas = 2 },
-		"public":           func(s *store.Service) { s.Domain, s.Port = "db.example.com", 5432 },
-		"low memory":       func(s *store.Service) { s.MemoryMB = 64 },
-		"unpinned":         func(s *store.Service) { s.Image = "postgres:latest" },
-		"no password":      func(s *store.Service) { delete(s.Env, pgPassword) },
-		"db reference":     func(s *store.Service) { s.Env["OTHER"] = "{{ project.A }}/{{ db.other.URL }}" },
-		"secret reference": func(s *store.Service) { s.Env["OTHER"] = "{{ pass://V/I/password }}" },
+	for name, mutate := range map[string]func(*domain.Service){
+		"replicas":         func(s *domain.Service) { s.Replicas = 2 },
+		"public":           func(s *domain.Service) { s.Domain, s.Port = "db.example.com", 5432 },
+		"low memory":       func(s *domain.Service) { s.MemoryMB = 64 },
+		"unpinned":         func(s *domain.Service) { s.Image = "postgres:latest" },
+		"no password":      func(s *domain.Service) { delete(s.Env, pgPassword) },
+		"db reference":     func(s *domain.Service) { s.Env["OTHER"] = "{{ project.A }}/{{ db.other.URL }}" },
+		"secret reference": func(s *domain.Service) { s.Env["OTHER"] = "{{ pass://V/I/password }}" },
 	} {
 		s := pgService()
 		mutate(&s)
@@ -111,7 +111,7 @@ func TestDatabaseURLEscapes(t *testing.T) {
 }
 
 func TestPostgresContainerSpec(t *testing.T) {
-	p := store.Project{ID: "P1", Name: "shop"}
+	p := domain.Project{ID: "P1", Name: "shop"}
 	svc := pgService()
 	svc.CPUs = 1.5
 	spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, route{resolver: certResolver})
@@ -140,12 +140,12 @@ func TestPostgresContainerSpec(t *testing.T) {
 }
 
 func TestDatabaseRefsInSpec(t *testing.T) {
-	p := store.Project{ID: "P1", Name: "shop"}
+	p := domain.Project{ID: "P1", Name: "shop"}
 	db := pgService()
-	app := store.Service{ID: "01APP", Name: "web", Image: "app", Replicas: 1,
+	app := domain.Service{ID: "01APP", Name: "web", Image: "app", Replicas: 1,
 		Env: map[string]string{"DATABASE_URL": "{{ db." + db.Name + ".URL }}"}}
 
-	spec := containerSpec(p, app, envSources{project: p.Env, dbs: map[string]store.Service{db.Name: db}}, "D1", 1, route{resolver: certResolver})
+	spec := containerSpec(p, app, envSources{project: p.Env, dbs: map[string]domain.Service{db.Name: db}}, "D1", 1, route{resolver: certResolver})
 	if !slices.Contains(spec.Config.Env, "DATABASE_URL="+DatabaseURL(db)) {
 		t.Errorf("DATABASE_URL not resolved: %v", spec.Config.Env)
 	}

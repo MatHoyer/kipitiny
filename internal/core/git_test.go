@@ -16,7 +16,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestWebhookAuthorized(t *testing.T) {
@@ -43,8 +43,8 @@ func TestWebhookAuthorized(t *testing.T) {
 
 func TestCheckRepoHost(t *testing.T) {
 	ctx := context.Background()
-	member := WithActor(ctx, Actor{Role: store.RoleMember})
-	admin := WithActor(ctx, Actor{Role: store.RoleAdmin})
+	member := WithActor(ctx, Actor{Role: domain.RoleMember})
+	admin := WithActor(ctx, Actor{Role: domain.RoleAdmin})
 	for _, tc := range []struct {
 		ctx      context.Context
 		url, via string
@@ -59,7 +59,7 @@ func TestCheckRepoHost(t *testing.T) {
 		{admin, "http://10.0.0.5/me/infra.git", "", false},
 		{ctx, "http://10.0.0.5/me/infra.git", "", false},
 	} {
-		err := checkRepoHost(tc.ctx, store.ProjectGit{RepoURL: tc.url, ProviderID: tc.via})
+		err := checkRepoHost(tc.ctx, domain.ProjectGit{RepoURL: tc.url, ProviderID: tc.via})
 		if refused := errors.Is(err, ErrForbidden); refused != tc.refused {
 			t.Errorf("%s (provider %q): err = %v", tc.url, tc.via, err)
 		}
@@ -67,12 +67,12 @@ func TestCheckRepoHost(t *testing.T) {
 }
 
 func TestValidateGit(t *testing.T) {
-	ok := store.ProjectGit{RepoURL: "https://github.com/me/infra.git", Branch: "main", Path: "compose.yaml", PollSeconds: 300}
-	for name, mutate := range map[string]func(*store.ProjectGit){
-		"ssh url":        func(g *store.ProjectGit) { g.RepoURL = "git@github.com:me/infra.git" },
-		"creds in url":   func(g *store.ProjectGit) { g.RepoURL = "https://u:p@github.com/me/infra.git" },
-		"bad branch":     func(g *store.ProjectGit) { g.Branch = "a..b" },
-		"poll too often": func(g *store.ProjectGit) { g.PollSeconds = 5 },
+	ok := domain.ProjectGit{RepoURL: "https://github.com/me/infra.git", Branch: "main", Path: "compose.yaml", PollSeconds: 300}
+	for name, mutate := range map[string]func(*domain.ProjectGit){
+		"ssh url":        func(g *domain.ProjectGit) { g.RepoURL = "git@github.com:me/infra.git" },
+		"creds in url":   func(g *domain.ProjectGit) { g.RepoURL = "https://u:p@github.com/me/infra.git" },
+		"bad branch":     func(g *domain.ProjectGit) { g.Branch = "a..b" },
+		"poll too often": func(g *domain.ProjectGit) { g.PollSeconds = 5 },
 	} {
 		g := ok
 		mutate(&g)
@@ -120,7 +120,7 @@ func TestGitFetch(t *testing.T) {
 	dir, commit := localRepo(t)
 	sha := commit("services: {web: {image: nginx}}\n")
 	c := New(config.Config{DataDir: t.TempDir()}, nil, nil, nil)
-	g := store.ProjectGit{RepoURL: dir, Branch: "main", Path: "deploy/compose.yaml"}
+	g := domain.ProjectGit{RepoURL: dir, Branch: "main", Path: "deploy/compose.yaml"}
 	head, err := c.gitHead(ctx, g)
 	if err != nil || head != sha {
 		t.Fatalf("head = %q, %v; want %s", head, err, sha)
@@ -145,11 +145,11 @@ func TestGitFetch(t *testing.T) {
 func TestGitApply(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.store.SaveProjectGit(ctx, store.ProjectGit{ProjectID: p.ID, RepoURL: "https://example.com/r.git", Branch: "main",
+	if _, err := c.store.SaveProjectGit(ctx, domain.ProjectGit{ProjectID: p.ID, RepoURL: "https://example.com/r.git", Branch: "main",
 		Path: "compose.yaml", PollSeconds: 300, WebhookSecret: "w"}); err != nil {
 		t.Fatal(err)
 	}
@@ -213,13 +213,13 @@ func TestGitApply(t *testing.T) {
 	}
 }
 
-func servicesByName(t *testing.T, c *Core, projectID string) map[string]store.Service {
+func servicesByName(t *testing.T, c *Core, projectID string) map[string]domain.Service {
 	t.Helper()
 	svcs, err := c.store.ListServices(context.Background(), projectID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := map[string]store.Service{}
+	out := map[string]domain.Service{}
 	for _, s := range svcs {
 		out[s.Name] = s
 	}
@@ -229,11 +229,11 @@ func servicesByName(t *testing.T, c *Core, projectID string) map[string]store.Se
 func TestPreviewRefusesGit(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	parent, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	parent, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	pr, err := c.store.CreateProject(ctx, store.Project{Name: "shop-pr-1", ServerID: store.LocalServerID, ParentID: parent.ID})
+	pr, err := c.store.CreateProject(ctx, domain.Project{Name: "shop-pr-1", ServerID: domain.LocalServerID, ParentID: parent.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,20 +247,20 @@ func TestPreviewRefusesGit(t *testing.T) {
 func TestGitSyncAuthority(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, err := c.store.CreateUser(ctx, store.User{Username: "root", Role: store.RoleAdmin})
+	admin, err := c.store.CreateUser(ctx, domain.User{Username: "root", Role: domain.RoleAdmin})
 	if err != nil {
 		t.Fatal(err)
 	}
-	tok, err := c.store.CreateAPIToken(ctx, store.APIToken{Name: "agent", UserID: admin.ID, TokenHash: "h", Restricted: true,
+	tok, err := c.store.CreateAPIToken(ctx, domain.APIToken{Name: "agent", UserID: admin.ID, TokenHash: "h", Restricted: true,
 		Features: []string{}, Grants: map[string][]string{p.ID: {string(PermView), string(PermGit)}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := store.ProjectGit{ProjectID: p.ID, LinkedBy: admin.ID, LinkedToken: tok.ID}
+	g := domain.ProjectGit{ProjectID: p.ID, LinkedBy: admin.ID, LinkedToken: tok.ID}
 	linker, err := c.asLinker(ctx, g)
 	if err != nil {
 		t.Fatal(err)

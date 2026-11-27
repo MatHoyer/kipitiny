@@ -17,8 +17,8 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
-	"github.com/kipit-labs/kipitiny/internal/store/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 )
 
 type bearer struct{ token string }
@@ -30,10 +30,10 @@ func (b bearer) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 // asUser creates a user and returns a context acting as them.
-func asUser(t *testing.T, c *core.Core, st store.Store, name string, role store.Role) (context.Context, store.User) {
+func asUser(t *testing.T, c *core.Core, st domain.Store, name string, role domain.Role) (context.Context, domain.User) {
 	t.Helper()
 	ctx := context.Background()
-	u, err := st.CreateUser(ctx, store.User{Username: name, PasswordHash: "x", Role: role})
+	u, err := st.CreateUser(ctx, domain.User{Username: name, PasswordHash: "x", Role: role})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,13 +59,13 @@ func TestTools(t *testing.T) {
 	defer srv.Close()
 
 	// Seed a project and a database service without touching Docker.
-	p, _ := st.CreateProject(ctx, store.Project{Name: "shop"})
-	if _, err := st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindPostgres,
+	p, _ := st.CreateProject(ctx, domain.Project{Name: "shop"})
+	if _, err := st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "db", Kind: domain.ServiceKindPostgres,
 		Image: "postgres:17", Replicas: 1, Env: map[string]string{"POSTGRES_PASSWORD": "hunter2"},
 		Secrets: []string{"POSTGRES_PASSWORD"}}); err != nil {
 		t.Fatal(err)
 	}
-	admin, _ := asUser(t, c, st, "admin", store.RoleAdmin)
+	admin, _ := asUser(t, c, st, "admin", domain.RoleAdmin)
 	readTok, _ := c.CreateAPIToken(admin, core.TokenInput{Name: "agent", Restricted: true, Grants: map[string][]string{p.ID: {"view"}}})
 
 	connect := func(tok string) *mcp.ClientSession {
@@ -132,7 +132,7 @@ func TestTools(t *testing.T) {
 
 	// With only the deploy permission, deploy_image only retags an existing app: no new
 	// apps, other images or env (which could pull secrets out).
-	if _, err := st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp,
+	if _, err := st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp,
 		Image: "ghcr.io/org/web:v1", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -177,13 +177,13 @@ func TestDeployImageKeepsSettings(t *testing.T) {
 	srv := httptest.NewServer(api.New(c, log).Authenticated(Handler(c, "test")))
 	defer srv.Close()
 
-	p, _ := st.CreateProject(ctx, store.Project{Name: "shop"})
-	svc, err := st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp,
+	p, _ := st.CreateProject(ctx, domain.Project{Name: "shop"})
+	svc, err := st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp,
 		Image: "ghcr.io/org/web:v1", Replicas: 1, Domain: "web.example.com", Port: 8080})
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, _ := asUser(t, c, st, "admin", store.RoleAdmin)
+	admin, _ := asUser(t, c, st, "admin", domain.RoleAdmin)
 	tok, _ := c.CreateAPIToken(admin, core.TokenInput{Name: "agent"})
 	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(ctx, &mcp.StreamableClientTransport{
 		Endpoint: srv.URL, HTTPClient: &http.Client{Transport: bearer{tok.Token}},

@@ -7,11 +7,11 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestRowChangesDockerPostgres(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, store.ServiceKindPostgres, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &container.Config{
 		Image: DefaultPostgresImage,
 		Env:   []string{"POSTGRES_USER=app", "POSTGRES_DB=app", "POSTGRES_PASSWORD=secret"},
 	})
@@ -62,7 +62,7 @@ CREATE VIEW v AS SELECT id FROM items;"`)
 	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "view") {
 		t.Errorf("view: %v", err)
 	}
-	if _, err = c.ApplyRowChanges(ctx, svc.ID, "", "public", "missing", RowChanges{Inserts: []map[string]*string{{}}}, true); !errors.Is(err, store.ErrNotFound) {
+	if _, err = c.ApplyRowChanges(ctx, svc.ID, "", "public", "missing", RowChanges{Inserts: []map[string]*string{{}}}, true); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("missing table: %v", err)
 	}
 	read := WithActor(ctx, Actor{Kind: "token", Name: "read"})
@@ -72,10 +72,10 @@ CREATE VIEW v AS SELECT id FROM items;"`)
 }
 
 func TestRowChangesDockerMySQL(t *testing.T) {
-	for _, kind := range []store.ServiceKind{store.ServiceKindMySQL, store.ServiceKindMariaDB} {
+	for _, kind := range []domain.ServiceKind{domain.ServiceKindMySQL, domain.ServiceKindMariaDB} {
 		t.Run(string(kind), func(t *testing.T) {
 			c, ctx, svc, exec := dumpTestDB(t, kind)
-			ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin})
+			ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
 			client := `MYSQL_PWD="$MYSQL_PASSWORD" ` + mysqlBin(kind, "mysql") + ` -h 127.0.0.1 -u"$MYSQL_USER" "$MYSQL_DATABASE" `
 			exec(client + `-e "
 CREATE TABLE items (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL DEFAULT 'none', b BLOB, n INT NULL);
@@ -118,8 +118,8 @@ CREATE VIEW v AS SELECT id FROM items;"`)
 }
 
 func TestDocChangesDockerMongo(t *testing.T) {
-	c, ctx, svc, exec := dumpTestDB(t, store.ServiceKindMongoDB)
-	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin})
+	c, ctx, svc, exec := dumpTestDB(t, domain.ServiceKindMongoDB)
+	ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
 	shell := `mongosh --quiet "mongodb://$MONGO_INITDB_ROOT_USERNAME:$MONGO_INITDB_ROOT_PASSWORD@127.0.0.1/app?authSource=admin" --eval `
 	exec(shell + `'
 db.items.insertMany([{ _id: 1, n: NumberLong(5), name: "one", tags: ["a"] }, { _id: 2, name: "two" }, { _id: 3, name: "three" }]);
@@ -179,7 +179,7 @@ db.createView("v", "items", [])'`)
 }
 
 func TestKeyChangesDockerRedis(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, store.ServiceKindRedis, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindRedis, &container.Config{
 		Image: DefaultRedisImage,
 		Env:   []string{"REDIS_PASSWORD=secret", "REDISCLI_AUTH=secret"},
 		Cmd:   []string{"redis-server", "--requirepass", "secret"},

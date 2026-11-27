@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 type RedisKey struct {
@@ -116,7 +116,7 @@ func (c *Core) RedisScan(ctx context.Context, id, cursor, pattern string, count 
 	if err := c.requireOn(ctx, id, PermData); err != nil {
 		return RedisKeys{}, err
 	}
-	t, err := c.dataTarget(ctx, id, store.ServiceKindRedis)
+	t, err := c.dataTarget(ctx, id, domain.ServiceKindRedis)
 	if err != nil {
 		return RedisKeys{}, err
 	}
@@ -153,7 +153,7 @@ func (c *Core) RedisGet(ctx context.Context, id, key, cursor string, count int) 
 	if err := c.requireOn(ctx, id, PermData); err != nil {
 		return RedisValue{}, err
 	}
-	t, err := c.dataTarget(ctx, id, store.ServiceKindRedis)
+	t, err := c.dataTarget(ctx, id, domain.ServiceKindRedis)
 	if err != nil {
 		return RedisValue{}, err
 	}
@@ -176,7 +176,7 @@ func (c *Core) RedisGet(ctx context.Context, id, key, cursor string, count int) 
 		return RedisValue{}, fmt.Errorf("redis-cli output: unexpected value reply")
 	}
 	if v.Type == "none" {
-		return RedisValue{}, fmt.Errorf("key %q: %w", key, store.ErrNotFound)
+		return RedisValue{}, fmt.Errorf("key %q: %w", key, domain.ErrNotFound)
 	}
 	var items json.RawMessage
 	if err := unmarshalRow(out, &v.Type, &v.Length, &v.TTL, &items, &v.Cursor); err != nil {

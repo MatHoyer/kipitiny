@@ -7,21 +7,21 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestScheduleTools(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
-	p, _ := e.st.CreateProject(ctx, store.Project{Name: "shop"})
-	db, err := e.st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17", Replicas: 1})
+	p, _ := e.st.CreateProject(ctx, domain.Project{Name: "shop"})
+	db, err := e.st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "db", Kind: domain.ServiceKindPostgres, Image: "postgres:17", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "cache", Kind: store.ServiceKindRedis, Image: "redis:7", Replicas: 1}); err != nil {
+	if _, err := e.st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "cache", Kind: domain.ServiceKindRedis, Image: "redis:7", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "worker", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1}); err != nil {
+	if _, err := e.st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "worker", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
 	read, admin := e.session(core.PermView), e.session()
@@ -42,7 +42,7 @@ func TestScheduleTools(t *testing.T) {
 	}
 	out, isErr := e.call(admin, "set_backup_schedule", map[string]any{"service": "shop/db", "cron": "0 3 * * *"})
 	var sc core.ScheduleView
-	if err := json.Unmarshal([]byte(out), &sc); isErr || err != nil || sc.KeepDaily != 7 || sc.KeepMonthly != 6 || !sc.Enabled || sc.TargetID != store.LocalTargetID {
+	if err := json.Unmarshal([]byte(out), &sc); isErr || err != nil || sc.KeepDaily != 7 || sc.KeepMonthly != 6 || !sc.Enabled || sc.TargetID != domain.LocalTargetID {
 		t.Fatalf("new schedule: %s", out)
 	}
 	// An update keeps what it doesn't set.
@@ -69,7 +69,7 @@ func TestScheduleTools(t *testing.T) {
 	if out, isErr = e.call(admin, "set_uptime_check", map[string]any{"service": "shop/worker"}); !isErr || !strings.Contains(out, "public domain") {
 		t.Errorf("uptime on a private app: %s", out)
 	}
-	if _, err := e.st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1,
+	if _, err := e.st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1,
 		Domain: "shop.example.com", Port: 80}); err != nil {
 		t.Fatal(err)
 	}

@@ -17,14 +17,14 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
-	"github.com/kipit-labs/kipitiny/internal/store/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 )
 
 // env is an MCP server over a fresh store, for tools that refuse before
 // reaching Docker.
 type env struct {
-	st store.Store
+	st domain.Store
 	c  *core.Core
 	// session is a session with a token of an admin, restricted to perms on
 	// every existing project when some are given.
@@ -49,7 +49,7 @@ func newEnv(t *testing.T) env {
 	srv := httptest.NewServer(api.New(c, log).Authenticated(Handler(c, "test")))
 	t.Cleanup(srv.Close)
 	e := env{st: st, c: c}
-	admin, _ := asUser(t, c, st, "admin", store.RoleAdmin)
+	admin, _ := asUser(t, c, st, "admin", domain.RoleAdmin)
 	e.sessionOf = func(owner context.Context, perms ...core.Perm) *mcp.ClientSession {
 		in := core.TokenInput{Name: "agent", Restricted: len(perms) > 0, Grants: map[string][]string{}}
 		ps, _ := st.ListProjects(ctx)
@@ -90,12 +90,12 @@ func newEnv(t *testing.T) env {
 func TestDataTools(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
-	p, _ := e.st.CreateProject(ctx, store.Project{Name: "shop"})
-	if _, err := e.st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17", Replicas: 1,
+	p, _ := e.st.CreateProject(ctx, domain.Project{Name: "shop"})
+	if _, err := e.st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "db", Kind: domain.ServiceKindPostgres, Image: "postgres:17", Replicas: 1,
 		Env: map[string]string{"POSTGRES_USER": "shop", "POSTGRES_PASSWORD": "hunter2", "POSTGRES_DB": "shop"}, Secrets: []string{"POSTGRES_PASSWORD"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1}); err != nil {
+	if _, err := e.st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
 	read, admin := e.session(core.PermView), e.session()

@@ -16,8 +16,8 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
-	"github.com/kipit-labs/kipitiny/internal/store/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 )
 
 func newTestCore(t *testing.T, cfg config.Config) *Core {
@@ -33,10 +33,10 @@ func newTestCore(t *testing.T, cfg config.Config) *Core {
 func TestCertResolver(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	if got := c.certResolver(ctx, store.LocalServerID, "shop.example.com"); got != certResolver {
+	if got := c.certResolver(ctx, domain.LocalServerID, "shop.example.com"); got != certResolver {
 		t.Errorf("not connected: %q", got)
 	}
-	if got := c.certResolver(ctx, store.LocalServerID, "shop.localhost"); got != "" {
+	if got := c.certResolver(ctx, domain.LocalServerID, "shop.localhost"); got != "" {
 		t.Errorf(".localhost: %q", got)
 	}
 
@@ -50,7 +50,7 @@ func TestCertResolver(t *testing.T) {
 	}
 
 	c.cfg.Tunnel.Token = "t"
-	if got := c.certResolver(ctx, store.LocalServerID, "shop.example.com"); got != "" {
+	if got := c.certResolver(ctx, domain.LocalServerID, "shop.example.com"); got != "" {
 		t.Errorf("behind the tunnel: %q", got)
 	}
 }
@@ -94,7 +94,7 @@ func TestTunnelRoutes(t *testing.T) {
 }
 
 func TestProxiedFor(t *testing.T) {
-	ds := []store.Domain{{Name: "example.com", Proxied: true}, {Name: "direct.example.com"}}
+	ds := []domain.Domain{{Name: "example.com", Proxied: true}, {Name: "direct.example.com"}}
 	if !proxiedFor(ds, "shop.example.com") || proxiedFor(ds, "api.direct.example.com") || proxiedFor(ds, "other.org") {
 		t.Error("the longest listed domain decides")
 	}
@@ -104,20 +104,20 @@ func TestWantedRecords(t *testing.T) {
 	ctx := context.Background()
 	tok := base64.StdEncoding.EncodeToString([]byte(`{"a":"acc","t":"tid","s":"x"}`))
 	c := newTestCore(t, config.Config{Tunnel: config.Tunnel{Token: tok}, Traefik: config.Traefik{Enabled: true}})
-	remote, err := c.store.CreateServer(ctx, store.Server{Name: "w1", Kind: store.ServerSSH, Host: "w1", Port: 22, PublicIP: "203.0.113.9"})
+	remote, err := c.store.CreateServer(ctx, domain.Server{Name: "w1", Kind: domain.ServerSSH, Host: "w1", Port: 22, PublicIP: "203.0.113.9"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.store.CreateDomain(ctx, store.Domain{Name: "example.com", Proxied: true}); err != nil {
+	if _, err := c.store.CreateDomain(ctx, domain.Domain{Name: "example.com", Proxied: true}); err != nil {
 		t.Fatal(err)
 	}
-	local, _ := c.store.CreateProject(ctx, store.Project{Name: "a", ServerID: store.LocalServerID})
-	far, _ := c.store.CreateProject(ctx, store.Project{Name: "b", ServerID: remote.ID})
-	for _, s := range []store.Service{
-		{ProjectID: local.ID, ServerID: store.LocalServerID, Name: "web", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "tunnelled.example.com", Port: 80},
-		{ProjectID: far.ID, ServerID: remote.ID, Name: "web", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "direct.example.com", Port: 80},
-		{ProjectID: far.ID, ServerID: remote.ID, Name: "api", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "api.elsewhere.net", Port: 80},
-		{ProjectID: far.ID, ServerID: remote.ID, Name: "deep", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "a.b.example.com", Port: 80},
+	local, _ := c.store.CreateProject(ctx, domain.Project{Name: "a", ServerID: domain.LocalServerID})
+	far, _ := c.store.CreateProject(ctx, domain.Project{Name: "b", ServerID: remote.ID})
+	for _, s := range []domain.Service{
+		{ProjectID: local.ID, ServerID: domain.LocalServerID, Name: "web", Kind: domain.ServiceKindApp, Image: "x", Replicas: 1, Domain: "tunnelled.example.com", Port: 80},
+		{ProjectID: far.ID, ServerID: remote.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "x", Replicas: 1, Domain: "direct.example.com", Port: 80},
+		{ProjectID: far.ID, ServerID: remote.ID, Name: "api", Kind: domain.ServiceKindApp, Image: "x", Replicas: 1, Domain: "api.elsewhere.net", Port: 80},
+		{ProjectID: far.ID, ServerID: remote.ID, Name: "deep", Kind: domain.ServiceKindApp, Image: "x", Replicas: 1, Domain: "a.b.example.com", Port: 80},
 	} {
 		if _, err := c.store.CreateService(ctx, s); err != nil {
 			t.Fatal(err)
@@ -249,17 +249,17 @@ func TestSyncDNS(t *testing.T) {
 	if err := c.store.SetSetting(ctx, cfTokenSetting, "cf-token"); err != nil {
 		t.Fatal(err)
 	}
-	remote, _ := c.store.CreateServer(ctx, store.Server{Name: "w1", Kind: store.ServerSSH, Host: "w1", Port: 22, PublicIP: "203.0.113.9"})
+	remote, _ := c.store.CreateServer(ctx, domain.Server{Name: "w1", Kind: domain.ServerSSH, Host: "w1", Port: 22, PublicIP: "203.0.113.9"})
 	tok2 := base64.StdEncoding.EncodeToString([]byte(`{"a":"acc","t":"tid2","s":"y"}`))
-	tunnelled, _ := c.store.CreateServer(ctx, store.Server{Name: "w2", Kind: store.ServerSSH, Host: "w2", Port: 22, TunnelToken: tok2})
-	local, _ := c.store.CreateProject(ctx, store.Project{Name: "a", ServerID: store.LocalServerID})
-	far, _ := c.store.CreateProject(ctx, store.Project{Name: "b", ServerID: remote.ID})
-	far2, _ := c.store.CreateProject(ctx, store.Project{Name: "c", ServerID: tunnelled.ID})
-	for _, s := range []store.Service{
-		{ProjectID: local.ID, ServerID: store.LocalServerID, Name: "web", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "tunnelled.example.com", Port: 80},
-		{ProjectID: far.ID, ServerID: remote.ID, Name: "web", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "direct.example.com", Port: 80},
-		{ProjectID: far.ID, ServerID: remote.ID, Name: "hand", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "handmade.example.com", Port: 80},
-		{ProjectID: far2.ID, ServerID: tunnelled.ID, Name: "web", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "worker.example.com", Port: 80},
+	tunnelled, _ := c.store.CreateServer(ctx, domain.Server{Name: "w2", Kind: domain.ServerSSH, Host: "w2", Port: 22, TunnelToken: tok2})
+	local, _ := c.store.CreateProject(ctx, domain.Project{Name: "a", ServerID: domain.LocalServerID})
+	far, _ := c.store.CreateProject(ctx, domain.Project{Name: "b", ServerID: remote.ID})
+	far2, _ := c.store.CreateProject(ctx, domain.Project{Name: "c", ServerID: tunnelled.ID})
+	for _, s := range []domain.Service{
+		{ProjectID: local.ID, ServerID: domain.LocalServerID, Name: "web", Kind: domain.ServiceKindApp, Image: "x", Replicas: 1, Domain: "tunnelled.example.com", Port: 80},
+		{ProjectID: far.ID, ServerID: remote.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "x", Replicas: 1, Domain: "direct.example.com", Port: 80},
+		{ProjectID: far.ID, ServerID: remote.ID, Name: "hand", Kind: domain.ServiceKindApp, Image: "x", Replicas: 1, Domain: "handmade.example.com", Port: 80},
+		{ProjectID: far2.ID, ServerID: tunnelled.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "x", Replicas: 1, Domain: "worker.example.com", Port: 80},
 	} {
 		if _, err := c.store.CreateService(ctx, s); err != nil {
 			t.Fatal(err)

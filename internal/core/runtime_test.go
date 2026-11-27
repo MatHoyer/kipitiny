@@ -10,13 +10,13 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestComposeRuntime(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,13 +80,13 @@ services:
 }
 
 func TestValidateRuntime(t *testing.T) {
-	app := store.Service{Kind: store.ServiceKindApp, Image: "x", Replicas: 1}
-	for name, r := range map[string]store.Runtime{
+	app := domain.Service{Kind: domain.ServiceKindApp, Image: "x", Replicas: 1}
+	for name, r := range map[string]domain.Runtime{
 		"relative workdir":  {WorkingDir: "app"},
 		"traefik label":     {Labels: map[string]string{"traefik.http.routers.x.rule": "Host(`a`)"}},
 		"relative tmpfs":    {Tmpfs: map[string]string{"tmp": ""}},
-		"unknown ulimit":    {Ulimits: map[string]store.Ulimit{"files": {Soft: 1, Hard: 1}}},
-		"soft above hard":   {Ulimits: map[string]store.Ulimit{"nofile": {Soft: 2, Hard: 1}}},
+		"unknown ulimit":    {Ulimits: map[string]domain.Ulimit{"files": {Soft: 1, Hard: 1}}},
+		"soft above hard":   {Ulimits: map[string]domain.Ulimit{"nofile": {Soft: 2, Hard: 1}}},
 		"bad sysctl":        {Sysctls: map[string]string{"nope": "1"}},
 		"bad signal":        {StopSignal: "sigint now"},
 		"bad extra host":    {ExtraHosts: []string{"db:not-an-ip"}},
@@ -101,26 +101,26 @@ func TestValidateRuntime(t *testing.T) {
 		}
 	}
 	s := app
-	s.Runtime = store.Runtime{Command: []string{"run"}, ExtraHosts: []string{"db:10.0.0.2", "v6:::1"}, StopSignal: "SIGTERM",
-		Ulimits: map[string]store.Ulimit{"nofile": {Soft: -1, Hard: -1}}, Platform: "linux/arm/v7"}
+	s.Runtime = domain.Runtime{Command: []string{"run"}, ExtraHosts: []string{"db:10.0.0.2", "v6:::1"}, StopSignal: "SIGTERM",
+		Ulimits: map[string]domain.Ulimit{"nofile": {Soft: -1, Hard: -1}}, Platform: "linux/arm/v7"}
 	if err := validateService(s); err != nil {
 		t.Errorf("valid: %v", err)
 	}
 	db := redisService()
-	db.Runtime = store.Runtime{User: "root"}
+	db.Runtime = domain.Runtime{User: "root"}
 	if err := validateService(db); !errors.Is(err, ErrInvalid) {
 		t.Errorf("database: got %v", err)
 	}
 }
 
 func TestRuntimeHostAccess(t *testing.T) {
-	app := store.Service{ID: "S1", ProjectID: "P1", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Env: map[string]string{}}
-	app.Runtime = normalizeRuntime(store.Runtime{CapAdd: []string{"cap_net_admin"}, CapDrop: []string{"MKNOD"},
+	app := domain.Service{ID: "S1", ProjectID: "P1", Kind: domain.ServiceKindApp, Image: "x", Replicas: 1, Env: map[string]string{}}
+	app.Runtime = normalizeRuntime(domain.Runtime{CapAdd: []string{"cap_net_admin"}, CapDrop: []string{"MKNOD"},
 		Devices: []string{"/dev/net/tun", "/dev/ttyUSB0:/dev/ttyACM0:r"}, SecurityOpt: []string{"apparmor=unconfined"}})
 	if err := validateService(app); err != nil {
 		t.Fatal(err)
 	}
-	host := containerSpec(store.Project{ID: "P1", Name: "vpn"}, app, envSources{}, "D1", 1, route{}).HostConfig
+	host := containerSpec(domain.Project{ID: "P1", Name: "vpn"}, app, envSources{}, "D1", 1, route{}).HostConfig
 	if !slices.Equal(host.CapAdd, []string{"NET_ADMIN"}) || !slices.Equal(host.CapDrop, []string{"NET_RAW", "MKNOD"}) ||
 		!slices.Equal(host.SecurityOpt, []string{"apparmor=unconfined"}) || len(host.Devices) != 2 ||
 		host.Devices[0].PathInContainer != "/dev/net/tun" || host.Devices[0].CgroupPermissions != "rwm" ||
@@ -128,11 +128,11 @@ func TestRuntimeHostAccess(t *testing.T) {
 		t.Errorf("host config = %+v", host)
 	}
 	raw := app
-	raw.Runtime = store.Runtime{CapAdd: []string{"NET_RAW"}}
-	if host := containerSpec(store.Project{ID: "P1"}, raw, envSources{}, "D1", 1, route{}).HostConfig; slices.Contains(host.CapDrop, "NET_RAW") {
+	raw.Runtime = domain.Runtime{CapAdd: []string{"NET_RAW"}}
+	if host := containerSpec(domain.Project{ID: "P1"}, raw, envSources{}, "D1", 1, route{}).HostConfig; slices.Contains(host.CapDrop, "NET_RAW") {
 		t.Errorf("NET_RAW added back is still dropped: %v", host.CapDrop)
 	}
-	for _, r := range []store.Runtime{{CapAdd: []string{"net admin"}}, {Devices: []string{"dev/x"}}, {Devices: []string{"/dev/x:/dev/x:rwx"}}} {
+	for _, r := range []domain.Runtime{{CapAdd: []string{"net admin"}}, {Devices: []string{"dev/x"}}, {Devices: []string{"/dev/x:/dev/x:rwx"}}} {
 		bad := app
 		bad.Runtime = r
 		if err := validateService(bad); !errors.Is(err, ErrInvalid) {
@@ -140,10 +140,10 @@ func TestRuntimeHostAccess(t *testing.T) {
 		}
 	}
 
-	member := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", Role: store.RoleMember})
-	admin := WithActor(context.Background(), Actor{Kind: "user", Name: "root", Role: store.RoleAdmin})
+	member := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", Role: domain.RoleMember})
+	admin := WithActor(context.Background(), Actor{Kind: "user", Name: "root", Role: domain.RoleAdmin})
 	plain := app
-	plain.Runtime = store.Runtime{}
+	plain.Runtime = domain.Runtime{}
 	if err := checkServiceChange(member, plain, app); !errors.Is(err, ErrForbidden) {
 		t.Errorf("member adding host access: %v", err)
 	}
@@ -161,10 +161,10 @@ func TestRuntimeHostAccess(t *testing.T) {
 }
 
 func TestPortsAndVolumesHostAccess(t *testing.T) {
-	app := store.Service{ID: "S1", ProjectID: "P1", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Env: map[string]string{},
-		PublishedPorts: normalizePorts([]store.PublishedPort{{HostIP: "127.0.0.1", HostPort: 5432}, {HostIP: "0.0.0.0", HostPort: 80},
+	app := domain.Service{ID: "S1", ProjectID: "P1", Kind: domain.ServiceKindApp, Image: "x", Replicas: 1, Env: map[string]string{},
+		PublishedPorts: normalizePorts([]domain.PublishedPort{{HostIP: "127.0.0.1", HostPort: 5432}, {HostIP: "0.0.0.0", HostPort: 80},
 			{HostIP: "10.0.0.1", HostPort: 5432}}),
-		Volumes: normalizeVolumes([]store.Volume{{Name: "conf", Path: "/conf", ReadOnly: true}, {Name: "media", Path: "/media", External: "nas"},
+		Volumes: normalizeVolumes([]domain.Volume{{Name: "conf", Path: "/conf", ReadOnly: true}, {Name: "media", Path: "/media", External: "nas"},
 			{Name: "nfs", Path: "/nfs", DriverOpts: map[string]string{"type": "nfs", "o": "addr=10.0.0.5", "device": ":/x"}}})}
 	if err := validateService(app); err != nil {
 		t.Fatal(err)
@@ -172,7 +172,7 @@ func TestPortsAndVolumesHostAccess(t *testing.T) {
 	if app.PublishedPorts[1].HostIP != "" {
 		t.Errorf("0.0.0.0 is every address: %+v", app.PublishedPorts[1])
 	}
-	host := containerSpec(store.Project{ID: "P1"}, app, envSources{}, "D1", 1, route{}).HostConfig
+	host := containerSpec(domain.Project{ID: "P1"}, app, envSources{}, "D1", 1, route{}).HostConfig
 	var ips []string
 	for _, bs := range host.PortBindings {
 		for _, b := range bs {
@@ -190,19 +190,19 @@ func TestPortsAndVolumesHostAccess(t *testing.T) {
 	}
 
 	clash := app
-	clash.PublishedPorts = append(slices.Clone(app.PublishedPorts), store.PublishedPort{HostPort: 5432, ContainerPort: 1, Protocol: "tcp"})
+	clash.PublishedPorts = append(slices.Clone(app.PublishedPorts), domain.PublishedPort{HostPort: 5432, ContainerPort: 1, Protocol: "tcp"})
 	if err := validateService(clash); !errors.Is(err, ErrInvalid) {
 		t.Errorf("every address clashes with 127.0.0.1: %v", err)
 	}
-	for _, v := range []store.Volume{{Name: "a", Path: "/a", External: "bad name"}, {Name: "a", Path: "/a", DriverOpts: map[string]string{"uid": "1"}}} {
+	for _, v := range []domain.Volume{{Name: "a", Path: "/a", External: "bad name"}, {Name: "a", Path: "/a", DriverOpts: map[string]string{"uid": "1"}}} {
 		bad := app
-		bad.Volumes = []store.Volume{v}
+		bad.Volumes = []domain.Volume{v}
 		if err := validateService(bad); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%+v: got %v", v, err)
 		}
 	}
 
-	member := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", Role: store.RoleMember})
+	member := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", Role: domain.RoleMember})
 	plain := app
 	plain.Volumes = app.Volumes[:1]
 	if err := checkServiceChange(member, plain, app); !errors.Is(err, ErrForbidden) {
@@ -217,7 +217,7 @@ func TestPortsAndVolumesHostAccess(t *testing.T) {
 	if err := checkServiceChange(member, ro, app); !errors.Is(err, ErrForbidden) {
 		t.Errorf("member making a read-only external volume writable: %v", err)
 	}
-	admin := WithActor(context.Background(), Actor{Kind: "user", Name: "root", Role: store.RoleAdmin})
+	admin := WithActor(context.Background(), Actor{Kind: "user", Name: "root", Role: domain.RoleAdmin})
 	if err := checkServiceChange(admin, ro, app); err != nil {
 		t.Errorf("admin making a read-only external volume writable: %v", err)
 	}

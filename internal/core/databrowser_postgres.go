@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 type PgTable struct {
@@ -107,7 +107,7 @@ func (c *Core) PgDatabases(ctx context.Context, id string) ([]PgDatabase, error)
 	}
 	if svc, err := c.store.GetService(ctx, id); err != nil {
 		return nil, err
-	} else if svc.Kind == store.ServiceKindApp {
+	} else if svc.Kind == domain.ServiceKindApp {
 		return c.sqliteDatabases(ctx, svc)
 	}
 	t, err := c.databaseTarget(ctx, id, "")
@@ -152,11 +152,11 @@ func (c *Core) CreatePgDatabase(ctx context.Context, id, name, collection string
 	if strings.HasSuffix(name, "__restore") || strings.HasSuffix(name, "__pre_restore") {
 		return PgDatabase{}, fmt.Errorf("%w: names ending in __restore or __pre_restore are kept for restores", ErrInvalid)
 	}
-	t, err := c.dataTarget(ctx, id, store.ServiceKindPostgres, store.ServiceKindMySQL, store.ServiceKindMariaDB, store.ServiceKindMongoDB)
+	t, err := c.dataTarget(ctx, id, domain.ServiceKindPostgres, domain.ServiceKindMySQL, domain.ServiceKindMariaDB, domain.ServiceKindMongoDB)
 	if err != nil {
 		return PgDatabase{}, err
 	}
-	if t.svc.Kind == store.ServiceKindMongoDB {
+	if t.svc.Kind == domain.ServiceKindMongoDB {
 		if err := t.mongoCreateDatabase(ctx, name, collection); err != nil {
 			return PgDatabase{}, err
 		}
@@ -202,7 +202,7 @@ func (c *Core) PgTables(ctx context.Context, id, database string) ([]PgTable, er
 		return t.sqliteTables(ctx)
 	case t.svc.Kind.IsMySQL():
 		return t.mysqlTables(ctx)
-	case t.svc.Kind == store.ServiceKindMongoDB:
+	case t.svc.Kind == domain.ServiceKindMongoDB:
 		return t.mongoCollections(ctx)
 	}
 	tables := []PgTable{}
@@ -332,7 +332,7 @@ func (c *Core) PgExport(ctx context.Context, id, database, schema, table string,
 // sqlTarget is databaseTarget for the SQL kinds, whose rows are tables'.
 func (c *Core) sqlTarget(ctx context.Context, id, database string) (dataTarget, error) {
 	t, err := c.databaseTarget(ctx, id, database)
-	if err == nil && t.svc.Kind == store.ServiceKindMongoDB {
+	if err == nil && t.svc.Kind == domain.ServiceKindMongoDB {
 		err = fmt.Errorf("%w: %s holds documents, not rows: use its collections' documents", ErrInvalid, t.svc.Name)
 	}
 	return t, err
@@ -359,7 +359,7 @@ ORDER BY a.attnum;`, pgLiteral(schema), pgLiteral(table)), func(row []json.RawMe
 		return nil, err
 	}
 	if len(cols) == 0 {
-		return nil, fmt.Errorf("table %s.%s: %w", schema, table, store.ErrNotFound)
+		return nil, fmt.Errorf("table %s.%s: %w", schema, table, domain.ErrNotFound)
 	}
 	return cols, nil
 }

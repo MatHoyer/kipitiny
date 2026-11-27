@@ -13,7 +13,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func replica(name, deploy string, state container.ContainerState, health container.HealthStatus) container.Summary {
@@ -31,17 +31,17 @@ func replica(name, deploy string, state container.ContainerState, health contain
 }
 
 func TestHealthOf(t *testing.T) {
-	svc := store.Service{CurrentDeploymentID: "d2"}
+	svc := domain.Service{CurrentDeploymentID: "d2"}
 	for _, tc := range []struct {
 		name    string
-		svc     store.Service
+		svc     domain.Service
 		cts     []container.Summary
 		judged  bool
 		healthy bool
 		detail  string
 	}{
-		{"not deployed", store.Service{}, nil, false, false, ""},
-		{"stopped", store.Service{CurrentDeploymentID: "d2", Stopped: true}, nil, false, false, ""},
+		{"not deployed", domain.Service{}, nil, false, false, ""},
+		{"stopped", domain.Service{CurrentDeploymentID: "d2", Stopped: true}, nil, false, false, ""},
 		{"no healthcheck", svc, []container.Summary{replica("web-1", "d2", container.StateRunning, "")}, true, true, ""},
 		{"one healthy is enough", svc, []container.Summary{
 			replica("web-1", "d2", container.StateRunning, container.Unhealthy),
@@ -108,8 +108,8 @@ func TestTrackHealthNotifies(t *testing.T) {
 	if _, err := c.CreateChannel(ctx, ChannelInput{Name: "ops", Kind: "discord", Config: map[string]string{"webhookUrl": webhook}, Events: []string{EventServiceUnhealthy, EventServiceHealthy}, Enabled: true}); err != nil {
 		t.Fatal(err)
 	}
-	p := store.Project{ID: "p1", Name: "shop"}
-	svc := store.Service{ID: "s1", Name: "api", ServerID: "local", CurrentDeploymentID: "d1"}
+	p := domain.Project{ID: "p1", Name: "shop"}
+	svc := domain.Service{ID: "s1", Name: "api", ServerID: "local", CurrentDeploymentID: "d1"}
 	bad := []container.Summary{replica("api-1", "d1", container.StateRunning, container.Unhealthy)}
 	good := []container.Summary{replica("api-1", "d1", container.StateRunning, container.Healthy)}
 	t0 := time.Now()

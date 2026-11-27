@@ -11,10 +11,10 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 	"github.com/kipit-labs/kipitiny/internal/secrets"
 	"github.com/kipit-labs/kipitiny/internal/secrets/protonpass"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // SecretProviderView is a password manager this build offers, in Settings.
@@ -26,7 +26,7 @@ type SecretProviderView struct {
 
 // SecretConnectionView is an account a password manager is logged into.
 type SecretConnectionView struct {
-	store.SecretConnection
+	domain.SecretConnection
 	// Scheme is what its references start with: the provider's scheme for
 	// the default connection (pass), with "+name" for the others (pass+work).
 	Scheme       string `json:"scheme"`
@@ -187,7 +187,7 @@ func (c *Core) SecretProviders() []SecretProviderView {
 	return out
 }
 
-func (c *Core) secretConnectionView(conn store.SecretConnection) SecretConnectionView {
+func (c *Core) secretConnectionView(conn domain.SecretConnection) SecretConnectionView {
 	v := SecretConnectionView{SecretConnection: conn, ProviderName: conn.Kind, Scheme: conn.Name}
 	if k, ok := c.secretKind(conn.Kind); ok {
 		v.ProviderName, v.Scheme = k.info.Name, connScheme(k.info.Scheme, conn.Name)
@@ -208,7 +208,7 @@ func (c *Core) SecretConnections(ctx context.Context) ([]SecretConnectionView, e
 }
 
 // secretConnection returns a connection with its provider.
-func (c *Core) secretConnection(ctx context.Context, id string) (store.SecretConnection, secrets.Provider, error) {
+func (c *Core) secretConnection(ctx context.Context, id string) (domain.SecretConnection, secrets.Provider, error) {
 	conn, err := c.store.GetSecretConnection(ctx, id)
 	if err != nil {
 		return conn, nil, err
@@ -225,7 +225,7 @@ func (c *Core) secretConnection(ctx context.Context, id string) (store.SecretCon
 func (c *Core) CreateSecretConnection(ctx context.Context, kind, name, token string) (SecretConnectionView, error) {
 	k, ok := c.secretKind(kind)
 	if !ok {
-		return SecretConnectionView{}, store.ErrNotFound
+		return SecretConnectionView{}, domain.ErrNotFound
 	}
 	if !k.available {
 		return SecretConnectionView{}, fmt.Errorf("%w: %s isn't installed on the manager", ErrInvalid, k.info.Name)
@@ -250,7 +250,7 @@ func (c *Core) CreateSecretConnection(ctx context.Context, kind, name, token str
 	if err := c.secretProvider(k, name).Connect(ctx, token); err != nil {
 		return SecretConnectionView{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
-	conn, err := c.store.CreateSecretConnection(ctx, store.SecretConnection{Kind: kind, Name: name, Token: token})
+	conn, err := c.store.CreateSecretConnection(ctx, domain.SecretConnection{Kind: kind, Name: name, Token: token})
 	if err != nil {
 		return SecretConnectionView{}, err
 	}
@@ -339,7 +339,7 @@ func (v SecretConnectionView) label() string {
 
 // connectionFor returns the kind of password manager a reference scheme
 // names (pass, pass+work) and its connection, if any.
-func (c *Core) connectionFor(ctx context.Context, scheme string) (secretKind, *store.SecretConnection, error) {
+func (c *Core) connectionFor(ctx context.Context, scheme string) (secretKind, *domain.SecretConnection, error) {
 	base, name, _ := strings.Cut(scheme, "+")
 	var kind secretKind
 	found := false
@@ -429,7 +429,7 @@ func (c *Core) resolveSecrets(ctx context.Context, refs []string) (map[string]st
 	return out, nil
 }
 
-func (c *Core) secretBrowser(ctx context.Context, id string) (store.SecretConnection, secrets.Provider, secrets.Browser, error) {
+func (c *Core) secretBrowser(ctx context.Context, id string) (domain.SecretConnection, secrets.Provider, secrets.Browser, error) {
 	conn, p, err := c.secretConnection(ctx, id)
 	if err != nil {
 		return conn, nil, nil, err
@@ -444,7 +444,7 @@ func (c *Core) secretBrowser(ctx context.Context, id string) (store.SecretConnec
 // browseSecrets runs list, logging in again with the stored token and
 // retrying once if it fails, as resolveSecrets does: the session may have
 // expired since the last call.
-func browseSecrets[T any](ctx context.Context, conn store.SecretConnection, p secrets.Provider, list func() (T, error)) (T, error) {
+func browseSecrets[T any](ctx context.Context, conn domain.SecretConnection, p secrets.Provider, list func() (T, error)) (T, error) {
 	v, err := list()
 	if err == nil {
 		return v, nil

@@ -8,12 +8,12 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestApplyJobInput(t *testing.T) {
 	ok := JobInput{Name: "nightly", Command: "echo hi", Cron: "0 3 * * *", Enabled: true}
-	var j store.Job
+	var j domain.Job
 	if err := applyJobInput(&j, ok); err != nil {
 		t.Fatal(err)
 	}
@@ -36,15 +36,15 @@ func TestApplyJobInput(t *testing.T) {
 func TestJobs(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	app, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1})
+	app, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	db, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindRedis, Image: "redis", Replicas: 1})
+	db, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "db", Kind: domain.ServiceKindRedis, Image: "redis", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestJobs(t *testing.T) {
 func TestComposeJobs(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ services:
 	}
 
 	// A git project's file owns them.
-	if _, err := c.store.SaveProjectGit(ctx, store.ProjectGit{ProjectID: p.ID, RepoURL: "https://example.com/r.git", Branch: "main",
+	if _, err := c.store.SaveProjectGit(ctx, domain.ProjectGit{ProjectID: p.ID, RepoURL: "https://example.com/r.git", Branch: "main",
 		Path: "compose.yaml"}); err != nil {
 		t.Fatal(err)
 	}

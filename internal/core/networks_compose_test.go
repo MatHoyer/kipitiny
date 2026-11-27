@@ -8,17 +8,17 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestComposeNetworks(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	shared, err := c.store.CreateNetwork(ctx, store.Network{ServerID: store.LocalServerID, Name: "shared"})
+	shared, err := c.store.CreateNetwork(ctx, domain.Network{ServerID: domain.LocalServerID, Name: "shared"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ networks:
 		t.Fatal(err)
 	}
 	svcs, _ := c.store.ListServices(ctx, p.ID)
-	by := map[string]store.Service{}
+	by := map[string]domain.Service{}
 	for _, s := range svcs {
 		by[s.Name] = s
 	}

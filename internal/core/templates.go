@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/templates"
 )
 
@@ -45,7 +45,7 @@ func (c *Core) TemplateLogos() []templates.Logo { return templates.Logos() }
 func (c *Core) InstallTemplate(ctx context.Context, id string, in TemplateInstall) (TemplateResult, error) {
 	t, ok := templates.Get(id)
 	if !ok {
-		return TemplateResult{}, fmt.Errorf("%w: template %s", store.ErrNotFound, id)
+		return TemplateResult{}, fmt.Errorf("%w: template %s", domain.ErrNotFound, id)
 	}
 	if (in.ProjectID == "") == (in.NewProject == nil) {
 		return TemplateResult{}, fmt.Errorf("%w: give either a project or a new project", ErrInvalid)
@@ -89,12 +89,12 @@ func (c *Core) InstallTemplate(ctx context.Context, id string, in TemplateInstal
 		return TemplateResult{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
 	if np.ServerID == "" {
-		np.ServerID = store.LocalServerID
+		np.ServerID = domain.LocalServerID
 	}
 	if _, err := c.store.GetServer(ctx, np.ServerID); err != nil {
 		return TemplateResult{}, fmt.Errorf("%w: unknown server", ErrInvalid)
 	}
-	a, err := c.planCompose(ctx, store.Project{Name: np.Name, ServerID: np.ServerID}, nil, data, ApplyOptions{Env: env, DryRun: true}, false)
+	a, err := c.planCompose(ctx, domain.Project{Name: np.Name, ServerID: np.ServerID}, nil, data, ApplyOptions{Env: env, DryRun: true}, false)
 	if a == nil || err != nil || in.DryRun {
 		var plan ComposePlan
 		if a != nil {

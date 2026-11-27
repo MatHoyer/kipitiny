@@ -9,7 +9,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // topFile is a top-level config or secret: inline content, a file of the
@@ -57,7 +57,7 @@ func btoi(b bool) int {
 
 // fileRefs reads a service's configs or secrets and writes the files they
 // name; kind is "config" or "secret".
-func (p *parser) fileRefs(kind string, n *yaml.Node, defs map[string]topFile, files *[]store.ServiceFile) {
+func (p *parser) fileRefs(kind string, n *yaml.Node, defs map[string]topFile, files *[]domain.ServiceFile) {
 	if n.Kind != yaml.SequenceNode {
 		p.fail("%ss must be a list", kind)
 		return
@@ -100,7 +100,7 @@ func (p *parser) fileRefs(kind string, n *yaml.Node, defs map[string]topFile, fi
 		case target == "":
 			target = "/" + source
 		}
-		f := store.ServiceFile{Path: target, Mode: mode, Secret: kind == "secret", Source: kind + ":" + source}
+		f := domain.ServiceFile{Path: target, Mode: mode, Secret: kind == "secret", Source: kind + ":" + source}
 		switch {
 		case def.content != nil:
 			f.Content = []byte(*def.content)
@@ -131,7 +131,7 @@ func (p *parser) fileRefs(kind string, n *yaml.Node, defs map[string]topFile, fi
 
 // repoFiles reads a path of the git repository, relative to the compose
 // file; nil (with an error) without one.
-func (p *parser) repoFiles(rel string) []store.ServiceFile {
+func (p *parser) repoFiles(rel string) []domain.ServiceFile {
 	if p.vars.Files == nil {
 		p.fail("%s: files of the repository need a git project (use content: or a named volume)", rel)
 		return nil
@@ -146,7 +146,7 @@ func (p *parser) repoFiles(rel string) []store.ServiceFile {
 
 // bindFiles turns a bind mount of a repository path into the files it
 // holds, at target.
-func (p *parser) bindFiles(source, target string, files *[]store.ServiceFile) {
+func (p *parser) bindFiles(source, target string, files *[]domain.ServiceFile) {
 	for _, f := range p.repoFiles(source) {
 		rel := f.Path
 		f.Path, f.Source = path.Join(target, rel), source
@@ -233,7 +233,7 @@ func (o octal) MarshalYAML() (any, error) {
 // marshalFiles writes a service's files as configs and secrets: a secret's
 // Content is the variable it comes from. Names are the files' sources,
 // prefixed with the service when two services' differ.
-func marshalFiles(svc string, files []store.ServiceFile, o *outService, out *outFile) {
+func marshalFiles(svc string, files []domain.ServiceFile, o *outService, out *outFile) {
 	for _, f := range files {
 		kind, name, ok := strings.Cut(f.Source, ":")
 		if !ok || (kind != "config" && kind != "secret") {

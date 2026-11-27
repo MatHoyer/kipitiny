@@ -18,7 +18,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // TestMaintenanceTraefikDocker runs Traefik as the manager configures it in
@@ -39,11 +39,11 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 	cfg := config.Config{DataDir: t.TempDir(), Traefik: config.Traefik{Image: "traefik:v3.7.17", DockerSocket: "/var/run/docker.sock", HTTPPort: "0", HTTPSPort: "0"}}
 	c := newTestCore(t, cfg)
 	c.pool = docker.NewPool(dk, c.connectServer)
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "busybox", Replicas: 1, Domain: "shop.localhost", Port: 8080})
+	svc, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "busybox", Replicas: 1, Domain: "shop.localhost", Port: 8080})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,12 +91,12 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 
 	// Traefik as ensureTraefik builds it, minus what would make the manager
 	// or the real Traefik take it for theirs.
-	token, err := c.providerToken(ctx, store.LocalServerID)
+	token, err := c.providerToken(ctx, domain.LocalServerID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	upstream := "http://" + managerHost + ":" + portOf(t, ln.Addr())
-	opts, files := c.traefikSpec(cfg.Traefik.DockerSocket, traefikOpts{Pages: &pagesOpts{Upstream: upstream, ServerID: store.LocalServerID, Token: token}})
+	opts, files := c.traefikSpec(cfg.Traefik.DockerSocket, traefikOpts{Pages: &pagesOpts{Upstream: upstream, ServerID: domain.LocalServerID, Token: token}})
 	constraint := "tt-" + strings.ToLower(svc.ID)
 	for i, a := range opts.Config.Cmd {
 		switch {
@@ -181,19 +181,19 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 	app := runApp("mkdir /www && echo APP > /www/index.html && httpd -f -p 8080 -h /www")
 	expect("running", http.StatusOK, "APP")
 
-	set := func(m store.Maintenance) {
+	set := func(m domain.Maintenance) {
 		t.Helper()
 		if err := c.store.SetProjectMaintenance(ctx, p.ID, m); err != nil {
 			t.Fatal(err)
 		}
 	}
-	set(store.Maintenance{Enabled: true, Title: "Upgrading"})
+	set(domain.Maintenance{Enabled: true, Title: "Upgrading"})
 	expect("maintenance mode", http.StatusServiceUnavailable, "Upgrading")
-	set(store.Maintenance{Enabled: true, Title: "Upgrading", AllowIPs: []string{gateway}})
+	set(domain.Maintenance{Enabled: true, Title: "Upgrading", AllowIPs: []string{gateway}})
 	expect("allowed IP", http.StatusOK, "APP")
-	set(store.Maintenance{Enabled: true, Title: "Upgrading", AllowIPs: []string{"192.0.2.1"}})
+	set(domain.Maintenance{Enabled: true, Title: "Upgrading", AllowIPs: []string{"192.0.2.1"}})
 	expect("other IP", http.StatusServiceUnavailable, "Upgrading")
-	set(store.Maintenance{})
+	set(domain.Maintenance{})
 	expect("maintenance over", http.StatusOK, "APP")
 
 	if err := dk.RemoveContainer(ctx, app, 0); err != nil {

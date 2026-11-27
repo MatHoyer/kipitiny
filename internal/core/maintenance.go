@@ -19,7 +19,7 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -48,7 +48,7 @@ const (
 )
 
 // MaintenanceInput sets a project's maintenance page and mode; see
-// store.Maintenance.
+// domain.Maintenance.
 type MaintenanceInput struct {
 	Enabled  bool     `json:"enabled"`
 	AllowIPs []string `json:"allowIps"`
@@ -56,23 +56,23 @@ type MaintenanceInput struct {
 	Message  string   `json:"message"`
 	HTML     string   `json:"html"`
 	// Starting is the page of the project waking from sleep.
-	Starting store.StartingPage `json:"starting"`
+	Starting domain.StartingPage `json:"starting"`
 }
 
 // SetMaintenance replaces a project's maintenance page and mode, for all its
 // apps. Traefik picks it up within seconds; nothing restarts. Not described
 // by compose files, so it works on git projects too.
-func (c *Core) SetMaintenance(ctx context.Context, projectID string, in MaintenanceInput) (store.Project, error) {
+func (c *Core) SetMaintenance(ctx context.Context, projectID string, in MaintenanceInput) (domain.Project, error) {
 	p, err := c.store.GetProject(ctx, projectID)
 	if err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
-	m := store.Maintenance{
+	m := domain.Maintenance{
 		Enabled: in.Enabled,
 		Title:   strings.TrimSpace(in.Title),
 		Message: strings.TrimSpace(in.Message),
 		HTML:    strings.TrimSpace(in.HTML),
-		Starting: store.StartingPage{
+		Starting: domain.StartingPage{
 			Title:   strings.TrimSpace(in.Starting.Title),
 			Message: strings.TrimSpace(in.Starting.Message),
 			HTML:    strings.TrimSpace(in.Starting.HTML),
@@ -84,25 +84,25 @@ func (c *Core) SetMaintenance(ctx context.Context, projectID string, in Maintena
 		}
 	}
 	if err := validateMaintenance(m); err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	if m.Enabled {
 		svcs, err := c.store.ListServices(ctx, projectID)
 		if err != nil {
-			return store.Project{}, err
+			return domain.Project{}, err
 		}
 		if !slices.ContainsFunc(svcs, httpRouted) {
-			return store.Project{}, fmt.Errorf("%w: maintenance mode needs an app with a domain and a container port", ErrInvalid)
+			return domain.Project{}, fmt.Errorf("%w: maintenance mode needs an app with a domain and a container port", ErrInvalid)
 		}
 	}
 	if err := c.store.SetProjectMaintenance(ctx, projectID, m); err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	p.Maintenance = m
 	return maskedProject(p), nil
 }
 
-func validateMaintenance(m store.Maintenance) error {
+func validateMaintenance(m domain.Maintenance) error {
 	s := m.Starting
 	switch {
 	case utf8.RuneCountInString(s.Title) > maxPageTitle, utf8.RuneCountInString(s.Message) > maxPageMessage:
@@ -121,7 +121,7 @@ func validateMaintenance(m store.Maintenance) error {
 		return fmt.Errorf("%w: the HTML page must be UTF-8 text", ErrInvalid)
 	}
 	// The same rules as the IP allowlist middleware.
-	return validateMiddlewares(store.Middlewares{IPAllowList: m.AllowIPs})
+	return validateMiddlewares(domain.Middlewares{IPAllowList: m.AllowIPs})
 }
 
 // Page is a maintenance page as served to visitors.
@@ -156,31 +156,31 @@ func (c *Core) MaintenancePage(ctx context.Context, id, rawURL string) Page {
 // pageTarget finds whose page to serve: the app with the given ID, the
 // project with it (to see its page from the settings), or, when id is empty,
 // the app on rawURL's host. svc is zero for a project.
-func (c *Core) pageTarget(ctx context.Context, id, rawURL string) (svc store.Service, p store.Project, ok bool) {
+func (c *Core) pageTarget(ctx context.Context, id, rawURL string) (svc domain.Service, p domain.Project, ok bool) {
 	switch {
 	case id != "":
 		var err error
-		if svc, err = c.store.GetService(ctx, id); errors.Is(err, store.ErrNotFound) {
+		if svc, err = c.store.GetService(ctx, id); errors.Is(err, domain.ErrNotFound) {
 			p, err = c.store.GetProject(ctx, id)
-			return store.Service{}, p, err == nil
-		} else if err != nil || svc.Kind != store.ServiceKindApp {
-			return store.Service{}, store.Project{}, false
+			return domain.Service{}, p, err == nil
+		} else if err != nil || svc.Kind != domain.ServiceKindApp {
+			return domain.Service{}, domain.Project{}, false
 		}
 	default:
 		u, err := url.Parse(rawURL)
 		if err != nil || u.Hostname() == "" {
-			return store.Service{}, store.Project{}, false
+			return domain.Service{}, domain.Project{}, false
 		}
 		svcs, err := c.store.ListAllServices(ctx)
 		if err != nil {
 			c.log.Warn("maintenance page", "err", err)
-			return store.Service{}, store.Project{}, false
+			return domain.Service{}, domain.Project{}, false
 		}
-		i := slices.IndexFunc(svcs, func(s store.Service) bool {
-			return s.Kind == store.ServiceKindApp && strings.EqualFold(s.Domain, u.Hostname())
+		i := slices.IndexFunc(svcs, func(s domain.Service) bool {
+			return s.Kind == domain.ServiceKindApp && strings.EqualFold(s.Domain, u.Hostname())
 		})
 		if i < 0 {
-			return store.Service{}, store.Project{}, false
+			return domain.Service{}, domain.Project{}, false
 		}
 		svc = svcs[i]
 	}
@@ -300,7 +300,7 @@ func renderPage(d pageData) Page {
 func (c *Core) StartingPage(ctx context.Context, id string) Page {
 	_, p, ok := c.pageTarget(ctx, id, "")
 	if !ok {
-		return renderStarting("", store.StartingPage{})
+		return renderStarting("", domain.StartingPage{})
 	}
 	return renderStarting(p.Name, p.Maintenance.Starting)
 }
@@ -309,7 +309,7 @@ func (c *Core) StartingPage(ctx context.Context, id string) Page {
 // few seconds (a Refresh header, so custom HTML does too; no script: pages
 // are sandboxed) until the app's own router answers instead. After
 // coldStart the usual page replaces it.
-func renderStarting(name string, s store.StartingPage) Page {
+func renderStarting(name string, s domain.StartingPage) Page {
 	if s.HTML != "" {
 		return Page{Custom: true, Starting: true, Body: []byte(s.HTML)}
 	}
@@ -331,8 +331,8 @@ func renderStarting(name string, s store.StartingPage) Page {
 // at: over the Docker network on the manager's server, through the manager's
 // public domain elsewhere ("" when it has none: no pages there). managerURL
 // is the manager's upstream when already known.
-func (c *Core) pagesUpstream(ctx context.Context, sv store.Server, managerURL string) (string, error) {
-	if sv.Kind == store.ServerLocal {
+func (c *Core) pagesUpstream(ctx context.Context, sv domain.Server, managerURL string) (string, error) {
+	if sv.Kind == domain.ServerLocal {
 		if managerURL != "" {
 			return managerURL, nil
 		}
@@ -348,7 +348,7 @@ func (c *Core) pagesUpstream(ctx context.Context, sv store.Server, managerURL st
 // configuration (TraefikConfig). Stable, since it is in Traefik's command.
 func (c *Core) providerToken(ctx context.Context, serverID string) (string, error) {
 	key, err := c.store.GetSetting(ctx, providerKeySetting)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, domain.ErrNotFound) {
 		b := make([]byte, 32)
 		_, _ = rand.Read(b)
 		key = hex.EncodeToString(b)
@@ -407,13 +407,13 @@ func (c *Core) TraefikConfig(ctx context.Context, serverID, token string) ([]byt
 	if err != nil {
 		return nil, err
 	}
-	maintenance := map[string]store.Maintenance{}
+	maintenance := map[string]domain.Maintenance{}
 	for _, p := range projects {
 		maintenance[p.ID] = p.Maintenance
 	}
 	routers, middlewares := map[string]any{}, map[string]any{}
 	for _, svc := range svcs {
-		if svc.Kind != store.ServiceKindApp || svc.ServerID != serverID || !httpRouted(svc) {
+		if svc.Kind != domain.ServiceKindApp || svc.ServerID != serverID || !httpRouted(svc) {
 			continue
 		}
 		name := "kipitiny-" + strings.ToLower(svc.ID)
@@ -507,7 +507,7 @@ func (c *Core) TraefikConfig(ctx context.Context, serverID, token string) ([]byt
 // svc defines (named name-<hash>), so allowed IPs in maintenance mode still
 // go through the app's basic auth, allowlist and headers. nil when no
 // replica runs.
-func (c *Core) routerChain(ctx context.Context, svc store.Service, name string) ([]string, error) {
+func (c *Core) routerChain(ctx context.Context, svc domain.Service, name string) ([]string, error) {
 	cts, err := c.serviceContainers(ctx, svc)
 	if err != nil {
 		return nil, err

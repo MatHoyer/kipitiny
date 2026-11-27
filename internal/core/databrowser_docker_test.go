@@ -14,14 +14,14 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // dataTestDB starts a database container for svc against the local Docker
 // daemon and returns a core and an admin context to browse it.
 //
 //	KIPITINY_TEST_DOCKER=1 go test ./internal/core/ -run DataBrowserDocker
-func dataTestDB(t *testing.T, kind store.ServiceKind, cfg *container.Config) (*Core, context.Context, store.Service, func(string) string) {
+func dataTestDB(t *testing.T, kind domain.ServiceKind, cfg *container.Config) (*Core, context.Context, domain.Service, func(string) string) {
 	t.Helper()
 	if os.Getenv("KIPITINY_TEST_DOCKER") == "" {
 		t.Skip("KIPITINY_TEST_DOCKER not set")
@@ -33,11 +33,11 @@ func dataTestDB(t *testing.T, kind store.ServiceKind, cfg *container.Config) (*C
 	}
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
 	c.pool = docker.NewPool(dk, c.connectServer)
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "datatest", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "datatest", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := store.Service{ProjectID: p.ID, Name: "db", Kind: kind, Replicas: 1, Env: map[string]string{}}
+	svc := domain.Service{ProjectID: p.ID, Name: "db", Kind: kind, Replicas: 1, Env: map[string]string{}}
 	for _, e := range cfg.Env {
 		k, v, _ := strings.Cut(e, "=")
 		svc.Env[k] = v
@@ -48,7 +48,7 @@ func dataTestDB(t *testing.T, kind store.ServiceKind, cfg *container.Config) (*C
 	// Not kipitiny.managed: a manager running on this daemon would remove
 	// it as an orphan.
 	cfg.Labels = map[string]string{docker.LabelProject: p.ID, docker.LabelService: svc.ID}
-	if kind == store.ServiceKindPostgres {
+	if kind == domain.ServiceKindPostgres {
 		// Commands would otherwise reach initdb's temporary server, which
 		// shuts down right after.
 		cfg.Healthcheck = postgresHealthcheck(svc.Env[pgUser], svc.Env[pgDatabase])
@@ -81,11 +81,11 @@ func dataTestDB(t *testing.T, kind store.ServiceKind, cfg *container.Config) (*C
 		t.Fatalf("%s: %v", cmd, err)
 		return ""
 	}
-	return c, WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin}), svc, exec
+	return c, WithActor(ctx, Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin}), svc, exec
 }
 
 func TestDataBrowserDockerPostgres(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, store.ServiceKindPostgres, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &container.Config{
 		Image: DefaultPostgresImage,
 		Env:   []string{"POSTGRES_USER=app", "POSTGRES_DB=app", "POSTGRES_PASSWORD=secret"},
 	})
@@ -142,7 +142,7 @@ CREATE VIEW s.v AS SELECT id FROM s.items;"`)
 	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "invalid input syntax") {
 		t.Errorf("bad value: %v", err)
 	}
-	if _, err = c.PgRows(ctx, svc.ID, "", "s", "missing", RowQuery{}); !errors.Is(err, store.ErrNotFound) {
+	if _, err = c.PgRows(ctx, svc.ID, "", "s", "missing", RowQuery{}); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("missing table: %v", err)
 	}
 
@@ -207,7 +207,7 @@ CREATE TABLE tags (note int REFERENCES notes, a int, b int, FOREIGN KEY (a, b) R
 }
 
 func TestDataBrowserDockerRedis(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, store.ServiceKindRedis, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindRedis, &container.Config{
 		Image: DefaultRedisImage,
 		Env:   []string{"REDIS_PASSWORD=secret", "REDISCLI_AUTH=secret"},
 		Cmd:   []string{"redis-server", "--requirepass", "secret"},
@@ -286,7 +286,7 @@ key" v`)
 	if v = get("events", v.Cursor, 1); len(v.Items) != 1 || v.Items[0][0] != "2-1" {
 		t.Errorf("stream page 2: %+v", v)
 	}
-	if _, err := c.RedisGet(ctx, svc.ID, "missing", "", 0); !errors.Is(err, store.ErrNotFound) {
+	if _, err := c.RedisGet(ctx, svc.ID, "missing", "", 0); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("missing key: %v", err)
 	}
 	if _, err := c.RedisGet(ctx, svc.ID, "queue", "1; FLUSHALL", 0); !errors.Is(err, ErrInvalid) {
@@ -295,7 +295,7 @@ key" v`)
 }
 
 func TestDataConsoleDockerPostgres(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, store.ServiceKindPostgres, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &container.Config{
 		Image: DefaultPostgresImage,
 		Env:   []string{"POSTGRES_USER=app", "POSTGRES_DB=app", "POSTGRES_PASSWORD=secret"},
 	})
@@ -345,7 +345,7 @@ func TestDataConsoleDockerPostgres(t *testing.T) {
 }
 
 func TestDataConsoleDockerRedis(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, store.ServiceKindRedis, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindRedis, &container.Config{
 		Image: DefaultRedisImage,
 		Env:   []string{"REDIS_PASSWORD=secret", "REDISCLI_AUTH=secret"},
 		Cmd:   []string{"redis-server", "--requirepass", "secret"},
@@ -384,12 +384,12 @@ func TestDataConsoleDockerRedis(t *testing.T) {
 // database is postgres, the instance's maintenance database: the swap must
 // run from another one.
 func TestRestoreDockerPostgresDatabase(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, store.ServiceKindPostgres, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &container.Config{
 		Image: DefaultPostgresImage,
 		Env:   []string{"POSTGRES_USER=app", "POSTGRES_DB=postgres", "POSTGRES_PASSWORD=secret"},
 	})
 	exec(`psql -U app -d postgres -c "CREATE TABLE t (v text); INSERT INTO t VALUES ('before')"`)
-	target, err := c.store.GetBackupTarget(ctx, store.LocalTargetID)
+	target, err := c.store.GetBackupTarget(ctx, domain.LocalTargetID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +401,7 @@ func TestRestoreDockerPostgresDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := store.Backup{ID: "01BACKUPTEST", Kind: store.BackupKindPostgres, TargetID: target.ID, ObjectKey: "test/restore-postgres.dump"}
+	b := domain.Backup{ID: "01BACKUPTEST", Kind: domain.BackupKindPostgres, TargetID: target.ID, ObjectKey: "test/restore-postgres.dump"}
 	t.Cleanup(func() { _ = st.Delete(context.Background(), b.ObjectKey) })
 	if err := c.dump(ctx, svc, ct, st, target, &b); err != nil {
 		t.Fatal(err)
@@ -421,7 +421,7 @@ func TestRestoreDockerPostgresDatabase(t *testing.T) {
 // TestBackupDockerOtherDatabase backs up one of the instance's other
 // databases, then restores it, also once it has been dropped.
 func TestBackupDockerOtherDatabase(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, store.ServiceKindPostgres, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &container.Config{
 		Image: DefaultPostgresImage,
 		Env:   []string{"POSTGRES_USER=app", "POSTGRES_DB=postgres", "POSTGRES_PASSWORD=secret"},
 	})
@@ -435,13 +435,13 @@ func TestBackupDockerOtherDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for b.Status == store.OpRunning {
+	for b.Status == domain.OpRunning {
 		time.Sleep(200 * time.Millisecond)
 		if b, err = c.store.GetBackup(ctx, b.ID); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if b.Status != store.OpSucceeded || b.Database != "other" || !strings.Contains(b.ObjectKey, "/db/other/") {
+	if b.Status != domain.OpSucceeded || b.Database != "other" || !strings.Contains(b.ObjectKey, "/db/other/") {
 		t.Fatalf("backup: %+v", b)
 	}
 	target, _ := c.store.GetBackupTarget(ctx, b.TargetID)
@@ -474,6 +474,6 @@ func TestBackupDockerOtherDatabase(t *testing.T) {
 }
 
 // reader is a member who may view svc's project, plus perms.
-func reader(svc store.Service, perms ...string) Actor {
-	return Actor{Kind: "user", Role: store.RoleMember, Grants: map[string][]string{svc.ProjectID: append([]string{"view"}, perms...)}}
+func reader(svc domain.Service, perms ...string) Actor {
+	return Actor{Kind: "user", Role: domain.RoleMember, Grants: map[string][]string{svc.ProjectID: append([]string{"view"}, perms...)}}
 }

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestNormalizeTags(t *testing.T) {
@@ -35,10 +35,10 @@ func TestNormalizeTags(t *testing.T) {
 func TestTags(t *testing.T) {
 	c := newTestCore(t, config.Config{})
 	ctx := context.Background()
-	admin := WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin})
-	shop, _ := c.store.CreateProject(ctx, store.Project{Name: "shop"})
-	blog, _ := c.store.CreateProject(ctx, store.Project{Name: "blog"})
-	web, err := c.store.CreateService(ctx, store.Service{ProjectID: shop.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1})
+	admin := WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
+	shop, _ := c.store.CreateProject(ctx, domain.Project{Name: "shop"})
+	blog, _ := c.store.CreateProject(ctx, domain.Project{Name: "blog"})
+	web, err := c.store.CreateService(ctx, domain.Service{ProjectID: shop.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,9 +63,9 @@ func TestTags(t *testing.T) {
 
 	// A member sees the tags of their projects, and colors those of the
 	// projects they may change.
-	member := WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: store.RoleMember,
+	member := WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: domain.RoleMember,
 		Grants: map[string][]string{shop.ID: {string(PermSettings)}, blog.ID: {string(PermView)}}})
-	viewer := WithActor(ctx, Actor{Kind: "user", Name: "bob", Role: store.RoleMember, Grants: map[string][]string{blog.ID: {string(PermView)}}})
+	viewer := WithActor(ctx, Actor{Kind: "user", Name: "bob", Role: domain.RoleMember, Grants: map[string][]string{blog.ID: {string(PermView)}}})
 	if tags, _ := c.ListTags(viewer); len(tags) != 2 || tags[0].Name != "blog" || tags[1].Projects != 1 {
 		t.Errorf("viewer's tags = %+v", tags)
 	}
@@ -86,7 +86,7 @@ func TestTags(t *testing.T) {
 	}
 
 	// A git-linked project's file owns its services' tags.
-	if _, err := c.store.SaveProjectGit(ctx, store.ProjectGit{ProjectID: shop.ID, RepoURL: "https://example.com/shop.git", Branch: "main", Path: "compose.yaml"}); err != nil {
+	if _, err := c.store.SaveProjectGit(ctx, domain.ProjectGit{ProjectID: shop.ID, RepoURL: "https://example.com/shop.git", Branch: "main", Path: "compose.yaml"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.SetServiceTags(admin, web.ID, []string{"x"}); !errors.Is(err, ErrGitManaged) {

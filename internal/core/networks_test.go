@@ -6,25 +6,25 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestSetServiceNetworksValidation(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1})
+	svc, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := c.store.CreateServer(ctx, store.Server{Name: "other", Kind: store.ServerSSH, Host: "h"})
+	other, err := c.store.CreateServer(ctx, domain.Server{Name: "other", Kind: domain.ServerSSH, Host: "h"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	remote, err := c.store.CreateNetwork(ctx, store.Network{ServerID: other.ID, Name: "shared"})
+	remote, err := c.store.CreateNetwork(ctx, domain.Network{ServerID: other.ID, Name: "shared"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestSetServiceNetworksValidation(t *testing.T) {
 		t.Errorf("network on another server: got %v, want ErrInvalid", err)
 	}
 
-	local, err := c.store.CreateNetwork(ctx, store.Network{ServerID: store.LocalServerID, Name: "shared"})
+	local, err := c.store.CreateNetwork(ctx, domain.Network{ServerID: domain.LocalServerID, Name: "shared"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // The signed-in user's own security settings. Changes that alter how the
@@ -43,7 +43,7 @@ func (a *API) account(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) setPreferences(w http.ResponseWriter, r *http.Request) {
-	var p store.Preferences
+	var p domain.Preferences
 	if !decode(w, r, &p) {
 		return
 	}

@@ -15,8 +15,8 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/storage"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Volume backups archive a service's volumes (gzipped tar, one top-level
@@ -36,9 +36,9 @@ const (
 // volumeNames lists what a volume backup of svc archives: Redis's data
 // volume (the other databases are dumped by their own tool), or an app's
 // volumes.
-func volumeNames(svc store.Service) []string {
+func volumeNames(svc domain.Service) []string {
 	switch {
-	case svc.Kind == store.ServiceKindRedis:
+	case svc.Kind == domain.ServiceKindRedis:
 		return []string{dataVolumeName}
 	case svc.Kind.IsDatabase():
 		return nil
@@ -51,21 +51,21 @@ func volumeNames(svc store.Service) []string {
 }
 
 // backupKind is how a service is backed up.
-func backupKind(svc store.Service) (store.BackupKind, error) {
+func backupKind(svc domain.Service) (domain.BackupKind, error) {
 	switch {
-	case svc.Kind == store.ServiceKindPostgres:
-		return store.BackupKindPostgres, nil
-	case svc.Kind.IsMySQL(), svc.Kind == store.ServiceKindMongoDB:
-		return store.BackupKindDump, nil
+	case svc.Kind == domain.ServiceKindPostgres:
+		return domain.BackupKindPostgres, nil
+	case svc.Kind.IsMySQL(), svc.Kind == domain.ServiceKindMongoDB:
+		return domain.BackupKindDump, nil
 	case len(volumeNames(svc)) > 0:
-		return store.BackupKindVolume, nil
+		return domain.BackupKindVolume, nil
 	}
 	return "", fmt.Errorf("%w: %s has no volumes to back up", ErrInvalid, svc.Name)
 }
 
-// helperMounts mounts the named volumes of svc under root/<name>, read-only
+// helperMounts mounts the named volumes of svc under helperVolumeRoot/<name>, read-only
 // if readOnly or if the app mounts the volume read-only.
-func helperMounts(svc store.Service, names []string, root string, readOnly bool) []mount.Mount {
+func helperMounts(svc domain.Service, names []string, readOnly bool) []mount.Mount {
 	mounts := make([]mount.Mount, 0, len(names))
 	for _, name := range names {
 		var m mount.Mount
@@ -74,7 +74,7 @@ func helperMounts(svc store.Service, names []string, root string, readOnly bool)
 		} else {
 			m = appVolumeMount(svc, name, "")
 		}
-		m.Target, m.ReadOnly = root+"/"+name, readOnly || m.ReadOnly
+		m.Target, m.ReadOnly = helperVolumeRoot+"/"+name, readOnly || m.ReadOnly
 		mounts = append(mounts, m)
 	}
 	return mounts
@@ -105,7 +105,7 @@ func startVolumeHelper(ctx context.Context, dk *docker.Client, name string, moun
 // dumpVolumes streams an archive of the backup's volumes to storage. The
 // service keeps running: files are copied as they are (run a pre-backup
 // command to flush them first).
-func (c *Core) dumpVolumes(ctx context.Context, svc store.Service, st storage.Storage, target store.BackupTarget, b *store.Backup) error {
+func (c *Core) dumpVolumes(ctx context.Context, svc domain.Service, st storage.Storage, target domain.BackupTarget, b *domain.Backup) error {
 	if svc.PreBackup != "" {
 		c.steps.set(backupKey(b.ID), BackupPreBackup)
 		if err := c.preBackup(ctx, svc); err != nil {
@@ -114,7 +114,7 @@ func (c *Core) dumpVolumes(ctx context.Context, svc store.Service, st storage.St
 	}
 	dk := c.dockerFor(svc.ServerID)
 	c.steps.set(backupKey(b.ID), BackupHelper)
-	id, err := startVolumeHelper(ctx, dk, "kipitiny-backup-"+strings.ToLower(b.ID), helperMounts(svc, b.Volumes, helperVolumeRoot, true))
+	id, err := startVolumeHelper(ctx, dk, "kipitiny-backup-"+strings.ToLower(b.ID), helperMounts(svc, b.Volumes, true))
 	if err != nil {
 		return err
 	}
@@ -133,7 +133,7 @@ func (c *Core) dumpVolumes(ctx context.Context, svc store.Service, st storage.St
 
 // preBackup runs the service's pre-backup command in one running replica.
 // With none running, the files are at rest already.
-func (c *Core) preBackup(ctx context.Context, svc store.Service) error {
+func (c *Core) preBackup(ctx context.Context, svc domain.Service) error {
 	ctx, cancel := context.WithTimeout(ctx, preBackupTimeout)
 	defer cancel()
 	cts, err := c.activeContainers(ctx, svc)
@@ -160,43 +160,43 @@ func (c *Core) removeHelper(ctx context.Context, dk *docker.Client, id string) {
 
 // restoreVolumeBackup checks and starts the restore of a volume backup into
 // svc, which must have every volume of the archive.
-func (c *Core) restoreVolumeBackup(ctx context.Context, b store.Backup, svc store.Service, confirm string) (store.Restore, error) {
-	if kind, err := backupKind(svc); err != nil || kind != store.BackupKindVolume {
-		return store.Restore{}, fmt.Errorf("%w: %s has no volumes to restore into", ErrInvalid, svc.Name)
+func (c *Core) restoreVolumeBackup(ctx context.Context, b domain.Backup, svc domain.Service, confirm string) (domain.Restore, error) {
+	if kind, err := backupKind(svc); err != nil || kind != domain.BackupKindVolume {
+		return domain.Restore{}, fmt.Errorf("%w: %s has no volumes to restore into", ErrInvalid, svc.Name)
 	}
 	have := volumeNames(svc)
 	for _, name := range b.Volumes {
 		if !slices.Contains(have, name) {
-			return store.Restore{}, fmt.Errorf("%w: %s has no volume %q", ErrInvalid, svc.Name, name)
+			return domain.Restore{}, fmt.Errorf("%w: %s has no volume %q", ErrInvalid, svc.Name, name)
 		}
 	}
 	// An admin attaches host data read-only on purpose: only an admin overwrites it.
 	for _, v := range svc.Volumes {
 		if v.ReadOnly && v.HostAccess() && slices.Contains(b.Volumes, v.Name) {
 			if err := RequireAdmin(ctx); err != nil {
-				return store.Restore{}, fmt.Errorf("%w: volume %s is attached read-only; only an admin restores it", ErrForbidden, v.Name)
+				return domain.Restore{}, fmt.Errorf("%w: volume %s is attached read-only; only an admin restores it", ErrForbidden, v.Name)
 			}
 		}
 	}
 	if confirm != svc.Name {
-		return store.Restore{}, fmt.Errorf("%w: restoring overwrites the volumes of %s; confirm with its name", ErrInvalid, svc.Name)
+		return domain.Restore{}, fmt.Errorf("%w: restoring overwrites the volumes of %s; confirm with its name", ErrInvalid, svc.Name)
 	}
 	target, err := c.store.GetBackupTarget(ctx, b.TargetID)
 	if err != nil {
-		return store.Restore{}, err
+		return domain.Restore{}, err
 	}
 	st, err := c.openStorage(target)
 	if err != nil {
-		return store.Restore{}, err
+		return domain.Restore{}, err
 	}
 	unlock, err := c.lockService(svc.ID)
 	if err != nil {
-		return store.Restore{}, err
+		return domain.Restore{}, err
 	}
-	r, err := c.store.CreateRestore(ctx, store.Restore{BackupID: b.ID, ServiceID: svc.ID, Status: store.OpRunning})
+	r, err := c.store.CreateRestore(ctx, domain.Restore{BackupID: b.ID, ServiceID: svc.ID, Status: domain.OpRunning})
 	if err != nil {
 		unlock()
-		return store.Restore{}, err
+		return domain.Restore{}, err
 	}
 	if err := c.goBackground(func() {
 		defer unlock()
@@ -211,8 +211,8 @@ func (c *Core) restoreVolumeBackup(ctx context.Context, b store.Backup, svc stor
 		c.finishRestore(ctx, svc, target, b, r, err, "Its volumes now hold", after)
 	}); err != nil {
 		unlock()
-		_ = c.store.FinishRestore(ctx, r.ID, store.OpFailed, err.Error())
-		return store.Restore{}, err
+		_ = c.store.FinishRestore(ctx, r.ID, domain.OpFailed, err.Error())
+		return domain.Restore{}, err
 	}
 	return r, nil
 }
@@ -221,7 +221,7 @@ func (c *Core) restoreVolumeBackup(ctx context.Context, b store.Backup, svc stor
 // then stops the service, replaces the content of each volume with the
 // staged copy and starts the service again. It reports whether the live
 // volumes were touched.
-func (c *Core) restoreVolumes(ctx context.Context, svc store.Service, st storage.Storage, target store.BackupTarget, b store.Backup, r store.Restore) (bool, error) {
+func (c *Core) restoreVolumes(ctx context.Context, svc domain.Service, st storage.Storage, target domain.BackupTarget, b domain.Backup, r domain.Restore) (bool, error) {
 	key := restoreKey(r.ID)
 	c.steps.set(key, RestoreExtract)
 	rc, err := st.Get(ctx, b.ObjectKey)
@@ -243,7 +243,7 @@ func (c *Core) restoreVolumes(ctx context.Context, svc store.Service, st storage
 			c.log.Warn("cannot remove staging volume", "volume", stage, "err", err)
 		}
 	}()
-	mounts := helperMounts(svc, b.Volumes, helperVolumeRoot, false)
+	mounts := helperMounts(svc, b.Volumes, false)
 	for i := range mounts {
 		mounts[i].ReadOnly = false // a restore writes read-only volumes too (restoreVolumeBackup checked who may)
 	}
@@ -300,7 +300,7 @@ done`
 
 // stopServiceContainers stops the service's running containers and returns
 // their IDs so they can be started again.
-func (c *Core) stopServiceContainers(ctx context.Context, svc store.Service) ([]string, error) {
+func (c *Core) stopServiceContainers(ctx context.Context, svc domain.Service) ([]string, error) {
 	cts, err := c.serviceContainers(ctx, svc)
 	if err != nil {
 		return nil, err
@@ -321,8 +321,8 @@ func (c *Core) stopServiceContainers(ctx context.Context, svc store.Service) ([]
 
 // verifyVolumes reads the whole archive in a throwaway helper: it must
 // decrypt, decompress and list cleanly, and match the recorded checksum.
-func (c *Core) verifyVolumes(ctx context.Context, b store.Backup) (store.VerificationDetails, error) {
-	var d store.VerificationDetails
+func (c *Core) verifyVolumes(ctx context.Context, b domain.Backup) (domain.VerificationDetails, error) {
+	var d domain.VerificationDetails
 	target, err := c.store.GetBackupTarget(ctx, b.TargetID)
 	if err != nil {
 		return d, err
@@ -331,7 +331,7 @@ func (c *Core) verifyVolumes(ctx context.Context, b store.Backup) (store.Verific
 	if err != nil {
 		return d, err
 	}
-	serverID := store.LocalServerID
+	serverID := domain.LocalServerID
 	if svc, err := c.store.GetService(ctx, b.ServiceID); err == nil {
 		serverID = svc.ServerID
 	}

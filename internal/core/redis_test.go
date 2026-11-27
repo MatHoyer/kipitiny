@@ -5,12 +5,12 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
-func redisService() store.Service {
-	return store.Service{
-		ID: "01CACHE", ProjectID: "P1", Name: "cache", Kind: store.ServiceKindRedis,
+func redisService() domain.Service {
+	return domain.Service{
+		ID: "01CACHE", ProjectID: "P1", Name: "cache", Kind: domain.ServiceKindRedis,
 		Image: DefaultRedisImage, Replicas: 1, MemoryMB: 256, Env: newRedisEnv(),
 	}
 }
@@ -19,14 +19,14 @@ func TestValidateRedis(t *testing.T) {
 	if err := validateService(redisService()); err != nil {
 		t.Fatalf("valid service rejected: %v", err)
 	}
-	for name, mutate := range map[string]func(*store.Service){
-		"replicas":     func(s *store.Service) { s.Replicas = 2 },
-		"public":       func(s *store.Service) { s.Domain, s.Port = "cache.example.com", 6379 },
-		"low memory":   func(s *store.Service) { s.MemoryMB = 16 },
-		"no password":  func(s *store.Service) { delete(s.Env, redisPassword) },
-		"bad password": func(s *store.Service) { s.Env[redisPassword] = "has space and is long" },
-		"db reference": func(s *store.Service) { s.Env["OTHER"] = "{{ db.other.URL }}" },
-		"pre-deploy":   func(s *store.Service) { s.PreDeploy = "true" },
+	for name, mutate := range map[string]func(*domain.Service){
+		"replicas":     func(s *domain.Service) { s.Replicas = 2 },
+		"public":       func(s *domain.Service) { s.Domain, s.Port = "cache.example.com", 6379 },
+		"low memory":   func(s *domain.Service) { s.MemoryMB = 16 },
+		"no password":  func(s *domain.Service) { delete(s.Env, redisPassword) },
+		"bad password": func(s *domain.Service) { s.Env[redisPassword] = "has space and is long" },
+		"db reference": func(s *domain.Service) { s.Env["OTHER"] = "{{ db.other.URL }}" },
+		"pre-deploy":   func(s *domain.Service) { s.PreDeploy = "true" },
 	} {
 		s := redisService()
 		mutate(&s)
@@ -54,7 +54,7 @@ func TestCheckRedisUpdate(t *testing.T) {
 func TestRedisRefs(t *testing.T) {
 	db := redisService()
 	db.Env[redisPassword] = "s3cr3t-pass_word0"
-	src := envSources{dbs: map[string]store.Service{db.Name: db}}
+	src := envSources{dbs: map[string]domain.Service{db.Name: db}}
 	for ref, want := range map[string]string{
 		"{{ db.cache.URL }}":      "redis://:s3cr3t-pass_word0@cache:6379",
 		"{{ db.cache.HOST }}":     "cache",
@@ -71,7 +71,7 @@ func TestRedisRefs(t *testing.T) {
 }
 
 func TestRedisContainerSpec(t *testing.T) {
-	p := store.Project{ID: "P1", Name: "shop"}
+	p := domain.Project{ID: "P1", Name: "shop"}
 	svc := redisService()
 	spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, route{resolver: certResolver})
 

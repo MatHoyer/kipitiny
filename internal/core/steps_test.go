@@ -5,13 +5,13 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestBackupSteps(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	b, err := c.store.CreateBackup(ctx, store.Backup{Kind: store.BackupKindManager, TargetID: "local", Status: store.OpRunning})
+	b, err := c.store.CreateBackup(ctx, domain.Backup{Kind: domain.BackupKindManager, TargetID: "local", Status: domain.OpRunning})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,11 +29,11 @@ func TestBackupSteps(t *testing.T) {
 	}
 
 	// A restore test reports its own step, apart from the backup's.
-	b.Status = store.OpSucceeded
+	b.Status = domain.OpSucceeded
 	if err := c.store.FinishBackup(ctx, b); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.store.SetBackupVerification(ctx, b.ID, store.Verification{VerifyStatus: store.OpRunning}); err != nil {
+	if err := c.store.SetBackupVerification(ctx, b.ID, domain.Verification{VerifyStatus: domain.OpRunning}); err != nil {
 		t.Fatal(err)
 	}
 	c.steps.set(verifyKey(b.ID), VerifyRestore)

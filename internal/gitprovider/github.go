@@ -12,7 +12,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // A GitHub provider is a GitHub App the manager creates from a manifest
@@ -79,7 +79,7 @@ type App struct {
 // ConvertManifest exchanges the code GitHub redirected with for the app.
 func ConvertManifest(ctx context.Context, baseURL, code string) (App, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		APIURL(store.GitHub, baseURL)+"/app-manifests/"+url.PathEscape(code)+"/conversions", nil)
+		APIURL(domain.GitHub, baseURL)+"/app-manifests/"+url.PathEscape(code)+"/conversions", nil)
 	if err != nil {
 		return App{}, err
 	}
@@ -126,12 +126,12 @@ func appRequest(ctx context.Context, method, u string, appID int64, pemKey strin
 }
 
 // InstallationToken mints a token reading the installation's repositories.
-func InstallationToken(ctx context.Context, p store.GitProvider) (string, time.Time, error) {
+func InstallationToken(ctx context.Context, p domain.GitProvider) (string, time.Time, error) {
 	var body struct {
 		Token     string    `json:"token"`
 		ExpiresAt time.Time `json:"expires_at"`
 	}
-	u := fmt.Sprintf("%s/app/installations/%d/access_tokens", APIURL(store.GitHub, p.BaseURL), p.InstallationID)
+	u := fmt.Sprintf("%s/app/installations/%d/access_tokens", APIURL(domain.GitHub, p.BaseURL), p.InstallationID)
 	if err := appRequest(ctx, http.MethodPost, u, p.AppID, p.PrivateKey, &body); err != nil {
 		return "", time.Time{}, fmt.Errorf("GitHub App installation token: %w", err)
 	}
@@ -139,13 +139,13 @@ func InstallationToken(ctx context.Context, p store.GitProvider) (string, time.T
 }
 
 // InstallationAccount is the user or organization the app is installed on.
-func InstallationAccount(ctx context.Context, p store.GitProvider, installationID int64) (string, error) {
+func InstallationAccount(ctx context.Context, p domain.GitProvider, installationID int64) (string, error) {
 	var body struct {
 		Account struct {
 			Login string `json:"login"`
 		} `json:"account"`
 	}
-	u := fmt.Sprintf("%s/app/installations/%d", APIURL(store.GitHub, p.BaseURL), installationID)
+	u := fmt.Sprintf("%s/app/installations/%d", APIURL(domain.GitHub, p.BaseURL), installationID)
 	if err := appRequest(ctx, http.MethodGet, u, p.AppID, p.PrivateKey, &body); err != nil {
 		return "", fmt.Errorf("GitHub App installation: %w", err)
 	}

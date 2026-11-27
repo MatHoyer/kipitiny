@@ -9,20 +9,20 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestSetMaintenanceValidation(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres", Replicas: 1}); err != nil {
+	if _, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "db", Kind: domain.ServiceKindPostgres, Image: "postgres", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "worker", Kind: store.ServiceKindApp, Image: "busybox", Replicas: 1}); err != nil {
+	if _, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "worker", Kind: domain.ServiceKindApp, Image: "busybox", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
 	for name, in := range map[string]MaintenanceInput{
@@ -44,11 +44,11 @@ func TestSetMaintenanceValidation(t *testing.T) {
 func TestMaintenancePage(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1, Domain: "shop.example.com", Port: 80})
+	svc, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1, Domain: "shop.example.com", Port: 80})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestMaintenancePage(t *testing.T) {
 		t.Errorf("unknown host:\n%s", body)
 	}
 
-	m := store.Maintenance{Enabled: true, Title: "Upgrading <db>", Message: "Back at 3pm."}
+	m := domain.Maintenance{Enabled: true, Title: "Upgrading <db>", Message: "Back at 3pm."}
 	if err := c.store.SetProjectMaintenance(ctx, p.ID, m); err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestMaintenancePage(t *testing.T) {
 	if !strings.Contains(body, "<h1>Upgrading &lt;db&gt;</h1>") || !strings.Contains(body, "Back at 3pm.") {
 		t.Errorf("custom text:\n%s", body)
 	}
-	m = store.Maintenance{Enabled: true}
+	m = domain.Maintenance{Enabled: true}
 	if err := c.store.SetProjectMaintenance(ctx, p.ID, m); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestMaintenancePage(t *testing.T) {
 		t.Errorf("page by project: %+v", page)
 	}
 	// Every app of the project shows it.
-	if _, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "api", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1, Domain: "api.shop.example.com", Port: 80}); err != nil {
+	if _, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "api", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1, Domain: "api.shop.example.com", Port: 80}); err != nil {
 		t.Fatal(err)
 	}
 	if page := c.MaintenancePage(ctx, "", "https://api.shop.example.com/"); string(page.Body) != m.HTML {
@@ -120,29 +120,29 @@ type dynamicConfig struct {
 func TestTraefikConfig(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	web, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1, Domain: "shop.example.com", Port: 80})
+	web, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1, Domain: "shop.example.com", Port: 80})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "worker", Kind: store.ServiceKindApp, Image: "busybox", Replicas: 1}); err != nil {
+	if _, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "worker", Kind: domain.ServiceKindApp, Image: "busybox", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := c.TraefikConfig(ctx, store.LocalServerID, "nope"); !errors.Is(err, ErrUnauthorized) {
+	if _, err := c.TraefikConfig(ctx, domain.LocalServerID, "nope"); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("bad token: %v", err)
 	}
-	token, err := c.providerToken(ctx, store.LocalServerID)
+	token, err := c.providerToken(ctx, domain.LocalServerID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if other, _ := c.providerToken(ctx, "01OTHER"); other == token {
 		t.Error("each server needs its own token")
 	}
-	if again, _ := c.providerToken(ctx, store.LocalServerID); again != token {
+	if again, _ := c.providerToken(ctx, domain.LocalServerID); again != token {
 		t.Error("the token must be stable: it is in Traefik's command")
 	}
 	if _, err := c.TraefikConfig(ctx, "01OTHER", token); !errors.Is(err, ErrUnauthorized) {
@@ -151,7 +151,7 @@ func TestTraefikConfig(t *testing.T) {
 
 	get := func() dynamicConfig {
 		t.Helper()
-		b, err := c.TraefikConfig(ctx, store.LocalServerID, token)
+		b, err := c.TraefikConfig(ctx, domain.LocalServerID, token)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -175,7 +175,7 @@ func TestTraefikConfig(t *testing.T) {
 		t.Errorf("page path = %s", got)
 	}
 
-	if err := c.store.SetProjectMaintenance(ctx, p.ID, store.Maintenance{Enabled: true}); err != nil {
+	if err := c.store.SetProjectMaintenance(ctx, p.ID, domain.Maintenance{Enabled: true}); err != nil {
 		t.Fatal(err)
 	}
 	r = get().HTTP.Routers[name+"-maintenance"]

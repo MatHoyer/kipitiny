@@ -27,8 +27,8 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
-	"github.com/kipit-labs/kipitiny/internal/store/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 )
 
 type flow struct {
@@ -64,7 +64,7 @@ func newFlow(t *testing.T) flow {
 	}
 	f := flow{dk: dk, dbPath: filepath.Join(t.TempDir(), "t.db"), cfg: config.Config{DataDir: t.TempDir()}}
 	f.c = f.core(t)
-	f.ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin})
+	f.ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
 	return f
 }
 
@@ -80,13 +80,13 @@ func (f flow) core(t *testing.T) *Core {
 	c.pool = docker.NewPool(f.dk, c.connectServer)
 	// The injected health probe is the test binary, which can't probe: apps
 	// are ready on their own healthcheck, or once up for a few seconds.
-	c.probes.Store(store.LocalServerID, (*mount.Mount)(nil))
+	c.probes.Store(domain.LocalServerID, (*mount.Mount)(nil))
 	t.Cleanup(func() { c.cancel(); st.Close() })
 	return c
 }
 
 // project creates a project removed with its containers after the test.
-func (f flow) project(t *testing.T, name string) store.Project {
+func (f flow) project(t *testing.T, name string) domain.Project {
 	t.Helper()
 	p, err := f.c.CreateProject(f.ctx, name, "")
 	if err != nil {
@@ -96,7 +96,7 @@ func (f flow) project(t *testing.T, name string) store.Project {
 	return p
 }
 
-func (f flow) service(t *testing.T, projectID string, in ServiceInput) store.Service {
+func (f flow) service(t *testing.T, projectID string, in ServiceInput) domain.Service {
 	t.Helper()
 	if in.Replicas == 0 {
 		in.Replicas = 1
@@ -109,14 +109,14 @@ func (f flow) service(t *testing.T, projectID string, in ServiceInput) store.Ser
 }
 
 // deployed waits for deployment id to finish and returns it.
-func (f flow) deployed(t *testing.T, id string) store.Deployment {
+func (f flow) deployed(t *testing.T, id string) domain.Deployment {
 	t.Helper()
 	for deadline := time.Now().Add(5 * time.Minute); ; time.Sleep(time.Second) {
 		d, err := f.c.store.GetDeployment(f.ctx, id)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if d.Status != store.DeploymentRunning {
+		if d.Status != domain.DeploymentRunning {
 			return d
 		}
 		if time.Now().After(deadline) {
@@ -127,13 +127,13 @@ func (f flow) deployed(t *testing.T, id string) store.Deployment {
 
 // ok waits for a deployment Deploy or Rollback started, and fails with its
 // log unless it succeeded: f.ok(t)(f.c.Deploy(...)).
-func (f flow) ok(t *testing.T) func(store.Deployment, error) store.Deployment {
-	return func(d store.Deployment, err error) store.Deployment {
+func (f flow) ok(t *testing.T) func(domain.Deployment, error) domain.Deployment {
+	return func(d domain.Deployment, err error) domain.Deployment {
 		t.Helper()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if d = f.deployed(t, d.ID); d.Status != store.DeploymentSucceeded {
+		if d = f.deployed(t, d.ID); d.Status != domain.DeploymentSucceeded {
 			f.log(t, d.ID)
 			t.Fatalf("deployment %s: %s", d.ID, d.Status)
 		}
@@ -143,7 +143,7 @@ func (f flow) ok(t *testing.T) func(store.Deployment, error) store.Deployment {
 
 // latest waits for the deployment a background deploy (compose, previews)
 // starts for svc, and fails unless it succeeded.
-func (f flow) latest(t *testing.T, svc store.Service) store.Deployment {
+func (f flow) latest(t *testing.T, svc domain.Service) domain.Deployment {
 	t.Helper()
 	for deadline := time.Now().Add(5 * time.Minute); ; time.Sleep(time.Second) {
 		deps, err := f.c.store.ListDeployments(f.ctx, svc.ID, 1)
@@ -169,7 +169,7 @@ func (f flow) log(t *testing.T, deploymentID string) {
 }
 
 // running lists the deployments of svc's running containers.
-func (f flow) running(t *testing.T, svc store.Service) []string {
+func (f flow) running(t *testing.T, svc domain.Service) []string {
 	t.Helper()
 	cts, err := f.c.serviceContainers(f.ctx, svc)
 	if err != nil {
@@ -184,7 +184,7 @@ func (f flow) running(t *testing.T, svc store.Service) []string {
 	return deps
 }
 
-func (f flow) current(t *testing.T, svc store.Service) string {
+func (f flow) current(t *testing.T, svc domain.Service) string {
 	t.Helper()
 	s, err := f.c.store.GetService(f.ctx, svc.ID)
 	if err != nil {
@@ -198,7 +198,7 @@ func (f flow) current(t *testing.T, svc store.Service) string {
 func TestDeployRolloutRollbackFlowDocker(t *testing.T) {
 	f := newFlow(t)
 	p := f.project(t, "shop")
-	web := f.service(t, p.ID, ServiceInput{Name: "web", Kind: store.ServiceKindApp, Image: "nginx:1.29-alpine", Port: 80})
+	web := f.service(t, p.ID, ServiceInput{Name: "web", Kind: domain.ServiceKindApp, Image: "nginx:1.29-alpine", Port: 80})
 
 	first := f.ok(t)(f.c.Deploy(f.ctx, web.ID, DeployOptions{}))
 	if got := f.running(t, web); len(got) != 1 || got[0] != first.ID || f.current(t, web) != first.ID {
@@ -216,7 +216,7 @@ func TestDeployRolloutRollbackFlowDocker(t *testing.T) {
 	// A tag that doesn't exist never deploys: the running version stays.
 	broken, err := f.c.Deploy(f.ctx, web.ID, DeployOptions{Tag: "x"})
 	if err == nil {
-		if broken = f.deployed(t, broken.ID); broken.Status == store.DeploymentSucceeded {
+		if broken = f.deployed(t, broken.ID); broken.Status == domain.DeploymentSucceeded {
 			t.Fatalf("a missing tag deployed")
 		}
 	}
@@ -238,7 +238,7 @@ func TestDeployRolloutRollbackFlowDocker(t *testing.T) {
 func TestReconcileAfterRestartFlowDocker(t *testing.T) {
 	f := newFlow(t)
 	p := f.project(t, "shop")
-	web := f.service(t, p.ID, ServiceInput{Name: "web", Kind: store.ServiceKindApp, Image: "nginx:1.29-alpine", Port: 80, Replicas: 2})
+	web := f.service(t, p.ID, ServiceInput{Name: "web", Kind: domain.ServiceKindApp, Image: "nginx:1.29-alpine", Port: 80, Replicas: 2})
 	dep := f.ok(t)(f.c.Deploy(f.ctx, web.ID, DeployOptions{}))
 	cts, err := f.c.serviceContainers(f.ctx, web)
 	if err != nil || len(cts) != 2 {
@@ -334,7 +334,7 @@ func TestComposeFlowDocker(t *testing.T) {
 func TestDatabaseBackupFlowDocker(t *testing.T) {
 	f := newFlow(t)
 	p := f.project(t, "shop")
-	db := f.service(t, p.ID, ServiceInput{Name: "db", Kind: store.ServiceKindPostgres, Image: DefaultPostgresImage})
+	db := f.service(t, p.ID, ServiceInput{Name: "db", Kind: domain.ServiceKindPostgres, Image: DefaultPostgresImage})
 	f.ok(t)(f.c.Deploy(f.ctx, db.ID, DeployOptions{}))
 	db, _ = f.c.store.GetService(f.ctx, db.ID)
 	psql := func(sql string) string {
@@ -356,14 +356,14 @@ func TestDatabaseBackupFlowDocker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b = waitBackup(t, f.c, b.ID, func(b store.Backup) bool { return b.Status != store.OpRunning })
-	if b.Status != store.OpSucceeded {
+	b = waitBackup(t, f.c, b.ID, func(b domain.Backup) bool { return b.Status != domain.OpRunning })
+	if b.Status != domain.OpSucceeded {
 		t.Fatalf("backup: %+v", b)
 	}
 	if _, err := f.c.VerifyBackup(f.ctx, b.ID); err != nil {
 		t.Fatal(err)
 	}
-	if b = waitBackup(t, f.c, b.ID, func(b store.Backup) bool { return b.VerifyStatus != "" && b.VerifyStatus != store.OpRunning }); b.VerifyStatus != store.OpSucceeded {
+	if b = waitBackup(t, f.c, b.ID, func(b domain.Backup) bool { return b.VerifyStatus != "" && b.VerifyStatus != domain.OpRunning }); b.VerifyStatus != domain.OpSucceeded {
 		t.Fatalf("verify: %+v", b)
 	}
 
@@ -375,7 +375,7 @@ func TestDatabaseBackupFlowDocker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for deadline := time.Now().Add(2 * time.Minute); r.Status == store.OpRunning; time.Sleep(time.Second) {
+	for deadline := time.Now().Add(2 * time.Minute); r.Status == domain.OpRunning; time.Sleep(time.Second) {
 		rs, err := f.c.ListRestores(f.ctx, db.ID)
 		if err != nil || len(rs) == 0 {
 			t.Fatalf("restores: %v", err)
@@ -385,7 +385,7 @@ func TestDatabaseBackupFlowDocker(t *testing.T) {
 			t.Fatal("restore still running")
 		}
 	}
-	if r.Status != store.OpSucceeded {
+	if r.Status != domain.OpSucceeded {
 		t.Fatalf("restore: %+v", r)
 	}
 	if got := psql("SELECT count(*) FROM orders"); got != "2" {
@@ -398,7 +398,7 @@ func TestDatabaseBackupFlowDocker(t *testing.T) {
 func TestPreviewFlowDocker(t *testing.T) {
 	f := newFlow(t)
 	p := f.project(t, "shop")
-	web := f.service(t, p.ID, ServiceInput{Name: "web", Kind: store.ServiceKindApp, Image: "nginx:1.29-alpine", Port: 80, Domain: "shop.localhost"})
+	web := f.service(t, p.ID, ServiceInput{Name: "web", Kind: domain.ServiceKindApp, Image: "nginx:1.29-alpine", Port: 80, Domain: "shop.localhost"})
 	parent := f.ok(t)(f.c.Deploy(f.ctx, web.ID, DeployOptions{}))
 
 	if _, err := f.c.DeployPreview(f.ctx, p.ID, "pr-1", PreviewOptions{}); err == nil {
@@ -461,7 +461,7 @@ func TestUpdatePreflightFlowDocker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b = waitBackup(t, f.c, b.ID, func(b store.Backup) bool { return b.Status != store.OpRunning }); b.Status != store.OpSucceeded {
+	if b = waitBackup(t, f.c, b.ID, func(b domain.Backup) bool { return b.Status != domain.OpRunning }); b.Status != domain.OpSucceeded {
 		t.Fatalf("manager backup: %+v", b)
 	}
 	if c := check("backup"); c.State != "ok" {

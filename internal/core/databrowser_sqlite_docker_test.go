@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // sqliteSeed is a script writing a small SQLite database, owned by 1000, to
@@ -50,11 +50,11 @@ func TestDataBrowserSQLiteDocker(t *testing.T) {
 	if image == "" {
 		t.Skip("KIPITINY_TEST_SQLITE_IMAGE not set")
 	}
-	c, _, svc := filesTestService(t, store.Service{Name: "web", Kind: store.ServiceKindApp,
-		Volumes: []store.Volume{{Name: "data", Path: "/data"}}}, "data", sqliteSeed(t))
+	c, _, svc := filesTestService(t, domain.Service{Name: "web", Kind: domain.ServiceKindApp,
+		Volumes: []domain.Volume{{Name: "data", Path: "/data"}}}, "data", sqliteSeed(t))
 	name, tag, _ := strings.Cut(image, ":")
 	c.cfg.Update.Image, c.cfg.Version = name, tag
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "test", Role: store.RoleAdmin})
+	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
 
 	dbs, err := c.PgDatabases(ctx, svc.ID)
 	if err != nil || len(dbs) != 1 || dbs[0].Name != "data/db/app.db" || dbs[0].Bytes == 0 {

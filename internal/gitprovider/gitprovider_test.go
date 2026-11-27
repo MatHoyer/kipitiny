@@ -15,7 +15,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // fakeForge serves handler over TLS and points the package's client at it.
@@ -31,13 +31,13 @@ func fakeForge(t *testing.T, handler http.HandlerFunc) string {
 
 func TestAPIURL(t *testing.T) {
 	for _, tc := range []struct {
-		kind       store.GitProviderKind
+		kind       domain.GitProviderKind
 		base, want string
 	}{
-		{store.GitHub, "https://github.com", "https://api.github.com"},
-		{store.GitHub, "https://ghe.example.com", "https://ghe.example.com/api/v3"},
-		{store.GitLab, "https://gitlab.com", "https://gitlab.com/api/v4"},
-		{store.Gitea, "https://git.example.com", "https://git.example.com/api/v1"},
+		{domain.GitHub, "https://github.com", "https://api.github.com"},
+		{domain.GitHub, "https://ghe.example.com", "https://ghe.example.com/api/v3"},
+		{domain.GitLab, "https://gitlab.com", "https://gitlab.com/api/v4"},
+		{domain.Gitea, "https://git.example.com", "https://git.example.com/api/v1"},
 	} {
 		if got := APIURL(tc.kind, tc.base); got != tc.want {
 			t.Errorf("%s %s: %s", tc.kind, tc.base, got)
@@ -61,11 +61,11 @@ func TestReposPaginates(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(repos)
 	})
-	repos, err := Repos(context.Background(), store.Gitea, base, "tok")
+	repos, err := Repos(context.Background(), domain.Gitea, base, "tok")
 	if err != nil || len(repos) != 53 || !repos[0].Private || repos[0].DefaultBranch != "main" {
 		t.Fatalf("repos = %d, %v", len(repos), err)
 	}
-	_, err = Repos(context.Background(), store.Gitea, base, "wrong")
+	_, err = Repos(context.Background(), domain.Gitea, base, "wrong")
 	if !Unauthorized(err) || !strings.Contains(err.Error(), "nope") {
 		t.Errorf("refused: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestGitLabRepos(t *testing.T) {
 		}
 		_, _ = w.Write([]byte(`[{"path_with_namespace":"grp/sub/app","http_url_to_repo":"https://gl/grp/sub/app.git","default_branch":"main","visibility":"private"}]`))
 	})
-	repos, err := Repos(context.Background(), store.GitLab, base, "tok")
+	repos, err := Repos(context.Background(), domain.GitLab, base, "tok")
 	if err != nil || len(repos) != 1 || repos[0].FullName != "grp/sub/app" || !repos[0].Private {
 		t.Fatalf("repos = %+v, %v", repos, err)
 	}
@@ -109,7 +109,7 @@ func TestGitHubApp(t *testing.T) {
 	if err != nil || app.ID != 7 || app.Slug != "kipitiny-x" || app.WebhookSecret != "wh" || app.Owner.Login != "me" {
 		t.Fatalf("app = %+v, %v", app, err)
 	}
-	p := store.GitProvider{Kind: store.GitHub, BaseURL: base, AppID: app.ID, PrivateKey: app.PEM, InstallationID: 9}
+	p := domain.GitProvider{Kind: domain.GitHub, BaseURL: base, AppID: app.ID, PrivateKey: app.PEM, InstallationID: 9}
 	tok, exp, err := InstallationToken(context.Background(), p)
 	if err != nil || tok != "ghs_x" || exp.Year() != 2030 {
 		t.Fatalf("token = %q %v %v", tok, exp, err)

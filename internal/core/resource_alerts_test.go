@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestAlertStateDebounce(t *testing.T) {
@@ -42,7 +42,7 @@ func TestAlertStateDebounce(t *testing.T) {
 
 func TestCheckResources(t *testing.T) {
 	th := defaultResourceAlerts()
-	svcs := map[string]store.Service{
+	svcs := map[string]domain.Service{
 		"limited":   {ID: "limited", ServerID: "s1", MemoryMB: 100, CPUs: 0.5},
 		"unlimited": {ID: "unlimited", ServerID: "s1"},
 	}

@@ -11,12 +11,12 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestNormalizePorts(t *testing.T) {
-	got := normalizePorts([]store.PublishedPort{{HostPort: 25565}, {HostPort: 19132, ContainerPort: 19133, Protocol: " UDP "}})
-	want := []store.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}, {HostPort: 19132, ContainerPort: 19133, Protocol: "udp"}}
+	got := normalizePorts([]domain.PublishedPort{{HostPort: 25565}, {HostPort: 19132, ContainerPort: 19133, Protocol: " UDP "}})
+	want := []domain.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}, {HostPort: 19132, ContainerPort: 19133, Protocol: "udp"}}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got %+v", got)
 	}
@@ -26,27 +26,27 @@ func TestNormalizePorts(t *testing.T) {
 }
 
 func TestValidatePorts(t *testing.T) {
-	tcp := func(host, ctr int) store.PublishedPort {
-		return store.PublishedPort{HostPort: host, ContainerPort: ctr, Protocol: "tcp"}
+	tcp := func(host, ctr int) domain.PublishedPort {
+		return domain.PublishedPort{HostPort: host, ContainerPort: ctr, Protocol: "tcp"}
 	}
 	tests := []struct {
 		name     string
 		replicas int
-		ports    []store.PublishedPort
+		ports    []domain.PublishedPort
 		wantErr  bool
 	}{
 		{"none", 3, nil, false},
-		{"minecraft", 1, []store.PublishedPort{tcp(25565, 25565), {HostPort: 25565, ContainerPort: 25565, Protocol: "udp"}}, false},
-		{"two host ports to one container port", 1, []store.PublishedPort{tcp(25565, 25565), tcp(25566, 25565)}, false},
-		{"replicas", 2, []store.PublishedPort{tcp(25565, 25565)}, true},
-		{"protocol", 1, []store.PublishedPort{{HostPort: 1, ContainerPort: 1, Protocol: "sctp"}}, true},
-		{"host port range", 1, []store.PublishedPort{tcp(70000, 80)}, true},
-		{"container port range", 1, []store.PublishedPort{tcp(8080, 0)}, true},
-		{"duplicate", 1, []store.PublishedPort{tcp(25565, 25565), tcp(25565, 25566)}, true},
+		{"minecraft", 1, []domain.PublishedPort{tcp(25565, 25565), {HostPort: 25565, ContainerPort: 25565, Protocol: "udp"}}, false},
+		{"two host ports to one container port", 1, []domain.PublishedPort{tcp(25565, 25565), tcp(25566, 25565)}, false},
+		{"replicas", 2, []domain.PublishedPort{tcp(25565, 25565)}, true},
+		{"protocol", 1, []domain.PublishedPort{{HostPort: 1, ContainerPort: 1, Protocol: "sctp"}}, true},
+		{"host port range", 1, []domain.PublishedPort{tcp(70000, 80)}, true},
+		{"container port range", 1, []domain.PublishedPort{tcp(8080, 0)}, true},
+		{"duplicate", 1, []domain.PublishedPort{tcp(25565, 25565), tcp(25565, 25566)}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validatePorts(store.Service{Replicas: tt.replicas, PublishedPorts: tt.ports})
+			err := validatePorts(domain.Service{Replicas: tt.replicas, PublishedPorts: tt.ports})
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("got %v, wantErr %v", err, tt.wantErr)
 			}
@@ -59,7 +59,7 @@ func TestValidatePorts(t *testing.T) {
 
 func TestDatabaseRefusesPorts(t *testing.T) {
 	svc := redisService()
-	svc.PublishedPorts = []store.PublishedPort{{HostPort: 6379, ContainerPort: 6379, Protocol: "tcp"}}
+	svc.PublishedPorts = []domain.PublishedPort{{HostPort: 6379, ContainerPort: 6379, Protocol: "tcp"}}
 	if err := validateService(svc); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("got %v, want ErrInvalid", err)
 	}
@@ -68,29 +68,29 @@ func TestDatabaseRefusesPorts(t *testing.T) {
 func TestCheckPortsFree(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{Traefik: config.Traefik{Enabled: true, HTTPPort: "80", HTTPSPort: "443"}})
-	remote, err := c.store.CreateServer(ctx, store.Server{Name: "w1", Kind: store.ServerSSH, Host: "w1", Port: 22})
+	remote, err := c.store.CreateServer(ctx, domain.Server{Name: "w1", Kind: domain.ServerSSH, Host: "w1", Port: 22})
 	if err != nil {
 		t.Fatal(err)
 	}
-	local, _ := c.store.CreateProject(ctx, store.Project{Name: "a", ServerID: store.LocalServerID})
-	far, _ := c.store.CreateProject(ctx, store.Project{Name: "b", ServerID: remote.ID})
-	mc := []store.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}}
-	existing, err := c.store.CreateService(ctx, store.Service{ProjectID: local.ID, Name: "mc", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, PublishedPorts: mc})
+	local, _ := c.store.CreateProject(ctx, domain.Project{Name: "a", ServerID: domain.LocalServerID})
+	far, _ := c.store.CreateProject(ctx, domain.Project{Name: "b", ServerID: remote.ID})
+	mc := []domain.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}}
+	existing, err := c.store.CreateService(ctx, domain.Service{ProjectID: local.ID, Name: "mc", Kind: domain.ServiceKindApp, Image: "x", Replicas: 1, PublishedPorts: mc})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, tt := range []struct {
 		name  string
-		svc   store.Service
+		svc   domain.Service
 		taken bool
 	}{
-		{"same server", store.Service{ProjectID: local.ID, PublishedPorts: mc}, true},
-		{"other server", store.Service{ProjectID: far.ID, PublishedPorts: mc}, false},
-		{"other protocol", store.Service{ProjectID: local.ID, PublishedPorts: []store.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "udp"}}}, false},
+		{"same server", domain.Service{ProjectID: local.ID, PublishedPorts: mc}, true},
+		{"other server", domain.Service{ProjectID: far.ID, PublishedPorts: mc}, false},
+		{"other protocol", domain.Service{ProjectID: local.ID, PublishedPorts: []domain.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "udp"}}}, false},
 		{"itself", existing, false},
-		{"traefik", store.Service{ProjectID: far.ID, PublishedPorts: []store.PublishedPort{{HostPort: 443, ContainerPort: 8443, Protocol: "tcp"}}}, true},
-		{"udp 443", store.Service{ProjectID: far.ID, PublishedPorts: []store.PublishedPort{{HostPort: 443, ContainerPort: 443, Protocol: "udp"}}}, false},
+		{"traefik", domain.Service{ProjectID: far.ID, PublishedPorts: []domain.PublishedPort{{HostPort: 443, ContainerPort: 8443, Protocol: "tcp"}}}, true},
+		{"udp 443", domain.Service{ProjectID: far.ID, PublishedPorts: []domain.PublishedPort{{HostPort: 443, ContainerPort: 443, Protocol: "udp"}}}, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			err := c.checkPortsFree(ctx, tt.svc)
@@ -105,9 +105,9 @@ func TestCheckPortsFree(t *testing.T) {
 }
 
 func TestPublishedPortsSpec(t *testing.T) {
-	p := store.Project{ID: "P1", Name: "games"}
-	svc := store.Service{ID: "01ABC", ProjectID: "P1", Name: "mc", Kind: store.ServiceKindApp, Image: "itzg/minecraft-server", Replicas: 1,
-		PublishedPorts: []store.PublishedPort{
+	p := domain.Project{ID: "P1", Name: "games"}
+	svc := domain.Service{ID: "01ABC", ProjectID: "P1", Name: "mc", Kind: domain.ServiceKindApp, Image: "itzg/minecraft-server", Replicas: 1,
+		PublishedPorts: []domain.PublishedPort{
 			{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"},
 			{HostPort: 25566, ContainerPort: 25565, Protocol: "tcp"},
 			{HostPort: 19132, ContainerPort: 19132, Protocol: "udp"},
@@ -132,7 +132,7 @@ func TestPublishedPortsSpec(t *testing.T) {
 	if got := probePort(svc); got != 8123 {
 		t.Errorf("probe port with HTTP port = %d", got)
 	}
-	if got := probePort(store.Service{PublishedPorts: []store.PublishedPort{{HostPort: 1, ContainerPort: 1, Protocol: "udp"}}}); got != 0 {
+	if got := probePort(domain.Service{PublishedPorts: []domain.PublishedPort{{HostPort: 1, ContainerPort: 1, Protocol: "udp"}}}); got != 0 {
 		t.Errorf("udp only: %d", got)
 	}
 }
@@ -141,7 +141,7 @@ func TestPublishedPortsDomain(t *testing.T) {
 	ctx := context.Background()
 	tok := base64.StdEncoding.EncodeToString([]byte(`{"a":"acc","t":"tid","s":"x"}`))
 	c := newTestCore(t, config.Config{Tunnel: config.Tunnel{Token: tok}, Traefik: config.Traefik{Enabled: true, HTTPPort: "80", HTTPSPort: "443"}})
-	sv, err := c.store.GetServer(ctx, store.LocalServerID)
+	sv, err := c.store.GetServer(ctx, domain.LocalServerID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,11 +149,11 @@ func TestPublishedPortsDomain(t *testing.T) {
 	if _, err := c.store.UpdateServer(ctx, sv); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.store.CreateDomain(ctx, store.Domain{Name: "example.com", Proxied: true}); err != nil {
+	if _, err := c.store.CreateDomain(ctx, domain.Domain{Name: "example.com", Proxied: true}); err != nil {
 		t.Fatal(err)
 	}
-	p, _ := c.store.CreateProject(ctx, store.Project{Name: "games", ServerID: store.LocalServerID})
-	ports := []store.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}}
+	p, _ := c.store.CreateProject(ctx, domain.Project{Name: "games", ServerID: domain.LocalServerID})
+	ports := []domain.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}}
 
 	// Behind the tunnel, the domain of a port-only app is a direct record.
 	view, err := c.CreateService(ctx, p.ID, ServiceInput{Name: "mc", Image: "itzg/minecraft-server", Domain: "mc.example.com", PublishedPorts: ports})

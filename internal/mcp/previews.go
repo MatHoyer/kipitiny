@@ -12,7 +12,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 type listPreviewsIn struct {
@@ -89,13 +89,13 @@ type getPreviewSettingsIn struct {
 	Project string `json:"project" jsonschema:"the project whose preview settings to read"`
 }
 
-func (t *tools) getPreviewSettings(ctx context.Context, _ *mcp.CallToolRequest, in getPreviewSettingsIn) (*mcp.CallToolResult, store.PreviewSettings, error) {
+func (t *tools) getPreviewSettings(ctx context.Context, _ *mcp.CallToolRequest, in getPreviewSettingsIn) (*mcp.CallToolResult, domain.PreviewSettings, error) {
 	if err := core.Authenticated(ctx); err != nil {
-		return nil, store.PreviewSettings{}, err
+		return nil, domain.PreviewSettings{}, err
 	}
 	p, err := t.project(ctx, in.Project, core.PermView)
 	if err != nil {
-		return nil, store.PreviewSettings{}, friendly(err)
+		return nil, domain.PreviewSettings{}, friendly(err)
 	}
 	ps, err := t.c.GetPreviewSettings(ctx, p.ID)
 	return nil, ps, friendly(err)
@@ -115,15 +115,15 @@ type setPreviewSettingsIn struct {
 
 // setPreviewSettings changes only the fields given, unlike the API's
 // replace, so an agent can't drop secrets it can't read.
-func (t *tools) setPreviewSettings(ctx context.Context, _ *mcp.CallToolRequest, in setPreviewSettingsIn) (*mcp.CallToolResult, store.PreviewSettings, error) {
-	out, err := mutate(ctx, t.c, "set_preview_settings", in.Project, func() (store.PreviewSettings, error) {
+func (t *tools) setPreviewSettings(ctx context.Context, _ *mcp.CallToolRequest, in setPreviewSettingsIn) (*mcp.CallToolResult, domain.PreviewSettings, error) {
+	out, err := mutate(ctx, t.c, "set_preview_settings", in.Project, func() (domain.PreviewSettings, error) {
 		p, err := t.project(ctx, in.Project, core.PermEnv)
 		if err != nil {
-			return store.PreviewSettings{}, err
+			return domain.PreviewSettings{}, err
 		}
 		ps, err := t.c.GetPreviewSettings(ctx, p.ID) // secrets masked: unchanged ones are kept
 		if err != nil {
-			return store.PreviewSettings{}, err
+			return domain.PreviewSettings{}, err
 		}
 		next := core.PreviewSettingsInput{BaseDomain: ps.BaseDomain, Env: ps.Env, Inherit: ps.Inherit,
 			TTLSeconds: ps.TTLSeconds, SleepAfterSeconds: ps.SleepAfterSeconds, Seed: ps.SeedMode}
@@ -142,16 +142,16 @@ func (t *tools) setPreviewSettings(ctx context.Context, _ *mcp.CallToolRequest, 
 		}
 		if in.TTL != nil {
 			if next.TTLSeconds, err = seconds(*in.TTL); err != nil {
-				return store.PreviewSettings{}, err
+				return domain.PreviewSettings{}, err
 			}
 		}
 		if in.SleepAfter != nil {
 			if next.SleepAfterSeconds, err = seconds(*in.SleepAfter); err != nil {
-				return store.PreviewSettings{}, err
+				return domain.PreviewSettings{}, err
 			}
 		}
 		if in.Seed != nil {
-			next.Seed = store.SeedMode(*in.Seed)
+			next.Seed = domain.SeedMode(*in.Seed)
 		}
 		return t.c.SetPreviewSettings(ctx, p.ID, next)
 	})
@@ -218,11 +218,11 @@ type anonymizeNowIn struct {
 	Service string `json:"service" jsonschema:"the database service"`
 }
 
-func (t *tools) anonymizeNow(ctx context.Context, _ *mcp.CallToolRequest, in anonymizeNowIn) (*mcp.CallToolResult, store.Backup, error) {
-	out, err := mutate(ctx, t.c, "anonymize_now", in.Project+"/"+in.Service, func() (store.Backup, error) {
+func (t *tools) anonymizeNow(ctx context.Context, _ *mcp.CallToolRequest, in anonymizeNowIn) (*mcp.CallToolResult, domain.Backup, error) {
+	out, err := mutate(ctx, t.c, "anonymize_now", in.Project+"/"+in.Service, func() (domain.Backup, error) {
 		p, err := t.project(ctx, in.Project, core.PermEnv)
 		if err != nil {
-			return store.Backup{}, err
+			return domain.Backup{}, err
 		}
 		return t.c.AnonymizeNow(ctx, p.ID, in.Service)
 	})

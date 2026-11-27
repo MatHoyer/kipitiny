@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // The data browser runs the database's own client (psql, redis-cli) inside
@@ -36,7 +36,7 @@ const (
 
 // dataTarget is a database's running container, ready for an exec.
 type dataTarget struct {
-	svc       store.Service
+	svc       domain.Service
 	dk        *docker.Client
 	container string
 	// db is the database queries run against (postgres, mysql, mongodb),
@@ -50,7 +50,7 @@ type dataTarget struct {
 // dataTarget resolves a database service of one of the given kinds to its
 // running container, on its own database. MySQL and MongoDB get the data
 // browser's read-only user first.
-func (c *Core) dataTarget(ctx context.Context, id string, kinds ...store.ServiceKind) (dataTarget, error) {
+func (c *Core) dataTarget(ctx context.Context, id string, kinds ...domain.ServiceKind) (dataTarget, error) {
 	svc, err := c.store.GetService(ctx, id)
 	if err != nil {
 		return dataTarget{}, err
@@ -68,14 +68,14 @@ func (c *Core) dataTarget(ctx context.Context, id string, kinds ...store.Service
 	}
 	t := dataTarget{svc: svc, dk: c.dockerFor(svc.ServerID), container: ct}
 	switch {
-	case svc.Kind == store.ServiceKindPostgres:
+	case svc.Kind == domain.ServiceKindPostgres:
 		t.db = svc.Env[pgDatabase]
 	case svc.Kind.IsMySQL():
 		t.db = svc.Env[mysqlDatabase]
-	case svc.Kind == store.ServiceKindMongoDB:
+	case svc.Kind == domain.ServiceKindMongoDB:
 		t.db = svc.Env[mongoDatabase]
 	}
-	if svc.Kind.IsMySQL() || svc.Kind == store.ServiceKindMongoDB {
+	if svc.Kind.IsMySQL() || svc.Kind == domain.ServiceKindMongoDB {
 		if _, ok := c.readUsers.Load(ct); !ok {
 			if err := t.ensureReadUser(ctx); err != nil {
 				return dataTarget{}, fmt.Errorf("read-only user: %w", err)
@@ -96,14 +96,14 @@ func (c *Core) databaseTarget(ctx context.Context, id, database string) (dataTar
 	if err != nil {
 		return dataTarget{}, err
 	}
-	if svc.Kind == store.ServiceKindApp {
+	if svc.Kind == domain.ServiceKindApp {
 		return c.sqliteTarget(ctx, svc, database)
 	}
-	t, err := c.dataTarget(ctx, id, store.ServiceKindPostgres, store.ServiceKindMySQL, store.ServiceKindMariaDB, store.ServiceKindMongoDB)
+	t, err := c.dataTarget(ctx, id, domain.ServiceKindPostgres, domain.ServiceKindMySQL, domain.ServiceKindMariaDB, domain.ServiceKindMongoDB)
 	if err != nil || database == "" || database == t.db {
 		return t, err
 	}
-	if t.svc.Kind == store.ServiceKindPostgres {
+	if t.svc.Kind == domain.ServiceKindPostgres {
 		t.db, err = c.pgDatabaseOf(ctx, t.svc, t.container, database)
 		return t, err
 	}
@@ -123,7 +123,7 @@ func (t dataTarget) databases(ctx context.Context) ([]PgDatabase, error) {
 	switch {
 	case t.svc.Kind.IsMySQL():
 		return t.mysqlDatabases(ctx)
-	case t.svc.Kind == store.ServiceKindMongoDB:
+	case t.svc.Kind == domain.ServiceKindMongoDB:
 		return t.mongoDatabases(ctx)
 	}
 	return t.pgDatabases(ctx)
@@ -145,7 +145,7 @@ const readUser = "kipitiny_read"
 func (t dataTarget) ensureReadUser(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, dataConsoleTimeout)
 	defer cancel()
-	if t.svc.Kind == store.ServiceKindMongoDB {
+	if t.svc.Kind == domain.ServiceKindMongoDB {
 		return clientError(t.dk.Exec(ctx, t.container, docker.ExecOptions{
 			Cmd: append([]string{"mongosh", "--quiet", "--norc", "--eval", `const a = db.getSiblingDB("admin"), u = process.env.KP_USER, pwd = process.env.KP_PASSWORD;
 if (a.getUser(u)) a.updateUser(u, { pwd, roles: ["readAnyDatabase"] });

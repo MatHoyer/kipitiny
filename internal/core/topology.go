@@ -13,7 +13,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // Topology is what runs where: per server, how traffic gets in (entrypoints,
@@ -24,9 +24,9 @@ type Topology struct {
 }
 
 type ServerTopology struct {
-	ID   string           `json:"id"`
-	Name string           `json:"name"`
-	Kind store.ServerKind `json:"kind"`
+	ID   string            `json:"id"`
+	Name string            `json:"name"`
+	Kind domain.ServerKind `json:"kind"`
 	// Error is set when the server's Docker could not be read; the rest
 	// then only holds what the store knows.
 	Error string `json:"error,omitempty"`
@@ -97,17 +97,17 @@ type TopoProject struct {
 }
 
 type TopoService struct {
-	ID       string            `json:"id"`
-	Name     string            `json:"name"`
-	Kind     store.ServiceKind `json:"kind"`
-	Image    string            `json:"image"`
-	Icon     string            `json:"icon,omitempty"`
-	Domain   string            `json:"domain,omitempty"`
-	Port     int               `json:"port,omitempty"`
-	Replicas int               `json:"replicas"`
-	Stopped  bool              `json:"stopped,omitempty"`
-	Sleeping bool              `json:"sleeping,omitempty"`
-	// Preview is "only" or "skip" (store.Service.Preview).
+	ID       string             `json:"id"`
+	Name     string             `json:"name"`
+	Kind     domain.ServiceKind `json:"kind"`
+	Image    string             `json:"image"`
+	Icon     string             `json:"icon,omitempty"`
+	Domain   string             `json:"domain,omitempty"`
+	Port     int                `json:"port,omitempty"`
+	Replicas int                `json:"replicas"`
+	Stopped  bool               `json:"stopped,omitempty"`
+	Sleeping bool               `json:"sleeping,omitempty"`
+	// Preview is "only" or "skip" (domain.Service.Preview).
 	Preview string `json:"preview,omitempty"`
 	// Volume holds a database's data.
 	Volume string `json:"volume,omitempty"`
@@ -117,7 +117,7 @@ type TopoService struct {
 	Networks    []string `json:"networks"`
 	HostNetwork bool     `json:"hostNetwork,omitempty"`
 	// PublishedPorts are host ports published straight to the service.
-	PublishedPorts []store.PublishedPort `json:"publishedPorts,omitempty"`
+	PublishedPorts []domain.PublishedPort `json:"publishedPorts,omitempty"`
 	// RoutePending: the domain or port changed since the running deployment.
 	RoutePending bool `json:"routePending,omitempty"`
 	// NetworkIssues are the networks its running containers miss, as the
@@ -130,26 +130,26 @@ type TopoService struct {
 
 // Topology maps every server, or only the server and project of projectID.
 func (c *Core) Topology(ctx context.Context, projectID string) (Topology, error) {
-	var projects []store.Project
+	var projects []domain.Project
 	if projectID != "" {
 		p, err := c.store.GetProject(ctx, projectID)
 		if err != nil {
 			return Topology{}, err
 		}
-		projects = []store.Project{p}
+		projects = []domain.Project{p}
 	} else {
 		ps, err := c.store.ListProjects(ctx)
 		if err != nil {
 			return Topology{}, err
 		}
-		projects = slices.DeleteFunc(ps, func(p store.Project) bool { return !visible(ctx, p.ID) })
+		projects = slices.DeleteFunc(ps, func(p domain.Project) bool { return !visible(ctx, p.ID) })
 	}
 	servers, err := c.store.ListServers(ctx)
 	if err != nil {
 		return Topology{}, err
 	}
 	if projectID != "" {
-		servers = slices.DeleteFunc(servers, func(sv store.Server) bool { return sv.ID != projects[0].ServerID })
+		servers = slices.DeleteFunc(servers, func(sv domain.Server) bool { return sv.ID != projects[0].ServerID })
 	}
 	svcs, err := c.store.ListAllServices(ctx)
 	if err != nil {
@@ -167,7 +167,7 @@ func (c *Core) Topology(ctx context.Context, projectID string) (Topology, error)
 	out := Topology{Servers: make([]ServerTopology, len(servers))}
 	done := make(chan struct{})
 	for i, sv := range servers {
-		var mine []store.Project
+		var mine []domain.Project
 		for _, p := range projects {
 			if p.ServerID == sv.ID {
 				mine = append(mine, p)
@@ -186,7 +186,7 @@ func (c *Core) Topology(ctx context.Context, projectID string) (Topology, error)
 	return out, nil
 }
 
-func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []store.Project, svcs []store.Service, gitPaths map[string]string) ServerTopology {
+func (c *Core) serverTopology(ctx context.Context, sv domain.Server, projects []domain.Project, svcs []domain.Service, gitPaths map[string]string) ServerTopology {
 	t := ServerTopology{ID: sv.ID, Name: sv.Name, Kind: sv.Kind, Traefik: c.cfg.Traefik.Enabled, Entrypoints: []Entrypoint{}, Networks: []TopoNetwork{}, Projects: []TopoProject{}}
 	if t.Traefik {
 		t.Tunnel = c.tunnelToken(sv) != ""
@@ -227,7 +227,7 @@ func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []s
 			t.Cloudflared = topoNode(ct, componentView(ct))
 		}
 	}
-	if sv.Kind == store.ServerLocal {
+	if sv.Kind == domain.ServerLocal {
 		t.Manager = c.managerNode(ctx, dk)
 	}
 
@@ -238,7 +238,7 @@ func (c *Core) serverTopology(ctx context.Context, sv store.Server, projects []s
 		}
 	}
 	for _, p := range projects {
-		var own []store.Service
+		var own []domain.Service
 		for _, s := range svcs {
 			if s.ProjectID == p.ID {
 				own = append(own, s)
@@ -349,14 +349,14 @@ func topoNode(ct container.Summary, v ContainerView) *TopoNode {
 
 // componentView describes a container that belongs to no service.
 func componentView(ct container.Summary) ContainerView {
-	v := containerView(ct, store.Service{})
+	v := containerView(ct, domain.Service{})
 	v.Retired = false
 	return v
 }
 
 // usedDatabases returns the IDs of the databases svc's env references,
 // directly or through a project variable.
-func usedDatabases(svc store.Service, p store.Project, dbs map[string]store.Service) []string {
+func usedDatabases(svc domain.Service, p domain.Project, dbs map[string]domain.Service) []string {
 	seen := map[string]bool{}
 	var scan func(v string, depth int)
 	scan = func(v string, depth int) {

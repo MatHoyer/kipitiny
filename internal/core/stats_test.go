@@ -7,7 +7,7 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestMemoryUsedLeavesOutPageCache(t *testing.T) {
@@ -26,7 +26,7 @@ func TestMemoryUsedLeavesOutPageCache(t *testing.T) {
 
 func TestRecordRatesAndHistory(t *testing.T) {
 	t0 := time.Unix(1700000000, 0)
-	svcs := map[string]store.Service{"s1": {ID: "s1", ProjectID: "p1", ServerID: "local", MemoryMB: 64}}
+	svcs := map[string]domain.Service{"s1": {ID: "s1", ProjectID: "p1", ServerID: "local", MemoryMB: 64}}
 	owner := map[string]string{"a": "s1", "b": "s1"}
 	var st statsState
 

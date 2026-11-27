@@ -9,12 +9,12 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // runtimeKey reads k into rt when it is one of the container settings
-// store.Runtime holds, reporting whether it was.
-func (p *parser) runtimeKey(k string, v *yaml.Node, rt *store.Runtime) bool {
+// domain.Runtime holds, reporting whether it was.
+func (p *parser) runtimeKey(k string, v *yaml.Node, rt *domain.Runtime) bool {
 	switch k {
 	case "command":
 		rt.Command = p.command(k, v)
@@ -63,14 +63,14 @@ func (p *parser) runtimeKey(k string, v *yaml.Node, rt *store.Runtime) bool {
 	case "shm_size":
 		rt.ShmSizeMB = p.memory(v)
 	case "ulimits":
-		rt.Ulimits = map[string]store.Ulimit{}
+		rt.Ulimits = map[string]domain.Ulimit{}
 		for name, lv := range pairs(v) {
 			if lv.Kind == yaml.ScalarNode {
 				n := int64(p.int(lv))
-				rt.Ulimits[name] = store.Ulimit{Soft: n, Hard: n}
+				rt.Ulimits[name] = domain.Ulimit{Soft: n, Hard: n}
 				continue
 			}
-			var u store.Ulimit
+			var u domain.Ulimit
 			for lk, lvv := range pairs(lv) {
 				switch lk {
 				case "soft":
@@ -244,7 +244,7 @@ var nonNameRe = regexp.MustCompile(`[^a-z0-9]+`)
 
 // anonymousName names an anonymous volume after its path (/app/node_modules
 // is app-node-modules), unique among taken.
-func anonymousName(path string, taken []store.Volume) string {
+func anonymousName(path string, taken []domain.Volume) string {
 	base := strings.Trim(nonNameRe.ReplaceAllString(strings.ToLower(path), "-"), "-")
 	if len(base) > 28 {
 		base = strings.Trim(base[len(base)-28:], "-")
@@ -253,7 +253,7 @@ func anonymousName(path string, taken []store.Volume) string {
 		base = "data"
 	}
 	name := base
-	for i := 2; slices.ContainsFunc(taken, func(v store.Volume) bool { return v.Name == name }); i++ {
+	for i := 2; slices.ContainsFunc(taken, func(v domain.Volume) bool { return v.Name == name }); i++ {
 		name = base + "-" + strconv.Itoa(i)
 	}
 	return name
@@ -261,7 +261,7 @@ func anonymousName(path string, taken []store.Volume) string {
 
 // shortPorts reads a short port syntax: [ip:]host:container[/protocol],
 // where both ports may be ranges of the same length (8000-8010:8000-8010).
-func (p *parser) shortPorts(spec string) []store.PublishedPort {
+func (p *parser) shortPorts(spec string) []domain.PublishedPort {
 	rest, proto, _ := strings.Cut(spec, "/")
 	if proto == "" {
 		proto = "tcp"
@@ -286,9 +286,9 @@ func (p *parser) shortPorts(spec string) []store.PublishedPort {
 		p.fail("port %s: expected host:container, with ranges of the same length", spec)
 		return nil
 	}
-	var out []store.PublishedPort
+	var out []domain.PublishedPort
 	for i := 0; i <= hostTo-hostFrom; i++ {
-		out = append(out, store.PublishedPort{HostIP: ip, HostPort: hostFrom + i, ContainerPort: ctrFrom + i, Protocol: proto})
+		out = append(out, domain.PublishedPort{HostIP: ip, HostPort: hostFrom + i, ContainerPort: ctrFrom + i, Protocol: proto})
 	}
 	return out
 }

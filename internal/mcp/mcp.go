@@ -18,7 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 var release = regexp.MustCompile(`^(\d+\.\d+)\.\d+$`)
@@ -311,7 +311,7 @@ func friendly(err error) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, store.ErrNotFound):
+	case errors.Is(err, domain.ErrNotFound):
 		return fmt.Errorf("not found: %s", strings.TrimPrefix(err.Error(), "not found: "))
 	case errors.Is(err, core.ErrBusy):
 		return errors.New("another operation (deploy, backup, restore) is running on this service; retry shortly")
@@ -388,9 +388,9 @@ func status(s core.ServiceView) string {
 }
 
 type appStatusOut struct {
-	Service     core.ServiceView   `json:"service"`
-	Status      string             `json:"status"`
-	Deployments []store.Deployment `json:"recentDeployments"`
+	Service     core.ServiceView    `json:"service"`
+	Status      string              `json:"status"`
+	Deployments []domain.Deployment `json:"recentDeployments"`
 	// Usage is the current CPU, memory and network use; nil when not running.
 	Usage *core.Usage `json:"usage,omitempty"`
 	// Uptime is the uptime check and its results, when the service has one.
@@ -469,11 +469,11 @@ type deployIn struct {
 	Tag     string `json:"tag,omitempty" jsonschema:"image services only: deploy this tag of the service's image, which then keeps it"`
 }
 
-func (t *tools) deploy(ctx context.Context, _ *mcp.CallToolRequest, in deployIn) (*mcp.CallToolResult, store.Deployment, error) {
-	dep, err := mutate(ctx, t.c, "deploy", in.Service, func() (store.Deployment, error) {
+func (t *tools) deploy(ctx context.Context, _ *mcp.CallToolRequest, in deployIn) (*mcp.CallToolResult, domain.Deployment, error) {
+	dep, err := mutate(ctx, t.c, "deploy", in.Service, func() (domain.Deployment, error) {
 		svc, err := t.service(ctx, in.Service, core.PermDeploy)
 		if err != nil {
-			return store.Deployment{}, err
+			return domain.Deployment{}, err
 		}
 		return t.c.Deploy(ctx, svc.ID, core.DeployOptions{Tag: in.Tag})
 	})
@@ -499,13 +499,13 @@ type routeIn struct {
 	Port   int      `json:"port,omitempty" jsonschema:"container port; defaults to port"`
 }
 
-func (in deployImageIn) routes() []store.Route {
+func (in deployImageIn) routes() []domain.Route {
 	if in.Routes == nil {
 		return nil
 	}
-	out := make([]store.Route, 0, len(*in.Routes))
+	out := make([]domain.Route, 0, len(*in.Routes))
 	for _, r := range *in.Routes {
-		out = append(out, store.Route{Paths: r.Paths, Scheme: r.Scheme, Port: r.Port})
+		out = append(out, domain.Route{Paths: r.Paths, Scheme: r.Scheme, Port: r.Port})
 	}
 	return out
 }
@@ -516,13 +516,13 @@ type publishedPortIn struct {
 	Protocol      string `json:"protocol,omitempty" jsonschema:"tcp (default) or udp"`
 }
 
-func (in deployImageIn) ports() []store.PublishedPort {
+func (in deployImageIn) ports() []domain.PublishedPort {
 	if in.PublishedPorts == nil {
 		return nil
 	}
-	out := make([]store.PublishedPort, 0, len(*in.PublishedPorts))
+	out := make([]domain.PublishedPort, 0, len(*in.PublishedPorts))
 	for _, p := range *in.PublishedPorts {
-		out = append(out, store.PublishedPort{HostPort: p.HostPort, ContainerPort: p.ContainerPort, Protocol: p.Protocol})
+		out = append(out, domain.PublishedPort{HostPort: p.HostPort, ContainerPort: p.ContainerPort, Protocol: p.Protocol})
 	}
 	return out
 }
@@ -532,21 +532,21 @@ func (in deployImageIn) ports() []store.PublishedPort {
 // password-manager and database secrets, publish host ports and claim domains.
 // The deploy permission gets what REST deploy allows, another tag of an
 // existing app's image.
-func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in deployImageIn) (*mcp.CallToolResult, store.Deployment, error) {
-	dep, err := mutate(ctx, t.c, "deploy_image", in.Project+"/"+in.Name, func() (store.Deployment, error) {
+func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in deployImageIn) (*mcp.CallToolResult, domain.Deployment, error) {
+	dep, err := mutate(ctx, t.c, "deploy_image", in.Project+"/"+in.Name, func() (domain.Deployment, error) {
 		project, err := t.findProject(ctx, in.Project)
 		if err == nil && core.Authorize(ctx, project.ID, core.PermSettings) != nil {
 			return t.retag(ctx, in)
 		}
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.Is(err, domain.ErrNotFound) {
 			project, err = t.c.CreateProject(ctx, in.Project, "")
 		}
 		if err != nil {
-			return store.Deployment{}, err
+			return domain.Deployment{}, err
 		}
 		svc, err := t.c.ResolveService(ctx, project.Name+"/"+in.Name)
 		switch {
-		case errors.Is(err, store.ErrNotFound):
+		case errors.Is(err, domain.ErrNotFound):
 			input := core.ServiceInput{
 				Name: in.Name, Image: in.Image, Domain: in.Domain, Port: in.Port, Env: in.Env, PublishedPorts: in.ports(),
 				Routes: in.routes(),
@@ -556,14 +556,14 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 			}
 			view, err := t.c.CreateService(ctx, project.ID, input)
 			if err != nil {
-				return store.Deployment{}, err
+				return domain.Deployment{}, err
 			}
 			svc = view.Service
 		case err != nil:
-			return store.Deployment{}, err
+			return domain.Deployment{}, err
 		default:
-			if svc.Kind != store.ServiceKindApp {
-				return store.Deployment{}, fmt.Errorf("%s/%s exists and is not an app", project.Name, in.Name)
+			if svc.Kind != domain.ServiceKindApp {
+				return domain.Deployment{}, fmt.Errorf("%s/%s exists and is not an app", project.Name, in.Name)
 			}
 			patch := core.ServicePatch{Image: &in.Image, PublishedPorts: in.ports(), StopGraceSeconds: in.StopGraceSeconds, Routes: in.routes()}
 			// Omitted keeps the app's domain and port, as in retag.
@@ -580,7 +580,7 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 				patch.Env = env
 			}
 			if _, err := t.c.UpdateService(ctx, svc.ID, patch); err != nil {
-				return store.Deployment{}, err
+				return domain.Deployment{}, err
 			}
 		}
 		return t.c.Deploy(ctx, svc.ID, core.DeployOptions{})
@@ -590,24 +590,24 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 
 // retag is deploy_image without the settings permission: the app must exist
 // and only its image tag or digest may change.
-func (t *tools) retag(ctx context.Context, in deployImageIn) (store.Deployment, error) {
+func (t *tools) retag(ctx context.Context, in deployImageIn) (domain.Deployment, error) {
 	svc, err := t.service(ctx, in.Project+"/"+in.Name, core.PermDeploy)
-	if errors.Is(err, store.ErrNotFound) {
-		return store.Deployment{}, fmt.Errorf("%w: needs the settings permission to create an app", core.ErrForbidden)
+	if errors.Is(err, domain.ErrNotFound) {
+		return domain.Deployment{}, fmt.Errorf("%w: needs the settings permission to create an app", core.ErrForbidden)
 	}
 	if err != nil {
-		return store.Deployment{}, err
+		return domain.Deployment{}, err
 	}
-	if svc.Kind != store.ServiceKindApp {
-		return store.Deployment{}, fmt.Errorf("%s/%s exists and is not an app", in.Project, in.Name)
+	if svc.Kind != domain.ServiceKindApp {
+		return domain.Deployment{}, fmt.Errorf("%s/%s exists and is not an app", in.Project, in.Name)
 	}
 	if in.Env != nil || in.PublishedPorts != nil || in.StopGraceSeconds != nil || in.Routes != nil ||
 		(in.Domain != "" && in.Domain != svc.Domain) || (in.Port != 0 && in.Port != svc.Port) {
-		return store.Deployment{}, fmt.Errorf("%w: needs the settings permission to change anything but the image tag", core.ErrForbidden)
+		return domain.Deployment{}, fmt.Errorf("%w: needs the settings permission to change anything but the image tag", core.ErrForbidden)
 	}
 	opts, err := core.RetagOptions(svc.Image, in.Image)
 	if err != nil {
-		return store.Deployment{}, err
+		return domain.Deployment{}, err
 	}
 	return t.c.Deploy(ctx, svc.ID, opts)
 }
@@ -700,31 +700,31 @@ func (t *tools) applyProjectCompose(ctx context.Context, _ *mcp.CallToolRequest,
 	return nil, out, err
 }
 
-func (t *tools) findProject(ctx context.Context, name string) (store.Project, error) {
+func (t *tools) findProject(ctx context.Context, name string) (domain.Project, error) {
 	projects, err := t.c.ListProjects(ctx)
 	if err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	for _, p := range projects {
 		if p.Name == name {
 			return p, nil
 		}
 	}
-	return store.Project{}, fmt.Errorf("%w: project %s", store.ErrNotFound, name)
+	return domain.Project{}, fmt.Errorf("%w: project %s", domain.ErrNotFound, name)
 }
 
 // project finds a project by name and checks p on it.
-func (t *tools) project(ctx context.Context, name string, p core.Perm) (store.Project, error) {
+func (t *tools) project(ctx context.Context, name string, p core.Perm) (domain.Project, error) {
 	pr, err := t.findProject(ctx, name)
 	if err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	return pr, core.Authorize(ctx, pr.ID, p)
 }
 
 // service resolves a service (project/service or ID) and checks p on its
 // project.
-func (t *tools) service(ctx context.Context, ref string, p core.Perm) (store.Service, error) {
+func (t *tools) service(ctx context.Context, ref string, p core.Perm) (domain.Service, error) {
 	return t.c.AuthorizeService(ctx, ref, p)
 }
 
@@ -745,11 +745,11 @@ type rollbackIn struct {
 	DeploymentID string `json:"deployment_id,omitempty" jsonschema:"deployment to return to; default: the previous successful one"`
 }
 
-func (t *tools) rollback(ctx context.Context, _ *mcp.CallToolRequest, in rollbackIn) (*mcp.CallToolResult, store.Deployment, error) {
-	dep, err := mutate(ctx, t.c, "rollback", in.Service, func() (store.Deployment, error) {
+func (t *tools) rollback(ctx context.Context, _ *mcp.CallToolRequest, in rollbackIn) (*mcp.CallToolResult, domain.Deployment, error) {
+	dep, err := mutate(ctx, t.c, "rollback", in.Service, func() (domain.Deployment, error) {
 		svc, err := t.service(ctx, in.Service, core.PermDeploy)
 		if err != nil {
-			return store.Deployment{}, err
+			return domain.Deployment{}, err
 		}
 		return t.c.Rollback(ctx, svc.ID, in.DeploymentID)
 	})
@@ -763,11 +763,11 @@ type backupIn struct {
 	DatabaseName string `json:"database_name,omitempty" jsonschema:"for PostgreSQL, which of the instance's databases to dump; default the service's own"`
 }
 
-func (t *tools) backupDatabase(ctx context.Context, _ *mcp.CallToolRequest, in backupIn) (*mcp.CallToolResult, store.Backup, error) {
-	b, err := mutate(ctx, t.c, "backup_database", in.Database, func() (store.Backup, error) {
+func (t *tools) backupDatabase(ctx context.Context, _ *mcp.CallToolRequest, in backupIn) (*mcp.CallToolResult, domain.Backup, error) {
+	b, err := mutate(ctx, t.c, "backup_database", in.Database, func() (domain.Backup, error) {
 		svc, err := t.service(ctx, in.Database, core.PermBackups)
 		if err != nil {
-			return store.Backup{}, err
+			return domain.Backup{}, err
 		}
 		return t.c.BackupService(ctx, svc.ID, in.Storage, in.DatabaseName)
 	})
@@ -823,7 +823,7 @@ type listBackupsIn struct {
 }
 
 type listBackupsOut struct {
-	Backups []store.Backup `json:"backups"`
+	Backups []domain.Backup `json:"backups"`
 }
 
 func (t *tools) listBackups(ctx context.Context, _ *mcp.CallToolRequest, in listBackupsIn) (*mcp.CallToolResult, listBackupsOut, error) {
@@ -834,7 +834,7 @@ func (t *tools) listBackups(ctx context.Context, _ *mcp.CallToolRequest, in list
 	if err != nil {
 		return nil, listBackupsOut{}, friendly(err)
 	}
-	bs, err := t.c.ListBackups(ctx, store.BackupFilter{ServiceID: svc.ID, Limit: 50})
+	bs, err := t.c.ListBackups(ctx, domain.BackupFilter{ServiceID: svc.ID, Limit: 50})
 	return nil, listBackupsOut{Backups: bs}, err
 }
 
@@ -844,11 +844,11 @@ type restoreIn struct {
 	Confirm  string `json:"confirm" jsonschema:"must equal the service name to confirm the data will be replaced"`
 }
 
-func (t *tools) restoreDatabase(ctx context.Context, _ *mcp.CallToolRequest, in restoreIn) (*mcp.CallToolResult, store.Restore, error) {
-	r, err := mutate(ctx, t.c, "restore_database", in.Database, func() (store.Restore, error) {
+func (t *tools) restoreDatabase(ctx context.Context, _ *mcp.CallToolRequest, in restoreIn) (*mcp.CallToolResult, domain.Restore, error) {
+	r, err := mutate(ctx, t.c, "restore_database", in.Database, func() (domain.Restore, error) {
 		svc, err := t.service(ctx, in.Database, core.PermRestore)
 		if err != nil {
-			return store.Restore{}, err
+			return domain.Restore{}, err
 		}
 		return t.c.RestoreBackup(ctx, in.BackupID, svc.ID, in.Confirm)
 	})

@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"slices"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // Perm is something a member may do in a project they were granted.
@@ -64,7 +64,7 @@ var Features = []Feature{
 }
 
 // Admin reports whether the actor may do everything.
-func (a Actor) Admin() bool { return a.Role == store.RoleAdmin }
+func (a Actor) Admin() bool { return a.Role == domain.RoleAdmin }
 
 // Can reports whether the actor holds p in the project.
 func (a Actor) Can(projectID string, p Perm) bool {
@@ -88,7 +88,7 @@ func Authorize(ctx context.Context, projectID string, p Perm) error {
 		return ErrUnauthorized
 	}
 	if !a.Can(projectID, PermView) {
-		return fmt.Errorf("%w: project", store.ErrNotFound)
+		return fmt.Errorf("%w: project", domain.ErrNotFound)
 	}
 	if !a.Can(projectID, p) {
 		return fmt.Errorf("%w: needs the %s permission on this project", ErrForbidden, p)
@@ -197,19 +197,19 @@ func (c *Core) ProjectOf(ctx context.Context, kind IDKind, id string) (string, e
 
 // AuthorizeService resolves a service (ID or project/service) and checks p
 // on its project.
-func (c *Core) AuthorizeService(ctx context.Context, ref string, p Perm) (store.Service, error) {
+func (c *Core) AuthorizeService(ctx context.Context, ref string, p Perm) (domain.Service, error) {
 	s, err := c.ResolveService(ctx, ref)
 	if err != nil {
-		return store.Service{}, err
+		return domain.Service{}, err
 	}
 	if err := Authorize(ctx, s.ProjectID, p); err != nil {
-		return store.Service{}, err
+		return domain.Service{}, err
 	}
 	return s, nil
 }
 
 // UserActor is the actor of a signed-in user, with their grants.
-func (c *Core) UserActor(ctx context.Context, u store.User) (Actor, error) {
+func (c *Core) UserActor(ctx context.Context, u domain.User) (Actor, error) {
 	a := Actor{Kind: "user", Name: u.Username, UserID: u.ID, Role: u.Role, Features: u.Features}
 	return c.withGrants(ctx, a)
 }
@@ -260,7 +260,7 @@ func check(ctx context.Context, projectID string, p Perm) error {
 // settings permission: env and domains have their own, and host access
 // (the host's network or Docker socket) is root on the host, so only
 // admins give it.
-func checkServiceChange(ctx context.Context, old, svc store.Service) error {
+func checkServiceChange(ctx context.Context, old, svc domain.Service) error {
 	a, ok := ActorFrom(ctx)
 	if !ok || a.Admin() {
 		return nil
@@ -275,7 +275,7 @@ func checkServiceChange(ctx context.Context, old, svc store.Service) error {
 		return fmt.Errorf("%w: only admins mount external volumes or set volume driver options", ErrForbidden)
 	}
 	for _, v := range svc.Volumes {
-		if i := slices.IndexFunc(old.Volumes, func(o store.Volume) bool { return o.Name == v.Name }); v.HostAccess() && !v.ReadOnly && i >= 0 && old.Volumes[i].ReadOnly {
+		if i := slices.IndexFunc(old.Volumes, func(o domain.Volume) bool { return o.Name == v.Name }); v.HostAccess() && !v.ReadOnly && i >= 0 && old.Volumes[i].ReadOnly {
 			return fmt.Errorf("%w: only admins make volume %s writable: it reaches outside the project", ErrForbidden, v.Name)
 		}
 	}
@@ -301,7 +301,7 @@ func checkServiceChange(ctx context.Context, old, svc store.Service) error {
 
 // basicAuthRefs holds m's basic auth password references, in the shape
 // checkSecretRefs reads.
-func basicAuthRefs(m store.Middlewares) map[string]string {
+func basicAuthRefs(m domain.Middlewares) map[string]string {
 	out := map[string]string{}
 	for _, u := range m.BasicAuth {
 		if u.Ref != "" {
@@ -347,7 +347,7 @@ func (c *Core) grantCreator(ctx context.Context, projectID string) error {
 	for i, p := range Perms {
 		perms[i] = string(p)
 	}
-	if err := c.store.SetGrant(ctx, store.ProjectGrant{UserID: a.UserID, ProjectID: projectID, Perms: perms}); err != nil {
+	if err := c.store.SetGrant(ctx, domain.ProjectGrant{UserID: a.UserID, ProjectID: projectID, Perms: perms}); err != nil {
 		return err
 	}
 	if a.Grants != nil {

@@ -11,45 +11,45 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestValidateService(t *testing.T) {
-	ok := store.Service{Image: "nginx:1.27", Replicas: 1}
+	ok := domain.Service{Image: "nginx:1.27", Replicas: 1}
 	tests := []struct {
 		name    string
-		mutate  func(*store.Service)
+		mutate  func(*domain.Service)
 		wantErr bool
 	}{
-		{"private service", func(*store.Service) {}, false},
-		{"public service", func(s *store.Service) { s.Domain, s.Port = "shop.example.com", 80 }, false},
-		{"localhost subdomain", func(s *store.Service) { s.Domain, s.Port = "shop.localhost", 80 }, false},
-		{"registry image", func(s *store.Service) { s.Image = "ghcr.io/org/app@sha256:" + sha }, false},
-		{"empty image", func(s *store.Service) { s.Image = "" }, true},
-		{"uppercase image", func(s *store.Service) { s.Image = "Nginx" }, true},
-		{"domain without port", func(s *store.Service) { s.Domain = "shop.example.com" }, true},
-		{"bad domain", func(s *store.Service) { s.Domain, s.Port = "shop_example.com", 80 }, true},
-		{"domain with scheme", func(s *store.Service) { s.Domain, s.Port = "https://shop.example.com", 80 }, true},
-		{"zero replicas", func(s *store.Service) { s.Replicas = 0 }, true},
-		{"too many replicas", func(s *store.Service) { s.Replicas = maxReplicas + 1 }, true},
-		{"bad env key", func(s *store.Service) { s.Env = map[string]string{"A-B": "1"} }, true},
-		{"good env key", func(s *store.Service) { s.Env = map[string]string{"_A1": "1"} }, false},
-		{"cpu limit", func(s *store.Service) { s.CPUs = 0.5 }, false},
-		{"tiny cpu limit", func(s *store.Service) { s.CPUs = 0.001 }, true},
-		{"negative cpu limit", func(s *store.Service) { s.CPUs = -1 }, true},
-		{"icon", func(s *store.Service) { s.Icon = "home-assistant" }, false},
-		{"uppercase icon", func(s *store.Service) { s.Icon = "Ghost" }, true},
-		{"icon path", func(s *store.Service) { s.Icon = "../ghost" }, true},
-		{"host network", func(s *store.Service) { s.HostNetwork, s.Port, s.DockerSocket = true, 45876, "ro" }, false},
-		{"host network replicas", func(s *store.Service) { s.HostNetwork, s.Replicas = true, 2 }, true},
-		{"host network domain", func(s *store.Service) { s.HostNetwork, s.Domain, s.Port = true, "a.example.com", 80 }, true},
-		{"host network ports", func(s *store.Service) {
-			s.HostNetwork, s.PublishedPorts = true, []store.PublishedPort{{HostPort: 9000, ContainerPort: 9000, Protocol: "tcp"}}
+		{"private service", func(*domain.Service) {}, false},
+		{"public service", func(s *domain.Service) { s.Domain, s.Port = "shop.example.com", 80 }, false},
+		{"localhost subdomain", func(s *domain.Service) { s.Domain, s.Port = "shop.localhost", 80 }, false},
+		{"registry image", func(s *domain.Service) { s.Image = "ghcr.io/org/app@sha256:" + sha }, false},
+		{"empty image", func(s *domain.Service) { s.Image = "" }, true},
+		{"uppercase image", func(s *domain.Service) { s.Image = "Nginx" }, true},
+		{"domain without port", func(s *domain.Service) { s.Domain = "shop.example.com" }, true},
+		{"bad domain", func(s *domain.Service) { s.Domain, s.Port = "shop_example.com", 80 }, true},
+		{"domain with scheme", func(s *domain.Service) { s.Domain, s.Port = "https://shop.example.com", 80 }, true},
+		{"zero replicas", func(s *domain.Service) { s.Replicas = 0 }, true},
+		{"too many replicas", func(s *domain.Service) { s.Replicas = maxReplicas + 1 }, true},
+		{"bad env key", func(s *domain.Service) { s.Env = map[string]string{"A-B": "1"} }, true},
+		{"good env key", func(s *domain.Service) { s.Env = map[string]string{"_A1": "1"} }, false},
+		{"cpu limit", func(s *domain.Service) { s.CPUs = 0.5 }, false},
+		{"tiny cpu limit", func(s *domain.Service) { s.CPUs = 0.001 }, true},
+		{"negative cpu limit", func(s *domain.Service) { s.CPUs = -1 }, true},
+		{"icon", func(s *domain.Service) { s.Icon = "home-assistant" }, false},
+		{"uppercase icon", func(s *domain.Service) { s.Icon = "Ghost" }, true},
+		{"icon path", func(s *domain.Service) { s.Icon = "../ghost" }, true},
+		{"host network", func(s *domain.Service) { s.HostNetwork, s.Port, s.DockerSocket = true, 45876, "ro" }, false},
+		{"host network replicas", func(s *domain.Service) { s.HostNetwork, s.Replicas = true, 2 }, true},
+		{"host network domain", func(s *domain.Service) { s.HostNetwork, s.Domain, s.Port = true, "a.example.com", 80 }, true},
+		{"host network ports", func(s *domain.Service) {
+			s.HostNetwork, s.PublishedPorts = true, []domain.PublishedPort{{HostPort: 9000, ContainerPort: 9000, Protocol: "tcp"}}
 		}, true},
-		{"bad socket mode", func(s *store.Service) { s.DockerSocket = "yes" }, true},
-		{"host network on a network", func(s *store.Service) { s.HostNetwork, s.Networks = true, []string{"N1"} }, true},
-		{"database socket", func(s *store.Service) {
-			s.Kind, s.Image, s.DockerSocket = store.ServiceKindPostgres, "postgres:17", "ro"
+		{"bad socket mode", func(s *domain.Service) { s.DockerSocket = "yes" }, true},
+		{"host network on a network", func(s *domain.Service) { s.HostNetwork, s.Networks = true, []string{"N1"} }, true},
+		{"database socket", func(s *domain.Service) {
+			s.Kind, s.Image, s.DockerSocket = domain.ServiceKindPostgres, "postgres:17", "ro"
 		}, true},
 	}
 	for _, tt := range tests {
@@ -70,8 +70,8 @@ func TestValidateService(t *testing.T) {
 const sha = "0000000000000000000000000000000000000000000000000000000000000000"
 
 func TestAppContainerSpec(t *testing.T) {
-	p := store.Project{ID: "P1", Name: "shop", Env: map[string]string{"SHARED": "s"}}
-	svc := store.Service{
+	p := domain.Project{ID: "P1", Name: "shop", Env: map[string]string{"SHARED": "s"}}
+	svc := domain.Service{
 		ID: "01ABC", ProjectID: "P1", Name: "web", Image: "nginx", Replicas: 2,
 		Env: map[string]string{"B": "2", "A": "1", "C": "{{ project.SHARED }}"},
 	}
@@ -148,7 +148,7 @@ func routerName(t *testing.T, labels map[string]string) string {
 }
 
 func TestMasked(t *testing.T) {
-	s := store.Service{Env: map[string]string{"SECRET": "hunter2", "VAR": "v"}, Secrets: []string{"SECRET"}}
+	s := domain.Service{Env: map[string]string{"SECRET": "hunter2", "VAR": "v"}, Secrets: []string{"SECRET"}}
 	m := masked(s)
 	if m.Env["SECRET"] != SecretMask || m.Env["VAR"] != "v" {
 		t.Errorf("env = %v, want the secret masked and the variable readable", m.Env)
@@ -156,7 +156,7 @@ func TestMasked(t *testing.T) {
 	if s.Env["SECRET"] != "hunter2" {
 		t.Error("masking mutated the original map")
 	}
-	if masked(store.Service{}).Env == nil {
+	if masked(domain.Service{}).Env == nil {
 		t.Error("nil env should serialize as {}")
 	}
 }
@@ -220,11 +220,11 @@ func TestTraefikManagerRoute(t *testing.T) {
 func TestTunnelMode(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{Domain: "kipitiny.example.com", Tunnel: config.Tunnel{Token: "tok", Image: "cloudflare/cloudflared"}})
-	worker, err := c.store.CreateServer(ctx, store.Server{Name: "w1", Kind: store.ServerSSH, Host: "w1", Port: 22})
+	worker, err := c.store.CreateServer(ctx, domain.Server{Name: "w1", Kind: domain.ServerSSH, Host: "w1", Port: 22})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !c.viaTunnel(ctx, store.LocalServerID) || !c.viaTunnel(ctx, "") || c.viaTunnel(ctx, worker.ID) {
+	if !c.viaTunnel(ctx, domain.LocalServerID) || !c.viaTunnel(ctx, "") || c.viaTunnel(ctx, worker.ID) {
 		t.Error("the environment token only serves the manager's own server")
 	}
 	worker.TunnelToken = "worker-tok"
@@ -246,7 +246,7 @@ func TestTunnelMode(t *testing.T) {
 		t.Error("manager route must not reference the ACME resolver")
 	}
 
-	l := traefikLabels(store.Service{ID: "01ABC", Domain: "shop.example.com", Port: 80}, route{})
+	l := traefikLabels(domain.Service{ID: "01ABC", Domain: "shop.example.com", Port: 80}, route{})
 	r := routerName(t, l)
 	if _, acme := l["traefik.http.routers."+r+".tls.certresolver"]; acme || l["traefik.http.routers."+r+".tls"] != "true" {
 		t.Errorf("tunnel labels = %v", l)
@@ -263,14 +263,14 @@ func TestTunnelMode(t *testing.T) {
 
 func TestIconHint(t *testing.T) {
 	for _, tc := range []struct {
-		svc  store.Service
+		svc  domain.Service
 		want string
 	}{
-		{store.Service{Image: "postgres:17"}, "postgres"},
-		{store.Service{Image: "ghcr.io/n8n-io/n8n:1.0@sha256:" + sha}, "n8n"},
-		{store.Service{Image: "bitnami/redis"}, "redis"},
-		{store.Service{Image: "ghcr.io/org/blog:v2", Icon: "ghost"}, "ghost"},
-		{store.Service{Image: "Not An Image"}, ""},
+		{domain.Service{Image: "postgres:17"}, "postgres"},
+		{domain.Service{Image: "ghcr.io/n8n-io/n8n:1.0@sha256:" + sha}, "n8n"},
+		{domain.Service{Image: "bitnami/redis"}, "redis"},
+		{domain.Service{Image: "ghcr.io/org/blog:v2", Icon: "ghost"}, "ghost"},
+		{domain.Service{Image: "Not An Image"}, ""},
 	} {
 		if got := IconHint(tc.svc); got != tc.want {
 			t.Errorf("IconHint(%+v) = %q, want %q", tc.svc, got, tc.want)
@@ -279,8 +279,8 @@ func TestIconHint(t *testing.T) {
 }
 
 func TestHostAccessContainerSpec(t *testing.T) {
-	p := store.Project{ID: "P1", Name: "mon"}
-	svc := store.Service{ID: "01ABC", ProjectID: "P1", Name: "agent", Image: "henrygd/beszel-agent", Replicas: 1, HostNetwork: true, DockerSocket: "ro"}
+	p := domain.Project{ID: "P1", Name: "mon"}
+	svc := domain.Service{ID: "01ABC", ProjectID: "P1", Name: "agent", Image: "henrygd/beszel-agent", Replicas: 1, HostNetwork: true, DockerSocket: "ro"}
 	spec := containerSpec(p, svc, envSources{}, "D1", 1, route{dockerSocket: "/run/docker.sock"})
 	if spec.HostConfig.NetworkMode != "host" || len(spec.NetworkingConfig.EndpointsConfig) != 0 {
 		t.Errorf("network = %q, endpoints %v", spec.HostConfig.NetworkMode, spec.NetworkingConfig.EndpointsConfig)

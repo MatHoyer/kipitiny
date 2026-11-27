@@ -6,24 +6,24 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // ListDomains returns the base domains offered for service domains.
-func (c *Core) ListDomains(ctx context.Context) ([]store.Domain, error) {
+func (c *Core) ListDomains(ctx context.Context) ([]domain.Domain, error) {
 	return c.store.ListDomains(ctx)
 }
 
 // CreateDomain registers a base domain (example.com). It changes no routing:
 // services still hold their full domain.
-func (c *Core) CreateDomain(ctx context.Context, name string) (store.Domain, error) {
+func (c *Core) CreateDomain(ctx context.Context, name string) (domain.Domain, error) {
 	name = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(name)), ".")
 	if !domainRe.MatchString(name) {
-		return store.Domain{}, fmt.Errorf("%w: %q is not a valid domain name", ErrInvalid, name)
+		return domain.Domain{}, fmt.Errorf("%w: %q is not a valid domain name", ErrInvalid, name)
 	}
-	d, err := c.store.CreateDomain(ctx, store.Domain{Name: name})
-	if errors.Is(err, store.ErrConflict) {
-		return store.Domain{}, fmt.Errorf("%w: %s is already listed", ErrInvalid, name)
+	d, err := c.store.CreateDomain(ctx, domain.Domain{Name: name})
+	if errors.Is(err, domain.ErrConflict) {
+		return domain.Domain{}, fmt.Errorf("%w: %s is already listed", ErrInvalid, name)
 	}
 	return d, err
 }

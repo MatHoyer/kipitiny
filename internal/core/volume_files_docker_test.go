@@ -20,14 +20,14 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // filesTestService creates svc and fills its volume (named vol) with a shell
 // script, run against the local Docker daemon.
 //
 //	KIPITINY_TEST_DOCKER=1 go test ./internal/core/ -run VolumeFilesDocker
-func filesTestService(t *testing.T, svc store.Service, vol, seed string) (*Core, context.Context, store.Service) {
+func filesTestService(t *testing.T, svc domain.Service, vol, seed string) (*Core, context.Context, domain.Service) {
 	t.Helper()
 	if os.Getenv("KIPITINY_TEST_DOCKER") == "" {
 		t.Skip("KIPITINY_TEST_DOCKER not set")
@@ -39,7 +39,7 @@ func filesTestService(t *testing.T, svc store.Service, vol, seed string) (*Core,
 	}
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
 	c.pool = docker.NewPool(dk, c.connectServer)
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "filestest", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "filestest", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,8 +75,8 @@ func filesTestService(t *testing.T, svc store.Service, vol, seed string) (*Core,
 }
 
 func TestVolumeFilesDockerApp(t *testing.T) {
-	c, ctx, svc := filesTestService(t, store.Service{Name: "mc", Kind: store.ServiceKindApp,
-		Volumes: []store.Volume{{Name: "data", Path: "/data"}}}, "data", `
+	c, ctx, svc := filesTestService(t, domain.Service{Name: "mc", Kind: domain.ServiceKindApp,
+		Volumes: []domain.Volume{{Name: "data", Path: "/data"}}}, "data", `
 cd /seed
 mkdir -p mods/deep .hidden
 printf 'motd=hi\n' > server.properties
@@ -118,7 +118,7 @@ ln -s mods/a.jar ok-link`)
 	}
 
 	for p, want := range map[string]error{
-		"data/missing":           store.ErrNotFound,
+		"data/missing":           domain.ErrNotFound,
 		"data/server.properties": ErrInvalid, // not a folder
 		"data/etc-link":          ErrInvalid, // outside
 		"data/up":                ErrInvalid, // outside
@@ -139,7 +139,7 @@ ln -s mods/a.jar ok-link`)
 	if err := c.ArchiveVolumeFiles(viewer, svc.ID, "data", nil, io.Discard); !errors.Is(err, ErrForbidden) {
 		t.Errorf("archive as a viewer: %v", err)
 	}
-	ctx = WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin})
+	ctx = WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 
 	f, err := c.ReadVolumeFile(ctx, svc.ID, "data/server.properties")
 	if err != nil || f.Content != "motd=hi\n" || f.Type != "file" || f.Path != "data/server.properties" {
@@ -152,7 +152,7 @@ ln -s mods/a.jar ok-link`)
 		"data/bin.dat":  ErrInvalid, // binary
 		"data/mods":     ErrInvalid, // folder
 		"data/etc-link": ErrInvalid,
-		"data/nope":     store.ErrNotFound,
+		"data/nope":     domain.ErrNotFound,
 	} {
 		if _, err := c.ReadVolumeFile(ctx, svc.ID, p); !errors.Is(err, want) {
 			t.Errorf("read %s: %v, want %v", p, err, want)
@@ -202,13 +202,13 @@ ln -s mods/a.jar ok-link`)
 		t.Error("helper kept after close")
 	}
 
-	if _, err := c.ListVolumeFiles(WithActor(context.Background(), Actor{Kind: "token"}), svc.ID, ""); !errors.Is(err, store.ErrNotFound) {
+	if _, err := c.ListVolumeFiles(WithActor(context.Background(), Actor{Kind: "token"}), svc.ID, ""); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("no access: %v", err)
 	}
 }
 
 func TestVolumeFilesDockerDatabase(t *testing.T) {
-	c, ctx, svc := filesTestService(t, store.Service{Name: "db", Kind: store.ServiceKindPostgres}, "", `printf 1 > /seed/PG_VERSION`)
+	c, ctx, svc := filesTestService(t, domain.Service{Name: "db", Kind: domain.ServiceKindPostgres}, "", `printf 1 > /seed/PG_VERSION`)
 	l, err := c.ListVolumeFiles(ctx, svc.ID, "data")
 	if err != nil || !l.ReadOnly || len(l.Entries) != 1 || l.Entries[0].Name != "PG_VERSION" {
 		t.Fatalf("listing: %+v %v", l, err)
@@ -247,8 +247,8 @@ func archiveNames(t *testing.T, c *Core, ctx context.Context, id, dir string, na
 }
 
 func TestVolumeFilesDockerWrite(t *testing.T) {
-	c, readCtx, svc := filesTestService(t, store.Service{Name: "mc", Kind: store.ServiceKindApp,
-		Volumes: []store.Volume{{Name: "data", Path: "/data"}, {Name: "logs", Path: "/logs"}}}, "data", `
+	c, readCtx, svc := filesTestService(t, domain.Service{Name: "mc", Kind: domain.ServiceKindApp,
+		Volumes: []domain.Volume{{Name: "data", Path: "/data"}, {Name: "logs", Path: "/logs"}}}, "data", `
 cd /seed
 mkdir mods
 chown 1000:1000 mods
@@ -257,7 +257,7 @@ chown 1000:1000 ops.json
 chmod 600 ops.json
 ln -s /etc etc-link
 ln -s .. up`)
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin})
+	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 
 	if err := c.MakeVolumeDir(readCtx, svc.ID, "data/x"); !errors.Is(err, ErrForbidden) {
 		t.Errorf("mkdir with only the files permission: %v", err)
@@ -269,12 +269,12 @@ ln -s .. up`)
 		t.Errorf("new folders belong to the parent's owner: %+v %v", l, err)
 	}
 	for p, want := range map[string]error{
-		"data/mods/new":    store.ErrConflict,
+		"data/mods/new":    domain.ErrConflict,
 		"data/etc-link/x":  ErrInvalid,
 		"data/up/x":        ErrInvalid,
 		"data":             ErrInvalid,
 		"data/ops.json/x":  ErrInvalid,
-		"nothere/x":        store.ErrNotFound,
+		"nothere/x":        domain.ErrNotFound,
 		"data/../../etc/x": ErrInvalid,
 	} {
 		if err := c.MakeVolumeDir(ctx, svc.ID, p); !errors.Is(err, want) {
@@ -286,14 +286,14 @@ ln -s .. up`)
 	if err != nil || e.Name != "b.jar" || e.Size != 4 || e.UID != 1000 || e.Mode != "0644" {
 		t.Fatalf("upload: %+v %v", e, err)
 	}
-	if _, err := c.WriteVolumeFile(ctx, svc.ID, "data/mods/sub/b.jar", strings.NewReader("x"), WriteOptions{}); !errors.Is(err, store.ErrConflict) {
+	if _, err := c.WriteVolumeFile(ctx, svc.ID, "data/mods/sub/b.jar", strings.NewReader("x"), WriteOptions{}); !errors.Is(err, domain.ErrConflict) {
 		t.Errorf("upload over a file: %v", err)
 	}
 	f, err := c.ReadVolumeFile(ctx, svc.ID, "data/ops.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.WriteVolumeFile(ctx, svc.ID, "data/ops.json", strings.NewReader("[]"), WriteOptions{Overwrite: true, Modified: time.Unix(1, 0)}); !errors.Is(err, store.ErrConflict) {
+	if _, err := c.WriteVolumeFile(ctx, svc.ID, "data/ops.json", strings.NewReader("[]"), WriteOptions{Overwrite: true, Modified: time.Unix(1, 0)}); !errors.Is(err, domain.ErrConflict) {
 		t.Errorf("save over a changed file: %v", err)
 	}
 	if e, err := c.WriteVolumeFile(ctx, svc.ID, "data/ops.json", strings.NewReader("[]"), WriteOptions{Overwrite: true, Modified: f.Modified}); err != nil || e.Mode != "0600" || e.UID != 1000 || e.Size != 2 {
@@ -337,10 +337,10 @@ ln -s .. up`)
 		from, to string
 		want     error
 	}{
-		{"data/b.jar", "data/ops.json", store.ErrConflict},
+		{"data/b.jar", "data/ops.json", domain.ErrConflict},
 		{"data/mods", "data/mods/new/inside", ErrInvalid},
-		{"data/missing", "data/x", store.ErrNotFound},
-		{"data/b.jar", "data/nofolder/b.jar", store.ErrNotFound},
+		{"data/missing", "data/x", domain.ErrNotFound},
+		{"data/b.jar", "data/nofolder/b.jar", domain.ErrNotFound},
 		{"data/b.jar", "data/up/b.jar", ErrInvalid},
 		{"data", "logs/data", ErrInvalid},
 	} {
@@ -349,7 +349,7 @@ ln -s .. up`)
 		}
 	}
 
-	if err := c.DeleteVolumePaths(ctx, svc.ID, []string{"data/b.jar", "data/missing"}); !errors.Is(err, store.ErrNotFound) {
+	if err := c.DeleteVolumePaths(ctx, svc.ID, []string{"data/b.jar", "data/missing"}); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("delete with a missing path: %v", err)
 	}
 	if _, err := c.StatVolumePath(ctx, svc.ID, "data/b.jar"); err != nil {
@@ -387,8 +387,8 @@ ln -s .. up`)
 }
 
 func TestVolumeFilesDockerDatabaseWrite(t *testing.T) {
-	c, _, svc := filesTestService(t, store.Service{Name: "db", Kind: store.ServiceKindRedis}, "", `printf x > /seed/dump.rdb`)
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin})
+	c, _, svc := filesTestService(t, domain.Service{Name: "db", Kind: domain.ServiceKindRedis}, "", `printf x > /seed/dump.rdb`)
+	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 	if err := c.DeleteVolumePaths(ctx, svc.ID, []string{"data/dump.rdb"}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("delete in a database: %v", err)
 	}
@@ -399,7 +399,7 @@ func TestVolumeFilesDockerDatabaseWrite(t *testing.T) {
 
 // containerFilesTest runs image as svc's only replica (not kipitiny.managed:
 // a manager on this daemon would remove it as an orphan).
-func containerFilesTest(t *testing.T, kind store.ServiceKind, image string, cmd ...string) (*Core, context.Context, store.Service, string) {
+func containerFilesTest(t *testing.T, kind domain.ServiceKind, image string, cmd ...string) (*Core, context.Context, domain.Service, string) {
 	t.Helper()
 	if os.Getenv("KIPITINY_TEST_DOCKER") == "" {
 		t.Skip("KIPITINY_TEST_DOCKER not set")
@@ -411,8 +411,8 @@ func containerFilesTest(t *testing.T, kind store.ServiceKind, image string, cmd 
 	}
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
 	c.pool = docker.NewPool(dk, c.connectServer)
-	p, _ := c.store.CreateProject(ctx, store.Project{Name: "ctfiles", ServerID: store.LocalServerID})
-	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "app", Kind: kind, Replicas: 1, Env: map[string]string{}})
+	p, _ := c.store.CreateProject(ctx, domain.Project{Name: "ctfiles", ServerID: domain.LocalServerID})
+	svc, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "app", Kind: kind, Replicas: 1, Env: map[string]string{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,13 +430,13 @@ func containerFilesTest(t *testing.T, kind store.ServiceKind, image string, cmd 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = dk.RemoveContainerAndVolumes(context.Background(), id) })
-	return c, WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin}), svc, id
+	return c, WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin}), svc, id
 }
 
 func TestVolumeFilesDockerContainer(t *testing.T) {
 	for _, image := range []string{"alpine:3.22", "debian:bookworm-slim"} {
 		t.Run(image, func(t *testing.T) {
-			c, ctx, svc, id := containerFilesTest(t, store.ServiceKindApp, image, "sleep", "infinity")
+			c, ctx, svc, id := containerFilesTest(t, domain.ServiceKindApp, image, "sleep", "infinity")
 			root, err := c.ListVolumeFiles(ctx, svc.ID, "")
 			if err != nil || len(root.Entries) != 1 || root.Entries[0].Name != "@container" || root.Entries[0].Type != "container" {
 				t.Fatalf("root: %+v %v", root, err)
@@ -483,7 +483,7 @@ func TestVolumeFilesDockerContainer(t *testing.T) {
 			if err := c.DeleteVolumePaths(ctx, svc.ID, []string{"@container/srv/conf"}); err != nil {
 				t.Errorf("delete: %v", err)
 			}
-			for p, want := range map[string]error{"@container/nope": store.ErrNotFound, "@container": ErrInvalid} {
+			for p, want := range map[string]error{"@container/nope": domain.ErrNotFound, "@container": ErrInvalid} {
 				if err := c.DeleteVolumePaths(ctx, svc.ID, []string{p}); !errors.Is(err, want) {
 					t.Errorf("delete %s: %v, want %v", p, err, want)
 				}
@@ -499,7 +499,7 @@ func TestVolumeFilesDockerContainer(t *testing.T) {
 }
 
 func TestVolumeFilesDockerContainerNoShell(t *testing.T) {
-	c, ctx, svc, _ := containerFilesTest(t, store.ServiceKindApp, "registry.k8s.io/pause:3.10")
+	c, ctx, svc, _ := containerFilesTest(t, domain.ServiceKindApp, "registry.k8s.io/pause:3.10")
 	_, err := c.ListVolumeFiles(ctx, svc.ID, "@container")
 	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "lacks a shell") {
 		t.Errorf("no shell: %v", err)
@@ -507,7 +507,7 @@ func TestVolumeFilesDockerContainerNoShell(t *testing.T) {
 }
 
 func TestVolumeFilesDockerContainerDatabase(t *testing.T) {
-	c, ctx, svc, _ := containerFilesTest(t, store.ServiceKindRedis, "alpine:3.22", "sleep", "infinity")
+	c, ctx, svc, _ := containerFilesTest(t, domain.ServiceKindRedis, "alpine:3.22", "sleep", "infinity")
 	if _, err := c.ListVolumeFiles(ctx, svc.ID, "@container/etc"); err != nil {
 		t.Errorf("list: %v", err)
 	}

@@ -18,7 +18,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // fakeIssuer is an OpenID provider: discovery, keys, and a token endpoint
@@ -99,7 +99,7 @@ func (f *fakeIssuer) code(code string, claims map[string]any) {
 }
 
 func asAdmin(ctx context.Context) context.Context {
-	return WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin})
+	return WithActor(ctx, Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 }
 
 func TestSSOProviders(t *testing.T) {
@@ -120,7 +120,7 @@ func TestSSOProviders(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	member := WithActor(context.Background(), Actor{Kind: "user", Role: store.RoleMember})
+	member := WithActor(context.Background(), Actor{Kind: "user", Role: domain.RoleMember})
 	if _, err := c.CreateSSOProvider(member, in); !errors.Is(err, ErrForbidden) {
 		t.Errorf("member: %v", err)
 	}
@@ -193,15 +193,15 @@ func TestSSOSignIn(t *testing.T) {
 	}
 	const origin = "https://kipitiny.example.com"
 	hash, _ := bcrypt.GenerateFromPassword([]byte("correct horse"), bcrypt.MinCost)
-	alice, err := c.store.CreateUser(ctx, store.User{Username: "alice", PasswordHash: string(hash), Role: store.RoleMember})
+	alice, err := c.store.CreateUser(ctx, domain.User{Username: "alice", PasswordHash: string(hash), Role: domain.RoleMember})
 	if err != nil {
 		t.Fatal(err)
 	}
-	bob, err := c.store.CreateUser(ctx, store.User{Username: "bob", PasswordHash: string(hash), Role: store.RoleMember})
+	bob, err := c.store.CreateUser(ctx, domain.User{Username: "bob", PasswordHash: string(hash), Role: domain.RoleMember})
 	if err != nil {
 		t.Fatal(err)
 	}
-	as := func(u store.User) context.Context {
+	as := func(u domain.User) context.Context {
 		return WithActor(context.Background(), Actor{Kind: "user", Name: u.Username, UserID: u.ID, Role: u.Role})
 	}
 
@@ -308,14 +308,14 @@ func TestSSOInvite(t *testing.T) {
 		t.Fatal(err)
 	}
 	const origin = "https://kipitiny.example.com"
-	inv, err := c.CreateInvite(ctx, InviteInput{UserAccess: UserAccess{Role: store.RoleMember}})
+	inv, err := c.CreateInvite(ctx, InviteInput{UserAccess: UserAccess{Role: domain.RoleMember}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if info, _ := c.Invite(ctx, inv.Token); len(info.SSO) != 1 {
 		t.Errorf("invite offers %+v", info.SSO)
 	}
-	if _, err := c.BeginSSOInvite(ctx, p.ID, origin, "nope", "carol"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := c.BeginSSOInvite(ctx, p.ID, origin, "nope", "carol"); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("unknown invite: %v", err)
 	}
 	if _, err := c.BeginSSOInvite(ctx, p.ID, origin, inv.Token, "Carol!"); !errors.Is(err, ErrInvalid) {
@@ -328,7 +328,7 @@ func TestSSOInvite(t *testing.T) {
 	}
 	state := idp.answer(t, start, "c1", "carol-sub")
 	res, err := c.FinishSSO(context.Background(), state, state, "c1")
-	if err != nil || res.Purpose != ssoInvite || res.Session == "" || res.User.Username != "carol" || res.User.Role != store.RoleMember {
+	if err != nil || res.Purpose != ssoInvite || res.Session == "" || res.User.Username != "carol" || res.User.Role != domain.RoleMember {
 		t.Fatalf("accept: %+v %v", res, err)
 	}
 	carolCtx, err := c.SessionActor(context.Background(), res.Session)
@@ -342,7 +342,7 @@ func TestSSOInvite(t *testing.T) {
 	}
 
 	// The invite is used; the identity signs in.
-	if _, err := c.BeginSSOInvite(ctx, p.ID, origin, inv.Token, "dave"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := c.BeginSSOInvite(ctx, p.ID, origin, inv.Token, "dave"); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("invite reused: %v", err)
 	}
 	start, _ = c.BeginSSO(context.Background(), p.ID, origin, "/")
@@ -352,7 +352,7 @@ func TestSSOInvite(t *testing.T) {
 	}
 
 	// An identity already linked can't accept another invite.
-	inv2, _ := c.CreateInvite(ctx, InviteInput{UserAccess: UserAccess{Role: store.RoleMember}})
+	inv2, _ := c.CreateInvite(ctx, InviteInput{UserAccess: UserAccess{Role: domain.RoleMember}})
 	start, _ = c.BeginSSOInvite(ctx, p.ID, origin, inv2.Token, "carol2")
 	state = idp.answer(t, start, "c3", "carol-sub")
 	if res, err := c.FinishSSO(context.Background(), state, state, "c3"); !errors.Is(err, ErrInvalid) || res.Invite != inv2.Token {
@@ -428,8 +428,8 @@ func TestSSORequired(t *testing.T) {
 	}
 	const origin = "https://kipitiny.example.com"
 	hash, _ := bcrypt.GenerateFromPassword([]byte("correct horse"), bcrypt.MinCost)
-	admin, _ := c.store.CreateUser(ctx, store.User{Username: "admin", PasswordHash: string(hash), Role: store.RoleAdmin})
-	as := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", UserID: admin.ID, Role: store.RoleAdmin})
+	admin, _ := c.store.CreateUser(ctx, domain.User{Username: "admin", PasswordHash: string(hash), Role: domain.RoleAdmin})
+	as := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", UserID: admin.ID, Role: domain.RoleAdmin})
 
 	// Not without a linked identity of one's own.
 	if err := c.SetSSORequired(as, true); !errors.Is(err, ErrInvalid) {
@@ -450,7 +450,7 @@ func TestSSORequired(t *testing.T) {
 	if _, err := c.BeginPasskeyLogin(context.Background(), RelyingParty{ID: "kipitiny.example.com", Origin: origin}); !errors.Is(err, ErrSSORequired) {
 		t.Errorf("passkey: %v", err)
 	}
-	inv, _ := c.CreateInvite(as, InviteInput{UserAccess: UserAccess{Role: store.RoleMember}})
+	inv, _ := c.CreateInvite(as, InviteInput{UserAccess: UserAccess{Role: domain.RoleMember}})
 	if _, _, err := c.AcceptInvite(context.Background(), inv.Token, "dave", "a long password"); !errors.Is(err, ErrSSORequired) {
 		t.Errorf("invite with a password: %v", err)
 	}

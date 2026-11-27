@@ -19,7 +19,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -159,7 +159,7 @@ func imageHealthcheck(ctx context.Context, dk *docker.Client, image, platform st
 // path, or a TCP connect to the port. Traefik only routes to healthy
 // containers, so a new replica gets traffic once it actually serves, and one
 // that stops answering is taken out of rotation.
-func withProbe(spec *client.ContainerCreateOptions, svc store.Service, m mount.Mount) {
+func withProbe(spec *client.ContainerCreateOptions, svc domain.Service, m mount.Mount) {
 	target := fmt.Sprintf("tcp://127.0.0.1:%d", probePort(svc))
 	if svc.HealthPath != "" {
 		target = fmt.Sprintf("http://127.0.0.1:%d%s", svc.Port, svc.HealthPath)
@@ -179,7 +179,7 @@ func withProbe(spec *client.ContainerCreateOptions, svc store.Service, m mount.M
 // healthConfig is an app's own healthcheck. Without a start period, it
 // gets the probe's: checked every second while starting, so a new replica's
 // readiness is noticed at once rather than after the first interval.
-func healthConfig(h store.Healthcheck) *container.HealthConfig {
+func healthConfig(h domain.Healthcheck) *container.HealthConfig {
 	if h.Test[0] == "NONE" {
 		return &container.HealthConfig{Test: []string{"NONE"}}
 	}
@@ -201,8 +201,8 @@ func healthConfig(h store.Healthcheck) *container.HealthConfig {
 // nil when the image or the service has its own healthcheck, the service has
 // no TCP port, or
 // the probe can't run on that server.
-func (c *Core) probeFor(ctx context.Context, svc store.Service) (*mount.Mount, error) {
-	if svc.Kind != store.ServiceKindApp || probePort(svc) == 0 || svc.Healthcheck.Set() {
+func (c *Core) probeFor(ctx context.Context, svc domain.Service) (*mount.Mount, error) {
+	if svc.Kind != domain.ServiceKindApp || probePort(svc) == 0 || svc.Healthcheck.Set() {
 		return nil, nil
 	}
 	has, err := imageHealthcheck(ctx, c.dockerFor(svc.ServerID), svc.Image, svc.Runtime.Platform)
@@ -213,7 +213,7 @@ func (c *Core) probeFor(ctx context.Context, svc store.Service) (*mount.Mount, e
 }
 
 // replicaSpec is containerSpec plus the injected health probe, if any.
-func replicaSpec(project store.Project, svc store.Service, src envSources, deployID string, replica int, probe *mount.Mount, rt route) client.ContainerCreateOptions {
+func replicaSpec(project domain.Project, svc domain.Service, src envSources, deployID string, replica int, probe *mount.Mount, rt route) client.ContainerCreateOptions {
 	spec := containerSpec(project, svc, src, deployID, replica, rt)
 	if probe != nil {
 		withProbe(&spec, svc, *probe)

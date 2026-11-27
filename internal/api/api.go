@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 type API struct {
@@ -490,12 +490,12 @@ func (a *API) failure(err error) (int, string) {
 		return http.StatusForbidden, reason(err, core.ErrForbidden)
 	case errors.Is(err, core.ErrInvalid):
 		return http.StatusBadRequest, reason(err, core.ErrInvalid)
-	case errors.Is(err, store.ErrNotFound):
+	case errors.Is(err, domain.ErrNotFound):
 		return http.StatusNotFound, "not found"
-	case errors.Is(err, store.ErrConflict):
+	case errors.Is(err, domain.ErrConflict):
 		msg := "already exists (name or domain taken)"
-		if strings.Contains(err.Error(), store.ErrConflict.Error()+": ") {
-			msg = reason(err, store.ErrConflict) // core's own explanation
+		if strings.Contains(err.Error(), domain.ErrConflict.Error()+": ") {
+			msg = reason(err, domain.ErrConflict) // core's own explanation
 		}
 		return http.StatusConflict, msg
 	case errors.Is(err, core.ErrBusy):

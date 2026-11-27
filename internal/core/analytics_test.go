@@ -7,15 +7,17 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestSetAnalyticsValidation(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{Domain: "manager.example.com", Traefik: config.Traefik{Enabled: true}})
-	p, _ := c.store.CreateProject(ctx, store.Project{Name: "shop"})
-	c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1,
-		Domain: "shop.example.com", Port: 80})
+	p, _ := c.store.CreateProject(ctx, domain.Project{Name: "shop"})
+	if _, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1,
+		Domain: "shop.example.com", Port: 80}); err != nil {
+		t.Fatal(err)
+	}
 	for _, c2 := range []struct {
 		in   AnalyticsSettings
 		want string
@@ -36,7 +38,7 @@ func TestSetAnalyticsValidation(t *testing.T) {
 }
 
 func TestServiceAnalyticsFlag(t *testing.T) {
-	app := store.Service{Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1, Analytics: true}
+	app := domain.Service{Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1, Analytics: true}
 	if err := validateService(app); err == nil || !strings.Contains(err.Error(), "set a domain") {
 		t.Errorf("without a domain: %v", err)
 	}
@@ -47,14 +49,14 @@ func TestServiceAnalyticsFlag(t *testing.T) {
 
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	if err := c.validateIn(ctx, app, store.Project{Name: "shop-pr1", ParentID: "01SHOP", ServerID: store.LocalServerID}, nil); err == nil ||
+	if err := c.validateIn(ctx, app, domain.Project{Name: "shop-pr1", ParentID: "01SHOP", ServerID: domain.LocalServerID}, nil); err == nil ||
 		!strings.Contains(err.Error(), "previews") {
 		t.Errorf("preview: %v", err)
 	}
-	if err := c.validateIn(ctx, app, store.Project{Name: "shop", ServerID: store.LocalServerID}, nil); err != nil {
+	if err := c.validateIn(ctx, app, domain.Project{Name: "shop", ServerID: domain.LocalServerID}, nil); err != nil {
 		t.Errorf("local project: %v", err)
 	}
-	remote := store.Project{Name: "far", ServerID: "01REMOTE"}
+	remote := domain.Project{Name: "far", ServerID: "01REMOTE"}
 	if err := c.validateIn(ctx, app, remote, nil); err == nil || !strings.Contains(err.Error(), "manager's server") {
 		t.Errorf("remote server: %v", err)
 	}
@@ -80,7 +82,7 @@ func TestOwnImageRef(t *testing.T) {
 func TestAnalyticsSince(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}

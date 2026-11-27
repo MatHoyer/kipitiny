@@ -10,7 +10,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 var cronParser = cron.NewParser(
@@ -51,7 +51,7 @@ type ScheduleInput struct {
 }
 
 type ScheduleView struct {
-	store.BackupSchedule
+	domain.BackupSchedule
 	NextRun *time.Time `json:"nextRun,omitempty"`
 }
 
@@ -134,7 +134,7 @@ func (c *Core) runScheduledBackup(scheduleID string) {
 			return // deleted or disabled meanwhile
 		}
 		done := make(chan struct{})
-		if sc.Kind == store.BackupKindManager {
+		if sc.Kind == domain.BackupKindManager {
 			_, err = c.startManagerBackup(ctx, sc.TargetID, sc.ID, done)
 		} else {
 			_, err = c.startBackup(ctx, sc.ServiceID, sc.TargetID, sc.Database, sc.ID, done)
@@ -179,7 +179,7 @@ func (c *Core) applyRetention(scheduleID string) {
 	if err != nil {
 		return
 	}
-	ok, err := c.store.ListBackups(ctx, store.BackupFilter{ScheduleID: sc.ID, Status: store.OpSucceeded})
+	ok, err := c.store.ListBackups(ctx, domain.BackupFilter{ScheduleID: sc.ID, Status: domain.OpSucceeded})
 	if err != nil {
 		log.Error("retention: list backups", "err", err)
 		return
@@ -195,7 +195,7 @@ func (c *Core) applyRetention(scheduleID string) {
 			log.Info("retention: pruned backup", "backup", b.ID, "created", b.CreatedAt)
 		}
 	}
-	failed, err := c.store.ListBackups(ctx, store.BackupFilter{ScheduleID: sc.ID, Status: store.OpFailed})
+	failed, err := c.store.ListBackups(ctx, domain.BackupFilter{ScheduleID: sc.ID, Status: domain.OpFailed})
 	if err != nil {
 		return
 	}
@@ -218,7 +218,7 @@ func (c *Core) ListBackupSchedules(ctx context.Context, serviceID string) ([]Sch
 	return views, nil
 }
 
-func (c *Core) scheduleView(sc store.BackupSchedule) ScheduleView {
+func (c *Core) scheduleView(sc domain.BackupSchedule) ScheduleView {
 	v := ScheduleView{BackupSchedule: sc}
 	c.sched.mu.Lock()
 	defer c.sched.mu.Unlock()
@@ -242,7 +242,7 @@ func (c *Core) CreateBackupSchedule(ctx context.Context, serviceID string, in Sc
 	if err != nil {
 		return ScheduleView{}, err
 	}
-	return c.createSchedule(ctx, store.BackupSchedule{Kind: kind, ServiceID: serviceID}, in)
+	return c.createSchedule(ctx, domain.BackupSchedule{Kind: kind, ServiceID: serviceID}, in)
 }
 
 // ListManagerSchedules lists the schedules backing up the manager itself.
@@ -253,7 +253,7 @@ func (c *Core) ListManagerSchedules(ctx context.Context) ([]ScheduleView, error)
 	}
 	views := []ScheduleView{}
 	for _, sc := range scs {
-		if sc.Kind == store.BackupKindManager {
+		if sc.Kind == domain.BackupKindManager {
 			views = append(views, c.scheduleView(sc))
 		}
 	}
@@ -262,10 +262,10 @@ func (c *Core) ListManagerSchedules(ctx context.Context) ([]ScheduleView, error)
 
 // CreateManagerSchedule schedules backups of the manager's own state.
 func (c *Core) CreateManagerSchedule(ctx context.Context, in ScheduleInput) (ScheduleView, error) {
-	return c.createSchedule(ctx, store.BackupSchedule{Kind: store.BackupKindManager}, in)
+	return c.createSchedule(ctx, domain.BackupSchedule{Kind: domain.BackupKindManager}, in)
 }
 
-func (c *Core) createSchedule(ctx context.Context, sc store.BackupSchedule, in ScheduleInput) (ScheduleView, error) {
+func (c *Core) createSchedule(ctx context.Context, sc domain.BackupSchedule, in ScheduleInput) (ScheduleView, error) {
 	if err := c.applyScheduleInput(ctx, &sc, in); err != nil {
 		return ScheduleView{}, err
 	}
@@ -303,7 +303,7 @@ func (c *Core) DeleteBackupSchedule(ctx context.Context, id string) error {
 	return c.reloadSchedules(ctx)
 }
 
-func (c *Core) applyScheduleInput(ctx context.Context, sc *store.BackupSchedule, in ScheduleInput) error {
+func (c *Core) applyScheduleInput(ctx context.Context, sc *domain.BackupSchedule, in ScheduleInput) error {
 	in.Cron = strings.TrimSpace(in.Cron)
 	if _, err := cronParser.Parse(in.Cron); err != nil {
 		return fmt.Errorf("%w: schedule: %v", ErrInvalid, err)
@@ -314,15 +314,15 @@ func (c *Core) applyScheduleInput(ctx context.Context, sc *store.BackupSchedule,
 		}
 	}
 	if in.TargetID == "" {
-		in.TargetID = store.LocalTargetID
+		in.TargetID = domain.LocalTargetID
 	}
 	target, err := c.store.GetBackupTarget(ctx, in.TargetID)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, domain.ErrNotFound) {
 		return fmt.Errorf("%w: unknown backup target", ErrInvalid)
 	} else if err != nil {
 		return err
 	}
-	if sc.Kind == store.BackupKindManager {
+	if sc.Kind == domain.BackupKindManager {
 		if err := managerTargetOK(target); err != nil {
 			return err
 		}
@@ -340,8 +340,8 @@ func (c *Core) applyScheduleInput(ctx context.Context, sc *store.BackupSchedule,
 
 // checkScheduleDatabase checks a schedule's database against the running
 // instance. Its own database needs no check (nor a running service).
-func (c *Core) checkScheduleDatabase(ctx context.Context, sc store.BackupSchedule, name string) error {
-	if sc.Kind != store.BackupKindPostgres {
+func (c *Core) checkScheduleDatabase(ctx context.Context, sc domain.BackupSchedule, name string) error {
+	if sc.Kind != domain.BackupKindPostgres {
 		return fmt.Errorf("%w: only a PostgreSQL service has databases to pick", ErrInvalid)
 	}
 	svc, err := c.store.GetService(ctx, sc.ServiceID)

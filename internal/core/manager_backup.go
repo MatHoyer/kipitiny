@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/storage"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // managerLockID serializes manager backups like a service.
@@ -18,15 +18,15 @@ const managerLockID = "manager"
 
 // BackupManager snapshots the manager's own state (VACUUM INTO) and uploads
 // it to a target in the background.
-func (c *Core) BackupManager(ctx context.Context, targetID string) (store.Backup, error) {
+func (c *Core) BackupManager(ctx context.Context, targetID string) (domain.Backup, error) {
 	return c.startManagerBackup(ctx, targetID, "", nil)
 }
 
 // managerTargetOK refuses unencrypted remote targets for manager backups:
 // the snapshot holds every credential kipitiny knows (SSH key, registry and
 // cloud tokens, TOTP secret, other targets' age identities) in plaintext.
-func managerTargetOK(t store.BackupTarget) error {
-	if t.Kind != store.BackupTargetLocal && t.AgeRecipient == "" {
+func managerTargetOK(t domain.BackupTarget) error {
+	if t.Kind != domain.BackupTargetLocal && t.AgeRecipient == "" {
 		return fmt.Errorf("%w: manager backups hold every credential; use local disk or a target with encryption", ErrInvalid)
 	}
 	return nil
@@ -34,39 +34,39 @@ func managerTargetOK(t store.BackupTarget) error {
 
 // startManagerBackup starts a manager backup; done, if set, is closed when it
 // finishes. Backups made by a schedule trigger its retention on success.
-func (c *Core) startManagerBackup(ctx context.Context, targetID, scheduleID string, done chan<- struct{}) (store.Backup, error) {
+func (c *Core) startManagerBackup(ctx context.Context, targetID, scheduleID string, done chan<- struct{}) (domain.Backup, error) {
 	if targetID == "" {
-		targetID = store.LocalTargetID
+		targetID = domain.LocalTargetID
 	}
 	target, err := c.store.GetBackupTarget(ctx, targetID)
-	if errors.Is(err, store.ErrNotFound) {
-		return store.Backup{}, fmt.Errorf("%w: unknown backup target", ErrInvalid)
+	if errors.Is(err, domain.ErrNotFound) {
+		return domain.Backup{}, fmt.Errorf("%w: unknown backup target", ErrInvalid)
 	}
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	if err := managerTargetOK(target); err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	st, err := c.openStorage(target)
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	unlock, err := c.lockService(managerLockID)
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
-	b, err := c.store.CreateBackup(ctx, store.Backup{
-		Kind:        store.BackupKindManager,
+	b, err := c.store.CreateBackup(ctx, domain.Backup{
+		Kind:        domain.BackupKindManager,
 		ServiceName: "manager",
 		TargetID:    target.ID,
 		ScheduleID:  scheduleID,
 		ObjectKey:   objectKey("_manager/", time.Now().UTC(), ".db", target),
-		Status:      store.OpRunning,
+		Status:      domain.OpRunning,
 	})
 	if err != nil {
 		unlock()
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	if err := c.goBackground(func() {
 		defer unlock()
@@ -78,14 +78,14 @@ func (c *Core) startManagerBackup(ctx context.Context, targetID, scheduleID stri
 		}
 	}); err != nil {
 		unlock()
-		b.Status, b.Error = store.OpFailed, err.Error()
+		b.Status, b.Error = domain.OpFailed, err.Error()
 		_ = c.store.FinishBackup(ctx, b)
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	return b, nil
 }
 
-func (c *Core) runManagerBackup(st storage.Storage, target store.BackupTarget, b store.Backup) bool {
+func (c *Core) runManagerBackup(st storage.Storage, target domain.BackupTarget, b domain.Backup) bool {
 	ctx, cancel := context.WithTimeout(c.bg, time.Hour)
 	defer cancel()
 	defer c.steps.done(backupKey(b.ID))
@@ -93,9 +93,9 @@ func (c *Core) runManagerBackup(st storage.Storage, target store.BackupTarget, b
 
 	err := c.snapshotTo(ctx, st, target, &b)
 	b.DurationMS = time.Since(start).Milliseconds()
-	b.Status = store.OpSucceeded
+	b.Status = domain.OpSucceeded
 	if err != nil {
-		b.Status, b.Error, b.SizeBytes, b.SHA256 = store.OpFailed, err.Error(), 0, ""
+		b.Status, b.Error, b.SizeBytes, b.SHA256 = domain.OpFailed, err.Error(), 0, ""
 		_ = st.Delete(context.WithoutCancel(ctx), b.ObjectKey)
 		c.log.Warn("manager backup failed", "err", err)
 	}
@@ -103,10 +103,10 @@ func (c *Core) runManagerBackup(st storage.Storage, target store.BackupTarget, b
 		c.log.Error("cannot record manager backup", "err", err)
 	}
 	c.notifyBackup(b, target, "")
-	return b.Status == store.OpSucceeded
+	return b.Status == domain.OpSucceeded
 }
 
-func (c *Core) snapshotTo(ctx context.Context, st storage.Storage, target store.BackupTarget, b *store.Backup) error {
+func (c *Core) snapshotTo(ctx context.Context, st storage.Storage, target domain.BackupTarget, b *domain.Backup) error {
 	dir := filepath.Join(c.cfg.DataDir, "tmp")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -142,12 +142,12 @@ func (c *Core) seedManagerSchedule(ctx context.Context) error {
 		in := ScheduleInput{TargetID: cfg.TargetID, Cron: cfg.Cron, KeepLast: cfg.Keep, Enabled: true}
 		if t, err := c.store.GetBackupTarget(ctx, in.TargetID); err != nil {
 			c.log.Warn("KIPITINY_MANAGER_BACKUP_TARGET not found, using local disk", "target", in.TargetID)
-			in.TargetID = store.LocalTargetID
+			in.TargetID = domain.LocalTargetID
 		} else if err := managerTargetOK(t); err != nil {
 			c.log.Warn("KIPITINY_MANAGER_BACKUP_TARGET is not encrypted, using local disk", "target", in.TargetID)
-			in.TargetID = store.LocalTargetID
+			in.TargetID = domain.LocalTargetID
 		}
-		sc := store.BackupSchedule{Kind: store.BackupKindManager}
+		sc := domain.BackupSchedule{Kind: domain.BackupKindManager}
 		if err := c.applyScheduleInput(ctx, &sc, in); err != nil {
 			return fmt.Errorf("KIPITINY_MANAGER_BACKUP_CRON: %w", err)
 		}

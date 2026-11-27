@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/storage"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // sidecarExt names a backup's sidecar: <object key>.json, the backup's
@@ -18,10 +18,10 @@ const sidecarExt = ".json"
 
 // writeSidecar stores b's record next to it. Manager backups get none: they
 // belong to the manager that made them.
-func writeSidecar(ctx context.Context, st storage.Storage, target store.BackupTarget, b store.Backup) error {
+func writeSidecar(ctx context.Context, st storage.Storage, target domain.BackupTarget, b domain.Backup) error {
 	// What belongs to this manager (IDs, schedule, verification) stays out.
 	b.ID, b.ServiceID, b.ProjectID, b.TargetID, b.ScheduleID = "", "", "", "", ""
-	b.Verification = store.Verification{}
+	b.Verification = domain.Verification{}
 	data, err := json.Marshal(b)
 	if err != nil {
 		return err
@@ -45,28 +45,28 @@ func writeSidecar(ctx context.Context, st storage.Storage, target store.BackupTa
 // readSidecar reads the record stored next to a backup, decrypting it with
 // identity when it is encrypted. Its ObjectKey is the one the other manager
 // used, relative to its own prefix.
-func readSidecar(ctx context.Context, st storage.Storage, key, identity string) (store.Backup, error) {
+func readSidecar(ctx context.Context, st storage.Storage, key, identity string) (domain.Backup, error) {
 	rc, err := st.Get(ctx, key)
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	defer rc.Close()
 	data, err := io.ReadAll(io.LimitReader(rc, 1<<20))
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	if bytes.HasPrefix(data, []byte("age-encryption.org/")) {
 		r, err := decryptFrom(bytes.NewReader(data), identity)
 		if err != nil {
-			return store.Backup{}, err
+			return domain.Backup{}, err
 		}
 		if data, err = io.ReadAll(r); err != nil {
-			return store.Backup{}, fmt.Errorf("decrypt: %w", err)
+			return domain.Backup{}, fmt.Errorf("decrypt: %w", err)
 		}
 	}
-	var b store.Backup
+	var b domain.Backup
 	if err := json.Unmarshal(data, &b); err != nil {
-		return store.Backup{}, fmt.Errorf("not a backup record: %w", err)
+		return domain.Backup{}, fmt.Errorf("not a backup record: %w", err)
 	}
 	return b, nil
 }

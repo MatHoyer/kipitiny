@@ -25,8 +25,8 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const (
@@ -48,23 +48,23 @@ type DeployOptions struct {
 // Deploy starts a deployment of the service's current configuration in the
 // background and returns immediately. Progress goes to the deployment's log.
 // With a tag or digest, the service keeps that image once deployed.
-func (c *Core) Deploy(ctx context.Context, serviceID string, opts DeployOptions) (store.Deployment, error) {
+func (c *Core) Deploy(ctx context.Context, serviceID string, opts DeployOptions) (domain.Deployment, error) {
 	req := deployRequest{commit: strings.ToLower(strings.TrimSpace(opts.Commit))}
 	if req.commit != "" && !commitRe.MatchString(req.commit) {
-		return store.Deployment{}, fmt.Errorf("%w: commit must be a hex SHA", ErrInvalid)
+		return domain.Deployment{}, fmt.Errorf("%w: commit must be a hex SHA", ErrInvalid)
 	}
 	if opts.Tag != "" || opts.Digest != "" {
 		svc, err := c.store.GetService(ctx, serviceID)
 		if err != nil {
-			return store.Deployment{}, err
+			return domain.Deployment{}, err
 		}
 		// A database's version changes only through its settings: a new major
 		// can't start on the old data directory.
-		if svc.Kind != store.ServiceKindApp {
-			return store.Deployment{}, fmt.Errorf("%w: only apps deploy a tag or digest", ErrInvalid)
+		if svc.Kind != domain.ServiceKindApp {
+			return domain.Deployment{}, fmt.Errorf("%w: only apps deploy a tag or digest", ErrInvalid)
 		}
 		if req.image, err = retagImage(svc.Image, opts.Tag, opts.Digest); err != nil {
-			return store.Deployment{}, err
+			return domain.Deployment{}, err
 		}
 		req.keep = true
 	}
@@ -134,61 +134,61 @@ type deployRequest struct {
 
 // Rollback redeploys the image of an earlier successful deployment (the one
 // before the current, when deploymentID is empty) with the current settings.
-func (c *Core) Rollback(ctx context.Context, serviceID, deploymentID string) (store.Deployment, error) {
+func (c *Core) Rollback(ctx context.Context, serviceID, deploymentID string) (domain.Deployment, error) {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
-		return store.Deployment{}, err
+		return domain.Deployment{}, err
 	}
 	deps, err := c.store.ListDeployments(ctx, serviceID, 50)
 	if err != nil {
-		return store.Deployment{}, err
+		return domain.Deployment{}, err
 	}
 	for _, d := range deps {
-		if d.Status != store.DeploymentSucceeded {
+		if d.Status != domain.DeploymentSucceeded {
 			continue
 		}
 		if (deploymentID == "" && d.ID != svc.CurrentDeploymentID) || d.ID == deploymentID {
 			return c.startDeploy(ctx, serviceID, deployRequest{image: d.Image, commit: d.GitCommit})
 		}
 	}
-	return store.Deployment{}, fmt.Errorf("%w: no earlier successful deployment to roll back to", ErrInvalid)
+	return domain.Deployment{}, fmt.Errorf("%w: no earlier successful deployment to roll back to", ErrInvalid)
 }
 
-func (c *Core) startDeploy(ctx context.Context, serviceID string, req deployRequest) (store.Deployment, error) {
+func (c *Core) startDeploy(ctx context.Context, serviceID string, req deployRequest) (domain.Deployment, error) {
 	unlock, err := c.lockService(serviceID)
 	if err != nil {
-		return store.Deployment{}, err
+		return domain.Deployment{}, err
 	}
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
 		unlock()
-		return store.Deployment{}, err
+		return domain.Deployment{}, err
 	}
 	if svc.Preview == "only" {
 		unlock()
-		return store.Deployment{}, errPreviewOnly(svc)
+		return domain.Deployment{}, errPreviewOnly(svc)
 	}
 	project, err := c.store.GetProject(ctx, svc.ProjectID)
 	if err != nil {
 		unlock()
-		return store.Deployment{}, err
+		return domain.Deployment{}, err
 	}
 	others, err := c.store.ListServices(ctx, svc.ProjectID)
 	if err != nil {
 		unlock()
-		return store.Deployment{}, err
+		return domain.Deployment{}, err
 	}
 	if err := checkRefs(refEnv(svc), envSources{project: project.Env, dbs: databasesOf(others), apps: c.appURLs(others)}); err != nil {
 		unlock()
-		return store.Deployment{}, err
+		return domain.Deployment{}, err
 	}
 	if req.image != "" {
 		svc.Image = req.image
 	}
 	image := svc.Image
-	d := store.Deployment{
+	d := domain.Deployment{
 		ServiceID: svc.ID,
-		Status:    store.DeploymentRunning,
+		Status:    domain.DeploymentRunning,
 		Image:     image,
 		GitCommit: req.commit,
 		Config:    svc,
@@ -199,7 +199,7 @@ func (c *Core) startDeploy(ctx context.Context, serviceID string, req deployRequ
 	dep, err := c.store.CreateDeployment(ctx, d)
 	if err != nil {
 		unlock()
-		return store.Deployment{}, err
+		return domain.Deployment{}, err
 	}
 
 	if err := c.goBackground(func() {
@@ -207,13 +207,13 @@ func (c *Core) startDeploy(ctx context.Context, serviceID string, req deployRequ
 		c.runDeploy(project, svc, dep, req)
 	}); err != nil {
 		unlock()
-		_ = c.store.FinishDeployment(ctx, dep.ID, store.DeploymentFailed, err.Error())
-		return store.Deployment{}, err
+		_ = c.store.FinishDeployment(ctx, dep.ID, domain.DeploymentFailed, err.Error())
+		return domain.Deployment{}, err
 	}
 	return dep, nil
 }
 
-func (c *Core) runDeploy(project store.Project, svc store.Service, dep store.Deployment, req deployRequest) {
+func (c *Core) runDeploy(project domain.Project, svc domain.Service, dep domain.Deployment, req deployRequest) {
 	ctx, cancel := context.WithTimeout(c.bg, deployTimeout)
 	defer cancel()
 	log := c.log.With("deploy", dep.ID, "project", project.Name, "service", svc.Name)
@@ -232,9 +232,9 @@ func (c *Core) runDeploy(project store.Project, svc store.Service, dep store.Dep
 	start := time.Now()
 	err := c.deploy(ctx, project, svc, dep, out, logf)
 
-	status, msg := store.DeploymentSucceeded, ""
+	status, msg := domain.DeploymentSucceeded, ""
 	if err != nil {
-		status, msg = store.DeploymentFailed, err.Error()
+		status, msg = domain.DeploymentFailed, err.Error()
 		if errors.Is(ctx.Err(), context.Canceled) {
 			msg = "interrupted by manager shutdown"
 		}
@@ -245,11 +245,11 @@ func (c *Core) runDeploy(project store.Project, svc store.Service, dep store.Dep
 		log.Info("deployment succeeded")
 	}
 	// The deploy context may be cancelled; recording the outcome must not be.
-	if err := c.store.FinishDeployment(context.WithoutCancel(ctx), dep.ID, status, msg); err != nil && !errors.Is(err, store.ErrNotFound) {
+	if err := c.store.FinishDeployment(context.WithoutCancel(ctx), dep.ID, status, msg); err != nil && !errors.Is(err, domain.ErrNotFound) {
 		log.Error("cannot record deployment result", "err", err)
 	}
 	if err == nil && req.keep {
-		if err := c.store.SetServiceImage(context.WithoutCancel(ctx), svc.ID, req.image); err != nil && !errors.Is(err, store.ErrNotFound) {
+		if err := c.store.SetServiceImage(context.WithoutCancel(ctx), svc.ID, req.image); err != nil && !errors.Is(err, domain.ErrNotFound) {
 			log.Error("cannot record the deployed image", "err", err)
 		}
 	}
@@ -271,7 +271,7 @@ func (c *Core) runDeploy(project store.Project, svc store.Service, dep store.Dep
 	c.notify(e, "/services/"+svc.ID, "")
 }
 
-func (c *Core) deploy(ctx context.Context, project store.Project, svc store.Service, dep store.Deployment,
+func (c *Core) deploy(ctx context.Context, project domain.Project, svc domain.Service, dep domain.Deployment,
 	out io.Writer, logf func(string, ...any)) error {
 
 	dk := c.dockerFor(svc.ServerID)
@@ -383,7 +383,7 @@ func pinDigest(image string, repoDigests []string) string {
 
 // recreate replaces a database's container in place: its volume can't be
 // shared by two servers, so a short restart is unavoidable.
-func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Service, src envSources, dep store.Deployment,
+func (c *Core) recreate(ctx context.Context, project domain.Project, svc domain.Service, src envSources, dep domain.Deployment,
 	logf func(string, ...any)) error {
 
 	dk := c.dockerFor(svc.ServerID)
@@ -416,8 +416,8 @@ func (c *Core) recreate(ctx context.Context, project store.Project, svc store.Se
 // rollout is a blue-green deploy: every new replica starts next to the old
 // ones and must become ready before any old one stops. If one fails, all new
 // containers are removed and the old version keeps serving.
-func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Service, src envSources,
-	dep store.Deployment, out io.Writer, logf func(string, ...any)) error {
+func (c *Core) rollout(ctx context.Context, project domain.Project, svc domain.Service, src envSources,
+	dep domain.Deployment, out io.Writer, logf func(string, ...any)) error {
 
 	dk := c.dockerFor(svc.ServerID)
 	active, err := c.removeRetired(ctx, svc, logf)
@@ -498,7 +498,7 @@ func (c *Core) rollout(ctx context.Context, project store.Project, svc store.Ser
 // removeRetired removes the service's containers retired by an earlier
 // deploy (kept for their logs) or left by a failed one, and returns the
 // active ones.
-func (c *Core) removeRetired(ctx context.Context, svc store.Service, logf func(string, ...any)) ([]container.Summary, error) {
+func (c *Core) removeRetired(ctx context.Context, svc domain.Service, logf func(string, ...any)) ([]container.Summary, error) {
 	dk := c.dockerFor(svc.ServerID)
 	existing, err := c.serviceContainers(ctx, svc)
 	if err != nil {
@@ -522,8 +522,8 @@ func (c *Core) removeRetired(ctx context.Context, svc store.Service, logf func(s
 // the same port, so the old replicas stop before the new one starts, a short
 // downtime. They are kept stopped for their logs; if the new replica doesn't
 // become ready, it is removed and they start again.
-func (c *Core) swap(ctx context.Context, project store.Project, svc store.Service, src envSources,
-	dep store.Deployment, out io.Writer, logf func(string, ...any)) error {
+func (c *Core) swap(ctx context.Context, project domain.Project, svc domain.Service, src envSources,
+	dep domain.Deployment, out io.Writer, logf func(string, ...any)) error {
 
 	dk := c.dockerFor(svc.ServerID)
 	active, err := c.removeRetired(ctx, svc, logf)
@@ -590,14 +590,14 @@ func (c *Core) swap(ctx context.Context, project store.Project, svc store.Servic
 
 // isActive reports whether a container belongs to the deployment serving
 // traffic. Containers from before deployments were tracked count while running.
-func isActive(ct container.Summary, svc store.Service) bool {
+func isActive(ct container.Summary, svc domain.Service) bool {
 	if svc.CurrentDeploymentID == "" {
 		return ct.State == container.StateRunning
 	}
 	return ct.Labels[docker.LabelDeploy] == svc.CurrentDeploymentID
 }
 
-func readinessMode(svc store.Service) string {
+func readinessMode(svc domain.Service) string {
 	switch {
 	case svc.Runtime.Restart == "no":
 		return "a job: exiting with code 0"
@@ -615,7 +615,7 @@ func readinessMode(svc store.Service) string {
 
 // containerSpec builds the container for one replica. src resolves env
 // references.
-func containerSpec(project store.Project, svc store.Service, src envSources, deployID string, replica int, rt route) client.ContainerCreateOptions {
+func containerSpec(project domain.Project, svc domain.Service, src envSources, deployID string, replica int, rt route) client.ContainerCreateOptions {
 	labels := map[string]string{
 		docker.LabelManaged: "true",
 		docker.LabelProject: project.ID,
@@ -715,14 +715,14 @@ func deploySuffix(deployID string) string {
 	return id[max(0, len(id)-6):]
 }
 
-func (c *Core) ListDeployments(ctx context.Context, serviceID string) ([]store.Deployment, error) {
+func (c *Core) ListDeployments(ctx context.Context, serviceID string) ([]domain.Deployment, error) {
 	if _, err := c.store.GetService(ctx, serviceID); err != nil {
 		return nil, err
 	}
 	return c.store.ListDeployments(ctx, serviceID, 50)
 }
 
-func (c *Core) GetDeployment(ctx context.Context, id string) (store.Deployment, error) {
+func (c *Core) GetDeployment(ctx context.Context, id string) (domain.Deployment, error) {
 	return c.store.GetDeployment(ctx, id)
 }
 

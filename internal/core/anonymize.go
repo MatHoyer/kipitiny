@@ -12,9 +12,9 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/storage"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Previews seeded with anonymized data restore an anonymized copy of the
@@ -25,26 +25,26 @@ import (
 // original. Raw data never reaches a preview container.
 
 // seedable reports whether a backup can seed a preview's database.
-func seedable(b store.Backup) bool {
-	return b.Kind == store.BackupKindPostgres || b.Kind == store.BackupKindDump
+func seedable(b domain.Backup) bool {
+	return b.Kind == domain.BackupKindPostgres || b.Kind == domain.BackupKindDump
 }
 
 // latestSeedable returns the service's latest successful backup a preview
 // can be seeded with.
-func (c *Core) latestSeedable(ctx context.Context, serviceID string) (store.Backup, bool, error) {
-	bs, err := c.store.ListBackups(ctx, store.BackupFilter{ServiceID: serviceID, Status: store.OpSucceeded, Limit: 20})
+func (c *Core) latestSeedable(ctx context.Context, serviceID string) (domain.Backup, bool, error) {
+	bs, err := c.store.ListBackups(ctx, domain.BackupFilter{ServiceID: serviceID, Status: domain.OpSucceeded, Limit: 20})
 	if err != nil {
-		return store.Backup{}, false, err
+		return domain.Backup{}, false, err
 	}
 	i := slices.IndexFunc(bs, seedable)
 	if i < 0 {
-		return store.Backup{}, false, nil
+		return domain.Backup{}, false, nil
 	}
 	return bs[i], true, nil
 }
 
 // anonymizeSalt returns the project's salt, making one on first use.
-func (c *Core) anonymizeSalt(ctx context.Context, projectID string) (store.PreviewSettings, error) {
+func (c *Core) anonymizeSalt(ctx context.Context, projectID string) (domain.PreviewSettings, error) {
 	ps, err := c.previewSettings(ctx, projectID)
 	if err != nil || ps.Salt != "" {
 		return ps, err
@@ -59,7 +59,7 @@ func (c *Core) anonymizeSalt(ctx context.Context, projectID string) (store.Previ
 // retried with force (or with a new backup or rules).
 func (c *Core) refreshAnonymized(ctx context.Context, projectID string, force bool) error {
 	ps, err := c.previewSettings(ctx, projectID)
-	if err != nil || ps.SeedMode != store.SeedAnonymized {
+	if err != nil || ps.SeedMode != domain.SeedAnonymized {
 		return err
 	}
 	svcs, err := c.store.ListServices(ctx, projectID)
@@ -101,59 +101,59 @@ func (c *Core) logAnonymizeErr(err error) {
 // anonymizeLatest starts the anonymized copy of svc's latest backup with
 // its current rules, unless one exists (a failed one too, without force).
 // It returns the copy, made or found.
-func (c *Core) anonymizeLatest(ctx context.Context, svc store.Service, force bool) (store.Backup, error) {
+func (c *Core) anonymizeLatest(ctx context.Context, svc domain.Service, force bool) (domain.Backup, error) {
 	c.anonymizeMu.Lock() // check-then-create: one copy per backup and rules
 	defer c.anonymizeMu.Unlock()
 	src, ok, err := c.latestSeedable(ctx, svc.ID)
 	if err != nil || !ok {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	ps, err := c.anonymizeSalt(ctx, svc.ProjectID)
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	hash := svc.Anonymize.Hash(ps.Salt)
-	copies, err := c.store.ListBackups(ctx, store.BackupFilter{Anonymized: true, SourceID: src.ID})
+	copies, err := c.store.ListBackups(ctx, domain.BackupFilter{Anonymized: true, SourceID: src.ID})
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	for _, cp := range copies {
 		// A restart's interruption isn't the rules' fault: try again.
-		retry := cp.Status == store.OpFailed && (force || strings.HasPrefix(cp.Error, "interrupted by manager"))
+		retry := cp.Status == domain.OpFailed && (force || strings.HasPrefix(cp.Error, "interrupted by manager"))
 		if cp.RulesHash == hash && !retry {
 			return cp, nil
 		}
 	}
 	target, err := c.store.GetBackupTarget(ctx, src.TargetID)
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	st, err := c.openStorage(target)
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	cp := src
-	cp.ID, cp.ScheduleID, cp.Error, cp.Verification = "", "", "", store.Verification{}
-	cp.SourceID, cp.RulesHash, cp.Status, cp.CreatedAt, cp.FinishedAt = src.ID, hash, store.OpRunning, time.Time{}, nil
+	cp.ID, cp.ScheduleID, cp.Error, cp.Verification = "", "", "", domain.Verification{}
+	cp.SourceID, cp.RulesHash, cp.Status, cp.CreatedAt, cp.FinishedAt = src.ID, hash, domain.OpRunning, time.Time{}, nil
 	cp.ObjectKey = anonymizedKey(src, hash, target)
 	if cp, err = c.store.CreateBackup(ctx, cp); err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	rules, mongoDB := svc.Anonymize, svc.Env[mongoDatabase]
 	if err := c.goBackground(func() { c.runAnonymize(src, cp, rules, ps.Salt, mongoDB, st, target) }); err != nil {
-		cp.Status, cp.Error = store.OpFailed, err.Error()
+		cp.Status, cp.Error = domain.OpFailed, err.Error()
 		_ = c.store.FinishBackup(context.WithoutCancel(ctx), cp)
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	return cp, nil
 }
 
 // anonymizedKey stores a copy next to its backup:
 // <backup key>-<rules hash>.anon<ext>[.age].
-func anonymizedKey(src store.Backup, hash string, target store.BackupTarget) string {
+func anonymizedKey(src domain.Backup, hash string, target domain.BackupTarget) string {
 	key := strings.TrimSuffix(src.ObjectKey, ".age")
 	ext := ".dump"
-	if src.Kind == store.BackupKindDump {
+	if src.Kind == domain.BackupKindDump {
 		ext = dumpExt(src.ServiceKind)
 	}
 	key = strings.TrimSuffix(key, ext) + "-" + hash[:8] + ".anon" + ext
@@ -167,7 +167,7 @@ func anonymizedKey(src store.Backup, hash string, target store.BackupTarget) str
 // database MongoDB rules apply to). Once it succeeded,
 // the service's older copies go; a failed one stays to tell why seeding is
 // refused, and the previous good copy keeps seeding previews.
-func (c *Core) runAnonymize(src, cp store.Backup, rules anonymize.Rules, salt, mongoDB string, st storage.Storage, target store.BackupTarget) {
+func (c *Core) runAnonymize(src, cp domain.Backup, rules anonymize.Rules, salt, mongoDB string, st storage.Storage, target domain.BackupTarget) {
 	defer c.steps.done(backupKey(cp.ID))
 	// One throwaway server at a time, restore tests included.
 	select {
@@ -182,15 +182,15 @@ func (c *Core) runAnonymize(src, cp store.Backup, rules anonymize.Rules, salt, m
 	start := time.Now()
 
 	var err error
-	if src.Kind == store.BackupKindDump {
+	if src.Kind == domain.BackupKindDump {
 		err = c.anonymizeDump(ctx, src, &cp, rules, salt, mongoDB, st, target)
 	} else {
 		err = c.anonymizePostgres(ctx, src, &cp, rules, salt, st, target)
 	}
 	cp.DurationMS = time.Since(start).Milliseconds()
-	cp.Status = store.OpSucceeded
+	cp.Status = domain.OpSucceeded
 	if err != nil {
-		cp.Status, cp.Error, cp.SizeBytes, cp.SHA256 = store.OpFailed, err.Error(), 0, ""
+		cp.Status, cp.Error, cp.SizeBytes, cp.SHA256 = domain.OpFailed, err.Error(), 0, ""
 		if errors.Is(ctx.Err(), context.Canceled) {
 			cp.Error = "interrupted by manager shutdown"
 		}
@@ -218,13 +218,13 @@ func (c *Core) runAnonymize(src, cp store.Backup, rules anonymize.Rules, salt, m
 
 // pruneAnonymized deletes the copies of cp's service that cp replaces: all
 // the others once it succeeded, the other failed ones otherwise.
-func (c *Core) pruneAnonymized(ctx context.Context, cp store.Backup) {
-	others, err := c.store.ListBackups(ctx, store.BackupFilter{Anonymized: true, ServiceID: cp.ServiceID})
+func (c *Core) pruneAnonymized(ctx context.Context, cp domain.Backup) {
+	others, err := c.store.ListBackups(ctx, domain.BackupFilter{Anonymized: true, ServiceID: cp.ServiceID})
 	if err != nil {
 		return
 	}
 	for _, o := range others {
-		if o.ID == cp.ID || o.Status == store.OpRunning || (cp.Status == store.OpFailed && o.Status == store.OpSucceeded) {
+		if o.ID == cp.ID || o.Status == domain.OpRunning || (cp.Status == domain.OpFailed && o.Status == domain.OpSucceeded) {
 			continue
 		}
 		if err := c.DeleteBackup(ctx, o.ID); err != nil {
@@ -235,8 +235,8 @@ func (c *Core) pruneAnonymized(ctx context.Context, cp store.Backup) {
 
 // anonymizePostgres restores src into a throwaway server, applies the
 // rules in one transaction and dumps the result as cp.
-func (c *Core) anonymizePostgres(ctx context.Context, src store.Backup, cp *store.Backup, rules anonymize.Rules, salt string,
-	st storage.Storage, target store.BackupTarget) error {
+func (c *Core) anonymizePostgres(ctx context.Context, src domain.Backup, cp *domain.Backup, rules anonymize.Rules, salt string,
+	st storage.Storage, target domain.BackupTarget) error {
 
 	script, err := anonymize.Postgres(rules, salt)
 	if err != nil {
@@ -283,8 +283,8 @@ func (c *Core) anonymizePostgres(ctx context.Context, src store.Backup, cp *stor
 
 // anonymizeDump loads a MySQL, MariaDB or MongoDB dump into a throwaway
 // server, applies the rules and dumps the result as cp.
-func (c *Core) anonymizeDump(ctx context.Context, src store.Backup, cp *store.Backup, rules anonymize.Rules, salt, mongoDB string,
-	st storage.Storage, target store.BackupTarget) error {
+func (c *Core) anonymizeDump(ctx context.Context, src domain.Backup, cp *domain.Backup, rules anonymize.Rules, salt, mongoDB string,
+	st storage.Storage, target domain.BackupTarget) error {
 
 	key := backupKey(cp.ID)
 	svc, dk, id, err := c.scratchDump(ctx, src, "kipitiny-anonymize-"+strings.ToLower(cp.ID), func(s string) { c.steps.set(key, s) })
@@ -298,7 +298,7 @@ func (c *Core) anonymizeDump(ctx context.Context, src store.Backup, cp *store.Ba
 	}
 	c.steps.set(key, AnonymizeRules)
 	opts := docker.ExecOptions{Stdout: io.Discard}
-	if svc.Kind == store.ServiceKindMongoDB {
+	if svc.Kind == domain.ServiceKindMongoDB {
 		script, env, err := anonymize.Mongo(rules, salt, mongoDB)
 		if err != nil {
 			return err
@@ -323,17 +323,17 @@ const AnonymizeRules = "anonymize"
 
 // SeedDatabase is a database of a project, as previews are seeded with it.
 type SeedDatabase struct {
-	ServiceID string            `json:"serviceId"`
-	Name      string            `json:"name"`
-	Kind      store.ServiceKind `json:"kind"`
+	ServiceID string             `json:"serviceId"`
+	Name      string             `json:"name"`
+	Kind      domain.ServiceKind `json:"kind"`
 	// Rules are its anonymize rules; nil has none.
 	Rules anonymize.Rules `json:"rules"`
 	// Backup is its latest backup a preview can be seeded with.
-	Backup *store.Backup `json:"backup,omitempty"`
+	Backup *domain.Backup `json:"backup,omitempty"`
 	// Copy is the latest anonymized copy made with the current rules,
 	// whatever its status; Seeds the one previews get, the latest good one.
-	Copy  *store.Backup `json:"copy,omitempty"`
-	Seeds *store.Backup `json:"seeds,omitempty"`
+	Copy  *domain.Backup `json:"copy,omitempty"`
+	Seeds *domain.Backup `json:"seeds,omitempty"`
 }
 
 // PreviewSeed lists the databases of a project, as previews are seeded
@@ -365,11 +365,11 @@ func (c *Core) PreviewSeed(ctx context.Context, projectID string) ([]SeedDatabas
 	return out, nil
 }
 
-func anonymizable(k store.ServiceKind) bool {
-	return k.IsDatabase() && k != store.ServiceKindRedis
+func anonymizable(k domain.ServiceKind) bool {
+	return k.IsDatabase() && k != domain.ServiceKindRedis
 }
 
-func (c *Core) seedDatabase(ctx context.Context, s store.Service, salt string) (SeedDatabase, error) {
+func (c *Core) seedDatabase(ctx context.Context, s domain.Service, salt string) (SeedDatabase, error) {
 	d := SeedDatabase{ServiceID: s.ID, Name: s.Name, Kind: s.Kind, Rules: s.Anonymize}
 	if b, ok, err := c.latestSeedable(ctx, s.ID); err != nil {
 		return d, err
@@ -379,7 +379,7 @@ func (c *Core) seedDatabase(ctx context.Context, s store.Service, salt string) (
 	if s.Anonymize == nil || salt == "" {
 		return d, nil
 	}
-	copies, err := c.store.ListBackups(ctx, store.BackupFilter{Anonymized: true, ServiceID: s.ID})
+	copies, err := c.store.ListBackups(ctx, domain.BackupFilter{Anonymized: true, ServiceID: s.ID})
 	if err != nil {
 		return d, err
 	}
@@ -391,7 +391,7 @@ func (c *Core) seedDatabase(ctx context.Context, s store.Service, salt string) (
 		if d.Copy == nil {
 			d.Copy = &cp
 		}
-		if cp.Status == store.OpSucceeded {
+		if cp.Status == domain.OpSucceeded {
 			d.Seeds = &cp
 			break
 		}
@@ -411,7 +411,7 @@ func (c *Core) SetAnonymizeRules(ctx context.Context, projectID, service string,
 	}
 	if g, err := c.store.GetProjectGit(ctx, projectID); err == nil {
 		return SeedDatabase{}, fmt.Errorf("%w: %s follows git: set the rules in x-kipitiny.anonymize of %s", ErrInvalid, p.Name, g.Path)
-	} else if !errors.Is(err, store.ErrNotFound) {
+	} else if !errors.Is(err, domain.ErrNotFound) {
 		return SeedDatabase{}, err
 	}
 	svc, err := c.serviceNamed(ctx, projectID, service)
@@ -438,20 +438,20 @@ func (c *Core) SetAnonymizeRules(ctx context.Context, projectID, service string,
 
 // AnonymizeNow makes the anonymized copy of a database's latest backup
 // again, after a failure.
-func (c *Core) AnonymizeNow(ctx context.Context, projectID, service string) (store.Backup, error) {
+func (c *Core) AnonymizeNow(ctx context.Context, projectID, service string) (domain.Backup, error) {
 	ps, err := c.previewSettings(ctx, projectID)
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
-	if ps.SeedMode != store.SeedAnonymized {
-		return store.Backup{}, fmt.Errorf("%w: previews aren't seeded with anonymized data", ErrInvalid)
+	if ps.SeedMode != domain.SeedAnonymized {
+		return domain.Backup{}, fmt.Errorf("%w: previews aren't seeded with anonymized data", ErrInvalid)
 	}
 	svc, err := c.serviceNamed(ctx, projectID, service)
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	if svc.Anonymize == nil {
-		return store.Backup{}, fmt.Errorf("%w: %s has no anonymize rules", ErrInvalid, svc.Name)
+		return domain.Backup{}, fmt.Errorf("%w: %s has no anonymize rules", ErrInvalid, svc.Name)
 	}
 	cp, err := c.anonymizeLatest(ctx, svc, true)
 	if err == nil && cp.ID == "" {
@@ -460,21 +460,21 @@ func (c *Core) AnonymizeNow(ctx context.Context, projectID, service string) (sto
 	return cp, err
 }
 
-func (c *Core) serviceNamed(ctx context.Context, projectID, name string) (store.Service, error) {
+func (c *Core) serviceNamed(ctx context.Context, projectID, name string) (domain.Service, error) {
 	svcs, err := c.store.ListServices(ctx, projectID)
 	if err != nil {
-		return store.Service{}, err
+		return domain.Service{}, err
 	}
-	if i := slices.IndexFunc(svcs, func(s store.Service) bool { return s.Name == name }); i >= 0 {
+	if i := slices.IndexFunc(svcs, func(s domain.Service) bool { return s.Name == name }); i >= 0 {
 		return svcs[i], nil
 	}
-	return store.Service{}, fmt.Errorf("%w: service %q", store.ErrNotFound, name)
+	return domain.Service{}, fmt.Errorf("%w: service %q", domain.ErrNotFound, name)
 }
 
 // seedAnonymized picks the anonymized copy each parent database the
 // preview has seeds it with, refusing when one has no rules or no good
 // copy made with them: production data is never the fallback.
-func (c *Core) seedAnonymized(ctx context.Context, parent store.Project, f compose.File, parentSvcs []store.Service) (map[string]string, error) {
+func (c *Core) seedAnonymized(ctx context.Context, parent domain.Project, f compose.File, parentSvcs []domain.Service) (map[string]string, error) {
 	ps, err := c.previewSettings(ctx, parent.ID)
 	if err != nil {
 		return nil, err
@@ -498,7 +498,7 @@ func (c *Core) seedAnonymized(ctx context.Context, parent store.Project, f compo
 			out[s.Name] = d.Seeds.ID
 		case d.Backup == nil:
 			problems = append(problems, "no backup of "+s.Name+" to anonymize")
-		case d.Copy != nil && d.Copy.Status == store.OpRunning:
+		case d.Copy != nil && d.Copy.Status == domain.OpRunning:
 			problems = append(problems, s.Name+"'s anonymized copy is still being made")
 		case d.Copy != nil:
 			problems = append(problems, s.Name+"'s anonymized copy failed: "+d.Copy.Error)

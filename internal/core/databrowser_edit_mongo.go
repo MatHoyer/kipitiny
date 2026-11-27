@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // DocChanges are edits to one collection's documents, in relaxed Extended
@@ -95,7 +95,7 @@ func (c *Core) ApplyDocChanges(ctx context.Context, id, database, collection str
 	if err != nil {
 		return ChangeResult{}, err
 	}
-	if t.svc.Kind != store.ServiceKindMongoDB {
+	if t.svc.Kind != domain.ServiceKindMongoDB {
 		return ChangeResult{}, fmt.Errorf("%w: %s is not a mongodb database", ErrInvalid, t.svc.Name)
 	}
 	tables, err := t.mongoCollections(ctx)
@@ -104,7 +104,7 @@ func (c *Core) ApplyDocChanges(ctx context.Context, id, database, collection str
 	}
 	i := slices.IndexFunc(tables, func(tb PgTable) bool { return tb.Name == collection })
 	if i < 0 {
-		return ChangeResult{}, fmt.Errorf("collection %s.%s: %w", t.db, collection, store.ErrNotFound)
+		return ChangeResult{}, fmt.Errorf("collection %s.%s: %w", t.db, collection, domain.ErrNotFound)
 	}
 	if tables[i].Kind != "collection" {
 		return ChangeResult{}, fmt.Errorf("%w: %s is a %s: only a collection's documents can be edited", ErrInvalid, collection, tables[i].Kind)

@@ -17,7 +17,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // ExportOptions picks what ExportCompose writes.
@@ -49,9 +49,9 @@ func (c *Core) ExportCompose(ctx context.Context, projectID string, opts ExportO
 		return Export{}, err
 	}
 	if opts.Service != "" {
-		i := slices.IndexFunc(svcs, func(s store.Service) bool { return s.Name == opts.Service })
+		i := slices.IndexFunc(svcs, func(s domain.Service) bool { return s.Name == opts.Service })
 		if i < 0 {
-			return Export{}, fmt.Errorf("%w: service %q", store.ErrNotFound, opts.Service)
+			return Export{}, fmt.Errorf("%w: service %q", domain.ErrNotFound, opts.Service)
 		}
 		svcs = svcs[i : i+1]
 	}
@@ -59,7 +59,7 @@ func (c *Core) ExportCompose(ctx context.Context, projectID string, opts ExportO
 	if err != nil {
 		return Export{}, err
 	}
-	byService := map[string]store.UptimeCheck{}
+	byService := map[string]domain.UptimeCheck{}
 	for _, chk := range checks {
 		byService[chk.ServiceID] = chk
 	}
@@ -71,7 +71,7 @@ func (c *Core) ExportCompose(ctx context.Context, projectID string, opts ExportO
 	if err != nil {
 		return Export{}, err
 	}
-	jobs := map[string][]store.Job{}
+	jobs := map[string][]domain.Job{}
 	for _, j := range all {
 		jobs[j.ServiceID] = append(jobs[j.ServiceID], j)
 	}
@@ -91,7 +91,7 @@ func (c *Core) ExportCompose(ctx context.Context, projectID string, opts ExportO
 // ID) to compose, with the variables their secrets became. Networks created by
 // hand (nets) become external networks. withProject adds the project's
 // shared variables.
-func exportFile(p store.Project, svcs []store.Service, checks map[string]store.UptimeCheck, jobs map[string][]store.Job, nets []store.Network,
+func exportFile(p domain.Project, svcs []domain.Service, checks map[string]domain.UptimeCheck, jobs map[string][]domain.Job, nets []domain.Network,
 	withProject bool) (compose.File, map[string]string) {
 	f := compose.File{Name: p.Name, Services: map[string]compose.Service{}}
 	env := map[string]string{}
@@ -166,12 +166,12 @@ func exportFile(p store.Project, svcs []store.Service, checks map[string]store.U
 			cs.Files = append(cs.Files, f)
 		}
 		for _, d := range s.DependsOn { // not one deleted since
-			if slices.ContainsFunc(svcs, func(o store.Service) bool { return o.Name == d.Service }) {
+			if slices.ContainsFunc(svcs, func(o domain.Service) bool { return o.Name == d.Service }) {
 				cs.DependsOn = append(cs.DependsOn, d)
 			}
 		}
 		for _, id := range s.Networks {
-			if i := slices.IndexFunc(nets, func(n store.Network) bool { return n.ID == id }); i >= 0 {
+			if i := slices.IndexFunc(nets, func(n domain.Network) bool { return n.ID == id }); i >= 0 {
 				cs.ExternalNetworks = append(cs.ExternalNetworks, nets[i].Name)
 			}
 		}
@@ -252,7 +252,7 @@ func exportFile(p store.Project, svcs []store.Service, checks map[string]store.U
 }
 
 // composeUptime writes a check, leaving out the defaults.
-func composeUptime(chk store.UptimeCheck) *compose.Uptime {
+func composeUptime(chk domain.UptimeCheck) *compose.Uptime {
 	u := &compose.Uptime{ExpectedStatus: chk.ExpectedStatus, Paused: !chk.Enabled}
 	if chk.Path != "/" {
 		u.Path = chk.Path
@@ -305,7 +305,7 @@ type ApplyOptions struct {
 	Commit string `json:"commit,omitempty"`
 	// files reads the git repository's files (compose.Vars.Files); nil
 	// without one.
-	files func(path string) ([]store.ServiceFile, error)
+	files func(path string) ([]domain.ServiceFile, error)
 	// afterDatabases runs once the databases deployed, before the apps,
 	// with the services created by name (a preview's seed).
 	afterDatabases func(ctx context.Context, created map[string]string)
@@ -405,8 +405,8 @@ func (c *Core) applyCompose(ctx context.Context, projectID string, data []byte, 
 // planCompose checks a compose file against a project and its services
 // and plans the changes. The project may not exist yet (a template's dry
 // run): then it has no ID and no services.
-func (c *Core) planCompose(ctx context.Context, project store.Project, existing []store.Service, data []byte, opts ApplyOptions, git bool) (*applier, error) {
-	byName := map[string]store.Service{}
+func (c *Core) planCompose(ctx context.Context, project domain.Project, existing []domain.Service, data []byte, opts ApplyOptions, git bool) (*applier, error) {
+	byName := map[string]domain.Service{}
 	for _, s := range existing {
 		byName[s.Name] = s
 	}
@@ -418,7 +418,7 @@ func (c *Core) planCompose(ctx context.Context, project store.Project, existing 
 				if v, had := old.Env[key]; had {
 					return v
 				}
-				if i := slices.IndexFunc(old.Files, func(f store.ServiceFile) bool { return f.Source == key }); i >= 0 {
+				if i := slices.IndexFunc(old.Files, func(f domain.ServiceFile) bool { return f.Source == key }); i >= 0 {
 					return string(old.Files[i].Content)
 				}
 			}
@@ -430,7 +430,7 @@ func (c *Core) planCompose(ctx context.Context, project store.Project, existing 
 		return nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	a := &applier{c: c, project: project, opts: opts, git: git, byName: byName,
-		hashes: map[string]string{}, images: map[string]string{}, created: map[string]string{}, planned: map[string]store.Service{}, uptimes: map[string]*compose.Uptime{}, jobs: map[string]map[string]compose.Job{}, plan: ComposePlan{
+		hashes: map[string]string{}, images: map[string]string{}, created: map[string]string{}, planned: map[string]domain.Service{}, uptimes: map[string]*compose.Uptime{}, jobs: map[string]map[string]compose.Job{}, plan: ComposePlan{
 			Create: []string{}, Update: []ServiceChange{}, Unchanged: []string{}, Delete: []string{}, Orphaned: []string{},
 			Variables: []string{}, Warnings: append([]string{}, warns...), Deploying: []string{},
 		}}
@@ -440,10 +440,10 @@ func (c *Core) planCompose(ctx context.Context, project store.Project, existing 
 // applier plans then applies one compose file.
 type applier struct {
 	c       *Core
-	project store.Project
+	project domain.Project
 	opts    ApplyOptions
 	git     bool
-	byName  map[string]store.Service
+	byName  map[string]domain.Service
 	plan    ComposePlan
 
 	// hashes and images are each listed service's compose block hash and
@@ -452,14 +452,14 @@ type applier struct {
 	images  map[string]string
 	created map[string]string
 	// planned are the project's services as the file leaves them, by name.
-	planned map[string]store.Service
+	planned map[string]domain.Service
 
 	// projectEnv and projectSecrets are the project's variables once applied.
 	projectEnv     map[string]string
 	projectSecrets []string
 	creates        []ServiceInput
 	updates        []pendingUpdate
-	deletes        []store.Service
+	deletes        []domain.Service
 	// uptimes are the listed services' checks in the file; uptimeOps the
 	// checks to save or delete.
 	uptimes   map[string]*compose.Uptime
@@ -480,14 +480,14 @@ type networkOp struct {
 // jobOp saves a service's job (an update when it has an ID), or deletes it.
 type jobOp struct {
 	name string
-	job  store.Job
+	job  domain.Job
 	del  bool
 }
 
 // uptimeOp saves a service's check, or deletes it when check is nil.
 type uptimeOp struct {
 	name  string
-	check *store.UptimeCheck
+	check *domain.UptimeCheck
 }
 
 type pendingUpdate struct {
@@ -520,7 +520,7 @@ func (a *applier) prepare(ctx context.Context, f compose.File) error {
 	prospect.Env = a.projectEnv
 
 	// Databases the services may reference: the ones kept and the new ones.
-	dbs := map[string]store.Service{}
+	dbs := map[string]domain.Service{}
 	for name, s := range a.byName {
 		if s.Kind.IsDatabase() {
 			dbs[name] = s
@@ -560,7 +560,7 @@ func (a *applier) prepare(ctx context.Context, f compose.File) error {
 		}
 		if in.Kind.IsDatabase() {
 			if _, ok := dbs[name]; !ok {
-				dbs[name] = store.Service{Name: name, Kind: in.Kind, Env: map[string]string{}}
+				dbs[name] = domain.Service{Name: name, Kind: in.Kind, Env: map[string]string{}}
 			}
 		}
 	}
@@ -604,7 +604,7 @@ func (a *applier) prepare(ctx context.Context, f compose.File) error {
 // leaves them, against each other and the other projects' services.
 func (a *applier) checkDomains(ctx context.Context) error {
 	for name, s := range a.byName {
-		if _, listed := a.planned[name]; !listed && !slices.ContainsFunc(a.deletes, func(d store.Service) bool { return d.ID == s.ID }) {
+		if _, listed := a.planned[name]; !listed && !slices.ContainsFunc(a.deletes, func(d domain.Service) bool { return d.ID == s.ID }) {
 			a.planned[name] = s // not in the file, kept
 		}
 	}
@@ -612,7 +612,7 @@ func (a *applier) checkDomains(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	others := slices.DeleteFunc(all, func(o store.Service) bool { return o.ProjectID == a.project.ID })
+	others := slices.DeleteFunc(all, func(o domain.Service) bool { return o.ProjectID == a.project.ID })
 	// Each pair once: a service is checked against the ones before it.
 	for _, name := range slices.Sorted(maps.Keys(a.planned)) {
 		s := a.planned[name]
@@ -662,7 +662,7 @@ func (a *applier) prepareVariables(x compose.FileExt) error {
 func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 	in := ServiceInput{
 		Name:             name,
-		Kind:             store.ServiceKind(cs.X.Kind),
+		Kind:             domain.ServiceKind(cs.X.Kind),
 		Image:            cs.Image,
 		Icon:             cs.X.Icon,
 		Tags:             cs.X.Tags,
@@ -687,7 +687,7 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 		Preview:          cs.X.Preview,
 	}
 	if in.Kind == "" {
-		in.Kind = store.ServiceKindApp
+		in.Kind = domain.ServiceKindApp
 	}
 	if cs.X.Anonymize != nil {
 		in.Anonymize = *cs.X.Anonymize
@@ -729,7 +729,7 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 	if m := cs.X.Middlewares; m != nil {
 		mw := &MiddlewaresInput{IPAllowList: m.IPAllowList, Headers: m.Headers}
 		if m.RateLimit != nil {
-			mw.RateLimit = &store.RateLimit{Average: m.RateLimit.Average, Burst: m.RateLimit.Burst}
+			mw.RateLimit = &domain.RateLimit{Average: m.RateLimit.Average, Burst: m.RateLimit.Burst}
 		}
 		for _, u := range m.BasicAuth {
 			bu := BasicAuthInput{Name: u.Name, Password: u.Ref}
@@ -755,21 +755,21 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 	return in, nil
 }
 
-func hasBasicAuthUser(s store.Service, name string) bool {
-	return slices.ContainsFunc(s.Middlewares.BasicAuth, func(u store.BasicAuthUser) bool { return u.Name == name })
+func hasBasicAuthUser(s domain.Service, name string) bool {
+	return slices.ContainsFunc(s.Middlewares.BasicAuth, func(u domain.BasicAuthUser) bool { return u.Name == name })
 }
 
 // checkChange runs the permission checks of creating or updating a service
 // while planning, so a dry run refuses what the apply would. A template's
 // new project doesn't exist yet: its install checks them.
-func (a *applier) checkChange(ctx context.Context, old, svc store.Service) error {
+func (a *applier) checkChange(ctx context.Context, old, svc domain.Service) error {
 	if a.project.ID == "" {
 		return nil
 	}
 	return checkServiceChange(ctx, old, svc)
 }
 
-func (a *applier) prepareService(ctx context.Context, name string, in ServiceInput, project store.Project, dbs map[string]store.Service) error {
+func (a *applier) prepareService(ctx context.Context, name string, in ServiceInput, project domain.Project, dbs map[string]domain.Service) error {
 	old, exists := a.byName[name]
 	if !exists {
 		svc, err := a.c.serviceFromInput(a.project.ID, in)
@@ -779,7 +779,7 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		// The project may not exist yet (a template's dry run): checks
 		// find its server here, not in the store.
 		svc.ServerID = a.project.ServerID
-		if err := a.checkChange(ctx, store.Service{ProjectID: a.project.ID, Env: map[string]string{}, Secrets: []string{}}, svc); err != nil {
+		if err := a.checkChange(ctx, domain.Service{ProjectID: a.project.ID, Env: map[string]string{}, Secrets: []string{}}, svc); err != nil {
 			return err
 		}
 		if err := a.c.validateIn(ctx, svc, project, dbs); err != nil {
@@ -881,7 +881,7 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 // checkPlatform warns when svc's platform isn't the server's (it runs
 // under emulation) and refuses one its image doesn't ship. A server or
 // registry that doesn't answer skips the check: the pull would tell.
-func (a *applier) checkPlatform(ctx context.Context, name string, svc store.Service) error {
+func (a *applier) checkPlatform(ctx context.Context, name string, svc domain.Service) error {
 	want := docker.Platform(svc.Runtime.Platform)
 	dk := a.c.dockerFor(svc.ServerID)
 	if want == nil || dk == nil {
@@ -918,10 +918,10 @@ func otherPlatforms(have []ocispec.Platform, want ocispec.Platform) []string {
 
 // prepareUptime plans the check of an existing service, as svc will be:
 // the file's, or none when the file has none. It reports a change.
-func (a *applier) prepareUptime(ctx context.Context, name string, svc store.Service) (bool, error) {
+func (a *applier) prepareUptime(ctx context.Context, name string, svc domain.Service) (bool, error) {
 	cur, err := a.c.store.GetUptimeCheck(ctx, svc.ID)
 	has := err == nil
-	if err != nil && !errors.Is(err, store.ErrNotFound) {
+	if err != nil && !errors.Is(err, domain.ErrNotFound) {
 		return false, err
 	}
 	u := a.uptimes[name]
@@ -944,16 +944,16 @@ func (a *applier) prepareUptime(ctx context.Context, name string, svc store.Serv
 
 // prepareJobs plans the jobs of a service, as svc will be, from the file's
 // and the current ones (cur): the file's replace them. It reports a change.
-func (a *applier) prepareJobs(_ context.Context, name string, svc store.Service, cur []store.Job) (bool, error) {
+func (a *applier) prepareJobs(_ context.Context, name string, svc domain.Service, cur []domain.Job) (bool, error) {
 	want := a.jobs[name]
-	if len(want) > 0 && svc.Kind != store.ServiceKindApp {
+	if len(want) > 0 && svc.Kind != domain.ServiceKindApp {
 		return false, fmt.Errorf("%w: service %s: only apps run jobs", ErrInvalid, name)
 	}
 	changed := false
 	for _, jobName := range slices.Sorted(maps.Keys(want)) {
 		cj := want[jobName]
-		j := store.Job{ServiceID: svc.ID}
-		if i := slices.IndexFunc(cur, func(j store.Job) bool { return j.Name == jobName }); i >= 0 {
+		j := domain.Job{ServiceID: svc.ID}
+		if i := slices.IndexFunc(cur, func(j domain.Job) bool { return j.Name == jobName }); i >= 0 {
 			j = cur[i]
 		}
 		was := j
@@ -976,13 +976,13 @@ func (a *applier) prepareJobs(_ context.Context, name string, svc store.Service,
 }
 
 // databasePasswordKey is the env key of the password apps connect with.
-func databasePasswordKey(k store.ServiceKind) string {
+func databasePasswordKey(k domain.ServiceKind) string {
 	switch k {
-	case store.ServiceKindRedis:
+	case domain.ServiceKindRedis:
 		return redisPassword
-	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+	case domain.ServiceKindMySQL, domain.ServiceKindMariaDB:
 		return mysqlPassword
-	case store.ServiceKindMongoDB:
+	case domain.ServiceKindMongoDB:
 		return mongoPassword
 	}
 	return pgPassword
@@ -991,7 +991,7 @@ func databasePasswordKey(k store.ServiceKind) string {
 // patchFromInput sets every field a compose file describes. A database's
 // environment is generated, so it's left alone; its memory too when the
 // file doesn't set it.
-func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
+func patchFromInput(old domain.Service, in ServiceInput) ServicePatch {
 	p := ServicePatch{
 		Image:            &in.Image,
 		Icon:             &in.Icon,
@@ -1025,22 +1025,22 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 		p.Image = nil
 	}
 	if p.Volumes == nil {
-		p.Volumes = []store.Volume{}
+		p.Volumes = []domain.Volume{}
 	}
 	if p.PublishedPorts == nil {
-		p.PublishedPorts = []store.PublishedPort{}
+		p.PublishedPorts = []domain.PublishedPort{}
 	}
 	if p.Routes == nil {
-		p.Routes = []store.Route{}
+		p.Routes = []domain.Route{}
 	}
 	if p.Tags == nil {
 		p.Tags = []string{}
 	}
 	if p.Files == nil {
-		p.Files = []store.ServiceFile{}
+		p.Files = []domain.ServiceFile{}
 	}
 	if p.DependsOn == nil {
-		p.DependsOn = []store.Dependency{}
+		p.DependsOn = []domain.Dependency{}
 	}
 	if p.ProjectNetworks == nil {
 		p.ProjectNetworks = []string{}
@@ -1056,7 +1056,7 @@ func patchFromInput(old store.Service, in ServiceInput) ServicePatch {
 }
 
 // changedFields names the settings that differ between old and svc.
-func changedFields(old, svc store.Service) []string {
+func changedFields(old, svc domain.Service) []string {
 	var out []string
 	add := func(name string, changed bool) {
 		if changed {
@@ -1096,7 +1096,7 @@ func changedFields(old, svc store.Service) []string {
 	return out
 }
 
-func composeRoutes(rs []store.Route) []compose.Route {
+func composeRoutes(rs []domain.Route) []compose.Route {
 	var out []compose.Route
 	for _, r := range rs {
 		out = append(out, compose.Route{Paths: r.Paths, Scheme: r.Scheme, Port: r.Port})
@@ -1104,15 +1104,15 @@ func composeRoutes(rs []store.Route) []compose.Route {
 	return out
 }
 
-func storeRoutes(rs []compose.Route) []store.Route {
-	var out []store.Route
+func storeRoutes(rs []compose.Route) []domain.Route {
+	var out []domain.Route
 	for _, r := range rs {
-		out = append(out, store.Route{Paths: r.Paths, Scheme: r.Scheme, Port: r.Port})
+		out = append(out, domain.Route{Paths: r.Paths, Scheme: r.Scheme, Port: r.Port})
 	}
 	return out
 }
 
-func sameMiddlewares(a, b store.Middlewares) bool {
+func sameMiddlewares(a, b domain.Middlewares) bool {
 	return slices.Equal(a.BasicAuth, b.BasicAuth) && slices.Equal(a.IPAllowList, b.IPAllowList) &&
 		maps.Equal(a.Headers, b.Headers) &&
 		(a.RateLimit == nil) == (b.RateLimit == nil) && (a.RateLimit == nil || *a.RateLimit == *b.RateLimit)
@@ -1126,7 +1126,7 @@ func (a *applier) apply(ctx context.Context) error {
 		}
 	}
 	var dbs, apps []string // IDs to deploy
-	queue := func(id string, kind store.ServiceKind) {
+	queue := func(id string, kind domain.ServiceKind) {
 		if kind.IsDatabase() {
 			dbs = append(dbs, id)
 		} else {
@@ -1177,7 +1177,7 @@ func (a *applier) apply(ctx context.Context) error {
 			id = a.byName[op.name].ID
 		}
 		if op.check == nil {
-			if err := c.deleteUptime(ctx, id); err != nil && !errors.Is(err, store.ErrNotFound) {
+			if err := c.deleteUptime(ctx, id); err != nil && !errors.Is(err, domain.ErrNotFound) {
 				return fmt.Errorf("uptime check of %s: %w", op.name, err)
 			}
 			continue
@@ -1295,7 +1295,7 @@ func (c *Core) deployInOrder(dbs, apps []string, commit string, between func()) 
 	if between != nil {
 		between()
 	}
-	var svcs []store.Service
+	var svcs []domain.Service
 	for _, id := range apps {
 		svc, err := c.store.GetService(ctx, id)
 		if err != nil {
@@ -1336,7 +1336,7 @@ func (c *Core) deployInOrder(dbs, apps []string, commit string, between func()) 
 // needsDeploy reports whether an apply deploys an existing service: when
 // its change needs it, or when it never deployed successfully (its first
 // deploy failed, or a failed apply created it) even if its block is unchanged.
-func needsDeploy(svc store.Service, changed bool) bool {
+func needsDeploy(svc domain.Service, changed bool) bool {
 	return svc.Preview != "only" && !svc.Stopped && (changed || svc.CurrentDeploymentID == "")
 }
 
@@ -1347,7 +1347,7 @@ func (c *Core) waitDeployments(ctx context.Context, ids []string) bool {
 	for _, id := range ids {
 		for time.Now().Before(deadline) {
 			d, err := c.store.GetDeployment(ctx, id)
-			if err != nil || d.Status != store.DeploymentRunning {
+			if err != nil || d.Status != domain.DeploymentRunning {
 				break
 			}
 			select {
@@ -1362,13 +1362,13 @@ func (c *Core) waitDeployments(ctx context.Context, ids []string) bool {
 
 // externalNetworks maps a service's external networks to the networks
 // created by hand on server, by name; nil when the service lists none.
-func externalNetworks(cs compose.Service, nets []store.Network, server string) ([]string, error) {
+func externalNetworks(cs compose.Service, nets []domain.Network, server string) ([]string, error) {
 	if cs.Networks == nil {
 		return nil, nil
 	}
 	ids := []string{}
 	for _, name := range cs.ExternalNetworks {
-		i := slices.IndexFunc(nets, func(n store.Network) bool { return n.Name == name && n.ServerID == server })
+		i := slices.IndexFunc(nets, func(n domain.Network) bool { return n.Name == name && n.ServerID == server })
 		if i < 0 {
 			return nil, fmt.Errorf("network %s doesn't exist on the project's server: create it in Networks first", name)
 		}

@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestPushNotifications(t *testing.T) {
@@ -33,14 +33,14 @@ func TestPushNotifications(t *testing.T) {
 	t.Cleanup(srv.Close)
 	c.notifyHTTP = &http.Client{Transport: redirect{srv}}
 
-	actor := func(role store.Role) context.Context {
-		u, err := c.store.CreateUser(ctx, store.User{Username: string(role), PasswordHash: "x", Role: role})
+	actor := func(role domain.Role) context.Context {
+		u, err := c.store.CreateUser(ctx, domain.User{Username: string(role), PasswordHash: "x", Role: role})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return WithActor(ctx, Actor{Kind: "user", Name: u.Username, UserID: u.ID, Role: role})
 	}
-	admin, member := actor(store.RoleAdmin), actor(store.RoleMember)
+	admin, member := actor(domain.RoleAdmin), actor(domain.RoleMember)
 	key, _ := ecdh.P256().GenerateKey(rand.Reader)
 	in := func(endpoint string) PushSubscribeInput {
 		var in PushSubscribeInput
@@ -95,7 +95,7 @@ func TestPushNotifications(t *testing.T) {
 		t.Fatalf("devices after a gone one: %+v", v.Devices)
 	}
 
-	if err := c.UnsubscribePush(member, v.Devices[0].ID); !errors.Is(err, store.ErrNotFound) {
+	if err := c.UnsubscribePush(member, v.Devices[0].ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("someone else's device: %v", err)
 	}
 	if err := c.UnsubscribePush(admin, v.Devices[0].ID); err != nil {

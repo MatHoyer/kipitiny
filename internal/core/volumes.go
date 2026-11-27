@@ -13,7 +13,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -34,7 +34,7 @@ func AppVolume(serviceID, name string) string {
 
 // validateVolumes checks an app's volumes: unique names and absolute,
 // distinct mount paths outside the manager's own mounts.
-func validateVolumes(vols []store.Volume) error {
+func validateVolumes(vols []domain.Volume) error {
 	if len(vols) > maxVolumes {
 		return fmt.Errorf("%w: at most %d volumes", ErrInvalid, maxVolumes)
 	}
@@ -69,8 +69,8 @@ func validateVolumes(vols []store.Volume) error {
 }
 
 // normalizeVolumes trims what users type; nil becomes empty.
-func normalizeVolumes(vols []store.Volume) []store.Volume {
-	out := make([]store.Volume, 0, len(vols))
+func normalizeVolumes(vols []domain.Volume) []domain.Volume {
+	out := make([]domain.Volume, 0, len(vols))
 	for _, v := range vols {
 		v.Name, v.Path, v.External = strings.TrimSpace(v.Name), strings.TrimSpace(v.Path), strings.TrimSpace(v.External)
 		if len(v.DriverOpts) == 0 {
@@ -82,7 +82,7 @@ func normalizeVolumes(vols []store.Volume) []store.Volume {
 }
 
 // appVolumeMounts mounts an app's volumes in a replica.
-func appVolumeMounts(svc store.Service) []mount.Mount {
+func appVolumeMounts(svc domain.Service) []mount.Mount {
 	mounts := make([]mount.Mount, 0, len(svc.Volumes))
 	for _, v := range svc.Volumes {
 		mounts = append(mounts, appVolumeMount(svc, v.Name, v.Path))
@@ -92,7 +92,7 @@ func appVolumeMounts(svc store.Service) []mount.Mount {
 
 // checkExternalVolumes refuses to deploy with a missing external volume:
 // Docker would create an empty one in its place, which compose refuses too.
-func checkExternalVolumes(ctx context.Context, dk *docker.Client, svc store.Service) error {
+func checkExternalVolumes(ctx context.Context, dk *docker.Client, svc domain.Service) error {
 	for _, v := range svc.Volumes {
 		if v.External == "" {
 			continue
@@ -109,9 +109,9 @@ func checkExternalVolumes(ctx context.Context, dk *docker.Client, svc store.Serv
 // appVolumeMount mounts one app volume (by name) at path. Docker creates a
 // missing volume on first use, with these labels; an external one is
 // mounted as is.
-func appVolumeMount(svc store.Service, name, path string) mount.Mount {
-	var v store.Volume
-	if i := slices.IndexFunc(svc.Volumes, func(v store.Volume) bool { return v.Name == name }); i >= 0 {
+func appVolumeMount(svc domain.Service, name, path string) mount.Mount {
+	var v domain.Volume
+	if i := slices.IndexFunc(svc.Volumes, func(v domain.Volume) bool { return v.Name == name }); i >= 0 {
 		v = svc.Volumes[i]
 	}
 	if v.External != "" {
@@ -136,24 +136,24 @@ func appVolumeMount(svc store.Service, name, path string) mount.Mount {
 }
 
 // volumesHostAccess is the part of vols only admins change.
-func volumesHostAccess(vols []store.Volume) []store.Volume {
-	var out []store.Volume
+func volumesHostAccess(vols []domain.Volume) []domain.Volume {
+	var out []domain.Volume
 	for _, v := range vols {
 		if v.HostAccess() {
-			out = append(out, store.Volume{Name: v.Name, External: v.External, DriverOpts: v.DriverOpts})
+			out = append(out, domain.Volume{Name: v.Name, External: v.External, DriverOpts: v.DriverOpts})
 		}
 	}
 	return out
 }
 
 // hasData reports whether deleting the service destroys data.
-func hasData(svc store.Service) bool {
+func hasData(svc domain.Service) bool {
 	return svc.Kind.IsDatabase() || len(svc.Volumes) > 0
 }
 
 // removeServiceVolumes removes a database's data volume and every volume
 // created for an app, including ones no longer in its settings.
-func removeServiceVolumes(ctx context.Context, dk *docker.Client, svc store.Service) error {
+func removeServiceVolumes(ctx context.Context, dk *docker.Client, svc domain.Service) error {
 	if vol := DataVolume(svc); vol != "" {
 		if err := dk.RemoveVolume(ctx, vol); err != nil {
 			return err

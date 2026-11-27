@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Push notifications reach the browsers admins turned them on in (Account),
@@ -32,7 +32,7 @@ func (c *Core) vapid(ctx context.Context) (notify.VAPID, error) {
 		if err := json.Unmarshal([]byte(s), &v); err == nil && v.PrivateKey != "" {
 			return v, nil
 		}
-	} else if err != nil && !errors.Is(err, store.ErrNotFound) {
+	} else if err != nil && !errors.Is(err, domain.ErrNotFound) {
 		return v, err
 	}
 	v, err := notify.NewVAPID()
@@ -45,8 +45,8 @@ func (c *Core) vapid(ctx context.Context) (notify.VAPID, error) {
 
 type PushDevices struct {
 	// PublicKey is the applicationServerKey browsers subscribe with.
-	PublicKey string                   `json:"publicKey"`
-	Devices   []store.PushSubscription `json:"devices"`
+	PublicKey string                    `json:"publicKey"`
+	Devices   []domain.PushSubscription `json:"devices"`
 }
 
 // PushDevices lists the signed-in admin's browsers that receive pushes.
@@ -77,19 +77,19 @@ type PushSubscribeInput struct {
 }
 
 // SubscribePush adds the browser the signed-in admin uses.
-func (c *Core) SubscribePush(ctx context.Context, in PushSubscribeInput) (store.PushSubscription, error) {
+func (c *Core) SubscribePush(ctx context.Context, in PushSubscribeInput) (domain.PushSubscription, error) {
 	if err := RequireAdmin(ctx); err != nil {
-		return store.PushSubscription{}, err
+		return domain.PushSubscription{}, err
 	}
 	u, err := c.currentUser(ctx)
 	if err != nil {
-		return store.PushSubscription{}, err
+		return domain.PushSubscription{}, err
 	}
 	if !notify.ValidPushEndpoint(in.Endpoint) {
-		return store.PushSubscription{}, fmt.Errorf("%w: not a known push service", ErrInvalid)
+		return domain.PushSubscription{}, fmt.Errorf("%w: not a known push service", ErrInvalid)
 	}
 	if !pushKeyLen(in.Keys.P256dh, 65) || !pushKeyLen(in.Keys.Auth, 16) {
-		return store.PushSubscription{}, fmt.Errorf("%w: invalid browser keys", ErrInvalid)
+		return domain.PushSubscription{}, fmt.Errorf("%w: invalid browser keys", ErrInvalid)
 	}
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
@@ -98,7 +98,7 @@ func (c *Core) SubscribePush(ctx context.Context, in PushSubscribeInput) (store.
 	if r := []rune(name); len(r) > 64 {
 		name = string(r[:64])
 	}
-	return c.store.SavePushSubscription(ctx, store.PushSubscription{
+	return c.store.SavePushSubscription(ctx, domain.PushSubscription{
 		UserID: u.ID, Name: name, Endpoint: in.Endpoint, P256dh: in.Keys.P256dh, Auth: in.Keys.Auth,
 	})
 }

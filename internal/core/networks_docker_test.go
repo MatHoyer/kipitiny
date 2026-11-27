@@ -12,7 +12,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // TestNetworksDocker joins, renames on and leaves a network created by hand
@@ -30,11 +30,11 @@ func TestNetworksDocker(t *testing.T) {
 	}
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
 	c.pool = docker.NewPool(dk, c.connectServer)
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "nettest", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "nettest", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "busybox", Replicas: 1})
+	svc, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "busybox", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

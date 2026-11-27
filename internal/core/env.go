@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // envRefRe matches a reference in a service env value, spaces optional:
@@ -29,7 +29,7 @@ var dbFields = []string{"URL", "HOST", "PORT", "USER", "PASSWORD", "DATABASE"}
 type envSources struct {
 	project map[string]string
 	// dbs are the project's database services by name.
-	dbs map[string]store.Service
+	dbs map[string]domain.Service
 	// secrets are password manager values by reference, fetched for a
 	// deploy (resolveSecrets); nil when only checking references.
 	secrets map[string]string
@@ -41,7 +41,7 @@ type envSources struct {
 }
 
 // projectDatabases returns the project's database services by name.
-func (c *Core) projectDatabases(ctx context.Context, projectID string) (map[string]store.Service, error) {
+func (c *Core) projectDatabases(ctx context.Context, projectID string) (map[string]domain.Service, error) {
 	svcs, err := c.store.ListServices(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -49,8 +49,8 @@ func (c *Core) projectDatabases(ctx context.Context, projectID string) (map[stri
 	return databasesOf(svcs), nil
 }
 
-func databasesOf(svcs []store.Service) map[string]store.Service {
-	dbs := map[string]store.Service{}
+func databasesOf(svcs []domain.Service) map[string]domain.Service {
+	dbs := map[string]domain.Service{}
 	for _, s := range svcs {
 		if s.Kind.IsDatabase() {
 			dbs[s.Name] = s
@@ -61,10 +61,10 @@ func databasesOf(svcs []store.Service) map[string]store.Service {
 
 // appURLs returns the public URLs of the apps among svcs by name, with
 // the HTTPS port when it isn't 443 (dev setups).
-func (c *Core) appURLs(svcs []store.Service) map[string]string {
+func (c *Core) appURLs(svcs []domain.Service) map[string]string {
 	urls := map[string]string{}
 	for _, s := range svcs {
-		if s.Kind == store.ServiceKindApp && httpRouted(s) {
+		if s.Kind == domain.ServiceKindApp && httpRouted(s) {
 			u := "https://" + s.Domain
 			if p := c.cfg.Traefik.HTTPSPort; p != "" && p != "443" {
 				u += ":" + p
@@ -161,7 +161,7 @@ func (c *Core) checkSecretSchemes(ctx context.Context, env map[string]string) er
 
 // envSources gathers what svc's env resolves against, fetching password
 // manager values.
-func (c *Core) envSources(ctx context.Context, project store.Project, svc store.Service) (envSources, error) {
+func (c *Core) envSources(ctx context.Context, project domain.Project, svc domain.Service) (envSources, error) {
 	svcs, err := c.store.ListServices(ctx, svc.ProjectID)
 	if err != nil {
 		return envSources{}, err
@@ -289,7 +289,7 @@ func mergeEnv(in map[string]string, secrets []string, old map[string]string, old
 	return env, out, nil
 }
 
-func maskedProject(p store.Project) store.Project {
+func maskedProject(p domain.Project) domain.Project {
 	p.Env = maskEnv(p.Env, p.Secrets)
 	if p.Secrets == nil {
 		p.Secrets = []string{}
@@ -300,44 +300,44 @@ func maskedProject(p store.Project) store.Project {
 // SetProjectEnv replaces the project's shared variables and secrets (see
 // mergeEnv). An entry still referenced by a service cannot be removed.
 // Services pick up changes on their next deploy.
-func (c *Core) SetProjectEnv(ctx context.Context, id string, env map[string]string, secrets []string) (store.Project, error) {
+func (c *Core) SetProjectEnv(ctx context.Context, id string, env map[string]string, secrets []string) (domain.Project, error) {
 	p, err := c.store.GetProject(ctx, id)
 	if err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	env, secrets, err = mergeEnv(env, secrets, p.Env, p.Secrets)
 	if err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	if !maps.Equal(env, p.Env) || !slices.Equal(secrets, p.Secrets) {
 		if err := check(ctx, id, PermEnv); err != nil {
-			return store.Project{}, err
+			return domain.Project{}, err
 		}
 		if err := checkSecretRefs(ctx, p.Env, env); err != nil {
-			return store.Project{}, err
+			return domain.Project{}, err
 		}
 	}
 	for k := range env {
 		if !envKeyRe.MatchString(k) {
-			return store.Project{}, fmt.Errorf("%w: invalid env var name %q", ErrInvalid, k)
+			return domain.Project{}, fmt.Errorf("%w: invalid env var name %q", ErrInvalid, k)
 		}
 	}
 	if err := c.checkSecretSchemes(ctx, env); err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	svcs, err := c.store.ListServices(ctx, id)
 	if err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	src := envSources{project: env, dbs: databasesOf(svcs), apps: c.appURLs(svcs)}
 	for _, s := range svcs {
 		if missing := unresolved(s.Env, src); len(missing) > 0 {
-			return store.Project{}, fmt.Errorf("%w: %s is used by service %s", ErrInvalid, strings.Join(missing, ", "), s.Name)
+			return domain.Project{}, fmt.Errorf("%w: %s is used by service %s", ErrInvalid, strings.Join(missing, ", "), s.Name)
 		}
 	}
 	p, err = c.store.SetProjectEnv(ctx, id, env, secrets)
 	if err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	return maskedProject(p), nil
 }

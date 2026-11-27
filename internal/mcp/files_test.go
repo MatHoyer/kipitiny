@@ -6,17 +6,17 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestVolumeFileTools(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
-	p, _ := e.st.CreateProject(ctx, store.Project{Name: "game"})
-	for _, svc := range []store.Service{
-		{ProjectID: p.ID, Name: "mc", Kind: store.ServiceKindApp, Image: "itzg/minecraft-server", Replicas: 1, Volumes: []store.Volume{{Name: "data", Path: "/data"}}},
-		{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1},
-		{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17", Replicas: 1, Env: map[string]string{}},
+	p, _ := e.st.CreateProject(ctx, domain.Project{Name: "game"})
+	for _, svc := range []domain.Service{
+		{ProjectID: p.ID, Name: "mc", Kind: domain.ServiceKindApp, Image: "itzg/minecraft-server", Replicas: 1, Volumes: []domain.Volume{{Name: "data", Path: "/data"}}},
+		{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1},
+		{ProjectID: p.ID, Name: "db", Kind: domain.ServiceKindPostgres, Image: "postgres:17", Replicas: 1, Env: map[string]string{}},
 	} {
 		if _, err := e.st.CreateService(ctx, svc); err != nil {
 			t.Fatal(err)

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestImageRegistry(t *testing.T) {
@@ -41,7 +41,7 @@ func TestRegistryAuth(t *testing.T) {
 	if got := c.registryAuth(ctx, "ghcr.io/org/app"); got != "" {
 		t.Fatal("credentials without any registry")
 	}
-	for _, r := range []store.Registry{
+	for _, r := range []domain.Registry{
 		{Host: "ghcr.io", Username: "me", Password: "ghp_x"},
 		{Host: "docker.io", Username: "hub", Password: "dckr_y"},
 	} {

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestParseRouterRequests(t *testing.T) {
@@ -64,20 +64,20 @@ func TestSleepObserveAfterMarkActive(t *testing.T) {
 }
 
 func TestSleepBlocker(t *testing.T) {
-	web := store.Service{Name: "web", Kind: store.ServiceKindApp, Domain: "a.example.com", Port: 80}
-	worker := store.Service{Name: "worker", Kind: store.ServiceKindApp}
-	db := store.Service{Name: "db", Kind: store.ServiceKindPostgres}
-	game := store.Service{Name: "game", Kind: store.ServiceKindApp, PublishedPorts: []store.PublishedPort{{HostPort: 25565, ContainerPort: 25565}}}
-	agent := store.Service{Name: "agent", Kind: store.ServiceKindApp, HostNetwork: true}
+	web := domain.Service{Name: "web", Kind: domain.ServiceKindApp, Domain: "a.example.com", Port: 80}
+	worker := domain.Service{Name: "worker", Kind: domain.ServiceKindApp}
+	db := domain.Service{Name: "db", Kind: domain.ServiceKindPostgres}
+	game := domain.Service{Name: "game", Kind: domain.ServiceKindApp, PublishedPorts: []domain.PublishedPort{{HostPort: 25565, ContainerPort: 25565}}}
+	agent := domain.Service{Name: "agent", Kind: domain.ServiceKindApp, HostNetwork: true}
 	for _, tc := range []struct {
 		name string
-		svcs []store.Service
+		svcs []domain.Service
 		ok   bool
 	}{
-		{"app, worker and database", []store.Service{web, worker, db}, true},
-		{"nothing on a domain", []store.Service{worker, db}, false},
-		{"published ports", []store.Service{web, game}, false},
-		{"host network", []store.Service{web, agent}, false},
+		{"app, worker and database", []domain.Service{web, worker, db}, true},
+		{"nothing on a domain", []domain.Service{worker, db}, false},
+		{"published ports", []domain.Service{web, game}, false},
+		{"host network", []domain.Service{web, agent}, false},
 	} {
 		err := sleepBlocker(tc.svcs)
 		if (err == nil) != tc.ok || (err != nil && !errors.Is(err, ErrInvalid)) {
@@ -89,14 +89,14 @@ func TestSleepBlocker(t *testing.T) {
 func TestSetProjectSleep(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.SetProjectSleep(ctx, p.ID, 1800); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a project without an app on a domain slept: %v", err)
 	}
-	if _, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1,
+	if _, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1,
 		Domain: "shop.example.com", Port: 80}); err != nil {
 		t.Fatal(err)
 	}
@@ -110,8 +110,8 @@ func TestSetProjectSleep(t *testing.T) {
 		t.Fatalf("got %+v, %v", got, err)
 	}
 	// A sleeping project takes no service whose traffic can't wake it.
-	_, err = c.CreateService(ctx, p.ID, ServiceInput{Name: "game", Kind: store.ServiceKindApp, Image: "itzg/minecraft-server",
-		PublishedPorts: []store.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}}})
+	_, err = c.CreateService(ctx, p.ID, ServiceInput{Name: "game", Kind: domain.ServiceKindApp, Image: "itzg/minecraft-server",
+		PublishedPorts: []domain.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}}})
 	if !errors.Is(err, ErrInvalid) {
 		t.Errorf("published ports in a sleeping project: %v", err)
 	}
@@ -120,16 +120,16 @@ func TestSetProjectSleep(t *testing.T) {
 func TestStartingPage(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1,
+	svc, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1,
 		Domain: "shop.example.com", Port: 80})
 	if err != nil {
 		t.Fatal(err)
 	}
-	dep, err := c.store.CreateDeployment(ctx, store.Deployment{ServiceID: svc.ID, Status: store.DeploymentSucceeded})
+	dep, err := c.store.CreateDeployment(ctx, domain.Deployment{ServiceID: svc.ID, Status: domain.DeploymentSucceeded})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,19 +150,19 @@ func TestStartingPage(t *testing.T) {
 	}
 
 	// The starting page can be customized like the maintenance page.
-	if err := c.store.SetProjectMaintenance(ctx, p.ID, store.Maintenance{Starting: store.StartingPage{Title: "Waking up", Message: "One moment"}}); err != nil {
+	if err := c.store.SetProjectMaintenance(ctx, p.ID, domain.Maintenance{Starting: domain.StartingPage{Title: "Waking up", Message: "One moment"}}); err != nil {
 		t.Fatal(err)
 	}
 	if body := string(c.StartingPage(ctx, svc.ID).Body); !strings.Contains(body, "Waking up") || !strings.Contains(body, "One moment") {
 		t.Errorf("custom text: %s", body)
 	}
-	if err := c.store.SetProjectMaintenance(ctx, p.ID, store.Maintenance{Starting: store.StartingPage{HTML: "<h1>zzz</h1>"}}); err != nil {
+	if err := c.store.SetProjectMaintenance(ctx, p.ID, domain.Maintenance{Starting: domain.StartingPage{HTML: "<h1>zzz</h1>"}}); err != nil {
 		t.Fatal(err)
 	}
 	if p := c.StartingPage(ctx, svc.ID); !p.Custom || !p.Starting || string(p.Body) != "<h1>zzz</h1>" {
 		t.Errorf("custom HTML: %+v", p)
 	}
-	if err := validateMaintenance(store.Maintenance{Starting: store.StartingPage{HTML: strings.Repeat("a", maxPageHTML+1)}}); !errors.Is(err, ErrInvalid) {
+	if err := validateMaintenance(domain.Maintenance{Starting: domain.StartingPage{HTML: strings.Repeat("a", maxPageHTML+1)}}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("huge starting page: %v", err)
 	}
 

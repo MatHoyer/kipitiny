@@ -17,8 +17,8 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 type Storage interface {
@@ -44,11 +44,11 @@ type Env struct {
 }
 
 // Open returns the storage for a target.
-func Open(t store.BackupTarget, env Env) (Storage, error) {
+func Open(t domain.BackupTarget, env Env) (Storage, error) {
 	switch t.Kind {
-	case store.BackupTargetLocal:
+	case domain.BackupTargetLocal:
 		return &Local{Root: filepath.Join(env.DataDir, "backups")}, nil
-	case store.BackupTargetS3:
+	case domain.BackupTargetS3:
 		cl, err := minio.New(t.Endpoint, &minio.Options{
 			Creds:  credentials.NewStaticV4(t.AccessKey, t.SecretKey, ""),
 			Secure: t.UseSSL,

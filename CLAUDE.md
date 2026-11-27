@@ -9,7 +9,8 @@ Design doc: `docs/design.md` â€” read before architectural changes. Roadmap in Â
 - `make lint` runs golangci-lint (`.golangci.yml`: depguard layer rules, files under 500 lines) on the code changed
   since `issues.new-from-rev`, and oxlint (`web/.oxlintrc.json`, `max-lines` 500) on the UI. Never `//nolint`: fix the
   dependency or split the file. The move to the layered layout goes area by area (#522).
-- Store access only via `store.Store`; keep SQL portable (SQLite now, Postgres later). STRICT tables, TEXT ULIDs, one goose folder per dialect.
+- Store access only via the repositories in `internal/domain` (`domain.Store` holds them all; SQLite adapter in
+  `internal/infrastructure/sqlite`); keep SQL portable (SQLite now, Postgres later). STRICT tables, TEXT ULIDs, one goose folder per dialect.
 - Docker SDK is `github.com/moby/moby/client` (Options/Result struct API, not the old `docker/docker/client` signatures). Use `cerrdefs.IsNotFound`.
 - Everything created on Docker carries `kipitiny.*` labels (`internal/docker`).
 - Postgres services are always 1 replica.

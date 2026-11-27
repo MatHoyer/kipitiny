@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestImageRelease(t *testing.T) {
@@ -29,7 +29,7 @@ func TestImageRelease(t *testing.T) {
 func TestServiceErrorsIdentityAndEnv(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{Domain: "manager.example.com", Traefik: config.Traefik{Enabled: true}})
-	p, _ := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, _ := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	// On from the start: a DSN right away.
 	v, err := c.CreateService(ctx, p.ID, ServiceInput{Name: "web", Image: "ghcr.io/org/shop:sha-1", Errors: true})
 	if err != nil {
@@ -58,7 +58,7 @@ func TestServiceErrorsIdentityAndEnv(t *testing.T) {
 		t.Errorf("reused: %d", api.ErrorsProject)
 	}
 	// Databases have no SDK.
-	if _, err := c.CreateService(ctx, p.ID, ServiceInput{Name: "db", Kind: store.ServiceKindPostgres, Errors: true}); err == nil ||
+	if _, err := c.CreateService(ctx, p.ID, ServiceInput{Name: "db", Kind: domain.ServiceKindPostgres, Errors: true}); err == nil ||
 		!strings.Contains(err.Error(), "for apps") {
 		t.Errorf("database: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestServiceErrorsIdentityAndEnv(t *testing.T) {
 	if env["SENTRY_DSN"] != "https://"+again.ErrorsKey+"@stats.example.com/2" || env["SENTRY_ENVIRONMENT"] != "production" {
 		t.Errorf("env: %v", env)
 	}
-	preview := store.Project{Name: "shop-pr-12", ParentID: p.ID, Preview: store.Preview{Name: "pr-12"}}
+	preview := domain.Project{Name: "shop-pr-12", ParentID: p.ID, Preview: domain.Preview{Name: "pr-12"}}
 	if env := c.errorsEnv(ctx, preview, again); env["SENTRY_ENVIRONMENT"] != "preview-pr-12" {
 		t.Errorf("preview: %v", env)
 	}

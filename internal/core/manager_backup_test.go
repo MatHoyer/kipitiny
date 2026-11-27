@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestSeedManagerSchedule(t *testing.T) {
@@ -21,7 +21,7 @@ func TestSeedManagerSchedule(t *testing.T) {
 		t.Fatalf("manager schedules: %+v %v", scs, err)
 	}
 	sc := scs[0]
-	if sc.Cron != "@daily" || sc.KeepLast != 14 || sc.TargetID != store.LocalTargetID || sc.Verify || !sc.Enabled {
+	if sc.Cron != "@daily" || sc.KeepLast != 14 || sc.TargetID != domain.LocalTargetID || sc.Verify || !sc.Enabled {
 		t.Fatalf("seeded schedule: %+v", sc)
 	}
 
@@ -50,12 +50,12 @@ func TestSeedManagerScheduleOff(t *testing.T) {
 
 func TestManagerTargetOK(t *testing.T) {
 	for _, tc := range []struct {
-		target store.BackupTarget
+		target domain.BackupTarget
 		ok     bool
 	}{
-		{store.BackupTarget{Kind: store.BackupTargetLocal}, true},
-		{store.BackupTarget{Kind: store.BackupTargetS3}, false},
-		{store.BackupTarget{Kind: store.BackupTargetS3, AgeRecipient: "age1xyz"}, true},
+		{domain.BackupTarget{Kind: domain.BackupTargetLocal}, true},
+		{domain.BackupTarget{Kind: domain.BackupTargetS3}, false},
+		{domain.BackupTarget{Kind: domain.BackupTargetS3, AgeRecipient: "age1xyz"}, true},
 	} {
 		if err := managerTargetOK(tc.target); (err == nil) != tc.ok {
 			t.Errorf("%+v: %v", tc.target, err)

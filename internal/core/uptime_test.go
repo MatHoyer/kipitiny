@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestUptimeDebounce(t *testing.T) {
@@ -45,7 +45,7 @@ func TestUptimeDebounce(t *testing.T) {
 
 func TestUptimeOver(t *testing.T) {
 	now := time.Date(2026, 10, 4, 12, 30, 0, 0, time.UTC)
-	hours := []store.UptimeHour{
+	hours := []domain.UptimeHour{
 		{Hour: now.Add(-48 * time.Hour).Truncate(time.Hour), Checks: 60, Failures: 60},
 		{Hour: now.Add(-2 * time.Hour).Truncate(time.Hour), Checks: 60, Failures: 0, LatencyMS: 6000},
 		{Hour: now.Truncate(time.Hour), Checks: 40, Failures: 10, LatencyMS: 3000},
@@ -96,15 +96,15 @@ func TestUptimeChecks(t *testing.T) {
 	if _, err := c.CreateChannel(ctx, ChannelInput{Name: "ops", Kind: "discord", Config: map[string]string{"webhookUrl": webhook}, Events: []string{EventUptimeDown, EventUptimeUp}, Enabled: true}); err != nil {
 		t.Fatal(err)
 	}
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	db, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres", Replicas: 1})
+	db, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "db", Kind: domain.ServiceKindPostgres, Image: "postgres", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1, Domain: "shop.example.com", Port: 80})
+	svc, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1, Domain: "shop.example.com", Port: 80})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestUptimeChecks(t *testing.T) {
 	if len(r.recent) != 0 {
 		t.Fatal("checked an undeployed service")
 	}
-	dep, err := c.store.CreateDeployment(ctx, store.Deployment{ServiceID: svc.ID, Status: store.DeploymentSucceeded})
+	dep, err := c.store.CreateDeployment(ctx, domain.Deployment{ServiceID: svc.ID, Status: domain.DeploymentSucceeded})
 	if err != nil {
 		t.Fatal(err)
 	}

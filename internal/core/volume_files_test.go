@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestVolumePath(t *testing.T) {
-	app := store.Service{Name: "web", Kind: store.ServiceKindApp, Volumes: []store.Volume{{Name: "data", Path: "/srv/data"}}}
-	pg := store.Service{Name: "db", Kind: store.ServiceKindPostgres}
+	app := domain.Service{Name: "web", Kind: domain.ServiceKindApp, Volumes: []domain.Volume{{Name: "data", Path: "/srv/data"}}}
+	pg := domain.Service{Name: "db", Kind: domain.ServiceKindPostgres}
 	for _, tc := range []struct {
-		svc      store.Service
+		svc      domain.Service
 		in, want string
 		err      error
 	}{
@@ -27,7 +27,7 @@ func TestVolumePath(t *testing.T) {
 		{app, "data/mods/..", "", ErrInvalid},
 		{app, "/data", "", ErrInvalid},
 		{app, "data/a\x00b", "", ErrInvalid},
-		{app, "other/x", "", store.ErrNotFound},
+		{app, "other/x", "", domain.ErrNotFound},
 		{pg, "data/base", "/v/data/base", nil},
 		{app, "@container", "/", nil},
 		{app, "@container/etc/nginx/", "/etc/nginx", nil},
@@ -65,10 +65,10 @@ func TestFileVolumeDisplay(t *testing.T) {
 }
 
 func TestFileVolumes(t *testing.T) {
-	if v := fileVolumes(store.Service{Kind: store.ServiceKindRedis}); len(v) != 1 || v[0] != (fileVolume{name: "data", mountPath: "/data"}) {
+	if v := fileVolumes(domain.Service{Kind: domain.ServiceKindRedis}); len(v) != 1 || v[0] != (fileVolume{name: "data", mountPath: "/data"}) {
 		t.Errorf("redis: %v", v)
 	}
-	if !filesReadOnly(store.Service{Kind: store.ServiceKindPostgres}) || filesReadOnly(store.Service{Kind: store.ServiceKindApp}) {
+	if !filesReadOnly(domain.Service{Kind: domain.ServiceKindPostgres}) || filesReadOnly(domain.Service{Kind: domain.ServiceKindApp}) {
 		t.Error("only databases are read-only")
 	}
 }

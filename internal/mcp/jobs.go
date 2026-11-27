@@ -9,7 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 type listJobsOut struct {
@@ -47,7 +47,7 @@ func (t *tools) setJob(ctx context.Context, _ *mcp.CallToolRequest, in setJobIn)
 		}
 		cur, err := t.job(ctx, svc.ID, in.Job)
 		exists := err == nil
-		if err != nil && !errors.Is(err, store.ErrNotFound) {
+		if err != nil && !errors.Is(err, domain.ErrNotFound) {
 			return core.JobView{}, err
 		}
 		j := core.JobInput{Name: in.Job, Enabled: true}
@@ -89,15 +89,15 @@ func (t *tools) deleteJob(ctx context.Context, _ *mcp.CallToolRequest, in jobArg
 	return nil, out, err
 }
 
-func (t *tools) runJob(ctx context.Context, _ *mcp.CallToolRequest, in jobArg) (*mcp.CallToolResult, store.JobRun, error) {
-	out, err := mutate(ctx, t.c, "run_job", in.Service, func() (store.JobRun, error) {
+func (t *tools) runJob(ctx context.Context, _ *mcp.CallToolRequest, in jobArg) (*mcp.CallToolResult, domain.JobRun, error) {
+	out, err := mutate(ctx, t.c, "run_job", in.Service, func() (domain.JobRun, error) {
 		svc, err := t.service(ctx, in.Service, core.PermDeploy)
 		if err != nil {
-			return store.JobRun{}, err
+			return domain.JobRun{}, err
 		}
 		j, err := t.job(ctx, svc.ID, in.Job)
 		if err != nil {
-			return store.JobRun{}, err
+			return domain.JobRun{}, err
 		}
 		return t.c.RunJob(ctx, j.ID)
 	})
@@ -112,7 +112,7 @@ type listJobRunsIn struct {
 }
 
 type listJobRunsOut struct {
-	Runs []store.JobRun `json:"runs"`
+	Runs []domain.JobRun `json:"runs"`
 	// Log is the given run's, or the latest one's.
 	LogRunID string   `json:"log_run_id,omitempty"`
 	Log      []string `json:"log"`
@@ -158,7 +158,7 @@ func (t *tools) job(ctx context.Context, serviceID, name string) (core.JobView, 
 	}
 	i := slices.IndexFunc(js, func(j core.JobView) bool { return j.Name == name })
 	if i < 0 {
-		return core.JobView{}, fmt.Errorf("%w: job %s of this service", store.ErrNotFound, name)
+		return core.JobView{}, fmt.Errorf("%w: job %s of this service", domain.ErrNotFound, name)
 	}
 	return js[i], nil
 }

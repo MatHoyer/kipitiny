@@ -12,7 +12,7 @@ import (
 	"github.com/moby/moby/api/types/mount"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -71,7 +71,7 @@ func postgresMajor(image string) int {
 	return n
 }
 
-func validatePostgres(s store.Service) error {
+func validatePostgres(s domain.Service) error {
 	if s.MemoryMB < minPostgresMemoryMB {
 		return fmt.Errorf("%w: postgres needs at least %d MB of memory", ErrInvalid, minPostgresMemoryMB)
 	}
@@ -87,7 +87,7 @@ func validatePostgres(s store.Service) error {
 }
 
 // checkPostgresUpdate refuses changes that would break an existing cluster.
-func checkPostgresUpdate(old, updated store.Service) error {
+func checkPostgresUpdate(old, updated domain.Service) error {
 	if postgresMajor(old.Image) != postgresMajor(updated.Image) {
 		return fmt.Errorf("%w: changing the postgres major version needs a dump and restore; create a new database service instead", ErrInvalid)
 	}
@@ -111,7 +111,7 @@ func alpineImage(image string) bool {
 	return ok && strings.Contains(tagged.Tag(), "alpine")
 }
 
-func postgresURL(db store.Service) string {
+func postgresURL(db domain.Service) string {
 	u := url.URL{
 		Scheme: "postgres",
 		User:   url.UserPassword(db.Env[pgUser], db.Env[pgPassword]),
@@ -122,7 +122,7 @@ func postgresURL(db store.Service) string {
 }
 
 // postgresField resolves {{ db.NAME.FIELD }} for a postgres service.
-func postgresField(db store.Service, field string) (string, bool) {
+func postgresField(db domain.Service, field string) (string, bool) {
 	switch field {
 	case "URL":
 		return postgresURL(db), true
@@ -151,7 +151,7 @@ func postgresTuning(memoryMB int) []string {
 	}
 }
 
-func applyPostgresSpec(cfg *container.Config, host *container.HostConfig, svc store.Service) {
+func applyPostgresSpec(cfg *container.Config, host *container.HostConfig, svc domain.Service) {
 	cfg.Cmd = postgresTuning(svc.MemoryMB)
 	cfg.Env = append(cfg.Env, "PGDATA="+pgDataDir)
 	cfg.Healthcheck = postgresHealthcheck(svc.Env[pgUser], svc.Env[pgDatabase])
@@ -162,7 +162,7 @@ func applyPostgresSpec(cfg *container.Config, host *container.HostConfig, svc st
 		Source: PostgresVolume(svc.ID),
 		Target: pgVolumeMount,
 	})
-	cfg.Labels[docker.LabelComponent] = string(store.ServiceKindPostgres)
+	cfg.Labels[docker.LabelComponent] = string(domain.ServiceKindPostgres)
 }
 
 // postgresHealthcheck probes over TCP: during first-start initdb the image

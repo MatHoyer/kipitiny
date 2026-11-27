@@ -13,7 +13,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // TestVolumeBackupDocker backs up, verifies and restores an app volume
@@ -31,16 +31,16 @@ func TestVolumeBackupDocker(t *testing.T) {
 	}
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
 	c.pool = docker.NewPool(dk, c.connectServer)
-	if _, err := c.EncryptBackupTarget(ctx, store.LocalTargetID, ""); err != nil {
+	if _, err := c.EncryptBackupTarget(ctx, domain.LocalTargetID, ""); err != nil {
 		t.Fatal(err)
 	}
 
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "voltest", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "voltest", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "busybox:stable",
-		Replicas: 1, Volumes: []store.Volume{{Name: "uploads", Path: "/uploads"}}})
+	svc, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "busybox:stable",
+		Replicas: 1, Volumes: []domain.Volume{{Name: "uploads", Path: "/uploads"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,16 +83,16 @@ func TestVolumeBackupDocker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b = waitBackup(t, c, b.ID, func(b store.Backup) bool { return b.Status != store.OpRunning })
-	if b.Status != store.OpSucceeded || b.Kind != store.BackupKindVolume || !b.Encrypted || b.SizeBytes == 0 {
+	b = waitBackup(t, c, b.ID, func(b domain.Backup) bool { return b.Status != domain.OpRunning })
+	if b.Status != domain.OpSucceeded || b.Kind != domain.BackupKindVolume || !b.Encrypted || b.SizeBytes == 0 {
 		t.Fatalf("backup = %+v", b)
 	}
 
 	if _, err := c.VerifyBackup(ctx, b.ID); err != nil {
 		t.Fatal(err)
 	}
-	b = waitBackup(t, c, b.ID, func(b store.Backup) bool { return b.VerifyStatus != store.OpRunning })
-	if b.VerifyStatus != store.OpSucceeded || b.VerifyDetails.Files < 3 {
+	b = waitBackup(t, c, b.ID, func(b domain.Backup) bool { return b.VerifyStatus != domain.OpRunning })
+	if b.VerifyStatus != domain.OpSucceeded || b.VerifyDetails.Files < 3 {
 		t.Fatalf("verification = %+v", b.Verification)
 	}
 
@@ -110,8 +110,8 @@ func TestVolumeBackupDocker(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if rs[0].ID == r.ID && rs[0].Status != store.OpRunning {
-			if rs[0].Status != store.OpSucceeded {
+		if rs[0].ID == r.ID && rs[0].Status != domain.OpRunning {
+			if rs[0].Status != domain.OpSucceeded {
 				t.Fatalf("restore = %+v", rs[0])
 			}
 			break
@@ -127,7 +127,7 @@ func TestVolumeBackupDocker(t *testing.T) {
 	}
 }
 
-func waitBackup(t *testing.T, c *Core, id string, done func(store.Backup) bool) store.Backup {
+func waitBackup(t *testing.T, c *Core, id string, done func(domain.Backup) bool) domain.Backup {
 	t.Helper()
 	deadline := time.Now().Add(time.Minute)
 	for {

@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -22,11 +22,11 @@ var routePathRe = regexp.MustCompile(`^/[A-Za-z0-9._~!$&()*+,;=:@%/-]*$`)
 
 // normalizeRoutes trims the paths and drops the default scheme, so equal
 // routes compare equal.
-func normalizeRoutes(in []store.Route) []store.Route {
+func normalizeRoutes(in []domain.Route) []domain.Route {
 	if in == nil {
 		return nil
 	}
-	out := make([]store.Route, 0, len(in))
+	out := make([]domain.Route, 0, len(in))
 	for _, r := range in {
 		paths := make([]string, 0, len(r.Paths))
 		for _, p := range r.Paths {
@@ -42,7 +42,7 @@ func normalizeRoutes(in []store.Route) []store.Route {
 	return out
 }
 
-func validateRoutes(s store.Service) error {
+func validateRoutes(s domain.Service) error {
 	if len(s.Routes) == 0 {
 		return nil
 	}
@@ -76,14 +76,14 @@ func validateRoutes(s store.Service) error {
 	return nil
 }
 
-func sameRoutes(a, b []store.Route) bool {
-	return slices.EqualFunc(a, b, func(x, y store.Route) bool {
+func sameRoutes(a, b []domain.Route) bool {
+	return slices.EqualFunc(a, b, func(x, y domain.Route) bool {
 		return slices.Equal(x.Paths, y.Paths) && x.Scheme == y.Scheme && x.Port == y.Port
 	})
 }
 
 // routePort is the container port r reaches on svc.
-func routePort(svc store.Service, r store.Route) int {
+func routePort(svc domain.Service, r domain.Route) int {
 	if r.Port > 0 {
 		return r.Port
 	}
@@ -115,7 +115,7 @@ func pathRule(domain, path string) string {
 
 // routeService names the Traefik service of r, after its configuration:
 // replicas of two rollouts may carry different ones.
-func routeService(name string, svc store.Service, r store.Route) string {
+func routeService(name string, svc domain.Service, r domain.Route) string {
 	return name + "-" + specHash(r.Scheme, routePort(svc, r))[:8]
 }
 
@@ -126,11 +126,11 @@ func routeService(name string, svc store.Service, r store.Route) string {
 // shortcut: check-then-write, so two concurrent writes claiming one domain
 // can both pass; add a lock around validate and the store write if that
 // ever matters.
-func (c *Core) checkDomain(ctx context.Context, s store.Service, serverID string, others []store.Service) error {
+func (c *Core) checkDomain(ctx context.Context, s domain.Service, serverID string, others []domain.Service) error {
 	if s.Domain == "" {
 		return nil
 	}
-	var group []store.Service
+	var group []domain.Service
 	for _, o := range others {
 		if o.Domain != s.Domain {
 			continue
@@ -184,7 +184,7 @@ func (c *Core) checkDomain(ctx context.Context, s store.Service, serverID string
 
 // domainDirect reports whether svc's domain points straight at the server,
 // never through Cloudflare's proxy: a service on it publishes ports.
-func (c *Core) domainDirect(ctx context.Context, svc store.Service) bool {
+func (c *Core) domainDirect(ctx context.Context, svc domain.Service) bool {
 	if len(svc.PublishedPorts) > 0 {
 		return true
 	}
@@ -193,5 +193,5 @@ func (c *Core) domainDirect(ctx context.Context, svc store.Service) bool {
 		c.log.Warn("list the services sharing a domain", "service", svc.ID, "err", err)
 		return false
 	}
-	return slices.ContainsFunc(svcs, func(o store.Service) bool { return o.Domain == svc.Domain && len(o.PublishedPorts) > 0 })
+	return slices.ContainsFunc(svcs, func(o domain.Service) bool { return o.Domain == svc.Domain && len(o.PublishedPorts) > 0 })
 }

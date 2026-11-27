@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/analytics"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // errorsNextSetting is the next DSN project number: never reused, so a new
@@ -19,7 +19,7 @@ import (
 const errorsNextSetting = "errors_next_project"
 
 // errorsIdentity gives svc its DSN the first time error tracking is on.
-func (c *Core) errorsIdentity(ctx context.Context, svc *store.Service) error {
+func (c *Core) errorsIdentity(ctx context.Context, svc *domain.Service) error {
 	if !svc.Errors || svc.ErrorsProject != 0 {
 		return nil
 	}
@@ -41,7 +41,7 @@ func (c *Core) errorsIdentity(ctx context.Context, svc *store.Service) error {
 }
 
 // errorsDSN is svc's DSN, on the analytics domain.
-func errorsDSN(domain string, svc store.Service) string {
+func errorsDSN(domain string, svc domain.Service) string {
 	return "https://" + svc.ErrorsKey + "@" + domain + "/" + strconv.FormatInt(svc.ErrorsProject, 10)
 }
 
@@ -61,7 +61,7 @@ func ImageRelease(image string) string {
 // errorsEnv is what a deploy adds to svc's environment for its Sentry SDK
 // (SENTRY_RELEASE is added by containerSpec, from the image deployed);
 // variables the app sets itself win.
-func (c *Core) errorsEnv(ctx context.Context, project store.Project, svc store.Service) map[string]string {
+func (c *Core) errorsEnv(ctx context.Context, project domain.Project, svc domain.Service) map[string]string {
 	if !svc.Errors || svc.ErrorsKey == "" {
 		return nil
 	}
@@ -110,7 +110,7 @@ func (c *Core) syncErrorProjects(ctx context.Context, id, token string) error {
 
 // serviceErrors checks the app's error tracking is on and returns the
 // analytics server's client.
-func (c *Core) serviceErrors(ctx context.Context, serviceID string) (store.Service, *analytics.Client, analyticsState, error) {
+func (c *Core) serviceErrors(ctx context.Context, serviceID string) (domain.Service, *analytics.Client, analyticsState, error) {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
 		return svc, nil, analyticsState{}, err

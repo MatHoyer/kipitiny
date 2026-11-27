@@ -9,7 +9,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // TestExternalVolumesDocker checks that a missing external volume fails the
@@ -31,7 +31,7 @@ func TestExternalVolumesDocker(t *testing.T) {
 	}
 	t.Cleanup(func() { _, _ = dk.VolumeRemove(context.Background(), name, client.VolumeRemoveOptions{}) })
 
-	svc := store.Service{Volumes: []store.Volume{{Name: "data", Path: "/data", External: name}}}
+	svc := domain.Service{Volumes: []domain.Volume{{Name: "data", Path: "/data", External: name}}}
 	if err := checkExternalVolumes(ctx, dk, svc); err != nil {
 		t.Fatalf("existing volume: %v", err)
 	}

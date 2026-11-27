@@ -8,7 +8,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestSeedAnonymized(t *testing.T) {
@@ -19,7 +19,7 @@ func TestSeedAnonymized(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ps, err := c.store.SavePreviewSettings(ctx, store.PreviewSettings{ProjectID: parent.ID, SeedMode: store.SeedAnonymized, Salt: anonymize.NewSalt()})
+	ps, err := c.store.SavePreviewSettings(ctx, domain.PreviewSettings{ProjectID: parent.ID, SeedMode: domain.SeedAnonymized, Salt: anonymize.NewSalt()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,9 +34,9 @@ func TestSeedAnonymized(t *testing.T) {
 			t.Fatalf("seeds %v, err %v; want %q", seeds, err, want)
 		}
 	}
-	backup := func(b store.Backup) store.Backup {
+	backup := func(b domain.Backup) domain.Backup {
 		t.Helper()
-		b.Kind, b.ServiceID, b.ProjectID, b.TargetID, b.ServiceKind = store.BackupKindPostgres, db.ID, parent.ID, store.LocalTargetID, db.Kind
+		b.Kind, b.ServiceID, b.ProjectID, b.TargetID, b.ServiceKind = domain.BackupKindPostgres, db.ID, parent.ID, domain.LocalTargetID, db.Kind
 		b.ObjectKey = "k" + string(b.Status) + b.RulesHash
 		b, err := c.store.CreateBackup(ctx, b)
 		if err != nil {
@@ -46,20 +46,20 @@ func TestSeedAnonymized(t *testing.T) {
 	}
 
 	refused("no backup of db")
-	src := backup(store.Backup{Status: store.OpSucceeded})
+	src := backup(domain.Backup{Status: domain.OpSucceeded})
 	refused("no anonymized copy yet")
 	hash := db.Anonymize.Hash(ps.Salt)
-	running := backup(store.Backup{Status: store.OpRunning, SourceID: src.ID, RulesHash: hash})
+	running := backup(domain.Backup{Status: domain.OpRunning, SourceID: src.ID, RulesHash: hash})
 	refused("still being made")
 	if err := c.store.DeleteBackup(ctx, running.ID); err != nil {
 		t.Fatal(err)
 	}
-	backup(store.Backup{Status: store.OpFailed, SourceID: src.ID, RulesHash: hash, Error: "no table users"})
+	backup(domain.Backup{Status: domain.OpFailed, SourceID: src.ID, RulesHash: hash, Error: "no table users"})
 	refused("failed: no table users")
 	// A good copy made with other rules (or another salt) doesn't count.
-	backup(store.Backup{Status: store.OpSucceeded, SourceID: src.ID, RulesHash: "other"})
+	backup(domain.Backup{Status: domain.OpSucceeded, SourceID: src.ID, RulesHash: "other"})
 	refused("failed")
-	good := backup(store.Backup{Status: store.OpSucceeded, SourceID: src.ID, RulesHash: hash})
+	good := backup(domain.Backup{Status: domain.OpSucceeded, SourceID: src.ID, RulesHash: hash})
 	if seeds, err := seed(); err != nil || seeds["db"] != good.ID {
 		t.Fatalf("seeds %v, %v", seeds, err)
 	}
@@ -89,7 +89,7 @@ func TestSetAnonymizeRules(t *testing.T) {
 	if err != nil || len(dbs) != 1 || dbs[0].Rules == nil {
 		t.Fatalf("seed status: %+v, %v", dbs, err)
 	}
-	if _, err := c.store.SaveProjectGit(ctx, store.ProjectGit{ProjectID: parent.ID, RepoURL: "https://example.com/r.git", Branch: "main", Path: "compose.yaml"}); err != nil {
+	if _, err := c.store.SaveProjectGit(ctx, domain.ProjectGit{ProjectID: parent.ID, RepoURL: "https://example.com/r.git", Branch: "main", Path: "compose.yaml"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.SetAnonymizeRules(ctx, parent.ID, "db", nil); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "x-kipitiny.anonymize of compose.yaml") {

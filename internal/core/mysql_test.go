@@ -6,35 +6,35 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
-func mysqlService(kind store.ServiceKind) store.Service {
-	return store.Service{
+func mysqlService(kind domain.ServiceKind) domain.Service {
+	return domain.Service{
 		ID: "01SQL", ProjectID: "P1", Name: "sql", Kind: kind,
 		Image: defaultMySQLImage(kind), Replicas: 1, MemoryMB: 512, Env: newMySQLEnv(),
 	}
 }
 
-func mongoService() store.Service {
-	return store.Service{
-		ID: "01DOCS", ProjectID: "P1", Name: "docs", Kind: store.ServiceKindMongoDB,
+func mongoService() domain.Service {
+	return domain.Service{
+		ID: "01DOCS", ProjectID: "P1", Name: "docs", Kind: domain.ServiceKindMongoDB,
 		Image: DefaultMongoImage, Replicas: 1, MemoryMB: 1024, Env: newMongoEnv(),
 	}
 }
 
 func TestValidateMySQLAndMongo(t *testing.T) {
-	for _, base := range []store.Service{mysqlService(store.ServiceKindMySQL), mysqlService(store.ServiceKindMariaDB), mongoService()} {
+	for _, base := range []domain.Service{mysqlService(domain.ServiceKindMySQL), mysqlService(domain.ServiceKindMariaDB), mongoService()} {
 		if err := validateService(base); err != nil {
 			t.Fatalf("%s: valid service rejected: %v", base.Kind, err)
 		}
 		pw := databasePasswordKey(base.Kind)
-		for name, mutate := range map[string]func(*store.Service){
-			"replicas":     func(s *store.Service) { s.Replicas = 2 },
-			"public":       func(s *store.Service) { s.Domain, s.Port = "db.example.com", 3306 },
-			"low memory":   func(s *store.Service) { s.MemoryMB = 64 },
-			"no password":  func(s *store.Service) { delete(s.Env, pw) },
-			"db reference": func(s *store.Service) { s.Env["OTHER"] = "{{ db.other.URL }}" },
+		for name, mutate := range map[string]func(*domain.Service){
+			"replicas":     func(s *domain.Service) { s.Replicas = 2 },
+			"public":       func(s *domain.Service) { s.Domain, s.Port = "db.example.com", 3306 },
+			"low memory":   func(s *domain.Service) { s.MemoryMB = 64 },
+			"no password":  func(s *domain.Service) { delete(s.Env, pw) },
+			"db reference": func(s *domain.Service) { s.Env["OTHER"] = "{{ db.other.URL }}" },
 		} {
 			s := base
 			s.Env = maps.Clone(base.Env)
@@ -50,7 +50,7 @@ func TestValidateMySQLAndMongo(t *testing.T) {
 			t.Errorf("%s: password change allowed: %v", base.Kind, err)
 		}
 	}
-	root := mysqlService(store.ServiceKindMySQL)
+	root := mysqlService(domain.ServiceKindMySQL)
 	delete(root.Env, mysqlRootPassword)
 	if err := validateService(root); !errors.Is(err, ErrInvalid) {
 		t.Errorf("no root password: %v", err)
@@ -58,11 +58,11 @@ func TestValidateMySQLAndMongo(t *testing.T) {
 }
 
 func TestMySQLAndMongoRefs(t *testing.T) {
-	sql := mysqlService(store.ServiceKindMariaDB)
+	sql := mysqlService(domain.ServiceKindMariaDB)
 	sql.Env[mysqlPassword] = "p@ss"
 	docs := mongoService()
 	docs.Env[mongoPassword] = "s3cr3t"
-	src := envSources{dbs: map[string]store.Service{sql.Name: sql, docs.Name: docs}}
+	src := envSources{dbs: map[string]domain.Service{sql.Name: sql, docs.Name: docs}}
 	for ref, want := range map[string]string{
 		"{{ db.sql.URL }}":       "mysql://app:p%40ss@sql:3306/app",
 		"{{ db.sql.PORT }}":      "3306",
@@ -80,8 +80,8 @@ func TestMySQLAndMongoRefs(t *testing.T) {
 }
 
 func TestMySQLAndMongoContainerSpec(t *testing.T) {
-	p := store.Project{ID: "P1", Name: "shop"}
-	for _, svc := range []store.Service{mysqlService(store.ServiceKindMySQL), mysqlService(store.ServiceKindMariaDB), mongoService()} {
+	p := domain.Project{ID: "P1", Name: "shop"}
+	for _, svc := range []domain.Service{mysqlService(domain.ServiceKindMySQL), mysqlService(domain.ServiceKindMariaDB), mongoService()} {
 		spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, route{resolver: certResolver})
 		if spec.Name != "shop-"+svc.Name+"-1" {
 			t.Errorf("%s: name = %q, want no deploy suffix", svc.Kind, spec.Name)
@@ -98,7 +98,7 @@ func TestMySQLAndMongoContainerSpec(t *testing.T) {
 		if _, public := spec.Config.Labels["traefik.enable"]; public {
 			t.Errorf("%s: database exposed to traefik", svc.Kind)
 		}
-		if k, err := backupKind(svc); k != store.BackupKindDump || err != nil || volumeNames(svc) != nil {
+		if k, err := backupKind(svc); k != domain.BackupKindDump || err != nil || volumeNames(svc) != nil {
 			t.Errorf("%s: backed up as %q (%v), volumes %v", svc.Kind, k, err, volumeNames(svc))
 		}
 	}
@@ -118,11 +118,11 @@ func TestMySQLAndMongoContainerSpec(t *testing.T) {
 }
 
 func TestMySQLDumpCmd(t *testing.T) {
-	if cmd := mysqlDumpCmd(store.ServiceKindMariaDB, "app"); cmd[0] != "mariadb-dump" || slices.Contains(cmd, "--set-gtid-purged=OFF") ||
+	if cmd := mysqlDumpCmd(domain.ServiceKindMariaDB, "app"); cmd[0] != "mariadb-dump" || slices.Contains(cmd, "--set-gtid-purged=OFF") ||
 		cmd[len(cmd)-1] != "app" || cmd[len(cmd)-2] != "--" {
 		t.Errorf("mariadb = %v", cmd)
 	}
-	if cmd := mysqlDumpCmd(store.ServiceKindMySQL, "app"); cmd[0] != "mysqldump" || !slices.Contains(cmd, "--set-gtid-purged=OFF") {
+	if cmd := mysqlDumpCmd(domain.ServiceKindMySQL, "app"); cmd[0] != "mysqldump" || !slices.Contains(cmd, "--set-gtid-purged=OFF") {
 		t.Errorf("mysql = %v", cmd)
 	}
 }

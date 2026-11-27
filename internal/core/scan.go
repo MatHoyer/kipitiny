@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // ScanResult is what ScanBackupTarget found.
@@ -14,8 +14,8 @@ type ScanResult struct {
 	// Adopted are the backups added to the history, Orphans of them have no
 	// service here with the same project, name and kind (restore them into
 	// one picked by hand).
-	Adopted []store.Backup `json:"adopted"`
-	Orphans int            `json:"orphans"`
+	Adopted []domain.Backup `json:"adopted"`
+	Orphans int             `json:"orphans"`
 	// Known backups were already in the history.
 	Known int `json:"known"`
 	// NoRecord counts files without a sidecar: older backups, manager
@@ -57,7 +57,7 @@ func (c *Core) ScanBackupTarget(ctx context.Context, id string) (ScanResult, err
 		sizes[obj.Key] = obj.Size
 	}
 	known := map[string]bool{}
-	all, err := c.store.ListBackups(ctx, store.BackupFilter{})
+	all, err := c.store.ListBackups(ctx, domain.BackupFilter{})
 	if err != nil {
 		return ScanResult{}, err
 	}
@@ -71,7 +71,7 @@ func (c *Core) ScanBackupTarget(ctx context.Context, id string) (ScanResult, err
 		return ScanResult{}, err
 	}
 
-	res := ScanResult{Adopted: []store.Backup{}, Unreadable: []ScanProblem{}}
+	res := ScanResult{Adopted: []domain.Backup{}, Unreadable: []ScanProblem{}}
 	for key := range sizes {
 		object, isSidecar := strings.CutSuffix(key, sidecarExt)
 		if !isSidecar {
@@ -93,7 +93,7 @@ func (c *Core) ScanBackupTarget(ctx context.Context, id string) (ScanResult, err
 			continue
 		}
 		b, err := readSidecar(ctx, st, key, target.AgeIdentity)
-		if err == nil && b.Status != store.OpSucceeded {
+		if err == nil && b.Status != domain.OpSucceeded {
 			err = fmt.Errorf("backup did not succeed")
 		}
 		if err == nil && b.SizeBytes != sizes[object] {
@@ -123,7 +123,7 @@ func (c *Core) ScanBackupTarget(ctx context.Context, id string) (ScanResult, err
 }
 
 // servicesByName indexes every service as project/service.
-func (c *Core) servicesByName(ctx context.Context) (map[string]store.Service, error) {
+func (c *Core) servicesByName(ctx context.Context) (map[string]domain.Service, error) {
 	projects, err := c.store.ListProjects(ctx)
 	if err != nil {
 		return nil, err
@@ -136,7 +136,7 @@ func (c *Core) servicesByName(ctx context.Context) (map[string]store.Service, er
 	if err != nil {
 		return nil, err
 	}
-	out := map[string]store.Service{}
+	out := map[string]domain.Service{}
 	for _, s := range svcs {
 		out[names[s.ProjectID]+"/"+s.Name] = s
 	}
@@ -144,7 +144,7 @@ func (c *Core) servicesByName(ctx context.Context) (map[string]store.Service, er
 }
 
 // backupFits reports whether b restores into svc.
-func backupFits(svc store.Service, b store.Backup) bool {
+func backupFits(svc domain.Service, b domain.Backup) bool {
 	kind, err := backupKind(svc)
-	return err == nil && kind == b.Kind && (kind != store.BackupKindDump || svc.Kind == b.ServiceKind)
+	return err == nil && kind == b.Kind && (kind != domain.BackupKindDump || svc.Kind == b.ServiceKind)
 }

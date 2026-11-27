@@ -10,45 +10,45 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestValidateRoutes(t *testing.T) {
-	ok := store.Service{Kind: store.ServiceKindApp, Domain: "nb.example.com", Port: 80}
+	ok := domain.Service{Kind: domain.ServiceKindApp, Domain: "nb.example.com", Port: 80}
 	for name, tc := range map[string]struct {
-		svc     func(s store.Service) store.Service
+		svc     func(s domain.Service) domain.Service
 		wantErr string
 	}{
-		"valid": {func(s store.Service) store.Service {
-			s.Routes = normalizeRoutes([]store.Route{{Paths: []string{"/a.B/", " /api "}, Scheme: "H2C"}, {Paths: []string{"/relay"}, Scheme: "http", Port: 33080}})
+		"valid": {func(s domain.Service) domain.Service {
+			s.Routes = normalizeRoutes([]domain.Route{{Paths: []string{"/a.B/", " /api "}, Scheme: "H2C"}, {Paths: []string{"/relay"}, Scheme: "http", Port: 33080}})
 			return s
 		}, ""},
-		"no domain": {func(s store.Service) store.Service {
-			s.Domain, s.Routes = "", []store.Route{{Paths: []string{"/api"}}}
+		"no domain": {func(s domain.Service) domain.Service {
+			s.Domain, s.Routes = "", []domain.Route{{Paths: []string{"/api"}}}
 			return s
 		}, "need the domain"},
-		"no paths": {func(s store.Service) store.Service {
-			s.Routes = []store.Route{{}}
+		"no paths": {func(s domain.Service) domain.Service {
+			s.Routes = []domain.Route{{}}
 			return s
 		}, "1 to 20 paths"},
-		"relative path": {func(s store.Service) store.Service {
-			s.Routes = []store.Route{{Paths: []string{"api"}}}
+		"relative path": {func(s domain.Service) domain.Service {
+			s.Routes = []domain.Route{{Paths: []string{"api"}}}
 			return s
 		}, "must start with /"},
-		"rule injection": {func(s store.Service) store.Service {
-			s.Routes = []store.Route{{Paths: []string{"/a`) || Host(`evil"}}}
+		"rule injection": {func(s domain.Service) domain.Service {
+			s.Routes = []domain.Route{{Paths: []string{"/a`) || Host(`evil"}}}
 			return s
 		}, "URL path characters"},
-		"twice": {func(s store.Service) store.Service {
-			s.Routes = []store.Route{{Paths: []string{"/api"}}, {Paths: []string{"/api"}, Scheme: "h2c"}}
+		"twice": {func(s domain.Service) domain.Service {
+			s.Routes = []domain.Route{{Paths: []string{"/api"}}, {Paths: []string{"/api"}, Scheme: "h2c"}}
 			return s
 		}, "listed twice"},
-		"scheme": {func(s store.Service) store.Service {
-			s.Routes = []store.Route{{Paths: []string{"/api"}, Scheme: "https"}}
+		"scheme": {func(s domain.Service) domain.Service {
+			s.Routes = []domain.Route{{Paths: []string{"/api"}, Scheme: "https"}}
 			return s
 		}, "http or h2c"},
-		"port": {func(s store.Service) store.Service {
-			s.Routes = []store.Route{{Paths: []string{"/api"}, Port: 70000}}
+		"port": {func(s domain.Service) domain.Service {
+			s.Routes = []domain.Route{{Paths: []string{"/api"}, Port: 70000}}
 			return s
 		}, "out of range"},
 	} {
@@ -57,13 +57,13 @@ func TestValidateRoutes(t *testing.T) {
 			t.Errorf("%s: err = %v, want %q", name, err, tc.wantErr)
 		}
 	}
-	if got := normalizeRoutes([]store.Route{{Paths: []string{" /x "}, Scheme: "HTTP"}}); got[0].Scheme != "" || got[0].Paths[0] != "/x" {
+	if got := normalizeRoutes([]domain.Route{{Paths: []string{" /x "}, Scheme: "HTTP"}}); got[0].Scheme != "" || got[0].Paths[0] != "/x" {
 		t.Errorf("normalize = %+v", got)
 	}
 }
 
 func TestTraefikLabelsRoutes(t *testing.T) {
-	svc := store.Service{ID: "01ABC", Domain: "nb.example.com", Port: 80, Routes: []store.Route{
+	svc := domain.Service{ID: "01ABC", Domain: "nb.example.com", Port: 80, Routes: []domain.Route{
 		{Paths: []string{"/signalexchange.SignalExchange/", "/management.ManagementService/"}, Scheme: "h2c"},
 		{Paths: []string{"/relay"}, Port: 8080},
 	}}
@@ -120,8 +120,8 @@ func TestTraefikLabelsRoutes(t *testing.T) {
 	}
 
 	// Without routes, labels (and so router names) are what they were.
-	plain := traefikLabels(store.Service{ID: "01ABC", Domain: "nb.example.com", Port: 80}, route{})
-	if plain["traefik.http.routers.kipitiny-01abc-"+specHash("nb.example.com", "", middlewareLabels(store.Middlewares{}, false))[:8]+".rule"] != "Host(`nb.example.com`)" {
+	plain := traefikLabels(domain.Service{ID: "01ABC", Domain: "nb.example.com", Port: 80}, route{})
+	if plain["traefik.http.routers.kipitiny-01abc-"+specHash("nb.example.com", "", middlewareLabels(domain.Middlewares{}, false))[:8]+".rule"] != "Host(`nb.example.com`)" {
 		t.Errorf("plain labels = %v", plain)
 	}
 }
@@ -129,22 +129,22 @@ func TestTraefikLabelsRoutes(t *testing.T) {
 func TestTraefikConfigRoutes(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "nb", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "nb", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "server", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1,
-		Domain: "nb.example.com", Port: 80, Routes: []store.Route{{Paths: []string{"/grpc.Svc/"}, Scheme: "h2c"}, {Paths: []string{"/api"}}}})
+	svc, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "server", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1,
+		Domain: "nb.example.com", Port: 80, Routes: []domain.Route{{Paths: []string{"/grpc.Svc/"}, Scheme: "h2c"}, {Paths: []string{"/api"}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	token, err := c.providerToken(ctx, store.LocalServerID)
+	token, err := c.providerToken(ctx, domain.LocalServerID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	get := func() dynamicConfig {
 		t.Helper()
-		b, err := c.TraefikConfig(ctx, store.LocalServerID, token)
+		b, err := c.TraefikConfig(ctx, domain.LocalServerID, token)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -192,7 +192,7 @@ func TestTraefikConfigRoutes(t *testing.T) {
 func TestComposeRoutes(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "nb", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "nb", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ services:
 		t.Fatal(err)
 	}
 	svcs, _ := c.store.ListServices(ctx, p.ID)
-	want := []store.Route{{Paths: []string{"/signalexchange.SignalExchange/", "/management.ManagementService/"}, Scheme: "h2c"}, {Paths: []string{"/relay", "/api"}}}
+	want := []domain.Route{{Paths: []string{"/signalexchange.SignalExchange/", "/management.ManagementService/"}, Scheme: "h2c"}, {Paths: []string{"/relay", "/api"}}}
 	if !sameRoutes(svcs[0].Routes, want) {
 		t.Errorf("routes = %+v", svcs[0].Routes)
 	}

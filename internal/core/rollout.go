@@ -13,7 +13,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -24,8 +24,8 @@ const (
 
 // preDeploy runs the service's pre-deploy command once in a one-off
 // container with the new image and the same environment and network.
-func (c *Core) preDeploy(ctx context.Context, project store.Project, svc store.Service, src envSources,
-	dep store.Deployment, out io.Writer, logf func(string, ...any)) error {
+func (c *Core) preDeploy(ctx context.Context, project domain.Project, svc domain.Service, src envSources,
+	dep domain.Deployment, out io.Writer, logf func(string, ...any)) error {
 
 	ctx, cancel := context.WithTimeout(ctx, preDeployTimeout)
 	defer cancel()
@@ -73,7 +73,7 @@ func (c *Core) preDeploy(ctx context.Context, project store.Project, svc store.S
 // waitReady waits until a new replica can take traffic: its healthcheck
 // (image or injected probe) passes, or, without one, it stays up for a few
 // seconds. A container that exits or restarts fails immediately. With a
-// restart policy (store.Runtime.Restart), exiting 0 is ready too; a job
+// restart policy (domain.Runtime.Restart), exiting 0 is ready too; a job
 // (restart "no") is ready only then, and on-failure may restart.
 func (c *Core) waitReady(ctx context.Context, dk *docker.Client, id, restart string) error {
 	ctx, cancel := context.WithTimeout(ctx, readyTimeout)

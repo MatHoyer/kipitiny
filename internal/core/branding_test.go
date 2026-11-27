@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/mail/mailtest"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 var pngLogo = []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00")
@@ -21,7 +21,7 @@ func ptr[T any](v T) *T { return &v }
 
 func TestSetBranding(t *testing.T) {
 	c := newTestCore(t, config.Config{})
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin})
+	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 	if got := c.Branding(ctx); got != (Branding{}) || c.BrandName(ctx) != DefaultBrandName {
 		t.Fatalf("default: %+v", got)
 	}
@@ -46,7 +46,7 @@ func TestSetBranding(t *testing.T) {
 	if b2, _ := c.SetBranding(ctx, BrandingInput{Name: "Acme", Logo: ptr("")}); b2.Logo != "" {
 		t.Errorf("removed logo: %+v", b2)
 	}
-	if _, _, err := c.BrandingLogo(ctx); !errors.Is(err, store.ErrNotFound) {
+	if _, _, err := c.BrandingLogo(ctx); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("removed logo served: %v", err)
 	}
 
@@ -60,7 +60,7 @@ func TestSetBranding(t *testing.T) {
 
 func TestSetBrandingValidates(t *testing.T) {
 	c := newTestCore(t, config.Config{})
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin})
+	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 	b64 := func(s string) *string { return ptr(base64.StdEncoding.EncodeToString([]byte(s))) }
 	tests := []struct {
 		name    string
@@ -97,7 +97,7 @@ func TestSetBrandingValidates(t *testing.T) {
 		})
 	}
 
-	member := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", Role: store.RoleMember})
+	member := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", Role: domain.RoleMember})
 	if _, err := c.SetBranding(member, BrandingInput{Name: "x"}); !errors.Is(err, ErrForbidden) {
 		t.Errorf("member: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestSetBrandingValidates(t *testing.T) {
 
 func TestBrandedEmail(t *testing.T) {
 	c := newTestCore(t, config.Config{Domain: "ops.example.com"})
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: store.RoleAdmin})
+	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
 	srv := mailtest.NewServer(t)
 	p, err := c.CreateEmailProvider(ctx, localProvider("relay", srv))
 	if err != nil {
@@ -119,7 +119,7 @@ func TestBrandedEmail(t *testing.T) {
 	}
 
 	to := []*netmail.Address{{Address: "a@example.com"}}
-	inv := store.Invite{Role: store.RoleAdmin, ExpiresAt: time.Now().Add(time.Hour)}
+	inv := domain.Invite{Role: domain.RoleAdmin, ExpiresAt: time.Now().Add(time.Hour)}
 	if err := c.sendMail(ctx, "", to, c.inviteBody(ctx, inv, "https://ops.example.com/invite#t"), ""); err != nil {
 		t.Fatal(err)
 	}

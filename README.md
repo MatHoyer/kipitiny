@@ -152,8 +152,8 @@ internal/config/       env config
 internal/core/         service layer (REST + future MCP call this)
 internal/api/          JSON HTTP handlers
 internal/docker/       Docker client wrapper, label/network conventions
-internal/store/        Store interface + models
-internal/store/sqlite/ SQLite impl (bun + goose migrations)
+internal/domain/       entities and repository interfaces, one per area
+internal/infrastructure/sqlite/ SQLite store (bun + goose migrations)
 web/                   React SPA (Vite), embedded via go:embed
 site/                  website: landing page and docs (site/docs/*.md), own image
 ```

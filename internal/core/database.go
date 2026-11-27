@@ -13,7 +13,7 @@ import (
 	"github.com/moby/moby/api/types/container"
 
 	"github.com/kipit-labs/kipitiny/internal/compose"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // databaseReadyTimeout bounds the wait for a recreated database to pass its
@@ -21,15 +21,15 @@ import (
 const databaseReadyTimeout = 2 * time.Minute
 
 // DataVolume is the named volume holding a database's data; empty for apps.
-func DataVolume(svc store.Service) string {
+func DataVolume(svc domain.Service) string {
 	switch svc.Kind {
-	case store.ServiceKindPostgres:
+	case domain.ServiceKindPostgres:
 		return PostgresVolume(svc.ID)
-	case store.ServiceKindRedis:
+	case domain.ServiceKindRedis:
 		return RedisVolume(svc.ID)
-	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+	case domain.ServiceKindMySQL, domain.ServiceKindMariaDB:
 		return MySQLVolume(svc.ID)
-	case store.ServiceKindMongoDB:
+	case domain.ServiceKindMongoDB:
 		return MongoVolume(svc.ID)
 	}
 	return ""
@@ -43,7 +43,7 @@ var databaseNameKeys = []string{pgUser, pgDatabase, mysqlUser, mysqlDatabase, mo
 
 var databaseNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,62}$`)
 
-func validateDatabase(s store.Service) error {
+func validateDatabase(s domain.Service) error {
 	if s.HealthPath != "" || s.Healthcheck.Set() || s.PreDeploy != "" {
 		return fmt.Errorf("%w: databases have a built-in healthcheck and no pre-deploy command", ErrInvalid)
 	}
@@ -70,54 +70,54 @@ func validateDatabase(s store.Service) error {
 		}
 	}
 	for _, f := range s.Files {
-		if s.Kind == store.ServiceKindRedis || !strings.HasPrefix(f.Path, compose.InitDir+"/") {
+		if s.Kind == domain.ServiceKindRedis || !strings.HasPrefix(f.Path, compose.InitDir+"/") {
 			return fmt.Errorf("%w: a database's files go in %s (scripts run on its first start)", ErrInvalid, compose.InitDir)
 		}
 	}
 	switch s.Kind {
-	case store.ServiceKindPostgres:
+	case domain.ServiceKindPostgres:
 		return validatePostgres(s)
-	case store.ServiceKindRedis:
+	case domain.ServiceKindRedis:
 		return validateRedis(s)
-	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+	case domain.ServiceKindMySQL, domain.ServiceKindMariaDB:
 		return validateMySQL(s)
-	case store.ServiceKindMongoDB:
+	case domain.ServiceKindMongoDB:
 		return validateMongo(s)
 	}
 	return nil
 }
 
 // checkDatabaseUpdate refuses changes that would break existing data.
-func checkDatabaseUpdate(old, updated store.Service) error {
+func checkDatabaseUpdate(old, updated domain.Service) error {
 	// The credentials are generated at creation and baked into the data
 	// directory (postgres initdb) or shared with apps: edits would silently
 	// do nothing or lock apps out.
 	if !maps.Equal(old.Env, updated.Env) || !slices.Equal(old.Secrets, updated.Secrets) {
 		return fmt.Errorf("%w: a database's environment is fixed at creation", ErrInvalid)
 	}
-	if old.Kind == store.ServiceKindPostgres {
+	if old.Kind == domain.ServiceKindPostgres {
 		return checkPostgresUpdate(old, updated)
 	}
 	return nil
 }
 
 // DatabaseURL is the connection string apps of the project use.
-func DatabaseURL(db store.Service) string {
+func DatabaseURL(db domain.Service) string {
 	v, _ := databaseField(db, "URL")
 	return v
 }
 
 // databaseField resolves {{ db.NAME.FIELD }}; false when the kind has no such
 // field.
-func databaseField(db store.Service, field string) (string, bool) {
+func databaseField(db domain.Service, field string) (string, bool) {
 	switch db.Kind {
-	case store.ServiceKindPostgres:
+	case domain.ServiceKindPostgres:
 		return postgresField(db, field)
-	case store.ServiceKindRedis:
+	case domain.ServiceKindRedis:
 		return redisField(db, field)
-	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+	case domain.ServiceKindMySQL, domain.ServiceKindMariaDB:
 		return mysqlField(db, field)
-	case store.ServiceKindMongoDB:
+	case domain.ServiceKindMongoDB:
 		return mongoField(db, field)
 	}
 	return "", false
@@ -159,28 +159,28 @@ func (c *Core) DatabaseConnection(ctx context.Context, id string) (Connection, e
 	}, nil
 }
 
-func applyDatabaseSpec(cfg *container.Config, host *container.HostConfig, svc store.Service) {
+func applyDatabaseSpec(cfg *container.Config, host *container.HostConfig, svc domain.Service) {
 	switch svc.Kind {
-	case store.ServiceKindPostgres:
+	case domain.ServiceKindPostgres:
 		applyPostgresSpec(cfg, host, svc)
-	case store.ServiceKindRedis:
+	case domain.ServiceKindRedis:
 		applyRedisSpec(cfg, host, svc)
-	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+	case domain.ServiceKindMySQL, domain.ServiceKindMariaDB:
 		applyMySQLSpec(cfg, host, svc)
-	case store.ServiceKindMongoDB:
+	case domain.ServiceKindMongoDB:
 		applyMongoSpec(cfg, host, svc)
 	}
 }
 
-func stopTimeoutFor(svc store.Service) time.Duration {
+func stopTimeoutFor(svc domain.Service) time.Duration {
 	switch svc.Kind {
-	case store.ServiceKindPostgres:
+	case domain.ServiceKindPostgres:
 		return postgresStopTimeout
-	case store.ServiceKindRedis:
+	case domain.ServiceKindRedis:
 		return redisStopTimeout
-	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+	case domain.ServiceKindMySQL, domain.ServiceKindMariaDB:
 		return mysqlStopTimeout
-	case store.ServiceKindMongoDB:
+	case domain.ServiceKindMongoDB:
 		return mongoStopTimeout
 	}
 	if svc.StopGraceSeconds > 0 {

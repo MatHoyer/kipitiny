@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -19,23 +19,23 @@ const (
 // normalizeFiles sets each file's size and sorts them by path. A file
 // sent back without its content (as API responses give it) keeps the
 // content old has at that path.
-func normalizeFiles(files, old []store.ServiceFile) []store.ServiceFile {
-	out := make([]store.ServiceFile, 0, len(files))
+func normalizeFiles(files, old []domain.ServiceFile) []domain.ServiceFile {
+	out := make([]domain.ServiceFile, 0, len(files))
 	for _, f := range files {
 		f.Path = strings.TrimSpace(f.Path)
 		if f.Content == nil && f.Size > 0 {
-			if i := slices.IndexFunc(old, func(o store.ServiceFile) bool { return o.Path == f.Path }); i >= 0 {
+			if i := slices.IndexFunc(old, func(o domain.ServiceFile) bool { return o.Path == f.Path }); i >= 0 {
 				f.Content = old[i].Content
 			}
 		}
 		f.Size = len(f.Content)
 		out = append(out, f)
 	}
-	slices.SortFunc(out, func(a, b store.ServiceFile) int { return strings.Compare(a.Path, b.Path) })
+	slices.SortFunc(out, func(a, b domain.ServiceFile) int { return strings.Compare(a.Path, b.Path) })
 	return out
 }
 
-func validateFiles(s store.Service) error {
+func validateFiles(s domain.Service) error {
 	if len(s.Files) == 0 {
 		return nil
 	}
@@ -82,7 +82,7 @@ func validateFiles(s store.Service) error {
 
 // serviceFiles are the files written into svc's containers, secrets with
 // their references resolved.
-func serviceFiles(svc store.Service, src envSources) []docker.File {
+func serviceFiles(svc domain.Service, src envSources) []docker.File {
 	out := make([]docker.File, 0, len(svc.Files))
 	for _, f := range svc.Files {
 		content := f.Content
@@ -96,7 +96,7 @@ func serviceFiles(svc store.Service, src envSources) []docker.File {
 
 // refEnv is svc's env with its secret files as entries, so references in
 // them are checked and fetched like the env's.
-func refEnv(svc store.Service) map[string]string {
+func refEnv(svc domain.Service) map[string]string {
 	env := maps.Clone(svc.Env)
 	if env == nil {
 		env = map[string]string{}
@@ -109,8 +109,8 @@ func refEnv(svc store.Service) map[string]string {
 	return env
 }
 
-func sameFiles(a, b []store.ServiceFile) bool {
-	return slices.EqualFunc(a, b, func(x, y store.ServiceFile) bool {
+func sameFiles(a, b []domain.ServiceFile) bool {
+	return slices.EqualFunc(a, b, func(x, y domain.ServiceFile) bool {
 		return x.Path == y.Path && x.Mode == y.Mode && x.Secret == y.Secret && x.Source == y.Source && string(x.Content) == string(y.Content)
 	})
 }

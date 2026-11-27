@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // UpdatePreflight says whether now is a good time to update the manager:
@@ -54,13 +54,13 @@ func (c *Core) UpdatePreflight(ctx context.Context) UpdatePreflight {
 		add("tasks", "ok", "no deploy, backup, restore or cleanup running")
 	}
 
-	if info, err := c.dockerFor(store.LocalServerID).Info(ctx); err != nil {
+	if info, err := c.dockerFor(domain.LocalServerID).Info(ctx); err != nil {
 		add("docker", "block", "Docker doesn't answer: "+err.Error())
 	} else {
 		add("docker", "ok", "Docker "+info.Version+" answers")
 	}
 
-	bs, err := c.store.ListBackups(ctx, store.BackupFilter{Kind: store.BackupKindManager, Status: store.OpSucceeded, Limit: 1})
+	bs, err := c.store.ListBackups(ctx, domain.BackupFilter{Kind: domain.BackupKindManager, Status: domain.OpSucceeded, Limit: 1})
 	switch {
 	case err != nil:
 		add("backup", "warn", "couldn't read the manager's backups: "+err.Error())
