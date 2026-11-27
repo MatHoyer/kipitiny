@@ -1,0 +1,89 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - depguard
+    - errorlint
+    - gocritic
+    - misspell
+    - nilerr
+    - noctx
+    - revive
+    - sqlclosecheck
+    - unconvert
+    - unparam
+  settings:
+    # Clean architecture: dependencies point inward. Each rule lists what a
+    # layer may import; anything else fails the lint.
+    depguard:
+      rules:
+        domain:
+          list-mode: strict
+          files: ["**/internal/domain/**"]
+          # anonymize: the anonymization rules, a pure package (no I/O).
+          allow: [$gostd, github.com/kipit-labs/kipitiny/internal/domain, github.com/kipit-labs/kipitiny/internal/anonymize]
+        usecase:
+          files: ["**/internal/usecase/**"]
+          deny:
+            - pkg: github.com/kipit-labs/kipitiny/internal/infrastructure
+              desc: use cases go through the ports in domain, wiring is in cmd/kipitiny
+            - pkg: github.com/kipit-labs/kipitiny/internal/delivery
+              desc: use cases know nothing about HTTP or MCP
+            - pkg: github.com/kipit-labs/kipitiny/internal/api
+              desc: use cases know nothing about HTTP
+            - pkg: github.com/kipit-labs/kipitiny/internal/mcp
+              desc: use cases know nothing about MCP
+            - pkg: github.com/uptrace/bun
+              desc: SQL stays in the store adapter
+        infrastructure:
+          files: ["**/internal/infrastructure/**"]
+          deny:
+            - pkg: github.com/kipit-labs/kipitiny/internal/usecase
+              desc: adapters implement domain ports, they never call use cases
+            - pkg: github.com/kipit-labs/kipitiny/internal/core
+              desc: adapters implement domain ports, they never call use cases
+            - pkg: github.com/kipit-labs/kipitiny/internal/delivery
+              desc: adapters know nothing about HTTP or MCP
+        # REST handlers and MCP tools are thin adapters over the use cases.
+        delivery:
+          files: ["**/internal/delivery/**", "**/internal/api/**", "**/internal/mcp/**"]
+          deny:
+            - pkg: github.com/kipit-labs/kipitiny/internal/infrastructure
+              desc: handlers go through use cases, wiring is in cmd/kipitiny
+            - pkg: github.com/kipit-labs/kipitiny/internal/store/sqlite
+              desc: handlers go through use cases, wiring is in cmd/kipitiny
+            - pkg: github.com/kipit-labs/kipitiny/internal/docker
+              desc: handlers never touch Docker, they go through use cases
+            - pkg: github.com/moby/moby
+              desc: handlers never touch Docker, they go through use cases
+            - pkg: github.com/uptrace/bun
+              desc: handlers never touch SQL
+    revive:
+      enable-default-rules: true
+      rules:
+        # Small files: easier to review, and to read whole (people and LLMs).
+        - name: file-length-limit
+          arguments: [{ max: 500 }]
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+  exclusions:
+    # std-error-handling: unchecked Close/Flush/print, which only read paths use here.
+    presets: [std-error-handling, common-false-positives]
+    rules:
+      # Tests wire the real store and Docker client: the unit layer runs on a
+      # temp SQLite, the contract tests on the real wiring.
+      - path: _test\.go
+        linters: [noctx, unparam, depguard]
+
+formatters:
+  enable:
+    - gofmt
+
+issues:
+  # The rules apply to code written or moved since they came in; the code
+  # older than that is brought up to them area by area (#522).
+  new-from-rev: 284c097f8684633706c91c3917fd41d8d17fc361

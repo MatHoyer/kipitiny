@@ -28,6 +28,8 @@ jobs:
       KIPITINY_TEST_S3_SECRET_KEY: testsecret
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # golangci-lint reports what changed since issues.new-from-rev
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -37,6 +39,10 @@ jobs:
           unformatted=$(gofmt -l .)
           if [ -n "$unformatted" ]; then echo "Run gofmt on:"; echo "$unformatted"; exit 1; fi
       - run: go vet ./...
+      # The kipitrek linters, the layer rules and the file length limit (.golangci.yml).
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
       - name: Wait for S3
         run: for i in $(seq 30); do curl -s -o /dev/null localhost:19000 && exit 0; sleep 1; done; exit 1
       # Unit, API and the Docker-backed integration tests, under the coverage floor.
@@ -59,6 +65,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - run: pnpm lint # oxlint, max-lines included
       - run: pnpm build # tsc -b && vite build
       - run: pnpm build:demo # the website embeds this one
 

@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "build:demo": "tsc -b && vite build --mode demo --base /demo/ --outDir dist-demo",
     "dev:demo": "vite --mode demo",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "lint": "oxlint"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",
@@ -43,6 +44,7 @@
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "1.81.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.1"
