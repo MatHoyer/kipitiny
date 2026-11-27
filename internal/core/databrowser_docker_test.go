@@ -53,6 +53,10 @@ func dataTestDB(t *testing.T, kind store.ServiceKind, cfg *container.Config) (*C
 		// shuts down right after.
 		cfg.Healthcheck = postgresHealthcheck(svc.Env[pgUser], svc.Env[pgDatabase])
 	}
+	// Pulled first: a fresh daemon (CI's) has no image yet.
+	if err := dk.EnsureImage(ctx, cfg.Image, "", ""); err != nil {
+		t.Fatal(err)
+	}
 	id, err := dk.Run(ctx, client.ContainerCreateOptions{Name: "kipitiny-test-" + strings.ToLower(svc.ID), Config: cfg})
 	if err != nil {
 		t.Fatal(err)
