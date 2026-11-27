@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 )
@@ -53,7 +52,7 @@ func (c *Servers) Bootstrap(ctx context.Context) error {
 func (c *Servers) bootstrapServer(ctx context.Context, sv domain.Server) error {
 	dk := c.DockerFor(sv.ID)
 	progress.Report(ctx, ServerStepNetwork)
-	if err := dk.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil {
+	if err := dk.EnsureNetwork(ctx, domain.ProxyNetwork); err != nil {
 		return err
 	}
 	if err := c.cleanupTerminals(ctx, dk); err != nil {

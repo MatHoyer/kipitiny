@@ -136,7 +136,7 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 		labels := network.TraefikLabels(svc, network.Routing{})
 		labels["traefik.docker.network"] = netName
 		labels[constraint] = "true"
-		labels[docker.LabelProject], labels[docker.LabelService] = p.ID, svc.ID
+		labels[domain.LabelProject], labels[domain.LabelService] = p.ID, svc.ID
 		id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{
 			Config:           &container.Config{Image: "busybox", Cmd: []string{"sh", "-c", cmd}, Labels: labels},
 			NetworkingConfig: &dockernet.NetworkingConfig{EndpointsConfig: map[string]*dockernet.EndpointSettings{netName: {}}},

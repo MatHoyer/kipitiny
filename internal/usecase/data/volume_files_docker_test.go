@@ -423,7 +423,7 @@ func containerFilesTest(t *testing.T, kind domain.ServiceKind, image string, cmd
 	id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{
 		Name: "kipitiny-test-" + strings.ToLower(svc.ID),
 		Config: &container.Config{Image: image, Cmd: cmd, User: "1000",
-			Labels: map[string]string{docker.LabelProject: p.ID, docker.LabelService: svc.ID, docker.LabelReplica: "1"}},
+			Labels: map[string]string{domain.LabelProject: p.ID, domain.LabelService: svc.ID, domain.LabelReplica: "1"}},
 		HostConfig: &container.HostConfig{NetworkMode: "none"},
 	})
 	if err != nil {

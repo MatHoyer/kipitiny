@@ -116,7 +116,7 @@ func pickContainer(cts []container.Summary, ref string) (container.Summary, bool
 }
 
 func replicaOf(ct container.Summary) int {
-	n, _ := strconv.Atoi(ct.Labels[docker.LabelReplica])
+	n, _ := strconv.Atoi(ct.Labels[domain.LabelReplica])
 	return n
 }
 
@@ -155,8 +155,8 @@ func (c *Servers) OpenServerTerminal(ctx context.Context, serverID string, cols,
 			Cmd:   hostShell,
 			Env:   terminalEnv,
 			Labels: map[string]string{
-				docker.LabelManaged:   "true",
-				docker.LabelComponent: terminalComponent,
+				domain.LabelManaged:   "true",
+				domain.LabelComponent: terminalComponent,
 			},
 		},
 		HostConfig: &container.HostConfig{
@@ -171,7 +171,7 @@ func (c *Servers) OpenServerTerminal(ctx context.Context, serverID string, cols,
 // cleanupTerminals removes host shell and host check helpers left by a crash.
 func (c *Servers) cleanupTerminals(ctx context.Context, dk *docker.Client) error {
 	for _, component := range []string{terminalComponent, hostCheckComponent} {
-		cts, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: component})
+		cts, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: component})
 		if err != nil {
 			return err
 		}

@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
@@ -53,11 +52,11 @@ networks:
 		t.Errorf("web = %v %v", w.ProjectNetworks, w.Networks)
 	}
 	spec := containerSpec(p, by["api"], envSources{}, "D1", 1, network.Routing{})
-	if len(spec.NetworkingConfig.EndpointsConfig) != 2 || spec.NetworkingConfig.EndpointsConfig[docker.ProjectNetworkNamed(p.ID, "back")] == nil ||
-		spec.NetworkingConfig.EndpointsConfig[docker.ProjectNetwork(p.ID)] != nil {
+	if len(spec.NetworkingConfig.EndpointsConfig) != 2 || spec.NetworkingConfig.EndpointsConfig[domain.ProjectNetworkNamed(p.ID, "back")] == nil ||
+		spec.NetworkingConfig.EndpointsConfig[domain.ProjectNetwork(p.ID)] != nil {
 		t.Errorf("api endpoints = %v", spec.NetworkingConfig.EndpointsConfig)
 	}
-	if spec := containerSpec(p, by["plain"], envSources{}, "D1", 1, network.Routing{}); spec.NetworkingConfig.EndpointsConfig[docker.ProjectNetwork(p.ID)] == nil {
+	if spec := containerSpec(p, by["plain"], envSources{}, "D1", 1, network.Routing{}); spec.NetworkingConfig.EndpointsConfig[domain.ProjectNetwork(p.ID)] == nil {
 		t.Errorf("plain endpoints = %v", spec.NetworkingConfig.EndpointsConfig)
 	}
 

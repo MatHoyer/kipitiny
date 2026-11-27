@@ -38,7 +38,7 @@ func TestTraefikImageUpgradeDocker(t *testing.T) {
 	}
 	t.Cleanup(func() { _, _ = dk.ImageRemove(context.Background(), floating, client.ImageRemoveOptions{}) })
 
-	if err := dk.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil { // the reconciler's job
+	if err := dk.EnsureNetwork(ctx, domain.ProxyNetwork); err != nil { // the reconciler's job
 		t.Fatal(err)
 	}
 
@@ -51,14 +51,14 @@ func TestTraefikImageUpgradeDocker(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		cts, _ := dk.ListContainers(context.Background(), map[string]string{docker.LabelComponent: network.TraefikComponent})
+		cts, _ := dk.ListContainers(context.Background(), map[string]string{domain.LabelComponent: network.TraefikComponent})
 		for _, ct := range cts {
 			_ = dk.RemoveContainer(context.Background(), ct.ID, 0)
 		}
 	})
 	running := func() (id, image string) {
 		t.Helper()
-		cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: network.TraefikComponent})
+		cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: network.TraefikComponent})
 		if err != nil || len(cts) != 1 {
 			t.Fatalf("traefik containers: %v %v", cts, err)
 		}

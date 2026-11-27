@@ -13,7 +13,6 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
@@ -63,7 +62,7 @@ func (c *Deployer) ReconcileService(ctx context.Context, project domain.Project,
 		if !IsActive(ct, svc) {
 			continue
 		}
-		idx, _ := strconv.Atoi(ct.Labels[docker.LabelReplica])
+		idx, _ := strconv.Atoi(ct.Labels[domain.LabelReplica])
 		if _, dup := byReplica[idx]; dup || idx < 1 || idx > want.Replicas {
 			extra = append(extra, ct)
 			continue
@@ -118,8 +117,8 @@ func (c *Deployer) ReconcileService(ctx context.Context, project domain.Project,
 
 	// Scale down from the highest replica, one at a time.
 	slices.SortFunc(extra, func(a, b container.Summary) int {
-		ai, _ := strconv.Atoi(a.Labels[docker.LabelReplica])
-		bi, _ := strconv.Atoi(b.Labels[docker.LabelReplica])
+		ai, _ := strconv.Atoi(a.Labels[domain.LabelReplica])
+		bi, _ := strconv.Atoi(b.Labels[domain.LabelReplica])
 		return bi - ai
 	})
 	for i, ct := range extra {

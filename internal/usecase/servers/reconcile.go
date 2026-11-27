@@ -10,7 +10,6 @@ import (
 	"github.com/moby/moby/api/types/events"
 	"github.com/moby/moby/client"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -91,7 +90,7 @@ func (c *Servers) watchEvents(ctx context.Context, serverID string) {
 	for ctx.Err() == nil {
 		f := make(client.Filters)
 		f.Add("type", string(events.ContainerEventType))
-		f.Add("label", docker.LabelManaged+"=true")
+		f.Add("label", domain.LabelManaged+"=true")
 		f.Add("event", string(events.ActionDie), string(events.ActionDestroy), string(events.ActionOOM))
 		res := c.DockerFor(serverID).Client.Events(ctx, client.EventsListOptions{Filters: f})
 	stream:
@@ -100,8 +99,8 @@ func (c *Servers) watchEvents(ctx context.Context, serverID string) {
 			case m := <-res.Messages:
 				if m.Action == events.ActionOOM {
 					// Docker restarts the replica itself: the reconciler wouldn't see it.
-					if sid := m.Actor.Attributes[docker.LabelService]; sid != "" {
-						c.NotifyOOM(ctx, sid, m.Actor.Attributes[docker.LabelReplica])
+					if sid := m.Actor.Attributes[domain.LabelService]; sid != "" {
+						c.NotifyOOM(ctx, sid, m.Actor.Attributes[domain.LabelReplica])
 					}
 					continue
 				}
@@ -149,7 +148,7 @@ func (c *Servers) Reconcile(ctx context.Context) error {
 
 func (c *Servers) reconcileServer(ctx context.Context, sv domain.Server, svcs []domain.Service) error {
 	dk := c.DockerFor(sv.ID)
-	if err := dk.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil {
+	if err := dk.EnsureNetwork(ctx, domain.ProxyNetwork); err != nil {
 		return err // server unreachable: nothing else will work either
 	}
 	if c.cfg.Traefik.Enabled {
@@ -174,14 +173,14 @@ func (c *Servers) reconcileServer(ctx context.Context, sv domain.Server, svcs []
 	if err := c.mgr.EnsureNetworks(ctx, sv); err != nil {
 		c.log.Warn("reconcile: networks", "server", sv.Name, "err", err)
 	}
-	all, err := dk.ListSummaries(ctx, map[string]string{docker.LabelManaged: "true"})
+	all, err := dk.ListSummaries(ctx, map[string]string{domain.LabelManaged: "true"})
 	if err != nil {
 		return err
 	}
 	c.mgr.RemoveStaleJobContainers(ctx, dk, all)
 	byService := map[string][]container.Summary{}
 	for _, ct := range all {
-		if sid := ct.Labels[docker.LabelService]; sid != "" {
+		if sid := ct.Labels[domain.LabelService]; sid != "" {
 			byService[sid] = append(byService[sid], ct)
 		}
 	}
@@ -199,7 +198,7 @@ func (c *Servers) reconcileServer(ctx context.Context, sv domain.Server, svcs []
 				continue
 			}
 			projects[p.ID] = p
-			if err := dk.EnsureNetwork(ctx, docker.ProjectNetwork(p.ID)); err != nil {
+			if err := dk.EnsureNetwork(ctx, domain.ProjectNetwork(p.ID)); err != nil {
 				errs = append(errs, err)
 				continue
 			}

@@ -12,7 +12,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/compose"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -284,7 +283,7 @@ func (c *Deployer) DeployPreview(ctx context.Context, parentID, name string, opt
 	if errors.Is(err, domain.ErrNotFound) {
 		p, err = c.store.CreateProject(ctx, domain.Project{Name: projectName, ServerID: parent.ServerID, ParentID: parentID, Preview: domain.Preview{Name: name}})
 		if err == nil {
-			err = c.mgr.DockerFor(p.ServerID).EnsureNetwork(ctx, docker.ProjectNetwork(p.ID))
+			err = c.mgr.DockerFor(p.ServerID).EnsureNetwork(ctx, domain.ProjectNetwork(p.ID))
 		}
 	}
 	if err != nil {

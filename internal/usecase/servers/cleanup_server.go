@@ -38,7 +38,7 @@ func (c *Servers) cleanServer(ctx context.Context, sv domain.Server, svcs []doma
 	// Containers first: what they held becomes unused for the next steps.
 	if s.Containers {
 		step(CleanupContainers)
-		f := make(client.Filters).Add("until", until).Add("label!", docker.LabelManaged)
+		f := make(client.Filters).Add("until", until).Add("label!", domain.LabelManaged)
 		res, err := dk.ContainerPrune(ctx, client.ContainerPruneOptions{Filters: f})
 		fail("containers", err)
 		r.Containers += len(res.Report.ContainersDeleted)
@@ -81,7 +81,7 @@ func (c *Servers) cleanServer(ctx context.Context, sv domain.Server, svcs []doma
 	r.Volumes += n
 	if s.Networks {
 		step(CleanupNetworks)
-		f := make(client.Filters).Add("until", until).Add("label!", docker.LabelManaged)
+		f := make(client.Filters).Add("until", until).Add("label!", domain.LabelManaged)
 		res, err := dk.NetworkPrune(ctx, client.NetworkPruneOptions{Filters: f})
 		fail("networks", err)
 		r.Networks += len(res.Report.NetworksDeleted)
@@ -176,7 +176,7 @@ func (c *Servers) removeUnusedVolumes(ctx context.Context, dk *docker.Client, sv
 	}
 	n, size := 0, uint64(0)
 	for _, v := range vols.Items {
-		_, managed := v.Labels[docker.LabelManaged]
+		_, managed := v.Labels[domain.LabelManaged]
 		if managed || protected[v.Name] || strings.HasPrefix(v.Name, "kipitiny-") {
 			continue
 		}
@@ -213,7 +213,7 @@ func (c *Servers) removeStaleProbes(ctx context.Context, dk *docker.Client) (int
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return 0, err
 	}
-	f := make(client.Filters).Add("dangling", "true").Add("label", docker.LabelComponent+"=probe")
+	f := make(client.Filters).Add("dangling", "true").Add("label", domain.LabelComponent+"=probe")
 	vols, err := dk.VolumeList(ctx, client.VolumeListOptions{Filters: f})
 	if err != nil {
 		return 0, err

@@ -15,6 +15,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 	"github.com/kipit-labs/kipitiny/internal/secrets"
 )
@@ -182,7 +183,7 @@ func (r *ContainerRunner) start(ctx context.Context) (string, error) {
 	if err := r.dk.EnsureImage(ctx, r.image, "", ""); err != nil {
 		return "", fmt.Errorf("pull %s: %w", r.image, err)
 	}
-	labels := map[string]string{docker.LabelManaged: "true", docker.LabelComponent: Component}
+	labels := map[string]string{domain.LabelManaged: "true", domain.LabelComponent: Component}
 	// Creating an existing volume returns it.
 	if _, err := r.dk.VolumeCreate(ctx, client.VolumeCreateOptions{Name: r.volume, Labels: labels}); err != nil {
 		return "", fmt.Errorf("session volume: %w", err)

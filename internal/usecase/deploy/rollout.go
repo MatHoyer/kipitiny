@@ -38,13 +38,13 @@ func (c *Deployer) preDeploy(ctx context.Context, project domain.Project, svc do
 	spec.Config.Entrypoint = []string{}
 	// Not a replica: no service label (so it never shows up as one), no routing.
 	spec.Config.Labels = map[string]string{
-		docker.LabelManaged:   "true",
-		docker.LabelProject:   project.ID,
-		docker.LabelComponent: "predeploy",
-		docker.LabelDeploy:    dep.ID,
+		domain.LabelManaged:   "true",
+		domain.LabelProject:   project.ID,
+		domain.LabelComponent: "predeploy",
+		domain.LabelDeploy:    dep.ID,
 	}
 	spec.HostConfig.RestartPolicy = container.RestartPolicy{Name: container.RestartPolicyDisabled}
-	delete(spec.NetworkingConfig.EndpointsConfig, docker.ProxyNetwork)
+	delete(spec.NetworkingConfig.EndpointsConfig, domain.ProxyNetwork)
 	// The replica it precedes holds the published ports.
 	spec.Config.ExposedPorts, spec.HostConfig.PortBindings = nil, nil
 
@@ -368,5 +368,5 @@ func IsActive(ct container.Summary, svc domain.Service) bool {
 	if svc.CurrentDeploymentID == "" {
 		return ct.State == container.StateRunning
 	}
-	return ct.Labels[docker.LabelDeploy] == svc.CurrentDeploymentID
+	return ct.Labels[domain.LabelDeploy] == svc.CurrentDeploymentID
 }

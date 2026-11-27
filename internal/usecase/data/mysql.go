@@ -12,7 +12,6 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -147,7 +146,7 @@ func applyMySQLSpec(cfg *container.Config, host *container.HostConfig, svc domai
 		Source: MySQLVolume(svc.ID),
 		Target: mysqlVolumeMount,
 	})
-	cfg.Labels[docker.LabelComponent] = string(svc.Kind)
+	cfg.Labels[domain.LabelComponent] = string(svc.Kind)
 }
 
 // mysqlHealthcheck pings over TCP: the image initializes the data directory

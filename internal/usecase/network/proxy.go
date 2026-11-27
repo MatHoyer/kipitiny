@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -62,7 +61,7 @@ func (c *Network) refreshProxyLocked(ctx context.Context) {
 	c.proxy.refreshed = time.Now()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	cts, err := c.mgr.DockerFor(domain.LocalServerID).ListSummaries(ctx, map[string]string{docker.LabelComponent: TraefikComponent})
+	cts, err := c.mgr.DockerFor(domain.LocalServerID).ListSummaries(ctx, map[string]string{domain.LabelComponent: TraefikComponent})
 	if err != nil {
 		c.log.Warn("read traefik addresses", "err", err)
 		return // keep the last known ones

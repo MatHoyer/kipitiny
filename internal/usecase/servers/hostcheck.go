@@ -155,8 +155,8 @@ func (c *Servers) runOnHost(ctx context.Context, serverID, script string) (strin
 			Image: hostShellImage,
 			Cmd:   []string{"nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--", "/bin/sh", "-s"},
 			Labels: map[string]string{
-				docker.LabelManaged:   "true",
-				docker.LabelComponent: hostCheckComponent,
+				domain.LabelManaged:   "true",
+				domain.LabelComponent: hostCheckComponent,
 			},
 		},
 		HostConfig: &container.HostConfig{

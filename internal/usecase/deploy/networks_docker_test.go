@@ -45,7 +45,7 @@ func TestNetworksDocker(t *testing.T) {
 	// it as an orphan.
 	id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{
 		Name:   "kipitiny-test-" + strings.ToLower(svc.ID),
-		Config: &container.Config{Image: "busybox", Cmd: []string{"sleep", "300"}, Labels: map[string]string{docker.LabelProject: p.ID, docker.LabelService: svc.ID}},
+		Config: &container.Config{Image: "busybox", Cmd: []string{"sleep", "300"}, Labels: map[string]string{domain.LabelProject: p.ID, domain.LabelService: svc.ID}},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -63,7 +63,7 @@ func (c *Network) ViaTunnel(ctx context.Context, serverID string) bool {
 func (c *Network) EnsureTunnel(ctx context.Context, sv domain.Server) error {
 	dk := c.mgr.DockerFor(sv.ID)
 	token := c.TunnelToken(sv)
-	existing, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: TunnelComponent})
+	existing, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: TunnelComponent})
 	if err != nil {
 		return err
 	}
@@ -73,8 +73,8 @@ func (c *Network) EnsureTunnel(ctx context.Context, sv domain.Server) error {
 	if token != "" {
 		opts = c.tunnelSpec(token)
 		hash = SpecHash(opts.Config.Image, opts.Config.Cmd, opts.Config.Env)
-		opts.Config.Labels[docker.LabelConfigHash] = hash
-		if len(existing) == 1 && existing[0].Labels[docker.LabelConfigHash] == hash {
+		opts.Config.Labels[domain.LabelConfigHash] = hash
+		if len(existing) == 1 && existing[0].Labels[domain.LabelConfigHash] == hash {
 			if existing[0].State == container.StateRunning {
 				return nil
 			}
@@ -111,8 +111,8 @@ func (c *Network) tunnelSpec(token string) client.ContainerCreateOptions {
 			// The token is read from the environment, keeping it out of `ps`.
 			Env: []string{"TUNNEL_TOKEN=" + token},
 			Labels: map[string]string{
-				docker.LabelManaged:   "true",
-				docker.LabelComponent: TunnelComponent,
+				domain.LabelManaged:   "true",
+				domain.LabelComponent: TunnelComponent,
 			},
 		},
 		HostConfig: &container.HostConfig{
@@ -120,7 +120,7 @@ func (c *Network) tunnelSpec(token string) client.ContainerCreateOptions {
 			LogConfig:     docker.DefaultLogConfig(),
 		},
 		NetworkingConfig: &network.NetworkingConfig{
-			EndpointsConfig: map[string]*network.EndpointSettings{docker.ProxyNetwork: {}},
+			EndpointsConfig: map[string]*network.EndpointSettings{domain.ProxyNetwork: {}},
 		},
 	}
 }

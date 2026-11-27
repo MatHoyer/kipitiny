@@ -132,7 +132,7 @@ func (c *Data) filesContainer(ctx context.Context, svc domain.Service, ref strin
 		return "", err
 	}
 	slices.SortFunc(cts, func(a, b container.Summary) int {
-		return strings.Compare(a.Labels[docker.LabelReplica], b.Labels[docker.LabelReplica])
+		return strings.Compare(a.Labels[domain.LabelReplica], b.Labels[domain.LabelReplica])
 	})
 	id := strings.TrimPrefix(ref, containerPrefix)
 	for _, ct := range cts {

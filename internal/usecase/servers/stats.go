@@ -177,8 +177,8 @@ func (c *Servers) sampleStats(ctx context.Context) {
 // serve traffic (not the previous deployment's during a rollout).
 func sampleServer(ctx context.Context, dk *docker.Client, svcs map[string]domain.Service) (map[string]sample, map[string]string, error) {
 	f := make(client.Filters)
-	f.Add("label", docker.LabelManaged+"=true")
-	f.Add("label", docker.LabelService)
+	f.Add("label", domain.LabelManaged+"=true")
+	f.Add("label", domain.LabelService)
 	res, err := dk.ContainerList(ctx, client.ContainerListOptions{Filters: f})
 	if err != nil {
 		return nil, nil, err
@@ -191,7 +191,7 @@ func sampleServer(ctx context.Context, dk *docker.Client, svcs map[string]domain
 		owner   = map[string]string{}
 	)
 	for _, ct := range res.Items {
-		svc, ok := svcs[ct.Labels[docker.LabelService]]
+		svc, ok := svcs[ct.Labels[domain.LabelService]]
 		if !ok || !deploy.IsActive(ct, svc) {
 			continue
 		}

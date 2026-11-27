@@ -44,12 +44,12 @@ func TestTemplatesDocker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelManaged: "true"}); err != nil {
+	if cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelManaged: "true"}); err != nil {
 		t.Fatal(err)
 	} else if len(cts) > 0 {
 		t.Fatalf("this Docker daemon runs %d kipitiny container(s): use a throwaway one (DOCKER_HOST)", len(cts))
 	}
-	if err := dk.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil {
+	if err := dk.EnsureNetwork(ctx, domain.ProxyNetwork); err != nil {
 		t.Fatal(err)
 	}
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
@@ -86,7 +86,7 @@ func TestTemplatesDocker(t *testing.T) {
 			// late crash (bad config read after start) a chance to show.
 			time.Sleep(15 * time.Second)
 			for _, s := range svcs {
-				cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelService: s.ID})
+				cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelService: s.ID})
 				if err != nil {
 					t.Fatal(err)
 				}

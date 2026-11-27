@@ -100,7 +100,7 @@ func (c *Deployer) probeMount(ctx context.Context, serverID string) (*mount.Moun
 func installProbe(ctx context.Context, dk *docker.Client, volume, bin string) error {
 	if _, err := dk.VolumeCreate(ctx, client.VolumeCreateOptions{
 		Name:   volume,
-		Labels: map[string]string{docker.LabelManaged: "true", docker.LabelComponent: "probe"},
+		Labels: map[string]string{domain.LabelManaged: "true", domain.LabelComponent: "probe"},
 	}); err != nil {
 		return err
 	}
@@ -109,7 +109,7 @@ func installProbe(ctx context.Context, dk *docker.Client, volume, bin string) er
 		return err
 	}
 	helper, err := dk.ContainerCreate(ctx, client.ContainerCreateOptions{
-		Config: &container.Config{Image: probeHelperImage, Labels: map[string]string{docker.LabelManaged: "true"}},
+		Config: &container.Config{Image: probeHelperImage, Labels: map[string]string{domain.LabelManaged: "true"}},
 		HostConfig: &container.HostConfig{
 			Mounts: []mount.Mount{{Type: mount.TypeVolume, Source: volume, Target: "/probe"}},
 		},

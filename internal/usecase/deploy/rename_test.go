@@ -103,7 +103,7 @@ func TestRenameDocker(t *testing.T) {
 	}
 	// Not kipitiny.managed: a manager running on this daemon would remove
 	// them as orphans.
-	netName := docker.ProjectNetwork(p.ID)
+	netName := domain.ProjectNetwork(p.ID)
 	if _, err := dk.NetworkCreate(ctx, netName, client.NetworkCreateOptions{Driver: "bridge"}); err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestRenameDocker(t *testing.T) {
 		Config: &container.Config{
 			Image:  "busybox:stable",
 			Cmd:    []string{"sleep", "3600"},
-			Labels: map[string]string{docker.LabelProject: p.ID, docker.LabelService: db.ID},
+			Labels: map[string]string{domain.LabelProject: p.ID, domain.LabelService: db.ID},
 		},
 		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{
 			netName: {Aliases: []string{"main"}},

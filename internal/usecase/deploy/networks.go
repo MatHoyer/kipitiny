@@ -69,7 +69,7 @@ func (c *Deployer) ListNetworks(ctx context.Context) ([]NetworkView, error) {
 	}
 	out := make([]NetworkView, 0, len(nets))
 	for _, n := range nets {
-		v := NetworkView{Network: n, DockerName: docker.CustomNetwork(n.ID), Services: []NetworkMember{}}
+		v := NetworkView{Network: n, DockerName: domain.CustomNetwork(n.ID), Services: []NetworkMember{}}
 		for _, s := range svcs {
 			if !slices.Contains(s.Networks, n.ID) {
 				continue
@@ -110,7 +110,7 @@ func (c *Deployer) CreateNetwork(ctx context.Context, in NetworkInput) (NetworkV
 	if err != nil {
 		return NetworkView{}, err
 	}
-	v := NetworkView{Network: n, DockerName: docker.CustomNetwork(n.ID), Services: []NetworkMember{}}
+	v := NetworkView{Network: n, DockerName: domain.CustomNetwork(n.ID), Services: []NetworkMember{}}
 	if err := c.mgr.DockerFor(n.ServerID).EnsureNetwork(ctx, v.DockerName); err != nil {
 		return v, fmt.Errorf("%w: network saved but not created on the server yet (retried in the background): %v", ErrInvalid, err)
 	}
@@ -129,7 +129,7 @@ func (c *Deployer) DeleteNetwork(ctx context.Context, id string) error {
 		return err
 	}
 	dk := c.mgr.DockerFor(n.ServerID)
-	name := docker.CustomNetwork(n.ID)
+	name := domain.CustomNetwork(n.ID)
 	var errs []error
 	for _, s := range svcs {
 		if !slices.Contains(s.Networks, id) {
@@ -222,11 +222,11 @@ func (c *Deployer) syncNetworks(ctx context.Context, project domain.Project, svc
 			continue
 		}
 		for name := range ct.NetworkSettings.Networks {
-			if !docker.IsCustomNetwork(name) {
+			if !domain.IsCustomNetwork(name) {
 				continue
 			}
 			switch {
-			case !slices.ContainsFunc(svc.Networks, func(id string) bool { return docker.CustomNetwork(id) == name }):
+			case !slices.ContainsFunc(svc.Networks, func(id string) bool { return domain.CustomNetwork(id) == name }):
 				errs = append(errs, dk.DisconnectNetwork(ctx, name, ct.ID))
 			case renamed:
 				errs = append(errs, dk.SetAliases(ctx, name, ct.ID, []string{alias}))
@@ -278,11 +278,11 @@ func validateProjectNetworks(s domain.Service) error {
 // projectNetworks are the Docker names of the project networks svc is on.
 func projectNetworks(project domain.Project, svc domain.Service) []string {
 	if len(svc.ProjectNetworks) == 0 {
-		return []string{docker.ProjectNetwork(project.ID)}
+		return []string{domain.ProjectNetwork(project.ID)}
 	}
 	out := make([]string, len(svc.ProjectNetworks))
 	for i, n := range svc.ProjectNetworks {
-		out[i] = docker.ProjectNetworkNamed(project.ID, n)
+		out[i] = domain.ProjectNetworkNamed(project.ID, n)
 	}
 	return out
 }
@@ -299,10 +299,10 @@ func wantNetworks(project domain.Project, svc domain.Service, ct container.Summa
 		want[n] = []string{svc.Name}
 	}
 	for _, id := range svc.Networks {
-		want[docker.CustomNetwork(id)] = []string{networkAlias(project, svc)}
+		want[domain.CustomNetwork(id)] = []string{networkAlias(project, svc)}
 	}
 	if ct.Labels["traefik.enable"] == "true" {
-		want[docker.ProxyNetwork] = nil
+		want[domain.ProxyNetwork] = nil
 	}
 	return want
 }
@@ -321,9 +321,9 @@ func networkIssues(project domain.Project, svc domain.Service, cts []container.S
 			}
 			issue := "not on a network it joins"
 			switch {
-			case name == docker.ProxyNetwork:
+			case name == domain.ProxyNetwork:
 				issue = "not on the proxy network: its domain can't reach it"
-			case name == docker.ProjectNetwork(project.ID):
+			case name == domain.ProjectNetwork(project.ID):
 				issue = "not on the project network: other services can't reach it"
 			}
 			if !slices.Contains(out, issue) {
@@ -359,7 +359,7 @@ func (c *Deployer) EnsureNetworks(ctx context.Context, sv domain.Server) error {
 	var errs []error
 	for _, n := range nets {
 		if n.ServerID == sv.ID {
-			errs = append(errs, dk.EnsureNetwork(ctx, docker.CustomNetwork(n.ID)))
+			errs = append(errs, dk.EnsureNetwork(ctx, domain.CustomNetwork(n.ID)))
 		}
 	}
 	return errors.Join(errs...)

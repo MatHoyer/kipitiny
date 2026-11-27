@@ -12,7 +12,6 @@ import (
 	"github.com/moby/moby/api/types/container"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
@@ -23,7 +22,7 @@ func replica(name, deploy string, state container.ContainerState, health contain
 		Names:  []string{"/" + name},
 		State:  state,
 		Status: "Exited (1) 2 minutes ago",
-		Labels: map[string]string{docker.LabelDeploy: deploy},
+		Labels: map[string]string{domain.LabelDeploy: deploy},
 	}
 	if health != "" {
 		ct.Health = &container.HealthSummary{Status: health}

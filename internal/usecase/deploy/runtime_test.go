@@ -60,7 +60,7 @@ services:
 	if !slices.Equal(cfg.Entrypoint, []string{""}) || cfg.User != "1000" || cfg.WorkingDir != "/app" || cfg.StopSignal != "SIGINT" {
 		t.Errorf("config = %+v", cfg)
 	}
-	if cfg.Labels["com.example.team"] != "shop" || cfg.Labels[docker.LabelService] != w.ID {
+	if cfg.Labels["com.example.team"] != "shop" || cfg.Labels[domain.LabelService] != w.ID {
 		t.Errorf("labels = %v", cfg.Labels)
 	}
 	if host.Tmpfs["/tmp"] != "size=64m" || host.ShmSize != 1<<30 || !host.ReadonlyRootfs || host.Init == nil || !*host.Init ||
