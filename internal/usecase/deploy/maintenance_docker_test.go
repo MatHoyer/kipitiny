@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
 	dockernet "github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
@@ -99,21 +98,21 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 	upstream := "http://" + network.ManagerHost + ":" + portOf(t, ln.Addr())
 	opts, files := c.TraefikSpec(cfg.Traefik.DockerSocket, network.TraefikOpts{Pages: &network.PagesOpts{Upstream: upstream, ServerID: domain.LocalServerID, Token: token}})
 	constraint := "tt-" + strings.ToLower(svc.ID)
-	for i, a := range opts.Config.Cmd {
+	for i, a := range opts.Cmd {
 		switch {
 		case strings.HasPrefix(a, "--providers.docker.constraints="):
-			opts.Config.Cmd[i] = "--providers.docker.constraints=Label(`" + constraint + "`,`true`)"
+			opts.Cmd[i] = "--providers.docker.constraints=Label(`" + constraint + "`,`true`)"
 		case strings.HasPrefix(a, "--providers.docker.network="):
-			opts.Config.Cmd[i] = "--providers.docker.network=" + netName
+			opts.Cmd[i] = "--providers.docker.network=" + netName
 		}
 	}
-	opts.Config.Cmd = append(opts.Config.Cmd, "--providers.http.pollinterval=1s")
+	opts.Cmd = append(opts.Cmd, "--providers.http.pollinterval=1s")
 	opts.Name = netName + "-traefik"
-	opts.Config.Labels = nil
-	opts.HostConfig.Mounts = opts.HostConfig.Mounts[:1] // the socket, not the real Traefik's ACME volume
-	opts.HostConfig.PortBindings = dockernet.PortMap{dockernet.MustParsePort("443/tcp"): {{HostIP: netip.MustParseAddr("127.0.0.1")}}}
-	opts.NetworkingConfig.EndpointsConfig = map[string]*dockernet.EndpointSettings{netName: {}}
-	traefikID, err := dk.RunMoby(ctx, opts, files...)
+	opts.Labels = nil
+	opts.Mounts = opts.Mounts[:1] // the socket, not the real Traefik's ACME volume
+	opts.PortBindings = map[string][]domain.PortBinding{"443/tcp": {{HostIP: netip.MustParseAddr("127.0.0.1")}}}
+	opts.Networks = map[string][]string{netName: nil}
+	traefikID, err := dk.Run(ctx, opts, files...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,9 +136,9 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 		labels["traefik.docker.network"] = netName
 		labels[constraint] = "true"
 		labels[domain.LabelProject], labels[domain.LabelService] = p.ID, svc.ID
-		id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{
-			Config:           &container.Config{Image: "busybox", Cmd: []string{"sh", "-c", cmd}, Labels: labels},
-			NetworkingConfig: &dockernet.NetworkingConfig{EndpointsConfig: map[string]*dockernet.EndpointSettings{netName: {}}},
+		id, err := dk.Run(ctx, domain.ContainerSpec{
+			Image: "busybox", Cmd: []string{"sh", "-c", cmd}, Labels: labels,
+			Networks: map[string][]string{netName: nil},
 		})
 		if err != nil {
 			t.Fatal(err)

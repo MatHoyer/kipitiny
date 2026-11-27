@@ -7,10 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
-	"github.com/moby/moby/client"
-
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -51,16 +47,14 @@ func TestVolumeBackupDocker(t *testing.T) {
 	t.Cleanup(func() { _ = data.RemoveServiceVolumes(context.Background(), dk, svc) })
 
 	// A running replica writing to the volume, stopped during the restore.
-	replica, err := dk.RunMoby(ctx, client.ContainerCreateOptions{
-		Name: "kipitiny-test-" + strings.ToLower(svc.ID),
-		Config: &container.Config{
-			Image: "busybox:stable",
-			Cmd:   []string{"sh", "-c", "[ -f /uploads/a.txt ] || { echo v1 > /uploads/a.txt && mkdir /uploads/.d && chown 1000:1000 /uploads/a.txt; }; sleep 3600"},
-			// Not kipitiny.managed: a manager running on this daemon would
-			// remove it as an orphan.
-			Labels: map[string]string{domain.LabelProject: p.ID, domain.LabelService: svc.ID, domain.LabelDeploy: "D1"},
-		},
-		HostConfig: &container.HostConfig{Mounts: []mount.Mount{data.AppVolumeMount(svc, svc.Volumes[0].Name, svc.Volumes[0].Path)}},
+	replica, err := dk.Run(ctx, domain.ContainerSpec{
+		Name:  "kipitiny-test-" + strings.ToLower(svc.ID),
+		Image: "busybox:stable",
+		Cmd:   []string{"sh", "-c", "[ -f /uploads/a.txt ] || { echo v1 > /uploads/a.txt && mkdir /uploads/.d && chown 1000:1000 /uploads/a.txt; }; sleep 3600"},
+		// Not kipitiny.managed: a manager running on this daemon would
+		// remove it as an orphan.
+		Labels: map[string]string{domain.LabelProject: p.ID, domain.LabelService: svc.ID, domain.LabelDeploy: "D1"},
+		Mounts: []domain.Mount{data.AppVolumeMount(svc, svc.Volumes[0].Name, svc.Volumes[0].Path)},
 	})
 	if err != nil {
 		t.Fatal(err)

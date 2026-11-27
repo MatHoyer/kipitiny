@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
@@ -111,16 +110,12 @@ func TestRenameDocker(t *testing.T) {
 	if err := dk.EnsureImage(ctx, "busybox:stable", "", ""); err != nil {
 		t.Fatal(err)
 	}
-	id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{
-		Name: "renametest-main-1-abcdef",
-		Config: &container.Config{
-			Image:  "busybox:stable",
-			Cmd:    []string{"sleep", "3600"},
-			Labels: map[string]string{domain.LabelProject: p.ID, domain.LabelService: db.ID},
-		},
-		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{
-			netName: {Aliases: []string{"main"}},
-		}},
+	id, err := dk.Run(ctx, domain.ContainerSpec{
+		Name:     "renametest-main-1-abcdef",
+		Image:    "busybox:stable",
+		Cmd:      []string{"sleep", "3600"},
+		Labels:   map[string]string{domain.LabelProject: p.ID, domain.LabelService: db.ID},
+		Networks: map[string][]string{netName: {"main"}},
 	})
 	if err != nil {
 		t.Fatal(err)

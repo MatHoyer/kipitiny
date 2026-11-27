@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
@@ -43,9 +42,9 @@ func TestNetworksDocker(t *testing.T) {
 	}
 	// Not kipitiny.managed: a manager running on this daemon would remove
 	// it as an orphan.
-	id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{
-		Name:   "kipitiny-test-" + strings.ToLower(svc.ID),
-		Config: &container.Config{Image: "busybox", Cmd: []string{"sleep", "300"}, Labels: map[string]string{domain.LabelProject: p.ID, domain.LabelService: svc.ID}},
+	id, err := dk.Run(ctx, domain.ContainerSpec{
+		Name:  "kipitiny-test-" + strings.ToLower(svc.ID),
+		Image: "busybox", Cmd: []string{"sleep", "300"}, Labels: map[string]string{domain.LabelProject: p.ID, domain.LabelService: svc.ID},
 	})
 	if err != nil {
 		t.Fatal(err)

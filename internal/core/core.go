@@ -72,7 +72,7 @@ type Core struct {
 	// steps: what the running operations are at (backups and restores in
 	// data, the cleanup in servers).
 	steps  progress.Steps
-	probes sync.Map // server ID -> *mount.Mount (nil: no probe there)
+	probes sync.Map // server ID -> *domain.Mount (nil: no probe there)
 }
 
 // New builds the core around the local Docker client; remote servers are

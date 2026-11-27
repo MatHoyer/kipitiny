@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -182,60 +180,60 @@ func validateRuntime(s domain.Service) error {
 }
 
 // applyRuntime sets an app's runtime settings on its container.
-func applyRuntime(cfg *container.Config, host *container.HostConfig, r domain.Runtime) {
+func applyRuntime(spec *domain.ContainerSpec, r domain.Runtime) {
 	if len(r.Command) > 0 {
-		cfg.Cmd = r.Command
+		spec.Cmd = r.Command
 	}
 	if len(r.Entrypoint) > 0 {
-		cfg.Entrypoint = r.Entrypoint
+		spec.Entrypoint = r.Entrypoint
 	}
-	cfg.User, cfg.WorkingDir, cfg.StopSignal = r.User, r.WorkingDir, r.StopSignal
-	cfg.Tty, cfg.OpenStdin = r.TTY, r.StdinOpen
+	spec.User, spec.WorkingDir, spec.StopSignal = r.User, r.WorkingDir, r.StopSignal
+	spec.Tty, spec.OpenStdin = r.TTY, r.StdinOpen
 	if r.Restart != "" {
 		mode, retries, _ := strings.Cut(r.Restart, ":")
 		n, _ := strconv.Atoi(retries)
-		host.RestartPolicy = container.RestartPolicy{Name: container.RestartPolicyMode(mode), MaximumRetryCount: n}
+		spec.Restart = domain.RestartPolicy{Name: mode, MaxRetries: n}
 	}
 	for k, v := range r.Labels {
-		if _, ours := cfg.Labels[k]; !ours {
-			cfg.Labels[k] = v
+		if _, ours := spec.Labels[k]; !ours {
+			spec.Labels[k] = v
 		}
 	}
-	host.Tmpfs = maps.Clone(r.Tmpfs)
-	host.ShmSize = int64(r.ShmSizeMB) << 20
-	host.MemoryReservation = int64(r.MemoryReservationMB) << 20
+	spec.Tmpfs = maps.Clone(r.Tmpfs)
+	spec.ShmSize = int64(r.ShmSizeMB) << 20
+	spec.MemoryReservation = int64(r.MemoryReservationMB) << 20
 	for _, name := range slices.Sorted(maps.Keys(r.Ulimits)) {
 		u := r.Ulimits[name]
-		host.Ulimits = append(host.Ulimits, &container.Ulimit{Name: name, Soft: u.Soft, Hard: u.Hard})
+		spec.Ulimits = append(spec.Ulimits, domain.ContainerUlimit{Name: name, Soft: u.Soft, Hard: u.Hard})
 	}
-	host.Sysctls = maps.Clone(r.Sysctls)
-	host.ReadonlyRootfs = r.ReadOnly
+	spec.Sysctls = maps.Clone(r.Sysctls)
+	spec.ReadonlyRootfs = r.ReadOnly
 	if r.Init {
-		host.Init = &r.Init
+		spec.Init = &r.Init
 	}
-	host.ExtraHosts = slices.Clone(r.ExtraHosts)
-	host.CapAdd = slices.Clone(r.CapAdd)
+	spec.ExtraHosts = slices.Clone(r.ExtraHosts)
+	spec.CapAdd = slices.Clone(r.CapAdd)
 	if slices.Contains(r.CapAdd, "NET_RAW") || slices.Contains(r.CapAdd, "ALL") || r.Privileged {
-		host.CapDrop = slices.DeleteFunc(host.CapDrop, func(c string) bool { return c == "NET_RAW" })
+		spec.CapDrop = slices.DeleteFunc(spec.CapDrop, func(c string) bool { return c == "NET_RAW" })
 	}
 	for _, c := range r.CapDrop {
-		if !slices.Contains(host.CapDrop, c) {
-			host.CapDrop = append(host.CapDrop, c)
+		if !slices.Contains(spec.CapDrop, c) {
+			spec.CapDrop = append(spec.CapDrop, c)
 		}
 	}
-	host.Privileged = r.Privileged
-	host.Binds = slices.Clone(r.Binds)
-	host.SecurityOpt = slices.Clone(r.SecurityOpt)
+	spec.Privileged = r.Privileged
+	spec.Binds = slices.Clone(r.Binds)
+	spec.SecurityOpt = slices.Clone(r.SecurityOpt)
 	for _, d := range r.Devices {
 		parts := append(strings.Split(d, ":"), "", "")
-		m := container.DeviceMapping{PathOnHost: parts[0], PathInContainer: parts[1], CgroupPermissions: parts[2]}
+		m := domain.DeviceMapping{PathOnHost: parts[0], PathInContainer: parts[1], CgroupPermissions: parts[2]}
 		if m.PathInContainer == "" {
 			m.PathInContainer = m.PathOnHost
 		}
 		if m.CgroupPermissions == "" {
 			m.CgroupPermissions = "rwm"
 		}
-		host.Devices = append(host.Devices, m)
+		spec.Devices = append(spec.Devices, m)
 	}
 }
 

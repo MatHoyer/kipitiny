@@ -32,7 +32,7 @@ type Deployer struct {
 	log  *slog.Logger
 	// bg ends when the manager stops: deploys and loops run under it.
 	bg context.Context
-	// probes: server ID -> *mount.Mount of the health probe (nil: none
+	// probes: server ID -> *domain.Mount of the health probe (nil: none
 	// there), shared with core (servers forget theirs on delete).
 	probes *sync.Map
 

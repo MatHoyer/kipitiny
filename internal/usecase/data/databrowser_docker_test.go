@@ -11,9 +11,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/client"
-
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -23,7 +20,7 @@ import (
 // daemon and returns the data use cases and an admin context to browse it.
 //
 //	KIPITINY_TEST_DOCKER=1 go test ./internal/usecase/data/ -run DataBrowserDocker
-func dataTestDB(t *testing.T, kind domain.ServiceKind, cfg *container.Config) (*Data, context.Context, domain.Service, func(string) string) {
+func dataTestDB(t *testing.T, kind domain.ServiceKind, cfg *domain.ContainerSpec) (*Data, context.Context, domain.Service, func(string) string) {
 	t.Helper()
 	if os.Getenv("KIPITINY_TEST_DOCKER") == "" {
 		t.Skip("KIPITINY_TEST_DOCKER not set")
@@ -58,7 +55,8 @@ func dataTestDB(t *testing.T, kind domain.ServiceKind, cfg *container.Config) (*
 	if err := dk.EnsureImage(ctx, cfg.Image, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{Name: "kipitiny-test-" + strings.ToLower(svc.ID), Config: cfg})
+	cfg.Name = "kipitiny-test-" + strings.ToLower(svc.ID)
+	id, err := dk.Run(ctx, *cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +84,7 @@ func dataTestDB(t *testing.T, kind domain.ServiceKind, cfg *container.Config) (*
 }
 
 func TestDataBrowserDockerPostgres(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &domain.ContainerSpec{
 		Image: DefaultPostgresImage,
 		Env:   []string{"POSTGRES_USER=app", "POSTGRES_DB=app", "POSTGRES_PASSWORD=secret"},
 	})
@@ -208,7 +206,7 @@ CREATE TABLE tags (note int REFERENCES notes, a int, b int, FOREIGN KEY (a, b) R
 }
 
 func TestDataBrowserDockerRedis(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindRedis, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindRedis, &domain.ContainerSpec{
 		Image: DefaultRedisImage,
 		Env:   []string{"REDIS_PASSWORD=secret", "REDISCLI_AUTH=secret"},
 		Cmd:   []string{"redis-server", "--requirepass", "secret"},
@@ -296,7 +294,7 @@ key" v`)
 }
 
 func TestDataConsoleDockerPostgres(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &domain.ContainerSpec{
 		Image: DefaultPostgresImage,
 		Env:   []string{"POSTGRES_USER=app", "POSTGRES_DB=app", "POSTGRES_PASSWORD=secret"},
 	})
@@ -346,7 +344,7 @@ func TestDataConsoleDockerPostgres(t *testing.T) {
 }
 
 func TestDataConsoleDockerRedis(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindRedis, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindRedis, &domain.ContainerSpec{
 		Image: DefaultRedisImage,
 		Env:   []string{"REDIS_PASSWORD=secret", "REDISCLI_AUTH=secret"},
 		Cmd:   []string{"redis-server", "--requirepass", "secret"},
@@ -385,7 +383,7 @@ func TestDataConsoleDockerRedis(t *testing.T) {
 // database is postgres, the instance's maintenance database: the swap must
 // run from another one.
 func TestRestoreDockerPostgresDatabase(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &domain.ContainerSpec{
 		Image: DefaultPostgresImage,
 		Env:   []string{"POSTGRES_USER=app", "POSTGRES_DB=postgres", "POSTGRES_PASSWORD=secret"},
 	})
@@ -422,7 +420,7 @@ func TestRestoreDockerPostgresDatabase(t *testing.T) {
 // TestBackupDockerOtherDatabase backs up one of the instance's other
 // databases, then restores it, also once it has been dropped.
 func TestBackupDockerOtherDatabase(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &domain.ContainerSpec{
 		Image: DefaultPostgresImage,
 		Env:   []string{"POSTGRES_USER=app", "POSTGRES_DB=postgres", "POSTGRES_PASSWORD=secret"},
 	})

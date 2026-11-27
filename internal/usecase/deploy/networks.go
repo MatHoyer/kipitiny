@@ -9,8 +9,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/client"
-
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -336,15 +334,13 @@ func networkIssues(project domain.Project, svc domain.Service, cts []domain.Cont
 
 // runContainer creates and starts spec after creating the networks it joins:
 // one removed outside kipitiny would fail the create.
-func (c *Deployer) runContainer(ctx context.Context, dk *docker.Client, spec client.ContainerCreateOptions, files ...docker.File) (string, error) {
-	if spec.NetworkingConfig != nil {
-		for name := range spec.NetworkingConfig.EndpointsConfig {
-			if err := dk.EnsureNetwork(ctx, name); err != nil {
-				return "", err
-			}
+func (c *Deployer) runContainer(ctx context.Context, dk *docker.Client, spec domain.ContainerSpec, files ...domain.ContainerFile) (string, error) {
+	for name := range spec.Networks {
+		if err := dk.EnsureNetwork(ctx, name); err != nil {
+			return "", err
 		}
 	}
-	return dk.RunMoby(ctx, spec, files...)
+	return dk.Run(ctx, spec, files...)
 }
 
 // EnsureNetworks creates a server's networks that are missing, e.g. after

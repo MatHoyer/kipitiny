@@ -10,9 +10,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -95,11 +92,11 @@ func redisArgs(svc domain.Service) []string {
 	return args
 }
 
-func applyRedisSpec(cfg *container.Config, host *container.HostConfig, svc domain.Service) {
-	cfg.Cmd = redisArgs(svc)
+func applyRedisSpec(spec *domain.ContainerSpec, svc domain.Service) {
+	spec.Cmd = redisArgs(svc)
 	// redis-cli reads it: the healthcheck and the web terminal need no -a.
-	cfg.Env = append(cfg.Env, "REDISCLI_AUTH="+svc.Env[RedisPassword])
-	cfg.Healthcheck = &container.HealthConfig{
+	spec.Env = append(spec.Env, "REDISCLI_AUTH="+svc.Env[RedisPassword])
+	spec.Healthcheck = &domain.HealthConfig{
 		// PING answers LOADING while the AOF replays: not ready yet.
 		Test:          []string{"CMD-SHELL", "redis-cli ping | grep -q PONG"},
 		Interval:      10 * time.Second,
@@ -108,10 +105,10 @@ func applyRedisSpec(cfg *container.Config, host *container.HostConfig, svc domai
 		StartInterval: time.Second,
 		Retries:       3,
 	}
-	host.Mounts = append(host.Mounts, mount.Mount{
-		Type:   mount.TypeVolume,
+	spec.Mounts = append(spec.Mounts, domain.Mount{
+		Type:   domain.MountVolume,
 		Source: RedisVolume(svc.ID),
 		Target: redisVolumeMount,
 	})
-	cfg.Labels[domain.LabelComponent] = string(domain.ServiceKindRedis)
+	spec.Labels[domain.LabelComponent] = string(domain.ServiceKindRedis)
 }

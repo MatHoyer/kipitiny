@@ -181,12 +181,20 @@ type PortBinding struct {
 	HostPort string
 }
 
-// RestartPolicy is Docker's: Name is "" (never), no, always,
+// RestartPolicy is Docker's: Name is "" or no (never), always,
 // unless-stopped or on-failure, with MaxRetries for on-failure.
 type RestartPolicy struct {
 	Name       string
 	MaxRetries int
 }
+
+// The restart policies.
+const (
+	RestartNo            = "no"
+	RestartAlways        = "always"
+	RestartOnFailure     = "on-failure"
+	RestartUnlessStopped = "unless-stopped"
+)
 
 type ContainerUlimit struct {
 	Name       string

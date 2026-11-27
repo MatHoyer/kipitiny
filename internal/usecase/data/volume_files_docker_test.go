@@ -16,10 +16,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
-	"github.com/moby/moby/client"
-
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -65,9 +61,9 @@ func filesTestService(t *testing.T, svc domain.Service, vol, seed string) (*Data
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	code, err := dk.RunAttachedMoby(ctx, client.ContainerCreateOptions{
-		Config:     &container.Config{Image: volumeHelperImage, Cmd: []string{"sh", "-ec", seed}},
-		HostConfig: &container.HostConfig{NetworkMode: "none", Mounts: []mount.Mount{{Type: mount.TypeVolume, Source: source, Target: "/seed"}}},
+	code, err := dk.RunAttached(ctx, domain.ContainerSpec{
+		Image: volumeHelperImage, Cmd: []string{"sh", "-ec", seed},
+		NetworkMode: "none", Mounts: []domain.Mount{{Type: domain.MountVolume, Source: source, Target: "/seed"}},
 	}, nil, &out)
 	if err != nil || code != 0 {
 		t.Fatalf("seed: %d %v %s", code, err, out.String())
@@ -420,11 +416,11 @@ func containerFilesTest(t *testing.T, kind domain.ServiceKind, image string, cmd
 	if err := dk.EnsureImage(ctx, image, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{
-		Name: "kipitiny-test-" + strings.ToLower(svc.ID),
-		Config: &container.Config{Image: image, Cmd: cmd, User: "1000",
-			Labels: map[string]string{domain.LabelProject: p.ID, domain.LabelService: svc.ID, domain.LabelReplica: "1"}},
-		HostConfig: &container.HostConfig{NetworkMode: "none"},
+	id, err := dk.Run(ctx, domain.ContainerSpec{
+		Name:  "kipitiny-test-" + strings.ToLower(svc.ID),
+		Image: image, Cmd: cmd, User: "1000",
+		Labels:      map[string]string{domain.LabelProject: p.ID, domain.LabelService: svc.ID, domain.LabelReplica: "1"},
+		NetworkMode: "none",
 	})
 	if err != nil {
 		t.Fatal(err)

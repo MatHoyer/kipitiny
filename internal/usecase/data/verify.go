@@ -10,7 +10,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -194,24 +193,20 @@ func (c *Data) scratchPostgres(ctx context.Context, b domain.Backup, name, user,
 		return nil, "", fmt.Errorf("pull %s: %w", image, err)
 	}
 	step(VerifyServer)
-	id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{
-		Name: name,
-		Config: &container.Config{
-			Image: image,
-			Env:   []string{"POSTGRES_USER=" + user, "POSTGRES_DB=" + db, "POSTGRES_PASSWORD=" + identity.RandomToken(16)},
-			Labels: map[string]string{
-				domain.LabelManaged:   "true",
-				domain.LabelComponent: verifyComponent,
-			},
-			Healthcheck: postgresHealthcheck(user, db),
+	id, err := dk.Run(ctx, domain.ContainerSpec{
+		Name:  name,
+		Image: image,
+		Env:   []string{"POSTGRES_USER=" + user, "POSTGRES_DB=" + db, "POSTGRES_PASSWORD=" + identity.RandomToken(16)},
+		Labels: map[string]string{
+			domain.LabelManaged:   "true",
+			domain.LabelComponent: verifyComponent,
 		},
-		HostConfig: &container.HostConfig{
-			// Isolated: the restore arrives over exec, nothing needs a network.
-			NetworkMode: "none",
-			Resources:   container.Resources{Memory: verifyMemoryMB << 20},
-			ShmSize:     128 << 20,
-			LogConfig:   docker.DefaultLogConfig(),
-		},
+		Healthcheck: postgresHealthcheck(user, db),
+		// Isolated: the restore arrives over exec, nothing needs a network.
+		NetworkMode: "none",
+		Memory:      verifyMemoryMB << 20,
+		ShmSize:     128 << 20,
+		Log:         true,
 	})
 	if err != nil {
 		return nil, "", err

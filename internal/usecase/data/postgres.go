@@ -10,8 +10,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/distribution/reference"
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -152,25 +150,25 @@ func postgresTuning(memoryMB int) []string {
 	}
 }
 
-func applyPostgresSpec(cfg *container.Config, host *container.HostConfig, svc domain.Service) {
-	cfg.Cmd = postgresTuning(svc.MemoryMB)
-	cfg.Env = append(cfg.Env, "PGDATA="+PGDataDir)
-	cfg.Healthcheck = postgresHealthcheck(svc.Env[PGUser], svc.Env[PGDatabase])
+func applyPostgresSpec(spec *domain.ContainerSpec, svc domain.Service) {
+	spec.Cmd = postgresTuning(svc.MemoryMB)
+	spec.Env = append(spec.Env, "PGDATA="+PGDataDir)
+	spec.Healthcheck = postgresHealthcheck(svc.Env[PGUser], svc.Env[PGDatabase])
 	// Room for pg_dump/pg_restore over exec without hitting /dev/shm limits.
-	host.ShmSize = 128 << 20
-	host.Mounts = append(host.Mounts, mount.Mount{
-		Type:   mount.TypeVolume,
+	spec.ShmSize = 128 << 20
+	spec.Mounts = append(spec.Mounts, domain.Mount{
+		Type:   domain.MountVolume,
 		Source: PostgresVolume(svc.ID),
 		Target: pgVolumeMount,
 	})
-	cfg.Labels[domain.LabelComponent] = string(domain.ServiceKindPostgres)
+	spec.Labels[domain.LabelComponent] = string(domain.ServiceKindPostgres)
 }
 
 // postgresHealthcheck probes over TCP: during first-start initdb the image
 // runs a temporary server on the Unix socket only, which must not count as
 // ready (it restarts right after).
-func postgresHealthcheck(user, db string) *container.HealthConfig {
-	return &container.HealthConfig{
+func postgresHealthcheck(user, db string) *domain.HealthConfig {
+	return &domain.HealthConfig{
 		Test:          []string{"CMD-SHELL", fmt.Sprintf("pg_isready -h 127.0.0.1 -U %s -d %s", user, db)},
 		Interval:      10 * time.Second,
 		Timeout:       5 * time.Second,

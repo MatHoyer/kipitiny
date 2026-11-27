@@ -73,22 +73,22 @@ func TestMySQLAndMongoContainerSpec(t *testing.T) {
 		if spec.Name != "shop-"+svc.Name+"-1" {
 			t.Errorf("%s: name = %q, want no deploy suffix", svc.Kind, spec.Name)
 		}
-		if spec.Config.Healthcheck == nil || len(spec.Config.Cmd) == 0 || spec.Config.Cmd[0][0] != '-' {
-			t.Errorf("%s: cmd %v, healthcheck %v", svc.Kind, spec.Config.Cmd, spec.Config.Healthcheck)
+		if spec.Healthcheck == nil || len(spec.Cmd) == 0 || spec.Cmd[0][0] != '-' {
+			t.Errorf("%s: cmd %v, healthcheck %v", svc.Kind, spec.Cmd, spec.Healthcheck)
 		}
-		if len(spec.HostConfig.Mounts) != 1 || spec.HostConfig.Mounts[0].Source != data.DataVolume(svc) || data.DataVolume(svc) == "" {
-			t.Errorf("%s: mounts = %v", svc.Kind, spec.HostConfig.Mounts)
+		if len(spec.Mounts) != 1 || spec.Mounts[0].Source != data.DataVolume(svc) || data.DataVolume(svc) == "" {
+			t.Errorf("%s: mounts = %v", svc.Kind, spec.Mounts)
 		}
-		if spec.Config.Labels["kipitiny.component"] != string(svc.Kind) {
-			t.Errorf("%s: labels = %v", svc.Kind, spec.Config.Labels)
+		if spec.Labels["kipitiny.component"] != string(svc.Kind) {
+			t.Errorf("%s: labels = %v", svc.Kind, spec.Labels)
 		}
-		if _, public := spec.Config.Labels["traefik.enable"]; public {
+		if _, public := spec.Labels["traefik.enable"]; public {
 			t.Errorf("%s: database exposed to traefik", svc.Kind)
 		}
 	}
 	// Mongo's config VOLUME would leave an anonymous volume per recreate.
 	spec := containerSpec(p, mongoService(), envSources{}, "D1", 1, network.Routing{Resolver: network.CertResolverTLS})
-	if _, ok := spec.HostConfig.Tmpfs[data.MongoConfigMount]; !ok {
-		t.Errorf("tmpfs = %v", spec.HostConfig.Tmpfs)
+	if _, ok := spec.Tmpfs[data.MongoConfigMount]; !ok {
+		t.Errorf("tmpfs = %v", spec.Tmpfs)
 	}
 }

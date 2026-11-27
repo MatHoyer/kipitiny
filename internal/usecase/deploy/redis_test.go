@@ -58,26 +58,26 @@ func TestRedisContainerSpec(t *testing.T) {
 	if spec.Name != "shop-cache-1" {
 		t.Errorf("name = %q, want no deploy suffix", spec.Name)
 	}
-	if spec.HostConfig.Memory != 256<<20 {
-		t.Errorf("memory = %d", spec.HostConfig.Memory)
+	if spec.Memory != 256<<20 {
+		t.Errorf("memory = %d", spec.Memory)
 	}
-	cmd := spec.Config.Cmd
+	cmd := spec.Cmd
 	if i := slices.Index(cmd, "--requirepass"); i < 0 || cmd[i+1] != svc.Env[data.RedisPassword] {
 		t.Errorf("password not set: %v", cmd)
 	}
 	if i := slices.Index(cmd, "--maxmemory"); i < 0 || cmd[i+1] != "192mb" {
 		t.Errorf("maxmemory not set: %v", cmd)
 	}
-	if !slices.Contains(spec.Config.Env, "REDISCLI_AUTH="+svc.Env[data.RedisPassword]) {
-		t.Errorf("REDISCLI_AUTH missing: %v", spec.Config.Env)
+	if !slices.Contains(spec.Env, "REDISCLI_AUTH="+svc.Env[data.RedisPassword]) {
+		t.Errorf("REDISCLI_AUTH missing: %v", spec.Env)
 	}
-	if spec.Config.Healthcheck == nil {
+	if spec.Healthcheck == nil {
 		t.Error("healthcheck missing")
 	}
-	if len(spec.HostConfig.Mounts) != 1 || spec.HostConfig.Mounts[0].Source != data.RedisVolume(svc.ID) || data.DataVolume(svc) != data.RedisVolume(svc.ID) {
-		t.Errorf("mounts = %v", spec.HostConfig.Mounts)
+	if len(spec.Mounts) != 1 || spec.Mounts[0].Source != data.RedisVolume(svc.ID) || data.DataVolume(svc) != data.RedisVolume(svc.ID) {
+		t.Errorf("mounts = %v", spec.Mounts)
 	}
-	if _, public := spec.Config.Labels["traefik.enable"]; public {
+	if _, public := spec.Labels["traefik.enable"]; public {
 		t.Error("database exposed to traefik")
 	}
 }

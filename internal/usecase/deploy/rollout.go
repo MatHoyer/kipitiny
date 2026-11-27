@@ -34,19 +34,19 @@ func (c *Deployer) preDeploy(ctx context.Context, project domain.Project, svc do
 
 	spec := containerSpec(project, svc, src, dep.ID, 0, network.Routing{DockerSocket: c.mgr.DockerSocketFor(ctx, svc)}) // never routed
 	spec.Name = fmt.Sprintf("%s-%s-predeploy-%s", project.Name, svc.Name, deploySuffix(dep.ID))
-	spec.Config.Cmd = []string{"sh", "-c", svc.PreDeploy}
-	spec.Config.Entrypoint = []string{}
+	spec.Cmd = []string{"sh", "-c", svc.PreDeploy}
+	spec.Entrypoint = []string{}
 	// Not a replica: no service label (so it never shows up as one), no routing.
-	spec.Config.Labels = map[string]string{
+	spec.Labels = map[string]string{
 		domain.LabelManaged:   "true",
 		domain.LabelProject:   project.ID,
 		domain.LabelComponent: "predeploy",
 		domain.LabelDeploy:    dep.ID,
 	}
-	spec.HostConfig.RestartPolicy = container.RestartPolicy{Name: container.RestartPolicyDisabled}
-	delete(spec.NetworkingConfig.EndpointsConfig, domain.ProxyNetwork)
+	spec.Restart = domain.RestartPolicy{Name: domain.RestartNo}
+	delete(spec.Networks, domain.ProxyNetwork)
 	// The replica it precedes holds the published ports.
-	spec.Config.ExposedPorts, spec.HostConfig.PortBindings = nil, nil
+	spec.ExposedPorts, spec.PortBindings = nil, nil
 
 	logf("Running pre-deploy command: %s", svc.PreDeploy)
 	dk := c.mgr.DockerFor(svc.ServerID)

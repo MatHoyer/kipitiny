@@ -9,10 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
-	"github.com/moby/moby/client"
-
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/sqlitehelper"
@@ -44,31 +40,27 @@ type sqliteFile struct {
 
 // startSQLiteHelper runs an idle helper of the manager's own image, its
 // `sqlite` command run in it over exec.
-func (c *Data) startSQLiteHelper(ctx context.Context, dk *docker.Client, name string, mounts []mount.Mount) (string, error) {
+func (c *Data) startSQLiteHelper(ctx context.Context, dk *docker.Client, name string, mounts []domain.Mount) (string, error) {
 	image := c.mgr.OwnImageRef()
 	// The manager's public image: no registry credential.
 	if err := dk.EnsureImage(ctx, image, "", ""); err != nil {
 		return "", fmt.Errorf("pull %s: %w", image, err)
 	}
-	return dk.RunMoby(ctx, client.ContainerCreateOptions{
-		Name: name,
-		Config: &container.Config{
-			Image:  image,
-			Cmd:    []string{"sqlite", "idle"},
-			Labels: map[string]string{domain.LabelManaged: "true", domain.LabelComponent: volumeHelperComponent},
-			// SQLite's temporary files (big sorts) go to the tmpfs.
-			Env: []string{"SQLITE_TMPDIR=/tmp"},
-			// The image's own checks the manager's port.
-			Healthcheck: &container.HealthConfig{Test: []string{"NONE"}},
-		},
-		HostConfig: &container.HostConfig{
-			NetworkMode:    "none",
-			Mounts:         mounts,
-			ReadonlyRootfs: true,
-			Tmpfs:          map[string]string{"/tmp": ""},
-			SecurityOpt:    []string{"no-new-privileges"},
-			LogConfig:      docker.DefaultLogConfig(),
-		},
+	return dk.Run(ctx, domain.ContainerSpec{
+		Name:   name,
+		Image:  image,
+		Cmd:    []string{"sqlite", "idle"},
+		Labels: map[string]string{domain.LabelManaged: "true", domain.LabelComponent: volumeHelperComponent},
+		// SQLite's temporary files (big sorts) go to the tmpfs.
+		Env: []string{"SQLITE_TMPDIR=/tmp"},
+		// The image's own checks the manager's port.
+		Healthcheck:    &domain.HealthConfig{Test: []string{"NONE"}},
+		NetworkMode:    "none",
+		Mounts:         mounts,
+		ReadonlyRootfs: true,
+		Tmpfs:          map[string]string{"/tmp": ""},
+		SecurityOpt:    []string{"no-new-privileges"},
+		Log:            true,
 	})
 }
 

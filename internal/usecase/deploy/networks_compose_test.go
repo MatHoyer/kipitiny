@@ -52,12 +52,13 @@ networks:
 		t.Errorf("web = %v %v", w.ProjectNetworks, w.Networks)
 	}
 	spec := containerSpec(p, by["api"], envSources{}, "D1", 1, network.Routing{})
-	if len(spec.NetworkingConfig.EndpointsConfig) != 2 || spec.NetworkingConfig.EndpointsConfig[domain.ProjectNetworkNamed(p.ID, "back")] == nil ||
-		spec.NetworkingConfig.EndpointsConfig[domain.ProjectNetwork(p.ID)] != nil {
-		t.Errorf("api endpoints = %v", spec.NetworkingConfig.EndpointsConfig)
+	_, back := spec.Networks[domain.ProjectNetworkNamed(p.ID, "back")]
+	_, def := spec.Networks[domain.ProjectNetwork(p.ID)]
+	if len(spec.Networks) != 2 || !back || def {
+		t.Errorf("api endpoints = %v", spec.Networks)
 	}
-	if spec := containerSpec(p, by["plain"], envSources{}, "D1", 1, network.Routing{}); spec.NetworkingConfig.EndpointsConfig[domain.ProjectNetwork(p.ID)] == nil {
-		t.Errorf("plain endpoints = %v", spec.NetworkingConfig.EndpointsConfig)
+	if spec := containerSpec(p, by["plain"], envSources{}, "D1", 1, network.Routing{}); spec.Networks[domain.ProjectNetwork(p.ID)] == nil {
+		t.Errorf("plain endpoints = %v", spec.Networks)
 	}
 
 	exp, err := c.ExportCompose(ctx, p.ID, ExportOptions{})

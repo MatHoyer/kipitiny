@@ -12,10 +12,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/client"
-
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
 	"github.com/kipit-labs/kipitiny/internal/notify"
@@ -149,21 +145,17 @@ func (c *Servers) runOnHost(ctx context.Context, serverID, script string) (strin
 		return "", fmt.Errorf("pull %s: %w", hostShellImage, err)
 	}
 	var out bytes.Buffer
-	code, err := dk.RunAttachedMoby(ctx, client.ContainerCreateOptions{
-		Name: "kipitiny-hostcheck-" + strings.ToLower(ids.New()),
-		Config: &container.Config{
-			Image: hostShellImage,
-			Cmd:   []string{"nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--", "/bin/sh", "-s"},
-			Labels: map[string]string{
-				domain.LabelManaged:   "true",
-				domain.LabelComponent: hostCheckComponent,
-			},
+	code, err := dk.RunAttached(ctx, domain.ContainerSpec{
+		Name:  "kipitiny-hostcheck-" + strings.ToLower(ids.New()),
+		Image: hostShellImage,
+		Cmd:   []string{"nsenter", "-t", "1", "-m", "-u", "-i", "-n", "-p", "--", "/bin/sh", "-s"},
+		Labels: map[string]string{
+			domain.LabelManaged:   "true",
+			domain.LabelComponent: hostCheckComponent,
 		},
-		HostConfig: &container.HostConfig{
-			Privileged: true,
-			PidMode:    "host",
-			LogConfig:  docker.DefaultLogConfig(),
-		},
+		Privileged: true,
+		PidMode:    "host",
+		Log:        true,
 	}, strings.NewReader(script), &out)
 	if err != nil {
 		return out.String(), err

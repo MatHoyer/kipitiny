@@ -11,9 +11,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/client"
-
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
@@ -148,22 +145,18 @@ func (c *Servers) OpenServerTerminal(ctx context.Context, serverID string, cols,
 	if err := dk.EnsureImage(ctx, hostShellImage, "", ""); err != nil {
 		return c.openTerminal(ctx, target, nil, fmt.Errorf("pull %s: %w", hostShellImage, err))
 	}
-	tty, err := dk.RunTTYMoby(ctx, client.ContainerCreateOptions{
-		Name: "kipitiny-terminal-" + strings.ToLower(ids.New()),
-		Config: &container.Config{
-			Image: hostShellImage,
-			Cmd:   hostShell,
-			Env:   terminalEnv,
-			Labels: map[string]string{
-				domain.LabelManaged:   "true",
-				domain.LabelComponent: terminalComponent,
-			},
+	tty, err := dk.RunTTY(ctx, domain.ContainerSpec{
+		Name:  "kipitiny-terminal-" + strings.ToLower(ids.New()),
+		Image: hostShellImage,
+		Cmd:   hostShell,
+		Env:   terminalEnv,
+		Labels: map[string]string{
+			domain.LabelManaged:   "true",
+			domain.LabelComponent: terminalComponent,
 		},
-		HostConfig: &container.HostConfig{
-			Privileged: true,
-			PidMode:    "host",
-			LogConfig:  docker.DefaultLogConfig(),
-		},
+		Privileged: true,
+		PidMode:    "host",
+		Log:        true,
 	}, cols, rows)
 	return c.openTerminal(ctx, target, tty, err)
 }

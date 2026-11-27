@@ -7,13 +7,11 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestRowChangesDockerPostgres(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindPostgres, &domain.ContainerSpec{
 		Image: DefaultPostgresImage,
 		Env:   []string{"POSTGRES_USER=app", "POSTGRES_DB=app", "POSTGRES_PASSWORD=secret"},
 	})
@@ -74,7 +72,7 @@ CREATE VIEW v AS SELECT id FROM items;"`)
 }
 
 func TestKeyChangesDockerRedis(t *testing.T) {
-	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindRedis, &container.Config{
+	c, ctx, svc, exec := dataTestDB(t, domain.ServiceKindRedis, &domain.ContainerSpec{
 		Image: DefaultRedisImage,
 		Env:   []string{"REDIS_PASSWORD=secret", "REDISCLI_AUTH=secret"},
 		Cmd:   []string{"redis-server", "--requirepass", "secret"},

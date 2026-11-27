@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -82,14 +81,14 @@ func validateFiles(s domain.Service) error {
 
 // serviceFiles are the files written into svc's containers, secrets with
 // their references resolved.
-func serviceFiles(svc domain.Service, src envSources) []docker.File {
-	out := make([]docker.File, 0, len(svc.Files))
+func serviceFiles(svc domain.Service, src envSources) []domain.ContainerFile {
+	out := make([]domain.ContainerFile, 0, len(svc.Files))
 	for _, f := range svc.Files {
 		content := f.Content
 		if f.Secret {
 			content = []byte(resolveEnv(map[string]string{"v": string(content)}, src)["v"])
 		}
-		out = append(out, docker.File{Path: f.Path, Content: content, Mode: f.Mode})
+		out = append(out, domain.ContainerFile{Path: f.Path, Content: content, Mode: f.Mode})
 	}
 	return out
 }

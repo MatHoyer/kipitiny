@@ -9,9 +9,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -103,23 +100,23 @@ func mongoArgs(memoryMB int) []string {
 	return []string{"--wiredTigerCacheSizeGB", strconv.FormatFloat(cacheGB, 'f', 2, 64)}
 }
 
-func applyMongoSpec(cfg *container.Config, host *container.HostConfig, svc domain.Service) {
-	cfg.Cmd = mongoArgs(svc.MemoryMB)
-	cfg.Healthcheck = mongoHealthcheck()
-	host.Mounts = append(host.Mounts, mount.Mount{
-		Type:   mount.TypeVolume,
+func applyMongoSpec(spec *domain.ContainerSpec, svc domain.Service) {
+	spec.Cmd = mongoArgs(svc.MemoryMB)
+	spec.Healthcheck = mongoHealthcheck()
+	spec.Mounts = append(spec.Mounts, domain.Mount{
+		Type:   domain.MountVolume,
 		Source: MongoVolume(svc.ID),
 		Target: mongoVolumeMount,
 	})
-	host.Tmpfs = map[string]string{MongoConfigMount: ""}
-	cfg.Labels[domain.LabelComponent] = string(domain.ServiceKindMongoDB)
+	spec.Tmpfs = map[string]string{MongoConfigMount: ""}
+	spec.Labels[domain.LabelComponent] = string(domain.ServiceKindMongoDB)
 }
 
 // mongoHealthcheck pings once the entrypoint has exec'd the server: the
 // image creates the user with a temporary server first (forked, bound to
 // 127.0.0.1), which must not count as ready. ping needs no authentication.
-func mongoHealthcheck() *container.HealthConfig {
-	return &container.HealthConfig{
+func mongoHealthcheck() *domain.HealthConfig {
+	return &domain.HealthConfig{
 		Test: []string{"CMD-SHELL",
 			`[ "$(cat /proc/1/comm)" = mongod ] && mongosh --quiet --eval 'quit(db.adminCommand({ ping: 1 }).ok ? 0 : 1)'`},
 		Interval:      10 * time.Second,

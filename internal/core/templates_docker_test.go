@@ -15,7 +15,6 @@ import (
 
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 	"golang.org/x/crypto/ssh"
 
@@ -57,7 +56,7 @@ func TestTemplatesDocker(t *testing.T) {
 	// The injected health probe is the running binary, here the test's,
 	// which can't probe: apps are ready on their own healthcheck, or once
 	// up for a few seconds.
-	c.probes.Store(domain.LocalServerID, (*mount.Mount)(nil))
+	c.probes.Store(domain.LocalServerID, (*domain.Mount)(nil))
 	t.Cleanup(c.cancel)
 	ctx = identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
 

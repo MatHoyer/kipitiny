@@ -7,8 +7,6 @@ import (
 	"slices"
 	"testing"
 
-	dockernet "github.com/moby/moby/api/types/network"
-
 	"github.com/kipit-labs/kipitiny/internal/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -115,15 +113,15 @@ func TestPublishedPortsSpec(t *testing.T) {
 			{HostPort: 19132, ContainerPort: 19132, Protocol: "udp"},
 		}}
 	spec := containerSpec(p, svc, envSources{}, "D1", 1, network.Routing{})
-	tcp, udp := dockernet.MustParsePort("25565/tcp"), dockernet.MustParsePort("19132/udp")
-	if _, ok := spec.Config.ExposedPorts[tcp]; !ok || len(spec.Config.ExposedPorts) != 2 {
-		t.Errorf("exposed = %v", spec.Config.ExposedPorts)
+	tcp, udp := "25565/tcp", "19132/udp"
+	if !slices.Contains(spec.ExposedPorts, tcp) || len(spec.ExposedPorts) != 2 {
+		t.Errorf("exposed = %v", spec.ExposedPorts)
 	}
-	b := spec.HostConfig.PortBindings
+	b := spec.PortBindings
 	if len(b[tcp]) != 2 || b[tcp][0].HostPort != "25565" || b[tcp][1].HostPort != "25566" || len(b[udp]) != 1 || b[udp][0].HostPort != "19132" {
 		t.Errorf("bindings = %v", b)
 	}
-	if _, public := spec.NetworkingConfig.EndpointsConfig["kipitiny-proxy"]; public {
+	if _, public := spec.Networks["kipitiny-proxy"]; public {
 		t.Error("a service without a domain must stay off the proxy network")
 	}
 
@@ -171,8 +169,8 @@ func TestPublishedPortsDomain(t *testing.T) {
 		t.Errorf("record = %+v", w)
 	}
 	spec := containerSpec(p, mc, envSources{}, "D1", 1, c.RouteFor(ctx, mc))
-	if spec.Config.Labels["traefik.enable"] != "" {
-		t.Errorf("a domain without a container port must not be routed: %v", spec.Config.Labels)
+	if spec.Labels["traefik.enable"] != "" {
+		t.Errorf("a domain without a container port must not be routed: %v", spec.Labels)
 	}
 	if _, err := c.SetUptime(ctx, mc.ID, monitoring.UptimeInput{}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("uptime check on a port-only app: %v", err)
@@ -196,7 +194,7 @@ func TestPublishedPortsDomain(t *testing.T) {
 	if rt := c.RouteFor(ctx, mc); rt.BehindProxy {
 		t.Error("the record of an app with published ports is never proxied")
 	}
-	if l := containerSpec(p, mc, envSources{}, "D1", 1, c.RouteFor(ctx, mc)).Config.Labels; l["traefik.enable"] != "true" {
+	if l := containerSpec(p, mc, envSources{}, "D1", 1, c.RouteFor(ctx, mc)).Labels; l["traefik.enable"] != "true" {
 		t.Errorf("labels = %v", l)
 	}
 }

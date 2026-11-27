@@ -113,8 +113,8 @@ func TestStopGrace(t *testing.T) {
 	if got := data.StopTimeoutFor(app); got != domain.StopTimeout {
 		t.Errorf("default = %s", got)
 	}
-	if spec := containerSpec(domain.Project{ID: "P1", Name: "games"}, app, envSources{}, "D1", 1, network.Routing{}); spec.Config.StopTimeout != nil {
-		t.Errorf("default stop timeout set on the container: %d", *spec.Config.StopTimeout)
+	if spec := containerSpec(domain.Project{ID: "P1", Name: "games"}, app, envSources{}, "D1", 1, network.Routing{}); spec.StopTimeout != nil {
+		t.Errorf("default stop timeout set on the container: %d", *spec.StopTimeout)
 	}
 
 	app.StopGraceSeconds = 90
@@ -122,8 +122,8 @@ func TestStopGrace(t *testing.T) {
 		t.Errorf("custom = %s", got)
 	}
 	spec := containerSpec(domain.Project{ID: "P1", Name: "games"}, app, envSources{}, "D1", 1, network.Routing{})
-	if spec.Config.StopTimeout == nil || *spec.Config.StopTimeout != 90 {
-		t.Errorf("container stop timeout = %v", spec.Config.StopTimeout)
+	if spec.StopTimeout == nil || *spec.StopTimeout != 90 {
+		t.Errorf("container stop timeout = %v", spec.StopTimeout)
 	}
 	if err := validateService(app); err != nil {
 		t.Errorf("valid: %v", err)

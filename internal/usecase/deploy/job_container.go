@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
@@ -49,19 +47,19 @@ func (c *Deployer) StartJobContainer(ctx context.Context, project domain.Project
 
 	spec := containerSpec(project, want, src, dep.ID, 0, network.Routing{DockerSocket: c.mgr.DockerSocketFor(ctx, want)}) // never routed
 	spec.Name = fmt.Sprintf("%s-%s-job-%s-%s", project.Name, svc.Name, j.Name, deploySuffix(runID))
-	spec.Config.Cmd = []string{"sh", "-c", j.Command}
-	spec.Config.Entrypoint = []string{}
-	spec.Config.Healthcheck = &container.HealthConfig{Test: []string{"NONE"}}
+	spec.Cmd = []string{"sh", "-c", j.Command}
+	spec.Entrypoint = []string{}
+	spec.Healthcheck = &domain.HealthConfig{Test: []string{"NONE"}}
 	// Not a replica: no service label (so it never shows up as one).
-	spec.Config.Labels = map[string]string{
+	spec.Labels = map[string]string{
 		domain.LabelManaged:   "true",
 		domain.LabelProject:   project.ID,
 		domain.LabelComponent: JobComponent,
 		domain.LabelJob:       j.ID,
 	}
-	spec.HostConfig.RestartPolicy = container.RestartPolicy{Name: container.RestartPolicyDisabled}
-	delete(spec.NetworkingConfig.EndpointsConfig, domain.ProxyNetwork)
-	spec.Config.ExposedPorts, spec.HostConfig.PortBindings = nil, nil
+	spec.Restart = domain.RestartPolicy{Name: domain.RestartNo}
+	delete(spec.Networks, domain.ProxyNetwork)
+	spec.ExposedPorts, spec.PortBindings = nil, nil
 
 	logf("Running %s in %s", j.Command, want.Image)
 	id, err := c.runContainer(ctx, dk, spec, serviceFiles(want, src)...)

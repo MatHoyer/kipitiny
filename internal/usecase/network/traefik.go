@@ -12,9 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
-	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
@@ -66,12 +63,12 @@ func (c *Network) EnsureTraefik(ctx context.Context, sv domain.Server) error {
 	opts, files := c.TraefikSpec(socket, o)
 	// Keep this formula stable: any change recreates Traefik on every server
 	// at upgrade, a short outage for all apps. Tunnel mode changes Cmd.
-	parts := []any{cfg.Image, opts.Config.Cmd, cfg.HTTPPort, cfg.HTTPSPort, socket, files}
+	parts := []any{cfg.Image, opts.Cmd, cfg.HTTPPort, cfg.HTTPSPort, socket, files}
 	if o.CFToken != "" && !o.Tunnel {
 		parts = append(parts, o.CFToken) // a new token must reach Traefik
 	}
 	hash := SpecHash(parts...)
-	opts.Config.Labels[domain.LabelConfigHash] = hash
+	opts.Labels[domain.LabelConfigHash] = hash
 
 	existing, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: TraefikComponent})
 	if err != nil {
@@ -94,7 +91,7 @@ func (c *Network) EnsureTraefik(ctx context.Context, sv domain.Server) error {
 	if err := dk.EnsureImage(ctx, cfg.Image, c.mgr.RegistryAuth(ctx, cfg.Image), ""); err != nil {
 		return fmt.Errorf("pull %s: %w", cfg.Image, err)
 	}
-	if _, err := dk.RunMoby(ctx, opts, files...); err != nil {
+	if _, err := dk.Run(ctx, opts, files...); err != nil {
 		return err
 	}
 	c.log.Info("traefik started", "server", sv.Name, "image", cfg.Image, "http", cfg.HTTPPort, "https", cfg.HTTPSPort)
@@ -148,7 +145,7 @@ type PagesOpts struct {
 }
 
 // TraefikSpec builds the Traefik container.
-func (c *Network) TraefikSpec(socket string, o TraefikOpts) (client.ContainerCreateOptions, []docker.File) {
+func (c *Network) TraefikSpec(socket string, o TraefikOpts) (domain.ContainerSpec, []domain.ContainerFile) {
 	cfg := c.cfg.Traefik
 	tunnel := o.Tunnel
 
@@ -218,7 +215,7 @@ func (c *Network) TraefikSpec(socket string, o TraefikOpts) (client.ContainerCre
 		}
 		env = append(env, "CF_DNS_API_TOKEN="+o.CFToken)
 	}
-	var files []docker.File
+	var files []domain.ContainerFile
 	var extraHosts []string
 	dynamic := map[string]any{}
 	if o.ManagerURL != "" {
@@ -243,7 +240,7 @@ func (c *Network) TraefikSpec(socket string, o TraefikOpts) (client.ContainerCre
 		// JSON is valid YAML, which the file provider reads.
 		b, _ := json.MarshalIndent(map[string]any{"http": dynamic}, "", "  ")
 		args = append(args, "--providers.file.filename="+dynamicFile)
-		files = append(files, docker.File{Path: dynamicFile, Content: b})
+		files = append(files, domain.ContainerFile{Path: dynamicFile, Content: b})
 	}
 	for _, u := range []string{o.ManagerURL, pagesUpstream(o)} {
 		if strings.Contains(u, "//"+ManagerHost+":") {
@@ -252,39 +249,33 @@ func (c *Network) TraefikSpec(socket string, o TraefikOpts) (client.ContainerCre
 		}
 	}
 
-	http, https := network.MustParsePort("80/tcp"), network.MustParsePort("443/tcp")
-	ports := network.PortMap{
+	http, https := "80/tcp", "443/tcp"
+	ports := map[string][]domain.PortBinding{
 		http:  {{HostPort: cfg.HTTPPort}},
 		https: {{HostPort: cfg.HTTPSPort}},
 	}
 	if tunnel {
 		ports = nil // cloudflared reaches Traefik over the proxy network
 	}
-	return client.ContainerCreateOptions{
-		Name: TraefikName,
-		Config: &container.Config{
-			Image:        cfg.Image,
-			Cmd:          args,
-			Env:          env,
-			ExposedPorts: network.PortSet{http: {}, https: {}},
-			Labels: map[string]string{
-				domain.LabelManaged:   "true",
-				domain.LabelComponent: TraefikComponent,
-			},
+	return domain.ContainerSpec{
+		Name:         TraefikName,
+		Image:        cfg.Image,
+		Cmd:          args,
+		Env:          env,
+		ExposedPorts: []string{http, https},
+		Labels: map[string]string{
+			domain.LabelManaged:   "true",
+			domain.LabelComponent: TraefikComponent,
 		},
-		HostConfig: &container.HostConfig{
-			PortBindings: ports,
-			Mounts: []mount.Mount{
-				{Type: mount.TypeBind, Source: socket, Target: "/var/run/docker.sock", ReadOnly: true},
-				{Type: mount.TypeVolume, Source: traefikACMEVolume, Target: "/acme"},
-			},
-			ExtraHosts:    extraHosts,
-			RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
-			LogConfig:     docker.DefaultLogConfig(),
+		PortBindings: ports,
+		Mounts: []domain.Mount{
+			{Type: domain.MountBind, Source: socket, Target: "/var/run/docker.sock", ReadOnly: true},
+			{Type: domain.MountVolume, Source: traefikACMEVolume, Target: "/acme"},
 		},
-		NetworkingConfig: &network.NetworkingConfig{
-			EndpointsConfig: map[string]*network.EndpointSettings{domain.ProxyNetwork: {}},
-		},
+		ExtraHosts: extraHosts,
+		Restart:    domain.RestartPolicy{Name: domain.RestartUnlessStopped},
+		Log:        true,
+		Networks:   map[string][]string{domain.ProxyNetwork: nil},
 	}, files
 }
 

@@ -260,7 +260,7 @@ services:
 	}
 
 	spec := containerSpec(p, web, envSources{project: p.Env}, "D1", 1, network.Routing{})
-	if hc := spec.Config.Healthcheck; hc == nil || hc.Test[0] != "CMD" || hc.StartPeriod != readyTimeout || hc.StartInterval != time.Second {
+	if hc := spec.Healthcheck; hc == nil || hc.Test[0] != "CMD" || hc.StartPeriod != readyTimeout || hc.StartInterval != time.Second {
 		t.Errorf("container healthcheck = %+v", hc)
 	}
 	if readinessMode(web) != "its healthcheck passing" {

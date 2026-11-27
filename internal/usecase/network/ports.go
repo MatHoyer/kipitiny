@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/moby/moby/api/types/network"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -127,19 +125,21 @@ func portKey(p domain.PublishedPort) string {
 }
 
 // PortBindings publishes the app's ports, on every host address unless
-// one is given.
-func PortBindings(ports []domain.PublishedPort) (network.PortSet, network.PortMap) {
+// one is given: the exposed port/protocols and their bindings.
+func PortBindings(ports []domain.PublishedPort) ([]string, map[string][]domain.PortBinding) {
 	if len(ports) == 0 {
 		return nil, nil
 	}
-	exposed, bindings := network.PortSet{}, network.PortMap{}
+	exposed, bindings := []string{}, map[string][]domain.PortBinding{}
 	for _, p := range ports {
-		cp, ok := network.PortFrom(uint16(p.ContainerPort), network.IPProtocol(p.Protocol))
-		if !ok {
+		if p.Protocol == "" {
 			continue // validated before
 		}
-		exposed[cp] = struct{}{}
-		b := network.PortBinding{HostPort: strconv.Itoa(p.HostPort)}
+		cp := strconv.Itoa(int(uint16(p.ContainerPort))) + "/" + strings.ToLower(p.Protocol)
+		if !slices.Contains(exposed, cp) {
+			exposed = append(exposed, cp)
+		}
+		b := domain.PortBinding{HostPort: strconv.Itoa(p.HostPort)}
 		b.HostIP, _ = netip.ParseAddr(p.HostIP) // validated before; empty is every address
 		bindings[cp] = append(bindings[cp], b)
 	}
