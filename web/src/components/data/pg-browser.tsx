@@ -89,7 +89,7 @@ export function PgBrowser({ serviceId, database, defaultSchema, dialect }: { ser
       run={(schema, name, columns, apply) => api.createTable(serviceId, database, schema, name, columns, apply)}
       onCreated={(schema, name) => {
         queryClient.invalidateQueries({ queryKey: ["data", serviceId, "tables", database] });
-        setPicked(tableKey({ schema: dialect === "postgres" ? schema || "public" : database, name }));
+        setPicked(tableKey({ schema: dialect === "postgres" ? schema || "public" : defaultSchema, name }));
       }}
     />
   );
@@ -214,6 +214,8 @@ const nothing: Pending = { edits: {}, deletes: {}, inserts: [] };
 
 /** MySQL columns of bytes, shown as hex: edited from the console only. */
 const mysqlBinaryRe = /^((tiny|medium|long)?blob|(var)?binary|bit|geometry|point|linestring|polygon|multipoint|multilinestring|multipolygon|geometrycollection)\b/i;
+/** SQLite gives BLOB affinity to a declared type naming it. */
+const sqliteBinaryRe = /blob/i;
 
 function TableView({
   serviceId,
@@ -303,7 +305,7 @@ function TableView({
   const cut = new Set((data?.truncated ?? []).map(([r, c]) => `${r}:${c}`));
   const keyOf = (r: (string | null)[]) => JSON.stringify(pk.map((j) => r[j]));
   const nNew = write ? pending.inserts.length : 0;
-  const binary = (j: number) => dialect !== "postgres" && mysqlBinaryRe.test(cols[j].type);
+  const binary = (j: number) => dialect !== "postgres" && (dialect === "sqlite" ? sqliteBinaryRe : mysqlBinaryRe).test(cols[j].type);
   const shown: Cell[][] = write
     ? [
         ...pending.inserts.map((ins) => cols.map((c) => (c.name in ins.values ? ins.values[c.name] : undefined))),

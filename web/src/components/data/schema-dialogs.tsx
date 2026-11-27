@@ -13,7 +13,7 @@ import type { SqlDialect } from "./sql-editor";
 type TypeGroup = { label: string; types: [type: string, hint: string][] };
 
 /** The types offered per dialect, grouped; Custom… takes any other. The first is a new table's id. */
-const typeGroups: Record<"postgres" | "mysql", TypeGroup[]> = {
+const typeGroups: Record<"postgres" | "mysql" | "sqlite", TypeGroup[]> = {
   postgres: [
     {
       label: "Numbers",
@@ -94,6 +94,31 @@ const typeGroups: Record<"postgres" | "mysql", TypeGroup[]> = {
       ],
     },
   ],
+  // SQLite keeps any value in any column; the type only sets its affinity.
+  sqlite: [
+    {
+      label: "Numbers",
+      types: [
+        ["INTEGER", "integer; as the primary key, the auto-increment rowid"],
+        ["REAL", "floating point"],
+        ["NUMERIC", "integer or decimal"],
+      ],
+    },
+    {
+      label: "Text",
+      types: [
+        ["TEXT", "any length"],
+        ["DATETIME", "a date and time, as ISO 8601 text"],
+      ],
+    },
+    {
+      label: "Other",
+      types: [
+        ["BOOLEAN", "0 or 1"],
+        ["BLOB", "bytes"],
+      ],
+    },
+  ],
 };
 
 const CUSTOM = "__custom";
@@ -170,7 +195,7 @@ export function NewTableDialog({
   run: (schema: string, name: string, columns: NewColumn[], apply: boolean) => Promise<ChangeResult>;
   onCreated: (schema: string, name: string) => void;
 }) {
-  const groups = typeGroups[dialect === "postgres" ? "postgres" : "mysql"];
+  const groups = typeGroups[dialect === "postgres" || dialect === "sqlite" ? dialect : "mysql"];
   const first = (): NewColumn[] => [{ name: "id", type: groups[0].types[0][0], nullable: false, primaryKey: true }];
   const [name, setName] = useState("");
   const [schema, setSchema] = useState(defaultSchema);
@@ -247,7 +272,7 @@ export function NewTableDialog({
                   </Button>
                 </div>
               ))}
-              <Button type="button" variant="ghost" size="xs" onClick={() => setColumns([...columns, { name: "", type: dialect === "postgres" ? "text" : "varchar(255)", nullable: true, primaryKey: false }])}>
+              <Button type="button" variant="ghost" size="xs" onClick={() => setColumns([...columns, { name: "", type: dialect === "postgres" ? "text" : dialect === "sqlite" ? "TEXT" : "varchar(255)", nullable: true, primaryKey: false }])}>
                 <Plus /> Column
               </Button>
             </div>

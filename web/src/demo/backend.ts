@@ -2231,15 +2231,20 @@ const routes: Route[] = [
   [
     "GET",
     /^\/services\/([^/]+)\/data\/databases$/,
-    ({ m }) => [serviceOf(m[1]).kind === "postgres" ? { name: "postgres", bytes: 9_437_184, main: true } : { name: "app", bytes: 9_437_184, main: true }],
+    ({ m }) => {
+      const kind = serviceOf(m[1]).kind;
+      // An app's databases are the SQLite files found in its volumes.
+      if (kind === "app") return [{ name: "data/app.db", bytes: 2_097_152, main: false }];
+      return [kind === "postgres" ? { name: "postgres", bytes: 9_437_184, main: true } : { name: "app", bytes: 9_437_184, main: true }];
+    },
   ],
   [
     "GET",
     /^\/services\/([^/]+)\/data\/tables$/,
     ({ m }): PgTable[] => {
-      // The same demo data in every kind: MySQL's schema is its database, MongoDB's tables are collections.
+      // The same demo data in every kind: MySQL's schema is its database, SQLite's main, MongoDB's tables are collections.
       const kind = serviceOf(m[1]).kind;
-      const schemaOf = (t: DemoDb["tables"][number]) => (kind === "postgres" ? t.schema : "app");
+      const schemaOf = (t: DemoDb["tables"][number]) => (kind === "postgres" ? t.schema : kind === "app" ? "main" : "app");
       return db.tables.map((t) => ({
         schema: schemaOf(t),
         name: t.name,
