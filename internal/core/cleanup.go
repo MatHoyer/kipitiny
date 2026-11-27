@@ -16,6 +16,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 )
 
 const (
@@ -126,8 +127,8 @@ func (c *Core) cleanupSettings(ctx context.Context) CleanupSettings {
 func (c *Core) Cleanup(ctx context.Context) CleanupView {
 	v := CleanupView{Settings: c.cleanupSettings(ctx), Running: c.cleaning.Load()}
 	if v.Running {
-		v.Step, _ = c.steps.get(cleanupKey)
-		v.StepServer = c.steps.detailOf(cleanupKey)
+		v.Step, _ = c.steps.Get(cleanupKey)
+		v.StepServer = c.steps.DetailOf(cleanupKey)
 	}
 	c.sched.mu.Lock()
 	if c.sched.cron != nil && c.sched.cleanup != 0 {
@@ -147,7 +148,7 @@ func (c *Core) Cleanup(ctx context.Context) CleanupView {
 
 func (c *Core) SetCleanup(ctx context.Context, s CleanupSettings) (CleanupView, error) {
 	s.Cron = strings.TrimSpace(s.Cron)
-	if _, err := cronParser.Parse(s.Cron); err != nil {
+	if _, err := data.CronParser.Parse(s.Cron); err != nil {
 		return CleanupView{}, fmt.Errorf("%w: schedule: %v", ErrInvalid, err)
 	}
 	if s.MinAgeHours < 1 || s.MinAgeHours > 24*365 {
@@ -159,8 +160,8 @@ func (c *Core) SetCleanup(ctx context.Context, s CleanupSettings) (CleanupView, 
 	if !oneOf(s.Volumes, CleanOff, CleanAnonymous, CleanUnused) {
 		return CleanupView{}, fmt.Errorf("%w: volumes must be off, anonymous or unused", ErrInvalid)
 	}
-	if s.KeepDeployments != 0 && (s.KeepDeployments < minKeepDeployments || s.KeepDeployments > maxKeep) {
-		return CleanupView{}, fmt.Errorf("%w: keep 0 (all) or %d to %d deployments", ErrInvalid, minKeepDeployments, maxKeep)
+	if s.KeepDeployments != 0 && (s.KeepDeployments < minKeepDeployments || s.KeepDeployments > data.MaxKeep) {
+		return CleanupView{}, fmt.Errorf("%w: keep 0 (all) or %d to %d deployments", ErrInvalid, minKeepDeployments, data.MaxKeep)
 	}
 	b, err := json.Marshal(s)
 	if err != nil {
@@ -245,7 +246,7 @@ func (c *Core) startCleanup(ctx context.Context, trigger string, done chan<- str
 func (c *Core) runCleanup(s CleanupSettings, trigger string) {
 	ctx, cancel := context.WithTimeout(c.bg, time.Hour)
 	defer cancel()
-	defer c.steps.done(cleanupKey)
+	defer c.steps.Done(cleanupKey)
 	run := CleanupRun{Trigger: trigger, StartedAt: time.Now().UTC(), Servers: []CleanupResult{}}
 
 	servers, err := c.store.ListServers(ctx)
@@ -257,7 +258,7 @@ func (c *Core) runCleanup(s CleanupSettings, trigger string) {
 			run.Servers = append(run.Servers, c.cleanServer(ctx, sv, svcs, s))
 		}
 		if s.KeepDeployments > 0 {
-			c.steps.set(cleanupKey, CleanupDeployments)
+			c.steps.Set(cleanupKey, CleanupDeployments)
 			run.Deployments = c.trimDeployments(ctx, svcs, s.KeepDeployments)
 		}
 	}
@@ -290,7 +291,7 @@ func (c *Core) cleanServer(ctx context.Context, sv domain.Server, svcs []domain.
 			r.Errors = append(r.Errors, fmt.Sprintf("%s: %v", what, err))
 		}
 	}
-	step := func(name string) { c.steps.setOn(cleanupKey, name, sv.Name) }
+	step := func(name string) { c.steps.SetOn(cleanupKey, name, sv.Name) }
 	step(CleanupConnect)
 	if _, err := dk.Ping(ctx, client.PingOptions{}); err != nil {
 		fail("docker", err)
@@ -427,7 +428,7 @@ func (c *Core) removeUnusedImages(ctx context.Context, dk *docker.Client, server
 func (c *Core) removeUnusedVolumes(ctx context.Context, dk *docker.Client, svcs []domain.Service, named bool, minAge time.Duration) (int, uint64, error) {
 	protected := map[string]bool{}
 	for _, svc := range svcs {
-		if vol := DataVolume(svc); vol != "" {
+		if vol := data.DataVolume(svc); vol != "" {
 			protected[vol] = true
 		}
 	}

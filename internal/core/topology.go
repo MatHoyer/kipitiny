@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/moby/moby/api/types/container"
@@ -264,7 +265,7 @@ func (c *Core) serverTopology(ctx context.Context, sv domain.Server, projects []
 			if ts.Networks == nil {
 				ts.Networks = []string{}
 			}
-			ts.Volume = DataVolume(s)
+			ts.Volume = data.DataVolume(s)
 			views := make([]ContainerView, 0, len(byService[s.ID]))
 			nodes := map[string]container.Summary{}
 			for _, ct := range byService[s.ID] {

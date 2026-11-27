@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -174,7 +175,7 @@ type previewSeedIn struct {
 }
 
 type previewSeedOut struct {
-	Databases []core.SeedDatabase `json:"databases"`
+	Databases []data.SeedDatabase `json:"databases"`
 }
 
 func (t *tools) getPreviewSeed(ctx context.Context, _ *mcp.CallToolRequest, in previewSeedIn) (*mcp.CallToolResult, previewSeedOut, error) {
@@ -196,18 +197,18 @@ type setAnonymizeRulesIn struct {
 	Remove  bool           `json:"remove,omitempty" jsonschema:"remove the rules instead: the database can't seed previews with anonymized data"`
 }
 
-func (t *tools) setAnonymizeRules(ctx context.Context, _ *mcp.CallToolRequest, in setAnonymizeRulesIn) (*mcp.CallToolResult, core.SeedDatabase, error) {
-	out, err := mutate(ctx, t.c, "set_anonymize_rules", in.Project+"/"+in.Service, func() (core.SeedDatabase, error) {
+func (t *tools) setAnonymizeRules(ctx context.Context, _ *mcp.CallToolRequest, in setAnonymizeRulesIn) (*mcp.CallToolResult, data.SeedDatabase, error) {
+	out, err := mutate(ctx, t.c, "set_anonymize_rules", in.Project+"/"+in.Service, func() (data.SeedDatabase, error) {
 		p, err := t.project(ctx, in.Project, identity.PermEnv)
 		if err != nil {
-			return core.SeedDatabase{}, err
+			return data.SeedDatabase{}, err
 		}
 		var rules anonymize.Rules
 		if !in.Remove {
 			rules = anonymize.Rules{}
 			raw, _ := json.Marshal(in.Rules)
 			if err := json.Unmarshal(raw, &rules); err != nil {
-				return core.SeedDatabase{}, fmt.Errorf("%w: rules: %v", core.ErrInvalid, err)
+				return data.SeedDatabase{}, fmt.Errorf("%w: rules: %s", core.ErrInvalid, err.Error())
 			}
 		}
 		return t.c.SetAnonymizeRules(ctx, p.ID, in.Service, rules)

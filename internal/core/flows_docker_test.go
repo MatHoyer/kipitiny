@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/moby/moby/api/types/container"
@@ -336,7 +337,7 @@ func TestComposeFlowDocker(t *testing.T) {
 func TestDatabaseBackupFlowDocker(t *testing.T) {
 	f := newFlow(t)
 	p := f.project(t, "shop")
-	db := f.service(t, p.ID, ServiceInput{Name: "db", Kind: domain.ServiceKindPostgres, Image: DefaultPostgresImage})
+	db := f.service(t, p.ID, ServiceInput{Name: "db", Kind: domain.ServiceKindPostgres, Image: data.DefaultPostgresImage})
 	f.ok(t)(f.c.Deploy(f.ctx, db.ID, DeployOptions{}))
 	db, _ = f.c.store.GetService(f.ctx, db.ID)
 	psql := func(sql string) string {
@@ -346,7 +347,7 @@ func TestDatabaseBackupFlowDocker(t *testing.T) {
 			t.Fatalf("db containers: %d, %v", len(cts), err)
 		}
 		var out bytes.Buffer
-		cmd := []string{"psql", "-U", db.Env[pgUser], "-d", db.Env[pgDatabase], "-tAc", sql}
+		cmd := []string{"psql", "-U", db.Env[data.PGUser], "-d", db.Env[data.PGDatabase], "-tAc", sql}
 		if err := f.dk.Exec(f.ctx, cts[0].ID, docker.ExecOptions{Cmd: cmd, Stdout: &out}); err != nil {
 			t.Fatalf("%s: %v", sql, err)
 		}

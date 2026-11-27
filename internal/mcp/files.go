@@ -9,11 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 // Volume files: browsing and writes. The core checks the permissions
@@ -27,19 +26,19 @@ type volumePathIn struct {
 	Path    string `json:"path,omitempty" jsonschema:"<volume>/<path inside it> (e.g. data/mods) or @container/<absolute path> (e.g. @container/etc/nginx); empty lists the volumes and @container"`
 }
 
-func (t *tools) listVolumeFiles(ctx context.Context, _ *mcp.CallToolRequest, in volumePathIn) (*mcp.CallToolResult, core.VolumeListing, error) {
+func (t *tools) listVolumeFiles(ctx context.Context, _ *mcp.CallToolRequest, in volumePathIn) (*mcp.CallToolResult, data.VolumeListing, error) {
 	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
-		return nil, core.VolumeListing{}, friendly(err)
+		return nil, data.VolumeListing{}, friendly(err)
 	}
 	l, err := t.c.ListVolumeFiles(ctx, svc.ID, in.Path)
 	return nil, l, friendly(err)
 }
 
-func (t *tools) readVolumeFile(ctx context.Context, _ *mcp.CallToolRequest, in volumePathIn) (*mcp.CallToolResult, core.VolumeFile, error) {
+func (t *tools) readVolumeFile(ctx context.Context, _ *mcp.CallToolRequest, in volumePathIn) (*mcp.CallToolResult, data.VolumeFile, error) {
 	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
-		return nil, core.VolumeFile{}, friendly(err)
+		return nil, data.VolumeFile{}, friendly(err)
 	}
 	f, err := t.c.ReadVolumeFile(ctx, svc.ID, in.Path)
 	return nil, f, friendly(err)
@@ -54,29 +53,29 @@ type writeVolumeFileIn struct {
 	Modified      string `json:"modified,omitempty" jsonschema:"the modified time read_volume_file returned: refuse the write if the file changed since"`
 }
 
-func (t *tools) writeVolumeFile(ctx context.Context, _ *mcp.CallToolRequest, in writeVolumeFileIn) (*mcp.CallToolResult, core.VolumeEntry, error) {
+func (t *tools) writeVolumeFile(ctx context.Context, _ *mcp.CallToolRequest, in writeVolumeFileIn) (*mcp.CallToolResult, data.VolumeEntry, error) {
 	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
-		return nil, core.VolumeEntry{}, friendly(err)
+		return nil, data.VolumeEntry{}, friendly(err)
 	}
 	var body io.Reader = strings.NewReader(in.Content)
 	if in.ContentBase64 != "" {
 		if in.Content != "" {
-			return nil, core.VolumeEntry{}, errors.New("give content or content_base64, not both")
+			return nil, data.VolumeEntry{}, errors.New("give content or content_base64, not both")
 		}
 		if base64.StdEncoding.DecodedLen(len(in.ContentBase64)) > maxWriteBase64 {
-			return nil, core.VolumeEntry{}, fmt.Errorf("content_base64 is limited to %d MiB; upload bigger files from the UI", maxWriteBase64>>20)
+			return nil, data.VolumeEntry{}, fmt.Errorf("content_base64 is limited to %d MiB; upload bigger files from the UI", maxWriteBase64>>20)
 		}
 		b, err := base64.StdEncoding.DecodeString(in.ContentBase64)
 		if err != nil {
-			return nil, core.VolumeEntry{}, fmt.Errorf("content_base64: %w", err)
+			return nil, data.VolumeEntry{}, fmt.Errorf("content_base64: %w", err)
 		}
 		body = strings.NewReader(string(b))
 	}
-	opts := core.WriteOptions{Overwrite: in.Overwrite}
+	opts := data.WriteOptions{Overwrite: in.Overwrite}
 	if in.Modified != "" {
 		if opts.Modified, err = time.Parse(time.RFC3339, in.Modified); err != nil {
-			return nil, core.VolumeEntry{}, errors.New("modified must be an RFC 3339 time, as read_volume_file returns it")
+			return nil, data.VolumeEntry{}, errors.New("modified must be an RFC 3339 time, as read_volume_file returns it")
 		}
 	}
 	e, err := t.c.WriteVolumeFile(ctx, svc.ID, in.Path, body, opts)

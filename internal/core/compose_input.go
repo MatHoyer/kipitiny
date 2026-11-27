@@ -9,6 +9,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
@@ -162,7 +163,7 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 	if in.Kind.IsDatabase() && in.Password != "" && in.Password != old.Env[databasePasswordKey(old.Kind)] {
 		a.warn("service %s: a database's password is fixed at creation; kept", name)
 	}
-	for _, k := range databaseNameKeys {
+	for _, k := range data.DatabaseNameKeys {
 		if v := in.Env[k]; in.Kind.IsDatabase() && v != "" && v != old.Env[k] {
 			a.warn("service %s: %s is fixed at creation; %s kept", name, k, old.Env[k])
 		}

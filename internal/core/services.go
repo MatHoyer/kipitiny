@@ -9,6 +9,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
@@ -144,7 +145,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (domain.Servi
 		HealthPath:       strings.TrimSpace(in.HealthPath),
 		Healthcheck:      in.Healthcheck,
 		PreDeploy:        strings.TrimSpace(in.PreDeploy),
-		Volumes:          normalizeVolumes(in.Volumes),
+		Volumes:          data.NormalizeVolumes(in.Volumes),
 		PreBackup:        strings.TrimSpace(in.PreBackup),
 		PublishedPorts:   network.NormalizePorts(in.PublishedPorts),
 		Routes:           network.NormalizeRoutes(in.Routes),
@@ -185,54 +186,54 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (domain.Servi
 	case domain.ServiceKindApp:
 	case domain.ServiceKindPostgres:
 		if svc.Image == "" {
-			svc.Image = DefaultPostgresImage
+			svc.Image = data.DefaultPostgresImage
 		}
 		if svc.MemoryMB == 0 {
-			svc.MemoryMB = defaultPostgresMemoryMB
+			svc.MemoryMB = data.DefaultPostgresMemoryMB
 		}
 		// The env is generated and fixed: anything sent in is ignored.
-		svc.Env, svc.Secrets = newPostgresEnv(), []string{pgPassword}
+		svc.Env, svc.Secrets = data.NewPostgresEnv(), []string{data.PGPassword}
 		if in.Password != "" {
-			svc.Env[pgPassword] = in.Password
+			svc.Env[data.PGPassword] = in.Password
 		}
 	case domain.ServiceKindRedis:
 		if svc.Image == "" {
-			svc.Image = DefaultRedisImage
+			svc.Image = data.DefaultRedisImage
 		}
 		if svc.MemoryMB == 0 {
-			svc.MemoryMB = defaultRedisMemoryMB
+			svc.MemoryMB = data.DefaultRedisMemoryMB
 		}
-		svc.Env, svc.Secrets = newRedisEnv(), []string{redisPassword}
+		svc.Env, svc.Secrets = data.NewRedisEnv(), []string{data.RedisPassword}
 		if in.Password != "" {
-			svc.Env[redisPassword] = in.Password
+			svc.Env[data.RedisPassword] = in.Password
 		}
 	case domain.ServiceKindMySQL, domain.ServiceKindMariaDB:
 		if svc.Image == "" {
-			svc.Image = defaultMySQLImage(svc.Kind)
+			svc.Image = data.MySQLImageFor(svc.Kind)
 		}
 		if svc.MemoryMB == 0 {
-			svc.MemoryMB = defaultMySQLMemoryMB
+			svc.MemoryMB = data.DefaultMySQLMemoryMB
 		}
-		svc.Env, svc.Secrets = newMySQLEnv(), []string{mysqlPassword, mysqlRootPassword}
+		svc.Env, svc.Secrets = data.NewMySQLEnv(), []string{data.MySQLPassword, data.MySQLRootPassword}
 		if in.Password != "" {
-			svc.Env[mysqlPassword] = in.Password
+			svc.Env[data.MySQLPassword] = in.Password
 		}
 	case domain.ServiceKindMongoDB:
 		if svc.Image == "" {
-			svc.Image = DefaultMongoImage
+			svc.Image = data.DefaultMongoImage
 		}
 		if svc.MemoryMB == 0 {
-			svc.MemoryMB = defaultMongoMemoryMB
+			svc.MemoryMB = data.DefaultMongoMemoryMB
 		}
-		svc.Env, svc.Secrets = newMongoEnv(), []string{mongoPassword}
+		svc.Env, svc.Secrets = data.NewMongoEnv(), []string{data.MongoPassword}
 		if in.Password != "" {
-			svc.Env[mongoPassword] = in.Password
+			svc.Env[data.MongoPassword] = in.Password
 		}
 	default:
 		return domain.Service{}, fmt.Errorf("%w: unknown service kind %q", ErrInvalid, svc.Kind)
 	}
 	if svc.Kind.IsDatabase() {
-		for _, k := range databaseNameKeys {
+		for _, k := range data.DatabaseNameKeys {
 			if _, generated := svc.Env[k]; generated && in.Env[k] != "" {
 				svc.Env[k] = in.Env[k]
 			}
@@ -358,7 +359,7 @@ func (c *Core) DeleteService(ctx context.Context, id, confirm string) error {
 			return err
 		}
 	}
-	if hasData(svc) && confirm != svc.Name {
+	if data.HasData(svc) && confirm != svc.Name {
 		return fmt.Errorf("%w: deleting %s destroys its data; confirm with the service name", ErrInvalid, svc.Name)
 	}
 	if svc.Kind.IsDatabase() {
@@ -367,7 +368,7 @@ func (c *Core) DeleteService(ctx context.Context, id, confirm string) error {
 			return err
 		}
 		for _, s := range siblings {
-			if s.ID != svc.ID && usesDatabase(s.Env, svc.Name) {
+			if s.ID != svc.ID && domain.UsesDatabase(s.Env, svc.Name) {
 				return fmt.Errorf("%w: database is used by %q; remove its references first", ErrInvalid, s.Name)
 			}
 		}
@@ -392,15 +393,15 @@ func (c *Core) removeServiceContainers(ctx context.Context, svc domain.Service) 
 	}
 	dk := c.dockerFor(svc.ServerID)
 	for _, ct := range cts {
-		if err := dk.RemoveContainer(ctx, ct.ID, stopTimeoutFor(svc)); err != nil {
+		if err := dk.RemoveContainer(ctx, ct.ID, data.StopTimeoutFor(svc)); err != nil {
 			return err
 		}
 	}
 	if err := c.removeJobContainers(ctx, dk, svc.ID); err != nil {
 		return err
 	}
-	c.closeFilesHelper(svc.ID) // it holds the volumes
-	return removeServiceVolumes(ctx, dk, svc)
+	c.CloseFilesHelper(svc.ID) // it holds the volumes
+	return data.RemoveServiceVolumes(ctx, dk, svc)
 }
 
 // errPreviewOnly refuses running a previews-only service in its project.

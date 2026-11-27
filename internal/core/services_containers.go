@@ -12,6 +12,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 )
 
 type ContainerView struct {
@@ -136,7 +137,7 @@ func (c *Core) ServiceAction(ctx context.Context, id string, action Action) (Ser
 	if !svc.Stopped {
 		c.markActive(svc.ProjectID)
 	}
-	secs := int(stopTimeoutFor(svc).Seconds())
+	secs := int(data.StopTimeoutFor(svc).Seconds())
 	dk := c.dockerFor(svc.ServerID)
 	for _, ct := range cts {
 		switch action {

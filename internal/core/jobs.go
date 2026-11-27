@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
@@ -138,7 +139,7 @@ func (c *Core) jobView(ctx context.Context, j domain.Job) (JobView, error) {
 		if next := c.sched.cron.Entry(entry).Next; !next.IsZero() {
 			v.NextRun = &next
 		}
-	} else if sched, err := cronParser.Parse(j.Cron); err == nil {
+	} else if sched, err := data.CronParser.Parse(j.Cron); err == nil {
 		next := sched.Next(time.Now().UTC())
 		v.NextRun = &next
 	}
@@ -294,7 +295,7 @@ func applyJobInput(j *domain.Job, in JobInput) error {
 	if in.Command == "" {
 		return fmt.Errorf("%w: a job needs a command", ErrInvalid)
 	}
-	if _, err := cronParser.Parse(in.Cron); err != nil {
+	if _, err := data.CronParser.Parse(in.Cron); err != nil {
 		return fmt.Errorf("%w: schedule: %v", ErrInvalid, err)
 	}
 	if in.TimeoutSec == 0 {

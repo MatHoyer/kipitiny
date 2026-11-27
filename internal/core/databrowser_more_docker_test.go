@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -16,7 +17,7 @@ func TestDataBrowserDockerMySQL(t *testing.T) {
 		t.Run(string(kind), func(t *testing.T) {
 			c, ctx, svc, exec := dumpTestDB(t, kind)
 			ctx = identity.WithActor(ctx, identity.Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
-			client := mysqlBin(kind, "mysql")
+			client := data.MySQLBin(kind, "mysql")
 			exec(`MYSQL_PWD="$MYSQL_PASSWORD" ` + client + ` -h 127.0.0.1 -u"$MYSQL_USER" "$MYSQL_DATABASE" -e "
 CREATE TABLE items (id INT PRIMARY KEY, name TEXT, b BLOB, n INT NULL);
 INSERT INTO items VALUES (1, 'multi\nline', 0xdead, NULL), (2, REPEAT('x', 5000), NULL, 5), (3, 'it''s', NULL, 7);
@@ -35,27 +36,27 @@ CREATE VIEW v AS SELECT id FROM items;"`)
 				t.Fatalf("tables = %+v", tables)
 			}
 
-			rows, err := c.PgRows(ctx, svc.ID, "", "app", "items", RowQuery{Limit: 2})
+			rows, err := c.PgRows(ctx, svc.ID, "", "app", "items", data.RowQuery{Limit: 2})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !rows.HasMore || len(rows.Rows) != 2 || *rows.Rows[0][1] != "multi\nline" || *rows.Rows[0][2] != "0xDEAD" ||
-				rows.Rows[0][3] != nil || len(*rows.Rows[1][1]) != DataCellMax || len(rows.Truncated) != 1 {
+				rows.Rows[0][3] != nil || len(*rows.Rows[1][1]) != data.DataCellMax || len(rows.Truncated) != 1 {
 				t.Fatalf("rows = %+v", rows)
 			}
-			rows, err = c.PgRows(ctx, svc.ID, "", "", "items", RowQuery{Search: "it's", Filters: []PgFilter{{Column: "n", Op: ">", Value: "6"}}, OrderBy: "id", Desc: true})
+			rows, err = c.PgRows(ctx, svc.ID, "", "", "items", data.RowQuery{Search: "it's", Filters: []data.PgFilter{{Column: "n", Op: ">", Value: "6"}}, OrderBy: "id", Desc: true})
 			if err != nil || len(rows.Rows) != 1 || *rows.Rows[0][0] != "3" {
 				t.Fatalf("filtered = %+v, %v", rows, err)
 			}
-			if _, err := c.PgRows(ctx, svc.ID, "", "", "items", RowQuery{OrderBy: "nope"}); !errors.Is(err, ErrInvalid) {
+			if _, err := c.PgRows(ctx, svc.ID, "", "", "items", data.RowQuery{OrderBy: "nope"}); !errors.Is(err, ErrInvalid) {
 				t.Errorf("unknown column: %v", err)
 			}
-			if _, err := c.PgRows(ctx, svc.ID, "", "", "missing", RowQuery{}); !errors.Is(err, domain.ErrNotFound) {
+			if _, err := c.PgRows(ctx, svc.ID, "", "", "missing", data.RowQuery{}); !errors.Is(err, domain.ErrNotFound) {
 				t.Errorf("missing table: %v", err)
 			}
 
 			var csv strings.Builder
-			if err := c.PgExport(ctx, svc.ID, "", "app", "items", RowQuery{OrderBy: "id"}, &csv); err != nil {
+			if err := c.PgExport(ctx, svc.ID, "", "app", "items", data.RowQuery{OrderBy: "id"}, &csv); err != nil {
 				t.Fatal(err)
 			}
 			if !strings.HasPrefix(csv.String(), "id,name,b,n\n1,\"multi\nline\",0xDEAD,\n") || !strings.Contains(csv.String(), ","+strings.Repeat("x", 5000)+",") {
@@ -91,7 +92,7 @@ CREATE TABLE u (t INT, a INT, b INT, FOREIGN KEY (t) REFERENCES t (x), FOREIGN K
 				t.Fatalf("second tables = %+v, %v", tables, err)
 			}
 			// A foreign key of several columns isn't followed.
-			if u := tables[1].Columns; u[0].References == nil || *u[0].References != (PgRef{Schema: "second", Table: "t", Column: "x"}) || u[1].References != nil {
+			if u := tables[1].Columns; u[0].References == nil || *u[0].References != (data.PgRef{Schema: "second", Table: "t", Column: "x"}) || u[1].References != nil {
 				t.Errorf("references = %+v", u)
 			}
 			if _, err := c.PgTables(ctx, svc.ID, "mysql"); !errors.Is(err, ErrInvalid) {
@@ -118,27 +119,27 @@ db.getSiblingDB("other").logs.insertOne({ a: 1 })'`)
 		tables[1].Kind != "view" {
 		t.Fatalf("collections = %+v, %v", tables, err)
 	}
-	docs, err := c.MongoDocuments(ctx, svc.ID, "", "items", DocQuery{Limit: 2, Sort: `{"n": 1}`})
+	docs, err := c.MongoDocuments(ctx, svc.ID, "", "items", data.DocQuery{Limit: 2, Sort: `{"n": 1}`})
 	if err != nil || !docs.HasMore || len(docs.Documents) != 2 || !strings.Contains(docs.Documents[0], `"at":{"$date":"1970-01-01T00:00:00Z"}`) ||
 		len(docs.Truncated) != 1 || docs.Truncated[0] != 1 {
 		t.Fatalf("documents = %+v, %v", docs, err)
 	}
-	docs, err = c.MongoDocuments(ctx, svc.ID, "", "items", DocQuery{Filter: `{"n": {"$gte": 3}}`})
+	docs, err = c.MongoDocuments(ctx, svc.ID, "", "items", data.DocQuery{Filter: `{"n": {"$gte": 3}}`})
 	if err != nil || len(docs.Documents) != 1 || !strings.Contains(docs.Documents[0], `"three"`) {
 		t.Fatalf("filtered = %+v, %v", docs, err)
 	}
 	for _, f := range []string{`not json`, `{"$where": "sleep(100)"`} {
-		if _, err := c.MongoDocuments(ctx, svc.ID, "", "items", DocQuery{Filter: f}); !errors.Is(err, ErrInvalid) {
+		if _, err := c.MongoDocuments(ctx, svc.ID, "", "items", data.DocQuery{Filter: f}); !errors.Is(err, ErrInvalid) {
 			t.Errorf("filter %q: %v", f, err)
 		}
 	}
-	if _, err := c.MongoDocuments(ctx, svc.ID, "", "missing", DocQuery{}); !errors.Is(err, domain.ErrNotFound) {
+	if _, err := c.MongoDocuments(ctx, svc.ID, "", "missing", data.DocQuery{}); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("missing collection: %v", err)
 	}
-	if docs, err := c.MongoDocuments(ctx, svc.ID, "other", "logs", DocQuery{}); err != nil || len(docs.Documents) != 1 {
+	if docs, err := c.MongoDocuments(ctx, svc.ID, "other", "logs", data.DocQuery{}); err != nil || len(docs.Documents) != 1 {
 		t.Errorf("other database: %+v, %v", docs, err)
 	}
-	if _, err := c.PgRows(ctx, svc.ID, "", "", "items", RowQuery{}); !errors.Is(err, ErrInvalid) {
+	if _, err := c.PgRows(ctx, svc.ID, "", "", "items", data.RowQuery{}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("rows of a collection: %v", err)
 	}
 

@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -23,10 +24,11 @@ func TestSeedAnonymized(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db, _ := c.serviceNamed(ctx, parent.ID, "db")
+	parentSvcs, _ := c.store.ListServices(ctx, parent.ID)
+	db := parentSvcs[slices.IndexFunc(parentSvcs, func(s domain.Service) bool { return s.Name == "db" })]
 	seed := func() (map[string]string, error) {
 		svcs, _ := c.store.ListServices(ctx, parent.ID)
-		return c.seedAnonymized(ctx, parent, f, svcs)
+		return c.SeedAnonymized(ctx, parent, f, svcs)
 	}
 	refused := func(want string) {
 		t.Helper()

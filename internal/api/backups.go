@@ -8,8 +8,8 @@ import (
 	"path"
 	"strconv"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 )
 
 func (a *API) listServiceBackups(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +144,7 @@ func (a *API) listStorage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createStorage(w http.ResponseWriter, r *http.Request) {
-	var in core.TargetInput
+	var in data.TargetInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -157,7 +157,7 @@ func (a *API) createStorage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateStorage(w http.ResponseWriter, r *http.Request) {
-	var in core.TargetInput
+	var in data.TargetInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -209,7 +209,7 @@ func (a *API) listSchedules(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createSchedule(w http.ResponseWriter, r *http.Request) {
-	var in core.ScheduleInput
+	var in data.ScheduleInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -231,7 +231,7 @@ func (a *API) listManagerSchedules(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createManagerSchedule(w http.ResponseWriter, r *http.Request) {
-	var in core.ScheduleInput
+	var in data.ScheduleInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -244,7 +244,7 @@ func (a *API) createManagerSchedule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateSchedule(w http.ResponseWriter, r *http.Request) {
-	var in core.ScheduleInput
+	var in data.ScheduleInput
 	if !decode(w, r, &in) {
 		return
 	}

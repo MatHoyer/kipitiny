@@ -7,6 +7,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 )
 
 func TestRunningTasks(t *testing.T) {
@@ -28,14 +29,14 @@ func TestRunningTasks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.steps.set(verifyKey("B1"), VerifyRestore)
+	c.steps.Set("verify/B1", data.VerifyRestore)
 	c.cleaning.Store(true)
 	if got, want := c.runningTasks(ctx), []string{"shop/web", "a restore test", "the cleanup"}; !slices.Equal(got, want) {
 		t.Errorf("busy: %q, want %q", got, want)
 	}
 
 	unlock()
-	c.steps.done(verifyKey("B1"))
+	c.steps.Done("verify/B1")
 	c.cleaning.Store(false)
 	// Other operations only show as a count.
 	c.running.Add(2)

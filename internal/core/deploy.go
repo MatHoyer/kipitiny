@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
@@ -306,12 +307,12 @@ func (c *Core) deploy(ctx context.Context, project domain.Project, svc domain.Se
 	}
 	dbs := src.dbs
 	for _, name := range slices.Sorted(maps.Keys(dbs)) {
-		if usesDatabase(svc.Env, name) {
+		if domain.UsesDatabase(svc.Env, name) {
 			logf("Using credentials of database %s", name)
 		}
 	}
 
-	if err := checkExternalVolumes(ctx, dk, svc); err != nil {
+	if err := data.CheckExternalVolumes(ctx, dk, svc); err != nil {
 		return err
 	}
 	logf("Pulling %s", svc.Image)
@@ -397,7 +398,7 @@ func (c *Core) recreate(ctx context.Context, project domain.Project, svc domain.
 	}
 	for _, old := range existing {
 		logf("Stopping %s", old.Names[0][1:])
-		if err := dk.RemoveContainer(ctx, old.ID, stopTimeoutFor(svc)); err != nil {
+		if err := dk.RemoveContainer(ctx, old.ID, data.StopTimeoutFor(svc)); err != nil {
 			return err
 		}
 	}
@@ -408,7 +409,7 @@ func (c *Core) recreate(ctx context.Context, project domain.Project, svc domain.
 		return err
 	}
 	logf("Waiting for %s to accept connections", svc.Kind)
-	if err := dk.WaitHealthy(ctx, id, databaseReadyTimeout); err != nil {
+	if err := dk.WaitHealthy(ctx, id, data.DatabaseReadyTimeout); err != nil {
 		return fmt.Errorf("%s did not become ready: %w", svc.Kind, err)
 	}
 	if err := c.setRunning(ctx, svc); err != nil {
@@ -486,7 +487,7 @@ func (c *Core) rollout(ctx context.Context, project domain.Project, svc domain.S
 	// Traffic now reaches the new replicas; stop the old ones gracefully but
 	// keep them (and their logs) until the next deploy. One at a time, so
 	// Traefik never holds more than one stopped backend at once.
-	secs := int(stopTimeoutFor(svc).Seconds())
+	secs := int(data.StopTimeoutFor(svc).Seconds())
 	for i, old := range active {
 		if i > 0 {
 			time.Sleep(retireGap)
@@ -553,7 +554,7 @@ func (c *Core) swap(ctx context.Context, project domain.Project, svc domain.Serv
 			}
 		}
 	}
-	secs := int(stopTimeoutFor(svc).Seconds())
+	secs := int(data.StopTimeoutFor(svc).Seconds())
 	for _, old := range active {
 		if old.State != container.StateRunning {
 			continue
@@ -584,7 +585,7 @@ func (c *Core) swap(ctx context.Context, project domain.Project, svc domain.Serv
 	if err != nil {
 		logf("Rolling back: removing the new container, the previous version starts again")
 		if id != "" {
-			_ = dk.RemoveContainer(context.WithoutCancel(ctx), id, stopTimeoutFor(svc))
+			_ = dk.RemoveContainer(context.WithoutCancel(ctx), id, data.StopTimeoutFor(svc))
 		}
 		restore()
 		return err
@@ -678,9 +679,9 @@ func containerSpec(project domain.Project, svc domain.Service, src envSources, d
 		host.NanoCPUs = int64(math.Round(svc.CPUs * 1e9))
 	}
 	if svc.Kind.IsDatabase() {
-		applyDatabaseSpec(cfg, host, svc)
+		data.ApplyDatabaseSpec(cfg, host, svc)
 	} else {
-		host.Mounts = append(host.Mounts, appVolumeMounts(svc)...)
+		host.Mounts = append(host.Mounts, data.AppVolumeMounts(svc)...)
 		if svc.HostNetwork {
 			host.NetworkMode = "host"
 		}

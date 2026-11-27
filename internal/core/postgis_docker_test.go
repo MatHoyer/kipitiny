@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 )
 
 // TestPostGISDocker backs up a PostGIS database and checks that restore tests
@@ -20,7 +21,7 @@ func TestPostGISDocker(t *testing.T) {
 	gis, gisExec := startTestDB(ctx, t, c, plain.ProjectID, ServiceInput{Name: "gis", Kind: domain.ServiceKindPostgres, Image: image})
 
 	psql := func(sql string) string {
-		return gisExec("psql -U " + gis.Env[pgUser] + " -d " + gis.Env[pgDatabase] + " -tAc \"" + sql + "\"")
+		return gisExec("psql -U " + gis.Env[data.PGUser] + " -d " + gis.Env[data.PGDatabase] + " -tAc \"" + sql + "\"")
 	}
 	psql("CREATE TABLE places (id int PRIMARY KEY, geom geometry(Point, 4326)); " +
 		"INSERT INTO places VALUES (1, ST_SetSRID(ST_MakePoint(2.35, 48.85), 4326))")

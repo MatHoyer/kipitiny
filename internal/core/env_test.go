@@ -7,6 +7,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
@@ -51,8 +52,8 @@ func TestResolveDatabaseRefs(t *testing.T) {
 	}
 	got := resolveEnv(env, src)
 	want := map[string]string{
-		"DATABASE_URL": DatabaseURL(db), "PGHOST": db.Name, "PGPORT": "5432",
-		"PGUSER": db.Env[pgUser], "PGPASSWORD": db.Env[pgPassword], "PGDATABASE": db.Env[pgDatabase],
+		"DATABASE_URL": data.DatabaseURL(db), "PGHOST": db.Name, "PGPORT": "5432",
+		"PGUSER": db.Env[data.PGUser], "PGPASSWORD": db.Env[data.PGPassword], "PGDATABASE": db.Env[data.PGDatabase],
 		"BAD_FIELD": "", "BAD_DB": "",
 	}
 	if !maps.Equal(got, want) {
@@ -61,7 +62,7 @@ func TestResolveDatabaseRefs(t *testing.T) {
 	if got, want := unresolved(env, src), []string{"db." + db.Name + ".NOPE", "db.gone.URL"}; !slices.Equal(got, want) {
 		t.Errorf("unresolved = %v, want %v", got, want)
 	}
-	if !usesDatabase(env, db.Name) || usesDatabase(map[string]string{"A": "{{ project.X }}"}, db.Name) {
+	if !domain.UsesDatabase(env, db.Name) || domain.UsesDatabase(map[string]string{"A": "{{ project.X }}"}, db.Name) {
 		t.Error("usesDatabase")
 	}
 	if !domain.SoleRefRe.MatchString(env["PGHOST"]) {

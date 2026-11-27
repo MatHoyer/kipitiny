@@ -14,6 +14,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 )
 
 // TestVolumeBackupDocker backs up, verifies and restores an app volume
@@ -47,7 +48,7 @@ func TestVolumeBackupDocker(t *testing.T) {
 	if err := c.store.SetCurrentDeployment(ctx, svc.ID, "D1"); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = removeServiceVolumes(context.Background(), dk, svc) })
+	t.Cleanup(func() { _ = data.RemoveServiceVolumes(context.Background(), dk, svc) })
 
 	// A running replica writing to the volume, stopped during the restore.
 	replica, err := dk.Run(ctx, client.ContainerCreateOptions{
@@ -59,7 +60,7 @@ func TestVolumeBackupDocker(t *testing.T) {
 			// remove it as an orphan.
 			Labels: map[string]string{docker.LabelProject: p.ID, docker.LabelService: svc.ID, docker.LabelDeploy: "D1"},
 		},
-		HostConfig: &container.HostConfig{Mounts: []mount.Mount{appVolumeMount(svc, svc.Volumes[0].Name, svc.Volumes[0].Path)}},
+		HostConfig: &container.HostConfig{Mounts: []mount.Mount{data.AppVolumeMount(svc, svc.Volumes[0].Name, svc.Volumes[0].Path)}},
 	})
 	if err != nil {
 		t.Fatal(err)

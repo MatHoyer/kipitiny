@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
@@ -40,6 +41,8 @@ type Core struct {
 	*network.Network
 	// Notifications, email, push, uptime checks, analytics and errors.
 	*monitoring.Monitoring
+	// Databases and the data browser, backups, restores, volumes and files.
+	*data.Data
 
 	cfg   config.Config
 	store domain.Store
@@ -59,14 +62,12 @@ type Core struct {
 	locks   sync.Map // service ID -> *serviceLock
 	busy    sync.Map // service ID -> struct{}: its lock is held
 
-	sched     scheduler
-	verifySem chan struct{}
-	// anonymizeMu makes starting an anonymized copy check-then-create.
-	anonymizeMu   sync.Mutex
-	steps         opSteps
+	sched scheduler
+	// steps: what the running operations are at (backups and restores in
+	// data, the cleanup here).
+	steps         progress.Steps
 	reconcileKick chan struct{}
 	probes        sync.Map // server ID -> *mount.Mount (nil: no probe there)
-	readUsers     sync.Map // container ID -> struct{}: the data browser's read-only user exists in that database
 	update        updateState
 	gitKick       chan string // project IDs to sync
 	gitFlows      pending.Map[gitFlow]
@@ -78,18 +79,18 @@ type Core struct {
 	sleep         sleepState
 	jobs          jobsState
 	health        healthState
-	files         filesState
 }
 
 // New builds the core around the local Docker client; remote servers are
 // connected on demand over SSH.
 func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logger) *Core {
 	bg, cancel := context.WithCancel(context.Background())
-	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1), gitKick: make(chan string, 16)}
+	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, reconcileKick: make(chan struct{}, 1), gitKick: make(chan string, 16)}
 	c.pool = docker.NewPool(local, c.connectServer)
 	c.Monitoring = monitoring.New(bg, &c.cfg, s, monitoringPorts{c}, log)
 	c.Identity = identity.New(cfg, s, identity.SecretKinds(cfg, local), c.Monitoring, log)
 	c.Network = network.New(bg, &c.cfg, s, networkPorts{c}, log)
+	c.Data = data.New(bg, &c.cfg, s, &c.steps, dataPorts{c}, log)
 	return c
 }
 
@@ -120,7 +121,7 @@ func (c *Core) Bootstrap(ctx context.Context) error {
 	for _, sv := range servers {
 		// Nothing runs yet: what restore tests and volume helpers left
 		// behind is from a crash. (Later bootstraps must not touch them.)
-		if err := c.cleanupRestoreTests(ctx, c.dockerFor(sv.ID)); err != nil {
+		if err := c.CleanupRestoreTests(ctx, c.dockerFor(sv.ID)); err != nil {
 			errs = append(errs, fmt.Errorf("server %s: %w", sv.Name, err))
 			continue
 		}
@@ -190,7 +191,7 @@ func (c *Core) Shutdown(ctx context.Context) error {
 		}
 	}
 	c.cancel()
-	c.closeFilesHelpers()
+	c.CloseFilesHelpers()
 	if cerr := c.CloseSecretProviders(context.WithoutCancel(ctx)); cerr != nil {
 		c.log.Warn("removing password manager helpers failed", "err", cerr)
 	}
@@ -455,4 +456,4 @@ func (c *Core) deleteProject(ctx context.Context, p domain.Project) error {
 	return dk.RemoveNetwork(ctx, docker.ProjectNetwork(id))
 }
 
-const stopTimeout = 10 * time.Second
+const stopTimeout = domain.StopTimeout

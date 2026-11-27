@@ -13,6 +13,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
@@ -74,7 +75,7 @@ func startTestDB(ctx context.Context, t *testing.T, c *Core, projectID string, i
 		cfg.Env = append(cfg.Env, k+"="+v)
 	}
 	host := &container.HostConfig{Resources: container.Resources{Memory: int64(svc.MemoryMB) << 20}}
-	applyDatabaseSpec(cfg, host, svc)
+	data.ApplyDatabaseSpec(cfg, host, svc)
 	// Not kipitiny.managed: a manager running on this daemon would remove
 	// it as an orphan.
 	cfg.Labels = map[string]string{docker.LabelProject: projectID, docker.LabelService: svc.ID, docker.LabelDeploy: "D1"}
@@ -84,9 +85,9 @@ func startTestDB(ctx context.Context, t *testing.T, c *Core, projectID string, i
 	}
 	t.Cleanup(func() {
 		_ = dk.RemoveContainerAndVolumes(context.Background(), id)
-		_ = removeServiceVolumes(context.Background(), dk, svc)
+		_ = data.RemoveServiceVolumes(context.Background(), dk, svc)
 	})
-	if err := dk.WaitHealthy(ctx, id, databaseReadyTimeout); err != nil {
+	if err := dk.WaitHealthy(ctx, id, data.DatabaseReadyTimeout); err != nil {
 		t.Fatal(err)
 	}
 	exec := func(cmd string) string {
@@ -111,7 +112,7 @@ func dumpRoundTrip(ctx context.Context, t *testing.T, c *Core, svc domain.Servic
 	}
 	b = waitBackup(t, c, b.ID, func(b domain.Backup) bool { return b.Status != domain.OpRunning })
 	if b.Status != domain.OpSucceeded || b.Kind != domain.BackupKindDump || b.ServiceKind != svc.Kind || !b.Encrypted || b.PGVersion == "" ||
-		!strings.HasSuffix(b.ObjectKey, dumpExt(svc.Kind)+".age") {
+		!strings.HasSuffix(b.ObjectKey, data.DumpExt(svc.Kind)+".age") {
 		t.Fatalf("backup = %+v", b)
 	}
 
@@ -156,7 +157,7 @@ func TestDumpDockerMySQL(t *testing.T) {
 	for _, kind := range []domain.ServiceKind{domain.ServiceKindMySQL, domain.ServiceKindMariaDB} {
 		t.Run(string(kind), func(t *testing.T) {
 			c, ctx, svc, exec := dumpTestDB(t, kind)
-			client := mysqlBin(kind, "mysql")
+			client := data.MySQLBin(kind, "mysql")
 			// As the app connects: its user, its database.
 			app := func(sql string) string {
 				return exec(`MYSQL_PWD="$MYSQL_PASSWORD" ` + client + ` -h 127.0.0.1 -u"$MYSQL_USER" -NB "$MYSQL_DATABASE" -e "` + strings.ReplaceAll(sql, "`", "\\`") + `"`)

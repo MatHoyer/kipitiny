@@ -92,7 +92,7 @@ func (c *Core) runningTasks(ctx context.Context) []string {
 		return true
 	})
 	slices.Sort(out)
-	if n := len(c.steps.running("verify/")); n > 0 {
+	if n := len(c.steps.Running("verify/")); n > 0 {
 		out = append(out, plural(n, "a restore test", "restore tests"))
 	}
 	if c.cleaning.Load() {

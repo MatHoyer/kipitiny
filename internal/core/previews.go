@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/compose"
@@ -123,7 +124,7 @@ func (c *Core) SetPreviewSettings(ctx context.Context, projectID string, in Prev
 	if ps, err = c.store.SavePreviewSettings(ctx, ps); err != nil {
 		return domain.PreviewSettings{}, err
 	}
-	c.logAnonymizeErr(c.refreshAnonymized(ctx, projectID, false))
+	c.LogAnonymizeErr(c.RefreshAnonymized(ctx, projectID, false))
 	ps.Env = maskEnv(ps.Env, ps.Secrets)
 	return ps, nil
 }
@@ -268,7 +269,7 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 			return PreviewView{}, fmt.Errorf("%w: %s's preview settings don't allow seeding previews with its data", ErrInvalid, parent.Name)
 		}
 		if settings.SeedMode == domain.SeedAnonymized {
-			seeds, err = c.seedAnonymized(ctx, parent, file, parentSvcs)
+			seeds, err = c.SeedAnonymized(ctx, parent, file, parentSvcs)
 		} else {
 			seeds, err = c.seedBackups(ctx, file, parentSvcs)
 		}
@@ -347,7 +348,7 @@ func (c *Core) seedBackups(ctx context.Context, f compose.File, parentSvcs []dom
 		if _, listed := f.Services[s.Name]; !listed || !s.Kind.IsDatabase() {
 			continue
 		}
-		b, ok, err := c.latestSeedable(ctx, s.ID)
+		b, ok, err := c.LatestSeedable(ctx, s.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -385,7 +386,7 @@ func (c *Core) seedPreview(ctx context.Context, p domain.Project, seeds, created
 
 // waitRestore waits for a restore of service id to finish.
 func (c *Core) waitRestore(ctx context.Context, id, restoreID string) error {
-	deadline := time.Now().Add(restoreTimeout)
+	deadline := time.Now().Add(data.RestoreTimeout)
 	for time.Now().Before(deadline) {
 		rs, err := c.store.ListRestores(ctx, id, 5)
 		if err != nil {
@@ -710,7 +711,7 @@ func (c *Core) StartPreviewExpiry() error {
 			case <-tick.C:
 			}
 			c.expirePreviews(c.bg)
-			c.refreshAllAnonymized(c.bg)
+			c.RefreshAllAnonymized(c.bg)
 		}
 	})
 }

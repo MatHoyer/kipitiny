@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -28,7 +29,7 @@ func checkServiceChange(ctx context.Context, old, svc domain.Service) error {
 	if svc.Runtime.HostAccess() && !reflect.DeepEqual(runtimeHostAccess(svc.Runtime), runtimeHostAccess(old.Runtime)) {
 		return fmt.Errorf("%w: only admins give an app capabilities, devices, privileged mode, security options or host paths", identity.ErrForbidden)
 	}
-	if hv := volumesHostAccess(svc.Volumes); len(hv) > 0 && !reflect.DeepEqual(hv, volumesHostAccess(old.Volumes)) {
+	if hv := data.VolumesHostAccess(svc.Volumes); len(hv) > 0 && !reflect.DeepEqual(hv, data.VolumesHostAccess(old.Volumes)) {
 		return fmt.Errorf("%w: only admins mount external volumes or set volume driver options", identity.ErrForbidden)
 	}
 	for _, v := range svc.Volumes {

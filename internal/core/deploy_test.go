@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
@@ -109,7 +110,7 @@ func TestPinDigest(t *testing.T) {
 
 func TestStopGrace(t *testing.T) {
 	app := domain.Service{ID: "01ABC", Name: "mc", Kind: domain.ServiceKindApp, Image: "itzg/minecraft-server", Replicas: 1}
-	if got := stopTimeoutFor(app); got != stopTimeout {
+	if got := data.StopTimeoutFor(app); got != stopTimeout {
 		t.Errorf("default = %s", got)
 	}
 	if spec := containerSpec(domain.Project{ID: "P1", Name: "games"}, app, envSources{}, "D1", 1, network.Routing{}); spec.Config.StopTimeout != nil {
@@ -117,7 +118,7 @@ func TestStopGrace(t *testing.T) {
 	}
 
 	app.StopGraceSeconds = 90
-	if got := stopTimeoutFor(app); got != 90*time.Second {
+	if got := data.StopTimeoutFor(app); got != 90*time.Second {
 		t.Errorf("custom = %s", got)
 	}
 	spec := containerSpec(domain.Project{ID: "P1", Name: "games"}, app, envSources{}, "D1", 1, network.Routing{})

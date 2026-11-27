@@ -17,6 +17,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
@@ -305,7 +306,7 @@ func (c *Core) putToSleep(ctx context.Context, projectID string) error {
 		if err != nil {
 			return err
 		}
-		secs := int(stopTimeoutFor(svc).Seconds())
+		secs := int(data.StopTimeoutFor(svc).Seconds())
 		dk := c.dockerFor(svc.ServerID)
 		for _, ct := range cts {
 			if ct.State != container.StateRunning {

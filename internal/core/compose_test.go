@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
@@ -34,7 +35,7 @@ func TestExportFile(t *testing.T) {
 		},
 		{Name: "worker", Kind: domain.ServiceKindApp, Image: "ghcr.io/me/worker:1", Replicas: 1, Volumes: []domain.Volume{{Name: "data", Path: "/d"}}},
 		{Name: "db", Kind: domain.ServiceKindPostgres, Image: "postgres:17-alpine", Replicas: 1, MemoryMB: 512,
-			Env: map[string]string{pgUser: "app", pgPassword: "pw", pgDatabase: "app"}, Secrets: []string{pgPassword}},
+			Env: map[string]string{data.PGUser: "app", data.PGPassword: "pw", data.PGDatabase: "app"}, Secrets: []string{data.PGPassword}},
 	}
 	checks := map[string]domain.UptimeCheck{"w1": {ServiceID: "w1", Path: "/health", IntervalSec: 60, TimeoutSec: 10, Enabled: true}}
 	f, env := exportFile(p, svcs, checks, nil, nil, true)
@@ -58,7 +59,7 @@ func TestExportFile(t *testing.T) {
 		t.Errorf("basic auth = %+v", u)
 	}
 	db := f.Services["db"]
-	if db.X.Kind != "postgres" || !maps.Equal(db.Environment, map[string]string{pgUser: "app", pgDatabase: "app"}) || db.X.Password != "${DB_PASSWORD}" || env["DB_PASSWORD"] != "pw" {
+	if db.X.Kind != "postgres" || !maps.Equal(db.Environment, map[string]string{data.PGUser: "app", data.PGDatabase: "app"}) || db.X.Password != "${DB_PASSWORD}" || env["DB_PASSWORD"] != "pw" {
 		t.Errorf("db = %+v", db)
 	}
 	if f.X.Variables["TOKEN"] != "${PROJECT_TOKEN}" || f.X.Variables["REGION"] != "eu" || env["PROJECT_TOKEN"] != "t0k" {
@@ -136,7 +137,7 @@ services:
 	for _, s := range svcs {
 		byName[s.Name] = s
 	}
-	if db := byName["db"]; db.Kind != domain.ServiceKindPostgres || db.Env[pgPassword] != "dbpw" || db.Anonymize["users"].Columns["email"] != "fake:email" {
+	if db := byName["db"]; db.Kind != domain.ServiceKindPostgres || db.Env[data.PGPassword] != "dbpw" || db.Anonymize["users"].Columns["email"] != "fake:email" {
 		t.Errorf("db = %+v", db)
 	}
 	web := byName["web"]

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -43,7 +43,7 @@ func TestScheduleTools(t *testing.T) {
 		t.Errorf("schedule without cron: %s", out)
 	}
 	out, isErr := e.call(admin, "set_backup_schedule", map[string]any{"service": "shop/db", "cron": "0 3 * * *"})
-	var sc core.ScheduleView
+	var sc data.ScheduleView
 	if err := json.Unmarshal([]byte(out), &sc); isErr || err != nil || sc.KeepDaily != 7 || sc.KeepMonthly != 6 || !sc.Enabled || sc.TargetID != domain.LocalTargetID {
 		t.Fatalf("new schedule: %s", out)
 	}

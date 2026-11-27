@@ -8,6 +8,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
@@ -36,7 +37,7 @@ configs:
 	svcs, _ := c.store.ListServices(ctx, p.ID)
 	i := slices.IndexFunc(svcs, func(s domain.Service) bool { return s.Name == "db" })
 	db := svcs[i]
-	if db.Env[pgUser] != "shop" || db.Env[pgDatabase] != "shop_prod" || db.Env[pgPassword] != "s3cret" || len(db.Files) != 1 {
+	if db.Env[data.PGUser] != "shop" || db.Env[data.PGDatabase] != "shop_prod" || db.Env[data.PGPassword] != "s3cret" || len(db.Files) != 1 {
 		t.Errorf("db env = %v, files %+v", db.Env, db.Files)
 	}
 	web := svcs[1-i]
