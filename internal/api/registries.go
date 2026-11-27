@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 )
 
 func (a *API) listRegistries(w http.ResponseWriter, r *http.Request) {
@@ -17,7 +17,7 @@ func (a *API) listRegistries(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createRegistry(w http.ResponseWriter, r *http.Request) {
-	var in core.RegistryInput
+	var in deploy.RegistryInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -30,7 +30,7 @@ func (a *API) createRegistry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateRegistry(w http.ResponseWriter, r *http.Request) {
-	var in core.RegistryInput
+	var in deploy.RegistryInput
 	if !decode(w, r, &in) {
 		return
 	}

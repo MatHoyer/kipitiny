@@ -8,6 +8,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 )
 
 // TestPostGISDocker backs up a PostGIS database and checks that restore tests
@@ -18,7 +19,7 @@ func TestPostGISDocker(t *testing.T) {
 	const image = "postgis/postgis:17-3.6-alpine"
 	// dumpTestDB's database runs the default image, without PostGIS.
 	c, ctx, plain, _ := dumpTestDB(t, domain.ServiceKindPostgres)
-	gis, gisExec := startTestDB(ctx, t, c, plain.ProjectID, ServiceInput{Name: "gis", Kind: domain.ServiceKindPostgres, Image: image})
+	gis, gisExec := startTestDB(ctx, t, c, plain.ProjectID, deploy.ServiceInput{Name: "gis", Kind: domain.ServiceKindPostgres, Image: image})
 
 	psql := func(sql string) string {
 		return gisExec("psql -U " + gis.Env[data.PGUser] + " -d " + gis.Env[data.PGDatabase] + " -tAc \"" + sql + "\"")

@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"maps"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -25,7 +25,7 @@ func (t *tools) deploy(ctx context.Context, _ *mcp.CallToolRequest, in deployIn)
 		if err != nil {
 			return domain.Deployment{}, err
 		}
-		return t.c.Deploy(ctx, svc.ID, core.DeployOptions{Tag: in.Tag})
+		return t.c.Deploy(ctx, svc.ID, deploy.DeployOptions{Tag: in.Tag})
 	})
 	return nil, dep, err
 }
@@ -97,7 +97,7 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 		svc, err := t.c.ResolveService(ctx, project.Name+"/"+in.Name)
 		switch {
 		case errors.Is(err, domain.ErrNotFound):
-			input := core.ServiceInput{
+			input := deploy.ServiceInput{
 				Name: in.Name, Image: in.Image, Domain: in.Domain, Port: in.Port, Env: in.Env, PublishedPorts: in.ports(),
 				Routes: in.routes(),
 			}
@@ -115,7 +115,7 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 			if svc.Kind != domain.ServiceKindApp {
 				return domain.Deployment{}, fmt.Errorf("%s/%s exists and is not an app", project.Name, in.Name)
 			}
-			patch := core.ServicePatch{Image: &in.Image, PublishedPorts: in.ports(), StopGraceSeconds: in.StopGraceSeconds, Routes: in.routes()}
+			patch := deploy.ServicePatch{Image: &in.Image, PublishedPorts: in.ports(), StopGraceSeconds: in.StopGraceSeconds, Routes: in.routes()}
 			// Omitted keeps the app's domain and port, as in retag.
 			if in.Domain != "" {
 				patch.Domain = &in.Domain
@@ -133,7 +133,7 @@ func (t *tools) deployImage(ctx context.Context, _ *mcp.CallToolRequest, in depl
 				return domain.Deployment{}, err
 			}
 		}
-		return t.c.Deploy(ctx, svc.ID, core.DeployOptions{})
+		return t.c.Deploy(ctx, svc.ID, deploy.DeployOptions{})
 	})
 	return nil, dep, err
 }
@@ -155,7 +155,7 @@ func (t *tools) retag(ctx context.Context, in deployImageIn) (domain.Deployment,
 		(in.Domain != "" && in.Domain != svc.Domain) || (in.Port != 0 && in.Port != svc.Port) {
 		return domain.Deployment{}, fmt.Errorf("%w: needs the settings permission to change anything but the image tag", identity.ErrForbidden)
 	}
-	opts, err := core.RetagOptions(svc.Image, in.Image)
+	opts, err := deploy.RetagOptions(svc.Image, in.Image)
 	if err != nil {
 		return domain.Deployment{}, err
 	}

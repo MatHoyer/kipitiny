@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/go-git/go-git/v5"
@@ -51,7 +52,7 @@ const (
 )
 
 // ErrGitManaged refuses a change to a service a git repository owns.
-var ErrGitManaged = fmt.Errorf("%w: the project follows a git repository; change its compose file instead", ErrInvalid)
+var ErrGitManaged = domain.ErrGitManaged
 
 // ErrIgnored is a valid webhook that triggers nothing (another branch, ping).
 var ErrIgnored = errors.New("ignored")
@@ -143,10 +144,10 @@ func (c *Core) LinkProjectGit(ctx context.Context, projectID string, in GitInput
 
 // PreviewProjectGit returns what linking the project to in would change,
 // linking nothing: services the file doesn't list would be deleted.
-func (c *Core) PreviewProjectGit(ctx context.Context, projectID string, in GitInput) (ComposePlan, error) {
+func (c *Core) PreviewProjectGit(ctx context.Context, projectID string, in GitInput) (deploy.ComposePlan, error) {
 	g, err := c.gitFromInput(ctx, projectID, in)
 	if err != nil {
-		return ComposePlan{}, err
+		return deploy.ComposePlan{}, err
 	}
 	if cur, err := c.store.GetProjectGit(ctx, projectID); err == nil {
 		g.LastCommit = cur.LastCommit
@@ -267,17 +268,17 @@ func (c *Core) UnlinkProjectGit(ctx context.Context, projectID string) error {
 
 // SyncProjectGit fetches the compose file and applies it now (dryRun: only
 // returns what would change).
-func (c *Core) SyncProjectGit(ctx context.Context, projectID string, dryRun bool) (ComposePlan, error) {
+func (c *Core) SyncProjectGit(ctx context.Context, projectID string, dryRun bool) (deploy.ComposePlan, error) {
 	g, err := c.store.GetProjectGit(ctx, projectID)
 	if err != nil {
-		return ComposePlan{}, err
+		return deploy.ComposePlan{}, err
 	}
 	return c.syncGit(ctx, g, true, dryRun)
 }
 
 // syncGit applies the branch's compose file. Unless forced, it does
 // nothing while the branch is at the commit last applied.
-func (c *Core) syncGit(ctx context.Context, g domain.ProjectGit, force, dryRun bool) (ComposePlan, error) {
+func (c *Core) syncGit(ctx context.Context, g domain.ProjectGit, force, dryRun bool) (deploy.ComposePlan, error) {
 	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
 	// The address is checked again: the name may resolve elsewhere now.
@@ -287,45 +288,41 @@ func (c *Core) syncGit(ctx context.Context, g domain.ProjectGit, force, dryRun b
 	}
 	if err != nil {
 		if dryRun {
-			return ComposePlan{}, err
+			return deploy.ComposePlan{}, err
 		}
-		return ComposePlan{}, c.gitSynced(g, "", ComposePlan{}, nil, err)
+		return deploy.ComposePlan{}, c.gitSynced(g, "", deploy.ComposePlan{}, nil, err)
 	}
 	if !force {
 		head, err := c.gitHead(ctx, g)
 		if err != nil {
-			return ComposePlan{}, c.gitSynced(g, "", ComposePlan{}, nil, err)
+			return deploy.ComposePlan{}, c.gitSynced(g, "", deploy.ComposePlan{}, nil, err)
 		}
 		if head == g.LastCommit && g.LastError == "" {
-			return ComposePlan{}, nil
+			return deploy.ComposePlan{}, nil
 		}
 	}
-	var a *applier
+	var plan deploy.ComposePlan
+	var images map[string]string
 	var commit string
 	read := false
 	err = c.withGitFile(ctx, g, func(data []byte, cm string, files repoFiles) error {
 		read, commit = true, cm
 		var err error
-		a, err = c.applyCompose(fromGitSync(ctx), g.ProjectID, data,
-			ApplyOptions{Prune: true, Deploy: true, DryRun: dryRun, Commit: commit, files: files}, true)
+		plan, images, err = c.ApplyGitCompose(fromGitSync(ctx), g.ProjectID, data,
+			deploy.ApplyOptions{Prune: true, Deploy: true, DryRun: dryRun, Commit: commit}, files)
 		return err
 	})
 	if !read {
 		if dryRun {
-			return ComposePlan{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+			return deploy.ComposePlan{}, fmt.Errorf("%w: %s", ErrInvalid, err.Error())
 		}
-		return ComposePlan{}, c.gitSynced(g, "", ComposePlan{}, nil, err)
+		return deploy.ComposePlan{}, c.gitSynced(g, "", deploy.ComposePlan{}, nil, err)
 	}
 	if dryRun {
 		if err != nil {
-			return ComposePlan{}, err
+			return deploy.ComposePlan{}, err
 		}
-		return a.plan, nil
-	}
-	var plan ComposePlan
-	var images map[string]string
-	if a != nil {
-		plan, images = a.plan, a.images
+		return plan, nil
 	}
 	return plan, c.gitSynced(g, commit, plan, images, err)
 }
@@ -367,7 +364,7 @@ func (c *Core) asLinker(ctx context.Context, g domain.ProjectGit) (context.Conte
 
 // gitSynced records a sync's outcome and notifies changes of state; it
 // returns err.
-func (c *Core) gitSynced(g domain.ProjectGit, commit string, plan ComposePlan, images map[string]string, err error) error {
+func (c *Core) gitSynced(g domain.ProjectGit, commit string, plan deploy.ComposePlan, images map[string]string, err error) error {
 	ctx := context.WithoutCancel(c.bg)
 	prevErr := g.LastError
 	now := time.Now()
@@ -404,7 +401,7 @@ func (c *Core) gitSynced(g domain.ProjectGit, commit string, plan ComposePlan, i
 	return err
 }
 
-func syncSummary(p ComposePlan) string {
+func syncSummary(p deploy.ComposePlan) string {
 	var parts []string
 	for _, x := range []struct {
 		label string
@@ -571,8 +568,8 @@ func commitFiles(commit *object.Commit, dir, rel, branch string) ([]domain.Servi
 		if f.Mode == filemode.Symlink || f.Mode == filemode.Submodule {
 			return domain.ServiceFile{}, fmt.Errorf("%s is a symlink or submodule", path.Join(rel, name))
 		}
-		if f.Size > maxServiceFileBytes {
-			return domain.ServiceFile{}, fmt.Errorf("%s is larger than %d MB", path.Join(rel, name), maxServiceFileBytes>>20)
+		if f.Size > deploy.MaxServiceFileBytes {
+			return domain.ServiceFile{}, fmt.Errorf("%s is larger than %d MB", path.Join(rel, name), deploy.MaxServiceFileBytes>>20)
 		}
 		content, err := f.Contents()
 		mode := int64(0o644)
@@ -595,8 +592,8 @@ func commitFiles(commit *object.Commit, dir, rel, branch string) ([]domain.Servi
 	var out []domain.ServiceFile
 	total := int64(0)
 	err = tree.Files().ForEach(func(f *object.File) error {
-		if total += f.Size; total > maxServiceFileBytes || len(out) >= maxServiceFiles {
-			return fmt.Errorf("more than %d files or %d MB", maxServiceFiles, maxServiceFileBytes>>20)
+		if total += f.Size; total > deploy.MaxServiceFileBytes || len(out) >= deploy.MaxServiceFiles {
+			return fmt.Errorf("more than %d files or %d MB", deploy.MaxServiceFiles, deploy.MaxServiceFileBytes>>20)
 		}
 		sf, err := read(f, f.Name)
 		out = append(out, sf)
@@ -712,10 +709,4 @@ func webhookAuthorized(secret string, header func(string) string, body []byte) b
 		}
 	}
 	return false
-}
-
-// isGitProject reports whether a git repository owns the project.
-func (c *Core) isGitProject(ctx context.Context, projectID string) bool {
-	_, err := c.store.GetProjectGit(ctx, projectID)
-	return err == nil
 }

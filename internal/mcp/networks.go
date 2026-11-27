@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -66,7 +67,7 @@ func (t *tools) createNetwork(ctx context.Context, _ *mcp.CallToolRequest, in cr
 		if err != nil {
 			return NetworkSummary{}, err
 		}
-		n, err := t.c.CreateNetwork(ctx, core.NetworkInput{ServerID: serverID, Name: in.Name})
+		n, err := t.c.CreateNetwork(ctx, deploy.NetworkInput{ServerID: serverID, Name: in.Name})
 		return NetworkSummary{Name: n.Name, Server: in.Server, DockerName: n.DockerName, Services: []string{}}, err
 	})
 	return nil, out, err
@@ -113,7 +114,7 @@ func (t *tools) setServiceNetworks(ctx context.Context, _ *mcp.CallToolRequest, 
 		}
 		ids := make([]string, 0, len(in.Networks))
 		for _, name := range in.Networks {
-			i := slices.IndexFunc(nets, func(n core.NetworkView) bool { return n.Name == name && n.ServerID == svc.ServerID })
+			i := slices.IndexFunc(nets, func(n deploy.NetworkView) bool { return n.Name == name && n.ServerID == svc.ServerID })
 			if i < 0 {
 				return serviceNetworksOut{}, fmt.Errorf("%w: network %s on the service's server", domain.ErrNotFound, name)
 			}
@@ -131,18 +132,18 @@ func (t *tools) setServiceNetworks(ctx context.Context, _ *mcp.CallToolRequest, 
 	return nil, out, err
 }
 
-func (t *tools) findNetwork(ctx context.Context, name, server string) (core.NetworkView, error) {
+func (t *tools) findNetwork(ctx context.Context, name, server string) (deploy.NetworkView, error) {
 	nets, err := t.c.ListNetworks(ctx)
 	if err != nil {
-		return core.NetworkView{}, err
+		return deploy.NetworkView{}, err
 	}
 	serverID := ""
 	if server != "" {
 		if serverID, err = t.serverID(ctx, server); err != nil {
-			return core.NetworkView{}, err
+			return deploy.NetworkView{}, err
 		}
 	}
-	var found []core.NetworkView
+	var found []deploy.NetworkView
 	for _, n := range nets {
 		if n.Name == name && (serverID == "" || n.ServerID == serverID) {
 			found = append(found, n)
@@ -150,11 +151,11 @@ func (t *tools) findNetwork(ctx context.Context, name, server string) (core.Netw
 	}
 	switch len(found) {
 	case 0:
-		return core.NetworkView{}, fmt.Errorf("%w: network %s", domain.ErrNotFound, name)
+		return deploy.NetworkView{}, fmt.Errorf("%w: network %s", domain.ErrNotFound, name)
 	case 1:
 		return found[0], nil
 	}
-	return core.NetworkView{}, fmt.Errorf("%w: several servers have a network named %s; give the server", core.ErrInvalid, name)
+	return deploy.NetworkView{}, fmt.Errorf("%w: several servers have a network named %s; give the server", core.ErrInvalid, name)
 }
 
 // serverID resolves a server by name; empty is this one.

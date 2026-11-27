@@ -14,7 +14,7 @@ type monitoringPorts struct{ c *Core }
 func (p monitoringPorts) DockerFor(serverID string) *docker.Client { return p.c.dockerFor(serverID) }
 
 func (p monitoringPorts) RegistryAuth(ctx context.Context, image string) string {
-	return p.c.registryAuth(ctx, image)
+	return p.c.RegistryAuth(ctx, image)
 }
 
 func (p monitoringPorts) OwnImageRef() string { return p.c.ownImageRef() }

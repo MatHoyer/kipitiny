@@ -18,7 +18,7 @@ type dataPorts struct{ c *Core }
 func (p dataPorts) DockerFor(serverID string) *docker.Client { return p.c.dockerFor(serverID) }
 
 func (p dataPorts) RegistryAuth(ctx context.Context, image string) string {
-	return p.c.registryAuth(ctx, image)
+	return p.c.RegistryAuth(ctx, image)
 }
 
 func (p dataPorts) OwnImageRef() string { return p.c.ownImageRef() }
@@ -44,17 +44,17 @@ func (p dataPorts) Audit(ctx context.Context, action, target string, status int,
 func (p dataPorts) Notify(e notify.Event, path, key string) { p.c.Notify(e, path, key) }
 
 func (p dataPorts) ServiceContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error) {
-	return p.c.serviceContainers(ctx, svc)
+	return p.c.ServiceContainers(ctx, svc)
 }
 
 func (p dataPorts) ActiveContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error) {
-	return p.c.activeContainers(ctx, svc)
+	return p.c.ActiveContainers(ctx, svc)
 }
 
 func (p dataPorts) WakeFor(ctx context.Context, svc domain.Service) error {
-	return p.c.wakeFor(ctx, svc)
+	return p.c.WakeFor(ctx, svc)
 }
 
 func (p dataPorts) PreviewSettings(ctx context.Context, projectID string) (domain.PreviewSettings, error) {
-	return p.c.previewSettings(ctx, projectID)
+	return p.c.PreviewSettings(ctx, projectID)
 }

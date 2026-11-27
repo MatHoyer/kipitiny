@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 
@@ -61,7 +62,7 @@ func Pages(c *core.Core, log *slog.Logger) http.Handler {
 // instead of indexing the page, and uptime checks see the app down. An app
 // waking from sleep asks to retry in seconds, and clients that don't take
 // HTML (API calls) get only that, no page.
-func writePage(w http.ResponseWriter, r *http.Request, p core.Page) {
+func writePage(w http.ResponseWriter, r *http.Request, p deploy.Page) {
 	h := w.Header()
 	h.Set("Cache-Control", "no-store")
 	h.Set("X-Robots-Tag", "noindex")

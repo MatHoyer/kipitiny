@@ -14,7 +14,7 @@ type networkPorts struct{ c *Core }
 func (p networkPorts) DockerFor(serverID string) *docker.Client { return p.c.dockerFor(serverID) }
 
 func (p networkPorts) RegistryAuth(ctx context.Context, image string) string {
-	return p.c.registryAuth(ctx, image)
+	return p.c.RegistryAuth(ctx, image)
 }
 
 func (p networkPorts) GoLoop(f func()) error { return p.c.goLoop(f) }
@@ -22,11 +22,11 @@ func (p networkPorts) GoLoop(f func()) error { return p.c.goLoop(f) }
 func (p networkPorts) Kick() { p.c.kick() }
 
 func (p networkPorts) PagesUpstream(ctx context.Context, sv domain.Server, managerURL string) (string, error) {
-	return p.c.pagesUpstream(ctx, sv, managerURL)
+	return p.c.PagesUpstream(ctx, sv, managerURL)
 }
 
 func (p networkPorts) ProviderToken(ctx context.Context, serverID string) (string, error) {
-	return p.c.providerToken(ctx, serverID)
+	return p.c.ProviderToken(ctx, serverID)
 }
 
 func (p networkPorts) AnalyticsDomain(ctx context.Context) string {

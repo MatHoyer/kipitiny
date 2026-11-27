@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
@@ -21,17 +22,13 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 const (
-	defaultJobTimeout = 60 * 60
-	maxJobTimeout     = 24 * 60 * 60
 	// jobRunsKept is how many runs (and logs) each job keeps.
 	jobRunsKept = 50
 	// jobLogLines is how much of a run's output its log keeps.
-	jobLogLines  = "2000"
-	jobComponent = "job"
+	jobLogLines = "2000"
 )
 
 // jobsState tracks the runs in flight, in memory: a job runs once at a time.
@@ -43,14 +40,6 @@ type jobsState struct {
 type jobRunning struct {
 	serviceID, projectID string
 	cancel               context.CancelFunc
-}
-
-type JobInput struct {
-	Name       string `json:"name"`
-	Command    string `json:"command"`
-	Cron       string `json:"cron"`
-	TimeoutSec int    `json:"timeoutSec"` // 0: one hour
-	Enabled    bool   `json:"enabled"`
 }
 
 type JobView struct {
@@ -146,7 +135,7 @@ func (c *Core) jobView(ctx context.Context, j domain.Job) (JobView, error) {
 	return v, nil
 }
 
-func (c *Core) CreateJob(ctx context.Context, serviceID string, in JobInput) (JobView, error) {
+func (c *Core) CreateJob(ctx context.Context, serviceID string, in deploy.JobInput) (JobView, error) {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
 		return JobView{}, err
@@ -158,7 +147,7 @@ func (c *Core) CreateJob(ctx context.Context, serviceID string, in JobInput) (Jo
 		return JobView{}, err
 	}
 	j := domain.Job{ServiceID: serviceID}
-	if err := applyJobInput(&j, in); err != nil {
+	if err := deploy.ApplyJobInput(&j, in); err != nil {
 		return JobView{}, err
 	}
 	if j, err = c.store.CreateJob(ctx, j); err != nil {
@@ -170,7 +159,7 @@ func (c *Core) CreateJob(ctx context.Context, serviceID string, in JobInput) (Jo
 	return c.jobView(ctx, j)
 }
 
-func (c *Core) UpdateJob(ctx context.Context, id string, in JobInput) (JobView, error) {
+func (c *Core) UpdateJob(ctx context.Context, id string, in deploy.JobInput) (JobView, error) {
 	j, err := c.store.GetJob(ctx, id)
 	if err != nil {
 		return JobView{}, err
@@ -178,7 +167,7 @@ func (c *Core) UpdateJob(ctx context.Context, id string, in JobInput) (JobView, 
 	if err := c.checkJobGitOwned(ctx, j); err != nil {
 		return JobView{}, err
 	}
-	if err := applyJobInput(&j, in); err != nil {
+	if err := deploy.ApplyJobInput(&j, in); err != nil {
 		return JobView{}, err
 	}
 	if j, err = c.store.UpdateJob(ctx, j); err != nil {
@@ -263,7 +252,7 @@ func (c *Core) cancelJobRuns(match func(jobID string, r jobRunning) bool) (ids [
 func (c *Core) removeJobContainers(ctx context.Context, dk *docker.Client, serviceID string) error {
 	match := func(_ string, r jobRunning) bool { return r.serviceID == serviceID }
 	ids := c.cancelJobRuns(match)
-	for deadline := time.Now().Add(stopTimeout + 5*time.Second); len(c.cancelJobRuns(match)) > 0 && time.Now().Before(deadline); {
+	for deadline := time.Now().Add(domain.StopTimeout + 5*time.Second); len(c.cancelJobRuns(match)) > 0 && time.Now().Before(deadline); {
 		time.Sleep(200 * time.Millisecond)
 	}
 	for _, id := range ids {
@@ -272,7 +261,7 @@ func (c *Core) removeJobContainers(ctx context.Context, dk *docker.Client, servi
 			return err
 		}
 		for _, ct := range cts {
-			if err := dk.RemoveContainer(ctx, ct.ID, stopTimeout); err != nil {
+			if err := dk.RemoveContainer(ctx, ct.ID, domain.StopTimeout); err != nil {
 				return err
 			}
 		}
@@ -285,27 +274,6 @@ func jobConflict(err error, name string) error {
 		return fmt.Errorf("%w: the service already has a job named %s", ErrInvalid, name)
 	}
 	return err
-}
-
-func applyJobInput(j *domain.Job, in JobInput) error {
-	in.Name, in.Command, in.Cron = strings.TrimSpace(in.Name), strings.TrimSpace(in.Command), strings.TrimSpace(in.Cron)
-	if !domain.ValidName(in.Name) {
-		return fmt.Errorf("%w: job name must be lowercase letters, digits and dashes", ErrInvalid)
-	}
-	if in.Command == "" {
-		return fmt.Errorf("%w: a job needs a command", ErrInvalid)
-	}
-	if _, err := data.CronParser.Parse(in.Cron); err != nil {
-		return fmt.Errorf("%w: schedule: %v", ErrInvalid, err)
-	}
-	if in.TimeoutSec == 0 {
-		in.TimeoutSec = defaultJobTimeout
-	}
-	if in.TimeoutSec < 1 || in.TimeoutSec > maxJobTimeout {
-		return fmt.Errorf("%w: timeout must be between 1 second and 24 hours", ErrInvalid)
-	}
-	j.Name, j.Command, j.Cron, j.TimeoutSec, j.Enabled = in.Name, in.Command, in.Cron, in.TimeoutSec, in.Enabled
-	return nil
 }
 
 // RunJob runs a job now, unless it is running already.
@@ -469,53 +437,11 @@ func (c *Core) runJob(ctx context.Context, project domain.Project, svc domain.Se
 func (c *Core) execJob(ctx context.Context, project domain.Project, svc domain.Service, j domain.Job, r domain.JobRun,
 	out io.Writer, logf func(string, ...any)) (*int, error) {
 
-	if svc.Sleeping {
-		logf("Waking %s", project.Name)
-	}
-	if err := c.wakeFor(ctx, svc); err != nil {
-		return nil, fmt.Errorf("wake %s: %w", project.Name, err)
-	}
-	dep, err := c.store.GetDeployment(ctx, svc.CurrentDeploymentID)
+	dk, id, err := c.StartJobContainer(ctx, project, svc, j, r.ID, logf)
 	if err != nil {
 		return nil, err
 	}
-	want := dep.Config
-	if want.ID == "" { // deployed before snapshots existed
-		want = svc
-		want.Image = dep.Image
-	}
-	want.Name, want.Networks = svc.Name, svc.Networks
-	src, err := c.envSources(ctx, project, want)
-	if err != nil {
-		return nil, err
-	}
-	dk := c.dockerFor(svc.ServerID)
-	if err := dk.EnsureImage(ctx, want.Image, c.registryAuth(ctx, want.Image), want.Runtime.Platform); err != nil {
-		return nil, fmt.Errorf("pull %s: %w", want.Image, err)
-	}
-
-	spec := containerSpec(project, want, src, dep.ID, 0, network.Routing{DockerSocket: c.DockerSocketFor(ctx, want)}) // never routed
-	spec.Name = fmt.Sprintf("%s-%s-job-%s-%s", project.Name, svc.Name, j.Name, deploySuffix(r.ID))
-	spec.Config.Cmd = []string{"sh", "-c", j.Command}
-	spec.Config.Entrypoint = []string{}
-	spec.Config.Healthcheck = &container.HealthConfig{Test: []string{"NONE"}}
-	// Not a replica: no service label (so it never shows up as one).
-	spec.Config.Labels = map[string]string{
-		docker.LabelManaged:   "true",
-		docker.LabelProject:   project.ID,
-		docker.LabelComponent: jobComponent,
-		docker.LabelJob:       j.ID,
-	}
-	spec.HostConfig.RestartPolicy = container.RestartPolicy{Name: container.RestartPolicyDisabled}
-	delete(spec.NetworkingConfig.EndpointsConfig, docker.ProxyNetwork)
-	spec.Config.ExposedPorts, spec.HostConfig.PortBindings = nil, nil
-
-	logf("Running %s in %s", j.Command, want.Image)
-	id, err := c.runContainer(ctx, dk, spec, serviceFiles(want, src)...)
-	if err != nil {
-		return nil, err
-	}
-	defer dk.RemoveContainer(context.WithoutCancel(ctx), id, stopTimeout)
+	defer func() { _ = dk.RemoveContainer(context.WithoutCancel(ctx), id, domain.StopTimeout) }()
 
 	wait := dk.ContainerWait(ctx, id, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
 	var code *int
@@ -567,11 +493,11 @@ func (c *Core) removeStaleJobContainers(ctx context.Context, dk *docker.Client, 
 	}
 	c.jobs.mu.Unlock()
 	for _, ct := range cts {
-		if ct.Labels[docker.LabelComponent] != jobComponent || owned[ct.Labels[docker.LabelJob]] {
+		if ct.Labels[docker.LabelComponent] != deploy.JobComponent || owned[ct.Labels[docker.LabelJob]] {
 			continue
 		}
 		c.log.Info("reconcile: removing stale job container", "container", ct.Names[0][1:])
-		_ = dk.RemoveContainer(ctx, ct.ID, stopTimeout)
+		_ = dk.RemoveContainer(ctx, ct.ID, domain.StopTimeout)
 	}
 }
 

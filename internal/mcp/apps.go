@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
@@ -57,7 +58,7 @@ func (t *tools) listServices(ctx context.Context, _ *mcp.CallToolRequest, _ stru
 }
 
 // status summarises a service's active containers.
-func status(s core.ServiceView) string {
+func status(s deploy.ServiceView) string {
 	if s.Stopped {
 		return "stopped"
 	}
@@ -83,7 +84,7 @@ func status(s core.ServiceView) string {
 }
 
 type appStatusOut struct {
-	Service     core.ServiceView    `json:"service"`
+	Service     deploy.ServiceView  `json:"service"`
 	Status      string              `json:"status"`
 	Deployments []domain.Deployment `json:"recentDeployments"`
 	// Usage is the current CPU, memory and network use; nil when not running.

@@ -3,11 +3,11 @@ package mcp
 import (
 	"context"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -31,7 +31,7 @@ func (t *tools) setMaintenance(ctx context.Context, _ *mcp.CallToolRequest, in s
 			return domain.Maintenance{}, err
 		}
 		m := p.Maintenance
-		v := core.MaintenanceInput{Enabled: m.Enabled, AllowIPs: m.AllowIPs, Title: m.Title, Message: m.Message, HTML: m.HTML, Starting: m.Starting}
+		v := deploy.MaintenanceInput{Enabled: m.Enabled, AllowIPs: m.AllowIPs, Title: m.Title, Message: m.Message, HTML: m.HTML, Starting: m.Starting}
 		for dst, src := range map[*string]*string{&v.Starting.Title: in.StartingTitle, &v.Starting.Message: in.StartingMessage, &v.Starting.HTML: in.StartingHTML} {
 			if src != nil {
 				*dst = *src

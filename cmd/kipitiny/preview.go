@@ -71,7 +71,7 @@ func previewCmd() error {
 	return cl.preview(ctx, path, opts, !*noWait)
 }
 
-// previewOptions mirrors core.PreviewOptions.
+// previewOptions mirrors deploy.PreviewOptions.
 type previewOptions struct {
 	Tags       map[string]string `json:"tags,omitempty"`
 	Branch     string            `json:"branch,omitempty"`

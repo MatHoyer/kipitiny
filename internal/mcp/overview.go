@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -94,15 +95,15 @@ type getTopologyIn struct {
 	Project string `json:"project,omitempty" jsonschema:"only this project; default every server and project"`
 }
 
-func (t *tools) getTopology(ctx context.Context, _ *mcp.CallToolRequest, in getTopologyIn) (*mcp.CallToolResult, core.Topology, error) {
+func (t *tools) getTopology(ctx context.Context, _ *mcp.CallToolRequest, in getTopologyIn) (*mcp.CallToolResult, deploy.Topology, error) {
 	if err := identity.Authenticated(ctx); err != nil {
-		return nil, core.Topology{}, err
+		return nil, deploy.Topology{}, err
 	}
 	id := ""
 	if in.Project != "" {
 		p, err := t.findProject(ctx, in.Project)
 		if err != nil {
-			return nil, core.Topology{}, friendly(err)
+			return nil, deploy.Topology{}, friendly(err)
 		}
 		id = p.ID
 	}

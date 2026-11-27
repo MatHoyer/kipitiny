@@ -9,29 +9,8 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 )
-
-func TestApplyJobInput(t *testing.T) {
-	ok := JobInput{Name: "nightly", Command: "echo hi", Cron: "0 3 * * *", Enabled: true}
-	var j domain.Job
-	if err := applyJobInput(&j, ok); err != nil {
-		t.Fatal(err)
-	}
-	if j.TimeoutSec != defaultJobTimeout {
-		t.Errorf("default timeout: %d", j.TimeoutSec)
-	}
-	for name, in := range map[string]JobInput{
-		"name":         {Name: "Nightly", Command: "x", Cron: "@daily"},
-		"no command":   {Name: "x", Command: "  ", Cron: "@daily"},
-		"cron":         {Name: "x", Command: "x", Cron: "every day"},
-		"long timeout": {Name: "x", Command: "x", Cron: "@daily", TimeoutSec: maxJobTimeout + 1},
-		"neg timeout":  {Name: "x", Command: "x", Cron: "@daily", TimeoutSec: -1},
-	} {
-		if err := applyJobInput(&j, in); !errors.Is(err, ErrInvalid) {
-			t.Errorf("%s: %v", name, err)
-		}
-	}
-}
 
 func TestJobs(t *testing.T) {
 	ctx := context.Background()
@@ -48,7 +27,7 @@ func TestJobs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	in := JobInput{Name: "nightly", Command: "echo hi", Cron: "@daily", Enabled: true}
+	in := deploy.JobInput{Name: "nightly", Command: "echo hi", Cron: "@daily", Enabled: true}
 	if _, err := c.CreateJob(ctx, db.ID, in); !errors.Is(err, ErrInvalid) {
 		t.Errorf("job on a database: %v", err)
 	}
@@ -106,29 +85,29 @@ services:
         purge: {command: echo $HOME, schedule: "*/15 * * * *"}
         report: {command: ./report, schedule: "@daily", timeout: 10m, paused: true}
 `
-	if _, err := c.ApplyCompose(ctx, p.ID, []byte(src), ApplyOptions{}); err != nil {
+	if _, err := c.ApplyCompose(ctx, p.ID, []byte(src), deploy.ApplyOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	svcs, _ := c.store.ListServices(ctx, p.ID)
 	js, _ := c.store.ListJobs(ctx, svcs[0].ID)
-	if len(js) != 2 || js[0].Name != "purge" || js[0].Command != "echo $HOME" || js[0].TimeoutSec != defaultJobTimeout || !js[0].Enabled ||
+	if len(js) != 2 || js[0].Name != "purge" || js[0].Command != "echo $HOME" || js[0].TimeoutSec != deploy.DefaultJobTimeout || !js[0].Enabled ||
 		js[1].TimeoutSec != 600 || js[1].Enabled {
 		t.Fatalf("jobs = %+v", js)
 	}
 
 	// The export applies as is.
-	out, err := c.ExportCompose(ctx, p.ID, ExportOptions{})
+	out, err := c.ExportCompose(ctx, p.ID, deploy.ExportOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan, err := c.ApplyCompose(ctx, p.ID, out.Compose, ApplyOptions{DryRun: true})
+	plan, err := c.ApplyCompose(ctx, p.ID, out.Compose, deploy.ApplyOptions{DryRun: true})
 	if err != nil || len(plan.Update) != 0 {
 		t.Fatalf("round trip: %+v %v\n%s", plan, err, out.Compose)
 	}
 
 	changed := strings.Replace(src, "./report", "./report --all", 1)
 	changed = strings.Replace(changed, "        purge: {command: echo $HOME, schedule: \"*/15 * * * *\"}\n", "", 1)
-	plan, err = c.ApplyCompose(ctx, p.ID, []byte(changed), ApplyOptions{})
+	plan, err = c.ApplyCompose(ctx, p.ID, []byte(changed), deploy.ApplyOptions{})
 	if err != nil || len(plan.Update) != 1 || !slices.Equal(plan.Update[0].Fields, []string{"jobs"}) {
 		t.Fatalf("change: %+v %v", plan, err)
 	}
@@ -142,7 +121,7 @@ services:
 		Path: "compose.yaml"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.CreateJob(ctx, svcs[0].ID, JobInput{Name: "x", Command: "x", Cron: "@daily"}); !errors.Is(err, ErrGitManaged) {
+	if _, err := c.CreateJob(ctx, svcs[0].ID, deploy.JobInput{Name: "x", Command: "x", Cron: "@daily"}); !errors.Is(err, ErrGitManaged) {
 		t.Errorf("create in a git project: %v", err)
 	}
 	if err := c.DeleteJob(ctx, after[0].ID); !errors.Is(err, ErrGitManaged) {
@@ -155,7 +134,7 @@ services:
     image: redis:7
     x-kipitiny: {jobs: {x: {command: x, schedule: "@daily"}}}
 `
-	if _, err := c.ApplyCompose(ctx, p.ID, []byte(bad), ApplyOptions{DryRun: true}); !errors.Is(err, ErrInvalid) {
+	if _, err := c.ApplyCompose(ctx, p.ID, []byte(bad), deploy.ApplyOptions{DryRun: true}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("job on a database: %v", err)
 	}
 }

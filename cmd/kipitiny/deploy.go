@@ -50,7 +50,7 @@ func deployCmd() error {
 	return cl.deploy(ctx, *service, opts, !*noWait)
 }
 
-// deployOptions mirrors core.DeployOptions.
+// deployOptions mirrors deploy.DeployOptions.
 type deployOptions struct {
 	Tag    string `json:"tag,omitempty"`
 	Digest string `json:"digest,omitempty"`

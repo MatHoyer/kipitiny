@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
@@ -43,6 +44,8 @@ type Core struct {
 	*monitoring.Monitoring
 	// Databases and the data browser, backups, restores, volumes and files.
 	*data.Data
+	// Services, compose files, deploys, previews, networks and sleep.
+	*deploy.Deployer
 
 	cfg   config.Config
 	store domain.Store
@@ -76,9 +79,7 @@ type Core struct {
 	securityBusy  atomic.Bool // a security check started by hand is running
 	hostActionMu  sync.Mutex  // starting an update install or a reboot is check-then-start
 	stats         statsState
-	sleep         sleepState
 	jobs          jobsState
-	health        healthState
 }
 
 // New builds the core around the local Docker client; remote servers are
@@ -91,6 +92,7 @@ func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logg
 	c.Identity = identity.New(cfg, s, identity.SecretKinds(cfg, local), c.Monitoring, log)
 	c.Network = network.New(bg, &c.cfg, s, networkPorts{c}, log)
 	c.Data = data.New(bg, &c.cfg, s, &c.steps, dataPorts{c}, log)
+	c.Deployer = deploy.New(bg, &c.cfg, s, &c.probes, deployPorts{c}, log)
 	return c
 }
 
@@ -349,7 +351,7 @@ func (c *Core) ListProjects(ctx context.Context) ([]domain.Project, error) {
 	ps, err := c.store.ListProjects(ctx)
 	ps = slices.DeleteFunc(ps, func(p domain.Project) bool { return !identity.Visible(ctx, p.ID) })
 	for i := range ps {
-		ps[i] = maskedProject(ps[i])
+		ps[i] = deploy.MaskedProject(ps[i])
 	}
 	return ps, err
 }
@@ -385,7 +387,7 @@ func (c *Core) CreateProject(ctx context.Context, name, serverID string) (domain
 
 func (c *Core) GetProject(ctx context.Context, id string) (domain.Project, error) {
 	p, err := c.store.GetProject(ctx, id)
-	return maskedProject(p), err
+	return deploy.MaskedProject(p), err
 }
 
 // DeleteProject removes every container and volume of the project's services,
@@ -430,7 +432,7 @@ func (c *Core) deleteProject(ctx context.Context, p domain.Project) error {
 		defer unlock()
 	}
 	for _, s := range svcs {
-		if err := c.removeServiceContainers(ctx, s); err != nil {
+		if err := c.RemoveServiceContainers(ctx, s); err != nil {
 			return err
 		}
 	}
@@ -438,7 +440,7 @@ func (c *Core) deleteProject(ctx context.Context, p domain.Project) error {
 		return err
 	}
 	for _, s := range svcs {
-		c.removeDeployLogs(s.ID)
+		c.RemoveDeployLogs(s.ID)
 		c.forgetServiceJobs(s.ID)
 	}
 	dk := c.dockerFor(p.ServerID)
@@ -455,5 +457,3 @@ func (c *Core) deleteProject(ctx context.Context, p domain.Project) error {
 	}
 	return dk.RemoveNetwork(ctx, docker.ProjectNetwork(id))
 }
-
-const stopTimeout = domain.StopTimeout
