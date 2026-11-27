@@ -10,7 +10,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // TestS3 runs against a real S3-compatible server when configured, e.g.
@@ -24,8 +24,8 @@ func TestS3(t *testing.T) {
 		t.Skip("KIPITINY_TEST_S3_ENDPOINT not set")
 	}
 	ctx := context.Background()
-	target := store.BackupTarget{
-		Kind:      store.BackupTargetS3,
+	target := domain.BackupTarget{
+		Kind:      domain.BackupTargetS3,
 		Endpoint:  endpoint,
 		Bucket:    "kipitiny-test",
 		Prefix:    "pg",

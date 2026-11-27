@@ -19,7 +19,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // File is a project as a compose file.
@@ -43,8 +43,8 @@ type FileExt struct {
 type Service struct {
 	Image       string
 	Environment map[string]string
-	Ports       []store.PublishedPort
-	Volumes     []store.Volume
+	Ports       []domain.PublishedPort
+	Volumes     []domain.Volume
 	// Replicas is 0 when the file doesn't set it.
 	Replicas         int
 	MemoryMB         int
@@ -57,19 +57,19 @@ type Service struct {
 	DockerSocket string
 	// Healthcheck is compose's healthcheck key; nil when the file has none.
 	// Tagged so the hash of a service that doesn't use it stays the same.
-	Healthcheck *store.Healthcheck `json:",omitempty"`
+	Healthcheck *domain.Healthcheck `json:",omitempty"`
 	// Runtime holds command, entrypoint, user, tmpfs…; nil when the file
 	// sets none. Tagged like Healthcheck.
-	Runtime *store.Runtime `json:",omitempty"`
+	Runtime *domain.Runtime `json:",omitempty"`
 	// Files are the configs, secrets and repository files bind-mounted.
-	Files []store.ServiceFile `json:",omitempty"`
+	Files []domain.ServiceFile `json:",omitempty"`
 	// Networks are the file's own networks the service is on ("default"
 	// included); nil without a networks key. ExternalNetworks are the
 	// external ones, by name: networks created by hand in kipitiny.
 	Networks         []string `json:",omitempty"`
 	ExternalNetworks []string `json:",omitempty"`
 	// DependsOn are the services of the file this one starts after.
-	DependsOn []store.Dependency `json:",omitempty"`
+	DependsOn []domain.Dependency `json:",omitempty"`
 	// VarEnv lists the environment keys whose whole value is a ${NAME}
 	// variable: secrets, unless x-kipitiny.secrets says otherwise.
 	VarEnv []string `json:"-"`
@@ -399,7 +399,7 @@ type outRuntime struct {
 	Platform   string            `yaml:"platform,omitempty"`
 }
 
-func outRuntimeOf(r store.Runtime) outRuntime {
+func outRuntimeOf(r domain.Runtime) outRuntime {
 	o := outRuntime{Command: r.Command, Entrypoint: r.Entrypoint, User: r.User, WorkingDir: r.WorkingDir, Labels: r.Labels, Restart: r.Restart,
 		Sysctls: r.Sysctls, ReadOnly: r.ReadOnly, Init: r.Init, StopSignal: r.StopSignal, TTY: r.TTY, StdinOpen: r.StdinOpen,
 		ExtraHosts: r.ExtraHosts, CapAdd: r.CapAdd, CapDrop: r.CapDrop, Devices: r.Devices, Privileged: r.Privileged, SecOpt: r.SecurityOpt, Platform: r.Platform}
@@ -427,7 +427,7 @@ func outRuntimeOf(r store.Runtime) outRuntime {
 }
 
 // EscapeRuntime makes r's values literal in a compose file (see Escape).
-func EscapeRuntime(r store.Runtime) store.Runtime {
+func EscapeRuntime(r domain.Runtime) domain.Runtime {
 	list := func(l []string) []string {
 		if l == nil {
 			return nil
@@ -464,7 +464,7 @@ type outHealthcheck struct {
 	Disable     bool     `yaml:"disable,omitempty"`
 }
 
-func outHealthcheckOf(h store.Healthcheck) *outHealthcheck {
+func outHealthcheckOf(h domain.Healthcheck) *outHealthcheck {
 	if h.Test[0] == "NONE" {
 		return &outHealthcheck{Disable: true}
 	}
@@ -514,7 +514,7 @@ type Vars struct {
 	// Files reads a path of the git repository, relative to the compose
 	// file: the file (Path "") or a directory's files (relative paths). nil
 	// without a repository.
-	Files func(path string) ([]store.ServiceFile, error)
+	Files func(path string) ([]domain.ServiceFile, error)
 }
 
 // Parse reads a compose file. Warnings name what was dropped; an error
@@ -593,7 +593,7 @@ type parser struct {
 	vars Vars
 	// top holds the top-level volumes' options, by name; configs and
 	// secrets the top-level ones.
-	top              map[string]store.Volume
+	top              map[string]domain.Volume
 	configs, secrets map[string]topFile
 	// nets holds the top-level networks: external ones map to their name,
 	// the others to "".
@@ -647,10 +647,10 @@ func (p *parser) str(n *yaml.Node) string {
 
 // topVolumes reads the top-level volumes: whether each is external (and
 // its Docker name), and the local driver's options.
-func (p *parser) topVolumes(n *yaml.Node) map[string]store.Volume {
-	out := map[string]store.Volume{}
+func (p *parser) topVolumes(n *yaml.Node) map[string]domain.Volume {
+	out := map[string]domain.Volume{}
 	for name, v := range pairs(n) {
-		var vol store.Volume
+		var vol domain.Volume
 		external := false
 		for k, val := range pairs(v) {
 			switch k {
@@ -690,7 +690,7 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 	}
 	hasBuild := false
 	var expose []int
-	var rt store.Runtime
+	var rt domain.Runtime
 	var envFile map[string]string
 	var profiles []string
 	for k, v := range pairs(n) {
@@ -790,13 +790,13 @@ func (p *parser) service(name string, n *yaml.Node) Service {
 		p.fail("an app in the host network can't join networks")
 	}
 	if s.X.Anonymize != nil {
-		if k := store.ServiceKind(s.X.Kind); !k.IsDatabase() || k == store.ServiceKindRedis {
+		if k := domain.ServiceKind(s.X.Kind); !k.IsDatabase() || k == domain.ServiceKindRedis {
 			p.fail("%s.anonymize: only PostgreSQL, MySQL, MariaDB and MongoDB databases are anonymized", ExtKey)
 		} else if err := s.X.Anonymize.Validate(); err != nil {
 			p.fail("%s.anonymize: %v", ExtKey, err)
 		}
 	}
-	if store.ServiceKind(s.X.Kind).IsDatabase() {
+	if domain.ServiceKind(s.X.Kind).IsDatabase() {
 		// The manager generates a database's environment and owns its volume.
 		p.databaseEnv(&s)
 		if len(s.Volumes) > 0 {
@@ -832,9 +832,9 @@ func inferKind(image string) string {
 	repo = strings.TrimPrefix(strings.TrimPrefix(repo, "docker.io/"), "library/")
 	switch repo {
 	case "postgres":
-		return string(store.ServiceKindPostgres)
+		return string(domain.ServiceKindPostgres)
 	case "redis":
-		return string(store.ServiceKindRedis)
+		return string(domain.ServiceKindRedis)
 	}
 	return ""
 }
@@ -898,14 +898,14 @@ func (p *parser) lookup(name string) (string, bool) {
 	return p.vars.Lookup(name)
 }
 
-func (p *parser) ports(n *yaml.Node) []store.PublishedPort {
-	var out []store.PublishedPort
+func (p *parser) ports(n *yaml.Node) []domain.PublishedPort {
+	var out []domain.PublishedPort
 	if n.Kind != yaml.SequenceNode {
 		p.fail("ports must be a list")
 		return nil
 	}
 	for _, item := range n.Content {
-		var pp store.PublishedPort
+		var pp domain.PublishedPort
 		if item.Kind == yaml.MappingNode {
 			for k, v := range pairs(item) {
 				switch k {
@@ -941,15 +941,15 @@ func (p *parser) ports(n *yaml.Node) []store.PublishedPort {
 
 // volumes reads named volumes, and the Docker socket's bind mount ("ro"
 // or "rw"; "" without one).
-func (p *parser) volumes(n *yaml.Node, rt *store.Runtime, files *[]store.ServiceFile) ([]store.Volume, string) {
-	var out []store.Volume
+func (p *parser) volumes(n *yaml.Node, rt *domain.Runtime, files *[]domain.ServiceFile) ([]domain.Volume, string) {
+	var out []domain.Volume
 	socket := ""
 	if n.Kind != yaml.SequenceNode {
 		p.fail("volumes must be a list")
 		return nil, ""
 	}
 	for _, item := range n.Content {
-		var v store.Volume
+		var v domain.Volume
 		typ := "volume"
 		readOnly := false
 		var tmpfsOpts []string
@@ -1039,7 +1039,7 @@ func (p *parser) volumes(n *yaml.Node, rt *store.Runtime, files *[]store.Service
 	return out, socket
 }
 
-func (p *parser) deploy(n *yaml.Node, s *Service, rt *store.Runtime) {
+func (p *parser) deploy(n *yaml.Node, s *Service, rt *domain.Runtime) {
 	for k, v := range pairs(n) {
 		switch k {
 		case "replicas":
@@ -1146,8 +1146,8 @@ func (p *parser) expose(n *yaml.Node) []int {
 
 // healthcheck reads compose's healthcheck: test as a string (run by the
 // shell) or a list, the durations, retries, and disable.
-func (p *parser) healthcheck(n *yaml.Node) *store.Healthcheck {
-	h := &store.Healthcheck{}
+func (p *parser) healthcheck(n *yaml.Node) *domain.Healthcheck {
+	h := &domain.Healthcheck{}
 	for k, v := range pairs(n) {
 		switch k {
 		case "test":
@@ -1168,7 +1168,7 @@ func (p *parser) healthcheck(n *yaml.Node) *store.Healthcheck {
 			h.Retries = p.int(v)
 		case "disable":
 			if p.str(v) == "true" {
-				return &store.Healthcheck{Test: []string{"NONE"}}
+				return &domain.Healthcheck{Test: []string{"NONE"}}
 			}
 		case "start_interval":
 			p.warn("healthcheck start_interval is ignored (checked every second while starting)")

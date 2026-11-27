@@ -9,8 +9,8 @@ import (
 	"filippo.io/age"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/storage"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 func TestEncryptWithExistingKey(t *testing.T) {
@@ -34,28 +34,28 @@ func TestEncryptWithExistingKey(t *testing.T) {
 	}
 
 	for _, bad := range []string{"not a key", other.String()} {
-		if _, err := c.EncryptBackupTarget(ctx, store.LocalTargetID, bad); !errors.Is(err, ErrInvalid) {
+		if _, err := c.EncryptBackupTarget(ctx, domain.LocalTargetID, bad); !errors.Is(err, ErrInvalid) {
 			t.Errorf("key %.20q accepted: %v", bad, err)
 		}
 	}
-	tg, err := c.EncryptBackupTarget(ctx, store.LocalTargetID, "  "+mine.String()+"\n")
+	tg, err := c.EncryptBackupTarget(ctx, domain.LocalTargetID, "  "+mine.String()+"\n")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if tg.AgeRecipient != mine.Recipient().String() {
 		t.Fatalf("recipient %q", tg.AgeRecipient)
 	}
-	if k, _ := c.BackupTargetKey(ctx, store.LocalTargetID); k.Identity != mine.String() {
+	if k, _ := c.BackupTargetKey(ctx, domain.LocalTargetID); k.Identity != mine.String() {
 		t.Fatalf("stored identity %q", k.Identity)
 	}
 	// The key can't be replaced, even by a valid one.
-	if _, err := c.EncryptBackupTarget(ctx, store.LocalTargetID, mine.String()); !errors.Is(err, ErrInvalid) {
+	if _, err := c.EncryptBackupTarget(ctx, domain.LocalTargetID, mine.String()); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("re-encrypted: %v", err)
 	}
 
 	// Nothing encrypted yet: any key will do.
 	empty := newTestCore(t, config.Config{DataDir: t.TempDir()})
-	if tg, err := empty.EncryptBackupTarget(ctx, store.LocalTargetID, other.String()); err != nil || tg.AgeRecipient != other.Recipient().String() {
+	if tg, err := empty.EncryptBackupTarget(ctx, domain.LocalTargetID, other.String()); err != nil || tg.AgeRecipient != other.Recipient().String() {
 		t.Fatalf("empty storage: %+v %v", tg, err)
 	}
 }

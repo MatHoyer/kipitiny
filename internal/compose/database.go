@@ -7,7 +7,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // databaseKeys are the environment keys a database's image reads its user
@@ -58,8 +58,8 @@ func (p *parser) databaseEnv(s *Service) {
 
 // initFiles keeps a database's files in InitDir (scripts run on its first
 // start) and drops the others.
-func (p *parser) initFiles(kind string, files []store.ServiceFile) []store.ServiceFile {
-	var out []store.ServiceFile
+func (p *parser) initFiles(kind string, files []domain.ServiceFile) []domain.ServiceFile {
+	var out []domain.ServiceFile
 	for _, f := range files {
 		if kind != "redis" && strings.HasPrefix(f.Path, InitDir+"/") {
 			out = append(out, f)
@@ -71,7 +71,7 @@ func (p *parser) initFiles(kind string, files []store.ServiceFile) []store.Servi
 }
 
 // restartPolicy reads deploy.restart_policy into rt.Restart, like restart.
-func (p *parser) restartPolicy(n *yaml.Node, rt *store.Runtime) {
+func (p *parser) restartPolicy(n *yaml.Node, rt *domain.Runtime) {
 	cond, attempts := "any", 0
 	for k, v := range pairs(n) {
 		switch k {

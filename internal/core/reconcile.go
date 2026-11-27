@@ -4,18 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	cerrdefs "github.com/containerd/errdefs"
 	"slices"
 	"strconv"
 	"time"
+
+	cerrdefs "github.com/containerd/errdefs"
 
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/events"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const (
@@ -137,7 +138,7 @@ func (c *Core) reconcile(ctx context.Context) error {
 	}
 	var errs []error
 	for _, sv := range servers {
-		var here []store.Service
+		var here []domain.Service
 		for _, s := range svcs {
 			if s.ServerID == sv.ID {
 				here = append(here, s)
@@ -150,7 +151,7 @@ func (c *Core) reconcile(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-func (c *Core) reconcileServer(ctx context.Context, sv store.Server, svcs []store.Service) error {
+func (c *Core) reconcileServer(ctx context.Context, sv domain.Server, svcs []domain.Service) error {
 	dk := c.dockerFor(sv.ID)
 	if err := dk.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil {
 		return err // server unreachable: nothing else will work either
@@ -159,19 +160,19 @@ func (c *Core) reconcileServer(ctx context.Context, sv store.Server, svcs []stor
 		if err := c.ensureTraefik(ctx, sv); err != nil {
 			c.log.Warn("reconcile: traefik", "server", sv.Name, "err", err)
 		}
-		if sv.Kind == store.ServerLocal {
+		if sv.Kind == domain.ServerLocal {
 			c.refreshProxy(ctx)
 		}
 		if err := c.ensureTunnel(ctx, sv); err != nil {
 			c.log.Warn("reconcile: cloudflared", "server", sv.Name, "err", err)
 		}
-		if sv.Kind == store.ServerLocal {
+		if sv.Kind == domain.ServerLocal {
 			if err := c.ensureAnalytics(ctx); err != nil {
 				c.log.Warn("reconcile: analytics", "err", err)
 			}
 		}
 	}
-	if sv.Kind == store.ServerLocal {
+	if sv.Kind == domain.ServerLocal {
 		c.cleanupUpdater(ctx, dk)
 	}
 	if err := c.ensureNetworks(ctx, sv); err != nil {
@@ -192,7 +193,7 @@ func (c *Core) reconcileServer(ctx context.Context, sv store.Server, svcs []stor
 	var errs []error
 	now := time.Now()
 	known := map[string]bool{}
-	projects := map[string]store.Project{}
+	projects := map[string]domain.Project{}
 	for _, svc := range svcs {
 		known[svc.ID] = true
 		p, ok := projects[svc.ProjectID]
@@ -208,7 +209,7 @@ func (c *Core) reconcileServer(ctx context.Context, sv store.Server, svcs []stor
 			}
 		}
 		c.trackHealth(p, svc, byService[svc.ID], now)
-		if err := c.reconcileService(ctx, p, svc, byService[svc.ID]); err != nil {
+		if err := c.reconcileService(ctx, p, svc); err != nil {
 			errs = append(errs, fmt.Errorf("%s/%s: %w", p.Name, svc.Name, err))
 		}
 	}
@@ -230,7 +231,7 @@ func (c *Core) reconcileServer(ctx context.Context, sv store.Server, svcs []stor
 	return errors.Join(errs...)
 }
 
-func (c *Core) reconcileService(ctx context.Context, project store.Project, svc store.Service, cts []container.Summary) error {
+func (c *Core) reconcileService(ctx context.Context, project domain.Project, svc domain.Service) error {
 	if svc.CurrentDeploymentID == "" || svc.Stopped || svc.Sleeping {
 		return nil // never deployed, stopped on purpose, or asleep
 	}
@@ -247,7 +248,8 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 	if svc, err = c.store.GetService(ctx, svc.ID); err != nil || svc.Stopped || svc.Sleeping {
 		return err
 	}
-	if cts, err = c.serviceContainers(ctx, svc); err != nil {
+	cts, err := c.serviceContainers(ctx, svc)
+	if err != nil {
 		return err
 	}
 	dep, err := c.store.GetDeployment(ctx, svc.CurrentDeploymentID)
@@ -343,7 +345,7 @@ func (c *Core) reconcileService(ctx context.Context, project store.Project, svc 
 	return c.syncNetworks(ctx, project, svc, cts, false)
 }
 
-func (c *Core) recreateReplica(ctx context.Context, project store.Project, svc store.Service, deployID string, replica int) error {
+func (c *Core) recreateReplica(ctx context.Context, project domain.Project, svc domain.Service, deployID string, replica int) error {
 	src, err := c.envSources(ctx, project, svc)
 	if err != nil {
 		return err

@@ -19,10 +19,10 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 	"github.com/kipit-labs/kipitiny/internal/mcp"
 	"github.com/kipit-labs/kipitiny/internal/probe"
 	"github.com/kipit-labs/kipitiny/internal/sqlitehelper"
-	"github.com/kipit-labs/kipitiny/internal/store/sqlite"
 	"github.com/kipit-labs/kipitiny/web"
 )
 

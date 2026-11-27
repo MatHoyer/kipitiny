@@ -12,17 +12,17 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // dumpTestDB runs a database service of kind against the local Docker
 // daemon with the spec a deploy gives it, and waits for its healthcheck.
 //
 //	KIPITINY_TEST_DOCKER=1 go test ./internal/core/ -run DumpDocker
-func dumpTestDB(t *testing.T, kind store.ServiceKind) (*Core, context.Context, store.Service, func(string) string) {
+func dumpTestDB(t *testing.T, kind domain.ServiceKind) (*Core, context.Context, domain.Service, func(string) string) {
 	t.Helper()
 	c, ctx, projectID := dumpTestCore(t)
-	svc, exec := startTestDB(t, c, ctx, projectID, ServiceInput{Name: "db", Kind: kind})
+	svc, exec := startTestDB(ctx, t, c, projectID, ServiceInput{Name: "db", Kind: kind})
 	return c, ctx, svc, exec
 }
 
@@ -39,10 +39,10 @@ func dumpTestCore(t *testing.T) (*Core, context.Context, string) {
 	}
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
 	c.pool = docker.NewPool(dk, c.connectServer)
-	if _, err := c.EncryptBackupTarget(ctx, store.LocalTargetID, ""); err != nil {
+	if _, err := c.EncryptBackupTarget(ctx, domain.LocalTargetID, ""); err != nil {
 		t.Fatal(err)
 	}
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "dumptest", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "dumptest", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,14 +51,14 @@ func dumpTestCore(t *testing.T) (*Core, context.Context, string) {
 
 // startTestDB creates the database service in in project projectID and
 // runs it like a deploy would; exec runs a shell command in its container.
-func startTestDB(t *testing.T, c *Core, ctx context.Context, projectID string, in ServiceInput) (store.Service, func(string) string) {
+func startTestDB(ctx context.Context, t *testing.T, c *Core, projectID string, in ServiceInput) (domain.Service, func(string) string) {
 	t.Helper()
-	dk := c.dockerFor(store.LocalServerID)
+	dk := c.dockerFor(domain.LocalServerID)
 	svc, err := c.serviceFromInput(projectID, in)
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc.ServerID = store.LocalServerID
+	svc.ServerID = domain.LocalServerID
 	if svc, err = c.store.CreateService(ctx, svc); err != nil {
 		t.Fatal(err)
 	}
@@ -101,15 +101,15 @@ func startTestDB(t *testing.T, c *Core, ctx context.Context, projectID string, i
 
 // dumpRoundTrip backs up, verifies and restores svc: seed writes the data,
 // change alters it and read shows it.
-func dumpRoundTrip(t *testing.T, c *Core, ctx context.Context, svc store.Service, seed, change, read func() string, tables int, rows int64) {
+func dumpRoundTrip(ctx context.Context, t *testing.T, c *Core, svc domain.Service, seed, change, read func() string, tables int, rows int64) {
 	t.Helper()
 	before := seed()
 	b, err := c.BackupService(ctx, svc.ID, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b = waitBackup(t, c, b.ID, func(b store.Backup) bool { return b.Status != store.OpRunning })
-	if b.Status != store.OpSucceeded || b.Kind != store.BackupKindDump || b.ServiceKind != svc.Kind || !b.Encrypted || b.PGVersion == "" ||
+	b = waitBackup(t, c, b.ID, func(b domain.Backup) bool { return b.Status != domain.OpRunning })
+	if b.Status != domain.OpSucceeded || b.Kind != domain.BackupKindDump || b.ServiceKind != svc.Kind || !b.Encrypted || b.PGVersion == "" ||
 		!strings.HasSuffix(b.ObjectKey, dumpExt(svc.Kind)+".age") {
 		t.Fatalf("backup = %+v", b)
 	}
@@ -117,8 +117,8 @@ func dumpRoundTrip(t *testing.T, c *Core, ctx context.Context, svc store.Service
 	if _, err := c.VerifyBackup(ctx, b.ID); err != nil {
 		t.Fatal(err)
 	}
-	b = waitBackup(t, c, b.ID, func(b store.Backup) bool { return b.VerifyStatus != store.OpRunning })
-	if b.VerifyStatus != store.OpSucceeded || b.VerifyDetails.Tables != tables || b.VerifyDetails.Rows != rows || b.VerifyDetails.DBBytes == 0 {
+	b = waitBackup(t, c, b.ID, func(b domain.Backup) bool { return b.VerifyStatus != domain.OpRunning })
+	if b.VerifyStatus != domain.OpSucceeded || b.VerifyDetails.Tables != tables || b.VerifyDetails.Rows != rows || b.VerifyDetails.DBBytes == 0 {
 		t.Fatalf("verification = %+v", b.Verification)
 	}
 
@@ -135,8 +135,8 @@ func dumpRoundTrip(t *testing.T, c *Core, ctx context.Context, svc store.Service
 		if err != nil {
 			t.Fatal(err)
 		}
-		if rs[0].ID == r.ID && rs[0].Status != store.OpRunning {
-			if rs[0].Status != store.OpSucceeded {
+		if rs[0].ID == r.ID && rs[0].Status != domain.OpRunning {
+			if rs[0].Status != domain.OpSucceeded {
 				t.Fatalf("restore = %+v", rs[0])
 			}
 			break
@@ -152,7 +152,7 @@ func dumpRoundTrip(t *testing.T, c *Core, ctx context.Context, svc store.Service
 }
 
 func TestDumpDockerMySQL(t *testing.T) {
-	for _, kind := range []store.ServiceKind{store.ServiceKindMySQL, store.ServiceKindMariaDB} {
+	for _, kind := range []domain.ServiceKind{domain.ServiceKindMySQL, domain.ServiceKindMariaDB} {
 		t.Run(string(kind), func(t *testing.T) {
 			c, ctx, svc, exec := dumpTestDB(t, kind)
 			client := mysqlBin(kind, "mysql")
@@ -163,7 +163,7 @@ func TestDumpDockerMySQL(t *testing.T) {
 			read := func() string {
 				return app("SELECT GROUP_CONCAT(v ORDER BY id) FROM items; SELECT COUNT(*) FROM v_items; SHOW TABLES")
 			}
-			dumpRoundTrip(t, c, ctx, svc,
+			dumpRoundTrip(ctx, t, c, svc,
 				func() string {
 					app(`CREATE TABLE items (id INT PRIMARY KEY, v TEXT, b BLOB);
 INSERT INTO items VALUES (1, 'one', 0xdead), (2, 'two\nlines', NULL), (3, 'é', NULL);
@@ -184,14 +184,14 @@ CREATE VIEW v_items AS SELECT id FROM items`)
 }
 
 func TestDumpDockerMongo(t *testing.T) {
-	c, ctx, svc, exec := dumpTestDB(t, store.ServiceKindMongoDB)
+	c, ctx, svc, exec := dumpTestDB(t, domain.ServiceKindMongoDB)
 	mongosh := func(js string) string {
 		return exec(`mongosh --quiet "mongodb://$MONGO_INITDB_ROOT_USERNAME:$MONGO_INITDB_ROOT_PASSWORD@127.0.0.1/app?authSource=admin" --eval '` + js + `'`)
 	}
 	read := func() string {
 		return mongosh(`print(JSON.stringify(db.items.find({}, { _id: 0 }).sort({ n: 1 }).toArray()), db.getSiblingDB("other").logs.countDocuments())`)
 	}
-	dumpRoundTrip(t, c, ctx, svc,
+	dumpRoundTrip(ctx, t, c, svc,
 		func() string {
 			mongosh(`db.items.insertMany([{ n: 1, v: "one" }, { n: 2, v: "two" }]); db.getSiblingDB("other").logs.insertMany([{ a: 1 }, { a: 2 }, { a: 3 }])`)
 			return read()
@@ -207,13 +207,13 @@ func TestDumpDockerMongo(t *testing.T) {
 // (mongosh: "unrecognized option"): the backup, the data browser and the
 // healthcheck all authenticate with it.
 func TestDashPasswordDocker(t *testing.T) {
-	for _, kind := range []store.ServiceKind{store.ServiceKindPostgres, store.ServiceKindRedis, store.ServiceKindMySQL,
-		store.ServiceKindMariaDB, store.ServiceKindMongoDB} {
+	for _, kind := range []domain.ServiceKind{domain.ServiceKindPostgres, domain.ServiceKindRedis, domain.ServiceKindMySQL,
+		domain.ServiceKindMariaDB, domain.ServiceKindMongoDB} {
 		t.Run(string(kind), func(t *testing.T) {
 			c, ctx, projectID := dumpTestCore(t)
-			ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: store.RoleAdmin})
-			svc, _ := startTestDB(t, c, ctx, projectID, ServiceInput{Name: "db", Kind: kind, Password: "--dash" + randomToken(12)})
-			if kind == store.ServiceKindRedis {
+			ctx = WithActor(ctx, Actor{Kind: "user", Name: "test", Role: domain.RoleAdmin})
+			svc, _ := startTestDB(ctx, t, c, projectID, ServiceInput{Name: "db", Kind: kind, Password: "--dash" + randomToken(12)})
+			if kind == domain.ServiceKindRedis {
 				if _, err := c.RedisScan(ctx, svc.ID, "0", "*", 10); err != nil {
 					t.Fatalf("scan: %v", err)
 				}
@@ -226,7 +226,7 @@ func TestDashPasswordDocker(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if b = waitBackup(t, c, b.ID, func(b store.Backup) bool { return b.Status != store.OpRunning }); b.Status != store.OpSucceeded {
+			if b = waitBackup(t, c, b.ID, func(b domain.Backup) bool { return b.Status != domain.OpRunning }); b.Status != domain.OpSucceeded {
 				t.Fatalf("backup = %+v", b)
 			}
 		})

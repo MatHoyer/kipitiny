@@ -17,9 +17,9 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/registry"
-	"github.com/kipit-labs/kipitiny/internal/store"
 	"github.com/kipit-labs/kipitiny/internal/upgrade"
 )
 
@@ -211,7 +211,7 @@ func (c *Core) inspectPin(ctx context.Context) {
 	if done || self == "" {
 		return
 	}
-	res, err := c.dockerFor(store.LocalServerID).ContainerInspect(ctx, self, client.ContainerInspectOptions{})
+	res, err := c.dockerFor(domain.LocalServerID).ContainerInspect(ctx, self, client.ContainerInspectOptions{})
 	if err != nil {
 		c.log.Warn("cannot inspect the manager's container", "err", err)
 		return
@@ -323,7 +323,7 @@ func (c *Core) ApplyUpdate(ctx context.Context) (UpdateInfo, error) {
 }
 
 func (c *Core) launchUpdater(ctx context.Context, self, ref string) error {
-	dk := c.dockerFor(store.LocalServerID)
+	dk := c.dockerFor(domain.LocalServerID)
 	c.log.Info("updating the manager", "image", ref)
 	if err := dk.PullImage(ctx, ref, c.registryAuth(ctx, ref), "", io.Discard); err != nil {
 		return fmt.Errorf("pull %s: %w", ref, err)

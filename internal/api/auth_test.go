@@ -17,7 +17,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 )
 
 func newServer(t *testing.T) *httptest.Server {

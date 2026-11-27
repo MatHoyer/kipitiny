@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/probe"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const (
@@ -30,7 +30,7 @@ const (
 	defaultUptimeTimeout  = 10
 )
 
-type UptimeResult = store.UptimeResult
+type UptimeResult = domain.UptimeResult
 
 // uptimeState tracks the checks between runs, in memory.
 type uptimeState struct {
@@ -159,7 +159,7 @@ func (c *Core) scheduleUptime(ctx context.Context) {
 }
 
 // uptimeTarget returns the URL a check requests, or why it can't run now.
-func uptimeTarget(svc store.Service, chk store.UptimeCheck) (url, problem string) {
+func uptimeTarget(svc domain.Service, chk domain.UptimeCheck) (url, problem string) {
 	switch {
 	case !httpRouted(svc):
 		return "", "the service has no public domain"
@@ -173,7 +173,7 @@ func uptimeTarget(svc store.Service, chk store.UptimeCheck) (url, problem string
 	return "https://" + svc.Domain + chk.Path, ""
 }
 
-func (c *Core) runUptime(ctx context.Context, chk store.UptimeCheck, r *uptimeRun) {
+func (c *Core) runUptime(ctx context.Context, chk domain.UptimeCheck, r *uptimeRun) {
 	svc, err := c.store.GetService(ctx, chk.ServiceID)
 	if err != nil {
 		return
@@ -211,7 +211,7 @@ func (c *Core) runUptime(ctx context.Context, chk store.UptimeCheck, r *uptimeRu
 		return
 	}
 	since := chk.ChangedAt
-	if err := c.store.SetUptimeState(ctx, chk.ServiceID, down, out.At); err != nil && !errors.Is(err, store.ErrNotFound) {
+	if err := c.store.SetUptimeState(ctx, chk.ServiceID, down, out.At); err != nil && !errors.Is(err, domain.ErrNotFound) {
 		c.log.Warn("save uptime state", "service", svc.Name, "err", err)
 	}
 	c.notifyUptime(ctx, svc, url, down, lastError, since, out.At)
@@ -230,7 +230,7 @@ func uptimeError(err error, timeoutSec int) string {
 	return msg
 }
 
-func (c *Core) notifyUptime(ctx context.Context, svc store.Service, url string, down bool, lastError string, since *time.Time, at time.Time) {
+func (c *Core) notifyUptime(ctx context.Context, svc domain.Service, url string, down bool, lastError string, since *time.Time, at time.Time) {
 	project, err := c.store.GetProject(ctx, svc.ProjectID)
 	if err != nil {
 		return
@@ -258,8 +258,8 @@ type UptimeInput struct {
 // UptimeView is a service's check with what it has seen.
 type UptimeView struct {
 	// Check is nil when the service has none.
-	Check *store.UptimeCheck `json:"check"`
-	URL   string             `json:"url,omitempty"`
+	Check *domain.UptimeCheck `json:"check"`
+	URL   string              `json:"url,omitempty"`
 	// Problem says why the check isn't running.
 	Problem string         `json:"problem,omitempty"`
 	Recent  []UptimeResult `json:"recent"`
@@ -279,7 +279,7 @@ func (c *Core) Uptime(ctx context.Context, serviceID string) (UptimeView, error)
 	}
 	v := UptimeView{Recent: []UptimeResult{}}
 	chk, err := c.store.GetUptimeCheck(ctx, serviceID)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, domain.ErrNotFound) {
 		return v, nil
 	} else if err != nil {
 		return UptimeView{}, err
@@ -313,7 +313,7 @@ func (c *Core) Uptime(ctx context.Context, serviceID string) (UptimeView, error)
 
 // uptimeOver sums the hours from the one holding since: the percentage of
 // successful checks and their average response time.
-func uptimeOver(hours []store.UptimeHour, since time.Time) (pct *float64, latency *int64) {
+func uptimeOver(hours []domain.UptimeHour, since time.Time) (pct *float64, latency *int64) {
 	from := since.UTC().Truncate(time.Hour)
 	var checks, failures int
 	var ms int64
@@ -355,11 +355,11 @@ func (c *Core) SetUptime(ctx context.Context, serviceID string, in UptimeInput) 
 }
 
 // uptimeCheck validates svc's check settings, with the defaults applied.
-func uptimeCheck(svc store.Service, in UptimeInput) (store.UptimeCheck, error) {
-	if svc.Kind != store.ServiceKindApp || !httpRouted(svc) {
-		return store.UptimeCheck{}, fmt.Errorf("%w: only an app with a public domain can have an uptime check", ErrInvalid)
+func uptimeCheck(svc domain.Service, in UptimeInput) (domain.UptimeCheck, error) {
+	if svc.Kind != domain.ServiceKindApp || !httpRouted(svc) {
+		return domain.UptimeCheck{}, fmt.Errorf("%w: only an app with a public domain can have an uptime check", ErrInvalid)
 	}
-	chk := store.UptimeCheck{
+	chk := domain.UptimeCheck{
 		ServiceID:      svc.ID,
 		Path:           strings.TrimSpace(in.Path),
 		IntervalSec:    in.IntervalSec,
@@ -378,26 +378,26 @@ func uptimeCheck(svc store.Service, in UptimeInput) (store.UptimeCheck, error) {
 	}
 	switch {
 	case !strings.HasPrefix(chk.Path, "/") || strings.ContainsAny(chk.Path, " #\t\r\n"):
-		return store.UptimeCheck{}, fmt.Errorf("%w: path must start with / (e.g. /health)", ErrInvalid)
+		return domain.UptimeCheck{}, fmt.Errorf("%w: path must start with / (e.g. /health)", ErrInvalid)
 	case chk.IntervalSec < 30 || chk.IntervalSec > 3600:
-		return store.UptimeCheck{}, fmt.Errorf("%w: interval must be between 30 and 3600 seconds", ErrInvalid)
+		return domain.UptimeCheck{}, fmt.Errorf("%w: interval must be between 30 and 3600 seconds", ErrInvalid)
 	case chk.TimeoutSec < 1 || chk.TimeoutSec > 60 || chk.TimeoutSec >= chk.IntervalSec:
-		return store.UptimeCheck{}, fmt.Errorf("%w: timeout must be between 1 and 60 seconds, and shorter than the interval", ErrInvalid)
+		return domain.UptimeCheck{}, fmt.Errorf("%w: timeout must be between 1 and 60 seconds, and shorter than the interval", ErrInvalid)
 	case chk.ExpectedStatus != 0 && (chk.ExpectedStatus < 100 || chk.ExpectedStatus > 599):
-		return store.UptimeCheck{}, fmt.Errorf("%w: expected status must be an HTTP status (100-599), or 0 for any below 400", ErrInvalid)
+		return domain.UptimeCheck{}, fmt.Errorf("%w: expected status must be an HTTP status (100-599), or 0 for any below 400", ErrInvalid)
 	}
 	return chk, nil
 }
 
 // sameUptime reports whether two checks have the same settings.
-func sameUptime(a, b store.UptimeCheck) bool {
+func sameUptime(a, b domain.UptimeCheck) bool {
 	return a.Path == b.Path && a.IntervalSec == b.IntervalSec && a.TimeoutSec == b.TimeoutSec &&
 		a.ExpectedStatus == b.ExpectedStatus && a.Enabled == b.Enabled
 }
 
 // saveUptime stores a check and runs it now with the new settings; the
 // notified state is kept.
-func (c *Core) saveUptime(ctx context.Context, chk store.UptimeCheck) error {
+func (c *Core) saveUptime(ctx context.Context, chk domain.UptimeCheck) error {
 	if _, err := c.store.SaveUptimeCheck(ctx, chk); err != nil {
 		return err
 	}

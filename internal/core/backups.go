@@ -16,10 +16,10 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/storage"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const (
@@ -35,49 +35,49 @@ const (
 //
 // database picks which of a PostgreSQL instance's databases to dump; empty
 // is the service's own.
-func (c *Core) BackupService(ctx context.Context, serviceID, targetID, database string) (store.Backup, error) {
+func (c *Core) BackupService(ctx context.Context, serviceID, targetID, database string) (domain.Backup, error) {
 	return c.startBackup(ctx, serviceID, targetID, database, "", nil)
 }
 
 // startBackup starts a backup; done, if set, is closed when it finishes.
 // Backups made by a schedule trigger its retention on success.
-func (c *Core) startBackup(ctx context.Context, serviceID, targetID, database, scheduleID string, done chan<- struct{}) (store.Backup, error) {
+func (c *Core) startBackup(ctx context.Context, serviceID, targetID, database, scheduleID string, done chan<- struct{}) (domain.Backup, error) {
 	if targetID == "" {
-		targetID = store.LocalTargetID
+		targetID = domain.LocalTargetID
 	}
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	kind, err := backupKind(svc)
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	project, err := c.store.GetProject(ctx, svc.ProjectID)
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	target, err := c.store.GetBackupTarget(ctx, targetID)
-	if errors.Is(err, store.ErrNotFound) {
-		return store.Backup{}, fmt.Errorf("%w: unknown backup target", ErrInvalid)
+	if errors.Is(err, domain.ErrNotFound) {
+		return domain.Backup{}, fmt.Errorf("%w: unknown backup target", ErrInvalid)
 	}
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	st, err := c.openStorage(target)
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	unlock, err := c.lockService(svc.ID)
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	// Dumps run in the database; volumes are read by a helper, but must
 	// exist (a never-deployed service has none yet).
 	var ct string
 	ext, dir := ".tar.gz", fmt.Sprintf("%s/%s/", project.Name, svc.Name)
 	switch {
-	case kind == store.BackupKindPostgres:
+	case kind == domain.BackupKindPostgres:
 		ext = ".dump"
 		if ct, err = c.runningContainer(ctx, svc); err == nil {
 			database, err = c.pgDatabaseOf(ctx, svc, ct, database)
@@ -87,7 +87,7 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, database, s
 		}
 	case database != "":
 		err = fmt.Errorf("%w: only a PostgreSQL service has databases to pick", ErrInvalid)
-	case kind == store.BackupKindDump:
+	case kind == domain.BackupKindDump:
 		ext = dumpExt(svc.Kind)
 		ct, err = c.runningContainer(ctx, svc)
 	case svc.CurrentDeploymentID == "":
@@ -95,11 +95,11 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, database, s
 	}
 	if err != nil {
 		unlock()
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 
 	created := time.Now().UTC()
-	b, err := c.store.CreateBackup(ctx, store.Backup{
+	b, err := c.store.CreateBackup(ctx, domain.Backup{
 		Kind:        kind,
 		Volumes:     volumeNames(svc),
 		Image:       svc.Image,
@@ -114,11 +114,11 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, database, s
 		Database:    database,
 		// The suffix keeps keys unique for backups started in the same second.
 		ObjectKey: objectKey(dir, created, ext, target),
-		Status:    store.OpRunning,
+		Status:    domain.OpRunning,
 	})
 	if err != nil {
 		unlock()
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 
 	if err := c.goBackground(func() {
@@ -137,16 +137,16 @@ func (c *Core) startBackup(ctx context.Context, serviceID, targetID, database, s
 		}
 	}); err != nil {
 		unlock()
-		b.Status, b.Error = store.OpFailed, err.Error()
+		b.Status, b.Error = domain.OpFailed, err.Error()
 		_ = c.store.FinishBackup(ctx, b)
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	return b, nil
 }
 
 // objectKey is dir/<timestamp>-<suffix><ext>[.age]. The suffix keeps keys
 // unique for backups started in the same second.
-func objectKey(dir string, created time.Time, ext string, target store.BackupTarget) string {
+func objectKey(dir string, created time.Time, ext string, target domain.BackupTarget) string {
 	key := dir + created.Format("20060102T150405Z") + "-" + strings.ToLower(ids.New()[16:]) + ext
 	if target.Encrypted() {
 		key += ".age"
@@ -157,12 +157,12 @@ func objectKey(dir string, created time.Time, ext string, target store.BackupTar
 // BackupProject backs up every database and app with volumes of a project
 // to one target. Failures to start are reported per service; the others
 // still run.
-func (c *Core) BackupProject(ctx context.Context, projectID, targetID string) ([]store.Backup, error) {
+func (c *Core) BackupProject(ctx context.Context, projectID, targetID string) ([]domain.Backup, error) {
 	svcs, err := c.store.ListServices(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	var started []store.Backup
+	var started []domain.Backup
 	var errs []error
 	for _, s := range svcs {
 		if _, err := backupKind(s); err != nil {
@@ -182,7 +182,7 @@ func (c *Core) BackupProject(ctx context.Context, projectID, targetID string) ([
 }
 
 // runBackup performs the backup and records the outcome; it reports success.
-func (c *Core) runBackup(svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b store.Backup) bool {
+func (c *Core) runBackup(svc domain.Service, containerID string, st storage.Storage, target domain.BackupTarget, b domain.Backup) bool {
 	ctx, cancel := context.WithTimeout(c.bg, backupTimeout)
 	defer cancel()
 	defer c.steps.done(backupKey(b.ID))
@@ -191,17 +191,17 @@ func (c *Core) runBackup(svc store.Service, containerID string, st storage.Stora
 
 	var err error
 	switch b.Kind {
-	case store.BackupKindVolume:
+	case domain.BackupKindVolume:
 		err = c.dumpVolumes(ctx, svc, st, target, &b)
-	case store.BackupKindDump:
+	case domain.BackupKindDump:
 		err = c.dumpDatabase(ctx, svc, containerID, st, target, &b)
 	default:
 		err = c.dump(ctx, svc, containerID, st, target, &b)
 	}
 	b.DurationMS = time.Since(start).Milliseconds()
-	b.Status = store.OpSucceeded
+	b.Status = domain.OpSucceeded
 	if err != nil {
-		b.Status, b.Error = store.OpFailed, err.Error()
+		b.Status, b.Error = domain.OpFailed, err.Error()
 		b.SizeBytes, b.SHA256 = 0, ""
 		if errors.Is(ctx.Err(), context.Canceled) {
 			b.Error = "interrupted by manager shutdown"
@@ -223,12 +223,12 @@ func (c *Core) runBackup(svc store.Service, containerID string, st storage.Stora
 		return false
 	}
 	c.notifyBackup(b, target, "/services/"+svc.ID)
-	return err == nil && b.Status == store.OpSucceeded
+	return err == nil && b.Status == domain.OpSucceeded
 }
 
 // dump streams pg_dump output to storage, filling in size, checksum and
 // server version on b.
-func (c *Core) dump(ctx context.Context, svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b *store.Backup) error {
+func (c *Core) dump(ctx context.Context, svc domain.Service, containerID string, st storage.Storage, target domain.BackupTarget, b *domain.Backup) error {
 	c.steps.set(backupKey(b.ID), BackupPrepare)
 	version, err := c.serverVersion(ctx, svc, containerID)
 	if err != nil {
@@ -255,7 +255,7 @@ func (c *Core) dump(ctx context.Context, svc store.Service, containerID string, 
 // age encryption when the target has a recipient, and records size and
 // SHA-256 of the stored bytes on b. produce's error takes precedence: a
 // producer can fail after data already flowed.
-func (c *Core) upload(ctx context.Context, st storage.Storage, target store.BackupTarget, b *store.Backup,
+func (c *Core) upload(ctx context.Context, st storage.Storage, target domain.BackupTarget, b *domain.Backup,
 	produce func(w io.Writer) error) error {
 
 	pr, pw := io.Pipe()
@@ -303,7 +303,7 @@ func (c *Core) upload(ctx context.Context, st storage.Storage, target store.Back
 	return nil
 }
 
-func (c *Core) serverVersion(ctx context.Context, svc store.Service, containerID string) (string, error) {
+func (c *Core) serverVersion(ctx context.Context, svc domain.Service, containerID string) (string, error) {
 	var out strings.Builder
 	err := c.dockerFor(svc.ServerID).Exec(ctx, containerID, docker.ExecOptions{
 		Cmd:    []string{"psql", "-U", svc.Env[pgUser], "-d", svc.Env[pgDatabase], "-tAc", "SHOW server_version"},
@@ -314,13 +314,13 @@ func (c *Core) serverVersion(ctx context.Context, svc store.Service, containerID
 
 // pgExtensions lists the extensions database db uses, plpgsql aside (every
 // server has it).
-func (c *Core) pgExtensions(ctx context.Context, svc store.Service, containerID, db string) ([]string, error) {
+func (c *Core) pgExtensions(ctx context.Context, svc domain.Service, containerID, db string) ([]string, error) {
 	return c.pgList(ctx, svc, containerID, db, "SELECT extname FROM pg_extension WHERE extname <> 'plpgsql' ORDER BY 1")
 }
 
 // missingExtensions returns those of exts the server in containerID can't
 // create.
-func (c *Core) missingExtensions(ctx context.Context, svc store.Service, containerID string, exts []string) ([]string, error) {
+func (c *Core) missingExtensions(ctx context.Context, svc domain.Service, containerID string, exts []string) ([]string, error) {
 	available, err := c.pgList(ctx, svc, containerID, svc.Env[pgDatabase], "SELECT name FROM pg_available_extensions")
 	if err != nil {
 		return nil, err
@@ -335,7 +335,7 @@ func (c *Core) missingExtensions(ctx context.Context, svc store.Service, contain
 }
 
 // pgList runs a one-column query and returns its rows.
-func (c *Core) pgList(ctx context.Context, svc store.Service, containerID, db, query string) ([]string, error) {
+func (c *Core) pgList(ctx context.Context, svc domain.Service, containerID, db, query string) ([]string, error) {
 	var out strings.Builder
 	err := c.dockerFor(svc.ServerID).Exec(ctx, containerID, docker.ExecOptions{
 		Cmd:    []string{"psql", "-U", svc.Env[pgUser], "-d", db, "-v", "ON_ERROR_STOP=1", "-tAc", query},
@@ -362,67 +362,67 @@ func (h *hashCounter) Write(p []byte) (int, error) {
 // with the apps linked to the database stopped meanwhile; a volume archive is
 // extracted aside, then copied over the volumes with the service stopped.
 // It overwrites data, so confirm must repeat the target service name.
-func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, confirm string) (store.Restore, error) {
+func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, confirm string) (domain.Restore, error) {
 	b, err := c.store.GetBackup(ctx, backupID)
 	if err != nil {
-		return store.Restore{}, err
+		return domain.Restore{}, err
 	}
-	if b.Status != store.OpSucceeded {
-		return store.Restore{}, fmt.Errorf("%w: only successful backups can be restored", ErrInvalid)
+	if b.Status != domain.OpSucceeded {
+		return domain.Restore{}, fmt.Errorf("%w: only successful backups can be restored", ErrInvalid)
 	}
-	if b.Kind == store.BackupKindManager {
-		return store.Restore{}, fmt.Errorf("%w: manager backups are restored by replacing the data file (see README)", ErrInvalid)
+	if b.Kind == domain.BackupKindManager {
+		return domain.Restore{}, fmt.Errorf("%w: manager backups are restored by replacing the data file (see README)", ErrInvalid)
 	}
 	if targetServiceID == "" {
 		targetServiceID = b.ServiceID
 	}
 	svc, err := c.store.GetService(ctx, targetServiceID)
-	if errors.Is(err, store.ErrNotFound) {
-		return store.Restore{}, fmt.Errorf("%w: the backup's service no longer exists; pick another one", ErrInvalid)
+	if errors.Is(err, domain.ErrNotFound) {
+		return domain.Restore{}, fmt.Errorf("%w: the backup's service no longer exists; pick another one", ErrInvalid)
 	}
 	if err != nil {
-		return store.Restore{}, err
+		return domain.Restore{}, err
 	}
 	// Restoring reads the backup's project and overwrites the target's.
 	if err := check(ctx, b.ProjectID, PermRestore); err != nil {
-		return store.Restore{}, err
+		return domain.Restore{}, err
 	}
 	if err := check(ctx, svc.ProjectID, PermRestore); err != nil {
-		return store.Restore{}, err
+		return domain.Restore{}, err
 	}
-	if b.Kind == store.BackupKindVolume {
+	if b.Kind == domain.BackupKindVolume {
 		return c.restoreVolumeBackup(ctx, b, svc, confirm)
 	}
 	switch {
-	case b.Kind == store.BackupKindDump && svc.Kind != b.ServiceKind:
-		return store.Restore{}, fmt.Errorf("%w: a %s dump restores into a %s service", ErrInvalid, b.ServiceKind, b.ServiceKind)
-	case b.Kind == store.BackupKindPostgres && svc.Kind != store.ServiceKindPostgres:
-		return store.Restore{}, fmt.Errorf("%w: a database dump restores into a PostgreSQL service", ErrInvalid)
+	case b.Kind == domain.BackupKindDump && svc.Kind != b.ServiceKind:
+		return domain.Restore{}, fmt.Errorf("%w: a %s dump restores into a %s service", ErrInvalid, b.ServiceKind, b.ServiceKind)
+	case b.Kind == domain.BackupKindPostgres && svc.Kind != domain.ServiceKindPostgres:
+		return domain.Restore{}, fmt.Errorf("%w: a database dump restores into a PostgreSQL service", ErrInvalid)
 	}
 	if confirm != svc.Name {
-		return store.Restore{}, fmt.Errorf("%w: restoring overwrites %s; confirm with its name", ErrInvalid, svc.Name)
+		return domain.Restore{}, fmt.Errorf("%w: restoring overwrites %s; confirm with its name", ErrInvalid, svc.Name)
 	}
-	if major := postgresMajor(svc.Image); b.Kind == store.BackupKindPostgres && major != 0 && pgMajorFromVersion(b.PGVersion) > major {
-		return store.Restore{}, fmt.Errorf("%w: backup is from PostgreSQL %s, database runs %d", ErrInvalid, b.PGVersion, major)
+	if major := postgresMajor(svc.Image); b.Kind == domain.BackupKindPostgres && major != 0 && pgMajorFromVersion(b.PGVersion) > major {
+		return domain.Restore{}, fmt.Errorf("%w: backup is from PostgreSQL %s, database runs %d", ErrInvalid, b.PGVersion, major)
 	}
 	target, err := c.store.GetBackupTarget(ctx, b.TargetID)
 	if err != nil {
-		return store.Restore{}, err
+		return domain.Restore{}, err
 	}
 	st, err := c.openStorage(target)
 	if err != nil {
-		return store.Restore{}, err
+		return domain.Restore{}, err
 	}
 	unlock, err := c.lockService(svc.ID)
 	if err != nil {
-		return store.Restore{}, err
+		return domain.Restore{}, err
 	}
 	ct, err := c.runningContainer(ctx, svc)
 	if err != nil {
 		unlock()
-		return store.Restore{}, err
+		return domain.Restore{}, err
 	}
-	if b.Kind == store.BackupKindPostgres && len(b.Extensions) > 0 {
+	if b.Kind == domain.BackupKindPostgres && len(b.Extensions) > 0 {
 		// Checked up front: pg_restore would fail on the first CREATE EXTENSION.
 		missing, err := c.missingExtensions(ctx, svc, ct, b.Extensions)
 		if err == nil && len(missing) > 0 {
@@ -431,13 +431,13 @@ func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, con
 		}
 		if err != nil {
 			unlock()
-			return store.Restore{}, err
+			return domain.Restore{}, err
 		}
 	}
-	r, err := c.store.CreateRestore(ctx, store.Restore{BackupID: b.ID, ServiceID: svc.ID, Status: store.OpRunning})
+	r, err := c.store.CreateRestore(ctx, domain.Restore{BackupID: b.ID, ServiceID: svc.ID, Status: domain.OpRunning})
 	if err != nil {
 		unlock()
-		return store.Restore{}, err
+		return domain.Restore{}, err
 	}
 
 	if err := c.goBackground(func() {
@@ -445,13 +445,13 @@ func (c *Core) RestoreBackup(ctx context.Context, backupID, targetServiceID, con
 		c.runRestore(svc, ct, st, target, b, r)
 	}); err != nil {
 		unlock()
-		_ = c.store.FinishRestore(ctx, r.ID, store.OpFailed, err.Error())
-		return store.Restore{}, err
+		_ = c.store.FinishRestore(ctx, r.ID, domain.OpFailed, err.Error())
+		return domain.Restore{}, err
 	}
 	return r, nil
 }
 
-func (c *Core) runRestore(svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b store.Backup, r store.Restore) {
+func (c *Core) runRestore(svc domain.Service, containerID string, st storage.Storage, target domain.BackupTarget, b domain.Backup, r domain.Restore) {
 	ctx, cancel := context.WithTimeout(c.bg, restoreTimeout)
 	defer cancel()
 	key := restoreKey(r.ID)
@@ -459,7 +459,7 @@ func (c *Core) runRestore(svc store.Service, containerID string, st storage.Stor
 
 	c.steps.set(key, RestoreStopApps)
 	stopped, err := c.stopLinkedApps(ctx, svc)
-	if err == nil && b.Kind == store.BackupKindDump {
+	if err == nil && b.Kind == domain.BackupKindDump {
 		err = c.restoreDump(ctx, svc, containerID, st, target, b, key)
 	} else if err == nil {
 		err = c.restore(ctx, svc, containerID, st, target, b, key)
@@ -475,9 +475,9 @@ func (c *Core) runRestore(svc store.Service, containerID string, st storage.Stor
 	}
 	failed := "The live database was left unchanged."
 	switch {
-	case b.Kind == store.BackupKindDump && svc.Kind == store.ServiceKindMongoDB:
+	case b.Kind == domain.BackupKindDump && svc.Kind == domain.ServiceKindMongoDB:
 		failed = "Collections the backup holds may be partly restored."
-	case b.Kind == store.BackupKindDump:
+	case b.Kind == domain.BackupKindDump:
 		failed = "Unless the error says otherwise, the live database was left unchanged."
 	}
 	c.finishRestore(ctx, svc, target, b, r, err, "The database now holds", failed)
@@ -485,13 +485,13 @@ func (c *Core) runRestore(svc store.Service, containerID string, st storage.Stor
 
 // finishRestore records and reports a restore's outcome. done starts the
 // success message ("<done> the backup of <date>."); failed ends the failure one.
-func (c *Core) finishRestore(ctx context.Context, svc store.Service, target store.BackupTarget, b store.Backup, r store.Restore,
+func (c *Core) finishRestore(ctx context.Context, svc domain.Service, target domain.BackupTarget, b domain.Backup, r domain.Restore,
 	err error, done, failed string) {
 
 	log := c.log.With("restore", r.ID, "backup", b.ID, "service", svc.Name)
-	status, msg := store.OpSucceeded, ""
+	status, msg := domain.OpSucceeded, ""
 	if err != nil {
-		status, msg = store.OpFailed, err.Error()
+		status, msg = domain.OpFailed, err.Error()
 		if errors.Is(ctx.Err(), context.Canceled) {
 			msg = "interrupted by manager shutdown"
 		}
@@ -514,16 +514,16 @@ func (c *Core) finishRestore(ctx context.Context, svc store.Service, target stor
 			{Name: "Target", Value: target.Name},
 		},
 	}
-	if status == store.OpFailed {
+	if status == domain.OpFailed {
 		e.Type, e.Level, e.Title, e.Message = EventRestoreFailed, notify.Error, fmt.Sprintf("%s/%s restore failed", b.ProjectName, svc.Name), msg+"\n"+failed
 	}
 	c.notify(e, "/services/"+svc.ID, "")
 }
 
 // notifyBackup reports a finished database or manager backup.
-func (c *Core) notifyBackup(b store.Backup, target store.BackupTarget, path string) {
+func (c *Core) notifyBackup(b domain.Backup, target domain.BackupTarget, path string) {
 	subject := b.ProjectName + "/" + b.ServiceName
-	if b.Kind == store.BackupKindManager {
+	if b.Kind == domain.BackupKindManager {
 		subject, path = "Manager state", "/backups"
 	}
 	e := notify.Event{
@@ -536,7 +536,7 @@ func (c *Core) notifyBackup(b store.Backup, target store.BackupTarget, path stri
 			{Name: "Duration", Value: (time.Duration(b.DurationMS) * time.Millisecond).Round(time.Second).String()},
 		},
 	}
-	if b.Status != store.OpSucceeded {
+	if b.Status != domain.OpSucceeded {
 		e.Type, e.Level, e.Title, e.Message = EventBackupFailed, notify.Error, subject+" backup failed", b.Error
 		e.Fields = e.Fields[:1]
 	}
@@ -564,7 +564,7 @@ func humanSize(n int64) string {
 // so the result is exactly the backup (objects created since are gone) and
 // a failure leaves the live database untouched.
 // key names the restore, for its steps.
-func (c *Core) restore(ctx context.Context, svc store.Service, containerID string, st storage.Storage, target store.BackupTarget, b store.Backup, key string) error {
+func (c *Core) restore(ctx context.Context, svc domain.Service, containerID string, st storage.Storage, target domain.BackupTarget, b domain.Backup, key string) error {
 	c.steps.set(key, RestoreLoad)
 	rc, err := st.Get(ctx, b.ObjectKey)
 	if err != nil {
@@ -654,7 +654,7 @@ func (c *Core) restore(ctx context.Context, svc store.Service, containerID strin
 
 // backupDatabase is the database a backup holds; older backups predate the
 // choice and hold the service's own.
-func backupDatabase(svc store.Service, b store.Backup) string {
+func backupDatabase(svc domain.Service, b domain.Backup) string {
 	if b.Database != "" {
 		return b.Database
 	}
@@ -664,7 +664,7 @@ func backupDatabase(svc store.Service, b store.Backup) string {
 // pgDatabaseOf checks that name is a database of svc's instance (its
 // container ct) and returns it; empty is the service's own. Names come from
 // callers: psql and pg_dump would take a connection string as well.
-func (c *Core) pgDatabaseOf(ctx context.Context, svc store.Service, ct, name string) (string, error) {
+func (c *Core) pgDatabaseOf(ctx context.Context, svc domain.Service, ct, name string) (string, error) {
 	main := svc.Env[pgDatabase]
 	if name == "" || name == main {
 		return main, nil
@@ -688,7 +688,7 @@ func pgLiteral(s string) string {
 
 // pgRestore streams a stored backup (decrypting if needed) into pg_restore
 // against database db, then verifies the checksum of the stored bytes.
-func (c *Core) pgRestore(ctx context.Context, dk *docker.Client, containerID, user, db string, rc io.Reader, target store.BackupTarget, b store.Backup) error {
+func (c *Core) pgRestore(ctx context.Context, dk *docker.Client, containerID, user, db string, rc io.Reader, target domain.BackupTarget, b domain.Backup) error {
 	return fromStorage(rc, target, b, func(dump io.Reader) error {
 		err := dk.Exec(ctx, containerID, docker.ExecOptions{
 			Cmd: []string{
@@ -706,7 +706,7 @@ func (c *Core) pgRestore(ctx context.Context, dk *docker.Client, containerID, us
 
 // fromStorage feeds a stored backup (decrypted if needed) to consume, then
 // checks the checksum of the stored bytes.
-func fromStorage(rc io.Reader, target store.BackupTarget, b store.Backup, consume func(io.Reader) error) error {
+func fromStorage(rc io.Reader, target domain.BackupTarget, b domain.Backup, consume func(io.Reader) error) error {
 	sum := &hashCounter{h: sha256.New()}
 	stored := io.TeeReader(rc, sum)
 	var content io.Reader = stored
@@ -736,7 +736,7 @@ func pgIdent(s string) string {
 
 // stopLinkedApps stops running containers of apps whose env references db
 // and returns their IDs so they can be started again.
-func (c *Core) stopLinkedApps(ctx context.Context, db store.Service) ([]string, error) {
+func (c *Core) stopLinkedApps(ctx context.Context, db domain.Service) ([]string, error) {
 	svcs, err := c.store.ListServices(ctx, db.ProjectID)
 	if err != nil {
 		return nil, err
@@ -766,7 +766,7 @@ func (c *Core) stopLinkedApps(ctx context.Context, db store.Service) ([]string, 
 
 // runningContainer returns the ID of the service's running container.
 // A sleeping project wakes first.
-func (c *Core) runningContainer(ctx context.Context, svc store.Service) (string, error) {
+func (c *Core) runningContainer(ctx context.Context, svc domain.Service) (string, error) {
 	if err := c.wakeFor(ctx, svc); err != nil {
 		return "", err
 	}
@@ -793,12 +793,12 @@ func pgMajorFromVersion(v string) int {
 	return n
 }
 
-func (c *Core) ListBackups(ctx context.Context, f store.BackupFilter) ([]store.Backup, error) {
+func (c *Core) ListBackups(ctx context.Context, f domain.BackupFilter) ([]domain.Backup, error) {
 	if f.Limit == 0 {
 		f.Limit = 100
 	}
 	if f.ProjectID != "" && !visible(ctx, f.ProjectID) {
-		return []store.Backup{}, nil
+		return []domain.Backup{}, nil
 	}
 	f.ProjectIn = visibleProjects(ctx)
 	bs, err := c.store.ListBackups(ctx, f)
@@ -808,7 +808,7 @@ func (c *Core) ListBackups(ctx context.Context, f store.BackupFilter) ([]store.B
 	return bs, err
 }
 
-func (c *Core) GetBackup(ctx context.Context, id string) (store.Backup, error) {
+func (c *Core) GetBackup(ctx context.Context, id string) (domain.Backup, error) {
 	b, err := c.store.GetBackup(ctx, id)
 	if err == nil {
 		c.fillSteps(&b)
@@ -816,10 +816,10 @@ func (c *Core) GetBackup(ctx context.Context, id string) (store.Backup, error) {
 	return b, err
 }
 
-func (c *Core) ListRestores(ctx context.Context, serviceID string) ([]store.Restore, error) {
+func (c *Core) ListRestores(ctx context.Context, serviceID string) ([]domain.Restore, error) {
 	rs, err := c.store.ListRestores(ctx, serviceID, 20)
 	for i := range rs {
-		if rs[i].Status == store.OpRunning {
+		if rs[i].Status == domain.OpRunning {
 			rs[i].Step, _ = c.steps.get(restoreKey(rs[i].ID))
 		}
 	}
@@ -827,27 +827,27 @@ func (c *Core) ListRestores(ctx context.Context, serviceID string) ([]store.Rest
 }
 
 // fillSteps adds where b's running backup or restore test is at.
-func (c *Core) fillSteps(b *store.Backup) {
-	if b.Status == store.OpRunning {
+func (c *Core) fillSteps(b *domain.Backup) {
+	if b.Status == domain.OpRunning {
 		b.Step, b.StepBytes = c.steps.get(backupKey(b.ID))
 	}
-	if b.VerifyStatus == store.OpRunning {
+	if b.VerifyStatus == domain.OpRunning {
 		b.VerifyStep, _ = c.steps.get(verifyKey(b.ID))
 	}
 }
 
 // OpenBackup streams a backup's content (for download).
-func (c *Core) OpenBackup(ctx context.Context, id string) (store.Backup, io.ReadCloser, error) {
+func (c *Core) OpenBackup(ctx context.Context, id string) (domain.Backup, io.ReadCloser, error) {
 	b, err := c.store.GetBackup(ctx, id)
 	if err != nil {
-		return store.Backup{}, nil, err
+		return domain.Backup{}, nil, err
 	}
-	if b.Status != store.OpSucceeded {
-		return store.Backup{}, nil, fmt.Errorf("%w: backup did not succeed", ErrInvalid)
+	if b.Status != domain.OpSucceeded {
+		return domain.Backup{}, nil, fmt.Errorf("%w: backup did not succeed", ErrInvalid)
 	}
 	st, err := c.storageFor(ctx, b.TargetID)
 	if err != nil {
-		return store.Backup{}, nil, err
+		return domain.Backup{}, nil, err
 	}
 	rc, err := st.Get(ctx, b.ObjectKey)
 	return b, rc, err
@@ -860,10 +860,10 @@ func (c *Core) DeleteBackup(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if b.Status == store.OpRunning {
+	if b.Status == domain.OpRunning {
 		return ErrBusy
 	}
-	copies, err := c.store.ListBackups(ctx, store.BackupFilter{Anonymized: true, SourceID: id})
+	copies, err := c.store.ListBackups(ctx, domain.BackupFilter{Anonymized: true, SourceID: id})
 	if err != nil {
 		return err
 	}
@@ -879,7 +879,7 @@ func (c *Core) DeleteBackup(ctx context.Context, id string) error {
 	if err := st.Delete(ctx, b.ObjectKey); err != nil {
 		return fmt.Errorf("delete backup object: %w", err)
 	}
-	if b.Kind != store.BackupKindManager {
+	if b.Kind != domain.BackupKindManager {
 		if err := st.Delete(ctx, b.ObjectKey+sidecarExt); err != nil {
 			return fmt.Errorf("delete backup sidecar: %w", err)
 		}

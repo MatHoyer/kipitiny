@@ -13,7 +13,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestGitRepoFiles(t *testing.T) {
@@ -48,7 +48,7 @@ func TestGitRepoFiles(t *testing.T) {
 	}
 
 	c := New(config.Config{DataDir: t.TempDir()}, nil, nil, nil)
-	g := store.ProjectGit{RepoURL: dir, Branch: "main", Path: "deploy/compose.yaml"}
+	g := domain.ProjectGit{RepoURL: dir, Branch: "main", Path: "deploy/compose.yaml"}
 	err = c.withGitFile(ctx, g, func(data []byte, _ string, files repoFiles) error {
 		f, err := files("./nginx.conf")
 		if err != nil || len(f) != 1 || f[0].Path != "" || string(f[0].Content) != "server {}" {
@@ -76,7 +76,7 @@ func TestGitRepoFiles(t *testing.T) {
 func TestServiceFiles(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID, Env: map[string]string{"TOKEN": "t0k"}})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID, Env: map[string]string{"TOKEN": "t0k"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,13 +125,13 @@ secrets:
 		t.Errorf("own export re-applied: %+v, %v\n%s", plan, err, out.Compose)
 	}
 
-	for name, s := range map[string]store.Service{
-		"read-only root": {Runtime: store.Runtime{ReadOnly: true}, Files: []store.ServiceFile{{Path: "/a"}}},
-		"in a volume":    {Volumes: []store.Volume{{Name: "d", Path: "/data"}}, Files: []store.ServiceFile{{Path: "/data/x"}}},
-		"relative":       {Files: []store.ServiceFile{{Path: "etc/x"}}},
-		"twice":          {Files: []store.ServiceFile{{Path: "/a"}, {Path: "/a"}}},
+	for name, s := range map[string]domain.Service{
+		"read-only root": {Runtime: domain.Runtime{ReadOnly: true}, Files: []domain.ServiceFile{{Path: "/a"}}},
+		"in a volume":    {Volumes: []domain.Volume{{Name: "d", Path: "/data"}}, Files: []domain.ServiceFile{{Path: "/data/x"}}},
+		"relative":       {Files: []domain.ServiceFile{{Path: "etc/x"}}},
+		"twice":          {Files: []domain.ServiceFile{{Path: "/a"}, {Path: "/a"}}},
 	} {
-		s.Kind, s.Image, s.Replicas = store.ServiceKindApp, "x", 1
+		s.Kind, s.Image, s.Replicas = domain.ServiceKindApp, "x", 1
 		if err := validateService(s); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: got %v", name, err)
 		}

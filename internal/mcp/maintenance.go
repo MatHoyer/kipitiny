@@ -6,7 +6,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 type setMaintenanceIn struct {
@@ -22,11 +22,11 @@ type setMaintenanceIn struct {
 	StartingHTML    *string `json:"starting_html,omitempty" jsonschema:"a whole HTML document served while the project wakes (max 64 KiB; the manager makes it reload every 3 s); empty restores the default; omitted keeps it"`
 }
 
-func (t *tools) setMaintenance(ctx context.Context, _ *mcp.CallToolRequest, in setMaintenanceIn) (*mcp.CallToolResult, store.Maintenance, error) {
-	out, err := mutate(ctx, t.c, "set_maintenance", in.Project, func() (store.Maintenance, error) {
+func (t *tools) setMaintenance(ctx context.Context, _ *mcp.CallToolRequest, in setMaintenanceIn) (*mcp.CallToolResult, domain.Maintenance, error) {
+	out, err := mutate(ctx, t.c, "set_maintenance", in.Project, func() (domain.Maintenance, error) {
 		p, err := t.project(ctx, in.Project, core.PermDeploy)
 		if err != nil {
-			return store.Maintenance{}, err
+			return domain.Maintenance{}, err
 		}
 		m := p.Maintenance
 		v := core.MaintenanceInput{Enabled: m.Enabled, AllowIPs: m.AllowIPs, Title: m.Title, Message: m.Message, HTML: m.HTML, Starting: m.Starting}

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestInstallTemplateDryRun(t *testing.T) {
@@ -40,7 +40,7 @@ func TestInstallTemplateDryRun(t *testing.T) {
 	}
 
 	// An existing project.
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "ops", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "ops", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestInstallTemplateDryRun(t *testing.T) {
 	}
 
 	// Only adds: a service of the same name is refused, not changed.
-	if _, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "agent", Kind: store.ServiceKindApp, Image: "nginx:1", Replicas: 1}); err != nil {
+	if _, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "agent", Kind: domain.ServiceKindApp, Image: "nginx:1", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.InstallTemplate(ctx, "beszel-agent", TemplateInstall{ProjectID: p.ID, Values: map[string]string{"KEY": "k"}, DryRun: true}); !errors.Is(err, ErrInvalid) {
@@ -68,7 +68,7 @@ func TestInstallTemplateDryRun(t *testing.T) {
 			t.Errorf("%s: err = %v", name, err)
 		}
 	}
-	if _, err := c.InstallTemplate(ctx, "nope", TemplateInstall{ProjectID: p.ID}); !errors.Is(err, store.ErrNotFound) {
+	if _, err := c.InstallTemplate(ctx, "nope", TemplateInstall{ProjectID: p.ID}); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("unknown template: %v", err)
 	}
 }

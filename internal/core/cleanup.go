@@ -14,8 +14,8 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const (
@@ -281,7 +281,7 @@ func (c *Core) runCleanup(s CleanupSettings, trigger string) {
 
 // cleanServer removes what the settings allow on one server. Each step runs
 // even if an earlier one failed.
-func (c *Core) cleanServer(ctx context.Context, sv store.Server, svcs []store.Service, s CleanupSettings) CleanupResult {
+func (c *Core) cleanServer(ctx context.Context, sv domain.Server, svcs []domain.Service, s CleanupSettings) CleanupResult {
 	r := CleanupResult{Server: sv.Name}
 	dk := c.dockerFor(sv.ID)
 	until := fmt.Sprintf("%dh", s.MinAgeHours)
@@ -361,7 +361,7 @@ const keepRollbackImages = 5
 // removeUnusedImages removes images no container uses, except the images of
 // the server's services and of their recent successful deployments, which
 // deploys and rollbacks need.
-func (c *Core) removeUnusedImages(ctx context.Context, dk *docker.Client, serverID string, svcs []store.Service, minAge time.Duration) (int, uint64, error) {
+func (c *Core) removeUnusedImages(ctx context.Context, dk *docker.Client, serverID string, svcs []domain.Service, minAge time.Duration) (int, uint64, error) {
 	keep := map[string]bool{}
 	protect := func(ref string) {
 		if ref == "" {
@@ -382,10 +382,10 @@ func (c *Core) removeUnusedImages(ctx context.Context, dk *docker.Client, server
 		}
 		kept := 0
 		for _, d := range deps {
-			if d.ID == svc.CurrentDeploymentID || d.Status == store.DeploymentRunning ||
-				(d.Status == store.DeploymentSucceeded && kept < keepRollbackImages) {
+			if d.ID == svc.CurrentDeploymentID || d.Status == domain.DeploymentRunning ||
+				(d.Status == domain.DeploymentSucceeded && kept < keepRollbackImages) {
 				protect(d.Image)
-				if d.Status == store.DeploymentSucceeded {
+				if d.Status == domain.DeploymentSucceeded {
 					kept++
 				}
 			}
@@ -424,7 +424,7 @@ func (c *Core) removeUnusedImages(ctx context.Context, dk *docker.Client, server
 // removeUnusedVolumes removes volumes no container mounts: anonymous ones
 // only, or named ones too. Volumes of the manager (labelled, kipitiny-*) and
 // database volumes are never touched.
-func (c *Core) removeUnusedVolumes(ctx context.Context, dk *docker.Client, svcs []store.Service, named bool, minAge time.Duration) (int, uint64, error) {
+func (c *Core) removeUnusedVolumes(ctx context.Context, dk *docker.Client, svcs []domain.Service, named bool, minAge time.Duration) (int, uint64, error) {
 	protected := map[string]bool{}
 	for _, svc := range svcs {
 		if vol := DataVolume(svc); vol != "" {
@@ -494,7 +494,7 @@ func (c *Core) removeStaleProbes(ctx context.Context, dk *docker.Client) (int, e
 
 // trimDeployments deletes each service's deployments beyond the newest keep,
 // with their logs. The current and running ones always stay.
-func (c *Core) trimDeployments(ctx context.Context, svcs []store.Service, keep int) int {
+func (c *Core) trimDeployments(ctx context.Context, svcs []domain.Service, keep int) int {
 	n := 0
 	for _, svc := range svcs {
 		deps, err := c.store.ListDeployments(ctx, svc.ID, 0) // 0: all
@@ -503,10 +503,10 @@ func (c *Core) trimDeployments(ctx context.Context, svcs []store.Service, keep i
 			continue
 		}
 		for i, d := range deps {
-			if i < keep || d.ID == svc.CurrentDeploymentID || d.Status == store.DeploymentRunning {
+			if i < keep || d.ID == svc.CurrentDeploymentID || d.Status == domain.DeploymentRunning {
 				continue
 			}
-			if err := c.store.DeleteDeployment(ctx, d.ID); err != nil && !errors.Is(err, store.ErrNotFound) {
+			if err := c.store.DeleteDeployment(ctx, d.ID); err != nil && !errors.Is(err, domain.ErrNotFound) {
 				c.log.Warn("cleanup: delete deployment", "deployment", d.ID, "err", err)
 				continue
 			}

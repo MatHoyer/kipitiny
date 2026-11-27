@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 )
 
 func TestDatabaseSize(t *testing.T) {

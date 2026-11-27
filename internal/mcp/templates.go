@@ -9,7 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/templates"
 )
 
@@ -42,7 +42,7 @@ func (t *tools) installTemplate(ctx context.Context, _ *mcp.CallToolRequest, in 
 				return core.TemplateResult{}, fmt.Errorf("%w: project %s already exists; server is only for a new one", core.ErrInvalid, in.Project)
 			}
 			req.ProjectID = p.ID
-		case errors.Is(err, store.ErrNotFound):
+		case errors.Is(err, domain.ErrNotFound):
 			req.NewProject = &core.NewProject{Name: in.Project}
 			if in.Server != "" {
 				servers, err := t.c.ListServers(ctx)
@@ -51,7 +51,7 @@ func (t *tools) installTemplate(ctx context.Context, _ *mcp.CallToolRequest, in 
 				}
 				i := slices.IndexFunc(servers, func(sv core.ServerView) bool { return sv.Name == in.Server })
 				if i < 0 {
-					return core.TemplateResult{}, fmt.Errorf("%w: server %s", store.ErrNotFound, in.Server)
+					return core.TemplateResult{}, fmt.Errorf("%w: server %s", domain.ErrNotFound, in.Server)
 				}
 				req.NewProject.ServerID = servers[i].ID
 			}

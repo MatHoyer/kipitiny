@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Writes to volume files need the files-write permission, are refused on
@@ -60,7 +60,7 @@ type WriteOptions struct {
 
 // volumeEntry is volumePath for a path inside a volume, never a volume
 // itself. rel holds its segments below the volume.
-func volumeEntry(svc store.Service, p string) (vol fileVolume, abs string, rel []string, err error) {
+func volumeEntry(svc domain.Service, p string) (vol fileVolume, abs string, rel []string, err error) {
 	vol, abs, err = volumePath(svc, p)
 	if err != nil {
 		return vol, "", nil, err
@@ -73,28 +73,28 @@ func volumeEntry(svc store.Service, p string) (vol fileVolume, abs string, rel [
 
 // writableEntry is volumeEntry for a path that is written: a volume the app
 // mounts read-only stays read-only here.
-func writableEntry(svc store.Service, p string) (vol fileVolume, abs string, rel []string, err error) {
+func writableEntry(svc domain.Service, p string) (vol fileVolume, abs string, rel []string, err error) {
 	vol, abs, rel, err = volumeEntry(svc, p)
 	if err != nil {
 		return vol, "", nil, err
 	}
-	if i := slices.IndexFunc(svc.Volumes, func(v store.Volume) bool { return v.Name == vol.name }); !vol.container && i >= 0 && svc.Volumes[i].ReadOnly {
+	if i := slices.IndexFunc(svc.Volumes, func(v domain.Volume) bool { return v.Name == vol.name }); !vol.container && i >= 0 && svc.Volumes[i].ReadOnly {
 		return vol, "", nil, fmt.Errorf("%w: volume %s is mounted read-only", ErrInvalid, vol.name)
 	}
 	return vol, abs, rel, nil
 }
 
 // writableService loads a service whose volumes may be written.
-func (c *Core) writableService(ctx context.Context, id string) (store.Service, error) {
+func (c *Core) writableService(ctx context.Context, id string) (domain.Service, error) {
 	if err := c.requireOn(ctx, id, PermFilesEdit); err != nil {
-		return store.Service{}, err
+		return domain.Service{}, err
 	}
 	svc, err := c.store.GetService(ctx, id)
 	if err != nil {
-		return store.Service{}, err
+		return domain.Service{}, err
 	}
 	if filesReadOnly(svc) {
-		return store.Service{}, fmt.Errorf("%w: the volumes of databases are read-only", ErrInvalid)
+		return domain.Service{}, fmt.Errorf("%w: the volumes of databases are read-only", ErrInvalid)
 	}
 	return svc, nil
 }
@@ -110,7 +110,7 @@ func (c *Core) auditFiles(ctx context.Context, action, serviceID, what string, e
 
 // filesRun runs a write script where vol's files are (filesWriteLib loaded,
 // arguments as "$@").
-func (c *Core) filesRun(ctx context.Context, svc store.Service, vol fileVolume, script string, args ...string) error {
+func (c *Core) filesRun(ctx context.Context, svc domain.Service, vol fileVolume, script string, args ...string) error {
 	return c.filesExec(ctx, svc, vol, append([]string{"sh", "-c", filesWriteLib + script, "sh"}, args...), func(r io.Reader) error {
 		_, err := io.Copy(io.Discard, r)
 		return err

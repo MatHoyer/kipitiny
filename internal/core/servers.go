@@ -15,8 +15,8 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const sshKeySetting = "ssh_private_key"
@@ -27,7 +27,7 @@ var sshUserRe = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 // public half goes into ~/.ssh/authorized_keys on every remote server.
 func (c *Core) managerKey(ctx context.Context) (ssh.Signer, error) {
 	pemText, err := c.store.GetSetting(ctx, sshKeySetting)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, domain.ErrNotFound) {
 		_, priv, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			return nil, err
@@ -62,7 +62,7 @@ func (c *Core) connectServer(id string) (*docker.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	if sv.Kind != store.ServerSSH {
+	if sv.Kind != domain.ServerSSH {
 		return nil, fmt.Errorf("server %s is not remote", sv.Name)
 	}
 	signer, err := c.managerKey(ctx)
@@ -93,7 +93,7 @@ type ServerInput struct {
 }
 
 type ServerView struct {
-	store.Server
+	domain.Server
 	// DetectedIP is the public IP found when none is set.
 	DetectedIP string `json:"detectedIp,omitempty"`
 	// Tunnel is where its Cloudflare tunnel token comes from: "server"
@@ -140,7 +140,7 @@ func (c *Core) ListServers(ctx context.Context) ([]ServerView, error) {
 	}
 	if isMember(ctx) { // how to reach a server is the admins'
 		for i, v := range views {
-			views[i] = ServerView{Server: store.Server{ID: v.ID, Name: v.Name, Kind: v.Kind, PublicIP: v.PublicIP, CreatedAt: v.CreatedAt},
+			views[i] = ServerView{Server: domain.Server{ID: v.ID, Name: v.Name, Kind: v.Kind, PublicIP: v.PublicIP, CreatedAt: v.CreatedAt},
 				DetectedIP: v.DetectedIP, Projects: v.Projects}
 		}
 	}
@@ -151,7 +151,7 @@ func (c *Core) ListServers(ctx context.Context) ([]ServerView, error) {
 // key) and prepares it (proxy network, Traefik). A server that can't be
 // reached is not saved.
 func (c *Core) CreateServer(ctx context.Context, in ServerInput) (ServerView, error) {
-	sv := store.Server{Kind: store.ServerSSH}
+	sv := domain.Server{Kind: domain.ServerSSH}
 	if err := applyServerInput(&sv, in); err != nil {
 		return ServerView{}, err
 	}
@@ -174,7 +174,7 @@ func (c *Core) UpdateServer(ctx context.Context, id string, in ServerInput) (Ser
 	if err != nil {
 		return ServerView{}, err
 	}
-	if sv.Kind != store.ServerSSH {
+	if sv.Kind != domain.ServerSSH {
 		return ServerView{}, fmt.Errorf("%w: this server can't be edited", ErrInvalid)
 	}
 	if err := applyServerInput(&sv, in); err != nil {
@@ -197,10 +197,10 @@ func (c *Core) DeleteServer(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if sv.Kind != store.ServerSSH {
+	if sv.Kind != domain.ServerSSH {
 		return fmt.Errorf("%w: this server can't be removed", ErrInvalid)
 	}
-	if err := c.store.DeleteServer(ctx, id); errors.Is(err, store.ErrConflict) {
+	if err := c.store.DeleteServer(ctx, id); errors.Is(err, domain.ErrConflict) {
 		return fmt.Errorf("%w: %v; move or delete them first", ErrInvalid, err)
 	} else if err != nil {
 		return err
@@ -234,7 +234,7 @@ const (
 	ServerStepTunnel = "tunnel"
 )
 
-func (c *Core) checkServer(ctx context.Context, sv store.Server) (ServerView, error) {
+func (c *Core) checkServer(ctx context.Context, sv domain.Server) (ServerView, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	progress.Report(ctx, ServerStepConnect)
@@ -253,7 +253,7 @@ func (c *Core) checkServer(ctx context.Context, sv store.Server) (ServerView, er
 	return v, nil
 }
 
-func applyServerInput(sv *store.Server, in ServerInput) error {
+func applyServerInput(sv *domain.Server, in ServerInput) error {
 	sv.Name = strings.TrimSpace(in.Name)
 	sv.Host = strings.TrimSpace(in.Host)
 	sv.Port = in.Port

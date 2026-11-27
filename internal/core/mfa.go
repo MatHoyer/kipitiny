@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // ErrWrongPassword is a failed password confirmation on an account change.
@@ -43,23 +43,23 @@ type mfaTicket struct {
 }
 
 // LoginMFA completes a password sign-in with a TOTP code or a recovery code.
-func (c *Core) LoginMFA(ctx context.Context, ticket, code string) (store.User, string, error) {
+func (c *Core) LoginMFA(ctx context.Context, ticket, code string) (domain.User, string, error) {
 	t, exp, ok := c.mfaTickets.take(ticket)
 	if !ok {
-		return store.User{}, "", fmt.Errorf("%w: the sign-in expired, enter your password again", ErrUnauthorized)
+		return domain.User{}, "", fmt.Errorf("%w: the sign-in expired, enter your password again", ErrUnauthorized)
 	}
 	if !t.sso && c.SSORequired(ctx) {
-		return store.User{}, "", ErrSSORequired
+		return domain.User{}, "", ErrSSORequired
 	}
 	u, err := c.store.GetUser(ctx, t.userID)
 	if err != nil {
-		return store.User{}, "", err
+		return domain.User{}, "", err
 	}
 	if err := c.checkSecondFactor(ctx, u, code); err != nil {
 		if t.attempts++; t.attempts < mfaTicketAttempts && errors.Is(err, ErrUnauthorized) {
 			c.mfaTickets.put(ticket, t, exp)
 		}
-		return store.User{}, "", err
+		return domain.User{}, "", err
 	}
 	_ = c.store.DeleteExpiredSessions(ctx)
 	token, err := c.newSession(ctx, u.ID)
@@ -67,20 +67,20 @@ func (c *Core) LoginMFA(ctx context.Context, ticket, code string) (store.User, s
 }
 
 // checkSecondFactor accepts a current TOTP code or an unused recovery code.
-func (c *Core) checkSecondFactor(ctx context.Context, u store.User, code string) error {
+func (c *Core) checkSecondFactor(ctx context.Context, u domain.User, code string) error {
 	if u.TOTPSecret == "" {
 		return ErrUnauthorized
 	}
 	if step, ok := totpMatch(u.TOTPSecret, code, time.Now()); ok {
 		err := c.store.UseTOTPStep(ctx, u.ID, step)
-		if errors.Is(err, store.ErrConflict) {
+		if errors.Is(err, domain.ErrConflict) {
 			return fmt.Errorf("%w: that code was already used, wait for the next one", ErrUnauthorized)
 		}
 		return err
 	}
 	if norm := normalizeRecoveryCode(code); len(norm) == recoveryCodeLen {
 		err := c.store.UseRecoveryCode(ctx, u.ID, hashToken(norm))
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.Is(err, domain.ErrNotFound) {
 			return fmt.Errorf("%w: wrong code", ErrUnauthorized)
 		}
 		return err
@@ -119,8 +119,8 @@ type Account struct {
 	Username    string `json:"username"`
 	TOTPEnabled bool   `json:"totpEnabled"`
 	// RecoveryCodes is how many unused recovery codes are left.
-	RecoveryCodes int             `json:"recoveryCodes"`
-	Passkeys      []store.Passkey `json:"passkeys"`
+	RecoveryCodes int              `json:"recoveryCodes"`
+	Passkeys      []domain.Passkey `json:"passkeys"`
 	// HasPassword is false for an account that signs in with single sign-on
 	// (or passkeys) only: a fresh sign-in confirms its changes instead, and
 	// Confirmed reports one for this session.
@@ -133,7 +133,7 @@ type Account struct {
 	// SSORequired: passkeys don't sign in for now.
 	SSORequired bool `json:"ssoRequired"`
 	// Role, Features and Grants say what the user may do, for the UI.
-	Role     store.Role          `json:"role"`
+	Role     domain.Role         `json:"role"`
 	Features []string            `json:"features"`
 	Grants   map[string][]string `json:"grants"`
 }
@@ -155,41 +155,41 @@ func (c *Core) confirm(session string) {
 }
 
 // currentUser is the signed-in user making the request; API tokens have none.
-func (c *Core) currentUser(ctx context.Context) (store.User, error) {
+func (c *Core) currentUser(ctx context.Context) (domain.User, error) {
 	a, ok := ActorFrom(ctx)
 	if !ok || a.UserID == "" {
-		return store.User{}, ErrUnauthorized
+		return domain.User{}, ErrUnauthorized
 	}
 	return c.store.GetUser(ctx, a.UserID)
 }
 
 // SetPreferences replaces the current user's preferences.
-func (c *Core) SetPreferences(ctx context.Context, p store.Preferences) (store.Preferences, error) {
+func (c *Core) SetPreferences(ctx context.Context, p domain.Preferences) (domain.Preferences, error) {
 	if p.MapView != "" && p.MapView != "3d" {
-		return store.Preferences{}, fmt.Errorf("%w: map view must be empty (2D) or 3d", ErrInvalid)
+		return domain.Preferences{}, fmt.Errorf("%w: map view must be empty (2D) or 3d", ErrInvalid)
 	}
 	u, err := c.currentUser(ctx)
 	if err != nil {
-		return store.Preferences{}, err
+		return domain.Preferences{}, err
 	}
 	return p, c.store.SetUserPreferences(ctx, u.ID, p)
 }
 
 // confirmedUser is the current user, once they re-entered their password:
 // a stolen session alone can't change how the account signs in.
-func (c *Core) confirmedUser(ctx context.Context, password string) (store.User, error) {
+func (c *Core) confirmedUser(ctx context.Context, password string) (domain.User, error) {
 	u, err := c.currentUser(ctx)
 	if err != nil {
-		return store.User{}, err
+		return domain.User{}, err
 	}
 	if u.PasswordHash == "" {
 		if !c.confirmed(ctx) {
-			return store.User{}, ErrConfirmFirst
+			return domain.User{}, ErrConfirmFirst
 		}
 		return u, nil
 	}
 	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) != nil {
-		return store.User{}, ErrWrongPassword
+		return domain.User{}, ErrWrongPassword
 	}
 	return u, nil
 }
@@ -214,7 +214,7 @@ func (c *Core) Account(ctx context.Context) (Account, error) {
 	acc := Account{Username: u.Username, TOTPEnabled: u.TOTPSecret != "", RecoveryCodes: n, Passkeys: ps, SSO: ids, SSOProviders: c.SSOButtons(ctx), SSORequired: c.SSORequired(ctx),
 		HasPassword: u.PasswordHash != "", Confirmed: c.confirmed(ctx),
 		Role: u.Role, Features: u.Features, Grants: map[string][]string{}}
-	if u.Role != store.RoleAdmin {
+	if u.Role != domain.RoleAdmin {
 		v, err := c.userView(ctx, u)
 		if err != nil {
 			return Account{}, err

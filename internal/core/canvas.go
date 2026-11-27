@@ -6,7 +6,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // The map canvas lays nodes out by itself; where someone drags one is kept
@@ -106,7 +106,7 @@ func (c *Core) SaveCanvasLayout(ctx context.Context, positions map[string]Point)
 	if err != nil {
 		return err
 	}
-	ps := make([]store.CanvasPosition, 0, len(positions))
+	ps := make([]domain.CanvasPosition, 0, len(positions))
 	for node, p := range positions {
 		if !knownNode(known, node) {
 			return fmt.Errorf("%w: unknown node %q", ErrInvalid, node)
@@ -114,7 +114,7 @@ func (c *Core) SaveCanvasLayout(ctx context.Context, positions map[string]Point)
 		if !finite(p.X) || !finite(p.Y) || math.Abs(p.X) > 1e6 || math.Abs(p.Y) > 1e6 {
 			return fmt.Errorf("%w: position of %s out of range", ErrInvalid, node)
 		}
-		ps = append(ps, store.CanvasPosition{Node: node, X: math.Round(p.X), Y: math.Round(p.Y)})
+		ps = append(ps, domain.CanvasPosition{Node: node, X: math.Round(p.X), Y: math.Round(p.Y)})
 	}
 	stale, err := c.staleCanvasNodes(ctx, known)
 	if err != nil {

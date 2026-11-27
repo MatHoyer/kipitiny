@@ -16,7 +16,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -70,7 +70,7 @@ func (c *Core) markActive(projectID string) {
 
 // setRunning records that a deployed service runs: neither stopped nor
 // asleep, and its project active as of now.
-func (c *Core) setRunning(ctx context.Context, svc store.Service) error {
+func (c *Core) setRunning(ctx context.Context, svc domain.Service) error {
 	if err := c.store.SetServiceStopped(ctx, svc.ID, false); err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func (s *sleepState) forget(keep map[string]bool) {
 // sleepBlocker says why a project's services keep it from sleeping: only a
 // request through Traefik wakes it, so it needs an app with a domain, and
 // no traffic may go around Traefik.
-func sleepBlocker(svcs []store.Service) error {
+func sleepBlocker(svcs []domain.Service) error {
 	routed := false
 	for _, s := range svcs {
 		switch {
@@ -135,19 +135,19 @@ func sleepBlocker(svcs []store.Service) error {
 
 // checkSleepServer refuses sleep mode where nothing can wake the project: a
 // remote server reaches the manager's pages through KIPITINY_DOMAIN.
-func (c *Core) checkSleepServer(ctx context.Context, project store.Project) error {
+func (c *Core) checkSleepServer(ctx context.Context, project domain.Project) error {
 	sv, err := c.store.GetServer(ctx, project.ServerID)
 	if err != nil {
 		return err
 	}
-	if sv.Kind != store.ServerLocal && (c.cfg.Domain == "" || isLocalDomain(c.cfg.Domain)) {
+	if sv.Kind != domain.ServerLocal && (c.cfg.Domain == "" || isLocalDomain(c.cfg.Domain)) {
 		return fmt.Errorf("%w: on a remote server, sleep mode needs the manager's domain (KIPITINY_DOMAIN): requests wake the project through its pages", ErrInvalid)
 	}
 	return nil
 }
 
 // checkProjectSleep checks that a project may sleep with these services.
-func (c *Core) checkProjectSleep(ctx context.Context, project store.Project, svcs []store.Service) error {
+func (c *Core) checkProjectSleep(ctx context.Context, project domain.Project, svcs []domain.Service) error {
 	if s := project.SleepAfterSeconds; s < minSleepAfterSeconds || s > maxSleepAfterSeconds {
 		return fmt.Errorf("%w: sleep after must be between %d minutes and %d days", ErrInvalid, minSleepAfterSeconds/60, maxSleepAfterSeconds/86400)
 	}
@@ -160,28 +160,28 @@ func (c *Core) checkProjectSleep(ctx context.Context, project store.Project, svc
 // SetProjectSleep sets a project's sleep mode: after sleepAfterSeconds
 // without a request to its apps, every service stops, databases too, until
 // the next request. 0 turns it off, waking the project.
-func (c *Core) SetProjectSleep(ctx context.Context, projectID string, sleepAfterSeconds int) (store.Project, error) {
+func (c *Core) SetProjectSleep(ctx context.Context, projectID string, sleepAfterSeconds int) (domain.Project, error) {
 	p, err := c.store.GetProject(ctx, projectID)
 	if err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	p.SleepAfterSeconds = sleepAfterSeconds
 	if sleepAfterSeconds != 0 {
 		svcs, err := c.store.ListServices(ctx, projectID)
 		if err != nil {
-			return store.Project{}, err
+			return domain.Project{}, err
 		}
 		if err := c.checkProjectSleep(ctx, p, svcs); err != nil {
-			return store.Project{}, err
+			return domain.Project{}, err
 		}
 	}
 	if err := c.store.SetProjectSleep(ctx, projectID, sleepAfterSeconds); err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	c.markActive(projectID) // the idle time counts from now
 	if sleepAfterSeconds == 0 {
 		if err := c.wakeProject(ctx, projectID); err != nil {
-			return store.Project{}, err
+			return domain.Project{}, err
 		}
 	}
 	return c.GetProject(ctx, projectID)
@@ -218,11 +218,11 @@ func (c *Core) sleepIdle(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	svcs := map[string][]store.Service{}
+	svcs := map[string][]domain.Service{}
 	for _, s := range all {
 		svcs[s.ProjectID] = append(svcs[s.ProjectID], s)
 	}
-	byServer := map[string][]store.Project{}
+	byServer := map[string][]domain.Project{}
 	keep := map[string]bool{}
 	for _, p := range projects {
 		if p.SleepAfterSeconds == 0 || sleepBlocker(svcs[p.ID]) != nil {
@@ -299,7 +299,7 @@ func (c *Core) putToSleep(ctx context.Context, projectID string) error {
 	if err := c.store.SetProjectSleeping(ctx, projectID, true); err != nil {
 		return err
 	}
-	slices.SortStableFunc(svcs, func(a, b store.Service) int { return cmpBool(a.Kind.IsDatabase(), b.Kind.IsDatabase()) })
+	slices.SortStableFunc(svcs, func(a, b domain.Service) int { return cmpBool(a.Kind.IsDatabase(), b.Kind.IsDatabase()) })
 	for _, svc := range svcs {
 		if svc.Stopped || svc.CurrentDeploymentID == "" {
 			continue
@@ -341,7 +341,7 @@ const coldStart = 2 * time.Minute
 // starting reports whether svc's project is asleep or was woken less than
 // coldStart ago, waking it in the background when it sleeps: a visitor gets
 // the starting page. Maintenance mode wins: nothing wakes.
-func (c *Core) starting(svc store.Service, maintenance bool) bool {
+func (c *Core) starting(svc domain.Service, maintenance bool) bool {
 	if svc.Stopped || maintenance {
 		return false
 	}
@@ -374,7 +374,7 @@ func (c *Core) wakeProject(ctx context.Context, projectID string) error {
 	if err != nil {
 		return err
 	}
-	svcs = slices.DeleteFunc(svcs, func(s store.Service) bool { return !s.Sleeping })
+	svcs = slices.DeleteFunc(svcs, func(s domain.Service) bool { return !s.Sleeping })
 	if len(svcs) == 0 {
 		return nil
 	}
@@ -415,7 +415,7 @@ func (c *Core) wakeProject(ctx context.Context, projectID string) error {
 }
 
 // wakeFor wakes svc's project when svc sleeps, so its containers run.
-func (c *Core) wakeFor(ctx context.Context, svc store.Service) error {
+func (c *Core) wakeFor(ctx context.Context, svc domain.Service) error {
 	cur, err := c.store.GetService(ctx, svc.ID)
 	if err != nil || !cur.Sleeping {
 		return err

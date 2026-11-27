@@ -19,8 +19,8 @@ import (
 	"github.com/moby/moby/api/types/container"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Volume files: a service's volumes browsed through a volume helper (see
@@ -130,15 +130,15 @@ func (v fileVolume) display(abs string) string {
 
 // fileVolumes lists what can be browsed: a database's data volume, or an
 // app's volumes.
-func fileVolumes(svc store.Service) []fileVolume {
+func fileVolumes(svc domain.Service) []fileVolume {
 	switch svc.Kind {
-	case store.ServiceKindPostgres:
+	case domain.ServiceKindPostgres:
 		return []fileVolume{{name: dataVolumeName, mountPath: pgVolumeMount}}
-	case store.ServiceKindRedis:
+	case domain.ServiceKindRedis:
 		return []fileVolume{{name: dataVolumeName, mountPath: redisVolumeMount}}
-	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+	case domain.ServiceKindMySQL, domain.ServiceKindMariaDB:
 		return []fileVolume{{name: dataVolumeName, mountPath: mysqlVolumeMount}}
-	case store.ServiceKindMongoDB:
+	case domain.ServiceKindMongoDB:
 		return []fileVolume{{name: dataVolumeName, mountPath: mongoVolumeMount}}
 	}
 	vols := make([]fileVolume, len(svc.Volumes))
@@ -149,14 +149,14 @@ func fileVolumes(svc store.Service) []fileVolume {
 }
 
 // filesReadOnly reports whether svc's volumes are browsed read-only.
-func filesReadOnly(svc store.Service) bool {
+func filesReadOnly(svc domain.Service) bool {
 	return svc.Kind.IsDatabase()
 }
 
 // volumePath splits p ("<volume>/<path>") into the volume and the absolute
 // path in the helper, or in the container for "@container/<path>". "" is the
 // root, where the volumes are listed.
-func volumePath(svc store.Service, p string) (vol fileVolume, abs string, err error) {
+func volumePath(svc domain.Service, p string) (vol fileVolume, abs string, err error) {
 	if strings.HasPrefix(p, "/") || strings.ContainsRune(p, 0) {
 		return vol, "", fmt.Errorf("%w: path %q must be relative to the volumes", ErrInvalid, p)
 	}
@@ -181,7 +181,7 @@ func volumePath(svc store.Service, p string) (vol fileVolume, abs string, err er
 	}
 	i := slices.IndexFunc(fileVolumes(svc), func(v fileVolume) bool { return v.name == segs[0] })
 	if i < 0 {
-		return vol, "", fmt.Errorf("volume %q of %s: %w", segs[0], svc.Name, store.ErrNotFound)
+		return vol, "", fmt.Errorf("volume %q of %s: %w", segs[0], svc.Name, domain.ErrNotFound)
 	}
 	return fileVolumes(svc)[i], helperVolumeRoot + "/" + strings.Join(segs, "/"), nil
 }
@@ -406,15 +406,15 @@ func filesError(p string, err error) error {
 	}
 	switch ee.ExitCode {
 	case filesExitNotFound:
-		return fmt.Errorf("%s: %w", p, store.ErrNotFound)
+		return fmt.Errorf("%s: %w", p, domain.ErrNotFound)
 	case filesExitOutside:
 		return fmt.Errorf("%w: %s leads outside its volume", ErrInvalid, p)
 	case filesExitKind:
 		return fmt.Errorf("%w: %s is not the expected kind of entry (file or folder)", ErrInvalid, p)
 	case filesExitExists:
-		return fmt.Errorf("%w: %s already exists", store.ErrConflict, p)
+		return fmt.Errorf("%w: %s already exists", domain.ErrConflict, p)
 	case filesExitChanged:
-		return fmt.Errorf("%w: %s changed since it was read", store.ErrConflict, p)
+		return fmt.Errorf("%w: %s changed since it was read", domain.ErrConflict, p)
 	case 126, 127: // only in a container: its image lacks sh or a tool
 		return fmt.Errorf("%w: the container's image lacks a shell or the tools to browse files (sh, stat, realpath, cat): use a volume", ErrInvalid)
 	}
@@ -515,13 +515,13 @@ type filesHelper struct {
 // filesExec runs cmd where vol's files are, and hands its stdout to read:
 // in svc's helper for a volume (started if needed; one removed behind the
 // manager's back is started again once), or as root in the container.
-func (c *Core) filesExec(ctx context.Context, svc store.Service, vol fileVolume, cmd []string, read func(io.Reader) error) error {
+func (c *Core) filesExec(ctx context.Context, svc domain.Service, vol fileVolume, cmd []string, read func(io.Reader) error) error {
 	return c.filesExecIn(ctx, svc, vol, docker.ExecOptions{Cmd: cmd}, read)
 }
 
 // filesExecIn is filesExec with stdin; then the helper isn't retried, since
 // stdin may be partly consumed.
-func (c *Core) filesExecIn(ctx context.Context, svc store.Service, vol fileVolume, opts docker.ExecOptions, read func(io.Reader) error) error {
+func (c *Core) filesExecIn(ctx context.Context, svc domain.Service, vol fileVolume, opts docker.ExecOptions, read func(io.Reader) error) error {
 	if vol.container {
 		id, err := c.filesContainer(ctx, svc, vol.name)
 		if err != nil {
@@ -536,7 +536,7 @@ func (c *Core) filesExecIn(ctx context.Context, svc store.Service, vol fileVolum
 // helperExec runs opts in svc's helper (the SQLite one if sqlite), retried
 // once in a new helper if it was removed behind the manager's back, unless
 // stdin can't be rewound.
-func (c *Core) helperExec(ctx context.Context, svc store.Service, sqlite bool, opts docker.ExecOptions, read func(io.Reader) error) error {
+func (c *Core) helperExec(ctx context.Context, svc domain.Service, sqlite bool, opts docker.ExecOptions, read func(io.Reader) error) error {
 	for attempt := 0; ; attempt++ {
 		h, id, err := c.acquireFilesHelper(ctx, svc, sqlite)
 		if err != nil {
@@ -599,7 +599,7 @@ func filesStream(ctx context.Context, dk *docker.Client, id string, opts docker.
 
 // filesContainer resolves "@container" (the first running replica of the
 // serving deployment) or "@<container ID>" to a running container of svc.
-func (c *Core) filesContainer(ctx context.Context, svc store.Service, ref string) (string, error) {
+func (c *Core) filesContainer(ctx context.Context, svc domain.Service, ref string) (string, error) {
 	cts, err := c.activeContainers(ctx, svc)
 	if ref != FilesContainer {
 		cts, err = c.serviceContainers(ctx, svc)
@@ -624,7 +624,7 @@ func (c *Core) filesContainer(ctx context.Context, svc store.Service, ref string
 
 // acquireFilesHelper returns svc's running helper (the SQLite one if
 // sqlite), marked busy until releaseFilesHelper.
-func (c *Core) acquireFilesHelper(ctx context.Context, svc store.Service, sqlite bool) (*filesHelper, string, error) {
+func (c *Core) acquireFilesHelper(ctx context.Context, svc domain.Service, sqlite bool) (*filesHelper, string, error) {
 	vols := fileVolumes(svc)
 	if len(vols) == 0 {
 		return nil, "", fmt.Errorf("%w: %s has no volumes", ErrInvalid, svc.Name)
@@ -661,7 +661,7 @@ func (c *Core) acquireFilesHelper(ctx context.Context, svc store.Service, sqlite
 	}
 	if h.id == "" {
 		dk := c.dockerFor(svc.ServerID)
-		mounts := helperMounts(svc, names, helperVolumeRoot, filesReadOnly(svc))
+		mounts := helperMounts(svc, names, filesReadOnly(svc))
 		var id string
 		var err error
 		if sqlite {

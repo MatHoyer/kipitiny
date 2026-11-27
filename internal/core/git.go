@@ -28,9 +28,9 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/gitprovider"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // A project linked to a git repository follows the compose file there: the
@@ -74,7 +74,7 @@ type GitInput struct {
 
 // GitStatus is a project's link.
 type GitStatus struct {
-	store.ProjectGit
+	domain.ProjectGit
 	// WebhookPath receives push webhooks (POST, the secret as GitHub HMAC,
 	// GitLab token or bearer token).
 	WebhookPath string `json:"webhookPath"`
@@ -96,7 +96,7 @@ func (c *Core) checkGitOwned(ctx context.Context, projectID string) error {
 		return nil
 	}
 	if _, err := c.store.GetProjectGit(ctx, projectID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.Is(err, domain.ErrNotFound) {
 			return nil
 		}
 		return err
@@ -115,7 +115,7 @@ func (c *Core) GetProjectGit(ctx context.Context, projectID string) (GitStatus, 
 	}
 	st := GitStatus{ProjectGit: g, WebhookPath: "/api/hooks/projects/" + projectID, Drift: []string{}}
 	for _, s := range svcs {
-		if want, ok := g.Applied[s.Name]; ok && want != "" && s.Kind == store.ServiceKindApp && s.Image != want {
+		if want, ok := g.Applied[s.Name]; ok && want != "" && s.Kind == domain.ServiceKindApp && s.Image != want {
 			st.Drift = append(st.Drift, s.Name)
 		}
 	}
@@ -156,20 +156,20 @@ func (c *Core) PreviewProjectGit(ctx context.Context, projectID string, in GitIn
 }
 
 // gitFromInput is the link in describes, checked.
-func (c *Core) gitFromInput(ctx context.Context, projectID string, in GitInput) (store.ProjectGit, error) {
+func (c *Core) gitFromInput(ctx context.Context, projectID string, in GitInput) (domain.ProjectGit, error) {
 	p, err := c.store.GetProject(ctx, projectID)
 	if err != nil {
-		return store.ProjectGit{}, err
+		return domain.ProjectGit{}, err
 	}
 	if p.ParentID != "" {
 		// Its compose file is the parent's, read at the preview's branch.
-		return store.ProjectGit{}, fmt.Errorf("%w: a preview follows its parent's repository; link the parent instead", ErrInvalid)
+		return domain.ProjectGit{}, fmt.Errorf("%w: a preview follows its parent's repository; link the parent instead", ErrInvalid)
 	}
 	old, err := c.store.GetProjectGit(ctx, projectID)
-	if err != nil && !errors.Is(err, store.ErrNotFound) {
-		return store.ProjectGit{}, err
+	if err != nil && !errors.Is(err, domain.ErrNotFound) {
+		return domain.ProjectGit{}, err
 	}
-	g := store.ProjectGit{
+	g := domain.ProjectGit{
 		ProjectID:     projectID,
 		RepoURL:       strings.TrimSpace(in.RepoURL),
 		Branch:        strings.TrimSpace(in.Branch),
@@ -195,26 +195,26 @@ func (c *Core) gitFromInput(ctx context.Context, projectID string, in GitInput) 
 		g.WebhookSecret = randomToken(24)
 	}
 	if err := validateGit(g); err != nil {
-		return store.ProjectGit{}, err
+		return domain.ProjectGit{}, err
 	}
 	if err := checkRepoHost(ctx, g); err != nil {
-		return store.ProjectGit{}, err
+		return domain.ProjectGit{}, err
 	}
 	if g.ProviderID != "" {
 		p, err := c.store.GetGitProvider(ctx, g.ProviderID)
-		if errors.Is(err, store.ErrNotFound) {
-			return store.ProjectGit{}, fmt.Errorf("%w: unknown git provider", ErrInvalid)
+		if errors.Is(err, domain.ErrNotFound) {
+			return domain.ProjectGit{}, fmt.Errorf("%w: unknown git provider", ErrInvalid)
 		} else if err != nil {
-			return store.ProjectGit{}, err
+			return domain.ProjectGit{}, err
 		}
 		if err := checkProviderRepo(p, g.RepoURL); err != nil {
-			return store.ProjectGit{}, err
+			return domain.ProjectGit{}, err
 		}
 	}
 	return g, nil
 }
 
-func validateGit(g store.ProjectGit) error {
+func validateGit(g domain.ProjectGit) error {
 	u, err := url.Parse(g.RepoURL)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 		return fmt.Errorf("%w: repository must be an http(s) URL", ErrInvalid)
@@ -239,7 +239,7 @@ func validateGit(g store.ProjectGit) error {
 // aren't meant to be reachable from outside (other containers, the cloud
 // metadata endpoint). A git provider's repositories are on the host an
 // admin set up, and admins may link anything.
-func checkRepoHost(ctx context.Context, g store.ProjectGit) error {
+func checkRepoHost(ctx context.Context, g domain.ProjectGit) error {
 	a, ok := ActorFrom(ctx)
 	if !ok || a.Admin() || g.ProviderID != "" {
 		return nil
@@ -278,7 +278,7 @@ func (c *Core) SyncProjectGit(ctx context.Context, projectID string, dryRun bool
 
 // syncGit applies the branch's compose file. Unless forced, it does
 // nothing while the branch is at the commit last applied.
-func (c *Core) syncGit(ctx context.Context, g store.ProjectGit, force, dryRun bool) (ComposePlan, error) {
+func (c *Core) syncGit(ctx context.Context, g domain.ProjectGit, force, dryRun bool) (ComposePlan, error) {
 	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
 	// The address is checked again: the name may resolve elsewhere now.
@@ -334,12 +334,12 @@ func (c *Core) syncGit(ctx context.Context, g store.ProjectGit, force, dryRun bo
 // asLinker runs a sync without an actor (the poll loop, a webhook) as the
 // user who linked the repository, within the restriction of the token that
 // did if it was a restricted one.
-func (c *Core) asLinker(ctx context.Context, g store.ProjectGit) (context.Context, error) {
+func (c *Core) asLinker(ctx context.Context, g domain.ProjectGit) (context.Context, error) {
 	if _, ok := ActorFrom(ctx); ok || g.LinkedBy == "" {
 		return ctx, nil
 	}
 	u, err := c.store.GetUser(ctx, g.LinkedBy)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, domain.ErrNotFound) {
 		return ctx, fmt.Errorf("%w: the user who linked this repository was removed; link it again", ErrForbidden)
 	} else if err != nil {
 		return ctx, err
@@ -353,7 +353,7 @@ func (c *Core) asLinker(ctx context.Context, g store.ProjectGit) (context.Contex
 		if err != nil {
 			return ctx, err
 		}
-		i := slices.IndexFunc(ts, func(t store.APIToken) bool { return t.ID == g.LinkedToken })
+		i := slices.IndexFunc(ts, func(t domain.APIToken) bool { return t.ID == g.LinkedToken })
 		if i < 0 {
 			return ctx, fmt.Errorf("%w: the token that linked this repository was removed; link it again", ErrForbidden)
 		}
@@ -368,7 +368,7 @@ func (c *Core) asLinker(ctx context.Context, g store.ProjectGit) (context.Contex
 
 // gitSynced records a sync's outcome and notifies changes of state; it
 // returns err.
-func (c *Core) gitSynced(g store.ProjectGit, commit string, plan ComposePlan, images map[string]string, err error) error {
+func (c *Core) gitSynced(g domain.ProjectGit, commit string, plan ComposePlan, images map[string]string, err error) error {
 	ctx := context.WithoutCancel(c.bg)
 	prevErr := g.LastError
 	now := time.Now()
@@ -382,7 +382,7 @@ func (c *Core) gitSynced(g store.ProjectGit, commit string, plan ComposePlan, im
 			g.Applied = images
 		}
 	}
-	if serr := c.store.SetProjectGitSync(ctx, g); serr != nil && !errors.Is(serr, store.ErrNotFound) {
+	if serr := c.store.SetProjectGitSync(ctx, g); serr != nil && !errors.Is(serr, domain.ErrNotFound) {
 		c.log.Error("cannot record git sync", "project", g.ProjectID, "err", serr)
 	}
 	project, perr := c.store.GetProject(ctx, g.ProjectID)
@@ -437,7 +437,7 @@ func shortSHA(s string) string {
 
 // gitAuth is the credential reading the repository: its provider's token
 // (none for a public repository).
-func (c *Core) gitAuth(ctx context.Context, g store.ProjectGit) (transport.AuthMethod, error) {
+func (c *Core) gitAuth(ctx context.Context, g domain.ProjectGit) (transport.AuthMethod, error) {
 	if g.ProviderID == "" {
 		return nil, nil
 	}
@@ -452,7 +452,7 @@ func (c *Core) gitAuth(ctx context.Context, g store.ProjectGit) (transport.AuthM
 }
 
 // gitAccessError explains a refused repository.
-func gitAccessError(g store.ProjectGit, op string, err error) error {
+func gitAccessError(g domain.ProjectGit, op string, err error) error {
 	if errors.Is(err, transport.ErrAuthenticationRequired) || errors.Is(err, transport.ErrRepositoryNotFound) ||
 		errors.Is(err, transport.ErrAuthorizationFailed) {
 		if g.ProviderID == "" {
@@ -464,7 +464,7 @@ func gitAccessError(g store.ProjectGit, op string, err error) error {
 }
 
 // gitHead returns the commit the branch points at, without fetching.
-func (c *Core) gitHead(ctx context.Context, g store.ProjectGit) (string, error) {
+func (c *Core) gitHead(ctx context.Context, g domain.ProjectGit) (string, error) {
 	auth, err := c.gitAuth(ctx, g)
 	if err != nil {
 		return "", err
@@ -485,7 +485,7 @@ func (c *Core) gitHead(ctx context.Context, g store.ProjectGit) (string, error) 
 
 // gitReadFile reads the compose file of the branch: its content and the
 // commit.
-func (c *Core) gitReadFile(ctx context.Context, g store.ProjectGit) ([]byte, string, error) {
+func (c *Core) gitReadFile(ctx context.Context, g domain.ProjectGit) ([]byte, string, error) {
 	var data []byte
 	var commit string
 	err := c.withGitFile(ctx, g, func(d []byte, cm string, _ repoFiles) error {
@@ -497,7 +497,7 @@ func (c *Core) gitReadFile(ctx context.Context, g store.ProjectGit) ([]byte, str
 
 // repoFiles reads a path of the repository relative to the compose file
 // (compose.Vars.Files).
-type repoFiles = func(rel string) ([]store.ServiceFile, error)
+type repoFiles = func(rel string) ([]domain.ServiceFile, error)
 
 // withGitFile shallow-clones the branch into a temporary directory (on
 // disk: memory stays flat whatever the repository's size) and calls fn with
@@ -507,7 +507,7 @@ type repoFiles = func(rel string) ([]store.ServiceFile, error)
 // Unpacking holds the whole commit's files in memory for a moment. Go would
 // keep that memory for minutes before returning it, which shows as the
 // manager's usage: syncs are rare, so it goes back to the OS right away.
-func (c *Core) withGitFile(ctx context.Context, g store.ProjectGit, fn func(data []byte, commit string, files repoFiles) error) error {
+func (c *Core) withGitFile(ctx context.Context, g domain.ProjectGit, fn func(data []byte, commit string, files repoFiles) error) error {
 	auth, err := c.gitAuth(ctx, g)
 	if err != nil {
 		return err
@@ -556,35 +556,35 @@ func (c *Core) withGitFile(ctx context.Context, g store.ProjectGit, fn func(data
 	if err != nil {
 		return err
 	}
-	return fn([]byte(data), head.Hash().String(), func(rel string) ([]store.ServiceFile, error) {
+	return fn([]byte(data), head.Hash().String(), func(rel string) ([]domain.ServiceFile, error) {
 		return commitFiles(commit, path.Dir(g.Path), rel, g.Branch)
 	})
 }
 
 // commitFiles reads rel, relative to dir, from a commit: a file (Path "")
 // or a directory's files, within a service's limits.
-func commitFiles(commit *object.Commit, dir, rel, branch string) ([]store.ServiceFile, error) {
+func commitFiles(commit *object.Commit, dir, rel, branch string) ([]domain.ServiceFile, error) {
 	p := path.Clean(path.Join(dir, rel))
 	if p == ".." || strings.HasPrefix(p, "../") || path.IsAbs(rel) {
 		return nil, fmt.Errorf("outside the repository")
 	}
-	read := func(f *object.File, name string) (store.ServiceFile, error) {
+	read := func(f *object.File, name string) (domain.ServiceFile, error) {
 		if f.Mode == filemode.Symlink || f.Mode == filemode.Submodule {
-			return store.ServiceFile{}, fmt.Errorf("%s is a symlink or submodule", path.Join(rel, name))
+			return domain.ServiceFile{}, fmt.Errorf("%s is a symlink or submodule", path.Join(rel, name))
 		}
 		if f.Size > maxServiceFileBytes {
-			return store.ServiceFile{}, fmt.Errorf("%s is larger than %d MB", path.Join(rel, name), maxServiceFileBytes>>20)
+			return domain.ServiceFile{}, fmt.Errorf("%s is larger than %d MB", path.Join(rel, name), maxServiceFileBytes>>20)
 		}
 		content, err := f.Contents()
 		mode := int64(0o644)
 		if f.Mode == filemode.Executable {
 			mode = 0o755
 		}
-		return store.ServiceFile{Path: name, Content: []byte(content), Mode: mode}, err
+		return domain.ServiceFile{Path: name, Content: []byte(content), Mode: mode}, err
 	}
 	if f, err := commit.File(p); err == nil {
 		sf, err := read(f, "")
-		return []store.ServiceFile{sf}, err
+		return []domain.ServiceFile{sf}, err
 	}
 	tree, err := commit.Tree()
 	if err == nil && p != "." {
@@ -593,7 +593,7 @@ func commitFiles(commit *object.Commit, dir, rel, branch string) ([]store.Servic
 	if err != nil {
 		return nil, fmt.Errorf("not found on %s", branch)
 	}
-	var out []store.ServiceFile
+	var out []domain.ServiceFile
 	total := int64(0)
 	err = tree.Files().ForEach(func(f *object.File) error {
 		if total += f.Size; total > maxServiceFileBytes || len(out) >= maxServiceFiles {
@@ -647,7 +647,7 @@ func (c *Core) runGitSync(projectID string, force bool) {
 	c.syncLink(g, force)
 }
 
-func (c *Core) syncLink(g store.ProjectGit, force bool) {
+func (c *Core) syncLink(g domain.ProjectGit, force bool) {
 	if _, err := c.syncGit(c.bg, g, force, false); err != nil && c.bg.Err() == nil {
 		c.log.Warn("git sync failed", "project", g.ProjectID, "err", err)
 	}

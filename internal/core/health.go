@@ -9,8 +9,8 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // healthGrace is how long a service may have no healthy replica before it is
@@ -34,7 +34,7 @@ type svcHealth struct {
 // healthOf judges a deployed, running service from its containers: healthy
 // when a replica of the current deployment runs and passes its healthcheck
 // (or has none). judged is false when nothing is expected to run.
-func healthOf(svc store.Service, cts []container.Summary) (judged, healthy bool, detail string) {
+func healthOf(svc domain.Service, cts []container.Summary) (judged, healthy bool, detail string) {
 	if svc.CurrentDeploymentID == "" || svc.Stopped || svc.Sleeping {
 		return false, false, ""
 	}
@@ -86,7 +86,7 @@ func (h *svcHealth) observe(healthy bool, detail string, now time.Time) (down, u
 // trackHealth judges a service from the containers the reconciler listed and
 // notifies when it has had no healthy replica for healthGrace, then once it
 // recovers.
-func (c *Core) trackHealth(project store.Project, svc store.Service, cts []container.Summary, now time.Time) {
+func (c *Core) trackHealth(project domain.Project, svc domain.Service, cts []container.Summary, now time.Time) {
 	// A deploy, restart or restore is working on it: its own outcome is
 	// reported, and replicas come and go meanwhile.
 	unlock, err := c.lockServiceBackground(svc.ID)

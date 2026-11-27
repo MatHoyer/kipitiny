@@ -9,7 +9,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // TestTraefikImageUpgradeDocker checks a manager update that changes the
@@ -45,7 +45,7 @@ func TestTraefikImageUpgradeDocker(t *testing.T) {
 		Image: floating, DockerSocket: "/var/run/docker.sock", HTTPPort: "0", HTTPSPort: "0",
 	}})
 	c.pool = docker.NewPool(dk, c.connectServer)
-	sv, err := c.store.GetServer(ctx, store.LocalServerID)
+	sv, err := c.store.GetServer(ctx, domain.LocalServerID)
 	if err != nil {
 		t.Fatal(err)
 	}

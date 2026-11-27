@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // Edits from the data browser: the caller sends what changed, the manager
@@ -260,7 +260,7 @@ WHERE n.nspname = %s AND c.relname = %s;`, pgLiteral(schema), pgLiteral(table)),
 	}
 	switch kind {
 	case "":
-		return ChangeResult{}, fmt.Errorf("table %s.%s: %w", schema, table, store.ErrNotFound)
+		return ChangeResult{}, fmt.Errorf("table %s.%s: %w", schema, table, domain.ErrNotFound)
 	case "r", "p":
 	default:
 		return ChangeResult{}, fmt.Errorf("%w: %s.%s is a %s: only a table's rows can be edited", ErrInvalid, schema, table, pgRelKinds[kind])
@@ -330,7 +330,7 @@ var mysqlCheckRe = regexp.MustCompile(`ERROR 1242 \(21000\) at line (\d+)`)
 
 func (t dataTarget) mysqlApply(ctx context.Context, schema, table string, ch RowChanges, apply bool) (ChangeResult, error) {
 	if schema != "" && schema != t.db {
-		return ChangeResult{}, fmt.Errorf("table %s.%s: %w", schema, table, store.ErrNotFound)
+		return ChangeResult{}, fmt.Errorf("table %s.%s: %w", schema, table, domain.ErrNotFound)
 	}
 	var kind string
 	err := t.mysqlJSON(ctx, fmt.Sprintf("SELECT JSON_ARRAY(TABLE_TYPE) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s",
@@ -341,7 +341,7 @@ func (t dataTarget) mysqlApply(ctx context.Context, schema, table string, ch Row
 		return ChangeResult{}, err
 	}
 	if kind == "" {
-		return ChangeResult{}, fmt.Errorf("table %s.%s: %w", t.db, table, store.ErrNotFound)
+		return ChangeResult{}, fmt.Errorf("table %s.%s: %w", t.db, table, domain.ErrNotFound)
 	}
 	if k := mysqlTableKind(kind); k != "table" {
 		return ChangeResult{}, fmt.Errorf("%w: %s is a %s: only a table's rows can be edited", ErrInvalid, table, k)

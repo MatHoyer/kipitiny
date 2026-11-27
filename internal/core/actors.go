@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // ErrForbidden means the caller is authenticated but may not do that.
@@ -23,8 +23,8 @@ type Actor struct {
 	// UserID is the signed-in user's, or the token owner's.
 	UserID string `json:"-"`
 	// Role, Features and Grants are the user's (the token owner's).
-	Role     store.Role `json:"role"`
-	Features []string   `json:"-"`
+	Role     domain.Role `json:"role"`
+	Features []string    `json:"-"`
 	// Grants maps project IDs to a member's permissions; nil for admins.
 	Grants map[string][]string `json:"-"`
 	// Session is the hash of the session's token; empty for tokens.
@@ -58,7 +58,7 @@ func Authenticated(ctx context.Context) error {
 const tokenPrefix = "kpt_"
 
 type NewToken struct {
-	store.APIToken
+	domain.APIToken
 	// Token is shown once, at creation.
 	Token string `json:"token"`
 }
@@ -77,7 +77,7 @@ func (c *Core) CreateAPIToken(ctx context.Context, in TokenInput) (NewToken, err
 	if !ok || a.Kind != "user" {
 		return NewToken{}, ErrUnauthorized
 	}
-	t := store.APIToken{UserID: a.UserID}
+	t := domain.APIToken{UserID: a.UserID}
 	if err := c.setTokenAccess(ctx, a, &t, in); err != nil {
 		return NewToken{}, err
 	}
@@ -91,13 +91,13 @@ func (c *Core) CreateAPIToken(ctx context.Context, in TokenInput) (NewToken, err
 }
 
 // UpdateAPIToken renames a token and changes its access; a member only their own.
-func (c *Core) UpdateAPIToken(ctx context.Context, id string, in TokenInput) (store.APIToken, error) {
+func (c *Core) UpdateAPIToken(ctx context.Context, id string, in TokenInput) (domain.APIToken, error) {
 	a, t, err := c.ownToken(ctx, id)
 	if err != nil {
-		return store.APIToken{}, err
+		return domain.APIToken{}, err
 	}
 	if err := c.setTokenAccess(ctx, a, &t, in); err != nil {
-		return store.APIToken{}, err
+		return domain.APIToken{}, err
 	}
 	return c.store.UpdateAPIToken(ctx, t)
 }
@@ -118,25 +118,25 @@ func (c *Core) RollAPIToken(ctx context.Context, id string) (NewToken, error) {
 }
 
 // ownToken is token id, when the signed-in user may manage it.
-func (c *Core) ownToken(ctx context.Context, id string) (Actor, store.APIToken, error) {
+func (c *Core) ownToken(ctx context.Context, id string) (Actor, domain.APIToken, error) {
 	a, ok := ActorFrom(ctx)
 	if !ok || a.Kind != "user" {
-		return Actor{}, store.APIToken{}, ErrUnauthorized
+		return Actor{}, domain.APIToken{}, ErrUnauthorized
 	}
 	ts, err := c.ListAPITokens(ctx)
 	if err != nil {
-		return Actor{}, store.APIToken{}, err
+		return Actor{}, domain.APIToken{}, err
 	}
-	i := slices.IndexFunc(ts, func(t store.APIToken) bool { return t.ID == id })
+	i := slices.IndexFunc(ts, func(t domain.APIToken) bool { return t.ID == id })
 	if i < 0 {
-		return Actor{}, store.APIToken{}, fmt.Errorf("%w: token", store.ErrNotFound)
+		return Actor{}, domain.APIToken{}, fmt.Errorf("%w: token", domain.ErrNotFound)
 	}
 	return a, ts[i], nil
 }
 
 // setTokenAccess validates in and sets it on t: what a restricted token
 // gets stays within what a, its creator or editor, holds.
-func (c *Core) setTokenAccess(ctx context.Context, a Actor, t *store.APIToken, in TokenInput) error {
+func (c *Core) setTokenAccess(ctx context.Context, a Actor, t *domain.APIToken, in TokenInput) error {
 	name := strings.TrimSpace(in.Name)
 	if name == "" || len(name) > 60 {
 		return fmt.Errorf("%w: give the token a name (max 60 characters)", ErrInvalid)
@@ -145,7 +145,7 @@ func (c *Core) setTokenAccess(ctx context.Context, a Actor, t *store.APIToken, i
 	if !in.Restricted {
 		return nil
 	}
-	access, err := c.normalized(ctx, UserAccess{Role: store.RoleMember, Features: in.Features, Grants: in.Grants})
+	access, err := c.normalized(ctx, UserAccess{Role: domain.RoleMember, Features: in.Features, Grants: in.Grants})
 	if err != nil {
 		return err
 	}
@@ -166,7 +166,7 @@ func (c *Core) setTokenAccess(ctx context.Context, a Actor, t *store.APIToken, i
 }
 
 // ListAPITokens returns every token to an admin, a member's own to them.
-func (c *Core) ListAPITokens(ctx context.Context) ([]store.APIToken, error) {
+func (c *Core) ListAPITokens(ctx context.Context) ([]domain.APIToken, error) {
 	a, ok := ActorFrom(ctx)
 	if !ok {
 		return nil, ErrUnauthorized
@@ -183,8 +183,8 @@ func (c *Core) DeleteAPIToken(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if !slices.ContainsFunc(ts, func(t store.APIToken) bool { return t.ID == id }) {
-		return fmt.Errorf("%w: token", store.ErrNotFound)
+	if !slices.ContainsFunc(ts, func(t domain.APIToken) bool { return t.ID == id }) {
+		return fmt.Errorf("%w: token", domain.ErrNotFound)
 	}
 	return c.store.DeleteAPIToken(ctx, id)
 }
@@ -195,13 +195,13 @@ func (c *Core) AuthenticateToken(ctx context.Context, token string) (Actor, erro
 		return Actor{}, ErrUnauthorized
 	}
 	t, err := c.store.GetAPITokenByHash(ctx, hashToken(token))
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, domain.ErrNotFound) {
 		return Actor{}, ErrUnauthorized
 	}
 	if err != nil {
 		return Actor{}, err
 	}
-	a := Actor{Kind: "token", Name: t.Name, Role: store.RoleAdmin}
+	a := Actor{Kind: "token", Name: t.Name, Role: domain.RoleAdmin}
 	// Tokens made before they had owners, when only admins existed, act as one.
 	if t.UserID != "" {
 		u, err := c.store.GetUser(ctx, t.UserID)
@@ -222,13 +222,13 @@ func (c *Core) AuthenticateToken(ctx context.Context, token string) (Actor, erro
 // restricted narrows the owner's actor a to what token t was given: it acts
 // as a member holding what both have, so an owner losing a permission takes
 // it from the token too.
-func (c *Core) restricted(ctx context.Context, a Actor, t store.APIToken) (Actor, error) {
-	tok := Actor{Role: store.RoleMember, Grants: maps.Clone(t.Grants)}
+func (c *Core) restricted(ctx context.Context, a Actor, t domain.APIToken) (Actor, error) {
+	tok := Actor{Role: domain.RoleMember, Grants: maps.Clone(t.Grants)}
 	if err := c.withPreviews(ctx, tok.Grants); err != nil {
 		return Actor{}, err
 	}
 	out := a
-	out.Role, out.Features, out.Grants, out.TokenID = store.RoleMember, []string{}, map[string][]string{}, t.ID
+	out.Role, out.Features, out.Grants, out.TokenID = domain.RoleMember, []string{}, map[string][]string{}, t.ID
 	for _, f := range t.Features {
 		if a.Has(Feature(f)) {
 			out.Features = append(out.Features, f)
@@ -254,7 +254,7 @@ const auditRetention = 90 * 24 * time.Hour
 // logged, never returned: auditing must not break the action.
 func (c *Core) Audit(ctx context.Context, action, target string, status int, actionErr error) {
 	a, _ := ActorFrom(ctx)
-	e := store.AuditEntry{Actor: a.String(), Action: action, Target: target, Status: status}
+	e := domain.AuditEntry{Actor: a.String(), Action: action, Target: target, Status: status}
 	if actionErr != nil {
 		e.Error = actionErr.Error()
 	}
@@ -263,7 +263,7 @@ func (c *Core) Audit(ctx context.Context, action, target string, status int, act
 	}
 }
 
-func (c *Core) ListAudit(ctx context.Context, limit int) ([]store.AuditEntry, error) {
+func (c *Core) ListAudit(ctx context.Context, limit int) ([]domain.AuditEntry, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 200
 	}
@@ -277,12 +277,12 @@ func (c *Core) pruneAudit(ctx context.Context) {
 }
 
 // ResolveService finds a service by ID or by "project/service" name.
-func (c *Core) ResolveService(ctx context.Context, ref string) (store.Service, error) {
+func (c *Core) ResolveService(ctx context.Context, ref string) (domain.Service, error) {
 	ref = strings.TrimSpace(ref)
 	if projectName, name, ok := strings.Cut(ref, "/"); ok {
 		projects, err := c.store.ListProjects(ctx)
 		if err != nil {
-			return store.Service{}, err
+			return domain.Service{}, err
 		}
 		for _, p := range projects {
 			if p.Name != projectName {
@@ -290,7 +290,7 @@ func (c *Core) ResolveService(ctx context.Context, ref string) (store.Service, e
 			}
 			svcs, err := c.store.ListServices(ctx, p.ID)
 			if err != nil {
-				return store.Service{}, err
+				return domain.Service{}, err
 			}
 			for _, s := range svcs {
 				if s.Name == name {
@@ -298,7 +298,7 @@ func (c *Core) ResolveService(ctx context.Context, ref string) (store.Service, e
 				}
 			}
 		}
-		return store.Service{}, fmt.Errorf("%w: no service %q (use project/service)", store.ErrNotFound, ref)
+		return domain.Service{}, fmt.Errorf("%w: no service %q (use project/service)", domain.ErrNotFound, ref)
 	}
 	return c.store.GetService(ctx, ref)
 }

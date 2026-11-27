@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // TestPostGISDocker backs up a PostGIS database and checks that restore tests
@@ -16,8 +16,8 @@ import (
 func TestPostGISDocker(t *testing.T) {
 	const image = "postgis/postgis:17-3.6-alpine"
 	// dumpTestDB's database runs the default image, without PostGIS.
-	c, ctx, plain, _ := dumpTestDB(t, store.ServiceKindPostgres)
-	gis, gisExec := startTestDB(t, c, ctx, plain.ProjectID, ServiceInput{Name: "gis", Kind: store.ServiceKindPostgres, Image: image})
+	c, ctx, plain, _ := dumpTestDB(t, domain.ServiceKindPostgres)
+	gis, gisExec := startTestDB(ctx, t, c, plain.ProjectID, ServiceInput{Name: "gis", Kind: domain.ServiceKindPostgres, Image: image})
 
 	psql := func(sql string) string {
 		return gisExec("psql -U " + gis.Env[pgUser] + " -d " + gis.Env[pgDatabase] + " -tAc \"" + sql + "\"")
@@ -33,8 +33,8 @@ func TestPostGISDocker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b = waitBackup(t, c, b.ID, func(b store.Backup) bool { return b.Status != store.OpRunning })
-	if b.Status != store.OpSucceeded || b.Image != image || !slices.Contains(b.Extensions, "postgis") || slices.Contains(b.Extensions, "plpgsql") {
+	b = waitBackup(t, c, b.ID, func(b domain.Backup) bool { return b.Status != domain.OpRunning })
+	if b.Status != domain.OpSucceeded || b.Image != image || !slices.Contains(b.Extensions, "postgis") || slices.Contains(b.Extensions, "plpgsql") {
 		t.Fatalf("backup = %+v", b)
 	}
 
@@ -43,8 +43,8 @@ func TestPostGISDocker(t *testing.T) {
 		if _, err := c.VerifyBackup(ctx, b.ID); err != nil {
 			t.Fatal(err)
 		}
-		v := waitBackup(t, c, b.ID, func(b store.Backup) bool { return b.VerifyStatus != store.OpRunning })
-		if v.VerifyStatus != store.OpSucceeded || v.VerifyDetails.Rows < 1 {
+		v := waitBackup(t, c, b.ID, func(b domain.Backup) bool { return b.VerifyStatus != domain.OpRunning })
+		if v.VerifyStatus != domain.OpSucceeded || v.VerifyDetails.Rows < 1 {
 			t.Fatalf("verification = %+v", v.Verification)
 		}
 	}
@@ -68,8 +68,8 @@ func TestPostGISDocker(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if rs[0].ID == r.ID && rs[0].Status != store.OpRunning {
-			if rs[0].Status != store.OpSucceeded {
+		if rs[0].ID == r.ID && rs[0].Status != domain.OpRunning {
+			if rs[0].Status != domain.OpSucceeded {
 				t.Fatalf("restore = %+v", rs[0])
 			}
 			break

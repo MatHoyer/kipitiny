@@ -10,7 +10,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const sharedFile = `
@@ -35,15 +35,15 @@ services:
 func TestSharedDomain(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{Traefik: config.Traefik{Enabled: true, HTTPPort: "80", HTTPSPort: "443"}})
-	sv, _ := c.store.GetServer(ctx, store.LocalServerID)
+	sv, _ := c.store.GetServer(ctx, domain.LocalServerID)
 	sv.PublicIP = "203.0.113.7"
 	if _, err := c.store.UpdateServer(ctx, sv); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.store.CreateDomain(ctx, store.Domain{Name: "example.com", Proxied: true}); err != nil {
+	if _, err := c.store.CreateDomain(ctx, domain.Domain{Name: "example.com", Proxied: true}); err != nil {
 		t.Fatal(err)
 	}
-	p, _ := c.store.CreateProject(ctx, store.Project{Name: "nb", ServerID: store.LocalServerID})
+	p, _ := c.store.CreateProject(ctx, domain.Project{Name: "nb", ServerID: domain.LocalServerID})
 	if _, err := c.ApplyCompose(ctx, p.ID, []byte(sharedFile), ApplyOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -91,11 +91,11 @@ func TestSharedDomain(t *testing.T) {
 		t.Errorf("third catch-all: %v", err)
 	}
 	if _, err := c.CreateService(ctx, p.ID, ServiceInput{Name: "web", Image: "nginx", Domain: "nb.example.com", Port: 80,
-		Routes: []store.Route{{Paths: []string{"/web"}}}}); err != nil {
+		Routes: []domain.Route{{Paths: []string{"/web"}}}}); err != nil {
 		t.Errorf("another path: %v", err)
 	}
-	other, _ := c.store.CreateProject(ctx, store.Project{Name: "other", ServerID: store.LocalServerID})
-	_, err = c.CreateService(ctx, other.ID, ServiceInput{Name: "x", Image: "nginx", Domain: "nb.example.com", Port: 80, Routes: []store.Route{{Paths: []string{"/x"}}}})
+	other, _ := c.store.CreateProject(ctx, domain.Project{Name: "other", ServerID: domain.LocalServerID})
+	_, err = c.CreateService(ctx, other.ID, ServiceInput{Name: "x", Image: "nginx", Domain: "nb.example.com", Port: 80, Routes: []domain.Route{{Paths: []string{"/x"}}}})
 	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "in project nb") {
 		t.Errorf("another project: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestSharedDomainTunnel(t *testing.T) {
 	ctx := context.Background()
 	tok := base64.StdEncoding.EncodeToString([]byte(`{"a":"acc","t":"tid","s":"x"}`))
 	c := newTestCore(t, config.Config{Tunnel: config.Tunnel{Token: tok}, Traefik: config.Traefik{Enabled: true, HTTPPort: "80", HTTPSPort: "443"}})
-	p, _ := c.store.CreateProject(ctx, store.Project{Name: "nb", ServerID: store.LocalServerID})
+	p, _ := c.store.CreateProject(ctx, domain.Project{Name: "nb", ServerID: domain.LocalServerID})
 	_, err := c.ApplyCompose(ctx, p.ID, []byte(sharedFile), ApplyOptions{DryRun: true})
 	if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "behind a Cloudflare tunnel") {
 		t.Errorf("published ports next to HTTP behind a tunnel: %v", err)
@@ -121,7 +121,7 @@ func TestPreviewSharedDomain(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Services["web"] = compose.Service{Image: "nginx", X: compose.Ext{Domain: "www.example.com", Port: 80}}
-	if _, err := previewFile(&f, store.Project{Name: "nb"}, "pr-1", store.PreviewSettings{BaseDomain: "pr.example.com"}, nil); err != nil {
+	if _, err := previewFile(&f, domain.Project{Name: "nb"}, "pr-1", domain.PreviewSettings{BaseDomain: "pr.example.com"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if d, s := f.Services["dashboard"].X.Domain, f.Services["server"].X.Domain; d != s || d != "pr-1-dashboard.pr.example.com" {

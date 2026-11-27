@@ -6,15 +6,15 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // TestDeleteTools covers the refusals; actual removal needs Docker.
 func TestDeleteTools(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
-	p, _ := e.st.CreateProject(ctx, store.Project{Name: "shop"})
-	if _, err := e.st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1}); err != nil {
+	p, _ := e.st.CreateProject(ctx, domain.Project{Name: "shop"})
+	if _, err := e.st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
 	read, admin := e.session(core.PermView), e.session()
@@ -38,7 +38,7 @@ func TestDeleteTools(t *testing.T) {
 	}
 
 	// A git-linked project's file owns its services.
-	if _, err := e.st.SaveProjectGit(ctx, store.ProjectGit{ProjectID: p.ID, RepoURL: "https://github.com/me/shop.git", Branch: "main",
+	if _, err := e.st.SaveProjectGit(ctx, domain.ProjectGit{ProjectID: p.ID, RepoURL: "https://github.com/me/shop.git", Branch: "main",
 		Path: "compose.yaml", PollSeconds: 300}); err != nil {
 		t.Fatal(err)
 	}

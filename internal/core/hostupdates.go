@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // updatesTimeout is how long an update install may run before kipitiny stops
@@ -35,7 +35,7 @@ func updateRunSetting(serverID string) string { return "security-install/" + ser
 func (c *Core) updateRun(ctx context.Context, serverID string) (UpdateRun, error) {
 	var run UpdateRun
 	v, err := c.store.GetSetting(ctx, updateRunSetting(serverID))
-	if errors.Is(err, store.ErrNotFound) || err == nil && v == "" {
+	if errors.Is(err, domain.ErrNotFound) || err == nil && v == "" {
 		return run, nil
 	}
 	if err != nil {
@@ -153,7 +153,7 @@ func (c *Core) InstallUpdates(ctx context.Context, serverID string, all bool) (S
 // waitUpdates follows an install until it ends. The helper waiting for it
 // dies when Docker restarts, so it's started again; a manager restart
 // resumes it from resumeUpdates.
-func (c *Core) waitUpdates(sv store.Server, run UpdateRun) {
+func (c *Core) waitUpdates(sv domain.Server, run UpdateRun) {
 	ctx, cancel := context.WithDeadline(c.bg, run.StartedAt.Add(updatesTimeout))
 	defer cancel()
 	for {
@@ -217,7 +217,7 @@ func rebootSetting(serverID string) string { return "security-reboot/" + serverI
 // doesn't show over yet, or nil.
 func (c *Core) pendingReboot(ctx context.Context, serverID string, r SecurityReport) (*hostReboot, error) {
 	v, err := c.store.GetSetting(ctx, rebootSetting(serverID))
-	if errors.Is(err, store.ErrNotFound) || err == nil && v == "" {
+	if errors.Is(err, domain.ErrNotFound) || err == nil && v == "" {
 		return nil, nil
 	}
 	if err != nil {
@@ -286,7 +286,7 @@ systemd-run --quiet --on-active=5 --unit=kipitiny-reboot-`+strings.ToLower(ids.N
 // waitReboot checks a rebooting server until it's back on a new boot. When
 // the manager runs there, it goes down too and StartSecurityChecks checks
 // the server once it's back.
-func (c *Core) waitReboot(sv store.Server) {
+func (c *Core) waitReboot(sv domain.Server) {
 	for {
 		select {
 		case <-c.bg.Done():

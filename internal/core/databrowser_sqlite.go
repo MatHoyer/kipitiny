@@ -14,8 +14,8 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/sqlitehelper"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // An app's SQLite databases are files in its volumes. Most images have no
@@ -74,7 +74,7 @@ func (c *Core) startSQLiteHelper(ctx context.Context, dk *docker.Client, name st
 
 // sqliteExec runs one request of the helper in svc's SQLite helper and
 // decodes its answer; an error it reports is the caller's.
-func (c *Core) sqliteExec(ctx context.Context, svc store.Service, req sqlitehelper.Request) (sqlitehelper.Response, error) {
+func (c *Core) sqliteExec(ctx context.Context, svc domain.Service, req sqlitehelper.Request) (sqlitehelper.Response, error) {
 	b, err := json.Marshal(req)
 	if err != nil {
 		return sqlitehelper.Response{}, err
@@ -101,7 +101,7 @@ func (c *Core) sqliteExec(ctx context.Context, svc store.Service, req sqlitehelp
 
 // sqliteDatabases lists the SQLite files in svc's volumes, as
 // "<volume>/<path>".
-func (c *Core) sqliteDatabases(ctx context.Context, svc store.Service) ([]PgDatabase, error) {
+func (c *Core) sqliteDatabases(ctx context.Context, svc domain.Service) ([]PgDatabase, error) {
 	vols := fileVolumes(svc)
 	roots := make([]string, len(vols))
 	for i, v := range vols {
@@ -128,7 +128,7 @@ func (c *Core) sqliteDatabases(ctx context.Context, svc store.Service) ([]PgData
 // sqliteTarget resolves one of svc's SQLite files (the first found when
 // database is empty). The helper checks it is a SQLite file inside its
 // volume.
-func (c *Core) sqliteTarget(ctx context.Context, svc store.Service, database string) (dataTarget, error) {
+func (c *Core) sqliteTarget(ctx context.Context, svc domain.Service, database string) (dataTarget, error) {
 	if database == "" {
 		dbs, err := c.sqliteDatabases(ctx, svc)
 		if err != nil {
@@ -250,7 +250,7 @@ func primaryKey(cols []PgColumn) []string {
 // sqliteColumns returns a table's or view's columns and its kind.
 func (t dataTarget) sqliteColumns(ctx context.Context, schema, table string) ([]PgColumn, string, error) {
 	if schema != "" && schema != sqliteSchema {
-		return nil, "", fmt.Errorf("table %s.%s: %w", schema, table, store.ErrNotFound)
+		return nil, "", fmt.Errorf("table %s.%s: %w", schema, table, domain.ErrNotFound)
 	}
 	lit := pgLiteral(table)
 	rows, err := t.sqliteRowsOf(ctx, `SELECT s.type, p.name, p.type, p."notnull", p.pk FROM sqlite_schema s, pragma_table_info(s.name) p
@@ -259,7 +259,7 @@ WHERE `+sqliteUserTables+` AND s.name = `+lit+` ORDER BY p.cid`)
 		return nil, "", err
 	}
 	if len(rows) == 0 {
-		return nil, "", fmt.Errorf("table %s.%s: %w", sqliteSchema, table, store.ErrNotFound)
+		return nil, "", fmt.Errorf("table %s.%s: %w", sqliteSchema, table, domain.ErrNotFound)
 	}
 	cols := make([]PgColumn, len(rows))
 	for i, r := range rows {

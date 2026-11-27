@@ -8,8 +8,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/gitprovider"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // The manager as a whole: git repositories it can read, the network map,
@@ -146,7 +146,7 @@ type getAuditLogIn struct {
 }
 
 type getAuditLogOut struct {
-	Entries []store.AuditEntry `json:"entries"`
+	Entries []domain.AuditEntry `json:"entries"`
 }
 
 // getAuditLog is admin only, like the REST route: it maps who can do what.

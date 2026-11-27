@@ -5,14 +5,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 func TestOverviewTools(t *testing.T) {
 	e := newEnv(t)
-	e.st.CreateProject(context.Background(), store.Project{Name: "shop"})
+	if _, err := e.st.CreateProject(context.Background(), domain.Project{Name: "shop"}); err != nil {
+		t.Fatal(err)
+	}
 	read, admin := e.session(core.PermView), e.session()
 
 	if out, isErr := e.call(admin, "list_git_repos", nil); isErr || out != `{"providers":[]}` {
@@ -30,11 +32,13 @@ func TestOverviewTools(t *testing.T) {
 	if out, isErr := e.call(read, "get_manager_status", nil); isErr || !strings.Contains(out, `"usage":{}`) || !strings.Contains(out, `"update"`) {
 		t.Errorf("get_manager_status: %s", out)
 	}
-	e.st.CreateDomain(context.Background(), store.Domain{Name: "example.com"})
+	if _, err := e.st.CreateDomain(context.Background(), domain.Domain{Name: "example.com"}); err != nil {
+		t.Fatal(err)
+	}
 	if out, isErr := e.call(admin, "list_domains", nil); isErr || !strings.Contains(out, `"name":"example.com"`) || !strings.Contains(out, `"cloudflare":false`) {
 		t.Errorf("list_domains: %s", out)
 	}
-	if out, isErr := e.call(admin, "get_server_status", nil); isErr || !strings.Contains(out, `"id":"`+store.LocalServerID+`"`) || !strings.Contains(out, `"security":{`) {
+	if out, isErr := e.call(admin, "get_server_status", nil); isErr || !strings.Contains(out, `"id":"`+domain.LocalServerID+`"`) || !strings.Contains(out, `"security":{`) {
 		t.Errorf("get_server_status: %s", out)
 	}
 	if out, isErr := e.call(admin, "get_server_status", map[string]any{"server": "nope"}); !isErr || !strings.Contains(out, "not found") {

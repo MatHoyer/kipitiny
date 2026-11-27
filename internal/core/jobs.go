@@ -16,8 +16,8 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const (
@@ -50,9 +50,9 @@ type JobInput struct {
 }
 
 type JobView struct {
-	store.Job
-	NextRun *time.Time    `json:"nextRun,omitempty"`
-	LastRun *store.JobRun `json:"lastRun,omitempty"`
+	domain.Job
+	NextRun *time.Time     `json:"nextRun,omitempty"`
+	LastRun *domain.JobRun `json:"lastRun,omitempty"`
 }
 
 // reloadJobs replaces the jobs' cron entries from the store.
@@ -117,7 +117,7 @@ func (c *Core) GetJob(ctx context.Context, id string) (JobView, error) {
 	return c.jobView(ctx, j)
 }
 
-func (c *Core) jobView(ctx context.Context, j store.Job) (JobView, error) {
+func (c *Core) jobView(ctx context.Context, j domain.Job) (JobView, error) {
 	v := JobView{Job: j}
 	runs, err := c.store.ListJobRuns(ctx, j.ID, 1)
 	if err != nil {
@@ -147,13 +147,13 @@ func (c *Core) CreateJob(ctx context.Context, serviceID string, in JobInput) (Jo
 	if err != nil {
 		return JobView{}, err
 	}
-	if svc.Kind != store.ServiceKindApp {
+	if svc.Kind != domain.ServiceKindApp {
 		return JobView{}, fmt.Errorf("%w: only apps run jobs", ErrInvalid)
 	}
 	if err := c.checkGitOwned(ctx, svc.ProjectID); err != nil {
 		return JobView{}, err
 	}
-	j := store.Job{ServiceID: serviceID}
+	j := domain.Job{ServiceID: serviceID}
 	if err := applyJobInput(&j, in); err != nil {
 		return JobView{}, err
 	}
@@ -203,7 +203,7 @@ func (c *Core) DeleteJob(ctx context.Context, id string) error {
 
 // checkJobGitOwned refuses changes to the jobs of a git project: they are
 // in its compose file.
-func (c *Core) checkJobGitOwned(ctx context.Context, j store.Job) error {
+func (c *Core) checkJobGitOwned(ctx context.Context, j domain.Job) error {
 	svc, err := c.store.GetService(ctx, j.ServiceID)
 	if err != nil {
 		return err
@@ -213,7 +213,7 @@ func (c *Core) checkJobGitOwned(ctx context.Context, j store.Job) error {
 
 // deleteJob deletes j and its runs, stopping the one in progress; the
 // caller reloads the schedule.
-func (c *Core) deleteJob(ctx context.Context, j store.Job) error {
+func (c *Core) deleteJob(ctx context.Context, j domain.Job) error {
 	runs, err := c.store.ListJobRuns(ctx, j.ID, 0)
 	if err != nil {
 		return err
@@ -277,13 +277,13 @@ func (c *Core) removeJobContainers(ctx context.Context, dk *docker.Client, servi
 }
 
 func jobConflict(err error, name string) error {
-	if errors.Is(err, store.ErrConflict) {
+	if errors.Is(err, domain.ErrConflict) {
 		return fmt.Errorf("%w: the service already has a job named %s", ErrInvalid, name)
 	}
 	return err
 }
 
-func applyJobInput(j *store.Job, in JobInput) error {
+func applyJobInput(j *domain.Job, in JobInput) error {
 	in.Name, in.Command, in.Cron = strings.TrimSpace(in.Name), strings.TrimSpace(in.Command), strings.TrimSpace(in.Cron)
 	if !nameRe.MatchString(in.Name) {
 		return fmt.Errorf("%w: job name must be lowercase letters, digits and dashes", ErrInvalid)
@@ -305,11 +305,11 @@ func applyJobInput(j *store.Job, in JobInput) error {
 }
 
 // RunJob runs a job now, unless it is running already.
-func (c *Core) RunJob(ctx context.Context, id string) (store.JobRun, error) {
+func (c *Core) RunJob(ctx context.Context, id string) (domain.JobRun, error) {
 	return c.startJobRun(ctx, id)
 }
 
-func (c *Core) ListJobRuns(ctx context.Context, jobID string) ([]store.JobRun, error) {
+func (c *Core) ListJobRuns(ctx context.Context, jobID string) ([]domain.JobRun, error) {
 	if _, err := c.store.GetJob(ctx, jobID); err != nil {
 		return nil, err
 	}
@@ -327,7 +327,7 @@ func (c *Core) JobRunLog(ctx context.Context, jobID, runID string) (io.ReadClose
 		return nil, err
 	}
 	if r.JobID != j.ID {
-		return nil, store.ErrNotFound
+		return nil, domain.ErrNotFound
 	}
 	f, err := os.Open(c.jobLogPath(j.ServiceID, r.ID))
 	if errors.Is(err, os.ErrNotExist) {
@@ -336,24 +336,24 @@ func (c *Core) JobRunLog(ctx context.Context, jobID, runID string) (io.ReadClose
 	return f, err
 }
 
-func (c *Core) startJobRun(ctx context.Context, id string) (store.JobRun, error) {
+func (c *Core) startJobRun(ctx context.Context, id string) (domain.JobRun, error) {
 	j, err := c.store.GetJob(ctx, id)
 	if err != nil {
-		return store.JobRun{}, err
+		return domain.JobRun{}, err
 	}
 	svc, err := c.store.GetService(ctx, j.ServiceID)
 	if err != nil {
-		return store.JobRun{}, err
+		return domain.JobRun{}, err
 	}
 	switch {
 	case svc.CurrentDeploymentID == "":
-		return store.JobRun{}, fmt.Errorf("%w: deploy %s before running its jobs", ErrInvalid, svc.Name)
+		return domain.JobRun{}, fmt.Errorf("%w: deploy %s before running its jobs", ErrInvalid, svc.Name)
 	case svc.Stopped:
-		return store.JobRun{}, fmt.Errorf("%w: %s is stopped", ErrInvalid, svc.Name)
+		return domain.JobRun{}, fmt.Errorf("%w: %s is stopped", ErrInvalid, svc.Name)
 	}
 	project, err := c.store.GetProject(ctx, svc.ProjectID)
 	if err != nil {
-		return store.JobRun{}, err
+		return domain.JobRun{}, err
 	}
 
 	runCtx, cancel := context.WithTimeout(c.bg, time.Duration(j.TimeoutSec)*time.Second)
@@ -361,7 +361,7 @@ func (c *Core) startJobRun(ctx context.Context, id string) (store.JobRun, error)
 	if _, busy := c.jobs.running[j.ID]; busy {
 		c.jobs.mu.Unlock()
 		cancel()
-		return store.JobRun{}, fmt.Errorf("%w: job %s is running", ErrBusy, j.Name)
+		return domain.JobRun{}, fmt.Errorf("%w: job %s is running", ErrBusy, j.Name)
 	}
 	if c.jobs.running == nil {
 		c.jobs.running = map[string]jobRunning{}
@@ -375,13 +375,13 @@ func (c *Core) startJobRun(ctx context.Context, id string) (store.JobRun, error)
 		c.jobs.mu.Unlock()
 	}
 
-	r := store.JobRun{JobID: j.ID, Status: store.OpRunning}
+	r := domain.JobRun{JobID: j.ID, Status: domain.OpRunning}
 	if a, ok := ActorFrom(ctx); ok {
 		r.TriggeredBy = a.String()
 	}
 	if r, err = c.store.CreateJobRun(ctx, r); err != nil {
 		done()
-		return store.JobRun{}, err
+		return domain.JobRun{}, err
 	}
 	// Not an operation Shutdown waits for: a job may run for hours, the
 	// manager stops it instead.
@@ -390,14 +390,14 @@ func (c *Core) startJobRun(ctx context.Context, id string) (store.JobRun, error)
 		c.runJob(runCtx, project, svc, j, r)
 	}); err != nil {
 		done()
-		r.Status, r.Error = store.OpFailed, err.Error()
+		r.Status, r.Error = domain.OpFailed, err.Error()
 		_ = c.store.FinishJobRun(context.WithoutCancel(ctx), r)
-		return store.JobRun{}, err
+		return domain.JobRun{}, err
 	}
 	return r, nil
 }
 
-func (c *Core) runJob(ctx context.Context, project store.Project, svc store.Service, j store.Job, r store.JobRun) {
+func (c *Core) runJob(ctx context.Context, project domain.Project, svc domain.Service, j domain.Job, r domain.JobRun) {
 	log := c.log.With("job", j.ID, "run", r.ID, "project", project.Name, "service", svc.Name)
 	var out io.Writer = io.Discard
 	if err := os.MkdirAll(c.jobLogDir(svc.ID), 0o700); err != nil {
@@ -415,7 +415,7 @@ func (c *Core) runJob(ctx context.Context, project store.Project, svc store.Serv
 	start := time.Now()
 	code, err := c.execJob(ctx, project, svc, j, r, out, logf)
 	r.ExitCode = code
-	r.Status = store.OpSucceeded
+	r.Status = domain.OpSucceeded
 	if err != nil {
 		switch {
 		case errors.Is(ctx.Err(), context.DeadlineExceeded):
@@ -425,13 +425,13 @@ func (c *Core) runJob(ctx context.Context, project store.Project, svc store.Serv
 		case ctx.Err() != nil:
 			err = errors.New("cancelled")
 		}
-		r.Status, r.Error = store.OpFailed, err.Error()
+		r.Status, r.Error = domain.OpFailed, err.Error()
 		logf("Failed: %s", r.Error)
 	} else {
 		logf("Succeeded in %s", time.Since(start).Round(time.Millisecond))
 	}
 	bg := context.WithoutCancel(ctx)
-	if err := c.store.FinishJobRun(bg, r); errors.Is(err, store.ErrNotFound) || r.Error == "cancelled" {
+	if err := c.store.FinishJobRun(bg, r); errors.Is(err, domain.ErrNotFound) || r.Error == "cancelled" {
 		return // the job or its app is being deleted
 	} else if err != nil {
 		log.Error("cannot record job run", "err", err)
@@ -462,7 +462,7 @@ func (c *Core) runJob(ctx context.Context, project store.Project, svc store.Serv
 // execJob runs the command in a one-off container of the current
 // deployment: its pinned image, env, networks and volumes, like the
 // pre-deploy command. It returns the exit code, nil if it never exited.
-func (c *Core) execJob(ctx context.Context, project store.Project, svc store.Service, j store.Job, r store.JobRun,
+func (c *Core) execJob(ctx context.Context, project domain.Project, svc domain.Service, j domain.Job, r domain.JobRun,
 	out io.Writer, logf func(string, ...any)) (*int, error) {
 
 	if svc.Sleeping {

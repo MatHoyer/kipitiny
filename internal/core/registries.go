@@ -9,8 +9,8 @@ import (
 	"github.com/distribution/reference"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 type RegistryInput struct {
@@ -20,7 +20,7 @@ type RegistryInput struct {
 	Password string `json:"password"`
 }
 
-func (c *Core) ListRegistries(ctx context.Context) ([]store.Registry, error) {
+func (c *Core) ListRegistries(ctx context.Context) ([]domain.Registry, error) {
 	rs, err := c.store.ListRegistries(ctx)
 	for i := range rs {
 		rs[i].Password = SecretMask
@@ -32,23 +32,23 @@ func (c *Core) ListRegistries(ctx context.Context) ([]store.Registry, error) {
 }
 
 // CreateRegistry saves a credential once the registry accepts it.
-func (c *Core) CreateRegistry(ctx context.Context, in RegistryInput) (store.Registry, error) {
-	r := store.Registry{}
+func (c *Core) CreateRegistry(ctx context.Context, in RegistryInput) (domain.Registry, error) {
+	r := domain.Registry{}
 	if err := c.applyRegistry(ctx, &r, in); err != nil {
-		return store.Registry{}, err
+		return domain.Registry{}, err
 	}
 	r, err := c.store.CreateRegistry(ctx, r)
 	r.Password = SecretMask
 	return r, err
 }
 
-func (c *Core) UpdateRegistry(ctx context.Context, id string, in RegistryInput) (store.Registry, error) {
+func (c *Core) UpdateRegistry(ctx context.Context, id string, in RegistryInput) (domain.Registry, error) {
 	r, err := c.store.GetRegistry(ctx, id)
 	if err != nil {
-		return store.Registry{}, err
+		return domain.Registry{}, err
 	}
 	if err := c.applyRegistry(ctx, &r, in); err != nil {
-		return store.Registry{}, err
+		return domain.Registry{}, err
 	}
 	r, err = c.store.UpdateRegistry(ctx, r)
 	r.Password = SecretMask
@@ -74,7 +74,7 @@ func (c *Core) TestRegistry(ctx context.Context, id string) error {
 	return nil
 }
 
-func (c *Core) applyRegistry(ctx context.Context, r *store.Registry, in RegistryInput) error {
+func (c *Core) applyRegistry(ctx context.Context, r *domain.Registry, in RegistryInput) error {
 	r.Host = normalizeRegistryHost(in.Host)
 	r.Username = strings.TrimSpace(in.Username)
 	if in.Password != SecretMask {

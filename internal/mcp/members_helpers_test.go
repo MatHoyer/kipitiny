@@ -8,7 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // seeded names what seed created: a project with a Postgres service, a
@@ -18,22 +18,22 @@ type seeded struct{ project, service, backup, schedule string }
 func (e env) seed(t *testing.T, name string) seeded {
 	t.Helper()
 	ctx := context.Background()
-	p, err := e.st.CreateProject(ctx, store.Project{Name: name, ServerID: store.LocalServerID})
+	p, err := e.st.CreateProject(ctx, domain.Project{Name: name, ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := e.st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17",
+	svc, err := e.st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "db", Kind: domain.ServiceKindPostgres, Image: "postgres:17",
 		Replicas: 1, Env: map[string]string{"POSTGRES_PASSWORD": "hunter2"}, Secrets: []string{"POSTGRES_PASSWORD"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := e.st.CreateBackup(ctx, store.Backup{Kind: store.BackupKindPostgres, ServiceID: svc.ID, ProjectID: p.ID, ServiceName: "db",
-		ProjectName: name, ServiceKind: store.ServiceKindPostgres, TargetID: store.LocalTargetID, Status: store.OpSucceeded})
+	b, err := e.st.CreateBackup(ctx, domain.Backup{Kind: domain.BackupKindPostgres, ServiceID: svc.ID, ProjectID: p.ID, ServiceName: "db",
+		ProjectName: name, ServiceKind: domain.ServiceKindPostgres, TargetID: domain.LocalTargetID, Status: domain.OpSucceeded})
 	if err != nil {
 		t.Fatal(err)
 	}
-	sc, err := e.st.CreateBackupSchedule(ctx, store.BackupSchedule{Kind: store.BackupKindPostgres, ServiceID: svc.ID,
-		TargetID: store.LocalTargetID, Cron: "@daily", Enabled: true})
+	sc, err := e.st.CreateBackupSchedule(ctx, domain.BackupSchedule{Kind: domain.BackupKindPostgres, ServiceID: svc.ID,
+		TargetID: domain.LocalTargetID, Cron: "@daily", Enabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func (e env) seed(t *testing.T, name string) seeded {
 func (e env) member(t *testing.T, name, projectID string) func(perms []core.Perm, features ...core.Feature) *mcp.ClientSession {
 	t.Helper()
 	ctx := context.Background()
-	m, err := e.st.CreateUser(ctx, store.User{Username: name, PasswordHash: "x", Role: store.RoleMember})
+	m, err := e.st.CreateUser(ctx, domain.User{Username: name, PasswordHash: "x", Role: domain.RoleMember})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,14 +54,14 @@ func (e env) member(t *testing.T, name, projectID string) func(perms []core.Perm
 		for i, p := range perms {
 			ps[i] = string(p)
 		}
-		if err := e.st.SetGrant(ctx, store.ProjectGrant{UserID: m.ID, ProjectID: projectID, Perms: ps}); err != nil {
+		if err := e.st.SetGrant(ctx, domain.ProjectGrant{UserID: m.ID, ProjectID: projectID, Perms: ps}); err != nil {
 			t.Fatal(err)
 		}
 		fs := make([]string, len(features))
 		for i, f := range features {
 			fs[i] = string(f)
 		}
-		u, err := e.st.UpdateUserAccess(ctx, m.ID, store.RoleMember, fs)
+		u, err := e.st.UpdateUserAccess(ctx, m.ID, domain.RoleMember, fs)
 		if err != nil {
 			t.Fatal(err)
 		}

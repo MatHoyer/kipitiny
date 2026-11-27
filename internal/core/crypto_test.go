@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/storage"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 func TestUploadEncrypted(t *testing.T) {
@@ -22,10 +22,10 @@ func TestUploadEncrypted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := store.BackupTarget{Kind: store.BackupTargetLocal, AgeRecipient: recipient, AgeIdentity: identity}
+	target := domain.BackupTarget{Kind: domain.BackupTargetLocal, AgeRecipient: recipient, AgeIdentity: identity}
 	plain := strings.Repeat("pg_dump output ", 100_000)
 
-	b := &store.Backup{ObjectKey: "a.dump.age"}
+	b := &domain.Backup{ObjectKey: "a.dump.age"}
 	err = c.upload(ctx, st, target, b, func(w io.Writer) error {
 		_, err := io.WriteString(w, plain)
 		return err
@@ -64,9 +64,9 @@ func TestUploadProducerFailureWins(t *testing.T) {
 	ctx := context.Background()
 	c := New(config.Config{}, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	st := &storage.Local{Root: t.TempDir()}
-	b := &store.Backup{ObjectKey: "a.dump"}
+	b := &domain.Backup{ObjectKey: "a.dump"}
 	boom := errors.New("pg_dump exploded")
-	err := c.upload(ctx, st, store.BackupTarget{}, b, func(w io.Writer) error {
+	err := c.upload(ctx, st, domain.BackupTarget{}, b, func(w io.Writer) error {
 		io.WriteString(w, "partial data")
 		return boom
 	})

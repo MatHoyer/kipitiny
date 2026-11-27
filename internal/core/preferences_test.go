@@ -6,27 +6,27 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestSetPreferences(t *testing.T) {
 	c := newTestCore(t, config.Config{})
-	u, err := c.store.CreateUser(context.Background(), store.User{Username: "alice"})
+	u, err := c.store.CreateUser(context.Background(), domain.User{Username: "alice"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", UserID: u.ID, Role: store.RoleMember})
+	ctx := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", UserID: u.ID, Role: domain.RoleMember})
 
-	if _, err := c.SetPreferences(ctx, store.Preferences{MapView: "4d"}); !errors.Is(err, ErrInvalid) {
+	if _, err := c.SetPreferences(ctx, domain.Preferences{MapView: "4d"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("bad view: %v", err)
 	}
-	if _, err := c.SetPreferences(ctx, store.Preferences{MapView: "3d"}); err != nil {
+	if _, err := c.SetPreferences(ctx, domain.Preferences{MapView: "3d"}); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := c.store.GetUser(ctx, u.ID); got.Preferences.MapView != "3d" {
 		t.Fatalf("saved: %+v", got.Preferences)
 	}
-	if _, err := c.SetPreferences(context.Background(), store.Preferences{}); !errors.Is(err, ErrUnauthorized) {
+	if _, err := c.SetPreferences(context.Background(), domain.Preferences{}); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("no actor: %v", err)
 	}
 }

@@ -9,7 +9,7 @@ import (
 	"fmt"
 
 	"github.com/kipit-labs/kipitiny/internal/analytics"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // sharedHidden are the breakdowns a shared link leaves out: who the app
@@ -59,7 +59,7 @@ func (c *Core) SharedAnalytics(ctx context.Context, token string, q AnalyticsQue
 		return SharedAnalyticsView{}, err
 	}
 	if !svc.Analytics || svc.Domain == "" {
-		return SharedAnalyticsView{}, store.ErrNotFound
+		return SharedAnalyticsView{}, domain.ErrNotFound
 	}
 	cl, _, err := c.analyticsOn(ctx)
 	if err != nil {

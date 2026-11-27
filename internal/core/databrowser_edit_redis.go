@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // KeyChanges are edits to one Redis key. Items are as RedisValue gives
@@ -78,7 +78,7 @@ func (c *Core) ApplyKeyChanges(ctx context.Context, id, key string, ch KeyChange
 			c.Audit(ctx, "data edit", id, status, err)
 		}()
 	}
-	t, err := c.dataTarget(ctx, id, store.ServiceKindRedis)
+	t, err := c.dataTarget(ctx, id, domain.ServiceKindRedis)
 	if err != nil {
 		return ChangeResult{}, err
 	}

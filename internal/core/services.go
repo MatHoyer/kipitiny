@@ -17,7 +17,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // SecretMask replaces env values in read responses. Sending it back in an
@@ -43,14 +43,14 @@ var (
 )
 
 type ServiceInput struct {
-	Name     string            `json:"name"`
-	Kind     store.ServiceKind `json:"kind"`
-	Image    string            `json:"image"`
-	Icon     string            `json:"icon"`
-	Tags     []string          `json:"tags"`
-	Replicas int               `json:"replicas"`
-	Port     int               `json:"port"`
-	Domain   string            `json:"domain"`
+	Name     string             `json:"name"`
+	Kind     domain.ServiceKind `json:"kind"`
+	Image    string             `json:"image"`
+	Icon     string             `json:"icon"`
+	Tags     []string           `json:"tags"`
+	Replicas int                `json:"replicas"`
+	Port     int                `json:"port"`
+	Domain   string             `json:"domain"`
 	// Analytics counts the domain's visits (apps with a domain only).
 	Analytics bool `json:"analytics"`
 	// Errors takes the errors of the app's Sentry SDK (apps only).
@@ -62,17 +62,17 @@ type ServiceInput struct {
 	CPUs       float64  `json:"cpus"`
 	HealthPath string   `json:"healthPath"`
 	// Healthcheck replaces the image's own and the injected probe (apps only).
-	Healthcheck store.Healthcheck `json:"healthcheck"`
-	PreDeploy   string            `json:"preDeploy"`
+	Healthcheck domain.Healthcheck `json:"healthcheck"`
+	PreDeploy   string             `json:"preDeploy"`
 	// Volumes are named volumes mounted in every replica (apps only).
-	Volumes []store.Volume `json:"volumes"`
+	Volumes []domain.Volume `json:"volumes"`
 	// Middlewares apply to a public app's requests (apps only).
 	Middlewares *MiddlewaresInput `json:"middlewares"`
 	PreBackup   string            `json:"preBackup"`
 	// PublishedPorts bind host ports to the app's container (apps only).
-	PublishedPorts []store.PublishedPort `json:"publishedPorts"`
+	PublishedPorts []domain.PublishedPort `json:"publishedPorts"`
 	// Routes send some paths of the domain to the app (apps only).
-	Routes []store.Route `json:"routes"`
+	Routes []domain.Route `json:"routes"`
 	// StopGraceSeconds is the app's time to exit on stop; 0 means 10 s.
 	StopGraceSeconds int `json:"stopGraceSeconds"`
 	// HostNetwork runs the app in the host's network (apps only).
@@ -80,11 +80,11 @@ type ServiceInput struct {
 	// DockerSocket mounts the host's Docker socket: "", "ro" or "rw".
 	DockerSocket string `json:"dockerSocket"`
 	// Runtime holds command, entrypoint, user, tmpfs… (apps only).
-	Runtime store.Runtime `json:"runtime"`
+	Runtime domain.Runtime `json:"runtime"`
 	// Files are written into the app's containers (apps only).
-	Files []store.ServiceFile `json:"files"`
+	Files []domain.ServiceFile `json:"files"`
 	// DependsOn names services of the project started first (apps only).
-	DependsOn []store.Dependency `json:"dependsOn"`
+	DependsOn []domain.Dependency `json:"dependsOn"`
 	// ProjectNetworks are the project's own networks it's on; empty is the
 	// default one.
 	ProjectNetworks []string `json:"projectNetworks"`
@@ -125,27 +125,27 @@ type ServicePatch struct {
 	CPUs            *float64          `json:"cpus"`
 	HealthPath      *string           `json:"healthPath"`
 	// Healthcheck replaces the app's healthcheck; nil keeps it.
-	Healthcheck *store.Healthcheck `json:"healthcheck"`
-	PreDeploy   *string            `json:"preDeploy"`
+	Healthcheck *domain.Healthcheck `json:"healthcheck"`
+	PreDeploy   *string             `json:"preDeploy"`
 	// Volumes replaces the app's volumes; nil keeps them.
-	Volumes []store.Volume `json:"volumes"`
+	Volumes []domain.Volume `json:"volumes"`
 	// Middlewares replaces the app's middlewares; nil keeps them.
 	Middlewares *MiddlewaresInput `json:"middlewares"`
 	PreBackup   *string           `json:"preBackup"`
 	// PublishedPorts replaces the app's published ports; nil keeps them.
-	PublishedPorts []store.PublishedPort `json:"publishedPorts"`
+	PublishedPorts []domain.PublishedPort `json:"publishedPorts"`
 	// Routes replaces the app's routes; nil keeps them.
-	Routes           []store.Route `json:"routes"`
-	StopGraceSeconds *int          `json:"stopGraceSeconds"`
-	HostNetwork      *bool         `json:"hostNetwork"`
-	DockerSocket     *string       `json:"dockerSocket"`
+	Routes           []domain.Route `json:"routes"`
+	StopGraceSeconds *int           `json:"stopGraceSeconds"`
+	HostNetwork      *bool          `json:"hostNetwork"`
+	DockerSocket     *string        `json:"dockerSocket"`
 	// Runtime replaces the app's runtime settings; nil keeps them.
-	Runtime *store.Runtime `json:"runtime"`
+	Runtime *domain.Runtime `json:"runtime"`
 	// Files replaces the app's files; nil keeps them. A file without its
 	// content keeps the stored one.
-	Files []store.ServiceFile `json:"files"`
+	Files []domain.ServiceFile `json:"files"`
 	// DependsOn replaces the services the app starts after; nil keeps them.
-	DependsOn []store.Dependency `json:"dependsOn"`
+	DependsOn []domain.Dependency `json:"dependsOn"`
 	// ProjectNetworks replaces the project networks it's on; nil keeps them.
 	ProjectNetworks []string `json:"projectNetworks"`
 	Preview         *string  `json:"preview"`
@@ -170,7 +170,7 @@ type ContainerView struct {
 }
 
 type ServiceView struct {
-	store.Service
+	domain.Service
 	Containers []ContainerView `json:"containers"`
 	// DNS is set when the manager manages the domain's Cloudflare record.
 	DNS *DNSStatus `json:"dns,omitempty"`
@@ -193,7 +193,7 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 	if err != nil {
 		return ServiceView{}, err
 	}
-	if err := checkServiceChange(ctx, store.Service{ProjectID: projectID, Env: map[string]string{}, Secrets: []string{}}, svc); err != nil {
+	if err := checkServiceChange(ctx, domain.Service{ProjectID: projectID, Env: map[string]string{}, Secrets: []string{}}, svc); err != nil {
 		return ServiceView{}, err
 	}
 	if err := c.validate(ctx, svc); err != nil {
@@ -217,14 +217,14 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 
 // serviceFromInput builds a new service, with the kind's defaults, before
 // validation.
-func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Service, error) {
+func (c *Core) serviceFromInput(projectID string, in ServiceInput) (domain.Service, error) {
 	if in.Kind == "" {
-		in.Kind = store.ServiceKindApp
+		in.Kind = domain.ServiceKindApp
 	}
 	if in.Replicas == 0 {
 		in.Replicas = 1
 	}
-	svc := store.Service{
+	svc := domain.Service{
 		ProjectID:        projectID,
 		Name:             in.Name,
 		Kind:             in.Kind,
@@ -259,28 +259,28 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 	}
 	tags, err := normalizeTags(in.Tags)
 	if err != nil {
-		return store.Service{}, err
+		return domain.Service{}, err
 	}
 	svc.Tags = tags
 	svc.Anonymize = in.Anonymize
 	env, secrets, envErr := mergeEnv(svc.Env, in.Secrets, nil, nil)
 	if envErr != nil {
-		return store.Service{}, envErr
+		return domain.Service{}, envErr
 	}
 	svc.Env, svc.Secrets = env, secrets
 	if in.Middlewares != nil {
-		mw, err := mergeMiddlewares(*in.Middlewares, store.Middlewares{})
+		mw, err := mergeMiddlewares(*in.Middlewares, domain.Middlewares{})
 		if err != nil {
-			return store.Service{}, err
+			return domain.Service{}, err
 		}
 		svc.Middlewares = mw
 	}
 	if !nameRe.MatchString(svc.Name) {
-		return store.Service{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
+		return domain.Service{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
 	switch svc.Kind {
-	case store.ServiceKindApp:
-	case store.ServiceKindPostgres:
+	case domain.ServiceKindApp:
+	case domain.ServiceKindPostgres:
 		if svc.Image == "" {
 			svc.Image = DefaultPostgresImage
 		}
@@ -292,7 +292,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		if in.Password != "" {
 			svc.Env[pgPassword] = in.Password
 		}
-	case store.ServiceKindRedis:
+	case domain.ServiceKindRedis:
 		if svc.Image == "" {
 			svc.Image = DefaultRedisImage
 		}
@@ -303,7 +303,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		if in.Password != "" {
 			svc.Env[redisPassword] = in.Password
 		}
-	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+	case domain.ServiceKindMySQL, domain.ServiceKindMariaDB:
 		if svc.Image == "" {
 			svc.Image = defaultMySQLImage(svc.Kind)
 		}
@@ -314,7 +314,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 		if in.Password != "" {
 			svc.Env[mysqlPassword] = in.Password
 		}
-	case store.ServiceKindMongoDB:
+	case domain.ServiceKindMongoDB:
 		if svc.Image == "" {
 			svc.Image = DefaultMongoImage
 		}
@@ -326,7 +326,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (store.Servic
 			svc.Env[mongoPassword] = in.Password
 		}
 	default:
-		return store.Service{}, fmt.Errorf("%w: unknown service kind %q", ErrInvalid, svc.Kind)
+		return domain.Service{}, fmt.Errorf("%w: unknown service kind %q", ErrInvalid, svc.Kind)
 	}
 	if svc.Kind.IsDatabase() {
 		for _, k := range databaseNameKeys {
@@ -346,46 +346,46 @@ func (c *Core) UpdateService(ctx context.Context, id string, p ServicePatch) (Se
 	return c.view(ctx, svc)
 }
 
-func (c *Core) updateService(ctx context.Context, id string, p ServicePatch) (store.Service, error) {
+func (c *Core) updateService(ctx context.Context, id string, p ServicePatch) (domain.Service, error) {
 	old, err := c.store.GetService(ctx, id)
 	if err != nil {
-		return store.Service{}, err
+		return domain.Service{}, err
 	}
 	if err := c.checkGitOwned(ctx, old.ProjectID); err != nil {
-		return store.Service{}, err
+		return domain.Service{}, err
 	}
 	svc, err := c.patched(old, p)
 	if err != nil {
-		return store.Service{}, err
+		return domain.Service{}, err
 	}
 	if err := checkServiceChange(ctx, old, svc); err != nil {
-		return store.Service{}, err
+		return domain.Service{}, err
 	}
 	if err := c.validate(ctx, svc); err != nil {
-		return store.Service{}, err
+		return domain.Service{}, err
 	}
 	if err := c.errorsIdentity(ctx, &svc); err != nil {
-		return store.Service{}, err
+		return domain.Service{}, err
 	}
 	if svc.Domain != old.Domain || svc.Analytics && !old.Analytics {
 		svc.AnalyticsSince = time.Now().UTC().Truncate(time.Microsecond) // as stored
 	}
 	if svc, err = c.store.UpdateService(ctx, svc); err != nil {
-		return store.Service{}, err
+		return domain.Service{}, err
 	}
 	switch {
 	case svc.Preview == "only" && old.Preview != "only":
 		// Its previews' copy only: the project's own containers stop for good.
 		if err := c.store.SetServiceStopped(ctx, svc.ID, true); err != nil {
-			return store.Service{}, err
+			return domain.Service{}, err
 		}
 		if _, err := c.ServiceAction(ctx, svc.ID, ActionStop); err != nil && !errors.Is(err, ErrInvalid) {
-			return store.Service{}, err
+			return domain.Service{}, err
 		}
 		svc.Stopped = true
 	case old.Preview == "only" && svc.Preview != "only":
 		if err := c.store.SetServiceStopped(ctx, svc.ID, false); err != nil {
-			return store.Service{}, err
+			return domain.Service{}, err
 		}
 		svc.Stopped = false
 	}
@@ -406,7 +406,7 @@ func (c *Core) updateService(ctx context.Context, id string, p ServicePatch) (st
 }
 
 // patched is old with p applied, before validation.
-func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error) {
+func (c *Core) patched(old domain.Service, p ServicePatch) (domain.Service, error) {
 	var err error
 	svc := old
 	svc.Env = maps.Clone(old.Env)
@@ -418,7 +418,7 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 	}
 	if p.Tags != nil {
 		if svc.Tags, err = normalizeTags(p.Tags); err != nil {
-			return store.Service{}, err
+			return domain.Service{}, err
 		}
 	}
 	if p.Anonymize != nil {
@@ -451,7 +451,7 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 			in = maskEnv(svc.Env, svc.Secrets)
 		}
 		if svc.Env, svc.Secrets, err = mergeEnv(in, p.Secrets, old.Env, old.Secrets); err != nil {
-			return store.Service{}, err
+			return domain.Service{}, err
 		}
 	}
 	if p.MemoryMB != nil {
@@ -507,19 +507,19 @@ func (c *Core) patched(old store.Service, p ServicePatch) (store.Service, error)
 	}
 	if p.Middlewares != nil {
 		if svc.Middlewares, err = mergeMiddlewares(*p.Middlewares, old.Middlewares); err != nil {
-			return store.Service{}, err
+			return domain.Service{}, err
 		}
 	}
 	if svc.Kind.IsDatabase() {
 		if err := checkDatabaseUpdate(old, svc); err != nil {
-			return store.Service{}, err
+			return domain.Service{}, err
 		}
 	}
 	return svc, nil
 }
 
 // validate checks a service's fields and that its env references resolve.
-func (c *Core) validate(ctx context.Context, s store.Service) error {
+func (c *Core) validate(ctx context.Context, s domain.Service) error {
 	project, err := c.store.GetProject(ctx, s.ProjectID)
 	if err != nil {
 		return err
@@ -535,13 +535,13 @@ func (c *Core) validate(ctx context.Context, s store.Service) error {
 	if err != nil {
 		return err
 	}
-	others := slices.DeleteFunc(all, func(o store.Service) bool { return s.ID != "" && o.ID == s.ID })
+	others := slices.DeleteFunc(all, func(o domain.Service) bool { return s.ID != "" && o.ID == s.ID })
 	return c.checkDomain(ctx, s, project.ServerID, others)
 }
 
 // validateIn is validate against a project's variables and databases as
 // they will be (ApplyCompose checks a whole file before changing anything).
-func (c *Core) validateIn(ctx context.Context, s store.Service, project store.Project, dbs map[string]store.Service) error {
+func (c *Core) validateIn(ctx context.Context, s domain.Service, project domain.Project, dbs map[string]domain.Service) error {
 	if err := validateService(s); err != nil {
 		return err
 	}
@@ -551,7 +551,7 @@ func (c *Core) validateIn(ctx context.Context, s store.Service, project store.Pr
 	if s.Analytics && project.ParentID != "" {
 		return fmt.Errorf("%w: previews aren't counted by analytics", ErrInvalid)
 	}
-	if s.Analytics && project.ServerID != store.LocalServerID {
+	if s.Analytics && project.ServerID != domain.LocalServerID {
 		return fmt.Errorf("%w: analytics only run on the manager's server for now", ErrInvalid)
 	}
 	if project.SleepAfterSeconds != 0 && (len(s.PublishedPorts) > 0 || s.HostNetwork) {
@@ -585,7 +585,7 @@ func (c *Core) validateIn(ctx context.Context, s store.Service, project store.Pr
 // IconHint names the logo for svc: its icon, else its image's base name
 // (ghcr.io/n8n-io/n8n:1 → n8n). The UI shows the logo if it knows the name,
 // else one for the kind. Backups keep it, as they outlive the service.
-func IconHint(svc store.Service) string {
+func IconHint(svc domain.Service) string {
 	if svc.Icon != "" {
 		return svc.Icon
 	}
@@ -597,7 +597,7 @@ func IconHint(svc store.Service) string {
 	return p[strings.LastIndex(p, "/")+1:]
 }
 
-func validateService(s store.Service) error {
+func validateService(s domain.Service) error {
 	if err := validateProjectNetworks(s); err != nil {
 		return err
 	}
@@ -730,7 +730,7 @@ func (c *Core) ListServices(ctx context.Context, projectID string) ([]ServiceVie
 	if err != nil {
 		return nil, err
 	}
-	svcByID := map[string]store.Service{}
+	svcByID := map[string]domain.Service{}
 	for _, s := range svcs {
 		svcByID[s.ID] = s
 	}
@@ -751,7 +751,7 @@ func (c *Core) ListServices(ctx context.Context, projectID string) ([]ServiceVie
 	return views, nil
 }
 
-func (c *Core) view(ctx context.Context, svc store.Service) (ServiceView, error) {
+func (c *Core) view(ctx context.Context, svc domain.Service) (ServiceView, error) {
 	cts, err := c.serviceContainers(ctx, svc)
 	if err != nil {
 		return ServiceView{}, err
@@ -773,8 +773,8 @@ func (c *Core) view(ctx context.Context, svc store.Service) (ServiceView, error)
 
 // routePending reports whether svc's domain or port differ from what its
 // running deployment routes.
-func (c *Core) routePending(ctx context.Context, svc store.Service) bool {
-	if svc.Kind != store.ServiceKindApp || svc.Stopped || svc.CurrentDeploymentID == "" {
+func (c *Core) routePending(ctx context.Context, svc domain.Service) bool {
+	if svc.Kind != domain.ServiceKindApp || svc.Stopped || svc.CurrentDeploymentID == "" {
 		return false
 	}
 	d, err := c.store.GetDeployment(ctx, svc.CurrentDeploymentID)
@@ -784,7 +784,7 @@ func (c *Core) routePending(ctx context.Context, svc store.Service) bool {
 	return d.Config.Domain != svc.Domain || d.Config.Port != svc.Port || !sameRoutes(d.Config.Routes, svc.Routes)
 }
 
-func (c *Core) serviceContainers(ctx context.Context, svc store.Service) ([]container.Summary, error) {
+func (c *Core) serviceContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error) {
 	return c.dockerFor(svc.ServerID).ListContainers(ctx, map[string]string{
 		docker.LabelProject: svc.ProjectID,
 		docker.LabelService: svc.ID,
@@ -792,7 +792,7 @@ func (c *Core) serviceContainers(ctx context.Context, svc store.Service) ([]cont
 }
 
 // activeContainers returns the containers of the deployment serving traffic.
-func (c *Core) activeContainers(ctx context.Context, svc store.Service) ([]container.Summary, error) {
+func (c *Core) activeContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error) {
 	cts, err := c.serviceContainers(ctx, svc)
 	if err != nil {
 		return nil, err
@@ -806,7 +806,7 @@ func (c *Core) activeContainers(ctx context.Context, svc store.Service) ([]conta
 	return active, nil
 }
 
-func containerView(ct container.Summary, svc store.Service) ContainerView {
+func containerView(ct container.Summary, svc domain.Service) ContainerView {
 	replica, _ := strconv.Atoi(ct.Labels[docker.LabelReplica])
 	name := ""
 	if len(ct.Names) > 0 {
@@ -847,18 +847,18 @@ func sortedContainers(v []ContainerView) []ContainerView {
 	return v
 }
 
-func masked(s store.Service) store.Service {
+func masked(s domain.Service) domain.Service {
 	s.Env = maskEnv(s.Env, s.Secrets)
 	if s.Secrets == nil {
 		s.Secrets = []string{}
 	}
 	if s.Volumes == nil {
-		s.Volumes = []store.Volume{}
+		s.Volumes = []domain.Volume{}
 	}
 	if s.PublishedPorts == nil {
-		s.PublishedPorts = []store.PublishedPort{}
+		s.PublishedPorts = []domain.PublishedPort{}
 	}
-	files := make([]store.ServiceFile, len(s.Files))
+	files := make([]domain.ServiceFile, len(s.Files))
 	for i, f := range s.Files {
 		f.Content = nil // can be large, and secret: Size says how large
 		files[i] = f
@@ -914,7 +914,7 @@ func (c *Core) DeleteService(ctx context.Context, id, confirm string) error {
 }
 
 // removeServiceContainers removes containers and the service's volumes.
-func (c *Core) removeServiceContainers(ctx context.Context, svc store.Service) error {
+func (c *Core) removeServiceContainers(ctx context.Context, svc domain.Service) error {
 	cts, err := c.serviceContainers(ctx, svc)
 	if err != nil {
 		return err
@@ -933,7 +933,7 @@ func (c *Core) removeServiceContainers(ctx context.Context, svc store.Service) e
 }
 
 // errPreviewOnly refuses running a previews-only service in its project.
-func errPreviewOnly(svc store.Service) error {
+func errPreviewOnly(svc domain.Service) error {
 	return fmt.Errorf("%w: %s runs in previews only", ErrInvalid, svc.Name)
 }
 
@@ -1006,7 +1006,7 @@ func (c *Core) ServiceAction(ctx context.Context, id string, action Action) (Ser
 // maxHealthcheckSeconds bounds a healthcheck's durations.
 const maxHealthcheckSeconds = 3600
 
-func validateHealthcheck(s store.Service) error {
+func validateHealthcheck(s domain.Service) error {
 	h := s.Healthcheck
 	if !h.Set() {
 		return nil

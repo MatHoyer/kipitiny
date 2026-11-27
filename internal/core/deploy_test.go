@@ -9,7 +9,7 @@ import (
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestRetagImage(t *testing.T) {
@@ -46,15 +46,15 @@ func TestRetagImage(t *testing.T) {
 func TestDeployRejects(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	img, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, ServerID: p.ServerID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx:1.25", Replicas: 1})
+	img, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, ServerID: p.ServerID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx:1.25", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	db, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, ServerID: p.ServerID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17", Replicas: 1})
+	db, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, ServerID: p.ServerID, Name: "db", Kind: domain.ServiceKindPostgres, Image: "postgres:17", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,11 +105,11 @@ func TestPinDigest(t *testing.T) {
 }
 
 func TestStopGrace(t *testing.T) {
-	app := store.Service{ID: "01ABC", Name: "mc", Kind: store.ServiceKindApp, Image: "itzg/minecraft-server", Replicas: 1}
+	app := domain.Service{ID: "01ABC", Name: "mc", Kind: domain.ServiceKindApp, Image: "itzg/minecraft-server", Replicas: 1}
 	if got := stopTimeoutFor(app); got != stopTimeout {
 		t.Errorf("default = %s", got)
 	}
-	if spec := containerSpec(store.Project{ID: "P1", Name: "games"}, app, envSources{}, "D1", 1, route{}); spec.Config.StopTimeout != nil {
+	if spec := containerSpec(domain.Project{ID: "P1", Name: "games"}, app, envSources{}, "D1", 1, route{}); spec.Config.StopTimeout != nil {
 		t.Errorf("default stop timeout set on the container: %d", *spec.Config.StopTimeout)
 	}
 
@@ -117,7 +117,7 @@ func TestStopGrace(t *testing.T) {
 	if got := stopTimeoutFor(app); got != 90*time.Second {
 		t.Errorf("custom = %s", got)
 	}
-	spec := containerSpec(store.Project{ID: "P1", Name: "games"}, app, envSources{}, "D1", 1, route{})
+	spec := containerSpec(domain.Project{ID: "P1", Name: "games"}, app, envSources{}, "D1", 1, route{})
 	if spec.Config.StopTimeout == nil || *spec.Config.StopTimeout != 90 {
 		t.Errorf("container stop timeout = %v", spec.Config.StopTimeout)
 	}
@@ -179,9 +179,9 @@ func TestRetagOptions(t *testing.T) {
 func TestRoutePending(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, _ := c.store.CreateProject(ctx, store.Project{Name: "a", ServerID: store.LocalServerID})
-	svc, err := c.store.CreateService(ctx, store.Service{
-		ProjectID: p.ID, ServerID: store.LocalServerID, Name: "web", Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Domain: "old.example.com", Port: 80,
+	p, _ := c.store.CreateProject(ctx, domain.Project{Name: "a", ServerID: domain.LocalServerID})
+	svc, err := c.store.CreateService(ctx, domain.Service{
+		ProjectID: p.ID, ServerID: domain.LocalServerID, Name: "web", Kind: domain.ServiceKindApp, Image: "x", Replicas: 1, Domain: "old.example.com", Port: 80,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -189,7 +189,7 @@ func TestRoutePending(t *testing.T) {
 	if c.routePending(ctx, svc) {
 		t.Error("never deployed: nothing to apply")
 	}
-	d, err := c.store.CreateDeployment(ctx, store.Deployment{ServiceID: svc.ID, Status: store.DeploymentSucceeded, Image: "x", Config: svc})
+	d, err := c.store.CreateDeployment(ctx, domain.Deployment{ServiceID: svc.ID, Status: domain.DeploymentSucceeded, Image: "x", Config: svc})
 	if err != nil {
 		t.Fatal(err)
 	}

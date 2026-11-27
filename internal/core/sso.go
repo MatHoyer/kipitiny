@@ -16,7 +16,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // Single sign-on: admins add OpenID Connect providers (Google, Authentik,
@@ -39,10 +39,10 @@ type ssoState struct {
 
 // SSOProviderView is a provider with its client secret masked.
 type SSOProviderView struct {
-	store.SSOProvider
+	domain.SSOProvider
 }
 
-func ssoProviderView(p store.SSOProvider) SSOProviderView {
+func ssoProviderView(p domain.SSOProvider) SSOProviderView {
 	if p.ClientSecret != "" {
 		p.ClientSecret = SecretMask
 	}
@@ -94,7 +94,7 @@ func (c *Core) CreateSSOProvider(ctx context.Context, in SSOProviderInput) (SSOP
 	if err := RequireAdmin(ctx); err != nil {
 		return SSOProviderView{}, err
 	}
-	p, err := c.checkSSOProvider(ctx, store.SSOProvider{}, in)
+	p, err := c.checkSSOProvider(ctx, domain.SSOProvider{}, in)
 	if err != nil {
 		return SSOProviderView{}, err
 	}
@@ -142,7 +142,7 @@ func (c *Core) DeleteSSOProvider(ctx context.Context, id string) error {
 
 // checkSSOProvider validates in over p and fetches the issuer's discovery
 // document, so a typo shows up now rather than at the first sign-in.
-func (c *Core) checkSSOProvider(ctx context.Context, p store.SSOProvider, in SSOProviderInput) (store.SSOProvider, error) {
+func (c *Core) checkSSOProvider(ctx context.Context, p domain.SSOProvider, in SSOProviderInput) (domain.SSOProvider, error) {
 	p.Name, p.Issuer, p.ClientID = strings.TrimSpace(in.Name), strings.TrimSpace(in.Issuer), strings.TrimSpace(in.ClientID)
 	if in.ClientSecret != SecretMask {
 		p.ClientSecret = strings.TrimSpace(in.ClientSecret)
@@ -166,7 +166,7 @@ func (c *Core) checkSSOProvider(ctx context.Context, p store.SSOProvider, in SSO
 }
 
 func ssoConflict(err error) error {
-	if err != nil && strings.Contains(err.Error(), store.ErrConflict.Error()) {
+	if err != nil && strings.Contains(err.Error(), domain.ErrConflict.Error()) {
 		return fmt.Errorf("%w: a provider with this name exists", ErrInvalid)
 	}
 	return err
@@ -182,7 +182,7 @@ func (c *Core) ssoContext(ctx context.Context) context.Context {
 
 // oidcProvider returns the provider's endpoints and keys, discovered once
 // and kept until it changes (go-oidc refetches rotated keys itself).
-func (c *Core) oidcProvider(ctx context.Context, p store.SSOProvider) (*oidc.Provider, error) {
+func (c *Core) oidcProvider(ctx context.Context, p domain.SSOProvider) (*oidc.Provider, error) {
 	c.sso.mu.Lock()
 	op := c.sso.providers[p.ID]
 	c.sso.mu.Unlock()
@@ -291,7 +291,7 @@ func (c *Core) BeginSSOConfirm(ctx context.Context, providerID, managerURL, retu
 	if err != nil {
 		return SSOStart{}, err
 	}
-	if !slices.ContainsFunc(is, func(i store.SSOIdentity) bool { return i.ProviderID == providerID }) {
+	if !slices.ContainsFunc(is, func(i domain.SSOIdentity) bool { return i.ProviderID == providerID }) {
 		return SSOStart{}, fmt.Errorf("%w: your account isn't linked at this provider", ErrInvalid)
 	}
 	return c.beginSSO(ctx, ssoFlow{purpose: ssoConfirm, providerID: providerID, userID: a.UserID, session: a.Session,
@@ -321,7 +321,7 @@ func (c *Core) beginSSO(ctx context.Context, f ssoFlow, managerURL string) (SSOS
 	return SSOStart{URL: u, State: state}, nil
 }
 
-func ssoOAuth(p store.SSOProvider, op *oidc.Provider, redirectURL string) *oauth2.Config {
+func ssoOAuth(p domain.SSOProvider, op *oidc.Provider, redirectURL string) *oauth2.Config {
 	return &oauth2.Config{ClientID: p.ClientID, ClientSecret: p.ClientSecret, Endpoint: op.Endpoint(), RedirectURL: redirectURL,
 		Scopes: []string{oidc.ScopeOpenID, "email", "profile"}}
 }
@@ -330,7 +330,7 @@ func ssoOAuth(p store.SSOProvider, op *oidc.Provider, redirectURL string) *oauth
 // second factor) or a linked identity.
 type SSOResult struct {
 	Purpose   string
-	User      store.User
+	User      domain.User
 	Session   string
 	MFATicket string
 	// ReturnTo is where a sign-in lands.
@@ -386,7 +386,7 @@ type ssoClaims struct {
 
 // ssoIdentity exchanges the code and checks the ID token: signature,
 // issuer, audience, expiry and the flow's nonce.
-func (c *Core) ssoIdentity(ctx context.Context, p store.SSOProvider, f ssoFlow, code string) (ssoClaims, error) {
+func (c *Core) ssoIdentity(ctx context.Context, p domain.SSOProvider, f ssoFlow, code string) (ssoClaims, error) {
 	op, err := c.oidcProvider(ctx, p)
 	if err != nil {
 		return ssoClaims{}, err
@@ -421,22 +421,22 @@ func (c *Core) ssoIdentity(ctx context.Context, p store.SSOProvider, f ssoFlow, 
 
 // ssoSignIn signs in the user the identity is linked to. Two-factor
 // authentication still applies: the provider stands in for the password.
-func (c *Core) ssoSignIn(ctx context.Context, p store.SSOProvider, id ssoClaims) (store.User, string, string, error) {
+func (c *Core) ssoSignIn(ctx context.Context, p domain.SSOProvider, id ssoClaims) (domain.User, string, string, error) {
 	link, err := c.store.GetSSOIdentity(ctx, p.ID, id.Subject)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, domain.ErrNotFound) {
 		who := ""
 		if id.Email != "" {
 			who = " (" + id.Email + ")"
 		}
-		return store.User{}, "", "", fmt.Errorf("%w: no kipitiny account is linked to this %s account%s; ask an admin for an invite, or link it from Account once signed in",
+		return domain.User{}, "", "", fmt.Errorf("%w: no kipitiny account is linked to this %s account%s; ask an admin for an invite, or link it from Account once signed in",
 			ErrUnauthorized, p.Name, who)
 	}
 	if err != nil {
-		return store.User{}, "", "", err
+		return domain.User{}, "", "", err
 	}
 	u, err := c.store.GetUser(ctx, link.UserID)
 	if err != nil {
-		return store.User{}, "", "", err
+		return domain.User{}, "", "", err
 	}
 	_ = c.store.SSOIdentityUsed(ctx, link.ID, id.Email)
 	if u.TOTPSecret != "" {
@@ -449,10 +449,10 @@ func (c *Core) ssoSignIn(ctx context.Context, p store.SSOProvider, id ssoClaims)
 	return u, session, "", err
 }
 
-func (c *Core) linkSSOIdentity(ctx context.Context, p store.SSOProvider, userID string, id ssoClaims) (store.User, error) {
+func (c *Core) linkSSOIdentity(ctx context.Context, p domain.SSOProvider, userID string, id ssoClaims) (domain.User, error) {
 	u, err := c.store.GetUser(ctx, userID)
 	if err != nil {
-		return store.User{}, err
+		return domain.User{}, err
 	}
 	if link, err := c.store.GetSSOIdentity(ctx, p.ID, id.Subject); err == nil {
 		if link.UserID == userID {
@@ -460,8 +460,8 @@ func (c *Core) linkSSOIdentity(ctx context.Context, p store.SSOProvider, userID 
 		}
 		return u, fmt.Errorf("%w: this %s account is linked to another kipitiny user", ErrInvalid, p.Name)
 	}
-	_, err = c.store.CreateSSOIdentity(ctx, store.SSOIdentity{UserID: userID, ProviderID: p.ID, Subject: id.Subject, Email: id.Email})
-	if errors.Is(err, store.ErrConflict) {
+	_, err = c.store.CreateSSOIdentity(ctx, domain.SSOIdentity{UserID: userID, ProviderID: p.ID, Subject: id.Subject, Email: id.Email})
+	if errors.Is(err, domain.ErrConflict) {
 		return u, fmt.Errorf("%w: another %s account is linked to yours; unlink it first", ErrInvalid, p.Name)
 	}
 	return u, err
@@ -469,25 +469,25 @@ func (c *Core) linkSSOIdentity(ctx context.Context, p store.SSOProvider, userID 
 
 // acceptSSOInvite creates the invited account without a password, linked
 // to the identity, and signs it in.
-func (c *Core) acceptSSOInvite(ctx context.Context, p store.SSOProvider, f ssoFlow, id ssoClaims) (store.User, string, error) {
+func (c *Core) acceptSSOInvite(ctx context.Context, p domain.SSOProvider, f ssoFlow, id ssoClaims) (domain.User, string, error) {
 	if link, err := c.store.GetSSOIdentity(ctx, p.ID, id.Subject); err == nil {
 		owner := "another user"
 		if u, err := c.store.GetUser(ctx, link.UserID); err == nil {
 			owner = u.Username
 		}
-		return store.User{}, "", fmt.Errorf("%w: this %s account already signs in as %s", ErrInvalid, p.Name, owner)
+		return domain.User{}, "", fmt.Errorf("%w: this %s account already signs in as %s", ErrInvalid, p.Name, owner)
 	}
 	i, err := c.store.GetInviteByHash(ctx, hashToken(f.invite))
 	if err != nil {
-		return store.User{}, "", inviteErr(err)
+		return domain.User{}, "", inviteErr(err)
 	}
 	if err := c.checkNewUsername(ctx, f.username); err != nil {
-		return store.User{}, "", err
+		return domain.User{}, "", err
 	}
-	u, err := c.store.AcceptInvite(ctx, i.ID, store.User{Username: f.username},
-		&store.SSOIdentity{ProviderID: p.ID, Subject: id.Subject, Email: id.Email})
+	u, err := c.store.AcceptInvite(ctx, i.ID, domain.User{Username: f.username},
+		&domain.SSOIdentity{ProviderID: p.ID, Subject: id.Subject, Email: id.Email})
 	if err != nil {
-		return store.User{}, "", inviteErr(err)
+		return domain.User{}, "", inviteErr(err)
 	}
 	session, err := c.newSession(ctx, u.ID)
 	return u, session, err
@@ -495,18 +495,18 @@ func (c *Core) acceptSSOInvite(ctx context.Context, p store.SSOProvider, f ssoFl
 
 // confirmSSO marks the flow's session as confirmed, if the identity is the
 // user's and the provider asked for its credentials during the flow.
-func (c *Core) confirmSSO(ctx context.Context, p store.SSOProvider, f ssoFlow, id ssoClaims) (store.User, error) {
+func (c *Core) confirmSSO(ctx context.Context, p domain.SSOProvider, f ssoFlow, id ssoClaims) (domain.User, error) {
 	link, err := c.store.GetSSOIdentity(ctx, p.ID, id.Subject)
 	if err != nil || link.UserID != f.userID {
-		return store.User{}, fmt.Errorf("%w: that %s account isn't the one linked to yours", ErrInvalid, p.Name)
+		return domain.User{}, fmt.Errorf("%w: that %s account isn't the one linked to yours", ErrInvalid, p.Name)
 	}
 	if id.AuthTime.IsZero() || id.AuthTime.Before(f.started.Add(-ssoFreshness)) {
-		return store.User{}, fmt.Errorf("%w: %s didn't ask for your credentials again, so it can't confirm it's you; "+
+		return domain.User{}, fmt.Errorf("%w: %s didn't ask for your credentials again, so it can't confirm it's you; "+
 			"sign out of %s and retry", ErrInvalid, p.Name, p.Name)
 	}
 	u, err := c.store.GetUser(ctx, f.userID)
 	if err != nil {
-		return store.User{}, err
+		return domain.User{}, err
 	}
 	c.confirmations.put(f.session, struct{}{}, time.Now().Add(confirmWindow))
 	return u, nil
@@ -514,7 +514,7 @@ func (c *Core) confirmSSO(ctx context.Context, p store.SSOProvider, f ssoFlow, i
 
 // SSOIdentityView is a linked identity, for the account page.
 type SSOIdentityView struct {
-	store.SSOIdentity
+	domain.SSOIdentity
 	ProviderName string `json:"providerName"`
 }
 
@@ -547,7 +547,7 @@ func (c *Core) UnlinkSSOIdentity(ctx context.Context, id string) error {
 
 // keepASignIn fails when removing that passkey or identity would leave an
 // account without a password no way to sign in.
-func (c *Core) keepASignIn(ctx context.Context, u store.User, passkeyID, identityID string) error {
+func (c *Core) keepASignIn(ctx context.Context, u domain.User, passkeyID, identityID string) error {
 	if u.PasswordHash != "" {
 		return nil
 	}
@@ -560,8 +560,8 @@ func (c *Core) keepASignIn(ctx context.Context, u store.User, passkeyID, identit
 		return err
 	}
 	left := len(ps) + len(is)
-	if slices.ContainsFunc(ps, func(p store.Passkey) bool { return p.ID == passkeyID }) ||
-		slices.ContainsFunc(is, func(i store.SSOIdentity) bool { return i.ID == identityID }) {
+	if slices.ContainsFunc(ps, func(p domain.Passkey) bool { return p.ID == passkeyID }) ||
+		slices.ContainsFunc(is, func(i domain.SSOIdentity) bool { return i.ID == identityID }) {
 		left--
 	}
 	if left == 0 {

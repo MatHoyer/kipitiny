@@ -12,8 +12,8 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
-	"github.com/kipit-labs/kipitiny/internal/store/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 )
 
 // TestScheduledJobsDocker runs jobs of an app on the local Docker daemon:
@@ -36,17 +36,17 @@ func TestScheduledJobsDocker(t *testing.T) {
 	t.Cleanup(func() { st.Close() })
 	c := New(config.Config{DataDir: t.TempDir()}, st, dk, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
-	p, err := st.CreateProject(ctx, store.Project{Name: "kipitiny-jobtest", ServerID: store.LocalServerID})
+	p, err := st.CreateProject(ctx, domain.Project{Name: "kipitiny-jobtest", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = dk.RemoveNetwork(context.Background(), docker.ProjectNetwork(p.ID)) })
-	svc, err := st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "app", Kind: store.ServiceKindApp, Image: "busybox:stable",
+	svc, err := st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "app", Kind: domain.ServiceKindApp, Image: "busybox:stable",
 		Replicas: 1, Env: map[string]string{"GREETING": "hello"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	dep, err := st.CreateDeployment(ctx, store.Deployment{ServiceID: svc.ID, Status: store.DeploymentSucceeded, Image: svc.Image, Config: svc})
+	dep, err := st.CreateDeployment(ctx, domain.Deployment{ServiceID: svc.ID, Status: domain.DeploymentSucceeded, Image: svc.Image, Config: svc})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,13 +57,13 @@ func TestScheduledJobsDocker(t *testing.T) {
 	for _, tc := range []struct {
 		name, command string
 		timeout       int
-		status        store.OpStatus
+		status        domain.OpStatus
 		code          int // -1: none
 		log, err      string
 	}{
-		{"ok", "echo $GREETING from $HOSTNAME", 60, store.OpSucceeded, 0, "hello from", ""},
-		{"fail", "echo oops >&2; exit 3", 60, store.OpFailed, 3, "oops", "exited with code 3"},
-		{"slow", "echo started; sleep 60", 2, store.OpFailed, -1, "started", "timed out after 2s"},
+		{"ok", "echo $GREETING from $HOSTNAME", 60, domain.OpSucceeded, 0, "hello from", ""},
+		{"fail", "echo oops >&2; exit 3", 60, domain.OpFailed, 3, "oops", "exited with code 3"},
+		{"slow", "echo started; sleep 60", 2, domain.OpFailed, -1, "started", "timed out after 2s"},
 	} {
 		j, err := c.CreateJob(ctx, svc.ID, JobInput{Name: tc.name, Command: tc.command, Cron: "@yearly", TimeoutSec: tc.timeout})
 		if err != nil {
@@ -74,7 +74,7 @@ func TestScheduledJobsDocker(t *testing.T) {
 			t.Fatal(err)
 		}
 		deadline := time.Now().Add(time.Minute)
-		for r.Status == store.OpRunning && time.Now().Before(deadline) {
+		for r.Status == domain.OpRunning && time.Now().Before(deadline) {
 			time.Sleep(200 * time.Millisecond)
 			if r, err = st.GetJobRun(ctx, r.ID); err != nil {
 				t.Fatal(err)

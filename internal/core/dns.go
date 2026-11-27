@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/cloudflare"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const (
@@ -58,7 +58,7 @@ type TunnelView struct {
 
 // DomainView adds what Cloudflare knows about a listed domain.
 type DomainView struct {
-	store.Domain
+	domain.Domain
 	Cloudflare bool   `json:"cloudflare"`        // in a zone the token manages
 	SSLMode    string `json:"sslMode,omitempty"` // the zone's SSL/TLS mode
 }
@@ -192,8 +192,8 @@ func (c *Core) ConnectCloudflare(ctx context.Context, token string) (CloudflareV
 	cf := cloudflare.New(token)
 	for _, z := range zones {
 		mode, _ := cf.SSLMode(ctx, z.ID)
-		d := store.Domain{Name: z.Name, Proxied: mode == "full" || mode == "strict"}
-		if _, err := c.store.CreateDomain(ctx, d); err != nil && !errors.Is(err, store.ErrConflict) {
+		d := domain.Domain{Name: z.Name, Proxied: mode == "full" || mode == "strict"}
+		if _, err := c.store.CreateDomain(ctx, d); err != nil && !errors.Is(err, domain.ErrConflict) {
 			c.log.Warn("cannot add Cloudflare zone as a domain", "zone", z.Name, "err", err)
 		}
 	}
@@ -265,7 +265,7 @@ func (c *Core) DomainViews(ctx context.Context) ([]DomainView, error) {
 	return out, nil
 }
 
-func (c *Core) SetDomainProxied(ctx context.Context, id string, proxied bool) (store.Domain, error) {
+func (c *Core) SetDomainProxied(ctx context.Context, id string, proxied bool) (domain.Domain, error) {
 	d, err := c.store.SetDomainProxied(ctx, id, proxied)
 	if err == nil {
 		c.kickDNS()
@@ -313,12 +313,12 @@ func (c *Core) SetServerNetwork(ctx context.Context, id string, in ServerNetwork
 }
 
 // serverView is a server as clients see it, without live status.
-func (c *Core) serverView(sv store.Server) ServerView {
+func (c *Core) serverView(sv domain.Server) ServerView {
 	v := ServerView{Server: sv, DetectedIP: c.DetectedPublicIP(sv.ID)}
 	switch {
 	case sv.TunnelToken != "":
 		v.Tunnel = "server"
-	case sv.Kind == store.ServerLocal && c.cfg.Tunnel.Token != "":
+	case sv.Kind == domain.ServerLocal && c.cfg.Tunnel.Token != "":
 		v.Tunnel = "env"
 	}
 	return v
@@ -479,7 +479,7 @@ func (c *Core) wantedRecords(ctx context.Context, zones []cloudflare.Zone) (map[
 	if err != nil {
 		return nil, err
 	}
-	byID := map[string]store.Server{}
+	byID := map[string]domain.Server{}
 	for _, sv := range servers {
 		byID[sv.ID] = sv
 	}
@@ -532,10 +532,10 @@ func (c *Core) wantedRecords(ctx context.Context, zones []cloudflare.Zone) (map[
 		add(host, server[host], d)
 	}
 	if c.cfg.Domain != "" && c.cfg.Traefik.Enabled {
-		add(c.cfg.Domain, store.LocalServerID, false)
+		add(c.cfg.Domain, domain.LocalServerID, false)
 	}
 	if a := c.Analytics(ctx); a.Enabled && c.cfg.Traefik.Enabled {
-		add(a.Domain, store.LocalServerID, false)
+		add(a.Domain, domain.LocalServerID, false)
 	}
 	return wants, nil
 }
@@ -554,7 +554,7 @@ func flatName(zone, host string) string {
 }
 
 // proxiedFor is the proxy setting of the listed domain covering host.
-func proxiedFor(domains []store.Domain, host string) bool {
+func proxiedFor(domains []domain.Domain, host string) bool {
 	best := ""
 	proxied := false
 	for _, d := range domains {
@@ -748,7 +748,7 @@ func normalize(rules []cloudflare.Ingress) any {
 
 // publicIP is where records point for apps on sv: the configured address,
 // else detected (and remembered for the process's lifetime).
-func (c *Core) publicIP(ctx context.Context, sv store.Server) (string, error) {
+func (c *Core) publicIP(ctx context.Context, sv domain.Server) (string, error) {
 	if sv.PublicIP != "" {
 		return sv.PublicIP, nil
 	}
@@ -780,8 +780,8 @@ func (c *Core) DetectedPublicIP(id string) string {
 	return s.ips[id]
 }
 
-func detectPublicIP(ctx context.Context, sv store.Server) (string, error) {
-	if sv.Kind == store.ServerSSH {
+func detectPublicIP(ctx context.Context, sv domain.Server) (string, error) {
+	if sv.Kind == domain.ServerSSH {
 		ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", sv.Host)
 		if err != nil {
 			return "", err

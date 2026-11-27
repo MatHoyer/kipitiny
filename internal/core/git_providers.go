@@ -16,10 +16,10 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/gitprovider"
 	"github.com/kipit-labs/kipitiny/internal/ids"
 	"github.com/kipit-labs/kipitiny/internal/progress"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Git providers give the manager read access to private repositories:
@@ -56,14 +56,14 @@ type gitTokens struct {
 
 // GitProviderView is a provider with its credentials masked.
 type GitProviderView struct {
-	store.GitProvider
+	domain.GitProvider
 	Connected bool `json:"connected"`
 	// Webhooks reports that pushes reach the manager through the app, for
 	// every repository it reads.
 	Webhooks bool `json:"webhooks"`
 }
 
-func gitProviderView(p store.GitProvider) GitProviderView {
+func gitProviderView(p domain.GitProvider) GitProviderView {
 	v := GitProviderView{GitProvider: p, Connected: p.Connected(), Webhooks: p.WebhookSecret != ""}
 	if v.ClientSecret != "" {
 		v.ClientSecret = SecretMask
@@ -77,7 +77,7 @@ func (c *Core) ListGitProviders(ctx context.Context) ([]GitProviderView, error) 
 	for i, p := range ps {
 		out[i] = gitProviderView(p)
 		if isMember(ctx) { // enough to pick one
-			out[i].GitProvider = store.GitProvider{ID: p.ID, Kind: p.Kind, Name: p.Name, BaseURL: p.BaseURL, Account: p.Account}
+			out[i].GitProvider = domain.GitProvider{ID: p.ID, Kind: p.Kind, Name: p.Name, BaseURL: p.BaseURL, Account: p.Account}
 		}
 	}
 	return out, err
@@ -87,8 +87,8 @@ func (c *Core) ListGitProviders(ctx context.Context) ([]GitProviderView, error) 
 // one is created with StartGitHubApp; only its name can change).
 type GitProviderInput struct {
 	// Kind is set on creation only.
-	Kind store.GitProviderKind `json:"kind"`
-	Name string                `json:"name"`
+	Kind domain.GitProviderKind `json:"kind"`
+	Name string                 `json:"name"`
 	// BaseURL defaults to the hosted forge (gitlab.com).
 	BaseURL  string `json:"baseUrl"`
 	ClientID string `json:"clientId"`
@@ -99,10 +99,10 @@ type GitProviderInput struct {
 // CreateGitProvider saves an OAuth application; AuthorizeGitProvider then
 // connects it.
 func (c *Core) CreateGitProvider(ctx context.Context, in GitProviderInput) (GitProviderView, error) {
-	if in.Kind != store.GitLab && in.Kind != store.Gitea {
+	if in.Kind != domain.GitLab && in.Kind != domain.Gitea {
 		return GitProviderView{}, fmt.Errorf("%w: kind must be gitlab or gitea (GitHub providers are created as an app)", ErrInvalid)
 	}
-	p := store.GitProvider{Kind: in.Kind}
+	p := domain.GitProvider{Kind: in.Kind}
 	if err := applyGitProviderInput(&p, in); err != nil {
 		return GitProviderView{}, err
 	}
@@ -115,7 +115,7 @@ func (c *Core) UpdateGitProvider(ctx context.Context, id string, in GitProviderI
 	if err != nil {
 		return GitProviderView{}, err
 	}
-	if p.Kind == store.GitHub {
+	if p.Kind == domain.GitHub {
 		p.Name = strings.TrimSpace(in.Name)
 		if p.Name == "" {
 			return GitProviderView{}, fmt.Errorf("%w: a name is required", ErrInvalid)
@@ -134,7 +134,7 @@ func (c *Core) UpdateGitProvider(ctx context.Context, id string, in GitProviderI
 	return gitProviderView(p), gitProviderNameTaken(err)
 }
 
-func applyGitProviderInput(p *store.GitProvider, in GitProviderInput) error {
+func applyGitProviderInput(p *domain.GitProvider, in GitProviderInput) error {
 	p.Name = strings.TrimSpace(in.Name)
 	p.ClientID = strings.TrimSpace(in.ClientID)
 	if in.ClientSecret != SecretMask {
@@ -152,7 +152,7 @@ func applyGitProviderInput(p *store.GitProvider, in GitProviderInput) error {
 }
 
 // normalizeForgeURL is a forge's https root URL; empty is the hosted forge.
-func normalizeForgeURL(kind store.GitProviderKind, raw string) (string, error) {
+func normalizeForgeURL(kind domain.GitProviderKind, raw string) (string, error) {
 	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
 	if raw == "" {
 		raw = gitprovider.DefaultBaseURL(kind)
@@ -171,7 +171,7 @@ func normalizeForgeURL(kind store.GitProviderKind, raw string) (string, error) {
 }
 
 func gitProviderNameTaken(err error) error {
-	if errors.Is(err, store.ErrConflict) {
+	if errors.Is(err, domain.ErrConflict) {
 		return fmt.Errorf("%w: a git provider already has this name", ErrInvalid)
 	}
 	return err
@@ -179,7 +179,7 @@ func gitProviderNameTaken(err error) error {
 
 func (c *Core) DeleteGitProvider(ctx context.Context, id string) error {
 	err := c.store.DeleteGitProvider(ctx, id)
-	if errors.Is(err, store.ErrConflict) {
+	if errors.Is(err, domain.ErrConflict) {
 		return fmt.Errorf("%w: %v; unlink them first", ErrInvalid, err)
 	}
 	c.gitTokens.mu.Lock()
@@ -235,7 +235,7 @@ func (c *Core) StartGitHubApp(ctx context.Context, managerURL string, in GitHubA
 	if name == "" {
 		name = "GitHub"
 	}
-	base, err := normalizeForgeURL(store.GitHub, in.BaseURL)
+	base, err := normalizeForgeURL(domain.GitHub, in.BaseURL)
 	if err != nil {
 		return GitHubAppStart{}, err
 	}
@@ -249,7 +249,7 @@ func (c *Core) StartGitHubApp(ctx context.Context, managerURL string, in GitHubA
 	}
 	for _, p := range ps {
 		if p.Name == name {
-			return GitHubAppStart{}, gitProviderNameTaken(store.ErrConflict)
+			return GitHubAppStart{}, gitProviderNameTaken(domain.ErrConflict)
 		}
 	}
 	id := ids.New()
@@ -297,8 +297,8 @@ func (c *Core) FinishGitHubApp(ctx context.Context, code, state string) (string,
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
-	p := store.GitProvider{
-		ID: flow.providerID, Kind: store.GitHub, Name: flow.name, BaseURL: flow.baseURL,
+	p := domain.GitProvider{
+		ID: flow.providerID, Kind: domain.GitHub, Name: flow.name, BaseURL: flow.baseURL,
 		AppID: app.ID, AppSlug: app.Slug, PrivateKey: app.PEM,
 		ClientID: app.ClientID, ClientSecret: app.ClientSecret,
 	}
@@ -321,7 +321,7 @@ func (c *Core) GitHubAppInstalled(ctx context.Context, installationID int64, sta
 			return "", err
 		}
 		for _, p := range ps {
-			if p.Kind == store.GitHub && p.InstallationID == installationID {
+			if p.Kind == domain.GitHub && p.InstallationID == installationID {
 				return p.ID, nil
 			}
 		}
@@ -358,7 +358,7 @@ func (c *Core) AuthorizeGitProvider(ctx context.Context, id, managerURL string) 
 	if err != nil {
 		return "", err
 	}
-	if p.Kind == store.GitHub {
+	if p.Kind == domain.GitHub {
 		return gitprovider.InstallURL(p.BaseURL, p.AppSlug, c.putGitFlow(gitFlow{step: gitStepInstall, providerID: p.ID})), nil
 	}
 	p.RedirectURL = managerURL + "/api/git-providers/oauth/callback"
@@ -396,7 +396,7 @@ func (c *Core) FinishGitProviderOAuth(ctx context.Context, code, state string) (
 	return p.ID, err
 }
 
-func setOAuthToken(p *store.GitProvider, tok *oauth2.Token) {
+func setOAuthToken(p *domain.GitProvider, tok *oauth2.Token) {
 	p.AccessToken = tok.AccessToken
 	if tok.RefreshToken != "" {
 		p.RefreshToken = tok.RefreshToken
@@ -468,18 +468,18 @@ func (c *Core) GitProviderBranches(ctx context.Context, id, repo string) ([]stri
 // gitProviderToken returns a token reading the provider's repositories:
 // a GitHub installation token (minted, cached until shortly before it
 // expires) or the OAuth access token (refreshed when about to expire).
-func (c *Core) gitProviderToken(ctx context.Context, id string) (store.GitProvider, string, error) {
+func (c *Core) gitProviderToken(ctx context.Context, id string) (domain.GitProvider, string, error) {
 	c.gitTokens.mu.Lock()
 	defer c.gitTokens.mu.Unlock()
 	p, err := c.store.GetGitProvider(ctx, id)
 	if err != nil {
-		return store.GitProvider{}, "", err
+		return domain.GitProvider{}, "", err
 	}
 	if !p.Connected() {
 		return p, "", fmt.Errorf("%w: git provider %s isn't connected", ErrInvalid, p.Name)
 	}
 	soon := time.Now().Add(5 * time.Minute)
-	if p.Kind == store.GitHub {
+	if p.Kind == domain.GitHub {
 		if t, ok := c.gitTokens.github[id]; ok && t.Expiry.After(soon) {
 			return p, t.AccessToken, nil
 		}
@@ -509,7 +509,7 @@ func (c *Core) gitProviderToken(ctx context.Context, id string) (store.GitProvid
 
 // checkProviderRepo refuses a repository on another host than the
 // provider's: its token must never be sent elsewhere.
-func checkProviderRepo(p store.GitProvider, repoURL string) error {
+func checkProviderRepo(p domain.GitProvider, repoURL string) error {
 	u, err := url.Parse(repoURL)
 	b, berr := url.Parse(p.BaseURL)
 	if err != nil || berr != nil || u.Scheme != "https" || !strings.EqualFold(u.Host, b.Host) {

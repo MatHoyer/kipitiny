@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // anonymizeRoundTrip backs svc up (seed writes its data), turns on
@@ -16,7 +16,7 @@ import (
 // project's salt.
 //
 //	KIPITINY_TEST_DOCKER=1 go test ./internal/core/ -run AnonymizeDocker
-func anonymizeRoundTrip(t *testing.T, c *Core, ctx context.Context, svc, into store.Service, rules anonymize.Rules, seed func(), read func() string,
+func anonymizeRoundTrip(ctx context.Context, t *testing.T, c *Core, svc, into domain.Service, rules anonymize.Rules, seed func(), read func() string,
 	want func(salt string) string) {
 
 	t.Helper()
@@ -25,32 +25,32 @@ func anonymizeRoundTrip(t *testing.T, c *Core, ctx context.Context, svc, into st
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b = waitBackup(t, c, b.ID, func(b store.Backup) bool { return b.Status != store.OpRunning }); b.Status != store.OpSucceeded {
+	if b = waitBackup(t, c, b.ID, func(b domain.Backup) bool { return b.Status != domain.OpRunning }); b.Status != domain.OpSucceeded {
 		t.Fatalf("backup = %+v", b)
 	}
 	if err := c.store.SetServiceAnonymize(ctx, svc.ID, rules); err != nil {
 		t.Fatal(err)
 	}
 	// Turning anonymized seeds on makes the copy.
-	if _, err := c.SetPreviewSettings(ctx, svc.ProjectID, PreviewSettingsInput{Seed: store.SeedAnonymized}); err != nil {
+	if _, err := c.SetPreviewSettings(ctx, svc.ProjectID, PreviewSettingsInput{Seed: domain.SeedAnonymized}); err != nil {
 		t.Fatal(err)
 	}
 	cp := waitCopy(t, c, b.ID, "")
-	if cp.Status != store.OpSucceeded || !cp.Encrypted || !strings.Contains(cp.ObjectKey, ".anon") || cp.SizeBytes == 0 {
+	if cp.Status != domain.OpSucceeded || !cp.Encrypted || !strings.Contains(cp.ObjectKey, ".anon") || cp.SizeBytes == 0 {
 		t.Fatalf("copy = %+v", cp)
 	}
-	if bs, _ := c.store.ListBackups(ctx, store.BackupFilter{ServiceID: svc.ID}); len(bs) != 1 {
+	if bs, _ := c.store.ListBackups(ctx, domain.BackupFilter{ServiceID: svc.ID}); len(bs) != 1 {
 		t.Fatalf("the copy shows among backups: %+v", bs)
 	}
 	// Up to date: nothing new.
 	if err := c.refreshAnonymized(ctx, svc.ProjectID, false); err != nil {
 		t.Fatal(err)
 	}
-	if again, _ := c.store.ListBackups(ctx, store.BackupFilter{Anonymized: true, SourceID: b.ID}); len(again) != 1 {
+	if again, _ := c.store.ListBackups(ctx, domain.BackupFilter{Anonymized: true, SourceID: b.ID}); len(again) != 1 {
 		t.Fatalf("copies = %+v", again)
 	}
 
-	restoreAndWait(t, c, ctx, cp.ID, into)
+	restoreAndWait(ctx, t, c, cp.ID, into)
 	ps, _ := c.store.GetPreviewSettings(ctx, svc.ProjectID)
 	if got := read(); got != want(ps.Salt) {
 		t.Fatalf("anonymized data = %q, want %q", got, want(ps.Salt))
@@ -64,7 +64,7 @@ func anonymizeRoundTrip(t *testing.T, c *Core, ctx context.Context, svc, into st
 		t.Fatal(err)
 	}
 	bad := waitCopy(t, c, b.ID, cp.ID)
-	if bad.Status != store.OpFailed || !strings.Contains(bad.Error, "nope") {
+	if bad.Status != domain.OpFailed || !strings.Contains(bad.Error, "nope") {
 		t.Fatalf("bad copy = %+v", bad)
 	}
 	if _, err := c.store.GetBackup(ctx, cp.ID); err != nil {
@@ -75,32 +75,32 @@ func anonymizeRoundTrip(t *testing.T, c *Core, ctx context.Context, svc, into st
 	if err := c.DeleteBackup(ctx, b.ID); err != nil {
 		t.Fatal(err)
 	}
-	if left, _ := c.store.ListBackups(ctx, store.BackupFilter{Anonymized: true, ServiceID: svc.ID}); len(left) != 0 {
+	if left, _ := c.store.ListBackups(ctx, domain.BackupFilter{Anonymized: true, ServiceID: svc.ID}); len(left) != 0 {
 		t.Fatalf("copies left: %+v", left)
 	}
 }
 
 // waitCopy waits for a finished copy of backup src other than skip.
-func waitCopy(t *testing.T, c *Core, src, skip string) store.Backup {
+func waitCopy(t *testing.T, c *Core, src, skip string) domain.Backup {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Minute)
 	for time.Now().Before(deadline) {
-		cps, err := c.store.ListBackups(context.Background(), store.BackupFilter{Anonymized: true, SourceID: src})
+		cps, err := c.store.ListBackups(context.Background(), domain.BackupFilter{Anonymized: true, SourceID: src})
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, cp := range cps {
-			if cp.ID != skip && cp.Status != store.OpRunning {
+			if cp.ID != skip && cp.Status != domain.OpRunning {
 				return cp
 			}
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
 	t.Fatal("no anonymized copy")
-	return store.Backup{}
+	return domain.Backup{}
 }
 
-func restoreAndWait(t *testing.T, c *Core, ctx context.Context, backupID string, svc store.Service) {
+func restoreAndWait(ctx context.Context, t *testing.T, c *Core, backupID string, svc domain.Service) {
 	t.Helper()
 	r, err := c.RestoreBackup(ctx, backupID, svc.ID, svc.Name)
 	if err != nil {
@@ -120,7 +120,7 @@ func anonymized(rule, salt, v string) string {
 }
 
 func TestAnonymizeDockerPostgres(t *testing.T) {
-	c, ctx, svc, exec := dumpTestDB(t, store.ServiceKindPostgres)
+	c, ctx, svc, exec := dumpTestDB(t, domain.ServiceKindPostgres)
 	psql := func(sql string) string {
 		return exec(`psql -X -q -tA -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "` + sql + `"`)
 	}
@@ -129,7 +129,7 @@ func TestAnonymizeDockerPostgres(t *testing.T) {
 		"sessions":      {Action: anonymize.Truncate},
 		"billing.audit": {Action: anonymize.Exclude},
 	}
-	anonymizeRoundTrip(t, c, ctx, svc, svc, rules,
+	anonymizeRoundTrip(ctx, t, c, svc, svc, rules,
 		func() {
 			psql(`CREATE TABLE users (id int PRIMARY KEY, email text UNIQUE, name text, phone text, pw text, note text, ext uuid);
 INSERT INTO users VALUES (1, 'michelle@mail.com', 'michelle', '06 01 01 01 01', 'secret', 'n', gen_random_uuid()), (2, 'b@x.com', NULL, NULL, NULL, NULL, NULL);
@@ -154,7 +154,7 @@ SELECT count(*) FROM sessions; SELECT count(*) FROM pg_tables WHERE schemaname =
 }
 
 func TestAnonymizeDockerMySQL(t *testing.T) {
-	for _, kind := range []store.ServiceKind{store.ServiceKindMySQL, store.ServiceKindMariaDB} {
+	for _, kind := range []domain.ServiceKind{domain.ServiceKindMySQL, domain.ServiceKindMariaDB} {
 		t.Run(string(kind), func(t *testing.T) {
 			c, ctx, svc, exec := dumpTestDB(t, kind)
 			app := func(sql string) string {
@@ -165,7 +165,7 @@ func TestAnonymizeDockerMySQL(t *testing.T) {
 				"sessions": {Action: anonymize.Truncate},
 				"audit":    {Action: anonymize.Exclude},
 			}
-			anonymizeRoundTrip(t, c, ctx, svc, svc, rules,
+			anonymizeRoundTrip(ctx, t, c, svc, svc, rules,
 				func() {
 					app(`CREATE TABLE users (id INT PRIMARY KEY, email VARCHAR(100) UNIQUE, name TEXT, phone TEXT, pw TEXT, note TEXT) DEFAULT CHARSET=latin1;
 INSERT INTO users VALUES (1, 'michelle@mail.com', 'michelle', '06 01 01 01 01', 'secret', 'n'), (2, 'b@x.com', NULL, NULL, NULL, NULL);
@@ -190,10 +190,10 @@ SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE
 }
 
 func TestAnonymizeDockerMongo(t *testing.T) {
-	c, ctx, svc, prodExec := dumpTestDB(t, store.ServiceKindMongoDB)
+	c, ctx, svc, prodExec := dumpTestDB(t, domain.ServiceKindMongoDB)
 	// A restore keeps the collections an archive lacks: into a fresh
 	// database, as a preview's.
-	fresh, exec := startTestDB(t, c, ctx, svc.ProjectID, ServiceInput{Name: "fresh", Kind: store.ServiceKindMongoDB})
+	fresh, exec := startTestDB(ctx, t, c, svc.ProjectID, ServiceInput{Name: "fresh", Kind: domain.ServiceKindMongoDB})
 	mongo := func(exec func(string) string, js string) string {
 		return exec(`mongosh --quiet "mongodb://$MONGO_INITDB_ROOT_USERNAME:$MONGO_INITDB_ROOT_PASSWORD@127.0.0.1/app?authSource=admin" --eval '` + js + `'`)
 	}
@@ -202,7 +202,7 @@ func TestAnonymizeDockerMongo(t *testing.T) {
 		"sessions": {Action: anonymize.Truncate},
 		"audit":    {Action: anonymize.Exclude},
 	}
-	anonymizeRoundTrip(t, c, ctx, svc, fresh, rules,
+	anonymizeRoundTrip(ctx, t, c, svc, fresh, rules,
 		func() {
 			mongo(prodExec, `db.users.insertMany([{ n: 1, email: "michelle@mail.com", contact: { phone: "06 01 01 01 01" }, note: "n" }, { n: 2, email: "b@x.com" }]);
 db.sessions.insertOne({ a: 1 }); db.audit.insertOne({ a: 1 })`)

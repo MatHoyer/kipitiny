@@ -8,7 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // Backup schedules and uptime checks: not in compose files, so agents set
@@ -94,7 +94,7 @@ func (t *tools) schedule(ctx context.Context, serviceID, id string) (core.Schedu
 	}
 	i := slices.IndexFunc(scs, func(sc core.ScheduleView) bool { return sc.ID == id })
 	if i < 0 {
-		return core.ScheduleView{}, fmt.Errorf("%w: schedule %s of this service", store.ErrNotFound, id)
+		return core.ScheduleView{}, fmt.Errorf("%w: schedule %s of this service", domain.ErrNotFound, id)
 	}
 	return scs[i], nil
 }

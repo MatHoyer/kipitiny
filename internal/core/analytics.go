@@ -20,8 +20,8 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/analytics"
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const (
@@ -48,7 +48,7 @@ const (
 )
 
 // AnalyticsSettings turn the analytics server on, on the manager's server.
-// Apps opt in with store.Service.Analytics.
+// Apps opt in with domain.Service.Analytics.
 type AnalyticsSettings struct {
 	Enabled bool `json:"enabled"`
 	// Domain serves the tracker script and receives hits.
@@ -147,7 +147,7 @@ func (c *Core) DeleteAnalyticsData(ctx context.Context) error {
 	if c.Analytics(ctx).Enabled {
 		return fmt.Errorf("%w: turn analytics off first", ErrInvalid)
 	}
-	dk := c.dockerFor(store.LocalServerID)
+	dk := c.dockerFor(domain.LocalServerID)
 	if err := c.removeAnalytics(ctx, dk); err != nil {
 		return err
 	}
@@ -185,13 +185,13 @@ func validateAnalyticsPaths(script, hit string) error {
 }
 
 // trackedApps are the apps the analytics server counts.
-func (c *Core) trackedApps(ctx context.Context) ([]store.Service, error) {
+func (c *Core) trackedApps(ctx context.Context) ([]domain.Service, error) {
 	svcs, err := c.store.ListAllServices(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return slices.DeleteFunc(svcs, func(s store.Service) bool {
-		return !s.Analytics || s.ServerID != store.LocalServerID || !httpRouted(s)
+	return slices.DeleteFunc(svcs, func(s domain.Service) bool {
+		return !s.Analytics || s.ServerID != domain.LocalServerID || !httpRouted(s)
 	}), nil
 }
 
@@ -199,7 +199,7 @@ func (c *Core) trackedApps(ctx context.Context) ([]store.Service, error) {
 // the pages shown while it's down or asleep), below maintenance.
 const ownPathsPriority = 1 << 29
 
-func (c *Core) analyticsSpec(ctx context.Context, st analyticsState, apps []store.Service) client.ContainerCreateOptions {
+func (c *Core) analyticsSpec(ctx context.Context, st analyticsState, apps []domain.Service) client.ContainerCreateOptions {
 	labels := map[string]string{
 		docker.LabelManaged:      "true",
 		docker.LabelComponent:    analyticsComponent,
@@ -210,7 +210,7 @@ func (c *Core) analyticsSpec(ctx context.Context, st analyticsState, apps []stor
 		"traefik.http.routers." + analyticsRouter + ".service":                   analyticsRouter,
 		"traefik.http.services." + analyticsRouter + ".loadbalancer.server.port": strconv.Itoa(analytics.PublicPort),
 	}
-	if r := c.certResolver(ctx, store.LocalServerID, st.Domain); r != "" {
+	if r := c.certResolver(ctx, domain.LocalServerID, st.Domain); r != "" {
 		labels["traefik.http.routers."+analyticsRouter+".tls.certresolver"] = r
 	} else {
 		labels["traefik.http.routers."+analyticsRouter+".tls"] = "true"
@@ -278,7 +278,7 @@ func (c *Core) analyticsSpec(ctx context.Context, st analyticsState, apps []stor
 func (c *Core) ensureAnalytics(ctx context.Context) error {
 	c.analyticsMu.Lock()
 	defer c.analyticsMu.Unlock()
-	dk := c.dockerFor(store.LocalServerID)
+	dk := c.dockerFor(domain.LocalServerID)
 	st := c.analyticsState(ctx)
 	if !st.Enabled {
 		c.analyticsSites, c.analyticsErrors = "", ""
@@ -347,7 +347,7 @@ func (c *Core) removeAnalytics(ctx context.Context, dk *docker.Client) error {
 
 // syncAnalyticsSites sends the opted-in apps' domains and own paths when
 // they changed since the last time (or the container is new).
-func (c *Core) syncAnalyticsSites(ctx context.Context, id, token string, apps []store.Service) error {
+func (c *Core) syncAnalyticsSites(ctx context.Context, id, token string, apps []domain.Service) error {
 	hosts := []string{}
 	paths := map[string]analytics.Paths{}
 	for _, s := range apps {
@@ -380,7 +380,7 @@ func (c *Core) syncAnalyticsSites(ctx context.Context, id, token string, apps []
 // analyticsClient reaches the server's private port at its address on the
 // proxy network, which the manager is on (or, run on the host, routes to).
 func (c *Core) analyticsClient(ctx context.Context, token string) (*analytics.Client, error) {
-	cts, err := c.dockerFor(store.LocalServerID).ListContainers(ctx, map[string]string{docker.LabelComponent: analyticsComponent})
+	cts, err := c.dockerFor(domain.LocalServerID).ListContainers(ctx, map[string]string{docker.LabelComponent: analyticsComponent})
 	if err != nil {
 		return nil, err
 	}
@@ -413,7 +413,7 @@ type AnalyticsView struct {
 
 // serviceAnalytics checks the app's analytics are on and returns its
 // domain's client.
-func (c *Core) serviceAnalytics(ctx context.Context, serviceID string) (store.Service, *analytics.Client, analyticsState, error) {
+func (c *Core) serviceAnalytics(ctx context.Context, serviceID string) (domain.Service, *analytics.Client, analyticsState, error) {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
 		return svc, nil, analyticsState{}, err
@@ -445,14 +445,14 @@ func analyticsErr(err error, what string) error {
 	case errors.Is(err, analytics.ErrInvalid):
 		return fmt.Errorf("%w: %s", ErrInvalid, strings.TrimPrefix(err.Error(), analytics.ErrInvalid.Error()+": "))
 	case errors.Is(err, analytics.ErrNotFound):
-		return fmt.Errorf("%w: %s", store.ErrNotFound, what)
+		return fmt.Errorf("%w: %s", domain.ErrNotFound, what)
 	}
 	return err
 }
 
 // since keeps q to what svc collected: a hostname it took over brings no
 // earlier visits.
-func (q AnalyticsQuery) since(svc store.Service) AnalyticsQuery {
+func (q AnalyticsQuery) since(svc domain.Service) AnalyticsQuery {
 	if q.From.Before(svc.AnalyticsSince) {
 		q.From = svc.AnalyticsSince
 	}
@@ -531,7 +531,7 @@ func (c *Core) ServiceVisit(ctx context.Context, serviceID, visitID string) (ana
 	}
 	d, err := cl.Visit(ctx, []string{svc.Domain}, visitID)
 	if err == nil && d.StartedAt < svc.AnalyticsSince.Unix() {
-		return analytics.VisitDetail{}, fmt.Errorf("%w: visit %s", store.ErrNotFound, visitID)
+		return analytics.VisitDetail{}, fmt.Errorf("%w: visit %s", domain.ErrNotFound, visitID)
 	}
 	return d, analyticsErr(err, "visit "+visitID)
 }
@@ -619,7 +619,7 @@ func AnalyticsScript(domain string) string {
 }
 
 // serviceScript is svc's tag: from its own domain when it has its own paths.
-func serviceScript(svc store.Service, domain string) string {
+func serviceScript(svc domain.Service, domain string) string {
 	if svc.AnalyticsScript != "" {
 		return `<script defer src="https://` + svc.Domain + svc.AnalyticsScript + `"></script>`
 	}

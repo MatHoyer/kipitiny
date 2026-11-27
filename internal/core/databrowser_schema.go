@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // Creating and dropping tables and collections from the data browser. Like
@@ -149,7 +149,7 @@ func (c *Core) DropTable(ctx context.Context, id, database, schema, table string
 	mysql := t.svc.Kind.IsMySQL()
 	i := slices.IndexFunc(tables, func(tb PgTable) bool { return tb.Name == table && (mysql || tb.Schema == schema) })
 	if i < 0 {
-		return ChangeResult{}, fmt.Errorf("table %s.%s: %w", schema, table, store.ErrNotFound)
+		return ChangeResult{}, fmt.Errorf("table %s.%s: %w", schema, table, domain.ErrNotFound)
 	}
 	what := map[string]string{"view": "VIEW", "materialized view": "MATERIALIZED VIEW", "foreign table": "FOREIGN TABLE"}[tables[i].Kind]
 	if what == "" {
@@ -239,7 +239,7 @@ func (c *Core) DropCollection(ctx context.Context, id, database, collection stri
 		return ChangeResult{}, err
 	}
 	if !slices.ContainsFunc(tables, func(tb PgTable) bool { return tb.Name == collection }) {
-		return ChangeResult{}, fmt.Errorf("collection %s.%s: %w", t.db, collection, store.ErrNotFound)
+		return ChangeResult{}, fmt.Errorf("collection %s.%s: %w", t.db, collection, domain.ErrNotFound)
 	}
 	coll := "db.getCollection(" + jsonString(collection) + ")"
 	if mongoIdentRe.MatchString(collection) {
@@ -259,7 +259,7 @@ func (c *Core) DropCollection(ctx context.Context, id, database, collection stri
 // mongoTarget is databaseTarget for MongoDB only.
 func (c *Core) mongoTarget(ctx context.Context, id, database string) (dataTarget, error) {
 	t, err := c.databaseTarget(ctx, id, database)
-	if err == nil && t.svc.Kind != store.ServiceKindMongoDB {
+	if err == nil && t.svc.Kind != domain.ServiceKindMongoDB {
 		err = fmt.Errorf("%w: %s is not a mongodb database", ErrInvalid, t.svc.Name)
 	}
 	return t, err

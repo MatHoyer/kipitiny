@@ -16,17 +16,17 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
-	"github.com/kipit-labs/kipitiny/internal/store/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 )
 
 // members is a manager with an admin, a member and two projects: shop,
 // which tests grant the member permissions on, and other, never granted.
 type members struct {
-	st     store.Store
+	st     domain.Store
 	c      *core.Core
 	api    *API
-	member store.User
+	member domain.User
 	// IDs by route kind, in shop and in other.
 	shop, other map[core.IDKind]string
 }
@@ -46,37 +46,37 @@ func newMembers(t *testing.T) members {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	c := core.New(config.Config{DataDir: t.TempDir()}, st, dc, log)
 	m := members{st: st, c: c, api: New(c, log)}
-	if _, err := st.CreateUser(ctx, store.User{Username: "admin", PasswordHash: "x", Role: store.RoleAdmin}); err != nil {
+	if _, err := st.CreateUser(ctx, domain.User{Username: "admin", PasswordHash: "x", Role: domain.RoleAdmin}); err != nil {
 		t.Fatal(err)
 	}
-	if m.member, err = st.CreateUser(ctx, store.User{Username: "alice", PasswordHash: "x", Role: store.RoleMember}); err != nil {
+	if m.member, err = st.CreateUser(ctx, domain.User{Username: "alice", PasswordHash: "x", Role: domain.RoleMember}); err != nil {
 		t.Fatal(err)
 	}
 	seed := func(name string) map[core.IDKind]string {
-		p, err := st.CreateProject(ctx, store.Project{Name: name, ServerID: store.LocalServerID})
+		p, err := st.CreateProject(ctx, domain.Project{Name: name, ServerID: domain.LocalServerID})
 		if err != nil {
 			t.Fatal(err)
 		}
-		svc, err := st.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx",
+		svc, err := st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx",
 			Replicas: 1, Env: map[string]string{"A": "1"}, Secrets: []string{}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		d, err := st.CreateDeployment(ctx, store.Deployment{ServiceID: svc.ID, Status: store.DeploymentSucceeded, Image: "nginx"})
+		d, err := st.CreateDeployment(ctx, domain.Deployment{ServiceID: svc.ID, Status: domain.DeploymentSucceeded, Image: "nginx"})
 		if err != nil {
 			t.Fatal(err)
 		}
-		b, err := st.CreateBackup(ctx, store.Backup{Kind: store.BackupKindVolume, ServiceID: svc.ID, ProjectID: p.ID, ServiceName: "web",
-			ProjectName: name, ServiceKind: store.ServiceKindApp, TargetID: store.LocalTargetID, Status: store.OpSucceeded})
+		b, err := st.CreateBackup(ctx, domain.Backup{Kind: domain.BackupKindVolume, ServiceID: svc.ID, ProjectID: p.ID, ServiceName: "web",
+			ProjectName: name, ServiceKind: domain.ServiceKindApp, TargetID: domain.LocalTargetID, Status: domain.OpSucceeded})
 		if err != nil {
 			t.Fatal(err)
 		}
-		sc, err := st.CreateBackupSchedule(ctx, store.BackupSchedule{Kind: store.BackupKindVolume, ServiceID: svc.ID,
-			TargetID: store.LocalTargetID, Cron: "@daily", Enabled: true})
+		sc, err := st.CreateBackupSchedule(ctx, domain.BackupSchedule{Kind: domain.BackupKindVolume, ServiceID: svc.ID,
+			TargetID: domain.LocalTargetID, Cron: "@daily", Enabled: true})
 		if err != nil {
 			t.Fatal(err)
 		}
-		job, err := st.CreateJob(ctx, store.Job{ServiceID: svc.ID, Name: "nightly", Command: "true", Cron: "@daily", TimeoutSec: 60})
+		job, err := st.CreateJob(ctx, domain.Job{ServiceID: svc.ID, Name: "nightly", Command: "true", Cron: "@daily", TimeoutSec: 60})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,14 +96,14 @@ func (m members) as(t *testing.T, perms []core.Perm, features ...core.Feature) c
 	for i, p := range perms {
 		ps[i] = string(p)
 	}
-	if err := m.st.SetGrant(ctx, store.ProjectGrant{UserID: m.member.ID, ProjectID: m.shop[core.IDProject], Perms: ps}); err != nil {
+	if err := m.st.SetGrant(ctx, domain.ProjectGrant{UserID: m.member.ID, ProjectID: m.shop[core.IDProject], Perms: ps}); err != nil {
 		t.Fatal(err)
 	}
 	fs := make([]string, len(features))
 	for i, f := range features {
 		fs[i] = string(f)
 	}
-	u, err := m.st.UpdateUserAccess(ctx, m.member.ID, store.RoleMember, fs)
+	u, err := m.st.UpdateUserAccess(ctx, m.member.ID, domain.RoleMember, fs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func TestMemberRouteAccess(t *testing.T) {
 					t.Errorf("%s: allowed without %s: %v", pattern, acc.perm, err)
 				}
 			}
-			if err := m.authorize(m.as(t, core.Perms), pattern, acc.kind, m.other); !errors.Is(err, store.ErrNotFound) {
+			if err := m.authorize(m.as(t, core.Perms), pattern, acc.kind, m.other); !errors.Is(err, domain.ErrNotFound) {
 				t.Errorf("%s: another project's should be not found: %v", pattern, err)
 			}
 		default:
@@ -176,7 +176,7 @@ func TestMemberRouteAccess(t *testing.T) {
 	if err := m.authorize(m.as(t, []core.Perm{core.PermView}), "GET /api/services/{id}/data/tables", core.IDService, m.shop); err != nil {
 		t.Errorf("data route refused with view: %v", err)
 	}
-	if err := m.authorize(m.as(t, core.Perms), "GET /api/services/{id}/files", core.IDService, m.other); !errors.Is(err, store.ErrNotFound) {
+	if err := m.authorize(m.as(t, core.Perms), "GET /api/services/{id}/files", core.IDService, m.other); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("files route of another project: %v", err)
 	}
 }
@@ -201,7 +201,7 @@ func TestMemberRequests(t *testing.T) {
 
 	viewer := m.token(t, core.PermView)
 	code, body := do(viewer, "GET", "/api/projects", "")
-	var ps []store.Project
+	var ps []domain.Project
 	if err := json.Unmarshal([]byte(body), &ps); code != http.StatusOK || err != nil || len(ps) != 1 || ps[0].Name != "shop" {
 		t.Fatalf("projects: %d %s", code, body)
 	}
@@ -260,7 +260,7 @@ func TestMemberRequests(t *testing.T) {
 	}
 
 	// Server resources a member may see come without how they connect.
-	if _, err := m.st.CreateBackupTarget(context.Background(), store.BackupTarget{Name: "s3", Kind: store.BackupTargetS3,
+	if _, err := m.st.CreateBackupTarget(context.Background(), domain.BackupTarget{Name: "s3", Kind: domain.BackupTargetS3,
 		Endpoint: "s3.example.com", Bucket: "bkt", AccessKey: "AKIAEXAMPLE", SecretKey: "s3cret"}); err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +300,7 @@ func TestMemberTokens(t *testing.T) {
 	if ts, err := m.c.ListAPITokens(adminCtx); err != nil || len(ts) != 2 {
 		t.Fatalf("an admin lists every token: %+v %v", ts, err)
 	}
-	if err := m.c.DeleteAPIToken(memberCtx, adminTok.ID); !errors.Is(err, store.ErrNotFound) {
+	if err := m.c.DeleteAPIToken(memberCtx, adminTok.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("a member deleting another's token: %v", err)
 	}
 	// An admin-scoped token of a member still has only their permissions.
@@ -386,7 +386,7 @@ func TestRestrictedTokens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.c.UpdateAPIToken(memberCtx, adminTok.ID, edit); !errors.Is(err, store.ErrNotFound) {
+	if _, err := m.c.UpdateAPIToken(memberCtx, adminTok.ID, edit); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("a member editing another's token: %v", err)
 	}
 	if u, err := m.c.UpdateAPIToken(memberCtx, tok.ID, edit); err != nil || u.Name != "deployer" || len(u.Features) != 0 {
@@ -398,7 +398,7 @@ func TestRestrictedTokens(t *testing.T) {
 	}
 
 	// Rolling a token replaces its secret and keeps its access.
-	if _, err := m.c.RollAPIToken(memberCtx, adminTok.ID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := m.c.RollAPIToken(memberCtx, adminTok.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("a member rolling another's token: %v", err)
 	}
 	rolled, err := m.c.RollAPIToken(memberCtx, tok.ID)

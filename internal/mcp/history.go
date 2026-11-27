@@ -6,7 +6,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // Backup upkeep and the history of deployments and restores.
@@ -15,10 +15,10 @@ type backupArg struct {
 	BackupID string `json:"backup_id" jsonschema:"the backup (see list_backups)"`
 }
 
-func (t *tools) verifyBackup(ctx context.Context, _ *mcp.CallToolRequest, in backupArg) (*mcp.CallToolResult, store.Backup, error) {
-	b, err := mutate(ctx, t.c, "verify_backup", in.BackupID, func() (store.Backup, error) {
+func (t *tools) verifyBackup(ctx context.Context, _ *mcp.CallToolRequest, in backupArg) (*mcp.CallToolResult, domain.Backup, error) {
+	b, err := mutate(ctx, t.c, "verify_backup", in.BackupID, func() (domain.Backup, error) {
 		if err := t.backup(ctx, in.BackupID, core.PermBackups); err != nil {
-			return store.Backup{}, err
+			return domain.Backup{}, err
 		}
 		return t.c.VerifyBackup(ctx, in.BackupID)
 	})
@@ -41,7 +41,7 @@ type backupProjectIn struct {
 }
 
 type backupProjectOut struct {
-	Backups []store.Backup `json:"backups"`
+	Backups []domain.Backup `json:"backups"`
 	// Error lists the services whose backup could not start.
 	Error string `json:"error,omitempty"`
 }
@@ -68,7 +68,7 @@ func (t *tools) backupProject(ctx context.Context, _ *mcp.CallToolRequest, in ba
 }
 
 type listRestoresOut struct {
-	Restores []store.Restore `json:"restores"`
+	Restores []domain.Restore `json:"restores"`
 }
 
 func (t *tools) listRestores(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, listRestoresOut, error) {
@@ -89,7 +89,7 @@ type listDeploymentsIn struct {
 }
 
 type listDeploymentsOut struct {
-	Deployments []store.Deployment `json:"deployments"`
+	Deployments []domain.Deployment `json:"deployments"`
 }
 
 func (t *tools) listDeployments(ctx context.Context, _ *mcp.CallToolRequest, in listDeploymentsIn) (*mcp.CallToolResult, listDeploymentsOut, error) {

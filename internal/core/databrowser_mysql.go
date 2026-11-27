@@ -14,7 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // The MySQL and MariaDB data browser speaks the PostgreSQL one's shapes
@@ -62,7 +62,7 @@ func (t dataTarget) mysql(sql string, root bool, timeout time.Duration, stdout i
 	// max_execution_time (MySQL, ms) only bounds SELECT; MariaDB's
 	// max_statement_time (s) bounds every statement.
 	limit := fmt.Sprintf("SET SESSION max_execution_time = %d", timeout.Milliseconds())
-	if t.svc.Kind == store.ServiceKindMariaDB {
+	if t.svc.Kind == domain.ServiceKindMariaDB {
 		limit = fmt.Sprintf("SET SESSION max_statement_time = %d", int(timeout.Seconds()))
 	}
 	cmd := append([]string{
@@ -230,7 +230,7 @@ FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME =
 		return nil, err
 	}
 	if len(cols) == 0 {
-		return nil, fmt.Errorf("table %s.%s: %w", t.db, table, store.ErrNotFound)
+		return nil, fmt.Errorf("table %s.%s: %w", t.db, table, domain.ErrNotFound)
 	}
 	return cols, nil
 }
@@ -311,7 +311,7 @@ func (t dataTarget) mysqlSelect(table string, cols []mysqlColumn, q RowQuery, pa
 
 func (t dataTarget) mysqlRows(ctx context.Context, schema, table string, q RowQuery) (PgRows, error) {
 	if schema != "" && schema != t.db {
-		return PgRows{}, fmt.Errorf("table %s.%s: %w", schema, table, store.ErrNotFound)
+		return PgRows{}, fmt.Errorf("table %s.%s: %w", schema, table, domain.ErrNotFound)
 	}
 	cols, err := t.mysqlColumns(ctx, table)
 	if err != nil {
@@ -358,7 +358,7 @@ func (t dataTarget) mysqlRows(ctx context.Context, schema, table string, q RowQu
 // is an empty cell.
 func (t dataTarget) mysqlExport(ctx context.Context, schema, table string, q RowQuery, w io.Writer) error {
 	if schema != "" && schema != t.db {
-		return fmt.Errorf("table %s.%s: %w", schema, table, store.ErrNotFound)
+		return fmt.Errorf("table %s.%s: %w", schema, table, domain.ErrNotFound)
 	}
 	cols, err := t.mysqlColumns(ctx, table)
 	if err != nil {

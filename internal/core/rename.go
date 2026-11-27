@@ -11,7 +11,7 @@ import (
 	"github.com/moby/moby/api/types/container"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // Everything Docker holds for a project or a service is keyed by ID (labels,
@@ -19,32 +19,32 @@ import (
 // and the service's alias on the project network. Nothing restarts.
 
 // RenameProject changes a project's name and renames its containers.
-func (c *Core) RenameProject(ctx context.Context, id, name string) (store.Project, error) {
+func (c *Core) RenameProject(ctx context.Context, id, name string) (domain.Project, error) {
 	name = strings.TrimSpace(name)
 	if !nameRe.MatchString(name) {
-		return store.Project{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
+		return domain.Project{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
 	p, err := c.store.GetProject(ctx, id)
 	if err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	if p.Name == name {
 		return maskedProject(p), nil
 	}
 	svcs, err := c.store.ListServices(ctx, id)
 	if err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	// Hold every service so no deploy creates a container under the old name.
 	for _, s := range svcs {
 		unlock, err := c.lockService(s.ID)
 		if err != nil {
-			return store.Project{}, fmt.Errorf("%s: %w", s.Name, err)
+			return domain.Project{}, fmt.Errorf("%s: %w", s.Name, err)
 		}
 		defer unlock()
 	}
 	if err := c.store.RenameProject(ctx, id, name); err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	var errs []error
 	old := p
@@ -114,14 +114,14 @@ func (c *Core) RenameService(ctx context.Context, id, name string) (ServiceView,
 			}
 		}
 		switch {
-		case svc.Kind == store.ServiceKindApp:
+		case svc.Kind == domain.ServiceKindApp:
 			// The URL stays the same: nothing to redeploy.
 			if env := renameAppRefs(s.Env, old, name); !maps.Equal(env, s.Env) {
 				s.Env, changed = env, true
 			}
 		case usesDatabase(s.Env, old):
 			s.Env, changed = renameDatabaseRefs(s.Env, old, name), true
-			if s.Kind == store.ServiceKindApp && !s.Stopped && s.CurrentDeploymentID != "" {
+			if s.Kind == domain.ServiceKindApp && !s.Stopped && s.CurrentDeploymentID != "" {
 				dependents = append(dependents, s.ID)
 			}
 		}
@@ -156,7 +156,7 @@ func (c *Core) RenameService(ctx context.Context, id, name string) (ServiceView,
 
 // renameContainers swaps the name prefix of the service's containers and,
 // with aliases, sets the running ones' aliases on the project network.
-func (c *Core) renameContainers(ctx context.Context, svc store.Service, oldPrefix, newPrefix string, aliases []string) error {
+func (c *Core) renameContainers(ctx context.Context, svc domain.Service, oldPrefix, newPrefix string, aliases []string) error {
 	cts, err := c.serviceContainers(ctx, svc)
 	if err != nil {
 		return err
@@ -188,7 +188,7 @@ func (c *Core) renameContainers(ctx context.Context, svc store.Service, oldPrefi
 
 // renameOnNetworks moves a renamed service's alias on the networks created by
 // hand (<project>-<service>) to its new name.
-func (c *Core) renameOnNetworks(ctx context.Context, project store.Project, svc store.Service) error {
+func (c *Core) renameOnNetworks(ctx context.Context, project domain.Project, svc domain.Service) error {
 	if len(svc.Networks) == 0 {
 		return nil
 	}

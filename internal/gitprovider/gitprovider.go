@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // maxPages bounds listings, enough for any account a picker can show.
@@ -23,8 +23,8 @@ const maxPages = 10
 
 // pageSize is the most a forge returns per page (Gitea caps at 50 by
 // default).
-func pageSize(kind store.GitProviderKind) int {
-	if kind == store.Gitea {
+func pageSize(kind domain.GitProviderKind) int {
+	if kind == domain.Gitea {
 		return 50
 	}
 	return 100
@@ -42,40 +42,40 @@ type Repo struct {
 }
 
 // DefaultBaseURL is the hosted forge of a kind.
-func DefaultBaseURL(kind store.GitProviderKind) string {
+func DefaultBaseURL(kind domain.GitProviderKind) string {
 	switch kind {
-	case store.GitHub:
+	case domain.GitHub:
 		return "https://github.com"
-	case store.GitLab:
+	case domain.GitLab:
 		return "https://gitlab.com"
 	}
 	return ""
 }
 
 // APIURL is the REST API root of a forge.
-func APIURL(kind store.GitProviderKind, baseURL string) string {
+func APIURL(kind domain.GitProviderKind, baseURL string) string {
 	switch kind {
-	case store.GitHub:
+	case domain.GitHub:
 		if baseURL == "https://github.com" {
 			return "https://api.github.com"
 		}
 		return baseURL + "/api/v3" // GitHub Enterprise Server
-	case store.GitLab:
+	case domain.GitLab:
 		return baseURL + "/api/v4"
 	}
 	return baseURL + "/api/v1"
 }
 
 // CloneUsername goes with the token in HTTPS clone credentials.
-func CloneUsername(kind store.GitProviderKind) string {
-	if kind == store.GitHub {
+func CloneUsername(kind domain.GitProviderKind) string {
+	if kind == domain.GitHub {
 		return "x-access-token"
 	}
 	return "oauth2"
 }
 
 // Repos lists the repositories token can read.
-func Repos(ctx context.Context, kind store.GitProviderKind, baseURL, token string) ([]Repo, error) {
+func Repos(ctx context.Context, kind domain.GitProviderKind, baseURL, token string) ([]Repo, error) {
 	api, size := APIURL(kind, baseURL), pageSize(kind)
 	repos := []Repo{}
 	for page := 1; page <= maxPages; page++ {
@@ -83,7 +83,7 @@ func Repos(ctx context.Context, kind store.GitProviderKind, baseURL, token strin
 		var n int
 		var err error
 		switch kind {
-		case store.GitHub:
+		case domain.GitHub:
 			var body struct {
 				Repositories []githubRepo `json:"repositories"`
 			}
@@ -92,7 +92,7 @@ func Repos(ctx context.Context, kind store.GitProviderKind, baseURL, token strin
 				batch = append(batch, Repo{r.FullName, r.CloneURL, r.DefaultBranch, r.Private})
 			}
 			n = len(body.Repositories)
-		case store.GitLab:
+		case domain.GitLab:
 			var body []struct {
 				PathWithNamespace string `json:"path_with_namespace"`
 				HTTPURLToRepo     string `json:"http_url_to_repo"`
@@ -131,15 +131,15 @@ type githubRepo struct {
 }
 
 // Branches lists a repository's branches (fullName as Repos returns it).
-func Branches(ctx context.Context, kind store.GitProviderKind, baseURL, token, fullName string) ([]string, error) {
+func Branches(ctx context.Context, kind domain.GitProviderKind, baseURL, token, fullName string) ([]string, error) {
 	api, size := APIURL(kind, baseURL), pageSize(kind)
 	names := []string{}
 	for page := 1; page <= maxPages; page++ {
 		var u string
 		switch kind {
-		case store.GitHub:
+		case domain.GitHub:
 			u = fmt.Sprintf("%s/repos/%s/branches?per_page=%d&page=%d", api, fullName, size, page)
-		case store.GitLab:
+		case domain.GitLab:
 			u = fmt.Sprintf("%s/projects/%s/repository/branches?per_page=%d&page=%d", api, url.PathEscape(fullName), size, page)
 		default:
 			u = fmt.Sprintf("%s/repos/%s/branches?limit=%d&page=%d", api, fullName, size, page)
@@ -161,7 +161,7 @@ func Branches(ctx context.Context, kind store.GitProviderKind, baseURL, token, f
 }
 
 // Account is the login token belongs to (OAuth providers).
-func Account(ctx context.Context, kind store.GitProviderKind, baseURL, token string) (string, error) {
+func Account(ctx context.Context, kind domain.GitProviderKind, baseURL, token string) (string, error) {
 	var body struct {
 		Login    string `json:"login"`
 		Username string `json:"username"`
@@ -175,13 +175,13 @@ func Account(ctx context.Context, kind store.GitProviderKind, baseURL, token str
 	return body.Login, nil
 }
 
-func getJSON(ctx context.Context, kind store.GitProviderKind, u, token string, out any) error {
+func getJSON(ctx context.Context, kind domain.GitProviderKind, u, token string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return err
 	}
 	switch kind {
-	case store.GitHub:
+	case domain.GitHub:
 		req.Header.Set("Authorization", "token "+token)
 		req.Header.Set("Accept", "application/vnd.github+json")
 	default:

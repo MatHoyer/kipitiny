@@ -7,31 +7,32 @@ import (
 	"slices"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/config"
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/config"
+
 	"github.com/kipit-labs/kipitiny/internal/compose"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestExportFile(t *testing.T) {
-	p := store.Project{Name: "shop", Env: map[string]string{"REGION": "eu", "TOKEN": "t0k"}, Secrets: []string{"TOKEN"}}
-	svcs := []store.Service{
+	p := domain.Project{Name: "shop", Env: map[string]string{"REGION": "eu", "TOKEN": "t0k"}, Secrets: []string{"TOKEN"}}
+	svcs := []domain.Service{
 		{
-			ID: "w1", Name: "web", Kind: store.ServiceKindApp, Image: "ghcr.io/me/shop:1", Replicas: 2, Port: 3000, Domain: "shop.example.com",
+			ID: "w1", Name: "web", Kind: domain.ServiceKindApp, Image: "ghcr.io/me/shop:1", Replicas: 2, Port: 3000, Domain: "shop.example.com",
 			Env:     map[string]string{"API_KEY": "s3cr$t", "MODE": "a$b", "DATABASE_URL": "{{ db.db.URL }}", "SHARED": "{{ project.TOKEN }}"},
 			Secrets: []string{"API_KEY", "SHARED"},
-			Volumes: []store.Volume{{Name: "data", Path: "/data"}},
-			Middlewares: store.Middlewares{BasicAuth: []store.BasicAuthUser{
+			Volumes: []domain.Volume{{Name: "data", Path: "/data"}},
+			Middlewares: domain.Middlewares{BasicAuth: []domain.BasicAuthUser{
 				{Name: "admin", Hash: "$2a$10$x"}, {Name: "ops", Ref: "{{ pass://V/I/p }}"},
 			}},
 		},
-		{Name: "worker", Kind: store.ServiceKindApp, Image: "ghcr.io/me/worker:1", Replicas: 1, Volumes: []store.Volume{{Name: "data", Path: "/d"}}},
-		{Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17-alpine", Replicas: 1, MemoryMB: 512,
+		{Name: "worker", Kind: domain.ServiceKindApp, Image: "ghcr.io/me/worker:1", Replicas: 1, Volumes: []domain.Volume{{Name: "data", Path: "/d"}}},
+		{Name: "db", Kind: domain.ServiceKindPostgres, Image: "postgres:17-alpine", Replicas: 1, MemoryMB: 512,
 			Env: map[string]string{pgUser: "app", pgPassword: "pw", pgDatabase: "app"}, Secrets: []string{pgPassword}},
 	}
-	checks := map[string]store.UptimeCheck{"w1": {ServiceID: "w1", Path: "/health", IntervalSec: 60, TimeoutSec: 10, Enabled: true}}
+	checks := map[string]domain.UptimeCheck{"w1": {ServiceID: "w1", Path: "/health", IntervalSec: 60, TimeoutSec: 10, Enabled: true}}
 	f, env := exportFile(p, svcs, checks, nil, nil, true)
 	web := f.Services["web"]
 	if u := web.X.Uptime; u == nil || *u != (compose.Uptime{Path: "/health"}) {
@@ -80,7 +81,7 @@ func TestExportFile(t *testing.T) {
 func TestApplyCompose(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,11 +128,11 @@ services:
 		t.Fatal(err)
 	}
 	svcs, _ := c.store.ListServices(ctx, p.ID)
-	byName := map[string]store.Service{}
+	byName := map[string]domain.Service{}
 	for _, s := range svcs {
 		byName[s.Name] = s
 	}
-	if db := byName["db"]; db.Kind != store.ServiceKindPostgres || db.Env[pgPassword] != "dbpw" || db.Anonymize["users"].Columns["email"] != "fake:email" {
+	if db := byName["db"]; db.Kind != domain.ServiceKindPostgres || db.Env[pgPassword] != "dbpw" || db.Anonymize["users"].Columns["email"] != "fake:email" {
 		t.Errorf("db = %+v", db)
 	}
 	web := byName["web"]
@@ -216,7 +217,7 @@ services:
 func TestComposeStandardKeys(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID,
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID,
 		Env: map[string]string{"SHARED": "s"}})
 	if err != nil {
 		t.Fatal(err)
@@ -279,8 +280,8 @@ services:
 		t.Errorf("own export re-applied: %+v, %v\n%s", plan, err, text)
 	}
 
-	bad := store.Service{Kind: store.ServiceKindApp, Image: "x", Replicas: 1, Port: 80, HealthPath: "/h",
-		Healthcheck: store.Healthcheck{Test: []string{"CMD", "true"}}}
+	bad := domain.Service{Kind: domain.ServiceKindApp, Image: "x", Replicas: 1, Port: 80, HealthPath: "/h",
+		Healthcheck: domain.Healthcheck{Test: []string{"CMD", "true"}}}
 	if err := validateService(bad); !errors.Is(err, ErrInvalid) {
 		t.Errorf("health path and healthcheck: %v", err)
 	}
@@ -292,15 +293,15 @@ services:
 
 func TestNeedsDeploy(t *testing.T) {
 	for _, tc := range []struct {
-		svc     store.Service
+		svc     domain.Service
 		changed bool
 		want    bool
 	}{
-		{store.Service{CurrentDeploymentID: "d"}, true, true},
-		{store.Service{CurrentDeploymentID: "d"}, false, false},
-		{store.Service{}, false, true}, // never deployed: its first deploy failed
-		{store.Service{}, true, true},
-		{store.Service{Stopped: true}, true, false},
+		{domain.Service{CurrentDeploymentID: "d"}, true, true},
+		{domain.Service{CurrentDeploymentID: "d"}, false, false},
+		{domain.Service{}, false, true}, // never deployed: its first deploy failed
+		{domain.Service{}, true, true},
+		{domain.Service{Stopped: true}, true, false},
 	} {
 		if got := needsDeploy(tc.svc, tc.changed); got != tc.want {
 			t.Errorf("needsDeploy(%+v, %v) = %v", tc.svc, tc.changed, got)
@@ -311,11 +312,11 @@ func TestNeedsDeploy(t *testing.T) {
 func TestComposeDryRunPermissions(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "perm", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "perm", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	member := WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: store.RoleMember,
+	member := WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: domain.RoleMember,
 		Grants: map[string][]string{p.ID: {string(PermView), string(PermSettings), string(PermDeploy)}}})
 	plain := "services:\n  web: {image: busybox}\n"
 	if _, err := c.ApplyCompose(member, p.ID, []byte(plain), ApplyOptions{DryRun: true}); err != nil {

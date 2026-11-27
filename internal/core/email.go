@@ -10,9 +10,9 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/mail"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Email goes out through SMTP servers the admin configures, its email
@@ -34,7 +34,7 @@ var ErrNoEmail = fmt.Errorf("%w: email isn't set up; add an email provider in Se
 
 // EmailView lists the providers, passwords masked, and the one invites use.
 type EmailView struct {
-	Providers []store.EmailProvider `json:"providers"`
+	Providers []domain.EmailProvider `json:"providers"`
 	// Invites is the ID of the provider invites go through; empty without
 	// providers.
 	Invites string `json:"invites"`
@@ -47,14 +47,14 @@ type EmailProviderInput struct {
 	mail.Config
 }
 
-func maskedEmailProvider(p store.EmailProvider) store.EmailProvider {
+func maskedEmailProvider(p domain.EmailProvider) domain.EmailProvider {
 	if p.Password != "" {
 		p.Password = SecretMask
 	}
 	return p
 }
 
-func mailConfig(p store.EmailProvider) mail.Config {
+func mailConfig(p domain.EmailProvider) mail.Config {
 	return mail.Config{Host: p.Host, Port: p.Port, Security: mail.Security(p.Security), Username: p.Username, Password: p.Password, From: p.From}
 }
 
@@ -63,7 +63,7 @@ func (c *Core) Email(ctx context.Context) (EmailView, error) {
 	if err != nil {
 		return EmailView{}, err
 	}
-	v := EmailView{Providers: make([]store.EmailProvider, len(ps))}
+	v := EmailView{Providers: make([]domain.EmailProvider, len(ps))}
 	for i, p := range ps {
 		v.Providers[i] = maskedEmailProvider(p)
 	}
@@ -75,7 +75,7 @@ func (c *Core) Email(ctx context.Context) (EmailView, error) {
 
 // invitesProvider picks the provider invites go through among ps: the one
 // the setting names, else the oldest.
-func invitesProvider(ctx context.Context, s store.Store, ps []store.EmailProvider) (store.EmailProvider, bool) {
+func invitesProvider(ctx context.Context, s domain.Store, ps []domain.EmailProvider) (domain.EmailProvider, bool) {
 	id, _ := s.GetSetting(ctx, emailInvitesSetting)
 	for _, p := range ps {
 		if p.ID == id {
@@ -83,30 +83,30 @@ func invitesProvider(ctx context.Context, s store.Store, ps []store.EmailProvide
 		}
 	}
 	if len(ps) == 0 {
-		return store.EmailProvider{}, false
+		return domain.EmailProvider{}, false
 	}
 	return ps[0], true
 }
 
 // CreateEmailProvider checks the server accepts the configuration
 // (connection and sign-in, nothing sent) and saves it.
-func (c *Core) CreateEmailProvider(ctx context.Context, in EmailProviderInput) (store.EmailProvider, error) {
-	p, err := c.checkEmailProvider(ctx, store.EmailProvider{}, in)
+func (c *Core) CreateEmailProvider(ctx context.Context, in EmailProviderInput) (domain.EmailProvider, error) {
+	p, err := c.checkEmailProvider(ctx, domain.EmailProvider{}, in)
 	if err != nil {
-		return store.EmailProvider{}, err
+		return domain.EmailProvider{}, err
 	}
 	p, err = c.store.CreateEmailProvider(ctx, p)
 	return maskedEmailProvider(p), emailConflict(err)
 }
 
-func (c *Core) UpdateEmailProvider(ctx context.Context, id string, in EmailProviderInput) (store.EmailProvider, error) {
+func (c *Core) UpdateEmailProvider(ctx context.Context, id string, in EmailProviderInput) (domain.EmailProvider, error) {
 	old, err := c.store.GetEmailProvider(ctx, id)
 	if err != nil {
-		return store.EmailProvider{}, err
+		return domain.EmailProvider{}, err
 	}
 	p, err := c.checkEmailProvider(ctx, old, in)
 	if err != nil {
-		return store.EmailProvider{}, err
+		return domain.EmailProvider{}, err
 	}
 	p, err = c.store.UpdateEmailProvider(ctx, p)
 	return maskedEmailProvider(p), emailConflict(err)
@@ -137,7 +137,7 @@ func (c *Core) DeleteEmailProvider(ctx context.Context, id string) error {
 // SetEmailInvites picks the provider invites go through.
 func (c *Core) SetEmailInvites(ctx context.Context, id string) (EmailView, error) {
 	if _, err := c.store.GetEmailProvider(ctx, id); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.Is(err, domain.ErrNotFound) {
 			return EmailView{}, fmt.Errorf("%w: unknown email provider", ErrInvalid)
 		}
 		return EmailView{}, err
@@ -149,7 +149,7 @@ func (c *Core) SetEmailInvites(ctx context.Context, id string) (EmailView, error
 }
 
 // checkEmailProvider validates in over p and signs in to the server.
-func (c *Core) checkEmailProvider(ctx context.Context, p store.EmailProvider, in EmailProviderInput) (store.EmailProvider, error) {
+func (c *Core) checkEmailProvider(ctx context.Context, p domain.EmailProvider, in EmailProviderInput) (domain.EmailProvider, error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" || utf8.RuneCountInString(name) > 64 {
 		return p, fmt.Errorf("%w: name is required (max 64 characters)", ErrInvalid)
@@ -175,7 +175,7 @@ func (c *Core) checkEmailProvider(ctx context.Context, p store.EmailProvider, in
 }
 
 func emailConflict(err error) error {
-	if err != nil && strings.Contains(err.Error(), store.ErrConflict.Error()) {
+	if err != nil && strings.Contains(err.Error(), domain.ErrConflict.Error()) {
 		return fmt.Errorf("%w: an email provider with this name exists", ErrInvalid)
 	}
 	return err
@@ -205,17 +205,17 @@ func (c *Core) TestEmailProvider(ctx context.Context, id, to string) error {
 
 // emailProvider returns the provider with that ID, or the invites one for
 // an empty ID.
-func (c *Core) emailProvider(ctx context.Context, id string) (store.EmailProvider, error) {
+func (c *Core) emailProvider(ctx context.Context, id string) (domain.EmailProvider, error) {
 	if id != "" {
 		p, err := c.store.GetEmailProvider(ctx, id)
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.Is(err, domain.ErrNotFound) {
 			return p, fmt.Errorf("%w: the email provider was removed; pick another in Settings › Notifications", ErrInvalid)
 		}
 		return p, err
 	}
 	ps, err := c.store.ListEmailProviders(ctx)
 	if err != nil {
-		return store.EmailProvider{}, err
+		return domain.EmailProvider{}, err
 	}
 	p, ok := invitesProvider(ctx, c.store, ps)
 	if !ok {
@@ -260,7 +260,7 @@ func mailErr(err error) error {
 // interrupted run finds its provider by name.
 func (c *Core) migrateSMTPSetting(ctx context.Context) error {
 	v, err := c.store.GetSetting(ctx, smtpSetting)
-	if errors.Is(err, store.ErrNotFound) || (err == nil && v == "") {
+	if errors.Is(err, domain.ErrNotFound) || (err == nil && v == "") {
 		return nil
 	} else if err != nil {
 		return err
@@ -274,8 +274,8 @@ func (c *Core) migrateSMTPSetting(ctx context.Context) error {
 	if cfg.Host == "smtp.resend.com" {
 		name = "Resend"
 	}
-	p := store.EmailProvider{Name: name, Host: cfg.Host, Port: cfg.Port, Security: string(cfg.Security), Username: cfg.Username, Password: cfg.Password, From: cfg.From}
-	if p, err = c.store.CreateEmailProvider(ctx, p); errors.Is(err, store.ErrConflict) {
+	p := domain.EmailProvider{Name: name, Host: cfg.Host, Port: cfg.Port, Security: string(cfg.Security), Username: cfg.Username, Password: cfg.Password, From: cfg.From}
+	if p, err = c.store.CreateEmailProvider(ctx, p); errors.Is(err, domain.ErrConflict) {
 		ps, lerr := c.store.ListEmailProviders(ctx)
 		if lerr != nil {
 			return lerr

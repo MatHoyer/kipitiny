@@ -19,8 +19,8 @@ import (
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 func open(t *testing.T) *Store {
@@ -37,11 +37,11 @@ func TestProjectsAndServices(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
 
-	p, err := s.CreateProject(ctx, store.Project{Name: "shop"})
+	p, err := s.CreateProject(ctx, domain.Project{Name: "shop"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateProject(ctx, store.Project{Name: "shop"}); !errors.Is(err, store.ErrConflict) {
+	if _, err := s.CreateProject(ctx, domain.Project{Name: "shop"}); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("duplicate name: got %v, want ErrConflict", err)
 	}
 
@@ -62,20 +62,20 @@ func TestProjectsAndServices(t *testing.T) {
 		got.Env["REGION"] != "eu" || !slices.Equal(got.Secrets, []string{"KEY"}) {
 		t.Fatalf("set env: %+v %v %v", got.Env, got.Secrets, err)
 	}
-	if _, err := s.SetProjectEnv(ctx, "missing", nil, nil); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.SetProjectEnv(ctx, "missing", nil, nil); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("set env of unknown project: got %v, want ErrNotFound", err)
 	}
 
-	svc, err := s.CreateService(ctx, store.Service{
-		ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1,
+	svc, err := s.CreateService(ctx, domain.Service{
+		ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1,
 		Port: 80, Domain: "shop.example.com", Env: map[string]string{"A": "1"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Services may share a domain (split by path): core decides who may.
-	web2, err := s.CreateService(ctx, store.Service{
-		ProjectID: p.ID, Name: "web2", Kind: store.ServiceKindApp, Image: "nginx", Domain: "shop.example.com",
+	web2, err := s.CreateService(ctx, domain.Service{
+		ProjectID: p.ID, Name: "web2", Kind: domain.ServiceKindApp, Image: "nginx", Domain: "shop.example.com",
 	})
 	if err != nil {
 		t.Fatalf("shared domain: %v", err)
@@ -84,8 +84,8 @@ func TestProjectsAndServices(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"worker1", "worker2"} {
-		if _, err := s.CreateService(ctx, store.Service{
-			ProjectID: p.ID, Name: name, Kind: store.ServiceKindApp, Image: "busybox",
+		if _, err := s.CreateService(ctx, domain.Service{
+			ProjectID: p.ID, Name: name, Kind: domain.ServiceKindApp, Image: "busybox",
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -99,19 +99,19 @@ func TestProjectsAndServices(t *testing.T) {
 	}
 	svc.Env["B"] = "2"
 	svc.Replicas = 3
-	svc.Volumes = []store.Volume{{Name: "uploads", Path: "/app/uploads"}}
-	svc.PublishedPorts = []store.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}}
+	svc.Volumes = []domain.Volume{{Name: "uploads", Path: "/app/uploads"}}
+	svc.PublishedPorts = []domain.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}}
 	svc.StopGraceSeconds = 60
 	svc.Icon = "ghost"
 	svc.Analytics = true
-	svc.Files = []store.ServiceFile{{Path: "/etc/app.conf", Content: []byte("a=1\n"), Size: 4, Mode: 0o600, Source: "config:app"}}
-	svc.DependsOn = []store.Dependency{{Service: "db", Condition: "healthy"}}
+	svc.Files = []domain.ServiceFile{{Path: "/etc/app.conf", Content: []byte("a=1\n"), Size: 4, Mode: 0o600, Source: "config:app"}}
+	svc.DependsOn = []domain.Dependency{{Service: "db", Condition: "healthy"}}
 	svc.ProjectNetworks = []string{"back", "default"}
-	svc.Runtime = store.Runtime{Command: []string{"worker", "--queue", "a b"}, Ulimits: map[string]store.Ulimit{"nofile": {Soft: 1, Hard: 2}}}
-	svc.Middlewares = store.Middlewares{
-		BasicAuth:   []store.BasicAuthUser{{Name: "ann", Hash: "$2a$10$x"}},
+	svc.Runtime = domain.Runtime{Command: []string{"worker", "--queue", "a b"}, Ulimits: map[string]domain.Ulimit{"nofile": {Soft: 1, Hard: 2}}}
+	svc.Middlewares = domain.Middlewares{
+		BasicAuth:   []domain.BasicAuthUser{{Name: "ann", Hash: "$2a$10$x"}},
 		IPAllowList: []string{"10.0.0.0/8"},
-		RateLimit:   &store.RateLimit{Average: 10, Burst: 20},
+		RateLimit:   &domain.RateLimit{Average: 10, Burst: 20},
 		Headers:     map[string]string{"X-Robots-Tag": "noindex"},
 	}
 	if _, err := s.UpdateService(ctx, svc); err != nil {
@@ -127,7 +127,7 @@ func TestProjectsAndServices(t *testing.T) {
 		t.Fatalf("service round-trip mismatch: %+v", got2)
 	}
 
-	d, err := s.CreateDeployment(ctx, store.Deployment{ServiceID: svc.ID, Status: store.DeploymentRunning, Image: "nginx", Config: got2,
+	d, err := s.CreateDeployment(ctx, domain.Deployment{ServiceID: svc.ID, Status: domain.DeploymentRunning, Image: "nginx", Config: got2,
 		GitCommit: "abc1234", TriggeredBy: "token:ci"})
 	if err != nil {
 		t.Fatal(err)
@@ -150,7 +150,7 @@ func TestProjectsAndServices(t *testing.T) {
 		t.Fatalf("fail running: n=%d err=%v", n, err)
 	}
 	d, err = s.GetDeployment(ctx, d.ID)
-	if err != nil || d.Status != store.DeploymentFailed || d.FinishedAt == nil || d.Error != "interrupted" {
+	if err != nil || d.Status != domain.DeploymentFailed || d.FinishedAt == nil || d.Error != "interrupted" {
 		t.Fatalf("deployment after fail: %+v %v", d, err)
 	}
 	ds, err := s.ListDeployments(ctx, svc.ID, 10)
@@ -161,10 +161,10 @@ func TestProjectsAndServices(t *testing.T) {
 	if err := s.DeleteProject(ctx, p.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetService(ctx, svc.ID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.GetService(ctx, svc.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("service should cascade-delete, got %v", err)
 	}
-	if err := s.DeleteProject(ctx, p.ID); !errors.Is(err, store.ErrNotFound) {
+	if err := s.DeleteProject(ctx, p.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("second delete: got %v, want ErrNotFound", err)
 	}
 }
@@ -176,11 +176,11 @@ func TestUsersAndSessions(t *testing.T) {
 	if n, _ := s.CountUsers(ctx); n != 0 {
 		t.Fatalf("users = %d", n)
 	}
-	u, err := s.CreateUser(ctx, store.User{Username: "admin", PasswordHash: "x"})
+	u, err := s.CreateUser(ctx, domain.User{Username: "admin", PasswordHash: "x"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateUser(ctx, store.User{Username: "admin", PasswordHash: "y"}); !errors.Is(err, store.ErrConflict) {
+	if _, err := s.CreateUser(ctx, domain.User{Username: "admin", PasswordHash: "y"}); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("duplicate user: %v", err)
 	}
 	if got, err := s.GetUserByUsername(ctx, "admin"); err != nil || got.ID != u.ID {
@@ -188,25 +188,25 @@ func TestUsersAndSessions(t *testing.T) {
 	}
 
 	future := time.Now().Add(time.Hour)
-	if err := s.CreateSession(ctx, store.Session{TokenHash: "live", UserID: u.ID, ExpiresAt: future}); err != nil {
+	if err := s.CreateSession(ctx, domain.Session{TokenHash: "live", UserID: u.ID, ExpiresAt: future}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateSession(ctx, store.Session{TokenHash: "dead", UserID: u.ID, ExpiresAt: time.Now().Add(-time.Second)}); err != nil {
+	if err := s.CreateSession(ctx, domain.Session{TokenHash: "dead", UserID: u.ID, ExpiresAt: time.Now().Add(-time.Second)}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.GetSession(ctx, "live"); err != nil {
 		t.Fatalf("live session: %v", err)
 	}
-	if _, err := s.GetSession(ctx, "dead"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.GetSession(ctx, "dead"); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("expired session should be not found, got %v", err)
 	}
 	if err := s.SetPassword(ctx, u.ID, "new-hash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetSession(ctx, "live"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.GetSession(ctx, "live"); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("password change must revoke sessions, got %v", err)
 	}
-	if err := s.CreateSession(ctx, store.Session{TokenHash: "live", UserID: u.ID, ExpiresAt: future}); err != nil {
+	if err := s.CreateSession(ctx, domain.Session{TokenHash: "live", UserID: u.ID, ExpiresAt: future}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteExpiredSessions(ctx); err != nil {
@@ -215,7 +215,7 @@ func TestUsersAndSessions(t *testing.T) {
 	if err := s.DeleteSession(ctx, "live"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetSession(ctx, "live"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.GetSession(ctx, "live"); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("deleted session: %v", err)
 	}
 }
@@ -224,29 +224,29 @@ func TestUserAccessAndInvites(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
 
-	admin, err := s.CreateUser(ctx, store.User{Username: "admin", PasswordHash: "x", Role: store.RoleAdmin})
+	admin, err := s.CreateUser(ctx, domain.User{Username: "admin", PasswordHash: "x", Role: domain.RoleAdmin})
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := s.CreateProject(ctx, store.Project{Name: "shop"})
+	p, err := s.CreateProject(ctx, domain.Project{Name: "shop"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	inv, err := s.CreateInvite(ctx, store.Invite{
-		TokenHash: "inv", Role: store.RoleMember, Features: []string{"storage"},
+	inv, err := s.CreateInvite(ctx, domain.Invite{
+		TokenHash: "inv", Role: domain.RoleMember, Features: []string{"storage"},
 		Grants:    map[string][]string{p.ID: {"view", "deploy"}, "gone": {"view"}},
 		CreatedBy: admin.ID, Email: "alice@example.com", ExpiresAt: time.Now().Add(time.Hour),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateInvite(ctx, store.Invite{TokenHash: "old", Role: store.RoleMember, ExpiresAt: time.Now().Add(-time.Second)}); err != nil {
+	if _, err := s.CreateInvite(ctx, domain.Invite{TokenHash: "old", Role: domain.RoleMember, ExpiresAt: time.Now().Add(-time.Second)}); err != nil {
 		t.Fatal(err)
 	}
 	if is, err := s.ListInvites(ctx); err != nil || len(is) != 1 || is[0].ID != inv.ID || is[0].Email != "alice@example.com" {
 		t.Fatalf("invites: %+v %v", is, err)
 	}
-	if _, err := s.GetInviteByHash(ctx, "old"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.GetInviteByHash(ctx, "old"); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("expired invite: %v", err)
 	}
 	got, err := s.GetInviteByHash(ctx, "inv")
@@ -254,14 +254,14 @@ func TestUserAccessAndInvites(t *testing.T) {
 		t.Fatalf("invite by hash: %+v %v", got, err)
 	}
 
-	m, err := s.AcceptInvite(ctx, inv.ID, store.User{Username: "alice", PasswordHash: "y"}, nil)
+	m, err := s.AcceptInvite(ctx, inv.ID, domain.User{Username: "alice", PasswordHash: "y"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.Role != store.RoleMember || len(m.Features) != 1 {
+	if m.Role != domain.RoleMember || len(m.Features) != 1 {
 		t.Fatalf("member: %+v", m)
 	}
-	if _, err := s.AcceptInvite(ctx, inv.ID, store.User{Username: "bob", PasswordHash: "y"}, nil); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.AcceptInvite(ctx, inv.ID, domain.User{Username: "bob", PasswordHash: "y"}, nil); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("invite reused: %v", err)
 	}
 	gs, err := s.ListGrants(ctx, m.ID)
@@ -269,46 +269,46 @@ func TestUserAccessAndInvites(t *testing.T) {
 		t.Fatalf("grants: %+v %v", gs, err)
 	}
 
-	if err := s.SetGrant(ctx, store.ProjectGrant{UserID: m.ID, ProjectID: p.ID, Perms: []string{"view"}}); err != nil {
+	if err := s.SetGrant(ctx, domain.ProjectGrant{UserID: m.ID, ProjectID: p.ID, Perms: []string{"view"}}); err != nil {
 		t.Fatal(err)
 	}
 	if gs, _ := s.ListGrants(ctx, m.ID); len(gs) != 1 || len(gs[0].Perms) != 1 {
 		t.Fatalf("replaced grant: %+v", gs)
 	}
-	if err := s.SetGrant(ctx, store.ProjectGrant{UserID: m.ID, ProjectID: p.ID}); err != nil {
+	if err := s.SetGrant(ctx, domain.ProjectGrant{UserID: m.ID, ProjectID: p.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if gs, _ := s.ListGrants(ctx, m.ID); len(gs) != 0 {
 		t.Fatalf("grant without permissions should be gone: %+v", gs)
 	}
 
-	u, err := s.UpdateUserAccess(ctx, m.ID, store.RoleAdmin, nil)
-	if err != nil || u.Role != store.RoleAdmin || u.Features == nil {
+	u, err := s.UpdateUserAccess(ctx, m.ID, domain.RoleAdmin, nil)
+	if err != nil || u.Role != domain.RoleAdmin || u.Features == nil {
 		t.Fatalf("update access: %+v %v", u, err)
 	}
-	if err := s.SetUserPreferences(ctx, m.ID, store.Preferences{MapView: "3d"}); err != nil {
+	if err := s.SetUserPreferences(ctx, m.ID, domain.Preferences{MapView: "3d"}); err != nil {
 		t.Fatal(err)
 	}
 	if u, _ := s.GetUser(ctx, m.ID); u.Preferences.MapView != "3d" {
 		t.Fatalf("preferences: %+v", u.Preferences)
 	}
-	if err := s.SetUserPreferences(ctx, "nope", store.Preferences{}); !errors.Is(err, store.ErrNotFound) {
+	if err := s.SetUserPreferences(ctx, "nope", domain.Preferences{}); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("unknown user: %v", err)
 	}
 	if us, err := s.ListUsers(ctx); err != nil || len(us) != 2 || us[0].ID != admin.ID {
 		t.Fatalf("users: %+v %v", us, err)
 	}
 
-	if _, err := s.CreateAPIToken(ctx, store.APIToken{Name: "a", TokenHash: "t1", UserID: admin.ID}); err != nil {
+	if _, err := s.CreateAPIToken(ctx, domain.APIToken{Name: "a", TokenHash: "t1", UserID: admin.ID}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateAPIToken(ctx, store.APIToken{Name: "m", TokenHash: "t2", UserID: m.ID}); err != nil {
+	if _, err := s.CreateAPIToken(ctx, domain.APIToken{Name: "m", TokenHash: "t2", UserID: m.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if ts, _ := s.ListAPITokens(ctx, m.ID); len(ts) != 1 || ts[0].Name != "m" {
 		t.Fatalf("member tokens: %+v", ts)
 	}
-	if err := s.CreateSession(ctx, store.Session{TokenHash: "sess", UserID: m.ID, ExpiresAt: time.Now().Add(time.Hour)}); err != nil {
+	if err := s.CreateSession(ctx, domain.Session{TokenHash: "sess", UserID: m.ID, ExpiresAt: time.Now().Add(time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteUser(ctx, m.ID); err != nil {
@@ -317,7 +317,7 @@ func TestUserAccessAndInvites(t *testing.T) {
 	if ts, _ := s.ListAPITokens(ctx, ""); len(ts) != 1 {
 		t.Fatalf("deleting a user deletes their tokens: %+v", ts)
 	}
-	if _, err := s.GetSession(ctx, "sess"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.GetSession(ctx, "sess"); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("deleting a user deletes their sessions: %v", err)
 	}
 }
@@ -327,11 +327,11 @@ func TestBackups(t *testing.T) {
 	s := open(t)
 
 	targets, err := s.ListBackupTargets(ctx)
-	if err != nil || len(targets) != 1 || targets[0].ID != store.LocalTargetID {
+	if err != nil || len(targets) != 1 || targets[0].ID != domain.LocalTargetID {
 		t.Fatalf("seeded local target: %+v %v", targets, err)
 	}
-	s3, err := s.CreateBackupTarget(ctx, store.BackupTarget{
-		Name: "offsite", Kind: store.BackupTargetS3, Endpoint: "s3.example.com", Bucket: "b", SecretKey: "k", UseSSL: true,
+	s3, err := s.CreateBackupTarget(ctx, domain.BackupTarget{
+		Name: "offsite", Kind: domain.BackupTargetS3, Endpoint: "s3.example.com", Bucket: "b", SecretKey: "k", UseSSL: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -344,31 +344,31 @@ func TestBackups(t *testing.T) {
 		t.Fatalf("target round-trip: %+v", got)
 	}
 
-	b, err := s.CreateBackup(ctx, store.Backup{
+	b, err := s.CreateBackup(ctx, domain.Backup{
 		ServiceID: "SVC", ProjectID: "P", ServiceName: "db", ProjectName: "shop",
-		TargetID: s3.ID, ObjectKey: "shop/db/x.dump", Status: store.OpRunning,
+		TargetID: s3.ID, ObjectKey: "shop/db/x.dump", Status: domain.OpRunning,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	vb, err := s.CreateBackup(ctx, store.Backup{
-		Kind: store.BackupKindVolume, ServiceID: "SVC2", ProjectID: "P", ServiceName: "web", ProjectName: "shop",
-		ServiceKind: store.ServiceKindRedis, ServiceIcon: "redis", TargetID: store.LocalTargetID, ObjectKey: "shop/web/x.tar.gz", Status: store.OpRunning, Volumes: []string{"uploads", "cache"},
+	vb, err := s.CreateBackup(ctx, domain.Backup{
+		Kind: domain.BackupKindVolume, ServiceID: "SVC2", ProjectID: "P", ServiceName: "web", ProjectName: "shop",
+		ServiceKind: domain.ServiceKindRedis, ServiceIcon: "redis", TargetID: domain.LocalTargetID, ObjectKey: "shop/web/x.tar.gz", Status: domain.OpRunning, Volumes: []string{"uploads", "cache"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := s.GetBackup(ctx, vb.ID); err != nil || got.Kind != store.BackupKindVolume || got.ServiceKind != store.ServiceKindRedis || got.ServiceIcon != "redis" || !slices.Equal(got.Volumes, vb.Volumes) {
+	if got, err := s.GetBackup(ctx, vb.ID); err != nil || got.Kind != domain.BackupKindVolume || got.ServiceKind != domain.ServiceKindRedis || got.ServiceIcon != "redis" || !slices.Equal(got.Volumes, vb.Volumes) {
 		t.Fatalf("volume backup round-trip: %+v %v", got, err)
 	}
 	if err := s.DeleteBackup(ctx, vb.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteBackupTarget(ctx, s3.ID); !errors.Is(err, store.ErrConflict) {
+	if err := s.DeleteBackupTarget(ctx, s3.ID); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("deleting a target in use: %v", err)
 	}
 
-	b.Status, b.SizeBytes, b.SHA256, b.PGVersion, b.DurationMS, b.Encrypted = store.OpSucceeded, 1234, "abc", "17.2", 99, true
+	b.Status, b.SizeBytes, b.SHA256, b.PGVersion, b.DurationMS, b.Encrypted = domain.OpSucceeded, 1234, "abc", "17.2", 99, true
 	if err := s.FinishBackup(ctx, b); err != nil {
 		t.Fatal(err)
 	}
@@ -378,23 +378,23 @@ func TestBackups(t *testing.T) {
 	}
 
 	at := time.Now()
-	v := store.Verification{VerifyStatus: store.OpSucceeded, VerifiedAt: &at,
-		VerifyDetails: store.VerificationDetails{Tables: 3, Rows: 42}}
+	v := domain.Verification{VerifyStatus: domain.OpSucceeded, VerifiedAt: &at,
+		VerifyDetails: domain.VerificationDetails{Tables: 3, Rows: 42}}
 	if err := s.SetBackupVerification(ctx, b.ID, v); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := s.GetBackup(ctx, b.ID); got.VerifyStatus != store.OpSucceeded || got.VerifyDetails.Rows != 42 || got.VerifiedAt == nil || got.SizeBytes != 1234 {
+	if got, _ := s.GetBackup(ctx, b.ID); got.VerifyStatus != domain.OpSucceeded || got.VerifyDetails.Rows != 42 || got.VerifiedAt == nil || got.SizeBytes != 1234 {
 		t.Fatalf("verification round-trip: %+v", got)
 	}
 
-	running, _ := s.CreateBackup(ctx, store.Backup{ServiceID: "SVC", TargetID: "local", Status: store.OpRunning})
+	running, _ := s.CreateBackup(ctx, domain.Backup{ServiceID: "SVC", TargetID: "local", Status: domain.OpRunning})
 	if err := s.FailRunningOperations(ctx, "interrupted"); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := s.GetBackup(ctx, running.ID); got.Status != store.OpFailed {
+	if got, _ := s.GetBackup(ctx, running.ID); got.Status != domain.OpFailed {
 		t.Fatalf("running backup not failed: %+v", got)
 	}
-	ok, err := s.ListBackups(ctx, store.BackupFilter{ServiceID: "SVC", Status: store.OpSucceeded})
+	ok, err := s.ListBackups(ctx, domain.BackupFilter{ServiceID: "SVC", Status: domain.OpSucceeded})
 	if err != nil || len(ok) != 1 {
 		t.Fatalf("filtered list: %v %v", ok, err)
 	}
@@ -413,13 +413,13 @@ func TestBackups(t *testing.T) {
 func TestBackupSchedules(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
-	p, _ := s.CreateProject(ctx, store.Project{Name: "shop"})
-	db, err := s.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17"})
+	p, _ := s.CreateProject(ctx, domain.Project{Name: "shop"})
+	db, err := s.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "db", Kind: domain.ServiceKindPostgres, Image: "postgres:17"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	sc, err := s.CreateBackupSchedule(ctx, store.BackupSchedule{
-		ServiceID: db.ID, TargetID: store.LocalTargetID, Cron: "@daily", KeepDaily: 7, Enabled: true,
+	sc, err := s.CreateBackupSchedule(ctx, domain.BackupSchedule{
+		ServiceID: db.ID, TargetID: domain.LocalTargetID, Cron: "@daily", KeepDaily: 7, Enabled: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -432,10 +432,10 @@ func TestBackupSchedules(t *testing.T) {
 	if err != nil || got.Enabled || got.KeepWeekly != 4 || got.KeepDaily != 7 {
 		t.Fatalf("schedule round-trip: %+v %v", got, err)
 	}
-	if _, err := s.CreateBackup(ctx, store.Backup{ServiceID: db.ID, TargetID: "local", ScheduleID: sc.ID, Status: store.OpSucceeded}); err != nil {
+	if _, err := s.CreateBackup(ctx, domain.Backup{ServiceID: db.ID, TargetID: "local", ScheduleID: sc.ID, Status: domain.OpSucceeded}); err != nil {
 		t.Fatal(err)
 	}
-	if bs, _ := s.ListBackups(ctx, store.BackupFilter{ScheduleID: sc.ID}); len(bs) != 1 {
+	if bs, _ := s.ListBackups(ctx, domain.BackupFilter{ScheduleID: sc.ID}); len(bs) != 1 {
 		t.Fatalf("filter by schedule: %v", bs)
 	}
 	// Deleting the database removes its schedules (backups stay).
@@ -445,7 +445,7 @@ func TestBackupSchedules(t *testing.T) {
 	if all, _ := s.ListBackupSchedules(ctx, ""); len(all) != 0 {
 		t.Fatalf("schedules not cascaded: %v", all)
 	}
-	if bs, _ := s.ListBackups(ctx, store.BackupFilter{}); len(bs) != 1 {
+	if bs, _ := s.ListBackups(ctx, domain.BackupFilter{}); len(bs) != 1 {
 		t.Fatalf("backups must outlive the database: %v", bs)
 	}
 }
@@ -453,18 +453,18 @@ func TestBackupSchedules(t *testing.T) {
 func TestManagerSchedules(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
-	sc, err := s.CreateBackupSchedule(ctx, store.BackupSchedule{
-		Kind: store.BackupKindManager, TargetID: store.LocalTargetID, Cron: "@daily", KeepLast: 14, Enabled: true,
+	sc, err := s.CreateBackupSchedule(ctx, domain.BackupSchedule{
+		Kind: domain.BackupKindManager, TargetID: domain.LocalTargetID, Cron: "@daily", KeepLast: 14, Enabled: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.GetBackupSchedule(ctx, sc.ID)
-	if err != nil || got.Kind != store.BackupKindManager || got.ServiceID != "" {
+	if err != nil || got.Kind != domain.BackupKindManager || got.ServiceID != "" {
 		t.Fatalf("manager schedule round-trip: %+v %v", got, err)
 	}
 	// A manager schedule has no service, a database schedule needs one.
-	if _, err := s.CreateBackupSchedule(ctx, store.BackupSchedule{TargetID: store.LocalTargetID, Cron: "@daily"}); err == nil {
+	if _, err := s.CreateBackupSchedule(ctx, domain.BackupSchedule{TargetID: domain.LocalTargetID, Cron: "@daily"}); err == nil {
 		t.Fatal("database schedule without a service accepted")
 	}
 }
@@ -472,7 +472,7 @@ func TestManagerSchedules(t *testing.T) {
 func TestSnapshot(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
-	if _, err := s.CreateProject(ctx, store.Project{Name: "shop"}); err != nil {
+	if _, err := s.CreateProject(ctx, domain.Project{Name: "shop"}); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "snap.db")
@@ -493,7 +493,7 @@ func TestSnapshot(t *testing.T) {
 func TestTokensAndAudit(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
-	tok, err := s.CreateAPIToken(ctx, store.APIToken{Name: "ci", TokenHash: "h1"})
+	tok, err := s.CreateAPIToken(ctx, domain.APIToken{Name: "ci", TokenHash: "h1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -501,14 +501,14 @@ func TestTokensAndAudit(t *testing.T) {
 	if err != nil || got.ID != tok.ID || got.LastUsedAt == nil {
 		t.Fatalf("by hash: %+v %v", got, err)
 	}
-	if _, err := s.GetAPITokenByHash(ctx, "nope"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.GetAPITokenByHash(ctx, "nope"); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("unknown token: %v", err)
 	}
 	if err := s.DeleteAPIToken(ctx, tok.ID); err != nil {
 		t.Fatal(err)
 	}
 	for _, a := range []string{"deploy", "stop"} {
-		if err := s.AddAudit(ctx, store.AuditEntry{Actor: "user:admin", Action: a, Status: 200}); err != nil {
+		if err := s.AddAudit(ctx, domain.AuditEntry{Actor: "user:admin", Action: a, Status: 200}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -528,10 +528,10 @@ func TestServersAndSettings(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
 	servers, err := s.ListServers(ctx)
-	if err != nil || len(servers) != 1 || servers[0].ID != store.LocalServerID {
+	if err != nil || len(servers) != 1 || servers[0].ID != domain.LocalServerID {
 		t.Fatalf("seeded local server: %+v %v", servers, err)
 	}
-	remote, err := s.CreateServer(ctx, store.Server{Name: "db-2", Kind: store.ServerSSH, Host: "10.0.0.2", Port: 22, SSHUser: "root", Socket: "/var/run/docker.sock"})
+	remote, err := s.CreateServer(ctx, domain.Server{Name: "db-2", Kind: domain.ServerSSH, Host: "10.0.0.2", Port: 22, SSHUser: "root", Socket: "/var/run/docker.sock"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -539,22 +539,22 @@ func TestServersAndSettings(t *testing.T) {
 	if _, err := s.UpdateServer(ctx, remote); err != nil {
 		t.Fatal(err)
 	}
-	p, err := s.CreateProject(ctx, store.Project{Name: "shop", ServerID: remote.ID})
+	p, err := s.CreateProject(ctx, domain.Project{Name: "shop", ServerID: remote.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := s.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx"})
+	svc, err := s.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx"})
 	if err != nil || svc.ServerID != remote.ID {
 		t.Fatalf("service must inherit the project's server: %+v %v", svc, err)
 	}
-	if def, _ := s.CreateProject(ctx, store.Project{Name: "other"}); def.ServerID != store.LocalServerID {
+	if def, _ := s.CreateProject(ctx, domain.Project{Name: "other"}); def.ServerID != domain.LocalServerID {
 		t.Fatalf("default server: %q", def.ServerID)
 	}
-	if err := s.DeleteServer(ctx, remote.ID); !errors.Is(err, store.ErrConflict) {
+	if err := s.DeleteServer(ctx, remote.ID); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("deleting a server in use: %v", err)
 	}
 
-	if _, err := s.GetSetting(ctx, "k"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.GetSetting(ctx, "k"); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("missing setting: %v", err)
 	}
 	for _, v := range []string{"a", "b"} {
@@ -652,11 +652,11 @@ func TestDomains(t *testing.T) {
 	s := open(t)
 	ctx := context.Background()
 	for _, n := range []string{"example.org", "example.com"} {
-		if _, err := s.CreateDomain(ctx, store.Domain{Name: n}); err != nil {
+		if _, err := s.CreateDomain(ctx, domain.Domain{Name: n}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.CreateDomain(ctx, store.Domain{Name: "example.com"}); !errors.Is(err, store.ErrConflict) {
+	if _, err := s.CreateDomain(ctx, domain.Domain{Name: "example.com"}); !errors.Is(err, domain.ErrConflict) {
 		t.Errorf("duplicate: %v", err)
 	}
 	ds, err := s.ListDomains(ctx)
@@ -675,13 +675,13 @@ func TestNotificationChannels(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
 
-	ch, err := s.CreateNotificationChannel(ctx, store.NotificationChannel{
+	ch, err := s.CreateNotificationChannel(ctx, domain.NotificationChannel{
 		Name: "ops", Kind: "discord", Config: map[string]string{"webhookUrl": "u"}, Events: []string{"deploy.failed"}, Enabled: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateNotificationChannel(ctx, store.NotificationChannel{Name: "ops", Kind: "discord"}); !errors.Is(err, store.ErrConflict) {
+	if _, err := s.CreateNotificationChannel(ctx, domain.NotificationChannel{Name: "ops", Kind: "discord"}); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("duplicate name: got %v, want ErrConflict", err)
 	}
 	ch.Name, ch.Events, ch.Enabled = "alerts", []string{"backup.failed", "deploy.failed"}, false
@@ -695,7 +695,7 @@ func TestNotificationChannels(t *testing.T) {
 	if got.Name != "alerts" || got.Enabled || got.Config["webhookUrl"] != "u" || !slices.Equal(got.Events, ch.Events) {
 		t.Errorf("got %+v", got)
 	}
-	if _, err := s.UpdateNotificationChannel(ctx, store.NotificationChannel{ID: "missing"}); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.UpdateNotificationChannel(ctx, domain.NotificationChannel{ID: "missing"}); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("update missing: %v", err)
 	}
 	if err := s.DeleteNotificationChannel(ctx, ch.ID); err != nil {
@@ -746,7 +746,7 @@ func TestDriveTargetsMigration(t *testing.T) {
 	if b, err := s.GetBackup(ctx, "b1"); err != nil || b.TargetID != "t1" {
 		t.Fatalf("backup = %+v, %v", b, err)
 	}
-	if err := s.DeleteBackupTarget(ctx, "t1"); !errors.Is(err, store.ErrConflict) {
+	if err := s.DeleteBackupTarget(ctx, "t1"); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("delete referenced target: %v", err)
 	}
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO backups (id, service_id, project_id, service_name, project_name, target_id, object_key, status, created_at) VALUES ('b2', 's', 'p', 'db', 'shop', 'nope', 'k', 'running', '2026-01-01 00:00:00+00:00')`); err == nil {
@@ -798,10 +798,10 @@ func TestDropDriveTargetsMigration(t *testing.T) {
 	if _, err := s.GetBackup(ctx, "b1"); err != nil {
 		t.Fatalf("s3 backup: %v", err)
 	}
-	if _, err := s.GetBackupTarget(ctx, "gd"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.GetBackupTarget(ctx, "gd"); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("drive target kept: %v", err)
 	}
-	if _, err := s.GetBackup(ctx, "b2"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.GetBackup(ctx, "b2"); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("drive backup kept: %v", err)
 	}
 	for _, table := range []string{"backup_schedules", "restores"} {
@@ -833,13 +833,13 @@ func TestImageOnlyMigration(t *testing.T) {
 	}
 	old := &Store{db: bun.NewDB(db, sqlitedialect.New())}
 	// Raw inserts: the current models have columns this schema lacks.
-	pr := store.Project{ID: "p1", ServerID: store.LocalServerID}
+	pr := domain.Project{ID: "p1", ServerID: domain.LocalServerID}
 	if _, err := db.ExecContext(ctx, `INSERT INTO projects (id, name, server_id, created_at, updated_at)
 		VALUES ('p1', 'shop', ?, '2026-01-01 00:00:00+00:00', '2026-01-01 00:00:00+00:00')`, pr.ServerID); err != nil {
 		t.Fatal(err)
 	}
-	newService := func(name string) store.Service {
-		svc := store.Service{ID: ids.New(), ProjectID: pr.ID, Name: name}
+	newService := func(name string) domain.Service {
+		svc := domain.Service{ID: ids.New(), ProjectID: pr.ID, Name: name}
 		if _, err := db.ExecContext(ctx, `INSERT INTO services (id, project_id, server_id, name, kind, image, created_at, updated_at)
 			VALUES (?, ?, ?, ?, 'app', '', '2026-01-01 00:00:00+00:00', '2026-01-01 00:00:00+00:00')`,
 			svc.ID, pr.ID, pr.ServerID, name); err != nil {
@@ -848,7 +848,7 @@ func TestImageOnlyMigration(t *testing.T) {
 		return svc
 	}
 	built := newService("api")
-	d, err := old.CreateDeployment(ctx, store.Deployment{ServiceID: built.ID, Status: store.DeploymentSucceeded, Image: "kipitiny/api:abc"})
+	d, err := old.CreateDeployment(ctx, domain.Deployment{ServiceID: built.ID, Status: domain.DeploymentSucceeded, Image: "kipitiny/api:abc"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -877,21 +877,21 @@ func TestImageOnlyMigration(t *testing.T) {
 func TestSetBackupTargetKey(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
-	if err := s.SetBackupTargetKey(ctx, store.LocalTargetID, "AGE-SECRET-KEY-1", "age1one"); err != nil {
+	if err := s.SetBackupTargetKey(ctx, domain.LocalTargetID, "AGE-SECRET-KEY-1", "age1one"); err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.GetBackupTarget(ctx, store.LocalTargetID)
+	got, err := s.GetBackupTarget(ctx, domain.LocalTargetID)
 	if err != nil || got.AgeRecipient != "age1one" || got.AgeIdentity != "AGE-SECRET-KEY-1" {
 		t.Fatalf("key not saved: %+v %v", got, err)
 	}
 	// A key is never replaced: backups encrypted with it would be lost.
-	if err := s.SetBackupTargetKey(ctx, store.LocalTargetID, "AGE-SECRET-KEY-2", "age1two"); !errors.Is(err, store.ErrConflict) {
+	if err := s.SetBackupTargetKey(ctx, domain.LocalTargetID, "AGE-SECRET-KEY-2", "age1two"); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("second key: %v", err)
 	}
-	if got, _ := s.GetBackupTarget(ctx, store.LocalTargetID); got.AgeRecipient != "age1one" {
+	if got, _ := s.GetBackupTarget(ctx, domain.LocalTargetID); got.AgeRecipient != "age1one" {
 		t.Fatalf("key replaced: %+v", got)
 	}
-	if err := s.SetBackupTargetKey(ctx, "missing", "k", "r"); !errors.Is(err, store.ErrNotFound) {
+	if err := s.SetBackupTargetKey(ctx, "missing", "k", "r"); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("unknown target: %v", err)
 	}
 }
@@ -914,17 +914,17 @@ func TestRedisMigration(t *testing.T) {
 	}
 	old := &Store{db: bun.NewDB(db, sqlitedialect.New())}
 	// Raw SQL: the current models have columns added after this version.
-	pr := store.Project{ID: "p1"}
+	pr := domain.Project{ID: "p1"}
 	if _, err := db.ExecContext(ctx, `INSERT INTO projects (id, name, server_id, created_at, updated_at)
-		VALUES ('p1', 'shop', ?, '2026-01-01 00:00:00+00:00', '2026-01-01 00:00:00+00:00')`, store.LocalServerID); err != nil {
+		VALUES ('p1', 'shop', ?, '2026-01-01 00:00:00+00:00', '2026-01-01 00:00:00+00:00')`, domain.LocalServerID); err != nil {
 		t.Fatal(err)
 	}
-	pg := store.Service{ID: "pg1"}
+	pg := domain.Service{ID: "pg1"}
 	if _, err := db.ExecContext(ctx, `INSERT INTO services (id, project_id, name, kind, image, replicas, created_at, updated_at, env, memory_mb, secrets, cpus)
 		VALUES ('pg1', ?, 'db', 'postgres', 'postgres:17', 1, '2026-01-01 00:00:00+00:00', '2026-01-01 00:00:00+00:00', '{"A":"1"}', 512, '["A"]', 0.5)`, pr.ID); err != nil {
 		t.Fatal(err)
 	}
-	d, err := old.CreateDeployment(ctx, store.Deployment{ServiceID: pg.ID, Status: store.DeploymentSucceeded, Image: "postgres:17"})
+	d, err := old.CreateDeployment(ctx, domain.Deployment{ServiceID: pg.ID, Status: domain.DeploymentSucceeded, Image: "postgres:17"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -942,10 +942,10 @@ func TestRedisMigration(t *testing.T) {
 	if _, err := s.GetDeployment(ctx, d.ID); err != nil {
 		t.Fatalf("deployment lost: %v", err)
 	}
-	if _, err := s.CreateService(ctx, store.Service{ProjectID: pr.ID, Name: "cache", Kind: store.ServiceKindRedis, Image: "redis:8-alpine", Replicas: 1}); err != nil {
+	if _, err := s.CreateService(ctx, domain.Service{ProjectID: pr.ID, Name: "cache", Kind: domain.ServiceKindRedis, Image: "redis:8-alpine", Replicas: 1}); err != nil {
 		t.Fatalf("create redis: %v", err)
 	}
-	if _, err := s.CreateService(ctx, store.Service{ProjectID: pr.ID, Name: "db", Kind: store.ServiceKindRedis, Image: "redis:8-alpine", Replicas: 1}); err == nil {
+	if _, err := s.CreateService(ctx, domain.Service{ProjectID: pr.ID, Name: "db", Kind: domain.ServiceKindRedis, Image: "redis:8-alpine", Replicas: 1}); err == nil {
 		t.Fatal("unique (project_id, name) lost")
 	}
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO deployments (id, service_id, status, image, created_at) VALUES ('d2', 'nope', 'running', 'x', '2026-01-01 00:00:00+00:00')`); err == nil {
@@ -954,7 +954,7 @@ func TestRedisMigration(t *testing.T) {
 	if err := s.DeleteService(ctx, pg.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetDeployment(ctx, d.ID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.GetDeployment(ctx, d.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("deployment not cascaded: %v", err)
 	}
 }
@@ -962,18 +962,18 @@ func TestRedisMigration(t *testing.T) {
 func TestUptime(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
-	p, err := s.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := s.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := s.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1})
+	svc, err := s.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetUptimeCheck(ctx, svc.ID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.GetUptimeCheck(ctx, svc.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("before: %v", err)
 	}
-	c, err := s.SaveUptimeCheck(ctx, store.UptimeCheck{ServiceID: svc.ID, Path: "/", IntervalSec: 60, TimeoutSec: 10, Enabled: true})
+	c, err := s.SaveUptimeCheck(ctx, domain.UptimeCheck{ServiceID: svc.ID, Path: "/", IntervalSec: 60, TimeoutSec: 10, Enabled: true})
 	if err != nil || c.Down || c.ChangedAt != nil {
 		t.Fatalf("create: %+v %v", c, err)
 	}
@@ -982,19 +982,19 @@ func TestUptime(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Saving the settings again keeps the state.
-	c, err = s.SaveUptimeCheck(ctx, store.UptimeCheck{ServiceID: svc.ID, Path: "/health", IntervalSec: 30, TimeoutSec: 5, ExpectedStatus: 204})
+	c, err = s.SaveUptimeCheck(ctx, domain.UptimeCheck{ServiceID: svc.ID, Path: "/health", IntervalSec: 30, TimeoutSec: 5, ExpectedStatus: 204})
 	if err != nil || c.Path != "/health" || c.IntervalSec != 30 || c.ExpectedStatus != 204 || c.Enabled || !c.Down || c.ChangedAt == nil {
 		t.Fatalf("update: %+v %v", c, err)
 	}
 	if cs, err := s.ListUptimeChecks(ctx); err != nil || len(cs) != 1 || cs[0].Recent == nil {
 		t.Fatalf("list: %v %v", cs, err)
 	}
-	recent := []store.UptimeResult{{At: time.Now().UTC().Truncate(time.Second), Status: 503, Error: "status 503"}}
+	recent := []domain.UptimeResult{{At: time.Now().UTC().Truncate(time.Second), Status: 503, Error: "status 503"}}
 	if err := s.SetUptimeRecent(ctx, svc.ID, recent); err != nil {
 		t.Fatal(err)
 	}
 	// Saving the settings again keeps the results.
-	if c, err := s.SaveUptimeCheck(ctx, store.UptimeCheck{ServiceID: svc.ID, Path: "/", IntervalSec: 60, TimeoutSec: 10}); err != nil || !reflect.DeepEqual(c.Recent, recent) {
+	if c, err := s.SaveUptimeCheck(ctx, domain.UptimeCheck{ServiceID: svc.ID, Path: "/", IntervalSec: 60, TimeoutSec: 10}); err != nil || !reflect.DeepEqual(c.Recent, recent) {
 		t.Fatalf("recent: %+v %v", c.Recent, err)
 	}
 
@@ -1028,7 +1028,7 @@ func TestUptime(t *testing.T) {
 	if hs, _ := s.ListUptimeHours(ctx, svc.ID, h0); len(hs) != 0 {
 		t.Errorf("results kept after delete: %+v", hs)
 	}
-	if err := s.DeleteUptimeCheck(ctx, svc.ID); !errors.Is(err, store.ErrNotFound) {
+	if err := s.DeleteUptimeCheck(ctx, svc.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("delete again: %v", err)
 	}
 }
@@ -1072,7 +1072,7 @@ func TestVolumeBackupsMigration(t *testing.T) {
 	defer s.Close()
 	b, err := s.GetBackup(ctx, "b1")
 	if err != nil || b.SizeBytes != 42 || b.PGVersion != "17.2" || !b.Encrypted || b.ScheduleID != "sc1" ||
-		b.VerifyStatus != store.OpSucceeded || b.VerifyDetails.Tables != 3 || len(b.Volumes) != 0 {
+		b.VerifyStatus != domain.OpSucceeded || b.VerifyDetails.Tables != 3 || len(b.Volumes) != 0 {
 		t.Fatalf("backup after rebuild = %+v, %v", b, err)
 	}
 	if rs, err := s.ListRestores(ctx, "s1", 10); err != nil || len(rs) != 1 {
@@ -1081,10 +1081,10 @@ func TestVolumeBackupsMigration(t *testing.T) {
 	if sc, err := s.GetBackupSchedule(ctx, "sc1"); err != nil || sc.KeepDaily != 7 {
 		t.Fatalf("schedule after rebuild = %+v, %v", sc, err)
 	}
-	if _, err := s.CreateBackupSchedule(ctx, store.BackupSchedule{Kind: store.BackupKindVolume, ServiceID: "s1", TargetID: store.LocalTargetID, Cron: "@daily"}); err != nil {
+	if _, err := s.CreateBackupSchedule(ctx, domain.BackupSchedule{Kind: domain.BackupKindVolume, ServiceID: "s1", TargetID: domain.LocalTargetID, Cron: "@daily"}); err != nil {
 		t.Fatalf("volume schedule: %v", err)
 	}
-	if _, err := s.CreateBackupSchedule(ctx, store.BackupSchedule{Kind: store.BackupKindVolume, TargetID: store.LocalTargetID, Cron: "@daily"}); err == nil {
+	if _, err := s.CreateBackupSchedule(ctx, domain.BackupSchedule{Kind: domain.BackupKindVolume, TargetID: domain.LocalTargetID, Cron: "@daily"}); err == nil {
 		t.Fatal("service-less volume schedule accepted")
 	}
 	// Restores still cascade with their backup.
@@ -1099,15 +1099,15 @@ func TestVolumeBackupsMigration(t *testing.T) {
 func TestProjectGit(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
-	p, err := s.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := s.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := s.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1})
+	svc, err := s.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := s.SaveProjectGit(ctx, store.ProjectGit{ProjectID: p.ID, RepoURL: "https://example.com/r.git", Branch: "main", Path: "compose.yaml",
+	g, err := s.SaveProjectGit(ctx, domain.ProjectGit{ProjectID: p.ID, RepoURL: "https://example.com/r.git", Branch: "main", Path: "compose.yaml",
 		AutoSync: true, PollSeconds: 300, WebhookSecret: "w"})
 	if err != nil || g.Branch != "main" || g.Warnings == nil || g.Applied == nil {
 		t.Fatalf("create: %+v %v", g, err)
@@ -1118,7 +1118,7 @@ func TestProjectGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Saving the link again keeps the sync state and the webhook secret.
-	g, err = s.SaveProjectGit(ctx, store.ProjectGit{ProjectID: p.ID, RepoURL: "https://example.com/r.git", Branch: "prod", Path: "c.yml", WebhookSecret: "new"})
+	g, err = s.SaveProjectGit(ctx, domain.ProjectGit{ProjectID: p.ID, RepoURL: "https://example.com/r.git", Branch: "prod", Path: "c.yml", WebhookSecret: "new"})
 	if err != nil || g.Branch != "prod" || g.LastCommit != "abc" || g.WebhookSecret != "w" || g.Applied["web"] != "nginx:1" || g.LastSyncedAt == nil {
 		t.Fatalf("update: %+v %v", g, err)
 	}
@@ -1137,7 +1137,7 @@ func TestProjectGit(t *testing.T) {
 	if got, _ := s.GetService(ctx, svc.ID); got.GitSpecHash != "" || got.Orphaned {
 		t.Fatalf("unlinked service = %+v", got)
 	}
-	if _, err := s.GetProjectGit(ctx, p.ID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.GetProjectGit(ctx, p.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("after delete: %v", err)
 	}
 }
@@ -1193,19 +1193,19 @@ func TestNetworks(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
 
-	n, err := s.CreateNetwork(ctx, store.Network{ServerID: store.LocalServerID, Name: "shared"})
+	n, err := s.CreateNetwork(ctx, domain.Network{ServerID: domain.LocalServerID, Name: "shared"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateNetwork(ctx, store.Network{ServerID: store.LocalServerID, Name: "shared"}); !errors.Is(err, store.ErrConflict) {
+	if _, err := s.CreateNetwork(ctx, domain.Network{ServerID: domain.LocalServerID, Name: "shared"}); !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("duplicate name on a server: got %v, want ErrConflict", err)
 	}
 
-	p, err := s.CreateProject(ctx, store.Project{Name: "shop"})
+	p, err := s.CreateProject(ctx, domain.Project{Name: "shop"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := s.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1})
+	svc, err := s.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1227,7 +1227,7 @@ func TestNetworks(t *testing.T) {
 	if len(got.Networks) != 1 || got.Networks[0] != n.ID {
 		t.Fatalf("networks = %v", got.Networks)
 	}
-	if err := s.SetServiceNetworks(ctx, "nope", nil); !errors.Is(err, store.ErrNotFound) {
+	if err := s.SetServiceNetworks(ctx, "nope", nil); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("unknown service: got %v", err)
 	}
 
@@ -1238,7 +1238,7 @@ func TestNetworks(t *testing.T) {
 	if err := s.DeleteNetwork(ctx, n.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetNetwork(ctx, n.ID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.GetNetwork(ctx, n.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("deleted network: got %v", err)
 	}
 }
@@ -1261,14 +1261,14 @@ func TestProjectSleepAndMaintenanceMigration(t *testing.T) {
 	}
 	// Raw inserts: the current models have columns this schema lacks.
 	for _, q := range []string{
-		`INSERT INTO projects (id, name, server_id, created_at, updated_at) VALUES ('shop', 'shop', '` + store.LocalServerID + `', '2026-01-01', '2026-01-01')`,
-		`INSERT INTO projects (id, name, server_id, parent_id, created_at, updated_at) VALUES ('pr1', 'shop-pr-1', '` + store.LocalServerID + `', 'shop', '2026-01-01', '2026-01-01')`,
-		`INSERT INTO projects (id, name, server_id, created_at, updated_at) VALUES ('blog', 'blog', '` + store.LocalServerID + `', '2026-01-01', '2026-01-01')`,
+		`INSERT INTO projects (id, name, server_id, created_at, updated_at) VALUES ('shop', 'shop', '` + domain.LocalServerID + `', '2026-01-01', '2026-01-01')`,
+		`INSERT INTO projects (id, name, server_id, parent_id, created_at, updated_at) VALUES ('pr1', 'shop-pr-1', '` + domain.LocalServerID + `', 'shop', '2026-01-01', '2026-01-01')`,
+		`INSERT INTO projects (id, name, server_id, created_at, updated_at) VALUES ('blog', 'blog', '` + domain.LocalServerID + `', '2026-01-01', '2026-01-01')`,
 		`INSERT INTO preview_settings (project_id, sleep_after_seconds, updated_at) VALUES ('shop', 600, '2026-01-01')`,
 		`INSERT INTO services (id, project_id, server_id, name, kind, image, sleep_after_seconds, sleeping, maintenance, created_at, updated_at)
-			VALUES ('web', 'shop', '` + store.LocalServerID + `', 'web', 'app', 'nginx', 1800, 1, '{"enabled":true,"title":"Back soon"}', '2026-01-01', '2026-01-01')`,
+			VALUES ('web', 'shop', '` + domain.LocalServerID + `', 'web', 'app', 'nginx', 1800, 1, '{"enabled":true,"title":"Back soon"}', '2026-01-01', '2026-01-01')`,
 		`INSERT INTO services (id, project_id, server_id, name, kind, image, maintenance, created_at, updated_at)
-			VALUES ('api', 'shop', '` + store.LocalServerID + `', 'api', 'app', 'nginx', '{"enabled":true}', '2026-01-01', '2026-01-01')`,
+			VALUES ('api', 'shop', '` + domain.LocalServerID + `', 'api', 'app', 'nginx', '{"enabled":true}', '2026-01-01', '2026-01-01')`,
 	} {
 		if _, err := db.ExecContext(ctx, q); err != nil {
 			t.Fatal(err)
@@ -1338,11 +1338,11 @@ func TestSecretConnectionsMigration(t *testing.T) {
 	}
 
 	// Two connections of a kind need different names.
-	work, err := s.CreateSecretConnection(ctx, store.SecretConnection{Kind: "protonpass", Name: "work", Token: "a"})
+	work, err := s.CreateSecretConnection(ctx, domain.SecretConnection{Kind: "protonpass", Name: "work", Token: "a"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateSecretConnection(ctx, store.SecretConnection{Kind: "protonpass", Name: "work", Token: "b"}); !errors.Is(err, store.ErrConflict) {
+	if _, err := s.CreateSecretConnection(ctx, domain.SecretConnection{Kind: "protonpass", Name: "work", Token: "b"}); !errors.Is(err, domain.ErrConflict) {
 		t.Errorf("duplicate name: %v", err)
 	}
 	if err := s.SetSecretConnectionToken(ctx, work.ID, "c"); err != nil {
@@ -1351,7 +1351,7 @@ func TestSecretConnectionsMigration(t *testing.T) {
 	if got, _ := s.GetSecretConnection(ctx, work.ID); got.Token != "c" {
 		t.Errorf("token = %q", got.Token)
 	}
-	if err := s.SetSecretConnectionToken(ctx, "nope", "c"); !errors.Is(err, store.ErrNotFound) {
+	if err := s.SetSecretConnectionToken(ctx, "nope", "c"); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("unknown connection: %v", err)
 	}
 	if err := s.DeleteSecretConnection(ctx, work.ID); err != nil {
@@ -1401,7 +1401,7 @@ func TestTokenScopeMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	for hash, want := range map[string]store.APIToken{
+	for hash, want := range map[string]domain.APIToken{
 		"hr": {Restricted: true, Grants: map[string][]string{"p1": {"view", "data"}, "p2": {"view", "data"}}},
 		"hd": {Restricted: true, Grants: map[string][]string{"p2": {"view", "deploy", "backups", "data"}}},
 		"ha": {Restricted: false, Grants: map[string][]string{}},
@@ -1417,33 +1417,33 @@ func TestTokenScopeMigration(t *testing.T) {
 func TestPushSubscriptions(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
-	admin, err := s.CreateUser(ctx, store.User{Username: "admin", PasswordHash: "x", Role: store.RoleAdmin})
+	admin, err := s.CreateUser(ctx, domain.User{Username: "admin", PasswordHash: "x", Role: domain.RoleAdmin})
 	if err != nil {
 		t.Fatal(err)
 	}
-	member, err := s.CreateUser(ctx, store.User{Username: "member", PasswordHash: "x", Role: store.RoleMember})
+	member, err := s.CreateUser(ctx, domain.User{Username: "member", PasswordHash: "x", Role: domain.RoleMember})
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := s.SavePushSubscription(ctx, store.PushSubscription{UserID: admin.ID, Name: "Chrome", Endpoint: "https://e/1", P256dh: "k", Auth: "a"})
+	p, err := s.SavePushSubscription(ctx, domain.PushSubscription{UserID: admin.ID, Name: "Chrome", Endpoint: "https://e/1", P256dh: "k", Auth: "a"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// the same browser again, signed in as someone else: moved, not duplicated
-	again, err := s.SavePushSubscription(ctx, store.PushSubscription{UserID: member.ID, Name: "Chrome", Endpoint: "https://e/1", P256dh: "k2", Auth: "a2"})
+	again, err := s.SavePushSubscription(ctx, domain.PushSubscription{UserID: member.ID, Name: "Chrome", Endpoint: "https://e/1", P256dh: "k2", Auth: "a2"})
 	if err != nil || again.ID != p.ID || again.P256dh != "k2" {
 		t.Fatalf("resubscribe: %+v %v", again, err)
 	}
 	if ps, _ := s.ListAdminPushSubscriptions(ctx); len(ps) != 0 {
 		t.Fatalf("admin subscriptions after the move: %+v", ps)
 	}
-	if _, err := s.SavePushSubscription(ctx, store.PushSubscription{UserID: admin.ID, Name: "Firefox", Endpoint: "https://e/2", P256dh: "k", Auth: "a"}); err != nil {
+	if _, err := s.SavePushSubscription(ctx, domain.PushSubscription{UserID: admin.ID, Name: "Firefox", Endpoint: "https://e/2", P256dh: "k", Auth: "a"}); err != nil {
 		t.Fatal(err)
 	}
 	if ps, _ := s.ListAdminPushSubscriptions(ctx); len(ps) != 1 || ps[0].Name != "Firefox" {
 		t.Fatalf("admin subscriptions: %+v", ps)
 	}
-	if err := s.DeletePushSubscription(ctx, admin.ID, p.ID); !errors.Is(err, store.ErrNotFound) {
+	if err := s.DeletePushSubscription(ctx, admin.ID, p.ID); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("delete someone else's: %v", err)
 	}
 	if err := s.DeletePushSubscription(ctx, member.ID, p.ID); err != nil {
@@ -1457,11 +1457,11 @@ func TestPushSubscriptions(t *testing.T) {
 func TestAnonymizeRulesAndCopies(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
-	p, err := s.CreateProject(ctx, store.Project{Name: "shop"})
+	p, err := s.CreateProject(ctx, domain.Project{Name: "shop"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	db, err := s.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17"})
+	db, err := s.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "db", Kind: domain.ServiceKindPostgres, Image: "postgres:17"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1489,31 +1489,31 @@ func TestAnonymizeRulesAndCopies(t *testing.T) {
 		t.Fatalf("cleared rules came back as %#v", got.Anonymize)
 	}
 
-	src, err := s.CreateBackup(ctx, store.Backup{ServiceID: db.ID, ProjectID: p.ID, TargetID: store.LocalTargetID, ObjectKey: "a.dump", Status: store.OpSucceeded})
+	src, err := s.CreateBackup(ctx, domain.Backup{ServiceID: db.ID, ProjectID: p.ID, TargetID: domain.LocalTargetID, ObjectKey: "a.dump", Status: domain.OpSucceeded})
 	if err != nil {
 		t.Fatal(err)
 	}
-	cp, err := s.CreateBackup(ctx, store.Backup{ServiceID: db.ID, ProjectID: p.ID, TargetID: store.LocalTargetID, ObjectKey: "a.anon.dump",
-		Status: store.OpSucceeded, SourceID: src.ID, RulesHash: "h"})
+	cp, err := s.CreateBackup(ctx, domain.Backup{ServiceID: db.ID, ProjectID: p.ID, TargetID: domain.LocalTargetID, ObjectKey: "a.anon.dump",
+		Status: domain.OpSucceeded, SourceID: src.ID, RulesHash: "h"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bs, _ := s.ListBackups(ctx, store.BackupFilter{ServiceID: db.ID}); len(bs) != 1 || bs[0].ID != src.ID {
+	if bs, _ := s.ListBackups(ctx, domain.BackupFilter{ServiceID: db.ID}); len(bs) != 1 || bs[0].ID != src.ID {
 		t.Fatalf("backups list copies: %+v", bs)
 	}
-	if bs, _ := s.ListBackups(ctx, store.BackupFilter{ServiceID: db.ID, Anonymized: true, SourceID: src.ID}); len(bs) != 1 || bs[0].ID != cp.ID || bs[0].RulesHash != "h" {
+	if bs, _ := s.ListBackups(ctx, domain.BackupFilter{ServiceID: db.ID, Anonymized: true, SourceID: src.ID}); len(bs) != 1 || bs[0].ID != cp.ID || bs[0].RulesHash != "h" {
 		t.Fatalf("copies: %+v", bs)
 	}
 
-	ps, err := s.SavePreviewSettings(ctx, store.PreviewSettings{ProjectID: p.ID, SeedMode: store.SeedAnonymized, Salt: "abc"})
+	ps, err := s.SavePreviewSettings(ctx, domain.PreviewSettings{ProjectID: p.ID, SeedMode: domain.SeedAnonymized, Salt: "abc"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ps.SeedMode = store.SeedRaw
+	ps.SeedMode = domain.SeedRaw
 	if _, err := s.SavePreviewSettings(ctx, ps); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := s.GetPreviewSettings(ctx, p.ID); got.SeedMode != store.SeedRaw || got.Salt != "abc" {
+	if got, _ := s.GetPreviewSettings(ctx, p.ID); got.SeedMode != domain.SeedRaw || got.Salt != "abc" {
 		t.Fatalf("preview settings %+v", got)
 	}
 }
@@ -1535,8 +1535,8 @@ func TestSeedModeMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, q := range []string{
-		`INSERT INTO projects (id, name, server_id, created_at, updated_at) VALUES ('shop', 'shop', '` + store.LocalServerID + `', '2026-01-01', '2026-01-01')`,
-		`INSERT INTO projects (id, name, server_id, created_at, updated_at) VALUES ('blog', 'blog', '` + store.LocalServerID + `', '2026-01-01', '2026-01-01')`,
+		`INSERT INTO projects (id, name, server_id, created_at, updated_at) VALUES ('shop', 'shop', '` + domain.LocalServerID + `', '2026-01-01', '2026-01-01')`,
+		`INSERT INTO projects (id, name, server_id, created_at, updated_at) VALUES ('blog', 'blog', '` + domain.LocalServerID + `', '2026-01-01', '2026-01-01')`,
 		`INSERT INTO preview_settings (project_id, allow_seed, updated_at) VALUES ('shop', 1, '2026-01-01')`,
 		`INSERT INTO preview_settings (project_id, allow_seed, updated_at) VALUES ('blog', 0, '2026-01-01')`,
 	} {
@@ -1551,10 +1551,10 @@ func TestSeedModeMigration(t *testing.T) {
 	}
 	defer s.Close()
 	// Projects that allowed seeding keep seeding with their data as is.
-	if ps, _ := s.GetPreviewSettings(ctx, "shop"); ps.SeedMode != store.SeedRaw {
+	if ps, _ := s.GetPreviewSettings(ctx, "shop"); ps.SeedMode != domain.SeedRaw {
 		t.Errorf("shop seeds %q", ps.SeedMode)
 	}
-	if ps, _ := s.GetPreviewSettings(ctx, "blog"); ps.SeedMode != store.SeedOff {
+	if ps, _ := s.GetPreviewSettings(ctx, "blog"); ps.SeedMode != domain.SeedOff {
 		t.Errorf("blog seeds %q", ps.SeedMode)
 	}
 }

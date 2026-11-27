@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestAnalyticsPaths(t *testing.T) {
@@ -29,9 +29,9 @@ func TestAnalyticsPaths(t *testing.T) {
 
 	ctx := context.Background()
 	co := newTestCore(t, config.Config{})
-	own := store.Service{ID: "01OWN", Domain: "shop.example.com", ServerID: store.LocalServerID, AnalyticsScript: "/js/k.js", AnalyticsHit: "/k"}
-	plain := store.Service{ID: "01PLAIN", Domain: "blog.example.com", ServerID: store.LocalServerID}
-	labels := co.analyticsSpec(ctx, analyticsState{AnalyticsSettings: AnalyticsSettings{Domain: "stats.example.com"}}, []store.Service{own, plain}).Config.Labels
+	own := domain.Service{ID: "01OWN", Domain: "shop.example.com", ServerID: domain.LocalServerID, AnalyticsScript: "/js/k.js", AnalyticsHit: "/k"}
+	plain := domain.Service{ID: "01PLAIN", Domain: "blog.example.com", ServerID: domain.LocalServerID}
+	labels := co.analyticsSpec(ctx, analyticsState{AnalyticsSettings: AnalyticsSettings{Domain: "stats.example.com"}}, []domain.Service{own, plain}).Config.Labels
 	if r := labels["traefik.http.routers.kipitiny-analytics-01own.rule"]; r != "Host(`shop.example.com`) && (Path(`/js/k.js`) || Path(`/k`))" {
 		t.Errorf("own paths' router: %q", r)
 	}

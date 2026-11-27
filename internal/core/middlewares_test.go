@@ -11,7 +11,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestMergeMiddlewares(t *testing.T) {
@@ -21,10 +21,10 @@ func TestMergeMiddlewares(t *testing.T) {
 			{Name: "bob", Password: "{{ fake://bob }}"},
 		},
 		IPAllowList: []string{" 10.0.0.0/8 ", ""},
-		RateLimit:   &store.RateLimit{Average: 5},
+		RateLimit:   &domain.RateLimit{Average: 5},
 		Headers:     map[string]string{" X-Robots-Tag ": " noindex "},
 	}
-	m, err := mergeMiddlewares(in, store.Middlewares{})
+	m, err := mergeMiddlewares(in, domain.Middlewares{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,20 +52,20 @@ func TestMergeMiddlewares(t *testing.T) {
 }
 
 func TestValidateMiddlewares(t *testing.T) {
-	ok := store.Middlewares{
-		BasicAuth:   []store.BasicAuthUser{{Name: "ann@example.com", Hash: "h"}},
+	ok := domain.Middlewares{
+		BasicAuth:   []domain.BasicAuthUser{{Name: "ann@example.com", Hash: "h"}},
 		IPAllowList: []string{"203.0.113.7", "2001:db8::/32"},
-		RateLimit:   &store.RateLimit{Average: 1, Burst: 1},
+		RateLimit:   &domain.RateLimit{Average: 1, Burst: 1},
 		Headers:     map[string]string{"X-Robots-Tag": "noindex", "Server": ""},
 	}
 	if err := validateMiddlewares(ok); err != nil {
 		t.Fatal(err)
 	}
-	for name, m := range map[string]store.Middlewares{
-		"user with colon": {BasicAuth: []store.BasicAuthUser{{Name: "a:b"}}},
-		"duplicate user":  {BasicAuth: []store.BasicAuthUser{{Name: "a"}, {Name: "a"}}},
+	for name, m := range map[string]domain.Middlewares{
+		"user with colon": {BasicAuth: []domain.BasicAuthUser{{Name: "a:b"}}},
+		"duplicate user":  {BasicAuth: []domain.BasicAuthUser{{Name: "a"}, {Name: "a"}}},
 		"bad range":       {IPAllowList: []string{"10.0.0.0/33"}},
-		"zero rate":       {RateLimit: &store.RateLimit{Average: 0, Burst: 1}},
+		"zero rate":       {RateLimit: &domain.RateLimit{Average: 0, Burst: 1}},
 		"dotted header":   {Headers: map[string]string{"X.Y": "1"}},
 		"multiline value": {Headers: map[string]string{"X-Y": "a\r\nSet-Cookie: x"}},
 	} {
@@ -76,10 +76,10 @@ func TestValidateMiddlewares(t *testing.T) {
 }
 
 func TestMiddlewareLabels(t *testing.T) {
-	svc := store.Service{ID: "01ABC", Domain: "shop.example.com", Port: 80, Middlewares: store.Middlewares{
-		BasicAuth:   []store.BasicAuthUser{{Name: "ann", Hash: "$2a$04$h"}, {Name: "bob", Ref: "{{ fake://bob }}"}},
+	svc := domain.Service{ID: "01ABC", Domain: "shop.example.com", Port: 80, Middlewares: domain.Middlewares{
+		BasicAuth:   []domain.BasicAuthUser{{Name: "ann", Hash: "$2a$04$h"}, {Name: "bob", Ref: "{{ fake://bob }}"}},
 		IPAllowList: []string{"10.0.0.0/8", "203.0.113.7"},
-		RateLimit:   &store.RateLimit{Average: 10, Burst: 20},
+		RateLimit:   &domain.RateLimit{Average: 10, Burst: 20},
 		Headers:     map[string]string{"X-Robots-Tag": "noindex"},
 	}}
 	l := traefikLabels(svc, route{})
@@ -126,7 +126,7 @@ func TestHashBasicAuth(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
 	useSecretProvider(t, c, &fakeProvider{})("")
-	svc := store.Service{Middlewares: store.Middlewares{BasicAuth: []store.BasicAuthUser{
+	svc := domain.Service{Middlewares: domain.Middlewares{BasicAuth: []domain.BasicAuthUser{
 		{Name: "ann", Hash: "kept"},
 		{Name: "bob", Ref: "{{ fake://bob }}"},
 	}}}
@@ -143,7 +143,7 @@ func TestHashBasicAuth(t *testing.T) {
 		t.Error("hashing mutated the stored users")
 	}
 
-	if err := c.checkBasicAuthSchemes(ctx, store.Middlewares{BasicAuth: []store.BasicAuthUser{{Name: "x", Ref: "{{ op://v/i/f }}"}}}); !errors.Is(err, ErrInvalid) {
+	if err := c.checkBasicAuthSchemes(ctx, domain.Middlewares{BasicAuth: []domain.BasicAuthUser{{Name: "x", Ref: "{{ op://v/i/f }}"}}}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("unknown scheme accepted: %v", err)
 	}
 	if m := masked(svc).Middlewares; m.BasicAuth[0].Hash != "" || svc.Middlewares.BasicAuth[0].Hash != "kept" {
@@ -176,29 +176,29 @@ func TestTraefikTrustsCloudflare(t *testing.T) {
 func TestBehindCloudflare(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	if c.behindCloudflare(ctx, store.LocalServerID, "shop.example.com") {
+	if c.behindCloudflare(ctx, domain.LocalServerID, "shop.example.com") {
 		t.Error("not connected")
 	}
 	s := c.cf(ctx)
 	s.token, s.zones = "tok", []cloudflare.Zone{{ID: "z", Name: "example.com"}}
-	d, err := c.store.CreateDomain(ctx, store.Domain{Name: "example.com"})
+	d, err := c.store.CreateDomain(ctx, domain.Domain{Name: "example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.behindCloudflare(ctx, store.LocalServerID, "shop.example.com") {
+	if c.behindCloudflare(ctx, domain.LocalServerID, "shop.example.com") {
 		t.Error("DNS only record")
 	}
 	if _, err := c.store.SetDomainProxied(ctx, d.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	if !c.behindCloudflare(ctx, store.LocalServerID, "shop.example.com") {
+	if !c.behindCloudflare(ctx, domain.LocalServerID, "shop.example.com") {
 		t.Error("proxied record")
 	}
-	if c.behindCloudflare(ctx, store.LocalServerID, "shop.other.org") {
+	if c.behindCloudflare(ctx, domain.LocalServerID, "shop.other.org") {
 		t.Error("zone the token doesn't manage")
 	}
 	c.cfg.Tunnel.Token = "t"
-	if !c.behindCloudflare(ctx, store.LocalServerID, "shop.other.org") {
+	if !c.behindCloudflare(ctx, domain.LocalServerID, "shop.other.org") {
 		t.Error("behind the tunnel")
 	}
 }

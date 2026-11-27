@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const resourceAlertsSetting = "resource_alerts"
@@ -96,7 +96,7 @@ type resourceAlert struct {
 // checkResources judges this round's points against the thresholds, under
 // the stats lock, and returns what changed. A service or server missing from
 // the round starts its wait over.
-func (s *statsState) checkResources(now time.Time, th ResourceAlerts, svcs map[string]store.Service) []resourceAlert {
+func (s *statsState) checkResources(now time.Time, th ResourceAlerts, svcs map[string]domain.Service) []resourceAlert {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.alerts == nil {
@@ -182,7 +182,7 @@ func (s *statsState) checkResources(now time.Time, th ResourceAlerts, svcs map[s
 }
 
 // alertResources sends the transitions of this round.
-func (c *Core) alertResources(ctx context.Context, now time.Time, svcs map[string]store.Service, servers []store.Server) {
+func (c *Core) alertResources(ctx context.Context, now time.Time, svcs map[string]domain.Service, servers []domain.Server) {
 	th := c.resourceAlerts(ctx)
 	for _, a := range c.stats.checkResources(now, th, svcs) {
 		if a.serviceID == "" {

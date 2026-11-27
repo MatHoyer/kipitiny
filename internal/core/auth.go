@@ -15,7 +15,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 var ErrUnauthorized = errors.New("unauthorized")
@@ -31,8 +31,8 @@ const (
 var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("kipitiny-dummy-password"), bcrypt.DefaultCost)
 
 type AuthState struct {
-	SetupRequired bool        `json:"setupRequired"`
-	User          *store.User `json:"user,omitempty"`
+	SetupRequired bool         `json:"setupRequired"`
+	User          *domain.User `json:"user,omitempty"`
 	// SSO lists the providers to sign in with; with SSORequired, the only
 	// way to sign in.
 	SSO         []SSOButton `json:"sso"`
@@ -78,31 +78,31 @@ func (c *Core) AuthState(ctx context.Context, sessionToken string) (AuthState, e
 }
 
 // Setup creates the first admin account and returns a session token.
-func (c *Core) Setup(ctx context.Context, setupToken, username, password string) (store.User, string, error) {
+func (c *Core) Setup(ctx context.Context, setupToken, username, password string) (domain.User, string, error) {
 	c.setupMu.Lock()
 	defer c.setupMu.Unlock()
 
 	if n, err := c.store.CountUsers(ctx); err != nil {
-		return store.User{}, "", err
+		return domain.User{}, "", err
 	} else if n > 0 {
-		return store.User{}, "", fmt.Errorf("%w: setup already completed", ErrInvalid)
+		return domain.User{}, "", fmt.Errorf("%w: setup already completed", ErrInvalid)
 	}
 	if c.setupToken == "" || subtle.ConstantTimeCompare([]byte(strings.TrimSpace(setupToken)), []byte(c.setupToken)) != 1 {
-		return store.User{}, "", fmt.Errorf("%w: wrong setup token (see the manager logs)", ErrUnauthorized)
+		return domain.User{}, "", fmt.Errorf("%w: wrong setup token (see the manager logs)", ErrUnauthorized)
 	}
 	if !nameRe.MatchString(username) {
-		return store.User{}, "", fmt.Errorf("%w: username must be lowercase letters, digits and dashes", ErrInvalid)
+		return domain.User{}, "", fmt.Errorf("%w: username must be lowercase letters, digits and dashes", ErrInvalid)
 	}
 	if err := validatePassword(password); err != nil {
-		return store.User{}, "", err
+		return domain.User{}, "", err
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return store.User{}, "", err
+		return domain.User{}, "", err
 	}
-	u, err := c.store.CreateUser(ctx, store.User{Username: username, PasswordHash: string(hash), Role: store.RoleAdmin})
+	u, err := c.store.CreateUser(ctx, domain.User{Username: username, PasswordHash: string(hash), Role: domain.RoleAdmin})
 	if err != nil {
-		return store.User{}, "", err
+		return domain.User{}, "", err
 	}
 	c.setupToken = ""
 	token, err := c.newSession(ctx, u.ID)
@@ -138,7 +138,7 @@ func validatePassword(p string) error {
 // LoginResult is a new session, or a ticket for the second step when the
 // user has two-factor authentication on.
 type LoginResult struct {
-	User    store.User
+	User    domain.User
 	Session string
 	// MFATicket redeems a TOTP or recovery code (LoginMFA) for a session.
 	MFATicket string
@@ -149,7 +149,7 @@ func (c *Core) Login(ctx context.Context, username, password string) (LoginResul
 		return LoginResult{}, ErrSSORequired
 	}
 	u, err := c.store.GetUserByUsername(ctx, username)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, domain.ErrNotFound) {
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 		return LoginResult{}, ErrUnauthorized
 	}
@@ -173,20 +173,20 @@ func (c *Core) Login(ctx context.Context, username, password string) (LoginResul
 	return LoginResult{User: u, Session: token}, err
 }
 
-func (c *Core) Authenticate(ctx context.Context, sessionToken string) (store.User, error) {
+func (c *Core) Authenticate(ctx context.Context, sessionToken string) (domain.User, error) {
 	if sessionToken == "" {
-		return store.User{}, ErrUnauthorized
+		return domain.User{}, ErrUnauthorized
 	}
 	sess, err := c.store.GetSession(ctx, hashToken(sessionToken))
-	if errors.Is(err, store.ErrNotFound) {
-		return store.User{}, ErrUnauthorized
+	if errors.Is(err, domain.ErrNotFound) {
+		return domain.User{}, ErrUnauthorized
 	}
 	if err != nil {
-		return store.User{}, err
+		return domain.User{}, err
 	}
 	u, err := c.store.GetUser(ctx, sess.UserID)
-	if errors.Is(err, store.ErrNotFound) {
-		return store.User{}, ErrUnauthorized
+	if errors.Is(err, domain.ErrNotFound) {
+		return domain.User{}, ErrUnauthorized
 	}
 	return u, err
 }
@@ -211,7 +211,7 @@ func (c *Core) Logout(ctx context.Context, sessionToken string) error {
 
 func (c *Core) newSession(ctx context.Context, userID string) (string, error) {
 	token := randomToken(32)
-	err := c.store.CreateSession(ctx, store.Session{
+	err := c.store.CreateSession(ctx, domain.Session{
 		TokenHash: hashToken(token),
 		UserID:    userID,
 		ExpiresAt: time.Now().Add(SessionTTL),

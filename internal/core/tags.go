@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // Tags group projects and services in the UI. They are free-form names;
@@ -74,13 +74,13 @@ func normalizeTags(tags []string) ([]string, error) {
 }
 
 // SetProjectTags replaces a project's tags.
-func (c *Core) SetProjectTags(ctx context.Context, projectID string, tags []string) (store.Project, error) {
+func (c *Core) SetProjectTags(ctx context.Context, projectID string, tags []string) (domain.Project, error) {
 	tags, err := normalizeTags(tags)
 	if err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	if err := c.store.SetProjectTags(ctx, projectID, tags); err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	return c.GetProject(ctx, projectID)
 }
@@ -120,7 +120,7 @@ func (c *Core) ListTags(ctx context.Context) ([]Tag, error) {
 	out := make([]Tag, 0, len(byName))
 	for name, t := range byName {
 		t.Name, t.Color = name, AutoTagColor(name)
-		if i := slices.IndexFunc(colors, func(tc store.TagColor) bool { return tc.Name == name }); i >= 0 {
+		if i := slices.IndexFunc(colors, func(tc domain.TagColor) bool { return tc.Name == name }); i >= 0 {
 			t.Color, t.Custom = colors[i].Color, true
 		}
 		out = append(out, *t)

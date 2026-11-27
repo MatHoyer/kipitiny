@@ -9,11 +9,11 @@ import (
 	"strconv"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func (a *API) listServiceBackups(w http.ResponseWriter, r *http.Request) {
-	bs, err := a.core.ListBackups(r.Context(), store.BackupFilter{ServiceID: r.PathValue("id")})
+	bs, err := a.core.ListBackups(r.Context(), domain.BackupFilter{ServiceID: r.PathValue("id")})
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -23,7 +23,7 @@ func (a *API) listServiceBackups(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) listBackups(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	bs, err := a.core.ListBackups(r.Context(), store.BackupFilter{
+	bs, err := a.core.ListBackups(r.Context(), domain.BackupFilter{
 		ProjectID: r.URL.Query().Get("projectId"),
 		Limit:     limit,
 	})
@@ -190,8 +190,8 @@ func (a *API) backupProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res := struct {
-		Backups []store.Backup `json:"backups"`
-		Error   string         `json:"error,omitempty"`
+		Backups []domain.Backup `json:"backups"`
+		Error   string          `json:"error,omitempty"`
 	}{Backups: started}
 	if err != nil {
 		res.Error = err.Error() // some databases could not start

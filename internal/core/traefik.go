@@ -19,7 +19,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -39,12 +39,12 @@ const (
 
 // ensureTraefik makes sure exactly one Traefik container runs with the
 // current configuration, recreating it when the configuration changed.
-func (c *Core) ensureTraefik(ctx context.Context, sv store.Server) error {
+func (c *Core) ensureTraefik(ctx context.Context, sv domain.Server) error {
 	cfg := c.cfg.Traefik
 	socket := socketPath(sv, c.cfg)
 	dk := c.dockerFor(sv.ID)
 	o := traefikOpts{Tunnel: c.tunnelToken(sv) != "", CFToken: c.cfToken(ctx)}
-	if c.cfg.Domain != "" && sv.Kind == store.ServerLocal {
+	if c.cfg.Domain != "" && sv.Kind == domain.ServerLocal {
 		u, err := c.managerUpstream(ctx, dk)
 		if err != nil {
 			return err
@@ -103,8 +103,8 @@ func (c *Core) ensureTraefik(ctx context.Context, sv store.Server) error {
 
 // socketPath is the Docker socket's path on a server's host, for containers
 // that mount it (Traefik, builders).
-func socketPath(sv store.Server, cfg config.Config) string {
-	if sv.Kind == store.ServerSSH && sv.Socket != "" {
+func socketPath(sv domain.Server, cfg config.Config) string {
+	if sv.Kind == domain.ServerSSH && sv.Socket != "" {
 		return sv.Socket
 	}
 	return cfg.Traefik.DockerSocket
@@ -327,7 +327,7 @@ type route struct {
 	dockerSocket string
 }
 
-func (c *Core) routeFor(ctx context.Context, svc store.Service) route {
+func (c *Core) routeFor(ctx context.Context, svc domain.Service) route {
 	return route{
 		resolver: c.certResolver(ctx, svc.ServerID, svc.Domain),
 		// A domain with published ports (on any of its apps) is never proxied.
@@ -338,7 +338,7 @@ func (c *Core) routeFor(ctx context.Context, svc store.Service) route {
 
 // dockerSocketFor is the Docker socket's path on svc's server, when svc
 // mounts it.
-func (c *Core) dockerSocketFor(ctx context.Context, svc store.Service) string {
+func (c *Core) dockerSocketFor(ctx context.Context, svc domain.Service) string {
 	if svc.DockerSocket == "" {
 		return ""
 	}
@@ -352,7 +352,7 @@ func (c *Core) dockerSocketFor(ctx context.Context, svc store.Service) string {
 // httpRouted reports whether Traefik routes the service's domain: it has a
 // container port. An app with published ports may have a domain only for
 // DNS.
-func httpRouted(svc store.Service) bool {
+func httpRouted(svc domain.Service) bool {
 	return svc.Domain != "" && svc.Port > 0
 }
 
@@ -364,7 +364,7 @@ func httpRouted(svc store.Service) bool {
 // and old and new replicas run side by side during a rollout, so the router
 // and its middlewares are named after their configuration: a change adds a
 // new router next to the old one instead of conflicting with it.
-func traefikLabels(svc store.Service, rt route) map[string]string {
+func traefikLabels(svc domain.Service, rt route) map[string]string {
 	name := "kipitiny-" + strings.ToLower(svc.ID)
 	mws := middlewareLabels(svc.Middlewares, rt.behindProxy)
 	spec := []any{svc.Domain, rt.resolver, mws}

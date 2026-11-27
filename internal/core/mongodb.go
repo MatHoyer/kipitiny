@@ -11,7 +11,7 @@ import (
 	"github.com/moby/moby/api/types/mount"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -50,7 +50,7 @@ func MongoVolume(serviceID string) string {
 	return "kipitiny-mongodata-" + strings.ToLower(serviceID)
 }
 
-func validateMongo(s store.Service) error {
+func validateMongo(s domain.Service) error {
 	if s.MemoryMB < minMongoMemoryMB {
 		return fmt.Errorf("%w: mongodb needs at least %d MB of memory", ErrInvalid, minMongoMemoryMB)
 	}
@@ -63,7 +63,7 @@ func validateMongo(s store.Service) error {
 }
 
 // mongoURL authenticates against admin, where the image creates the user.
-func mongoURL(db store.Service) string {
+func mongoURL(db domain.Service) string {
 	u := url.URL{
 		Scheme:   "mongodb",
 		User:     url.UserPassword(db.Env[mongoUser], db.Env[mongoPassword]),
@@ -75,7 +75,7 @@ func mongoURL(db store.Service) string {
 }
 
 // mongoField resolves {{ db.NAME.FIELD }} for a MongoDB service.
-func mongoField(db store.Service, field string) (string, bool) {
+func mongoField(db domain.Service, field string) (string, bool) {
 	switch field {
 	case "URL":
 		return mongoURL(db), true
@@ -102,7 +102,7 @@ func mongoArgs(memoryMB int) []string {
 	return []string{"--wiredTigerCacheSizeGB", strconv.FormatFloat(cacheGB, 'f', 2, 64)}
 }
 
-func applyMongoSpec(cfg *container.Config, host *container.HostConfig, svc store.Service) {
+func applyMongoSpec(cfg *container.Config, host *container.HostConfig, svc domain.Service) {
 	cfg.Cmd = mongoArgs(svc.MemoryMB)
 	cfg.Healthcheck = mongoHealthcheck()
 	host.Mounts = append(host.Mounts, mount.Mount{
@@ -111,7 +111,7 @@ func applyMongoSpec(cfg *container.Config, host *container.HostConfig, svc store
 		Target: mongoVolumeMount,
 	})
 	host.Tmpfs = map[string]string{mongoConfigMount: ""}
-	cfg.Labels[docker.LabelComponent] = string(store.ServiceKindMongoDB)
+	cfg.Labels[docker.LabelComponent] = string(domain.ServiceKindMongoDB)
 }
 
 // mongoHealthcheck pings once the entrypoint has exec'd the server: the
@@ -130,7 +130,7 @@ func mongoHealthcheck() *container.HealthConfig {
 }
 
 // mongoAuthArgs authenticate the database tools as the service's user.
-func mongoAuthArgs(svc store.Service) []string {
+func mongoAuthArgs(svc domain.Service) []string {
 	return mongoAuth(svc.Env[mongoUser], svc.Env[mongoPassword])
 }
 

@@ -8,7 +8,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // maxIncludeDepth bounds nested includes and extends, which also stops
@@ -94,7 +94,7 @@ func (v Vars) under(dir string) Vars {
 		return v
 	}
 	read := v.Files
-	v.Files = func(rel string) ([]store.ServiceFile, error) { return read(path.Join(dir, rel)) }
+	v.Files = func(rel string) ([]domain.ServiceFile, error) { return read(path.Join(dir, rel)) }
 	return v
 }
 

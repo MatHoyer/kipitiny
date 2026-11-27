@@ -18,9 +18,9 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 	"github.com/kipit-labs/kipitiny/internal/secrets"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 var (
@@ -36,7 +36,7 @@ var nameRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 
 type Core struct {
 	cfg   config.Config
-	store store.Store
+	store domain.Store
 	pool  *docker.Pool
 	log   *slog.Logger
 
@@ -110,7 +110,7 @@ type Core struct {
 
 // New builds the core around the local Docker client; remote servers are
 // connected on demand over SSH.
-func New(cfg config.Config, s store.Store, local *docker.Client, log *slog.Logger) *Core {
+func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logger) *Core {
 	bg, cancel := context.WithCancel(context.Background())
 	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1), dnsKick: make(chan struct{}, 1), gitKick: make(chan string, 16),
 		errorsSeq: -1, spiked: map[string]bool{}}
@@ -159,7 +159,7 @@ func (c *Core) Bootstrap(ctx context.Context) error {
 
 // bootstrapServer prepares a Docker host: proxy network, Traefik, and
 // cleanup of terminals left by a crash.
-func (c *Core) bootstrapServer(ctx context.Context, sv store.Server) error {
+func (c *Core) bootstrapServer(ctx context.Context, sv domain.Server) error {
 	dk := c.dockerFor(sv.ID)
 	progress.Report(ctx, ServerStepNetwork)
 	if err := dk.EnsureNetwork(ctx, docker.ProxyNetwork); err != nil {
@@ -168,7 +168,7 @@ func (c *Core) bootstrapServer(ctx context.Context, sv store.Server) error {
 	if err := c.cleanupTerminals(ctx, dk); err != nil {
 		return err
 	}
-	if sv.Kind == store.ServerLocal {
+	if sv.Kind == domain.ServerLocal {
 		c.cleanupUpdater(ctx, dk)
 		if err := c.cleanupSecretHelpers(ctx, dk); err != nil {
 			c.log.Warn("removing password manager helpers failed", "err", err)
@@ -237,7 +237,7 @@ func waitDone(wg *sync.WaitGroup) <-chan struct{} {
 // BehindTunnel reports whether the manager's traffic arrives through a
 // Cloudflare tunnel.
 func (c *Core) BehindTunnel(ctx context.Context) bool {
-	return c.cfg.Traefik.Enabled && c.viaTunnel(ctx, store.LocalServerID)
+	return c.cfg.Traefik.Enabled && c.viaTunnel(ctx, domain.LocalServerID)
 }
 
 // dockerFor returns the Docker client of a server ("" or "local": this one).
@@ -361,7 +361,7 @@ func (c *Core) Status(ctx context.Context) Status {
 		return Status{Version: c.cfg.Version} // the rest is about the server
 	}
 	st := Status{Version: c.cfg.Version, Update: c.Update(), Database: c.databaseSize()}
-	info, err := c.dockerFor(store.LocalServerID).Info(ctx)
+	info, err := c.dockerFor(domain.LocalServerID).Info(ctx)
 	if err != nil {
 		st.DockerError = err.Error()
 		return st
@@ -370,9 +370,9 @@ func (c *Core) Status(ctx context.Context) Status {
 	return st
 }
 
-func (c *Core) ListProjects(ctx context.Context) ([]store.Project, error) {
+func (c *Core) ListProjects(ctx context.Context) ([]domain.Project, error) {
 	ps, err := c.store.ListProjects(ctx)
-	ps = slices.DeleteFunc(ps, func(p store.Project) bool { return !visible(ctx, p.ID) })
+	ps = slices.DeleteFunc(ps, func(p domain.Project) bool { return !visible(ctx, p.ID) })
 	for i := range ps {
 		ps[i] = maskedProject(ps[i])
 	}
@@ -380,24 +380,24 @@ func (c *Core) ListProjects(ctx context.Context) ([]store.Project, error) {
 }
 
 // CreateProject creates a project on a server (this one when serverID is empty).
-func (c *Core) CreateProject(ctx context.Context, name, serverID string) (store.Project, error) {
+func (c *Core) CreateProject(ctx context.Context, name, serverID string) (domain.Project, error) {
 	if err := checkFeature(ctx, FeatureCreateProjects); err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	if !nameRe.MatchString(name) {
-		return store.Project{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
+		return domain.Project{}, fmt.Errorf("%w: name must be lowercase letters, digits and dashes (max 40)", ErrInvalid)
 	}
 	if serverID == "" {
-		serverID = store.LocalServerID
+		serverID = domain.LocalServerID
 	}
-	if _, err := c.store.GetServer(ctx, serverID); errors.Is(err, store.ErrNotFound) {
-		return store.Project{}, fmt.Errorf("%w: unknown server", ErrInvalid)
+	if _, err := c.store.GetServer(ctx, serverID); errors.Is(err, domain.ErrNotFound) {
+		return domain.Project{}, fmt.Errorf("%w: unknown server", ErrInvalid)
 	} else if err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
-	p, err := c.store.CreateProject(ctx, store.Project{Name: name, ServerID: serverID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: name, ServerID: serverID})
 	if err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	if err := c.grantCreator(ctx, p.ID); err != nil {
 		return p, err
@@ -408,7 +408,7 @@ func (c *Core) CreateProject(ctx context.Context, name, serverID string) (store.
 	return p, nil
 }
 
-func (c *Core) GetProject(ctx context.Context, id string) (store.Project, error) {
+func (c *Core) GetProject(ctx context.Context, id string) (domain.Project, error) {
 	p, err := c.store.GetProject(ctx, id)
 	return maskedProject(p), err
 }
@@ -428,7 +428,7 @@ func (c *Core) DeleteProject(ctx context.Context, id, confirm string) error {
 
 // deleteProject is DeleteProject without the confirmation; a project's
 // previews go first.
-func (c *Core) deleteProject(ctx context.Context, p store.Project) error {
+func (c *Core) deleteProject(ctx context.Context, p domain.Project) error {
 	id := p.ID
 	all, err := c.store.ListProjects(ctx)
 	if err != nil {

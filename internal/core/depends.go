@@ -10,7 +10,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -23,7 +23,7 @@ const (
 // validateDependsOn checks an app's dependencies. Their names aren't
 // checked against the project: a compose file is checked whole, and a
 // dependency on a deleted service is skipped.
-func validateDependsOn(s store.Service) error {
+func validateDependsOn(s domain.Service) error {
 	if len(s.DependsOn) > maxDependencies {
 		return fmt.Errorf("%w: at most %d dependencies", ErrInvalid, maxDependencies)
 	}
@@ -46,15 +46,15 @@ func validateDependsOn(s store.Service) error {
 
 // startOrder sorts services so each comes after those it depends on,
 // databases first. A cycle or a missing service doesn't hold the others.
-func startOrder(svcs []store.Service) []store.Service {
-	byName := map[string]store.Service{}
+func startOrder(svcs []domain.Service) []domain.Service {
+	byName := map[string]domain.Service{}
 	for _, s := range svcs {
 		byName[s.Name] = s
 	}
-	out := make([]store.Service, 0, len(svcs))
+	out := make([]domain.Service, 0, len(svcs))
 	seen := map[string]bool{}
-	var visit func(s store.Service)
-	visit = func(s store.Service) {
+	var visit func(s domain.Service)
+	visit = func(s domain.Service) {
 		if seen[s.Name] {
 			return
 		}
@@ -79,7 +79,7 @@ func startOrder(svcs []store.Service) []store.Service {
 // awaited is, per service, what the others wait for before they start:
 // "healthy" or "completed" ("" when nothing waits but its start).
 // Databases are always awaited healthy.
-func awaited(svcs []store.Service) map[string]string {
+func awaited(svcs []domain.Service) map[string]string {
 	out := map[string]string{}
 	for _, s := range svcs {
 		if s.Kind.IsDatabase() {
@@ -96,7 +96,7 @@ func awaited(svcs []store.Service) map[string]string {
 
 // waitCondition waits until a container meets a dependency condition,
 // at most dependencyTimeout.
-func (c *Core) waitCondition(ctx context.Context, dk *docker.Client, id string, svc store.Service, cond string) error {
+func (c *Core) waitCondition(ctx context.Context, dk *docker.Client, id string, svc domain.Service, cond string) error {
 	ctx, cancel := context.WithTimeout(ctx, dependencyTimeout)
 	defer cancel()
 	switch cond {
@@ -119,7 +119,7 @@ func (c *Core) waitCondition(ctx context.Context, dk *docker.Client, id string, 
 
 // isJob reports whether svc runs once (restart "no" or on-failure)
 // rather than being kept running.
-func isJob(svc store.Service) bool { return svc.Runtime.Restart != "" }
+func isJob(svc domain.Service) bool { return svc.Runtime.Restart != "" }
 
 // completed reports whether a container exited with code 0.
 func completed(ct container.Summary) bool {
@@ -129,13 +129,13 @@ func completed(ct container.Summary) bool {
 // failedDependency names the first dependency of svc deployed in this run
 // whose deployment didn't succeed, among those it must wait to be healthy or
 // completed (as Compose doesn't start a service after such a failure).
-func (c *Core) failedDependency(ctx context.Context, svc store.Service, deployed map[string]string) string {
+func (c *Core) failedDependency(ctx context.Context, svc domain.Service, deployed map[string]string) string {
 	for _, d := range svc.DependsOn {
 		id, ok := deployed[d.Service]
 		if !ok || d.Condition == "" {
 			continue
 		}
-		if dep, err := c.store.GetDeployment(ctx, id); err != nil || dep.Status != store.DeploymentSucceeded {
+		if dep, err := c.store.GetDeployment(ctx, id); err != nil || dep.Status != domain.DeploymentSucceeded {
 			return d.Service
 		}
 	}
@@ -143,15 +143,15 @@ func (c *Core) failedDependency(ctx context.Context, svc store.Service, deployed
 }
 
 // skipDeploy records a deployment of svc that wasn't tried, with why.
-func (c *Core) skipDeploy(ctx context.Context, svc store.Service, commit, why string) (store.Deployment, error) {
-	d, err := c.store.CreateDeployment(ctx, store.Deployment{ServiceID: svc.ID, Status: store.DeploymentRunning, Image: svc.Image, GitCommit: commit, Config: svc})
+func (c *Core) skipDeploy(ctx context.Context, svc domain.Service, commit, why string) (domain.Deployment, error) {
+	d, err := c.store.CreateDeployment(ctx, domain.Deployment{ServiceID: svc.ID, Status: domain.DeploymentRunning, Image: svc.Image, GitCommit: commit, Config: svc})
 	if err != nil {
-		return store.Deployment{}, err
+		return domain.Deployment{}, err
 	}
 	if f, err := c.createDeployLog(svc.ID, d.ID); err == nil {
 		fmt.Fprintf(f, "[%s] Skipped: %s\n", time.Now().UTC().Format(time.TimeOnly), why)
 		f.Close()
 	}
-	d.Status, d.Error = store.DeploymentSkipped, why
-	return d, c.store.FinishDeployment(ctx, d.ID, store.DeploymentSkipped, why)
+	d.Status, d.Error = domain.DeploymentSkipped, why
+	return d, c.store.FinishDeployment(ctx, d.ID, domain.DeploymentSkipped, why)
 }

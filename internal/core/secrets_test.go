@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 	"github.com/kipit-labs/kipitiny/internal/secrets"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // fakeProvider resolves fake://X to "value-of-X" once connected with "good".
@@ -66,7 +66,7 @@ func TestSecretConnections(t *testing.T) {
 		return fakes[name]
 	})}
 
-	if _, err := c.CreateSecretConnection(ctx, "nope", "", "good"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := c.CreateSecretConnection(ctx, "nope", "", "good"); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("unknown provider: %v", err)
 	}
 	if _, err := c.CreateSecretConnection(ctx, "fake", "", "bad"); !errors.Is(err, ErrInvalid) {

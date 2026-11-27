@@ -12,7 +12,7 @@ import (
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const ceremonyTTL = 5 * time.Minute
@@ -41,7 +41,7 @@ type ceremony struct {
 
 // webauthnUser adapts a user and their passkeys to the webauthn library.
 type webauthnUser struct {
-	u     store.User
+	u     domain.User
 	creds []webauthn.Credential
 }
 
@@ -50,7 +50,7 @@ func (w webauthnUser) WebAuthnName() string                       { return w.u.U
 func (w webauthnUser) WebAuthnDisplayName() string                { return w.u.Username }
 func (w webauthnUser) WebAuthnCredentials() []webauthn.Credential { return w.creds }
 
-func (c *Core) webauthnUser(ctx context.Context, u store.User) (webauthnUser, error) {
+func (c *Core) webauthnUser(ctx context.Context, u domain.User) (webauthnUser, error) {
 	ps, err := c.store.ListPasskeys(ctx, u.ID)
 	if err != nil {
 		return webauthnUser{}, err
@@ -106,40 +106,40 @@ func (c *Core) BeginPasskeyRegistration(ctx context.Context, rp RelyingParty, pa
 	return PasskeyOptions{Ceremony: id, Options: creation}, nil
 }
 
-func (c *Core) FinishPasskeyRegistration(ctx context.Context, ceremonyID, name string, response []byte) (store.Passkey, error) {
+func (c *Core) FinishPasskeyRegistration(ctx context.Context, ceremonyID, name string, response []byte) (domain.Passkey, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 60 {
-		return store.Passkey{}, fmt.Errorf("%w: give the passkey a name (max 60 characters)", ErrInvalid)
+		return domain.Passkey{}, fmt.Errorf("%w: give the passkey a name (max 60 characters)", ErrInvalid)
 	}
 	u, err := c.currentUser(ctx)
 	if err != nil {
-		return store.Passkey{}, err
+		return domain.Passkey{}, err
 	}
 	cer, _, ok := c.ceremonies.take(ceremonyID)
 	if !ok || cer.userID != u.ID {
-		return store.Passkey{}, fmt.Errorf("%w: the passkey setup expired, start again", ErrInvalid)
+		return domain.Passkey{}, fmt.Errorf("%w: the passkey setup expired, start again", ErrInvalid)
 	}
 	parsed, err := protocol.ParseCredentialCreationResponseBytes(response)
 	if err != nil {
-		return store.Passkey{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+		return domain.Passkey{}, fmt.Errorf("%w: %s", ErrInvalid, err.Error())
 	}
 	w, err := cer.rp.webauthn()
 	if err != nil {
-		return store.Passkey{}, err
+		return domain.Passkey{}, err
 	}
 	wu, err := c.webauthnUser(ctx, u)
 	if err != nil {
-		return store.Passkey{}, err
+		return domain.Passkey{}, err
 	}
 	cred, err := w.CreateCredential(wu, cer.session, parsed)
 	if err != nil {
-		return store.Passkey{}, fmt.Errorf("%w: the passkey was refused: %v", ErrInvalid, err)
+		return domain.Passkey{}, fmt.Errorf("%w: the passkey was refused: %s", ErrInvalid, err.Error())
 	}
 	raw, err := json.Marshal(cred)
 	if err != nil {
-		return store.Passkey{}, err
+		return domain.Passkey{}, err
 	}
-	return c.store.CreatePasskey(ctx, store.Passkey{UserID: u.ID, Name: name, CredentialID: credentialID(cred.ID), Credential: string(raw)})
+	return c.store.CreatePasskey(ctx, domain.Passkey{UserID: u.ID, Name: name, CredentialID: credentialID(cred.ID), Credential: string(raw)})
 }
 
 func (c *Core) DeletePasskey(ctx context.Context, id string) error {
@@ -174,21 +174,21 @@ func (c *Core) BeginPasskeyLogin(ctx context.Context, rp RelyingParty) (PasskeyO
 
 // FinishPasskeyLogin signs in with a passkey. It counts as both factors (the
 // device and its PIN or biometric), so TOTP isn't asked for.
-func (c *Core) FinishPasskeyLogin(ctx context.Context, ceremonyID string, response []byte) (store.User, string, error) {
+func (c *Core) FinishPasskeyLogin(ctx context.Context, ceremonyID string, response []byte) (domain.User, string, error) {
 	cer, _, ok := c.ceremonies.take(ceremonyID)
 	if !ok || cer.userID != "" {
-		return store.User{}, "", fmt.Errorf("%w: the sign-in expired, try again", ErrUnauthorized)
+		return domain.User{}, "", fmt.Errorf("%w: the sign-in expired, try again", ErrUnauthorized)
 	}
 	if c.SSORequired(ctx) {
-		return store.User{}, "", ErrSSORequired
+		return domain.User{}, "", ErrSSORequired
 	}
 	parsed, err := protocol.ParseCredentialRequestResponseBytes(response)
 	if err != nil {
-		return store.User{}, "", fmt.Errorf("%w: %v", ErrInvalid, err)
+		return domain.User{}, "", fmt.Errorf("%w: %s", ErrInvalid, err.Error())
 	}
 	w, err := cer.rp.webauthn()
 	if err != nil {
-		return store.User{}, "", err
+		return domain.User{}, "", err
 	}
 	var user webauthnUser
 	_, cred, err := w.ValidatePasskeyLogin(func(rawID, userHandle []byte) (webauthn.User, error) {
@@ -208,7 +208,7 @@ func (c *Core) FinishPasskeyLogin(ctx context.Context, ceremonyID string, respon
 	}, cer.session, parsed)
 	if err != nil {
 		c.log.Info("passkey sign-in refused", "error", err)
-		return store.User{}, "", fmt.Errorf("%w: unknown or invalid passkey", ErrUnauthorized)
+		return domain.User{}, "", fmt.Errorf("%w: unknown or invalid passkey", ErrUnauthorized)
 	}
 	if cred.Authenticator.CloneWarning {
 		c.log.Warn("passkey sign count went backwards: it may have been cloned", "user", user.u.Username)

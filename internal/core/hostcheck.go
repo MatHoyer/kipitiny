@@ -17,9 +17,9 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const (
@@ -386,7 +386,7 @@ func public(addr string) bool {
 
 // checkSecurity checks one server's host, stores the report and notifies
 // when security updates appear or a reboot becomes needed.
-func (c *Core) checkSecurity(ctx context.Context, sv store.Server) SecurityReport {
+func (c *Core) checkSecurity(ctx context.Context, sv domain.Server) SecurityReport {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	r := SecurityReport{CheckedAt: time.Now().UTC(), Items: []SecurityItem{}, Updates: []PendingUpdate{}}
@@ -422,7 +422,7 @@ func (c *Core) checkSecurity(ctx context.Context, sv store.Server) SecurityRepor
 func (c *Core) securityReport(ctx context.Context, serverID string) (SecurityReport, error) {
 	var r SecurityReport
 	v, err := c.store.GetSetting(ctx, securitySetting(serverID))
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, domain.ErrNotFound) {
 		return r, nil // not checked yet
 	}
 	if err != nil || v == "" {

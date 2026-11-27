@@ -12,7 +12,7 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -32,7 +32,7 @@ var (
 
 // normalizeRuntime trims r and drops its empty collections, so equal
 // settings compare equal however they were sent.
-func normalizeRuntime(r store.Runtime) store.Runtime {
+func normalizeRuntime(r domain.Runtime) domain.Runtime {
 	r.User, r.WorkingDir, r.StopSignal = strings.TrimSpace(r.User), strings.TrimSpace(r.WorkingDir), strings.TrimSpace(r.StopSignal)
 	r.Platform = normalizePlatform(r.Platform)
 	if len(r.Command) == 0 {
@@ -76,7 +76,7 @@ func normalizeRuntime(r store.Runtime) store.Runtime {
 	return r
 }
 
-func validateRuntime(s store.Service) error {
+func validateRuntime(s domain.Service) error {
 	r := s.Runtime
 	invalid := func(format string, args ...any) error {
 		return fmt.Errorf("%w: "+format, append([]any{ErrInvalid}, args...)...)
@@ -107,7 +107,7 @@ func validateRuntime(s store.Service) error {
 		if strings.ContainsAny(opts, " \n") {
 			return invalid("tmpfs %s: invalid options %q", p, opts)
 		}
-		if slices.ContainsFunc(s.Volumes, func(v store.Volume) bool { return path.Clean(v.Path) == path.Clean(p) }) {
+		if slices.ContainsFunc(s.Volumes, func(v domain.Volume) bool { return path.Clean(v.Path) == path.Clean(p) }) {
 			return invalid("tmpfs %s is also a volume's path", p)
 		}
 	}
@@ -182,7 +182,7 @@ func validateRuntime(s store.Service) error {
 }
 
 // applyRuntime sets an app's runtime settings on its container.
-func applyRuntime(cfg *container.Config, host *container.HostConfig, r store.Runtime) {
+func applyRuntime(cfg *container.Config, host *container.HostConfig, r domain.Runtime) {
 	if len(r.Command) > 0 {
 		cfg.Cmd = r.Command
 	}
@@ -255,6 +255,6 @@ func normalizePlatform(p string) string {
 }
 
 // runtimeHostAccess is the part of r only admins change.
-func runtimeHostAccess(r store.Runtime) store.Runtime {
-	return store.Runtime{CapAdd: r.CapAdd, Devices: r.Devices, Privileged: r.Privileged, SecurityOpt: r.SecurityOpt, Binds: r.Binds}
+func runtimeHostAccess(r domain.Runtime) domain.Runtime {
+	return domain.Runtime{CapAdd: r.CapAdd, Devices: r.Devices, Privileged: r.Privileged, SecurityOpt: r.SecurityOpt, Binds: r.Binds}
 }

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestResolveEnv(t *testing.T) {
@@ -36,7 +36,7 @@ func TestResolveEnv(t *testing.T) {
 
 func TestResolveDatabaseRefs(t *testing.T) {
 	db := pgService()
-	src := envSources{dbs: map[string]store.Service{db.Name: db}}
+	src := envSources{dbs: map[string]domain.Service{db.Name: db}}
 	env := map[string]string{
 		"DATABASE_URL": "{{ db." + db.Name + ".URL }}",
 		"PGHOST":       "{{ db." + db.Name + ".HOST }}",
@@ -120,7 +120,7 @@ func TestMergeEnv(t *testing.T) {
 func TestSetProjectEnv(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop"})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,8 +136,8 @@ func TestSetProjectEnv(t *testing.T) {
 		t.Errorf("bad key: got %v, want ErrInvalid", err)
 	}
 
-	if _, err := c.store.CreateService(ctx, store.Service{
-		ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1,
+	if _, err := c.store.CreateService(ctx, domain.Service{
+		ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1,
 		Env: map[string]string{"DB_HOST": "{{ project.HOST }}"},
 	}); err != nil {
 		t.Fatal(err)
@@ -154,7 +154,7 @@ func TestSetProjectEnv(t *testing.T) {
 		t.Errorf("stored env = %v", stored.Env)
 	}
 
-	svc := store.Service{ProjectID: p.ID, Image: "nginx", Replicas: 1, Env: map[string]string{"X": "{{ project.MISSING }}"}}
+	svc := domain.Service{ProjectID: p.ID, Image: "nginx", Replicas: 1, Env: map[string]string{"X": "{{ project.MISSING }}"}}
 	if err := c.validate(ctx, svc); !errors.Is(err, ErrInvalid) {
 		t.Errorf("unknown reference: got %v, want ErrInvalid", err)
 	}
@@ -193,9 +193,9 @@ func TestSecretRefs(t *testing.T) {
 
 func TestResolveAppRefs(t *testing.T) {
 	c := &Core{cfg: config.Config{Traefik: config.Traefik{HTTPSPort: "443"}}}
-	svcs := []store.Service{
-		{Name: "web", Kind: store.ServiceKindApp, Domain: "shop.example.com", Port: 3000},
-		{Name: "worker", Kind: store.ServiceKindApp},
+	svcs := []domain.Service{
+		{Name: "web", Kind: domain.ServiceKindApp, Domain: "shop.example.com", Port: 3000},
+		{Name: "worker", Kind: domain.ServiceKindApp},
 		pgService(),
 	}
 	src := envSources{project: map[string]string{"PUBLIC_URL": "{{ app.web.URL }}/"}, dbs: databasesOf(svcs), apps: c.appURLs(svcs)}

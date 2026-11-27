@@ -11,7 +11,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -129,7 +129,7 @@ func (c *Core) sampleStats(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	byID := make(map[string]store.Service, len(svcs))
+	byID := make(map[string]domain.Service, len(svcs))
 	for _, s := range svcs {
 		byID[s.ID] = s
 	}
@@ -172,7 +172,7 @@ func (c *Core) sampleStats(ctx context.Context) {
 
 // sampleServer reads the counters of the server's running replicas that
 // serve traffic (not the previous deployment's during a rollout).
-func sampleServer(ctx context.Context, dk *docker.Client, svcs map[string]store.Service) (map[string]sample, map[string]string, error) {
+func sampleServer(ctx context.Context, dk *docker.Client, svcs map[string]domain.Service) (map[string]sample, map[string]string, error) {
 	f := make(client.Filters)
 	f.Add("label", docker.LabelManaged+"=true")
 	f.Add("label", docker.LabelService)
@@ -268,7 +268,7 @@ func grew(a, b uint64) uint64 {
 
 // record adds one point per service from this round's container samples.
 // A container seen for the first time counts for memory only.
-func (s *statsState) record(now time.Time, got map[string]sample, owner map[string]string, svcs map[string]store.Service) {
+func (s *statsState) record(now time.Time, got map[string]sample, owner map[string]string, svcs map[string]domain.Service) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.series == nil {

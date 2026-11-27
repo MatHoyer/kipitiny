@@ -12,7 +12,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/client"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // checkRepoHost looks at the name when linking; the address a fetch
@@ -24,7 +24,7 @@ type repoGuardKey struct{}
 
 // guardRepo marks ctx for fetches checkRepoHost would refuse at a private
 // address.
-func guardRepo(ctx context.Context, g store.ProjectGit) context.Context {
+func guardRepo(ctx context.Context, g domain.ProjectGit) context.Context {
 	if a, ok := ActorFrom(ctx); ok && !a.Admin() && g.ProviderID == "" {
 		return context.WithValue(ctx, repoGuardKey{}, true)
 	}

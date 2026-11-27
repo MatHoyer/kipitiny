@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // retain returns the IDs to keep among a schedule's successful backups
 // (newest first), using grandfather-father-son rules. Periods are in UTC.
 // With no rule set, everything is kept.
-func retain(backups []store.Backup, sc store.BackupSchedule) map[string]bool {
+func retain(backups []domain.Backup, sc domain.BackupSchedule) map[string]bool {
 	keep := map[string]bool{}
 	if sc.KeepLast == 0 && sc.KeepDaily == 0 && sc.KeepWeekly == 0 && sc.KeepMonthly == 0 {
 		for _, b := range backups {

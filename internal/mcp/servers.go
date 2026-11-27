@@ -9,7 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 type getServerStatusIn struct {
@@ -63,7 +63,7 @@ func (t *tools) getServerStatus(ctx context.Context, _ *mcp.CallToolRequest, in 
 		out.Servers = append(out.Servers, s)
 	}
 	if in.Server != "" && len(out.Servers) == 0 {
-		return nil, getServerStatusOut{}, friendly(fmt.Errorf("%w: server %s", store.ErrNotFound, in.Server))
+		return nil, getServerStatusOut{}, friendly(fmt.Errorf("%w: server %s", domain.ErrNotFound, in.Server))
 	}
 	return nil, out, nil
 }

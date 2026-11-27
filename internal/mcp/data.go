@@ -6,7 +6,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // Database contents: browsing, the console and credentials.
@@ -79,7 +79,7 @@ func (t *tools) readTable(ctx context.Context, _ *mcp.CallToolRequest, in readTa
 		return nil, core.PgRows{}, friendly(err)
 	}
 	schema := in.Schema
-	if schema == "" && svc.Kind == store.ServiceKindPostgres {
+	if schema == "" && svc.Kind == domain.ServiceKindPostgres {
 		schema = "public"
 	}
 	limit := in.Limit

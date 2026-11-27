@@ -11,15 +11,15 @@ import (
 
 	"github.com/moby/moby/api/types/network"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const maxPublishedPorts = 20
 
 // normalizePorts fills what users leave out: TCP, and the container port
 // equal to the host port. nil becomes empty.
-func normalizePorts(ports []store.PublishedPort) []store.PublishedPort {
-	out := make([]store.PublishedPort, 0, len(ports))
+func normalizePorts(ports []domain.PublishedPort) []domain.PublishedPort {
+	out := make([]domain.PublishedPort, 0, len(ports))
 	for _, p := range ports {
 		p.Protocol = strings.ToLower(strings.TrimSpace(p.Protocol))
 		if p.Protocol == "" {
@@ -38,7 +38,7 @@ func normalizePorts(ports []store.PublishedPort) []store.PublishedPort {
 
 // validatePorts checks an app's published ports. Two containers can't bind
 // the same host port, so an app publishing ports runs a single replica.
-func validatePorts(s store.Service) error {
+func validatePorts(s domain.Service) error {
 	if len(s.PublishedPorts) == 0 {
 		return nil
 	}
@@ -58,7 +58,7 @@ func validatePorts(s store.Service) error {
 		if _, err := netip.ParseAddr(p.HostIP); p.HostIP != "" && err != nil {
 			return fmt.Errorf("%w: host IP %q is not an IP address", ErrInvalid, p.HostIP)
 		}
-		if slices.ContainsFunc(s.PublishedPorts[:i], func(o store.PublishedPort) bool { return portsClash(o, p) }) {
+		if slices.ContainsFunc(s.PublishedPorts[:i], func(o domain.PublishedPort) bool { return portsClash(o, p) }) {
 			return fmt.Errorf("%w: host port %s is published twice", ErrInvalid, portKey(p))
 		}
 	}
@@ -67,19 +67,19 @@ func validatePorts(s store.Service) error {
 
 // checkPortsFree refuses host ports Traefik or another service of the same
 // server already publishes. Docker would only fail at deploy.
-func (c *Core) checkPortsFree(ctx context.Context, s store.Service) error {
+func (c *Core) checkPortsFree(ctx context.Context, s domain.Service) error {
 	if len(s.PublishedPorts) == 0 {
 		return nil
 	}
 	type use struct {
-		port store.PublishedPort
+		port domain.PublishedPort
 		by   string
 	}
 	var taken []use
 	if c.cfg.Traefik.Enabled {
 		for _, hp := range []string{c.cfg.Traefik.HTTPPort, c.cfg.Traefik.HTTPSPort} {
 			n, _ := strconv.Atoi(hp)
-			taken = append(taken, use{store.PublishedPort{HostPort: n, Protocol: "tcp"}, "Traefik"})
+			taken = append(taken, use{domain.PublishedPort{HostPort: n, Protocol: "tcp"}, "Traefik"})
 		}
 	}
 	serverID := s.ServerID
@@ -114,11 +114,11 @@ func (c *Core) checkPortsFree(ctx context.Context, s store.Service) error {
 
 // portsClash reports whether two published ports bind the same host
 // socket: same port and protocol, on the same address or on every one.
-func portsClash(a, b store.PublishedPort) bool {
+func portsClash(a, b domain.PublishedPort) bool {
 	return a.HostPort == b.HostPort && a.Protocol == b.Protocol && (a.HostIP == "" || b.HostIP == "" || a.HostIP == b.HostIP)
 }
 
-func portKey(p store.PublishedPort) string {
+func portKey(p domain.PublishedPort) string {
 	key := strconv.Itoa(p.HostPort) + "/" + p.Protocol
 	if p.HostIP != "" {
 		key = net.JoinHostPort(p.HostIP, key)
@@ -128,7 +128,7 @@ func portKey(p store.PublishedPort) string {
 
 // portBindings publishes the app's ports, on every host address unless
 // one is given.
-func portBindings(ports []store.PublishedPort) (network.PortSet, network.PortMap) {
+func portBindings(ports []domain.PublishedPort) (network.PortSet, network.PortMap) {
 	if len(ports) == 0 {
 		return nil, nil
 	}
@@ -148,7 +148,7 @@ func portBindings(ports []store.PublishedPort) (network.PortSet, network.PortMap
 
 // probePort is the container port the health probe connects to: the HTTP
 // port, else the first published TCP port; 0 when there is none.
-func probePort(svc store.Service) int {
+func probePort(svc domain.Service) int {
 	if svc.Port > 0 {
 		return svc.Port
 	}
@@ -163,7 +163,7 @@ func probePort(svc store.Service) int {
 // validateHostAccess checks an app's host network and Docker socket. In
 // the host's network the app has no project network to be reached on and
 // listens on host ports itself: one replica, no domain, nothing to publish.
-func validateHostAccess(s store.Service) error {
+func validateHostAccess(s domain.Service) error {
 	if s.DockerSocket != "" && s.DockerSocket != "ro" && s.DockerSocket != "rw" {
 		return fmt.Errorf("%w: Docker socket access must be ro or rw", ErrInvalid)
 	}

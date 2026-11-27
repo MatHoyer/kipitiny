@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Event types sent to notification channels.
@@ -97,9 +97,9 @@ const (
 )
 
 type NotificationsView struct {
-	Channels []store.NotificationChannel `json:"channels"`
-	Kinds    []notify.Kind               `json:"kinds"`
-	Events   []EventType                 `json:"events"`
+	Channels []domain.NotificationChannel `json:"channels"`
+	Kinds    []notify.Kind                `json:"kinds"`
+	Events   []EventType                  `json:"events"`
 	// Thresholds of the resource alerts.
 	Thresholds ResourceAlerts `json:"thresholds"`
 }
@@ -164,29 +164,29 @@ type ChannelInput struct {
 	Enabled bool              `json:"enabled"`
 }
 
-func (c *Core) CreateChannel(ctx context.Context, in ChannelInput) (store.NotificationChannel, error) {
-	ch := store.NotificationChannel{Kind: in.Kind, Config: map[string]string{}}
+func (c *Core) CreateChannel(ctx context.Context, in ChannelInput) (domain.NotificationChannel, error) {
+	ch := domain.NotificationChannel{Kind: in.Kind, Config: map[string]string{}}
 	if err := applyChannelInput(&ch, in); err != nil {
-		return store.NotificationChannel{}, err
+		return domain.NotificationChannel{}, err
 	}
 	if err := c.checkChannelProvider(ctx, ch); err != nil {
-		return store.NotificationChannel{}, err
+		return domain.NotificationChannel{}, err
 	}
 	ch, err := c.store.CreateNotificationChannel(ctx, ch)
 	return maskedChannel(ch), err
 }
 
 // UpdateChannel replaces a channel's settings; masked secrets are kept.
-func (c *Core) UpdateChannel(ctx context.Context, id string, in ChannelInput) (store.NotificationChannel, error) {
+func (c *Core) UpdateChannel(ctx context.Context, id string, in ChannelInput) (domain.NotificationChannel, error) {
 	ch, err := c.store.GetNotificationChannel(ctx, id)
 	if err != nil {
-		return store.NotificationChannel{}, err
+		return domain.NotificationChannel{}, err
 	}
 	if err := applyChannelInput(&ch, in); err != nil {
-		return store.NotificationChannel{}, err
+		return domain.NotificationChannel{}, err
 	}
 	if err := c.checkChannelProvider(ctx, ch); err != nil {
-		return store.NotificationChannel{}, err
+		return domain.NotificationChannel{}, err
 	}
 	ch, err = c.store.UpdateNotificationChannel(ctx, ch)
 	return maskedChannel(ch), err
@@ -218,7 +218,7 @@ func (c *Core) TestChannel(ctx context.Context, id string) error {
 
 // applyChannelInput validates in and copies it onto ch, keeping the stored
 // value of secrets sent back masked.
-func applyChannelInput(ch *store.NotificationChannel, in ChannelInput) error {
+func applyChannelInput(ch *domain.NotificationChannel, in ChannelInput) error {
 	kind, ok := notify.Lookup(ch.Kind)
 	if !ok {
 		return fmt.Errorf("%w: unknown notification kind %q", ErrInvalid, ch.Kind)
@@ -254,11 +254,11 @@ func applyChannelInput(ch *store.NotificationChannel, in ChannelInput) error {
 }
 
 // checkChannelProvider makes sure an email channel's provider exists.
-func (c *Core) checkChannelProvider(ctx context.Context, ch store.NotificationChannel) error {
+func (c *Core) checkChannelProvider(ctx context.Context, ch domain.NotificationChannel) error {
 	if ch.Kind != "email" {
 		return nil
 	}
-	if _, err := c.store.GetEmailProvider(ctx, ch.Config[notify.EmailProviderKey]); errors.Is(err, store.ErrNotFound) {
+	if _, err := c.store.GetEmailProvider(ctx, ch.Config[notify.EmailProviderKey]); errors.Is(err, domain.ErrNotFound) {
 		return fmt.Errorf("%w: unknown email provider; add one in Settings › Email", ErrInvalid)
 	} else if err != nil {
 		return err
@@ -266,7 +266,7 @@ func (c *Core) checkChannelProvider(ctx context.Context, ch store.NotificationCh
 	return nil
 }
 
-func maskedChannel(ch store.NotificationChannel) store.NotificationChannel {
+func maskedChannel(ch domain.NotificationChannel) domain.NotificationChannel {
 	kind, _ := notify.Lookup(ch.Kind)
 	cfg := make(map[string]string, len(ch.Config))
 	for k, v := range ch.Config {
@@ -314,7 +314,7 @@ func (c *Core) notify(e notify.Event, path, key string) {
 	}
 }
 
-func (c *Core) send(ctx context.Context, ch store.NotificationChannel, e notify.Event) error {
+func (c *Core) send(ctx context.Context, ch domain.NotificationChannel, e notify.Event) error {
 	s, err := notify.New(ch.Kind, ch.Config, notify.Deps{HTTP: c.notifyHTTP, Mail: c.sendMail, Push: c.pushToAdmins, Brand: c.BrandName(ctx)})
 	if err != nil {
 		return err

@@ -12,7 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // Projects, their git link, renames, start/stop and deploy logs.
@@ -57,7 +57,7 @@ func (t *tools) listProjects(ctx context.Context, _ *mcp.CallToolRequest, _ stru
 		}
 		if g, err := t.c.GetProjectGit(ctx, p.ID); err == nil {
 			s.Git = fmt.Sprintf("%s (%s) %s", g.RepoURL, g.Branch, g.Path)
-		} else if !errors.Is(err, store.ErrNotFound) {
+		} else if !errors.Is(err, domain.ErrNotFound) {
 			return nil, listProjectsOut{}, err
 		}
 		out.Projects = append(out.Projects, s)
@@ -80,7 +80,7 @@ func (t *tools) createProject(ctx context.Context, _ *mcp.CallToolRequest, in cr
 			}
 			i := slices.IndexFunc(servers, func(sv core.ServerView) bool { return sv.Name == in.Server })
 			if i < 0 {
-				return ProjectSummary{}, fmt.Errorf("%w: server %s", store.ErrNotFound, in.Server)
+				return ProjectSummary{}, fmt.Errorf("%w: server %s", domain.ErrNotFound, in.Server)
 			}
 			serverID = servers[i].ID
 		}
@@ -214,7 +214,7 @@ func (t *tools) getProjectGit(ctx context.Context, _ *mcp.CallToolRequest, in pr
 		return nil, GitLink{}, friendly(err)
 	}
 	g, err := t.c.GetProjectGit(ctx, p.ID)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, domain.ErrNotFound) {
 		return nil, GitLink{}, fmt.Errorf("project %s isn't linked to git", in.Project)
 	} else if err != nil {
 		return nil, GitLink{}, err
@@ -254,7 +254,7 @@ func (t *tools) linkProjectGit(ctx context.Context, _ *mcp.CallToolRequest, in l
 			}
 			i := slices.IndexFunc(ps, func(gp core.GitProviderView) bool { return gp.Name == in.Provider })
 			if i < 0 {
-				return linkProjectGitOut{}, fmt.Errorf("%w: git provider %s", store.ErrNotFound, in.Provider)
+				return linkProjectGitOut{}, fmt.Errorf("%w: git provider %s", domain.ErrNotFound, in.Provider)
 			}
 			gi.ProviderID = ps[i].ID
 		}
@@ -320,8 +320,8 @@ type getDeploymentLogIn struct {
 }
 
 type getDeploymentLogOut struct {
-	Deployment store.Deployment `json:"deployment"`
-	Lines      []string         `json:"lines"`
+	Deployment domain.Deployment `json:"deployment"`
+	Lines      []string          `json:"lines"`
 }
 
 func (t *tools) getDeploymentLog(ctx context.Context, _ *mcp.CallToolRequest, in getDeploymentLogIn) (*mcp.CallToolResult, getDeploymentLogOut, error) {

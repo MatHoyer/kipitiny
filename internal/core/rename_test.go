@@ -15,7 +15,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestRenameDatabaseRefs(t *testing.T) {
@@ -39,34 +39,34 @@ func TestRenameDatabaseRefs(t *testing.T) {
 func TestRenameRefused(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop"})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.store.CreateProject(ctx, store.Project{Name: "blog"}); err != nil {
+	if _, err := c.store.CreateProject(ctx, domain.Project{Name: "blog"}); err != nil {
 		t.Fatal(err)
 	}
-	web, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1})
+	web, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "api", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1}); err != nil {
+	if _, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "api", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1}); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := c.RenameProject(ctx, p.ID, "Bad Name"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("bad project name: got %v, want ErrInvalid", err)
 	}
-	if _, err := c.RenameProject(ctx, p.ID, "blog"); !errors.Is(err, store.ErrConflict) {
+	if _, err := c.RenameProject(ctx, p.ID, "blog"); !errors.Is(err, domain.ErrConflict) {
 		t.Errorf("taken project name: got %v, want ErrConflict", err)
 	}
 	if _, err := c.RenameService(ctx, web.ID, "-web"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("bad service name: got %v, want ErrInvalid", err)
 	}
-	if _, err := c.RenameService(ctx, web.ID, "api"); !errors.Is(err, store.ErrConflict) {
+	if _, err := c.RenameService(ctx, web.ID, "api"); !errors.Is(err, domain.ErrConflict) {
 		t.Errorf("taken service name: got %v, want ErrConflict", err)
 	}
-	if _, err := c.store.SaveProjectGit(ctx, store.ProjectGit{ProjectID: p.ID, RepoURL: "https://github.com/me/shop.git", Branch: "main", Path: "compose.yaml"}); err != nil {
+	if _, err := c.store.SaveProjectGit(ctx, domain.ProjectGit{ProjectID: p.ID, RepoURL: "https://github.com/me/shop.git", Branch: "main", Path: "compose.yaml"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.RenameService(ctx, web.ID, "front"); !errors.Is(err, ErrGitManaged) {
@@ -93,11 +93,11 @@ func TestRenameDocker(t *testing.T) {
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
 	c.pool = docker.NewPool(dk, c.connectServer)
 
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "renametest", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "renametest", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	db, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "main", Kind: store.ServiceKindApp, Image: "busybox:stable", Replicas: 1})
+	db, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "main", Kind: domain.ServiceKindApp, Image: "busybox:stable", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

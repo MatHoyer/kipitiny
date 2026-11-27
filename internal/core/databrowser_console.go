@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -79,7 +79,7 @@ func (c *Core) DataConsole(ctx context.Context, id, database, query string, writ
 		return ConsoleResult{}, err
 	}
 	var t dataTarget
-	if svc.Kind == store.ServiceKindRedis {
+	if svc.Kind == domain.ServiceKindRedis {
 		t, err = c.dataTarget(ctx, id, svc.Kind)
 	} else {
 		t, err = c.databaseTarget(ctx, id, database)
@@ -90,15 +90,15 @@ func (c *Core) DataConsole(ctx context.Context, id, database, query string, writ
 	ctx, cancel := context.WithTimeout(ctx, dataConsoleTimeout+5*time.Second)
 	defer cancel()
 	switch svc.Kind {
-	case store.ServiceKindPostgres:
+	case domain.ServiceKindPostgres:
 		return t.pgConsole(ctx, query, write)
-	case store.ServiceKindRedis:
+	case domain.ServiceKindRedis:
 		return t.redisConsole(ctx, query, write)
-	case store.ServiceKindMySQL, store.ServiceKindMariaDB:
+	case domain.ServiceKindMySQL, domain.ServiceKindMariaDB:
 		return t.mysqlConsole(ctx, query, write)
-	case store.ServiceKindMongoDB:
+	case domain.ServiceKindMongoDB:
 		return t.mongoConsole(ctx, query, write)
-	case store.ServiceKindApp:
+	case domain.ServiceKindApp:
 		return t.sqliteConsole(ctx, query, write)
 	}
 	return ConsoleResult{}, fmt.Errorf("%w: %s has no data console", ErrInvalid, svc.Name)

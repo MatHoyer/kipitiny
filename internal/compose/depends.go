@@ -7,26 +7,26 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
-// Compose's depends_on conditions, by store.Dependency condition.
+// Compose's depends_on conditions, by domain.Dependency condition.
 var conditions = map[string]string{"": "service_started", "healthy": "service_healthy", "completed": "service_completed_successfully"}
 
 // dependsOn reads depends_on: a list of names or a mapping of name to
 // {condition, required, restart}, sorted by name so that reordering the file
 // (or an export, which sorts) changes nothing.
-func (p *parser) dependsOn(n *yaml.Node) []store.Dependency {
+func (p *parser) dependsOn(n *yaml.Node) []domain.Dependency {
 	out := p.readDependsOn(n)
-	slices.SortFunc(out, func(a, b store.Dependency) int { return strings.Compare(a.Service, b.Service) })
+	slices.SortFunc(out, func(a, b domain.Dependency) int { return strings.Compare(a.Service, b.Service) })
 	return out
 }
 
-func (p *parser) readDependsOn(n *yaml.Node) []store.Dependency {
-	var out []store.Dependency
+func (p *parser) readDependsOn(n *yaml.Node) []domain.Dependency {
+	var out []domain.Dependency
 	if n.Kind == yaml.SequenceNode {
 		for _, item := range n.Content {
-			out = append(out, store.Dependency{Service: p.str(item)})
+			out = append(out, domain.Dependency{Service: p.str(item)})
 		}
 		return out
 	}
@@ -35,7 +35,7 @@ func (p *parser) readDependsOn(n *yaml.Node) []store.Dependency {
 		return nil
 	}
 	for name, v := range pairs(n) {
-		d := store.Dependency{Service: name}
+		d := domain.Dependency{Service: name}
 		for k, val := range pairs(v) {
 			switch k {
 			case "condition":
@@ -102,11 +102,11 @@ type outDependency struct {
 
 // outDependsOn writes depends_on as a list of names, or a mapping when a
 // condition isn't service_started.
-func outDependsOn(deps []store.Dependency) any {
+func outDependsOn(deps []domain.Dependency) any {
 	if len(deps) == 0 {
 		return nil
 	}
-	if !slices.ContainsFunc(deps, func(d store.Dependency) bool { return d.Condition != "" }) {
+	if !slices.ContainsFunc(deps, func(d domain.Dependency) bool { return d.Condition != "" }) {
 		names := make([]string, len(deps))
 		for i, d := range deps {
 			names[i] = d.Service

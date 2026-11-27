@@ -7,17 +7,17 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestCanvasLayout(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1})
+	svc, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestCanvasLayout(t *testing.T) {
 	}
 
 	// A member sees no position of a project they can't see, nor of its map.
-	if got, err := c.CanvasLayout(WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: store.RoleMember})); err != nil || len(got) != 1 {
+	if got, err := c.CanvasLayout(WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: domain.RoleMember})); err != nil || len(got) != 1 {
 		t.Errorf("member's layout = %v, %v", got, err)
 	}
 

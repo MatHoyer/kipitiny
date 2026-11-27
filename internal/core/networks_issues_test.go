@@ -9,12 +9,12 @@ import (
 	"github.com/moby/moby/api/types/network"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestNetworkIssues(t *testing.T) {
-	p := store.Project{ID: "P1", Name: "shop"}
-	svc := store.Service{ID: "S1", Name: "web", ProjectID: p.ID, CurrentDeploymentID: "D1", Networks: []string{"N1"}}
+	p := domain.Project{ID: "P1", Name: "shop"}
+	svc := domain.Service{ID: "S1", Name: "web", ProjectID: p.ID, CurrentDeploymentID: "D1", Networks: []string{"N1"}}
 	ct := func(state container.ContainerState, routed bool, nets ...string) container.Summary {
 		c := container.Summary{
 			State:           state,
@@ -54,7 +54,7 @@ func TestNetworkIssues(t *testing.T) {
 	if got := networkIssues(p, svc, []container.Summary{ct(container.StateExited, false)}); len(got) != 0 {
 		t.Errorf("stopped: %q", got)
 	}
-	if got := networkIssues(p, store.Service{HostNetwork: true, CurrentDeploymentID: "D1"}, []container.Summary{ct(container.StateRunning, false)}); len(got) != 0 {
+	if got := networkIssues(p, domain.Service{HostNetwork: true, CurrentDeploymentID: "D1"}, []container.Summary{ct(container.StateRunning, false)}); len(got) != 0 {
 		t.Errorf("host network: %q", got)
 	}
 }

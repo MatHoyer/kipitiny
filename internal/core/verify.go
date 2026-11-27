@@ -12,8 +12,8 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 const (
@@ -26,27 +26,27 @@ const (
 // restored into a throwaway, network-less server of its kind and checked; a
 // volume archive is read through entirely. The outcome is recorded on the
 // backup.
-func (c *Core) VerifyBackup(ctx context.Context, backupID string) (store.Backup, error) {
+func (c *Core) VerifyBackup(ctx context.Context, backupID string) (domain.Backup, error) {
 	b, err := c.store.GetBackup(ctx, backupID)
 	if err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
-	if b.Kind == store.BackupKindManager || b.Status != store.OpSucceeded {
-		return store.Backup{}, fmt.Errorf("%w: only successful service backups can be verified", ErrInvalid)
+	if b.Kind == domain.BackupKindManager || b.Status != domain.OpSucceeded {
+		return domain.Backup{}, fmt.Errorf("%w: only successful service backups can be verified", ErrInvalid)
 	}
-	if b.VerifyStatus == store.OpRunning {
-		return store.Backup{}, ErrBusy
+	if b.VerifyStatus == domain.OpRunning {
+		return domain.Backup{}, ErrBusy
 	}
-	b.Verification = store.Verification{VerifyStatus: store.OpRunning}
+	b.Verification = domain.Verification{VerifyStatus: domain.OpRunning}
 	if err := c.store.SetBackupVerification(ctx, b.ID, b.Verification); err != nil {
-		return store.Backup{}, err
+		return domain.Backup{}, err
 	}
 	c.steps.set(verifyKey(b.ID), VerifyQueued)
 	if err := c.goBackground(func() { c.runVerify(b) }); err != nil {
 		c.steps.done(verifyKey(b.ID))
 		now := time.Now()
-		_ = c.store.SetBackupVerification(ctx, b.ID, store.Verification{VerifyStatus: store.OpFailed, VerifyError: err.Error(), VerifiedAt: &now})
-		return store.Backup{}, err
+		_ = c.store.SetBackupVerification(ctx, b.ID, domain.Verification{VerifyStatus: domain.OpFailed, VerifyError: err.Error(), VerifiedAt: &now})
+		return domain.Backup{}, err
 	}
 	return b, nil
 }
@@ -68,7 +68,7 @@ const (
 	VerifyCheck = "check"
 )
 
-func (c *Core) runVerify(b store.Backup) {
+func (c *Core) runVerify(b domain.Backup) {
 	defer c.steps.done(verifyKey(b.ID))
 	// One restore test at a time: they can be memory- and disk-hungry.
 	select {
@@ -82,21 +82,21 @@ func (c *Core) runVerify(b store.Backup) {
 	log := c.log.With("backup", b.ID, "service", b.ServiceName)
 	start := time.Now()
 
-	var details store.VerificationDetails
+	var details domain.VerificationDetails
 	var err error
 	switch b.Kind {
-	case store.BackupKindVolume:
+	case domain.BackupKindVolume:
 		details, err = c.verifyVolumes(ctx, b)
-	case store.BackupKindDump:
+	case domain.BackupKindDump:
 		details, err = c.verifyDump(ctx, b)
 	default:
 		details, err = c.verify(ctx, b)
 	}
 	details.DurationMS = time.Since(start).Milliseconds()
 	now := time.Now()
-	v := store.Verification{VerifyStatus: store.OpSucceeded, VerifyDetails: details, VerifiedAt: &now}
+	v := domain.Verification{VerifyStatus: domain.OpSucceeded, VerifyDetails: details, VerifiedAt: &now}
 	if err != nil {
-		v.VerifyStatus, v.VerifyError = store.OpFailed, err.Error()
+		v.VerifyStatus, v.VerifyError = domain.OpFailed, err.Error()
 		if errors.Is(ctx.Err(), context.Canceled) {
 			v.VerifyError = "interrupted by manager shutdown"
 		}
@@ -104,7 +104,7 @@ func (c *Core) runVerify(b store.Backup) {
 	} else {
 		log.Info("restore test passed", "tables", details.Tables, "rows", details.Rows, "files", details.Files)
 	}
-	if err := c.store.SetBackupVerification(context.WithoutCancel(ctx), b.ID, v); err != nil && !errors.Is(err, store.ErrNotFound) {
+	if err := c.store.SetBackupVerification(context.WithoutCancel(ctx), b.ID, v); err != nil && !errors.Is(err, domain.ErrNotFound) {
 		log.Error("cannot record restore test", "err", err)
 	}
 
@@ -119,7 +119,7 @@ func (c *Core) runVerify(b store.Backup) {
 			{Name: "Rows", Value: fmt.Sprint(details.Rows)},
 		},
 	}
-	if b.Kind == store.BackupKindVolume {
+	if b.Kind == domain.BackupKindVolume {
 		e.Fields = []notify.Field{{Name: "Files", Value: fmt.Sprint(details.Files)}}
 	}
 	if err != nil {
@@ -129,8 +129,8 @@ func (c *Core) runVerify(b store.Backup) {
 	c.notify(e, "/services/"+b.ServiceID, "")
 }
 
-func (c *Core) verify(ctx context.Context, b store.Backup) (store.VerificationDetails, error) {
-	var d store.VerificationDetails
+func (c *Core) verify(ctx context.Context, b domain.Backup) (domain.VerificationDetails, error) {
+	var d domain.VerificationDetails
 	target, err := c.store.GetBackupTarget(ctx, b.TargetID)
 	if err != nil {
 		return d, err
@@ -184,7 +184,7 @@ SELECT (SELECT count(*) FROM pg_stat_user_tables),
 // b, with the superuser user and the database db, and waits until it's
 // ready; step reports where it's at (VerifyImage, VerifyServer). The caller
 // removes it with removeScratch.
-func (c *Core) scratchPostgres(ctx context.Context, b store.Backup, name, user, db string, step func(string)) (*docker.Client, string, error) {
+func (c *Core) scratchPostgres(ctx context.Context, b domain.Backup, name, user, db string, step func(string)) (*docker.Client, string, error) {
 	image, serverID := c.verifyImage(ctx, b)
 	dk := c.dockerFor(serverID)
 	step(VerifyImage)
@@ -230,8 +230,8 @@ func (c *Core) removeScratch(ctx context.Context, dk *docker.Client, id string) 
 }
 
 // parseVerifyOutput reads "tables|rows|bytes" from psql -tA output.
-func parseVerifyOutput(s string) (store.VerificationDetails, error) {
-	var d store.VerificationDetails
+func parseVerifyOutput(s string) (domain.VerificationDetails, error) {
+	var d domain.VerificationDetails
 	fields := strings.Split(strings.TrimSpace(s), "|")
 	if len(fields) != 3 {
 		return d, fmt.Errorf("sanity query: unexpected output %q", s)
@@ -253,13 +253,13 @@ func parseVerifyOutput(s string) (store.VerificationDetails, error) {
 // database's server with its own image when it still exists and runs the
 // backup's major version, otherwise with the image that made the backup, or
 // the official image of that major for backups that don't record it.
-func (c *Core) verifyImage(ctx context.Context, b store.Backup) (image, serverID string) {
+func (c *Core) verifyImage(ctx context.Context, b domain.Backup) (image, serverID string) {
 	major := pgMajorFromVersion(b.PGVersion)
 	svc, err := c.store.GetService(ctx, b.ServiceID)
 	if err == nil && postgresMajor(svc.Image) == major {
 		return svc.Image, svc.ServerID
 	}
-	serverID = store.LocalServerID
+	serverID = domain.LocalServerID
 	if err == nil {
 		serverID = svc.ServerID
 	}

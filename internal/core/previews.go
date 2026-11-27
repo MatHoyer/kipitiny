@@ -12,7 +12,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -27,7 +27,7 @@ const (
 )
 
 // PreviewSettingsInput sets how a project's previews differ from it; see
-// store.PreviewSettings. Env entries sent back as SecretMask keep their
+// domain.PreviewSettings. Env entries sent back as SecretMask keep their
 // value.
 type PreviewSettingsInput struct {
 	BaseDomain        string            `json:"baseDomain"`
@@ -37,43 +37,43 @@ type PreviewSettingsInput struct {
 	TTLSeconds        int               `json:"ttlSeconds"`
 	SleepAfterSeconds int               `json:"sleepAfterSeconds"`
 	// Seed is what --seed fills a new preview's databases with.
-	Seed store.SeedMode `json:"seed"`
+	Seed domain.SeedMode `json:"seed"`
 }
 
 // GetPreviewSettings returns a project's preview settings, secrets masked;
 // a project without any gets empty ones.
-func (c *Core) GetPreviewSettings(ctx context.Context, projectID string) (store.PreviewSettings, error) {
+func (c *Core) GetPreviewSettings(ctx context.Context, projectID string) (domain.PreviewSettings, error) {
 	if _, err := c.store.GetProject(ctx, projectID); err != nil {
-		return store.PreviewSettings{}, err
+		return domain.PreviewSettings{}, err
 	}
 	ps, err := c.previewSettings(ctx, projectID)
 	ps.Env = maskEnv(ps.Env, ps.Secrets)
 	return ps, err
 }
 
-func (c *Core) previewSettings(ctx context.Context, projectID string) (store.PreviewSettings, error) {
+func (c *Core) previewSettings(ctx context.Context, projectID string) (domain.PreviewSettings, error) {
 	ps, err := c.store.GetPreviewSettings(ctx, projectID)
-	if errors.Is(err, store.ErrNotFound) {
-		return store.PreviewSettings{ProjectID: projectID, Env: map[string]string{}, Secrets: []string{}, Inherit: []string{}}, nil
+	if errors.Is(err, domain.ErrNotFound) {
+		return domain.PreviewSettings{ProjectID: projectID, Env: map[string]string{}, Secrets: []string{}, Inherit: []string{}}, nil
 	}
 	return ps, err
 }
 
 // SetPreviewSettings replaces a project's preview settings. They apply to
 // each preview on its next deploy.
-func (c *Core) SetPreviewSettings(ctx context.Context, projectID string, in PreviewSettingsInput) (store.PreviewSettings, error) {
+func (c *Core) SetPreviewSettings(ctx context.Context, projectID string, in PreviewSettingsInput) (domain.PreviewSettings, error) {
 	p, err := c.store.GetProject(ctx, projectID)
 	if err != nil {
-		return store.PreviewSettings{}, err
+		return domain.PreviewSettings{}, err
 	}
 	if p.ParentID != "" {
-		return store.PreviewSettings{}, fmt.Errorf("%w: a preview has no previews of its own", ErrInvalid)
+		return domain.PreviewSettings{}, fmt.Errorf("%w: a preview has no previews of its own", ErrInvalid)
 	}
 	old, err := c.previewSettings(ctx, projectID)
 	if err != nil {
-		return store.PreviewSettings{}, err
+		return domain.PreviewSettings{}, err
 	}
-	ps := store.PreviewSettings{
+	ps := domain.PreviewSettings{
 		ProjectID:         projectID,
 		BaseDomain:        strings.ToLower(strings.TrimSpace(in.BaseDomain)),
 		Inherit:           []string{},
@@ -83,43 +83,43 @@ func (c *Core) SetPreviewSettings(ctx context.Context, projectID string, in Prev
 		Salt:              old.Salt,
 	}
 	if ps.BaseDomain != "" && !domainRe.MatchString(ps.BaseDomain) {
-		return store.PreviewSettings{}, fmt.Errorf("%w: base domain %q is not a valid hostname", ErrInvalid, ps.BaseDomain)
+		return domain.PreviewSettings{}, fmt.Errorf("%w: base domain %q is not a valid hostname", ErrInvalid, ps.BaseDomain)
 	}
-	if !slices.Contains([]store.SeedMode{store.SeedOff, store.SeedAnonymized, store.SeedRaw}, ps.SeedMode) {
-		return store.PreviewSettings{}, fmt.Errorf("%w: seed is empty (off), anonymized or raw", ErrInvalid)
+	if !slices.Contains([]domain.SeedMode{domain.SeedOff, domain.SeedAnonymized, domain.SeedRaw}, ps.SeedMode) {
+		return domain.PreviewSettings{}, fmt.Errorf("%w: seed is empty (off), anonymized or raw", ErrInvalid)
 	}
 	if ps.TTLSeconds < 0 {
-		return store.PreviewSettings{}, fmt.Errorf("%w: the time to live can't be negative", ErrInvalid)
+		return domain.PreviewSettings{}, fmt.Errorf("%w: the time to live can't be negative", ErrInvalid)
 	}
 	if s := ps.SleepAfterSeconds; s != 0 && (s < minSleepAfterSeconds || s > maxSleepAfterSeconds) {
-		return store.PreviewSettings{}, fmt.Errorf("%w: sleep after must be between %d minutes and %d days", ErrInvalid, minSleepAfterSeconds/60, maxSleepAfterSeconds/86400)
+		return domain.PreviewSettings{}, fmt.Errorf("%w: sleep after must be between %d minutes and %d days", ErrInvalid, minSleepAfterSeconds/60, maxSleepAfterSeconds/86400)
 	}
 	if in.Env == nil {
 		in.Env = map[string]string{}
 	}
 	for k := range in.Env {
 		if !envKeyRe.MatchString(k) {
-			return store.PreviewSettings{}, fmt.Errorf("%w: invalid env var name %q", ErrInvalid, k)
+			return domain.PreviewSettings{}, fmt.Errorf("%w: invalid env var name %q", ErrInvalid, k)
 		}
 	}
 	if ps.Env, ps.Secrets, err = mergeEnv(in.Env, in.Secrets, old.Env, old.Secrets); err != nil {
-		return store.PreviewSettings{}, err
+		return domain.PreviewSettings{}, err
 	}
 	if err := checkSecretRefs(ctx, old.Env, ps.Env); err != nil {
-		return store.PreviewSettings{}, err
+		return domain.PreviewSettings{}, err
 	}
 	if err := c.checkSecretSchemes(ctx, ps.Env); err != nil {
-		return store.PreviewSettings{}, err
+		return domain.PreviewSettings{}, err
 	}
 	for _, k := range in.Inherit {
 		if !slices.Contains(p.Secrets, k) {
-			return store.PreviewSettings{}, fmt.Errorf("%w: %s is not a secret of the project", ErrInvalid, k)
+			return domain.PreviewSettings{}, fmt.Errorf("%w: %s is not a secret of the project", ErrInvalid, k)
 		}
 		ps.Inherit = append(ps.Inherit, k)
 	}
 	slices.Sort(ps.Inherit)
 	if ps, err = c.store.SavePreviewSettings(ctx, ps); err != nil {
-		return store.PreviewSettings{}, err
+		return domain.PreviewSettings{}, err
 	}
 	c.logAnonymizeErr(c.refreshAnonymized(ctx, projectID, false))
 	ps.Env = maskEnv(ps.Env, ps.Secrets)
@@ -147,7 +147,7 @@ type PreviewOptions struct {
 
 // PreviewView is a preview with where its apps are.
 type PreviewView struct {
-	store.Project
+	domain.Project
 	// URLs of its public apps, by service name.
 	URLs map[string]string `json:"urls"`
 	// Plan is what the last deploy changed (DeployPreview only).
@@ -174,7 +174,7 @@ func (c *Core) ListPreviews(ctx context.Context, parentID string) ([]PreviewView
 	return out, nil
 }
 
-func (c *Core) previewView(ctx context.Context, p store.Project) (PreviewView, error) {
+func (c *Core) previewView(ctx context.Context, p domain.Project) (PreviewView, error) {
 	svcs, err := c.store.ListServices(ctx, p.ID)
 	if err != nil {
 		return PreviewView{}, err
@@ -183,17 +183,17 @@ func (c *Core) previewView(ctx context.Context, p store.Project) (PreviewView, e
 }
 
 // findPreview returns the parent's preview named name.
-func (c *Core) findPreview(ctx context.Context, parentID, name string) (store.Project, error) {
+func (c *Core) findPreview(ctx context.Context, parentID, name string) (domain.Project, error) {
 	ps, err := c.store.ListProjects(ctx)
 	if err != nil {
-		return store.Project{}, err
+		return domain.Project{}, err
 	}
 	for _, p := range ps {
 		if p.ParentID == parentID && p.Preview.Name == name {
 			return p, nil
 		}
 	}
-	return store.Project{}, fmt.Errorf("%w: preview %q", store.ErrNotFound, name)
+	return domain.Project{}, fmt.Errorf("%w: preview %q", domain.ErrNotFound, name)
 }
 
 // withoutActor runs work the caller was authorized for on the parent as the
@@ -262,10 +262,10 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 	}
 	var seeds map[string]string // database name -> parent's backup (or anonymized copy) ID
 	if opts.Seed {
-		if settings.SeedMode == store.SeedOff {
+		if settings.SeedMode == domain.SeedOff {
 			return PreviewView{}, fmt.Errorf("%w: %s's preview settings don't allow seeding previews with its data", ErrInvalid, parent.Name)
 		}
-		if settings.SeedMode == store.SeedAnonymized {
+		if settings.SeedMode == domain.SeedAnonymized {
 			seeds, err = c.seedAnonymized(ctx, parent, file, parentSvcs)
 		} else {
 			seeds, err = c.seedBackups(ctx, file, parentSvcs)
@@ -280,8 +280,8 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 	}
 
 	p, err := c.findPreview(ctx, parentID, name)
-	if errors.Is(err, store.ErrNotFound) {
-		p, err = c.store.CreateProject(ctx, store.Project{Name: projectName, ServerID: parent.ServerID, ParentID: parentID, Preview: store.Preview{Name: name}})
+	if errors.Is(err, domain.ErrNotFound) {
+		p, err = c.store.CreateProject(ctx, domain.Project{Name: projectName, ServerID: parent.ServerID, ParentID: parentID, Preview: domain.Preview{Name: name}})
 		if err == nil {
 			err = c.dockerFor(p.ServerID).EnsureNetwork(ctx, docker.ProjectNetwork(p.ID))
 		}
@@ -327,7 +327,7 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 	if ttl == 0 {
 		ttl = int(defaultPreviewTTL.Seconds())
 	}
-	p.Preview = store.Preview{Name: name, Branch: branch, Commit: opts.Commit, TTLSeconds: ttl, DeployedAt: time.Now().UTC()}
+	p.Preview = domain.Preview{Name: name, Branch: branch, Commit: opts.Commit, TTLSeconds: ttl, DeployedAt: time.Now().UTC()}
 	if err := c.store.SetProjectPreview(ctx, p.ID, p.Preview); err != nil {
 		return PreviewView{}, err
 	}
@@ -338,7 +338,7 @@ func (c *Core) DeployPreview(ctx context.Context, parentID, name string, opts Pr
 
 // seedBackups picks the latest successful backup of each parent database
 // the preview has, refusing when one has none.
-func (c *Core) seedBackups(ctx context.Context, f compose.File, parentSvcs []store.Service) (map[string]string, error) {
+func (c *Core) seedBackups(ctx context.Context, f compose.File, parentSvcs []domain.Service) (map[string]string, error) {
 	out := map[string]string{}
 	var none []string
 	for _, s := range parentSvcs {
@@ -364,7 +364,7 @@ func (c *Core) seedBackups(ctx context.Context, f compose.File, parentSvcs []sto
 // seedPreview restores the parent's backups into the databases this
 // deploy created (a later deploy keeps the preview's data), waiting for
 // each before the apps deploy.
-func (c *Core) seedPreview(ctx context.Context, p store.Project, seeds, created map[string]string) {
+func (c *Core) seedPreview(ctx context.Context, p domain.Project, seeds, created map[string]string) {
 	for name, backupID := range seeds {
 		id, ok := created[name]
 		if !ok {
@@ -390,10 +390,10 @@ func (c *Core) waitRestore(ctx context.Context, id, restoreID string) error {
 			return err
 		}
 		for _, r := range rs {
-			if r.ID != restoreID || r.Status == store.OpRunning {
+			if r.ID != restoreID || r.Status == domain.OpRunning {
 				continue
 			}
-			if r.Status != store.OpSucceeded {
+			if r.Status != domain.OpSucceeded {
 				return errors.New(r.Error)
 			}
 			return nil
@@ -410,7 +410,7 @@ func (c *Core) waitRestore(ctx context.Context, id, restoreID string) error {
 // previewSource is the parent as a compose file: its git file at branch
 // when it follows git, else exported. secretVars give the ${NAME} values a
 // preview may keep (basic auth hashes); branch is the one read.
-func (c *Core) previewSource(ctx context.Context, parent store.Project, branch string) (compose.File, map[string]string, string, error) {
+func (c *Core) previewSource(ctx context.Context, parent domain.Project, branch string) (compose.File, map[string]string, string, error) {
 	g, err := c.store.GetProjectGit(ctx, parent.ID)
 	if err == nil {
 		if branch != "" {
@@ -465,7 +465,7 @@ func (c *Core) previewSource(ctx context.Context, parent store.Project, branch s
 		}
 		return f, vars, g.Branch, nil
 	}
-	if !errors.Is(err, store.ErrNotFound) {
+	if !errors.Is(err, domain.ErrNotFound) {
 		return compose.File{}, nil, "", err
 	}
 	svcs, err := c.store.ListServices(ctx, parent.ID)
@@ -502,7 +502,7 @@ func (c *Core) previewSource(ctx context.Context, parent store.Project, branch s
 
 // previewSleep is how long a preview stays up unused: its settings' idle
 // time, or none when nothing would wake it.
-func (c *Core) previewSleep(ctx context.Context, p store.Project, f compose.File, settings store.PreviewSettings) (int, string) {
+func (c *Core) previewSleep(ctx context.Context, p domain.Project, f compose.File, settings domain.PreviewSettings) (int, string) {
 	routed := slices.ContainsFunc(slices.Collect(maps.Values(f.Services)), func(s compose.Service) bool { return s.X.Domain != "" })
 	if !routed {
 		return 0, ""
@@ -520,7 +520,7 @@ func (c *Core) previewSleep(ctx context.Context, p store.Project, f compose.File
 // domain, asleep when unused, no published ports, host access, uptime
 // checks or several replicas, fresh databases, and CI's images. It returns
 // what was left out.
-func previewFile(f *compose.File, parent store.Project, name string, settings store.PreviewSettings, tags map[string]string) ([]string, error) {
+func previewFile(f *compose.File, parent domain.Project, name string, settings domain.PreviewSettings, tags map[string]string) ([]string, error) {
 	f.Name, f.X = parent.Name+"-"+name, compose.FileExt{}
 	var warnings []string
 	// Services sharing a domain share the preview's: the one named first
@@ -536,7 +536,7 @@ func previewFile(f *compose.File, parent store.Project, name string, settings st
 	for _, svcName := range f.ServiceNames() {
 		s := f.Services[svcName]
 		if s.HostNetwork || s.DockerSocket != "" || (s.Runtime != nil && s.Runtime.HostAccess()) ||
-			slices.ContainsFunc(s.Volumes, store.Volume.HostAccess) {
+			slices.ContainsFunc(s.Volumes, domain.Volume.HostAccess) {
 			warnings = append(warnings, fmt.Sprintf("%s left out: previews don't get host access", svcName))
 			delete(f.Services, svcName)
 			continue
@@ -604,7 +604,7 @@ func previewFile(f *compose.File, parent store.Project, name string, settings st
 // variables, the secrets it lets previews inherit, then the preview
 // settings' and CI's values. A parent value pointing at a password manager
 // counts as a secret.
-func previewEnv(parent store.Project, settings store.PreviewSettings, ci map[string]string) (map[string]string, []string) {
+func previewEnv(parent domain.Project, settings domain.PreviewSettings, ci map[string]string) (map[string]string, []string) {
 	env := map[string]string{}
 	var secrets []string
 	for k, v := range parent.Env {
@@ -636,7 +636,7 @@ func previewEnv(parent store.Project, settings store.PreviewSettings, ci map[str
 // checkPreviewEnv refuses a preview that would miss a value (rather than
 // fall back to production's) or point at production: a value naming one of
 // the parent's domains, unless the preview settings set it on purpose.
-func checkPreviewEnv(f compose.File, env map[string]string, settings store.PreviewSettings, parentSvcs []store.Service) error {
+func checkPreviewEnv(f compose.File, env map[string]string, settings domain.PreviewSettings, parentSvcs []domain.Service) error {
 	var domains []string
 	for _, s := range parentSvcs {
 		if s.Domain != "" {

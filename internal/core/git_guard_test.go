@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // A member's fetch is refused when it connects to a private address,
@@ -18,12 +18,12 @@ func TestRepoDialGuard(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	defer srv.Close()
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
-	g := store.ProjectGit{RepoURL: srv.URL + "/r.git", Branch: "main", Path: "compose.yaml"}
-	member := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", Role: store.RoleMember})
+	g := domain.ProjectGit{RepoURL: srv.URL + "/r.git", Branch: "main", Path: "compose.yaml"}
+	member := WithActor(context.Background(), Actor{Kind: "user", Name: "alice", Role: domain.RoleMember})
 	if _, err := c.gitHead(member, g); !errors.Is(err, ErrForbidden) {
 		t.Errorf("member fetching from loopback: %v", err)
 	}
-	admin := WithActor(context.Background(), Actor{Kind: "user", Name: "root", Role: store.RoleAdmin})
+	admin := WithActor(context.Background(), Actor{Kind: "user", Name: "root", Role: domain.RoleAdmin})
 	if _, err := c.gitHead(admin, g); err == nil || errors.Is(err, ErrForbidden) {
 		t.Errorf("admin fetching from loopback reaches the server: %v", err)
 	}

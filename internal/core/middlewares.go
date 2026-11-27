@@ -11,7 +11,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -28,11 +28,11 @@ var (
 	headerNameRe    = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
 )
 
-// MiddlewaresInput sets an app's Traefik middlewares; see store.Middlewares.
+// MiddlewaresInput sets an app's Traefik middlewares; see domain.Middlewares.
 type MiddlewaresInput struct {
 	BasicAuth   []BasicAuthInput  `json:"basicAuth"`
 	IPAllowList []string          `json:"ipAllowList"`
-	RateLimit   *store.RateLimit  `json:"rateLimit"`
+	RateLimit   *domain.RateLimit `json:"rateLimit"`
 	Headers     map[string]string `json:"headers"`
 }
 
@@ -49,8 +49,8 @@ type BasicAuthInput struct {
 
 // mergeMiddlewares builds the stored middlewares from in, hashing new
 // passwords and keeping the ones left empty from old.
-func mergeMiddlewares(in MiddlewaresInput, old store.Middlewares) (store.Middlewares, error) {
-	m := store.Middlewares{RateLimit: in.RateLimit}
+func mergeMiddlewares(in MiddlewaresInput, old domain.Middlewares) (domain.Middlewares, error) {
+	m := domain.Middlewares{RateLimit: in.RateLimit}
 	if m.RateLimit != nil && m.RateLimit.Burst == 0 {
 		m.RateLimit.Burst = m.RateLimit.Average
 	}
@@ -66,32 +66,32 @@ func mergeMiddlewares(in MiddlewaresInput, old store.Middlewares) (store.Middlew
 		}
 	}
 	for _, u := range in.BasicAuth {
-		user := store.BasicAuthUser{Name: strings.TrimSpace(u.Name)}
+		user := domain.BasicAuthUser{Name: strings.TrimSpace(u.Name)}
 		pw := strings.TrimSpace(u.Password)
 		switch {
 		case u.Hash != "":
 			if _, err := bcrypt.Cost([]byte(u.Hash)); err != nil {
-				return store.Middlewares{}, fmt.Errorf("%w: basic auth user %q: not a bcrypt hash", ErrInvalid, user.Name)
+				return domain.Middlewares{}, fmt.Errorf("%w: basic auth user %q: not a bcrypt hash", ErrInvalid, user.Name)
 			}
 			user.Hash = u.Hash
 		case pw == "":
-			i := slices.IndexFunc(old.BasicAuth, func(o store.BasicAuthUser) bool { return o.Name == user.Name })
+			i := slices.IndexFunc(old.BasicAuth, func(o domain.BasicAuthUser) bool { return o.Name == user.Name })
 			if i < 0 {
-				return store.Middlewares{}, fmt.Errorf("%w: basic auth user %q needs a password", ErrInvalid, user.Name)
+				return domain.Middlewares{}, fmt.Errorf("%w: basic auth user %q needs a password", ErrInvalid, user.Name)
 			}
 			user.Hash, user.Ref = old.BasicAuth[i].Hash, old.BasicAuth[i].Ref
 		case soleRefRe.MatchString(pw):
 			if soleRefRe.FindStringSubmatch(pw)[4] == "" {
-				return store.Middlewares{}, fmt.Errorf("%w: basic auth user %q: only password manager references are allowed", ErrInvalid, user.Name)
+				return domain.Middlewares{}, fmt.Errorf("%w: basic auth user %q: only password manager references are allowed", ErrInvalid, user.Name)
 			}
 			user.Ref = pw
 		default:
 			if len(pw) < minPasswordLength || len(pw) > maxPasswordBytes {
-				return store.Middlewares{}, fmt.Errorf("%w: basic auth passwords must be %d to %d characters", ErrInvalid, minPasswordLength, maxPasswordBytes)
+				return domain.Middlewares{}, fmt.Errorf("%w: basic auth passwords must be %d to %d characters", ErrInvalid, minPasswordLength, maxPasswordBytes)
 			}
 			h, err := bcrypt.GenerateFromPassword([]byte(pw), basicAuthCost)
 			if err != nil {
-				return store.Middlewares{}, err
+				return domain.Middlewares{}, err
 			}
 			user.Hash = string(h)
 		}
@@ -101,7 +101,7 @@ func mergeMiddlewares(in MiddlewaresInput, old store.Middlewares) (store.Middlew
 }
 
 // validateMiddlewares checks what Traefik labels can't carry or would reject.
-func validateMiddlewares(m store.Middlewares) error {
+func validateMiddlewares(m domain.Middlewares) error {
 	if len(m.BasicAuth) > maxBasicAuthUsers {
 		return fmt.Errorf("%w: at most %d basic auth users", ErrInvalid, maxBasicAuthUsers)
 	}
@@ -143,7 +143,7 @@ func validateMiddlewares(m store.Middlewares) error {
 }
 
 // checkBasicAuthSchemes refuses references no password manager handles.
-func (c *Core) checkBasicAuthSchemes(ctx context.Context, m store.Middlewares) error {
+func (c *Core) checkBasicAuthSchemes(ctx context.Context, m domain.Middlewares) error {
 	for _, u := range m.BasicAuth {
 		if ref := basicAuthRef(u); ref != "" {
 			if err := c.checkSecretScheme(ctx, ref); err != nil {
@@ -155,7 +155,7 @@ func (c *Core) checkBasicAuthSchemes(ctx context.Context, m store.Middlewares) e
 }
 
 // basicAuthRef is the password manager reference inside u.Ref, if any.
-func basicAuthRef(u store.BasicAuthUser) string {
+func basicAuthRef(u domain.BasicAuthUser) string {
 	if m := soleRefRe.FindStringSubmatch(u.Ref); m != nil {
 		return m[4]
 	}
@@ -165,7 +165,7 @@ func basicAuthRef(u store.BasicAuthUser) string {
 // hashBasicAuth fetches the passwords of svc's reference users and hashes
 // them into svc, for the deployment snapshot replicas are created from.
 // It reports how many it fetched.
-func (c *Core) hashBasicAuth(ctx context.Context, svc *store.Service) (int, error) {
+func (c *Core) hashBasicAuth(ctx context.Context, svc *domain.Service) (int, error) {
 	var refs []string
 	for _, u := range svc.Middlewares.BasicAuth {
 		if ref := basicAuthRef(u); ref != "" {
@@ -200,7 +200,7 @@ func (c *Core) hashBasicAuth(ctx context.Context, svc *store.Service) (int, erro
 }
 
 // maskMiddlewares hides password hashes.
-func maskMiddlewares(m store.Middlewares) store.Middlewares {
+func maskMiddlewares(m domain.Middlewares) domain.Middlewares {
 	m.BasicAuth = slices.Clone(m.BasicAuth)
 	for i := range m.BasicAuth {
 		m.BasicAuth[i].Hash = ""
@@ -213,7 +213,7 @@ func maskMiddlewares(m store.Middlewares) store.Middlewares {
 // traefik.http.middlewares.<name>), in the order requests go through them.
 // behindProxy takes the client IP from X-Forwarded-For, where Cloudflare
 // puts it.
-func middlewareLabels(m store.Middlewares, behindProxy bool) []middleware {
+func middlewareLabels(m domain.Middlewares, behindProxy bool) []middleware {
 	var out []middleware
 	// First, so that refused requests get the headers too.
 	if len(m.Headers) > 0 {

@@ -16,8 +16,8 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
-	"github.com/kipit-labs/kipitiny/internal/store/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 )
 
 func TestDryRunWrapper(t *testing.T) {
@@ -65,11 +65,11 @@ func TestDryRunMode(t *testing.T) {
 	c := core.New(config.Config{DataDir: t.TempDir()}, st, dc, log)
 	srv := httptest.NewServer(api.New(c, log).Authenticated(Handler(c, "test")))
 	defer srv.Close()
-	p, err := st.CreateProject(ctx, store.Project{Name: "shop"})
+	p, err := st.CreateProject(ctx, domain.Project{Name: "shop"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	admin, _ := asUser(t, c, st, "admin", store.RoleAdmin)
+	admin, _ := asUser(t, c, st, "admin", domain.RoleAdmin)
 	tok, err := c.CreateAPIToken(admin, core.TokenInput{Name: "agent"})
 	if err != nil {
 		t.Fatal(err)

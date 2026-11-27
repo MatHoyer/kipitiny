@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // The MongoDB data browser runs mongosh scripts the manager writes; what
@@ -161,7 +161,7 @@ func (c *Core) MongoDocuments(ctx context.Context, id, database, collection stri
 	if err != nil {
 		return MongoDocs{}, err
 	}
-	if t.svc.Kind != store.ServiceKindMongoDB {
+	if t.svc.Kind != domain.ServiceKindMongoDB {
 		return MongoDocs{}, fmt.Errorf("%w: %s is not a mongodb database", ErrInvalid, t.svc.Name)
 	}
 	tables, err := t.mongoCollections(ctx)
@@ -169,7 +169,7 @@ func (c *Core) MongoDocuments(ctx context.Context, id, database, collection stri
 		return MongoDocs{}, err
 	}
 	if !slices.ContainsFunc(tables, func(tb PgTable) bool { return tb.Name == collection }) {
-		return MongoDocs{}, fmt.Errorf("collection %s.%s: %w", t.db, collection, store.ErrNotFound)
+		return MongoDocs{}, fmt.Errorf("collection %s.%s: %w", t.db, collection, domain.ErrNotFound)
 	}
 	if q.Limit <= 0 || q.Limit > DataPageMax {
 		q.Limit = DataPageMax

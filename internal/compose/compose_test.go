@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestRoundTrip(t *testing.T) {
@@ -20,9 +20,9 @@ func TestRoundTrip(t *testing.T) {
 			"web": {
 				Image:       "ghcr.io/me/shop:1.4.2",
 				Environment: map[string]string{"DATABASE_URL": "{{ db.db.URL }}", "API_KEY": "${WEB_API_KEY}", "PRICE": "$$5"},
-				Ports: []store.PublishedPort{{HostPort: 2525, ContainerPort: 25, Protocol: "tcp"}, {HostPort: 9000, ContainerPort: 9000, Protocol: "udp"},
+				Ports: []domain.PublishedPort{{HostPort: 2525, ContainerPort: 25, Protocol: "tcp"}, {HostPort: 9000, ContainerPort: 9000, Protocol: "udp"},
 					{HostIP: "127.0.0.1", HostPort: 5432, ContainerPort: 5432, Protocol: "tcp"}, {HostIP: "::1", HostPort: 6379, ContainerPort: 6379, Protocol: "tcp"}},
-				Volumes: []store.Volume{{Name: "uploads", Path: "/app/uploads"}, {Name: "config", Path: "/config", ReadOnly: true},
+				Volumes: []domain.Volume{{Name: "uploads", Path: "/app/uploads"}, {Name: "config", Path: "/config", ReadOnly: true},
 					{Name: "media", Path: "/media", External: "nas-media"}, {Name: "nfs", Path: "/nfs", DriverOpts: map[string]string{"type": "nfs", "o": "addr=10.0.0.5", "device": ":/export"}}},
 				Replicas:         2,
 				MemoryMB:         256,
@@ -42,11 +42,11 @@ func TestRoundTrip(t *testing.T) {
 			},
 			"worker": {
 				Image:       "ghcr.io/me/shop-worker:1.4.2",
-				Healthcheck: &store.Healthcheck{Test: []string{"CMD", "wget", "-qO-", "http://localhost:8080/healthz"}, IntervalSeconds: 30, StartPeriodSeconds: 90, Retries: 3},
-				Runtime: &store.Runtime{
+				Healthcheck: &domain.Healthcheck{Test: []string{"CMD", "wget", "-qO-", "http://localhost:8080/healthz"}, IntervalSeconds: 30, StartPeriodSeconds: 90, Retries: 3},
+				Runtime: &domain.Runtime{
 					Command: []string{"worker", "--queue", "a b"}, Entrypoint: []string{""}, User: "1000:1000", WorkingDir: "/app",
 					Labels: map[string]string{"com.example.team": "shop"}, Tmpfs: map[string]string{"/tmp": "size=64m", "/run": ""},
-					ShmSizeMB: 256, Ulimits: map[string]store.Ulimit{"nofile": {Soft: 1024, Hard: 4096}, "nproc": {Soft: 512, Hard: 512}},
+					ShmSizeMB: 256, Ulimits: map[string]domain.Ulimit{"nofile": {Soft: 1024, Hard: 4096}, "nproc": {Soft: 512, Hard: 512}},
 					Sysctls: map[string]string{"net.core.somaxconn": "1024"}, ReadOnly: true, Init: true, StopSignal: "SIGINT",
 					TTY: true, StdinOpen: true, ExtraHosts: []string{"host.docker.internal:host-gateway"},
 					CapAdd: []string{"NET_ADMIN"}, CapDrop: []string{"MKNOD"}, Devices: []string{"/dev/net/tun"}, Privileged: true,
@@ -114,10 +114,10 @@ volumes:
 	if web.Image != "app:latest" || web.MemoryMB != 1024 || web.Environment["FROM_PROJECT"] != "{{ project.FROM_PROJECT }}" || web.Environment["PLAIN"] != "1" {
 		t.Errorf("web = %+v", web)
 	}
-	if len(web.Ports) != 1 || web.Ports[0] != (store.PublishedPort{HostIP: "127.0.0.1", HostPort: 8080, ContainerPort: 80, Protocol: "tcp"}) {
+	if len(web.Ports) != 1 || web.Ports[0] != (domain.PublishedPort{HostIP: "127.0.0.1", HostPort: 8080, ContainerPort: 80, Protocol: "tcp"}) {
 		t.Errorf("ports = %+v", web.Ports)
 	}
-	if !slices.Equal(web.DependsOn, []store.Dependency{{Service: "db"}}) || web.Runtime != nil {
+	if !slices.Equal(web.DependsOn, []domain.Dependency{{Service: "db"}}) || web.Runtime != nil {
 		t.Errorf("depends_on = %v, runtime %v", web.DependsOn, web.Runtime)
 	}
 	db := f.Services["db"]
@@ -185,7 +185,7 @@ services:
 	if s.StopGraceSeconds != 90 || s.Replicas != 3 || s.MemoryMB != 2 || s.CPUs != 1.5 || s.X.Password != "${PW}" {
 		t.Errorf("service = %+v", s)
 	}
-	if s.Ports[0] != (store.PublishedPort{HostPort: 5353, ContainerPort: 53, Protocol: "udp"}) || !reflect.DeepEqual(s.Volumes[0], store.Volume{Name: "data", Path: "/data"}) {
+	if s.Ports[0] != (domain.PublishedPort{HostPort: 5353, ContainerPort: 53, Protocol: "udp"}) || !reflect.DeepEqual(s.Volumes[0], domain.Volume{Name: "data", Path: "/data"}) {
 		t.Errorf("ports/volumes = %+v %+v", s.Ports, s.Volumes)
 	}
 }
@@ -294,12 +294,12 @@ services:
 	if web.X.Port != 3000 || api.X.Port != 9090 {
 		t.Errorf("ports = %d, %d", web.X.Port, api.X.Port)
 	}
-	want := &store.Healthcheck{Test: []string{"CMD-SHELL", "wget -qO- http://localhost:3000/healthz || exit 1"},
+	want := &domain.Healthcheck{Test: []string{"CMD-SHELL", "wget -qO- http://localhost:3000/healthz || exit 1"},
 		IntervalSeconds: 30, TimeoutSeconds: 5, StartPeriodSeconds: 60, Retries: 3}
 	if !reflect.DeepEqual(web.Healthcheck, want) {
 		t.Errorf("healthcheck = %+v", web.Healthcheck)
 	}
-	if !reflect.DeepEqual(api.Healthcheck, &store.Healthcheck{Test: []string{"NONE"}}) {
+	if !reflect.DeepEqual(api.Healthcheck, &domain.Healthcheck{Test: []string{"NONE"}}) {
 		t.Errorf("disabled healthcheck = %+v", api.Healthcheck)
 	}
 	if !slices.Equal(web.VarEnv, []string{"API_KEY"}) || !slices.Equal(api.VarEnv, []string{"TOKEN"}) {
@@ -355,10 +355,10 @@ services:
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := &store.Runtime{
+	want := &domain.Runtime{
 		Command: []string{"celery", "-A", "shop app", "worker", "--loglevel=${LEVEL}"}, Entrypoint: []string{""},
 		Labels: map[string]string{"com.example.a": "1"}, Tmpfs: map[string]string{"/run": "", "/cache": "size=1000000"},
-		Ulimits: map[string]store.Ulimit{"nofile": {Soft: 65535, Hard: 65535}}, Sysctls: map[string]string{"net.core.somaxconn": "1024"},
+		Ulimits: map[string]domain.Ulimit{"nofile": {Soft: 65535, Hard: 65535}}, Sysctls: map[string]string{"net.core.somaxconn": "1024"},
 		ExtraHosts: []string{"db.local:10.0.0.2"},
 	}
 	if got := f.Services["web"].Runtime; !reflect.DeepEqual(got, want) {
@@ -406,12 +406,12 @@ volumes:
 		t.Fatal(err)
 	}
 	s := f.Services["web"]
-	want := []store.PublishedPort{{HostPort: 8000, ContainerPort: 9000, Protocol: "udp"}, {HostPort: 8001, ContainerPort: 9001, Protocol: "udp"},
+	want := []domain.PublishedPort{{HostPort: 8000, ContainerPort: 9000, Protocol: "udp"}, {HostPort: 8001, ContainerPort: 9001, Protocol: "udp"},
 		{HostPort: 8002, ContainerPort: 9002, Protocol: "udp"}, {HostIP: "::1", HostPort: 5432, ContainerPort: 5432, Protocol: "tcp"}}
 	if !slices.Equal(s.Ports, want) {
 		t.Errorf("ports = %+v", s.Ports)
 	}
-	wantVols := []store.Volume{{Name: "app-node-modules", Path: "/app/node_modules"}, {Name: "app-node-modules-2", Path: "/app/node-modules"},
+	wantVols := []domain.Volume{{Name: "app-node-modules", Path: "/app/node_modules"}, {Name: "app-node-modules-2", Path: "/app/node-modules"},
 		{Name: "cache", Path: "/cache", ReadOnly: true}, {Name: "shared", Path: "/shared", External: "shared"}}
 	if !reflect.DeepEqual(s.Volumes, wantVols) {
 		t.Errorf("volumes = %+v", s.Volumes)
@@ -422,7 +422,7 @@ volumes:
 }
 
 func TestFiles(t *testing.T) {
-	repo := map[string][]store.ServiceFile{
+	repo := map[string][]domain.ServiceFile{
 		"./nginx.conf": {{Content: []byte("server {}"), Mode: 0o644}},
 		"./conf":       {{Path: "a.yml", Content: []byte("a: 1")}, {Path: "sub/run.sh", Content: []byte("#!/bin/sh"), Mode: 0o755}},
 		"app.env":      {{Content: []byte("A=from-file\nB=from-file\n")}},
@@ -431,7 +431,7 @@ func TestFiles(t *testing.T) {
 	vars := Vars{
 		Lookup: func(n string) (string, bool) { return "pw-value", n == "DB_PW" },
 		Ref:    func(_, _, n string) string { return "{{ project." + n + " }}" },
-		Files: func(p string) ([]store.ServiceFile, error) {
+		Files: func(p string) ([]domain.ServiceFile, error) {
 			if f, ok := repo[p]; ok {
 				return slices.Clone(f), nil
 			}
@@ -549,9 +549,9 @@ services:
 `,
 		"common/app.conf": "x",
 	}
-	vars := Vars{Files: func(p string) ([]store.ServiceFile, error) {
+	vars := Vars{Files: func(p string) ([]domain.ServiceFile, error) {
 		if c, ok := repo[path.Clean(p)]; ok {
-			return []store.ServiceFile{{Content: []byte(c)}}, nil
+			return []domain.ServiceFile{{Content: []byte(c)}}, nil
 		}
 		return nil, fmt.Errorf("%s not found", p)
 	}}
@@ -637,7 +637,7 @@ services:
 		t.Fatal(err)
 	}
 	web := f.Services["web"]
-	if !slices.Equal(web.DependsOn, []store.Dependency{{Service: "api", Condition: "healthy"}, {Service: "migrate", Condition: "completed"}}) {
+	if !slices.Equal(web.DependsOn, []domain.Dependency{{Service: "api", Condition: "healthy"}, {Service: "migrate", Condition: "completed"}}) {
 		t.Errorf("web depends_on = %v", web.DependsOn)
 	}
 	if f.Services["migrate"].Runtime.Restart != "no" || f.Services["api"].Runtime.Restart != "on-failure:3" || f.Services["db"].Runtime != nil {
@@ -769,9 +769,9 @@ services:
 
 func TestDatabaseEnv(t *testing.T) {
 	repo := map[string]string{"./init.sql": "CREATE TABLE t();"}
-	vars := Vars{Files: func(p string) ([]store.ServiceFile, error) {
+	vars := Vars{Files: func(p string) ([]domain.ServiceFile, error) {
 		if c, ok := repo[p]; ok {
-			return []store.ServiceFile{{Content: []byte(c)}}, nil
+			return []domain.ServiceFile{{Content: []byte(c)}}, nil
 		}
 		return nil, fmt.Errorf("%s not found", p)
 	}}

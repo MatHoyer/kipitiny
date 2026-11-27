@@ -7,22 +7,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/storage"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 func TestSidecar(t *testing.T) {
 	ctx := context.Background()
 	identity, recipient, _ := newAgeKey()
 	created := time.Date(2026, 10, 1, 3, 0, 0, 0, time.UTC)
-	b := store.Backup{
+	b := domain.Backup{
 		ID: "b1", ServiceID: "s1", ProjectID: "p1", TargetID: "t1", ScheduleID: "sc1",
-		Kind: store.BackupKindPostgres, ProjectName: "shop", ServiceName: "db", ServiceKind: store.ServiceKindPostgres,
-		Database: "app", ObjectKey: "shop/db/20261001T030000Z-abcd.dump", Status: store.OpSucceeded,
+		Kind: domain.BackupKindPostgres, ProjectName: "shop", ServiceName: "db", ServiceKind: domain.ServiceKindPostgres,
+		Database: "app", ObjectKey: "shop/db/20261001T030000Z-abcd.dump", Status: domain.OpSucceeded,
 		SizeBytes: 42, SHA256: "ff", PGVersion: "17.2", Image: "postgres:17", Extensions: []string{"vector"},
-		CreatedAt: created, Verification: store.Verification{VerifyStatus: store.OpSucceeded},
+		CreatedAt: created, Verification: domain.Verification{VerifyStatus: domain.OpSucceeded},
 	}
-	for _, target := range []store.BackupTarget{{}, {AgeRecipient: recipient, AgeIdentity: identity}} {
+	for _, target := range []domain.BackupTarget{{}, {AgeRecipient: recipient, AgeIdentity: identity}} {
 		st := &storage.Local{Root: t.TempDir()}
 		if err := writeSidecar(ctx, st, target, b); err != nil {
 			t.Fatal(err)

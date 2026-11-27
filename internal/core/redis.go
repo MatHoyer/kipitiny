@@ -12,7 +12,7 @@ import (
 	"github.com/moby/moby/api/types/mount"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 const (
@@ -41,7 +41,7 @@ func RedisVolume(serviceID string) string {
 	return "kipitiny-redisdata-" + strings.ToLower(serviceID)
 }
 
-func validateRedis(s store.Service) error {
+func validateRedis(s domain.Service) error {
 	if s.MemoryMB < minRedisMemoryMB {
 		return fmt.Errorf("%w: redis needs at least %d MB of memory", ErrInvalid, minRedisMemoryMB)
 	}
@@ -51,7 +51,7 @@ func validateRedis(s store.Service) error {
 	return nil
 }
 
-func redisURL(db store.Service) string {
+func redisURL(db domain.Service) string {
 	u := url.URL{
 		Scheme: "redis",
 		User:   url.UserPassword("", db.Env[redisPassword]),
@@ -62,7 +62,7 @@ func redisURL(db store.Service) string {
 
 // redisField resolves {{ db.NAME.FIELD }} for a redis service; it has no
 // DATABASE.
-func redisField(db store.Service, field string) (string, bool) {
+func redisField(db domain.Service, field string) (string, bool) {
 	switch field {
 	case "URL":
 		return redisURL(db), true
@@ -81,7 +81,7 @@ func redisField(db store.Service, field string) (string, bool) {
 // redisArgs persists every write (AOF) and caps memory below the container
 // limit, so redis refuses writes instead of being OOM-killed (the rest is
 // headroom for the AOF rewrite fork and allocator overhead).
-func redisArgs(svc store.Service) []string {
+func redisArgs(svc domain.Service) []string {
 	args := []string{
 		"redis-server",
 		"--appendonly", "yes",
@@ -94,7 +94,7 @@ func redisArgs(svc store.Service) []string {
 	return args
 }
 
-func applyRedisSpec(cfg *container.Config, host *container.HostConfig, svc store.Service) {
+func applyRedisSpec(cfg *container.Config, host *container.HostConfig, svc domain.Service) {
 	cfg.Cmd = redisArgs(svc)
 	// redis-cli reads it: the healthcheck and the web terminal need no -a.
 	cfg.Env = append(cfg.Env, "REDISCLI_AUTH="+svc.Env[redisPassword])
@@ -112,5 +112,5 @@ func applyRedisSpec(cfg *container.Config, host *container.HostConfig, svc store
 		Source: RedisVolume(svc.ID),
 		Target: redisVolumeMount,
 	})
-	cfg.Labels[docker.LabelComponent] = string(store.ServiceKindRedis)
+	cfg.Labels[docker.LabelComponent] = string(domain.ServiceKindRedis)
 }

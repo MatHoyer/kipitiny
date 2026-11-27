@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestSetCleanupValidates(t *testing.T) {
@@ -63,21 +63,21 @@ func TestCleanupSettingsPersist(t *testing.T) {
 func TestTrimDeployments(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{DataDir: t.TempDir()})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := c.store.CreateService(ctx, store.Service{ProjectID: p.ID, ServerID: p.ServerID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1})
+	svc, err := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, ServerID: p.ServerID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var deps []store.Deployment // oldest first
+	var deps []domain.Deployment // oldest first
 	for i := range 6 {
-		status := store.DeploymentSucceeded
+		status := domain.DeploymentSucceeded
 		if i == 1 {
-			status = store.DeploymentRunning
+			status = domain.DeploymentRunning
 		}
-		d, err := c.store.CreateDeployment(ctx, store.Deployment{ServiceID: svc.ID, Status: status, Image: "nginx"})
+		d, err := c.store.CreateDeployment(ctx, domain.Deployment{ServiceID: svc.ID, Status: status, Image: "nginx"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,7 +94,7 @@ func TestTrimDeployments(t *testing.T) {
 	}
 	svc.CurrentDeploymentID = deps[0].ID
 
-	if n := c.trimDeployments(ctx, []store.Service{svc}, 2); n != 2 {
+	if n := c.trimDeployments(ctx, []domain.Service{svc}, 2); n != 2 {
 		t.Fatalf("trimmed %d, want 2", n)
 	}
 	left, err := c.store.ListDeployments(ctx, svc.ID, 0)

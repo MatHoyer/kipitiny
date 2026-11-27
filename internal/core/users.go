@@ -13,8 +13,8 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/mail"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // Users and invites: admins manage who signs in and what members may do.
@@ -24,7 +24,7 @@ const InviteTTL = 7 * 24 * time.Hour
 
 // UserView is a user with their grants, for admins.
 type UserView struct {
-	store.User
+	domain.User
 	// Grants maps project IDs to a member's permissions.
 	Grants      map[string][]string `json:"grants"`
 	TOTPEnabled bool                `json:"totpEnabled"`
@@ -33,7 +33,7 @@ type UserView struct {
 // UserAccess is what a user may do: a role, and for a member their
 // server features and permissions per project.
 type UserAccess struct {
-	Role     store.Role          `json:"role"`
+	Role     domain.Role         `json:"role"`
 	Features []string            `json:"features"`
 	Grants   map[string][]string `json:"grants"`
 }
@@ -41,11 +41,11 @@ type UserAccess struct {
 // normalized validates a and drops what doesn't apply: an admin has no
 // features or grants, a project without permissions no grant.
 func (c *Core) normalized(ctx context.Context, a UserAccess) (UserAccess, error) {
-	if a.Role != store.RoleAdmin && a.Role != store.RoleMember {
+	if a.Role != domain.RoleAdmin && a.Role != domain.RoleMember {
 		return UserAccess{}, fmt.Errorf("%w: role must be admin or member", ErrInvalid)
 	}
 	out := UserAccess{Role: a.Role, Features: []string{}, Grants: map[string][]string{}}
-	if a.Role == store.RoleAdmin {
+	if a.Role == domain.RoleAdmin {
 		return out, nil
 	}
 	for _, f := range a.Features {
@@ -77,7 +77,7 @@ func (c *Core) normalized(ctx context.Context, a UserAccess) (UserAccess, error)
 	return out, nil
 }
 
-func (c *Core) userView(ctx context.Context, u store.User) (UserView, error) {
+func (c *Core) userView(ctx context.Context, u domain.User) (UserView, error) {
 	v := UserView{User: u, Grants: map[string][]string{}, TOTPEnabled: u.TOTPSecret != ""}
 	gs, err := c.store.ListGrants(ctx, u.ID)
 	for _, g := range gs {
@@ -120,7 +120,7 @@ func (c *Core) SetUserAccess(ctx context.Context, id string, in UserAccess) (Use
 	if err != nil {
 		return UserView{}, err
 	}
-	if u.Role == store.RoleAdmin && in.Role != store.RoleAdmin {
+	if u.Role == domain.RoleAdmin && in.Role != domain.RoleAdmin {
 		if err := c.keepAnAdmin(ctx, id); err != nil {
 			return UserView{}, err
 		}
@@ -134,13 +134,13 @@ func (c *Core) SetUserAccess(ctx context.Context, id string, in UserAccess) (Use
 	}
 	for _, g := range old {
 		if _, kept := in.Grants[g.ProjectID]; !kept {
-			if err := c.store.SetGrant(ctx, store.ProjectGrant{UserID: id, ProjectID: g.ProjectID}); err != nil {
+			if err := c.store.SetGrant(ctx, domain.ProjectGrant{UserID: id, ProjectID: g.ProjectID}); err != nil {
 				return UserView{}, err
 			}
 		}
 	}
 	for projectID, perms := range in.Grants {
-		if err := c.store.SetGrant(ctx, store.ProjectGrant{UserID: id, ProjectID: projectID, Perms: perms}); err != nil {
+		if err := c.store.SetGrant(ctx, domain.ProjectGrant{UserID: id, ProjectID: projectID, Perms: perms}); err != nil {
 			return UserView{}, err
 		}
 	}
@@ -162,7 +162,7 @@ func (c *Core) DeleteUser(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if u.Role == store.RoleAdmin {
+	if u.Role == domain.RoleAdmin {
 		if err := c.keepAnAdmin(ctx, id); err != nil {
 			return err
 		}
@@ -176,7 +176,7 @@ func (c *Core) keepAnAdmin(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if !slices.ContainsFunc(us, func(u store.User) bool { return u.Role == store.RoleAdmin && u.ID != id }) {
+	if !slices.ContainsFunc(us, func(u domain.User) bool { return u.Role == domain.RoleAdmin && u.ID != id }) {
 		return fmt.Errorf("%w: this is the last admin; make another user admin first", ErrInvalid)
 	}
 	return nil
@@ -188,7 +188,7 @@ func (c *Core) MakeAdmin(ctx context.Context, username string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := c.store.UpdateUserAccess(ctx, u.ID, store.RoleAdmin, []string{}); err != nil {
+	if _, err := c.store.UpdateUserAccess(ctx, u.ID, domain.RoleAdmin, []string{}); err != nil {
 		return err
 	}
 	return c.store.DeleteUserSessions(ctx, u.ID) // sessions pick the role up on the next sign-in anyway
@@ -196,7 +196,7 @@ func (c *Core) MakeAdmin(ctx context.Context, username string) error {
 
 // NewInvite is an invite with its token, shown once.
 type NewInvite struct {
-	store.Invite
+	domain.Invite
 	Token string `json:"token"`
 	// EmailError is why the invite couldn't be emailed; the link still works.
 	EmailError string `json:"emailError,omitempty"`
@@ -238,7 +238,7 @@ func (c *Core) CreateInvite(ctx context.Context, in InviteInput) (NewInvite, err
 	}
 	a, _ := ActorFrom(ctx)
 	token := randomToken(32)
-	i, err := c.store.CreateInvite(ctx, store.Invite{TokenHash: hashToken(token), Role: access.Role, Features: access.Features,
+	i, err := c.store.CreateInvite(ctx, domain.Invite{TokenHash: hashToken(token), Role: access.Role, Features: access.Features,
 		Grants: access.Grants, CreatedBy: a.UserID, Email: in.Email, ExpiresAt: time.Now().Add(InviteTTL)})
 	if err != nil {
 		return NewInvite{}, err
@@ -254,7 +254,7 @@ func (c *Core) CreateInvite(ctx context.Context, in InviteInput) (NewInvite, err
 }
 
 // inviteBody is the email carrying an invite link.
-func (c *Core) inviteBody(ctx context.Context, i store.Invite, link string) mail.Body {
+func (c *Core) inviteBody(ctx context.Context, i domain.Invite, link string) mail.Body {
 	who := "An admin"
 	if u, err := c.store.GetUser(ctx, i.CreatedBy); err == nil {
 		who = u.Username
@@ -278,7 +278,7 @@ func (c *Core) inviteBody(ctx context.Context, i store.Invite, link string) mail
 		Button: &mail.Link{Label: "Accept the invite", URL: link},
 		Footer: c.mailFooter(ctx),
 	}
-	if i.Role == store.RoleAdmin {
+	if i.Role == domain.RoleAdmin {
 		b.Fields = []mail.Field{{Name: "Role", Value: "Admin"}}
 	} else {
 		var names []string
@@ -293,7 +293,7 @@ func (c *Core) inviteBody(ctx context.Context, i store.Invite, link string) mail
 }
 
 // ListInvites returns the invites not used yet; admins only.
-func (c *Core) ListInvites(ctx context.Context) ([]store.Invite, error) {
+func (c *Core) ListInvites(ctx context.Context) ([]domain.Invite, error) {
 	if err := RequireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -310,8 +310,8 @@ func (c *Core) DeleteInvite(ctx context.Context, id string) error {
 
 // InviteInfo is what someone opening an invite link sees.
 type InviteInfo struct {
-	Role      store.Role `json:"role"`
-	ExpiresAt time.Time  `json:"expiresAt"`
+	Role      domain.Role `json:"role"`
+	ExpiresAt time.Time   `json:"expiresAt"`
 	// Projects names the projects it grants.
 	Projects []string `json:"projects"`
 	// SSO lists the providers the account can sign in with instead of a
@@ -337,27 +337,27 @@ func (c *Core) Invite(ctx context.Context, token string) (InviteInfo, error) {
 }
 
 // AcceptInvite creates the invited account and returns a session for it.
-func (c *Core) AcceptInvite(ctx context.Context, token, username, password string) (store.User, string, error) {
+func (c *Core) AcceptInvite(ctx context.Context, token, username, password string) (domain.User, string, error) {
 	if c.SSORequired(ctx) {
-		return store.User{}, "", ErrSSORequired
+		return domain.User{}, "", ErrSSORequired
 	}
 	i, err := c.store.GetInviteByHash(ctx, hashToken(strings.TrimSpace(token)))
 	if err != nil {
-		return store.User{}, "", inviteErr(err)
+		return domain.User{}, "", inviteErr(err)
 	}
 	if err := c.checkNewUsername(ctx, username); err != nil {
-		return store.User{}, "", err
+		return domain.User{}, "", err
 	}
 	if err := validatePassword(password); err != nil {
-		return store.User{}, "", err
+		return domain.User{}, "", err
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return store.User{}, "", err
+		return domain.User{}, "", err
 	}
-	u, err := c.store.AcceptInvite(ctx, i.ID, store.User{Username: username, PasswordHash: string(hash)}, nil)
+	u, err := c.store.AcceptInvite(ctx, i.ID, domain.User{Username: username, PasswordHash: string(hash)}, nil)
 	if err != nil {
-		return store.User{}, "", inviteErr(err)
+		return domain.User{}, "", inviteErr(err)
 	}
 	session, err := c.newSession(ctx, u.ID)
 	return u, session, err
@@ -375,8 +375,8 @@ func (c *Core) checkNewUsername(ctx context.Context, username string) error {
 }
 
 func inviteErr(err error) error {
-	if errors.Is(err, store.ErrNotFound) {
-		return fmt.Errorf("%w: this invite link is invalid, used or expired; ask for a new one", store.ErrNotFound)
+	if errors.Is(err, domain.ErrNotFound) {
+		return fmt.Errorf("%w: this invite link is invalid, used or expired; ask for a new one", domain.ErrNotFound)
 	}
 	return err
 }

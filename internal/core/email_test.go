@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/mail"
 	"github.com/kipit-labs/kipitiny/internal/mail/mailtest"
-	"github.com/kipit-labs/kipitiny/internal/store"
 )
 
 // localProvider is an email provider sending to a fake server.
@@ -88,7 +88,7 @@ func TestEmailPasswordMasked(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
 	// Stored directly: signing in needs TLS, which the fake server lacks.
-	p, err := c.store.CreateEmailProvider(ctx, store.EmailProvider{Name: "x", Host: "smtp.example.com", Port: 587, Security: "starttls", Username: "u", Password: "secret", From: "ops@example.com"})
+	p, err := c.store.CreateEmailProvider(ctx, domain.EmailProvider{Name: "x", Host: "smtp.example.com", Port: 587, Security: "starttls", Username: "u", Password: "secret", From: "ops@example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestMigrateSMTPSetting(t *testing.T) {
 	if err := c.store.SetSetting(ctx, smtpSetting, `{"host":"smtp.resend.com","port":465,"security":"tls","username":"resend","password":"re_x","from":"ops@example.com"}`); err != nil {
 		t.Fatal(err)
 	}
-	ch, err := c.store.CreateNotificationChannel(ctx, store.NotificationChannel{Name: "ops", Kind: "email", Config: map[string]string{"to": "ops@example.com"}, Events: []string{}, Enabled: true})
+	ch, err := c.store.CreateNotificationChannel(ctx, domain.NotificationChannel{Name: "ops", Kind: "email", Config: map[string]string{"to": "ops@example.com"}, Events: []string{}, Enabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,12 +174,12 @@ func TestMigrateSMTPSetting(t *testing.T) {
 
 func TestInviteEmail(t *testing.T) {
 	c := newTestCore(t, config.Config{Domain: "kipitiny.example.com"})
-	admin, err := c.store.CreateUser(context.Background(), store.User{Username: "boss", PasswordHash: "x", Role: store.RoleAdmin})
+	admin, err := c.store.CreateUser(context.Background(), domain.User{Username: "boss", PasswordHash: "x", Role: domain.RoleAdmin})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := WithActor(context.Background(), Actor{Kind: "user", UserID: admin.ID, Role: store.RoleAdmin})
-	in := InviteInput{UserAccess: UserAccess{Role: store.RoleAdmin}, Email: "new@example.com", Link: "https://kipitiny.example.com/invite"}
+	ctx := WithActor(context.Background(), Actor{Kind: "user", UserID: admin.ID, Role: domain.RoleAdmin})
+	in := InviteInput{UserAccess: UserAccess{Role: domain.RoleAdmin}, Email: "new@example.com", Link: "https://kipitiny.example.com/invite"}
 	if _, err := c.CreateInvite(ctx, in); !errors.Is(err, ErrNoEmail) {
 		t.Fatalf("without SMTP: %v", err)
 	}

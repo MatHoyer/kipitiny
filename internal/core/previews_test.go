@@ -11,28 +11,28 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // previewParent is a project like most: an app on a domain using a
 // database, a worker, a game server and a secret.
-func previewParent(t *testing.T, c *Core) store.Project {
+func previewParent(t *testing.T, c *Core) domain.Project {
 	t.Helper()
 	ctx := context.Background()
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID,
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID,
 		Env:     map[string]string{"LOG_LEVEL": "info", "STRIPE_KEY": "sk_live", "SENTRY_DSN": "https://sentry", "MAIL": "{{ pass://Prod/mail/password }}"},
 		Secrets: []string{"SENTRY_DSN", "STRIPE_KEY"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range []store.Service{
-		{Name: "db", Kind: store.ServiceKindPostgres, Image: "postgres:17", Env: map[string]string{pgUser: "u", pgPassword: "prod-pass", pgDatabase: "app"},
+	for _, s := range []domain.Service{
+		{Name: "db", Kind: domain.ServiceKindPostgres, Image: "postgres:17", Env: map[string]string{pgUser: "u", pgPassword: "prod-pass", pgDatabase: "app"},
 			Anonymize: anonymize.Rules{"users": {Action: anonymize.Truncate}}},
-		{Name: "web", Kind: store.ServiceKindApp, Image: "ghcr.io/acme/web:v1", Domain: "shop.example.com", Port: 3000, Replicas: 3,
+		{Name: "web", Kind: domain.ServiceKindApp, Image: "ghcr.io/acme/web:v1", Domain: "shop.example.com", Port: 3000, Replicas: 3,
 			Env:     map[string]string{"DATABASE_URL": "{{ db.db.URL }}", "APP_URL": "{{ app.web.URL }}", "API_TOKEN": "t0ken", "STRIPE": "{{ project.STRIPE_KEY }}"},
 			Secrets: []string{"API_TOKEN"}},
-		{Name: "worker", Kind: store.ServiceKindApp, Image: "ghcr.io/acme/web:v1", Env: map[string]string{"LOG": "{{ project.LOG_LEVEL }}"}},
-		{Name: "game", Kind: store.ServiceKindApp, Image: "itzg/minecraft-server", PublishedPorts: []store.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}}},
+		{Name: "worker", Kind: domain.ServiceKindApp, Image: "ghcr.io/acme/web:v1", Env: map[string]string{"LOG": "{{ project.LOG_LEVEL }}"}},
+		{Name: "game", Kind: domain.ServiceKindApp, Image: "itzg/minecraft-server", PublishedPorts: []domain.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}}},
 	} {
 		s.ProjectID, s.ServerID = p.ID, p.ServerID
 		if s.Replicas == 0 {
@@ -56,7 +56,7 @@ func TestPreviewFile(t *testing.T) {
 	if len(vars) != 0 {
 		t.Errorf("no basic auth: no variable kept, got %v", vars)
 	}
-	settings := store.PreviewSettings{BaseDomain: "preview.example.com"}
+	settings := domain.PreviewSettings{BaseDomain: "preview.example.com"}
 	warnings, err := previewFile(&f, parent, "pr-12", settings, map[string]string{"web": "sha-abc", "worker": "sha256:" + strings.Repeat("a", 64)})
 	if err != nil {
 		t.Fatal(err)
@@ -90,7 +90,7 @@ func TestPreviewFile(t *testing.T) {
 func TestPreviewEnv(t *testing.T) {
 	c := newTestCore(t, config.Config{})
 	parent := previewParent(t, c)
-	settings := store.PreviewSettings{
+	settings := domain.PreviewSettings{
 		Env:     map[string]string{"STRIPE_KEY": "sk_test", "API_TOKEN": "preview-token", "LOG_LEVEL": "debug"},
 		Secrets: []string{"API_TOKEN", "STRIPE_KEY"},
 		Inherit: []string{"SENTRY_DSN"},
@@ -114,7 +114,7 @@ func TestCheckPreviewEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	settings := store.PreviewSettings{BaseDomain: "preview.example.com"}
+	settings := domain.PreviewSettings{BaseDomain: "preview.example.com"}
 	if _, err := previewFile(&f, parent, "pr-1", settings, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestPreviewSettings(t *testing.T) {
 
 	// Password manager references need the secret-providers feature.
 	useSecretProvider(t, c, &fakeProvider{})("")
-	member := WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: store.RoleMember,
+	member := WithActor(ctx, Actor{Kind: "user", Name: "alice", Role: domain.RoleMember,
 		Grants: map[string][]string{parent.ID: {string(PermView), string(PermSettings), string(PermEnv)}}})
 	ref := PreviewSettingsInput{Env: map[string]string{"KEY": "{{ fake://prod/key }}"}}
 	if _, err := c.SetPreviewSettings(member, parent.ID, ref); !errors.Is(err, ErrForbidden) {
@@ -207,10 +207,10 @@ func TestPreviewSeedBackups(t *testing.T) {
 	if _, err := c.seedBackups(ctx, f, svcs); err == nil || !strings.Contains(err.Error(), "no backup of db") {
 		t.Fatalf("no backup: %v", err)
 	}
-	i := slices.IndexFunc(svcs, func(s store.Service) bool { return s.Name == "db" })
-	for _, b := range []store.Backup{
-		{Kind: store.BackupKindPostgres, Status: store.OpSucceeded},
-		{Kind: store.BackupKindPostgres, Status: store.OpFailed},
+	i := slices.IndexFunc(svcs, func(s domain.Service) bool { return s.Name == "db" })
+	for _, b := range []domain.Backup{
+		{Kind: domain.BackupKindPostgres, Status: domain.OpSucceeded},
+		{Kind: domain.BackupKindPostgres, Status: domain.OpFailed},
 	} {
 		b.ServiceID, b.ProjectID, b.TargetID = svcs[i].ID, parent.ID, "local"
 		if _, err := c.store.CreateBackup(ctx, b); err != nil {
@@ -221,7 +221,7 @@ func TestPreviewSeedBackups(t *testing.T) {
 	if err != nil || len(seeds) != 1 || seeds["db"] == "" {
 		t.Fatalf("seeds %v, %v", seeds, err)
 	}
-	if b, _ := c.store.GetBackup(ctx, seeds["db"]); b.Status != store.OpSucceeded {
+	if b, _ := c.store.GetBackup(ctx, seeds["db"]); b.Status != domain.OpSucceeded {
 		t.Errorf("seeds from a failed backup")
 	}
 }
@@ -229,18 +229,18 @@ func TestPreviewSeedBackups(t *testing.T) {
 func TestPreviewOneReplica(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	parent, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	parent, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	pr, err := c.store.CreateProject(ctx, store.Project{Name: "shop-pr-1", ServerID: store.LocalServerID, ParentID: parent.ID})
+	pr, err := c.store.CreateProject(ctx, domain.Project{Name: "shop-pr-1", ServerID: domain.LocalServerID, ParentID: parent.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.CreateService(ctx, pr.ID, ServiceInput{Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 2}); !errors.Is(err, ErrInvalid) {
+	if _, err := c.CreateService(ctx, pr.ID, ServiceInput{Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 2}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("two replicas in a preview: %v", err)
 	}
-	v, err := c.CreateService(ctx, pr.ID, ServiceInput{Name: "web", Kind: store.ServiceKindApp, Image: "nginx"})
+	v, err := c.CreateService(ctx, pr.ID, ServiceInput{Name: "web", Kind: domain.ServiceKindApp, Image: "nginx"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ func TestPreviewOneReplica(t *testing.T) {
 	if _, err := c.UpdateService(ctx, v.ID, ServicePatch{Replicas: &two}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("scaled a preview's service: %v", err)
 	}
-	if _, err := c.CreateService(ctx, parent.ID, ServiceInput{Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 2}); err != nil {
+	if _, err := c.CreateService(ctx, parent.ID, ServiceInput{Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 2}); err != nil {
 		t.Fatalf("the parent scales: %v", err)
 	}
 }
@@ -256,7 +256,7 @@ func TestPreviewOneReplica(t *testing.T) {
 func TestPreviewOnly(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ services:
 		t.Fatal(err)
 	}
 	svcs, _ := c.store.ListServices(ctx, p.ID)
-	if len(svcs) != 2 || slices.ContainsFunc(svcs, func(s store.Service) bool { return s.Name == "mailpit" }) {
+	if len(svcs) != 2 || slices.ContainsFunc(svcs, func(s domain.Service) bool { return s.Name == "mailpit" }) {
 		t.Errorf("parent services = %v", svcs)
 	}
 	if !slices.ContainsFunc(a.plan.Warnings, func(w string) bool { return strings.Contains(w, "mailpit runs in previews only") }) {
@@ -286,7 +286,7 @@ services:
 	if err != nil {
 		t.Fatal(err)
 	}
-	warnings, err := previewFile(&f, p, "pr-1", store.PreviewSettings{BaseDomain: "preview.example.com"}, nil)
+	warnings, err := previewFile(&f, p, "pr-1", domain.PreviewSettings{BaseDomain: "preview.example.com"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func TestPreviewSourceBranchRefs(t *testing.T) {
 	parent := previewParent(t, c)
 	dir, commit := localRepo(t)
 	commit("services:\n  web:\n    image: nginx\n    environment:\n      LEAK: '{{ fake://Prod/billing/apikey }}'\n      PLAIN: plain\n")
-	if _, err := c.store.SaveProjectGit(ctx, store.ProjectGit{ProjectID: parent.ID, RepoURL: dir, Branch: "main", Path: "deploy/compose.yaml"}); err != nil {
+	if _, err := c.store.SaveProjectGit(ctx, domain.ProjectGit{ProjectID: parent.ID, RepoURL: dir, Branch: "main", Path: "deploy/compose.yaml"}); err != nil {
 		t.Fatal(err)
 	}
 	f, _, _, err := c.previewSource(ctx, parent, "")
@@ -323,7 +323,7 @@ func TestPreviewSourceBranchRefs(t *testing.T) {
 func TestPreviewOnlyStored(t *testing.T) {
 	ctx := context.Background()
 	c := newTestCore(t, config.Config{})
-	p, err := c.store.CreateProject(ctx, store.Project{Name: "shop", ServerID: store.LocalServerID})
+	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +341,7 @@ services:
 		t.Fatalf("plan = %+v", a.plan)
 	}
 	svcs, _ := c.store.ListServices(ctx, p.ID)
-	by := map[string]store.Service{}
+	by := map[string]domain.Service{}
 	for _, s := range svcs {
 		by[s.Name] = s
 	}
@@ -372,7 +372,7 @@ services:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := previewFile(&f, p, "pr-1", store.PreviewSettings{BaseDomain: "preview.example.com"}, nil); err != nil {
+	if _, err := previewFile(&f, p, "pr-1", domain.PreviewSettings{BaseDomain: "preview.example.com"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := f.Services["mailer"]; ok || f.Services["mailpit"].X.Preview != "" || f.Services["web"].Image != "a" {
@@ -389,7 +389,7 @@ services:
 		t.Errorf("back to both: %v %+v", err, v)
 	}
 
-	pr, err := c.store.CreateProject(ctx, store.Project{Name: "shop-pr-1", ServerID: store.LocalServerID, ParentID: p.ID})
+	pr, err := c.store.CreateProject(ctx, domain.Project{Name: "shop-pr-1", ServerID: domain.LocalServerID, ParentID: p.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

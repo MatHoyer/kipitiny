@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/kipit-labs/kipitiny/internal/compose"
-	"github.com/kipit-labs/kipitiny/internal/store"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/templates"
 )
 
@@ -27,17 +27,17 @@ type demoTemplate struct {
 // demoService is what the demo needs of a service the template creates.
 // DomainInput names the input its domain comes from.
 type demoService struct {
-	Name           string                `json:"name"`
-	Kind           string                `json:"kind"`
-	Image          string                `json:"image"`
-	Icon           string                `json:"icon,omitempty"`
-	Port           int                   `json:"port,omitempty"`
-	MemoryMB       int                   `json:"memoryMb,omitempty"`
-	PublishedPorts []store.PublishedPort `json:"publishedPorts,omitempty"`
-	Volumes        []store.Volume        `json:"volumes,omitempty"`
-	HostNetwork    bool                  `json:"hostNetwork,omitempty"`
-	DockerSocket   string                `json:"dockerSocket,omitempty"`
-	DomainInput    string                `json:"domainInput,omitempty"`
+	Name           string                 `json:"name"`
+	Kind           string                 `json:"kind"`
+	Image          string                 `json:"image"`
+	Icon           string                 `json:"icon,omitempty"`
+	Port           int                    `json:"port,omitempty"`
+	MemoryMB       int                    `json:"memoryMb,omitempty"`
+	PublishedPorts []domain.PublishedPort `json:"publishedPorts,omitempty"`
+	Volumes        []domain.Volume        `json:"volumes,omitempty"`
+	HostNetwork    bool                   `json:"hostNetwork,omitempty"`
+	DockerSocket   string                 `json:"dockerSocket,omitempty"`
+	DomainInput    string                 `json:"domainInput,omitempty"`
 }
 
 type demoCatalog struct {
@@ -63,7 +63,7 @@ func build() ([]byte, error) {
 			ds := demoService{Name: name, Kind: s.X.Kind, Image: untagged(s.Image), Icon: s.X.Icon, Port: s.X.Port, MemoryMB: s.MemoryMB,
 				PublishedPorts: s.Ports, Volumes: s.Volumes, HostNetwork: s.HostNetwork, DockerSocket: s.DockerSocket}
 			if ds.Kind == "" {
-				ds.Kind = string(store.ServiceKindApp)
+				ds.Kind = string(domain.ServiceKindApp)
 			}
 			if v, ok := compose.SoleVar(s.X.Domain); ok {
 				ds.DomainInput = v

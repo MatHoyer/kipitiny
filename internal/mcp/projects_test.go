@@ -17,8 +17,8 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/store"
-	"github.com/kipit-labs/kipitiny/internal/store/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 )
 
 // TestProjectTools covers projects, git links, renames, service actions and
@@ -36,20 +36,20 @@ func TestProjectTools(t *testing.T) {
 	srv := httptest.NewServer(api.New(c, log).Authenticated(Handler(c, "test")))
 	defer srv.Close()
 
-	shop, _ := st.CreateProject(ctx, store.Project{Name: "shop"})
-	if _, err := st.CreateProject(ctx, store.Project{Name: "site"}); err != nil {
+	shop, _ := st.CreateProject(ctx, domain.Project{Name: "shop"})
+	if _, err := st.CreateProject(ctx, domain.Project{Name: "site"}); err != nil {
 		t.Fatal(err)
 	}
-	web, err := st.CreateService(ctx, store.Service{ProjectID: shop.ID, Name: "web", Kind: store.ServiceKindApp, Image: "nginx", Replicas: 1})
+	web, err := st.CreateService(ctx, domain.Service{ProjectID: shop.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.SaveProjectGit(ctx, store.ProjectGit{ProjectID: shop.ID, RepoURL: "https://github.com/me/shop.git", Branch: "main",
+	if _, err := st.SaveProjectGit(ctx, domain.ProjectGit{ProjectID: shop.ID, RepoURL: "https://github.com/me/shop.git", Branch: "main",
 		Path: "compose.yaml", AutoSync: true, PollSeconds: 300, WebhookSecret: "hook-s3cret"}); err != nil {
 		t.Fatal(err)
 	}
 
-	owner, _ := asUser(t, c, st, "admin", store.RoleAdmin)
+	owner, _ := asUser(t, c, st, "admin", domain.RoleAdmin)
 	session := func(perms ...string) *mcp.ClientSession {
 		in := core.TokenInput{Name: "agent", Restricted: len(perms) > 0, Grants: map[string][]string{}}
 		ps, _ := st.ListProjects(ctx)
@@ -138,7 +138,7 @@ func TestProjectTools(t *testing.T) {
 	if out, isErr = call(read, "get_deployment_log", map[string]any{"service": "shop/web"}); !isErr || !strings.Contains(out, "no deployments") {
 		t.Errorf("get_deployment_log without deployments: %s", out)
 	}
-	dep, err := st.CreateDeployment(ctx, store.Deployment{ServiceID: web.ID, Image: "nginx", Status: store.DeploymentFailed})
+	dep, err := st.CreateDeployment(ctx, domain.Deployment{ServiceID: web.ID, Image: "nginx", Status: domain.DeploymentFailed})
 	if err != nil {
 		t.Fatal(err)
 	}
