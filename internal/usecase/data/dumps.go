@@ -111,7 +111,7 @@ func dumpServerVersion(ctx context.Context, dk *docker.Client, containerID strin
 // key names the restore, for its steps.
 func (c *Data) restoreDump(ctx context.Context, svc domain.Service, containerID string, st storage.Storage, target domain.BackupTarget, b domain.Backup, key string) error {
 	c.steps.Set(key, RestoreCheck)
-	if err := checkDump(ctx, st, target, b); err != nil {
+	if err := c.checkDump(ctx, st, target, b); err != nil {
 		return err
 	}
 	dk := c.mgr.DockerFor(svc.ServerID)
@@ -155,13 +155,13 @@ func (c *Data) restoreDump(ctx context.Context, svc domain.Service, containerID 
 }
 
 // checkDump reads a stored dump through: checksum, decryption and gzip.
-func checkDump(ctx context.Context, st storage.Storage, target domain.BackupTarget, b domain.Backup) error {
+func (c *Data) checkDump(ctx context.Context, st storage.Storage, target domain.BackupTarget, b domain.Backup) error {
 	rc, err := st.Get(ctx, b.ObjectKey)
 	if err != nil {
 		return fmt.Errorf("open backup: %w", err)
 	}
 	defer rc.Close()
-	return fromStorage(rc, target, b, func(r io.Reader) error {
+	return c.fromStorage(rc, target, b, func(r io.Reader) error {
 		zr, err := gzip.NewReader(r)
 		if err != nil {
 			return fmt.Errorf("read backup: %w", err)
@@ -183,7 +183,7 @@ func (c *Data) loadDump(ctx context.Context, dk *docker.Client, ct string, svc d
 		return fmt.Errorf("open backup: %w", err)
 	}
 	defer rc.Close()
-	return fromStorage(rc, target, b, func(r io.Reader) error {
+	return c.fromStorage(rc, target, b, func(r io.Reader) error {
 		if svc.Kind == domain.ServiceKindMongoDB {
 			cmd := []string{"mongorestore", "--quiet", "--archive", "--gzip", "--drop"}
 			for _, name := range mongoSkipped {

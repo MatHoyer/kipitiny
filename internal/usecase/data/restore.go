@@ -312,7 +312,7 @@ func pgLiteral(s string) string {
 // pgRestore streams a stored backup (decrypting if needed) into pg_restore
 // against database db, then verifies the checksum of the stored bytes.
 func (c *Data) pgRestore(ctx context.Context, dk *docker.Client, containerID, user, db string, rc io.Reader, target domain.BackupTarget, b domain.Backup) error {
-	return fromStorage(rc, target, b, func(dump io.Reader) error {
+	return c.fromStorage(rc, target, b, func(dump io.Reader) error {
 		err := dk.Exec(ctx, containerID, docker.ExecOptions{
 			Cmd: []string{
 				"pg_restore", "-U", user, "-d", db,
@@ -329,13 +329,13 @@ func (c *Data) pgRestore(ctx context.Context, dk *docker.Client, containerID, us
 
 // fromStorage feeds a stored backup (decrypted if needed) to consume, then
 // checks the checksum of the stored bytes.
-func fromStorage(rc io.Reader, target domain.BackupTarget, b domain.Backup, consume func(io.Reader) error) error {
+func (c *Data) fromStorage(rc io.Reader, target domain.BackupTarget, b domain.Backup, consume func(io.Reader) error) error {
 	sum := &hashCounter{h: sha256.New()}
 	stored := io.TeeReader(rc, sum)
 	content := stored
 	if b.Encrypted {
 		var err error
-		if content, err = identity.DecryptFrom(stored, target.AgeIdentity); err != nil {
+		if content, err = c.decryptFrom(stored, target.AgeIdentity); err != nil {
 			return err
 		}
 	}

@@ -9,8 +9,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"filippo.io/age"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/storage"
 )
@@ -130,9 +128,9 @@ func (c *Data) EncryptBackupTarget(ctx context.Context, id, ageIdentity string) 
 func (c *Data) targetKey(ctx context.Context, t domain.BackupTarget, ageIdentity string) (string, string, error) {
 	ageIdentity = strings.TrimSpace(ageIdentity)
 	if ageIdentity == "" {
-		return identity.NewAgeKey()
+		return c.crypt.NewKey()
 	}
-	id, err := age.ParseX25519Identity(ageIdentity)
+	canonical, recipient, err := c.crypt.ParseIdentity(ageIdentity)
 	if err != nil {
 		return "", "", fmt.Errorf("%w: not an age key (AGE-SECRET-KEY-1…): %v", ErrInvalid, err)
 	}
@@ -154,14 +152,14 @@ func (c *Data) targetKey(ctx context.Context, t domain.BackupTarget, ageIdentity
 			return "", "", fmt.Errorf("%w: cannot read %s to check the key: %v", ErrInvalid, obj.Key, err)
 		}
 		// Decrypt unwraps the file key from the header: nothing more is read.
-		_, err = age.Decrypt(rc, id)
+		_, err = c.crypt.Decrypt(rc, canonical)
 		rc.Close()
 		if err != nil {
 			return "", "", fmt.Errorf("%w: this key doesn't open %s, already on this storage: %v", ErrInvalid, obj.Key, err)
 		}
 		break
 	}
-	return id.String(), id.Recipient().String(), nil
+	return canonical, recipient, nil
 }
 
 type TargetKey struct {

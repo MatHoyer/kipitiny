@@ -92,7 +92,7 @@ func (c *Data) ScanBackupTarget(ctx context.Context, id string) (ScanResult, err
 				Error: "encrypted: encrypt this storage with the key of the manager that made it first"})
 			continue
 		}
-		b, err := readSidecar(ctx, st, key, target.AgeIdentity)
+		b, err := c.readSidecar(ctx, st, key, target.AgeIdentity)
 		if err == nil && b.Status != domain.OpSucceeded {
 			err = fmt.Errorf("backup did not succeed")
 		}

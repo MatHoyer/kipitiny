@@ -6,8 +6,8 @@ Design doc: `docs/design.md` — read before architectural changes. Roadmap in �
 - Manager is ONE process: no Postgres/Redis/worker containers for its own state.
 - RAM budget matters: no Node at runtime, no heavy deps.
 - Layers, dependencies pointing inward (kipitrek's layout, enforced by depguard in `.golangci.yml`):
-  `internal/domain` (entities, repository interfaces, shared errors; standard library only) ←
-  `internal/usecase/<area>` (the logic) ← `internal/infrastructure/<adapter>` (SQLite now) and the delivery
+  `internal/domain` (entities, repository interfaces, the other ports such as `Encryption`, shared errors; standard library only) ←
+  `internal/usecase/<area>` (the logic) ← `internal/infrastructure/<adapter>` (SQLite, age) and the delivery
   (`internal/api` REST, `internal/mcp` tools). Wiring only in `cmd/kipitiny`. Handlers/MCP never touch SQL or Docker
   directly. `internal/core` is the wiring and lifecycle around the areas: it embeds each area's struct
   (`*identity.Identity`, `*network.Network`, `*monitoring.Monitoring`, `*data.Data`, `*deploy.Deployer`,

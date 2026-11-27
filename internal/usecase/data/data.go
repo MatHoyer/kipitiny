@@ -61,6 +61,8 @@ type Data struct {
 	// cfg is the manager's configuration, shared with core.
 	cfg   *config.Config
 	store domain.Store
+	// crypt seals backups for targets with a key.
+	crypt domain.Encryption
 	mgr   Manager
 	log   *slog.Logger
 	// bg ends when the manager stops: scheduled backups run under it.
@@ -78,6 +80,6 @@ type Data struct {
 }
 
 // New builds the data use cases; bg is the manager's background context.
-func New(bg context.Context, cfg *config.Config, store domain.Store, steps *progress.Steps, mgr Manager, log *slog.Logger) *Data {
-	return &Data{cfg: cfg, store: store, mgr: mgr, log: log, bg: bg, steps: steps, verifySem: make(chan struct{}, 1)}
+func New(bg context.Context, cfg *config.Config, store domain.Store, crypt domain.Encryption, steps *progress.Steps, mgr Manager, log *slog.Logger) *Data {
+	return &Data{cfg: cfg, store: store, crypt: crypt, mgr: mgr, log: log, bg: bg, steps: steps, verifySem: make(chan struct{}, 1)}
 }

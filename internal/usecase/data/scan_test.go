@@ -8,23 +8,24 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
 	"github.com/kipit-labs/kipitiny/internal/storage"
-	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
 func TestScanBackupTarget(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir() // the storage both managers use
-	ageIdentity, recipient, _ := identity.NewAgeKey()
+	ageIdentity, recipient, _ := age.Encryption{}.NewKey()
 	target := domain.BackupTarget{AgeRecipient: recipient, AgeIdentity: ageIdentity}
 	st := &storage.Local{Root: dir + "/backups"}
 	created := time.Date(2026, 9, 30, 3, 0, 0, 0, time.UTC)
 
 	// What the old manager left: a backup with its record per case.
+	old := newTestData(t, config.Config{DataDir: t.TempDir()}, nil)
 	put := func(b domain.Backup) {
 		t.Helper()
 		var sealed strings.Builder
-		w, _ := identity.EncryptTo(&sealed, recipient)
+		w, _ := age.Encryption{}.Encrypt(&sealed, recipient)
 		w.Write([]byte("dump"))
 		w.Close()
 		b.Status, b.Encrypted, b.CreatedAt = domain.OpSucceeded, true, created
@@ -34,7 +35,7 @@ func TestScanBackupTarget(t *testing.T) {
 		if err := st.Put(ctx, b.ObjectKey, strings.NewReader(sealed.String())); err != nil {
 			t.Fatal(err)
 		}
-		if err := writeSidecar(ctx, st, target, b); err != nil {
+		if err := old.writeSidecar(ctx, st, target, b); err != nil {
 			t.Fatal(err)
 		}
 	}

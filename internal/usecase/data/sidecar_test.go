@@ -7,14 +7,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
 	"github.com/kipit-labs/kipitiny/internal/storage"
-	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
 func TestSidecar(t *testing.T) {
 	ctx := context.Background()
-	ageIdentity, recipient, _ := identity.NewAgeKey()
+	c := newTestData(t, config.Config{DataDir: t.TempDir()}, nil)
+	ageIdentity, recipient, _ := age.Encryption{}.NewKey()
 	created := time.Date(2026, 10, 1, 3, 0, 0, 0, time.UTC)
 	b := domain.Backup{
 		ID: "b1", ServiceID: "s1", ProjectID: "p1", TargetID: "t1", ScheduleID: "sc1",
@@ -25,7 +27,7 @@ func TestSidecar(t *testing.T) {
 	}
 	for _, target := range []domain.BackupTarget{{}, {AgeRecipient: recipient, AgeIdentity: ageIdentity}} {
 		st := &storage.Local{Root: t.TempDir()}
-		if err := writeSidecar(ctx, st, target, b); err != nil {
+		if err := c.writeSidecar(ctx, st, target, b); err != nil {
 			t.Fatal(err)
 		}
 		rc, _ := st.Get(ctx, b.ObjectKey+".json")
@@ -35,7 +37,7 @@ func TestSidecar(t *testing.T) {
 			t.Errorf("encrypted %v, stored %.40q", target.Encrypted(), raw)
 		}
 
-		got, err := readSidecar(ctx, st, b.ObjectKey+".json", ageIdentity)
+		got, err := c.readSidecar(ctx, st, b.ObjectKey+".json", ageIdentity)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -47,8 +49,8 @@ func TestSidecar(t *testing.T) {
 			t.Errorf("record: %+v", got)
 		}
 		if target.Encrypted() {
-			other, _, _ := identity.NewAgeKey()
-			if _, err := readSidecar(ctx, st, b.ObjectKey+".json", other); err == nil {
+			other, _, _ := age.Encryption{}.NewKey()
+			if _, err := c.readSidecar(ctx, st, b.ObjectKey+".json", other); err == nil {
 				t.Error("read with the wrong key")
 			}
 		}
