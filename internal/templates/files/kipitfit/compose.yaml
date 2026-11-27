@@ -1,0 +1,51 @@
+# kipitfit: a workout tracker, installed on the phone as a PWA. One binary,
+# its SQLite database in a volume.
+x-template:
+  title: kipitfit
+  description: Workout tracker. Plan routines, log every set at the gym with a rest timer, see your records and progress.
+  website: https://github.com/kipit-labs/kipitfit
+  docs: https://github.com/kipit-labs/kipitfit#configuration
+  icon: kipitfit
+  category: sport
+  tags: [workout, gym, fitness, training, hevy, kipit labs]
+  notes: |
+    Open the app and create the admin account with the setup token you give here. Invite people from **Me → Invites**: each invite is a link that works once, for 7 days.
+
+    - On the phone, add it to the home screen to install it.
+    - Accounts and workouts are in `kipitfit.db` in the `data` volume: browse it from the **Data** tab, back it up from the **Backups** tab.
+  logo:
+    label: kipitfit
+    color: "#3DD6B0"
+    images: [kipitfit]
+  inputs:
+    - name: DOMAIN
+      label: Domain
+      type: domain
+      required: true
+      placeholder: fit.example.com
+    - name: SETUP_TOKEN
+      label: Setup token
+      type: secret
+      required: true
+      help: Asked once, to create the first admin account.
+name: kipitfit
+services:
+  app:
+    image: ghcr.io/kipit-labs/kipitfit:0.3.0
+    expose: ["8080"]
+    environment:
+      KIPITFIT_APP_URL: https://${DOMAIN}
+      KIPITFIT_COOKIE_SECURE: "true"
+      KIPITFIT_SETUP_TOKEN: ${SETUP_TOKEN}
+      # Traefik, on a Docker network, sets X-Forwarded-For.
+      KIPITFIT_REAL_IP_HEADER: X-Forwarded-For
+      KIPITFIT_TRUSTED_PROXIES: 172.16.0.0/12,192.168.0.0/16,10.0.0.0/8
+    volumes:
+      - data:/data
+    x-kipitiny:
+      domain: ${DOMAIN}
+      icon: kipitfit
+      health_path: /api/health
+      secrets: [KIPITFIT_SETUP_TOKEN]
+volumes:
+  data: {}
