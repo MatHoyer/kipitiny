@@ -416,6 +416,10 @@ func containerFilesTest(t *testing.T, kind store.ServiceKind, image string, cmd 
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Pulled first: a fresh daemon (CI's) has no image yet.
+	if err := dk.EnsureImage(ctx, image, "", ""); err != nil {
+		t.Fatal(err)
+	}
 	id, err := dk.Run(ctx, client.ContainerCreateOptions{
 		Name: "kipitiny-test-" + strings.ToLower(svc.ID),
 		Config: &container.Config{Image: image, Cmd: cmd, User: "1000",
