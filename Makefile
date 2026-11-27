@@ -57,10 +57,13 @@ test: ui-stub
 # of DOCKER_HOST, else the local socket. Its reconciler removes kipitiny containers it doesn't know, so outside CI the
 # daemon must have none (the Playwright container itself runs on the local daemon): give it a throwaway one (docker run -d --privileged -p 127.0.0.1:2375:2375 docker:dind
 # --tls=false, then DOCKER_HOST=tcp://127.0.0.1:2375). ARGS= passes options, e.g. ARGS="--project=iphone deploy".
+# The browsers get a network namespace of their own, like a user's on another machine: Chromium aborts the requests in
+# flight (ERR_NETWORK_CHANGED) when the daemon adds a bridge next to it, as creating a project does. Host networking
+# only to reach a DOCKER_HOST on the loopback, a dind whose bridges stay in its own namespace.
 e2e: build
 	@test -n "$$CI" || test -z "$$(docker ps -aq --filter label=kipitiny.managed)" || \
 		(echo "make e2e: this Docker daemon runs kipitiny containers the tests would remove; set DOCKER_HOST to a throwaway one" && exit 1)
-	env -u DOCKER_HOST docker run --rm --network host --ipc host -u $$(id -u):$$(id -g) -e HOME=/tmp -e CI \
+	env -u DOCKER_HOST docker run --rm $(if $(DOCKER_HOST),--network host) --ipc host -u $$(id -u):$$(id -g) -e HOME=/tmp -e CI \
 		$(if $(DOCKER_HOST),-e DOCKER_HOST=$(DOCKER_HOST),-v /var/run/docker.sock:/var/run/docker.sock --group-add $$(stat -c %g /var/run/docker.sock)) \
 		-v $(CURDIR):$(CURDIR) -w $(CURDIR)/web mcr.microsoft.com/playwright:v$(PLAYWRIGHT_VERSION)-noble \
 		node_modules/.bin/playwright test $(ARGS)
