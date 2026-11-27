@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"strings"
 
@@ -56,7 +57,11 @@ func (c *Core) InstallTemplate(ctx context.Context, id string, in TemplateInstal
 	} else if err := checkFeature(ctx, FeatureCreateProjects); err != nil {
 		return TemplateResult{}, err
 	}
-	env, err := t.Render(in.Values, randomToken)
+	env, err := t.Render(in.Values, func(n int) []byte {
+		b := make([]byte, n)
+		_, _ = rand.Read(b) // never fails since Go 1.24
+		return b
+	})
 	if err != nil {
 		return TemplateResult{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}

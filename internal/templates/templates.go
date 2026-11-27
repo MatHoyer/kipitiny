@@ -8,6 +8,8 @@ package templates
 
 import (
 	"embed"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -64,8 +66,10 @@ type Input struct {
 	Default     string   `json:"default,omitempty"`
 	Required    bool     `json:"required,omitempty"`
 	// Generate, when set, is the number of random bytes of a value the
-	// manager generates; such an input isn't asked.
-	Generate int `json:"generate,omitempty"`
+	// manager generates; such an input isn't asked. They're written as
+	// base64url without padding, or as hex with Hex.
+	Generate int  `json:"generate,omitempty"`
+	Hex      bool `json:"hex,omitempty" yaml:"hex"`
 }
 
 // Logo is a service logo a template brings: the UI shows it for services
@@ -256,6 +260,8 @@ func checkInputs(inputs []Input) error {
 			return fmt.Errorf("input %s: generate is a number of bytes, 1 to 64", in.Name)
 		case in.Generate == 0 && in.Label == "":
 			return fmt.Errorf("input %s needs a label", in.Name)
+		case in.Hex && in.Generate == 0:
+			return fmt.Errorf("input %s: hex goes with generate", in.Name)
 		}
 		seen[in.Name] = true
 		if (in.Type == "select") != (len(in.Options) > 0) {
@@ -304,15 +310,19 @@ func checkSVG(svg []byte) error {
 }
 
 // Render checks the user's values against the inputs and returns the .env
-// the file is applied with. gen makes a random value of n bytes for the
-// generated inputs. Every input is in the .env, unset ones as "", so none
+// the file is applied with. gen makes n random bytes for the generated
+// inputs. Every input is in the .env, unset ones as "", so none
 // becomes a project variable reference.
-func (t Template) Render(values map[string]string, gen func(n int) string) (map[string]string, error) {
+func (t Template) Render(values map[string]string, gen func(n int) []byte) (map[string]string, error) {
 	env := map[string]string{}
 	var errs []string
 	for _, in := range t.Inputs {
 		if in.Generate > 0 {
-			env[in.Name] = gen(in.Generate)
+			if b := gen(in.Generate); in.Hex {
+				env[in.Name] = hex.EncodeToString(b)
+			} else {
+				env[in.Name] = base64.RawURLEncoding.EncodeToString(b)
+			}
 			continue
 		}
 		v := strings.TrimSpace(values[in.Name])

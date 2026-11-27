@@ -504,7 +504,7 @@
       "website": "https://github.com/kipit-labs/kipitfit",
       "docs": "https://github.com/kipit-labs/kipitfit#configuration",
       "icon": "kipitfit",
-      "notes": "Open the app and create the admin account with the setup token you give here. Invite people from **Me → Invites**: each invite is a link that works once, for 7 days.\n\n- On the phone, add it to the home screen to install it.\n- Accounts and workouts are in `kipitfit.db` in the `data` volume: browse it from the **Data** tab, back it up from the **Backups** tab.",
+      "notes": "Open the app and create the admin account with the setup token you give here. Invite people from **Me → Invites**: each invite is a link that works once, for 7 days.\n\n- On the phone, add it to the home screen to install it.\n- Accounts and workouts are in `kipitfit.db` in the `data` volume: browse it from the **Data** tab, back it up from the **Backups** tab.\n- Exercise pictures come from a pack, imported once into the `s3` service (a [Garage](https://garagehq.deuxfleurs.fr) bucket only the app reaches). The app's image has no shell, so run it from the server's terminal (**Settings › Servers**): `docker exec $(docker ps -q -f name=^kipitfit-app-1-) /kipitfit pack import repdb-free`, with your project's name in place of `kipitfit` if you changed it. Running it again skips the pictures already there.\n- Back up the `garage-meta` and `garage-data` volumes of `s3` too.",
       "category": "sport",
       "tags": [
         "workout",
@@ -528,6 +528,27 @@
           "type": "secret",
           "help": "Asked once, to create the first admin account.",
           "required": true
+        },
+        {
+          "name": "RPC_SECRET",
+          "label": "",
+          "type": "secret",
+          "generate": 32,
+          "hex": true
+        },
+        {
+          "name": "S3_KEY_ID",
+          "label": "",
+          "type": "secret",
+          "generate": 16,
+          "hex": true
+        },
+        {
+          "name": "S3_SECRET",
+          "label": "",
+          "type": "secret",
+          "generate": 32,
+          "hex": true
         }
       ],
       "project": "kipitfit",
@@ -546,6 +567,22 @@
             }
           ],
           "domainInput": "DOMAIN"
+        },
+        {
+          "name": "s3",
+          "kind": "app",
+          "image": "dxflrs/garage",
+          "port": 3900,
+          "volumes": [
+            {
+              "name": "garage-meta",
+              "path": "/var/lib/garage/meta"
+            },
+            {
+              "name": "garage-data",
+              "path": "/var/lib/garage/data"
+            }
+          ]
         }
       ]
     },
