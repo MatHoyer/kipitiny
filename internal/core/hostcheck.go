@@ -411,11 +411,11 @@ func (c *Core) checkSecurity(ctx context.Context, sv domain.Server) SecurityRepo
 	}
 	link := "/servers/" + sv.ID
 	if r.SecurityUpdates > 0 && prev.SecurityUpdates == 0 {
-		c.notify(notify.Event{Type: EventServerUpdates, Level: notify.Warning, Title: sv.Name + " has security updates",
+		c.Notify(notify.Event{Type: domain.EventServerUpdates, Level: notify.Warning, Title: sv.Name + " has security updates",
 			Message: fmt.Sprintf("%d security updates are pending.", r.SecurityUpdates), Fields: []notify.Field{{Name: "Server", Value: sv.Name}}}, link, "")
 	}
 	if r.Reboot && !prev.Reboot {
-		c.notify(notify.Event{Type: EventServerReboot, Level: notify.Warning, Title: sv.Name + " needs a reboot",
+		c.Notify(notify.Event{Type: domain.EventServerReboot, Level: notify.Warning, Title: sv.Name + " needs a reboot",
 			Message: "Installed updates take effect after a reboot.", Fields: []notify.Field{{Name: "Server", Value: sv.Name}}}, link, "")
 	}
 	return r

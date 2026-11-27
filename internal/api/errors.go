@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
 // serviceErrors takes status, q, sort, limit and offset.
@@ -12,7 +12,7 @@ func (a *API) serviceErrors(w http.ResponseWriter, r *http.Request) {
 	v := r.URL.Query()
 	limit, _ := strconv.Atoi(v.Get("limit"))
 	offset, _ := strconv.Atoi(v.Get("offset"))
-	res, err := a.core.ServiceErrors(r.Context(), r.PathValue("id"), core.ErrorsQuery{
+	res, err := a.core.ServiceErrors(r.Context(), r.PathValue("id"), monitoring.ErrorsQuery{
 		Status: v.Get("status"), Search: v.Get("q"), Sort: v.Get("sort"), Limit: limit, Offset: offset,
 	})
 	if err != nil {

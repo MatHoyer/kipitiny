@@ -167,7 +167,7 @@ func (c *Core) finishRestore(ctx context.Context, svc domain.Service, target dom
 	}
 
 	e := notify.Event{
-		Type:    EventRestoreSucceeded,
+		Type:    domain.EventRestoreSucceeded,
 		Level:   notify.Success,
 		Title:   fmt.Sprintf("%s/%s restored", b.ProjectName, svc.Name),
 		Message: fmt.Sprintf("%s the backup of %s.", done, b.CreatedAt.UTC().Format("2006-01-02 15:04 UTC")),
@@ -178,9 +178,9 @@ func (c *Core) finishRestore(ctx context.Context, svc domain.Service, target dom
 		},
 	}
 	if status == domain.OpFailed {
-		e.Type, e.Level, e.Title, e.Message = EventRestoreFailed, notify.Error, fmt.Sprintf("%s/%s restore failed", b.ProjectName, svc.Name), msg+"\n"+failed
+		e.Type, e.Level, e.Title, e.Message = domain.EventRestoreFailed, notify.Error, fmt.Sprintf("%s/%s restore failed", b.ProjectName, svc.Name), msg+"\n"+failed
 	}
-	c.notify(e, "/services/"+svc.ID, "")
+	c.Notify(e, "/services/"+svc.ID, "")
 }
 
 // restore loads the dump into a scratch database and swaps it in by rename,

@@ -52,3 +52,39 @@ type EmailProvider struct {
 	From      string    `bun:"sender" json:"from"`
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 }
+
+// Event types sent to notification channels.
+const (
+	EventDeploySucceeded  = "deploy.succeeded"
+	EventDeployFailed     = "deploy.failed"
+	EventBackupSucceeded  = "backup.succeeded"
+	EventBackupFailed     = "backup.failed"
+	EventRestoreSucceeded = "restore.succeeded"
+	EventRestoreFailed    = "restore.failed"
+	EventVerifySucceeded  = "verify.succeeded"
+	EventVerifyFailed     = "verify.failed"
+	EventServiceRestarted = "service.restarted"
+	EventCleanupFailed    = "cleanup.failed"
+	EventUpdateAvailable  = "update.available"
+	EventServiceUnhealthy = "service.unhealthy"
+	EventServiceHealthy   = "service.healthy"
+	EventUptimeDown       = "uptime.down"
+	EventUptimeUp         = "uptime.up"
+	EventServerUpdates    = "server.updates_pending"
+	EventServerReboot     = "server.reboot_required"
+	EventJobFailed        = "job.failed"
+	EventJobSucceeded     = "job.succeeded"
+	EventAnonymizeFailed  = "anonymize.failed"
+	EventServiceOOMKilled = "service.oom_killed"
+	EventMemoryHigh       = "service.memory_high"
+	EventMemoryOK         = "service.memory_ok"
+	EventCPUHigh          = "service.cpu_high"
+	EventCPUOK            = "service.cpu_ok"
+	EventDiskLow          = "server.disk_low"
+	EventDiskOK           = "server.disk_ok"
+	EventErrorNew         = "error.new"
+	EventErrorRegression  = "error.regression"
+	EventErrorSpike       = "error.spike"
+	EventGitSyncFailed    = "git.sync.failed"
+	EventGitSyncSucceeded = "git.sync.succeeded"
+)

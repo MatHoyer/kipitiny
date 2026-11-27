@@ -70,17 +70,17 @@ func TestCheckResources(t *testing.T) {
 		}
 	}
 	got := events(round(t0.Add(300*time.Second), 95, 380, 95))
-	if a, ok := got[EventMemoryHigh]; !ok || a.unlimited || a.percent < 94 || a.limit != 100<<20 {
+	if a, ok := got[domain.EventMemoryHigh]; !ok || a.unlimited || a.percent < 94 || a.limit != 100<<20 {
 		t.Errorf("memory_high after 5 min: %+v", got)
 	}
-	if _, ok := got[EventCPUHigh]; ok {
+	if _, ok := got[domain.EventCPUHigh]; ok {
 		t.Errorf("cpu_high before 10 min: %+v", got)
 	}
 	for i := 31; i < 60; i++ {
 		round(t0.Add(time.Duration(i)*10*time.Second), 95, 380, 95)
 	}
 	got = events(round(t0.Add(600*time.Second), 95, 380, 95))
-	if a, ok := got[EventCPUHigh]; !ok || !a.unlimited || a.limit != 4 || a.percent != 95 {
+	if a, ok := got[domain.EventCPUHigh]; !ok || !a.unlimited || a.limit != 4 || a.percent != 95 {
 		t.Errorf("cpu_high of the host's cores after 10 min: %+v", got)
 	}
 	// Back to normal: recoveries after a minute.
@@ -90,7 +90,7 @@ func TestCheckResources(t *testing.T) {
 		}
 	}
 	got = events(round(t0.Add(670*time.Second), 10, 10, 10))
-	for _, e := range []string{EventMemoryOK, EventCPUOK, EventDiskOK} {
+	for _, e := range []string{domain.EventMemoryOK, domain.EventCPUOK, domain.EventDiskOK} {
 		if _, ok := got[e]; !ok {
 			t.Errorf("no %s: %+v", e, got)
 		}
@@ -98,7 +98,7 @@ func TestCheckResources(t *testing.T) {
 	// The disk_low was sent a minute in.
 	s = statsState{}
 	round(t0, 0, 0, 95)
-	if got := events(round(t0.Add(time.Minute), 0, 0, 95)); got[EventDiskLow].percent != 5 {
+	if got := events(round(t0.Add(time.Minute), 0, 0, 95)); got[domain.EventDiskLow].percent != 5 {
 		t.Errorf("disk_low: %+v", got)
 	}
 	// Unlimited memory is judged against the host: 1 GiB of 8 isn't high.
@@ -119,13 +119,13 @@ func TestSetResourceAlerts(t *testing.T) {
 	if got := c.resourceAlerts(ctx); got != defaultResourceAlerts() {
 		t.Errorf("defaults = %+v", got)
 	}
-	ok := ResourceAlerts{MemoryPercent: 80, MemoryMinutes: 2, CPUPercent: 95, CPUMinutes: 15, DiskFreePercent: 20}
-	for i, bad := range []func(*ResourceAlerts){
-		func(a *ResourceAlerts) { a.MemoryPercent = 0 },
-		func(a *ResourceAlerts) { a.CPUPercent = 101 },
-		func(a *ResourceAlerts) { a.MemoryMinutes = 0 },
-		func(a *ResourceAlerts) { a.CPUMinutes = 61 },
-		func(a *ResourceAlerts) { a.DiskFreePercent = 100 },
+	ok := domain.ResourceAlerts{MemoryPercent: 80, MemoryMinutes: 2, CPUPercent: 95, CPUMinutes: 15, DiskFreePercent: 20}
+	for i, bad := range []func(*domain.ResourceAlerts){
+		func(a *domain.ResourceAlerts) { a.MemoryPercent = 0 },
+		func(a *domain.ResourceAlerts) { a.CPUPercent = 101 },
+		func(a *domain.ResourceAlerts) { a.MemoryMinutes = 0 },
+		func(a *domain.ResourceAlerts) { a.CPUMinutes = 61 },
+		func(a *domain.ResourceAlerts) { a.DiskFreePercent = 100 },
 	} {
 		a := ok
 		bad(&a)

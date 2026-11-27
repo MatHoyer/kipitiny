@@ -1,4 +1,4 @@
-package core
+package monitoring
 
 import (
 	"context"
@@ -32,7 +32,7 @@ const (
 
 // ErrNoEmail is returned when something should be emailed but no email
 // provider is set up.
-var ErrNoEmail = fmt.Errorf("%w: email isn't set up; add an email provider in Settings › Email", ErrInvalid)
+var ErrNoEmail = fmt.Errorf("%w: email isn't set up; add an email provider in Settings › Email", domain.ErrInvalid)
 
 // EmailView lists the providers, passwords masked, and the one invites use.
 type EmailView struct {
@@ -60,7 +60,7 @@ func mailConfig(p domain.EmailProvider) mail.Config {
 	return mail.Config{Host: p.Host, Port: p.Port, Security: mail.Security(p.Security), Username: p.Username, Password: p.Password, From: p.From}
 }
 
-func (c *Core) Email(ctx context.Context) (EmailView, error) {
+func (c *Monitoring) Email(ctx context.Context) (EmailView, error) {
 	ps, err := c.store.ListEmailProviders(ctx)
 	if err != nil {
 		return EmailView{}, err
@@ -92,7 +92,7 @@ func invitesProvider(ctx context.Context, s domain.Store, ps []domain.EmailProvi
 
 // CreateEmailProvider checks the server accepts the configuration
 // (connection and sign-in, nothing sent) and saves it.
-func (c *Core) CreateEmailProvider(ctx context.Context, in EmailProviderInput) (domain.EmailProvider, error) {
+func (c *Monitoring) CreateEmailProvider(ctx context.Context, in EmailProviderInput) (domain.EmailProvider, error) {
 	p, err := c.checkEmailProvider(ctx, domain.EmailProvider{}, in)
 	if err != nil {
 		return domain.EmailProvider{}, err
@@ -101,7 +101,7 @@ func (c *Core) CreateEmailProvider(ctx context.Context, in EmailProviderInput) (
 	return maskedEmailProvider(p), emailConflict(err)
 }
 
-func (c *Core) UpdateEmailProvider(ctx context.Context, id string, in EmailProviderInput) (domain.EmailProvider, error) {
+func (c *Monitoring) UpdateEmailProvider(ctx context.Context, id string, in EmailProviderInput) (domain.EmailProvider, error) {
 	old, err := c.store.GetEmailProvider(ctx, id)
 	if err != nil {
 		return domain.EmailProvider{}, err
@@ -116,7 +116,7 @@ func (c *Core) UpdateEmailProvider(ctx context.Context, id string, in EmailProvi
 
 // DeleteEmailProvider removes a provider no channel sends through. Invites
 // move to the oldest one left.
-func (c *Core) DeleteEmailProvider(ctx context.Context, id string) error {
+func (c *Monitoring) DeleteEmailProvider(ctx context.Context, id string) error {
 	if _, err := c.store.GetEmailProvider(ctx, id); err != nil {
 		return err
 	}
@@ -131,16 +131,16 @@ func (c *Core) DeleteEmailProvider(ctx context.Context, id string) error {
 		}
 	}
 	if len(used) > 0 {
-		return fmt.Errorf("%w: notification channels send through it (%s); pick another provider for them first", ErrInvalid, strings.Join(used, ", "))
+		return fmt.Errorf("%w: notification channels send through it (%s); pick another provider for them first", domain.ErrInvalid, strings.Join(used, ", "))
 	}
 	return c.store.DeleteEmailProvider(ctx, id)
 }
 
 // SetEmailInvites picks the provider invites go through.
-func (c *Core) SetEmailInvites(ctx context.Context, id string) (EmailView, error) {
+func (c *Monitoring) SetEmailInvites(ctx context.Context, id string) (EmailView, error) {
 	if _, err := c.store.GetEmailProvider(ctx, id); err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			return EmailView{}, fmt.Errorf("%w: unknown email provider", ErrInvalid)
+			return EmailView{}, fmt.Errorf("%w: unknown email provider", domain.ErrInvalid)
 		}
 		return EmailView{}, err
 	}
@@ -151,10 +151,10 @@ func (c *Core) SetEmailInvites(ctx context.Context, id string) (EmailView, error
 }
 
 // checkEmailProvider validates in over p and signs in to the server.
-func (c *Core) checkEmailProvider(ctx context.Context, p domain.EmailProvider, in EmailProviderInput) (domain.EmailProvider, error) {
+func (c *Monitoring) checkEmailProvider(ctx context.Context, p domain.EmailProvider, in EmailProviderInput) (domain.EmailProvider, error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" || utf8.RuneCountInString(name) > 64 {
-		return p, fmt.Errorf("%w: name is required (max 64 characters)", ErrInvalid)
+		return p, fmt.Errorf("%w: name is required (max 64 characters)", domain.ErrInvalid)
 	}
 	cfg := in.Config
 	cfg.Host = strings.TrimSpace(cfg.Host)
@@ -169,7 +169,7 @@ func (c *Core) checkEmailProvider(ctx context.Context, p domain.EmailProvider, i
 	cctx, cancel := context.WithTimeout(ctx, mailTimeout)
 	defer cancel()
 	if err := mail.Check(cctx, cfg); err != nil {
-		return p, fmt.Errorf("%w: %v", ErrInvalid, err)
+		return p, fmt.Errorf("%w: %s", domain.ErrInvalid, err.Error())
 	}
 	p.Name, p.Host, p.Port, p.Security = name, cfg.Host, cfg.Port, string(cfg.Security)
 	p.Username, p.Password, p.From = cfg.Username, cfg.Password, cfg.From
@@ -178,13 +178,13 @@ func (c *Core) checkEmailProvider(ctx context.Context, p domain.EmailProvider, i
 
 func emailConflict(err error) error {
 	if err != nil && strings.Contains(err.Error(), domain.ErrConflict.Error()) {
-		return fmt.Errorf("%w: an email provider with this name exists", ErrInvalid)
+		return fmt.Errorf("%w: an email provider with this name exists", domain.ErrInvalid)
 	}
 	return err
 }
 
 // TestEmailProvider sends a test message through a provider.
-func (c *Core) TestEmailProvider(ctx context.Context, id, to string) error {
+func (c *Monitoring) TestEmailProvider(ctx context.Context, id, to string) error {
 	addr, err := mail.ParseAddress(to)
 	if err != nil {
 		return mailErr(err)
@@ -193,25 +193,25 @@ func (c *Core) TestEmailProvider(ctx context.Context, id, to string) error {
 	if err != nil {
 		return err
 	}
-	err = c.sendMail(ctx, p.ID, []*netmail.Address{addr}, mail.Body{
-		Title:      "Test email from " + c.BrandName(ctx),
+	err = c.SendMail(ctx, p.ID, []*netmail.Address{addr}, mail.Body{
+		Title:      "Test email from " + c.mgr.BrandName(ctx),
 		Accent:     "#22c55e",
-		Paragraphs: []string{"Email from " + c.BrandName(ctx) + " reaches this address through " + p.Name + "."},
+		Paragraphs: []string{"Email from " + c.mgr.BrandName(ctx) + " reaches this address through " + p.Name + "."},
 		Footer:     c.mailFooter(ctx),
 	}, "")
-	if err != nil && !errors.Is(err, ErrInvalid) {
-		return fmt.Errorf("%w: %v", ErrInvalid, err)
+	if err != nil && !errors.Is(err, domain.ErrInvalid) {
+		return fmt.Errorf("%w: %s", domain.ErrInvalid, err.Error())
 	}
 	return err
 }
 
 // emailProvider returns the provider with that ID, or the invites one for
 // an empty ID.
-func (c *Core) emailProvider(ctx context.Context, id string) (domain.EmailProvider, error) {
+func (c *Monitoring) emailProvider(ctx context.Context, id string) (domain.EmailProvider, error) {
 	if id != "" {
 		p, err := c.store.GetEmailProvider(ctx, id)
 		if errors.Is(err, domain.ErrNotFound) {
-			return p, fmt.Errorf("%w: the email provider was removed; pick another in Settings › Notifications", ErrInvalid)
+			return p, fmt.Errorf("%w: the email provider was removed; pick another in Settings › Notifications", domain.ErrInvalid)
 		}
 		return p, err
 	}
@@ -226,15 +226,15 @@ func (c *Core) emailProvider(ctx context.Context, id string) (domain.EmailProvid
 	return p, nil
 }
 
-// sendMail renders b and sends it right away through a provider (the
+// SendMail renders b and sends it right away through a provider (the
 // invites one for an empty ID), within mailTimeout.
-func (c *Core) sendMail(ctx context.Context, provider string, to []*netmail.Address, b mail.Body, subject string) error {
+func (c *Monitoring) SendMail(ctx context.Context, provider string, to []*netmail.Address, b mail.Body, subject string) error {
 	p, err := c.emailProvider(ctx, provider)
 	if err != nil {
 		return err
 	}
 	if b.Accent == "" {
-		b.Accent = c.brandingSettings(ctx).Accent
+		b.Accent = c.mgr.BrandAccent(ctx)
 	}
 	m, err := b.Message(to, subject)
 	if err != nil {
@@ -246,21 +246,21 @@ func (c *Core) sendMail(ctx context.Context, provider string, to []*netmail.Addr
 }
 
 // mailFooter says where an email comes from.
-func (c *Core) mailFooter(ctx context.Context) string {
+func (c *Monitoring) mailFooter(ctx context.Context) string {
 	if c.cfg.Domain != "" {
-		return "Sent by " + c.BrandName(ctx) + " on " + c.cfg.Domain
+		return "Sent by " + c.mgr.BrandName(ctx) + " on " + c.cfg.Domain
 	}
-	return "Sent by " + c.BrandName(ctx)
+	return "Sent by " + c.mgr.BrandName(ctx)
 }
 
 func mailErr(err error) error {
-	return fmt.Errorf("%w: %s", ErrInvalid, strings.TrimPrefix(err.Error(), mail.ErrConfig.Error()+": "))
+	return fmt.Errorf("%w: %s", domain.ErrInvalid, strings.TrimPrefix(err.Error(), mail.ErrConfig.Error()+": "))
 }
 
-// migrateSMTPSetting turns the single SMTP server of earlier versions into
+// MigrateSMTPSetting turns the single SMTP server of earlier versions into
 // a provider used by invites and the email channels. Safe to rerun: an
 // interrupted run finds its provider by name.
-func (c *Core) migrateSMTPSetting(ctx context.Context) error {
+func (c *Monitoring) MigrateSMTPSetting(ctx context.Context) error {
 	v, err := c.store.GetSetting(ctx, smtpSetting)
 	if errors.Is(err, domain.ErrNotFound) || (err == nil && v == "") {
 		return nil

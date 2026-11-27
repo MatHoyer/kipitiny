@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
 func (a *API) listServices(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +113,7 @@ func (a *API) uptime(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) setUptime(w http.ResponseWriter, r *http.Request) {
-	var in core.UptimeInput
+	var in monitoring.UptimeInput
 	if !decode(w, r, &in) {
 		return
 	}

@@ -264,8 +264,8 @@ func (c *Core) runCleanup(s CleanupSettings, trigger string) {
 	finished := time.Now().UTC()
 	run.FinishedAt = &finished
 	if problems := run.problems(); len(problems) > 0 {
-		c.notify(notify.Event{
-			Type:    EventCleanupFailed,
+		c.Notify(notify.Event{
+			Type:    domain.EventCleanupFailed,
 			Level:   notify.Warning,
 			Title:   "Docker cleanup had errors",
 			Message: strings.Join(problems, "\n"),

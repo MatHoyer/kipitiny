@@ -158,7 +158,7 @@ func (c *Core) envSources(ctx context.Context, project domain.Project, svc domai
 		return envSources{}, err
 	}
 	src := envSources{project: project.Env, dbs: databasesOf(svcs), apps: c.appURLs(svcs), secrets: map[string]string{},
-		errors: c.errorsEnv(ctx, project, svc)}
+		errors: c.ErrorsEnv(ctx, project, svc)}
 	if refs := secretRefs(refEnv(svc), project.Env); len(refs) > 0 {
 		if src.secrets, err = c.ResolveSecrets(ctx, refs); err != nil {
 			return envSources{}, err

@@ -3,7 +3,8 @@ package api
 import (
 	"net/http"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
 func (a *API) notifications(w http.ResponseWriter, r *http.Request) {
@@ -16,7 +17,7 @@ func (a *API) notifications(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createChannel(w http.ResponseWriter, r *http.Request) {
-	var body core.ChannelInput
+	var body monitoring.ChannelInput
 	if !decode(w, r, &body) {
 		return
 	}
@@ -29,7 +30,7 @@ func (a *API) createChannel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateChannel(w http.ResponseWriter, r *http.Request) {
-	var body core.ChannelInput
+	var body monitoring.ChannelInput
 	if !decode(w, r, &body) {
 		return
 	}
@@ -58,7 +59,7 @@ func (a *API) testChannel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) setThresholds(w http.ResponseWriter, r *http.Request) {
-	var body core.ResourceAlerts
+	var body domain.ResourceAlerts
 	if !decode(w, r, &body) {
 		return
 	}

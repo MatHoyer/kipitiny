@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/analytics"
-	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 type analyticsIn struct {
@@ -20,26 +20,26 @@ type analyticsIn struct {
 	Filters []string `json:"filters,omitempty" jsonschema:"narrow to breakdown values, as <breakdown>:<value>, e.g. countries:FR, pages:/pricing, referrers:google.com, events:signup, entries:/"`
 }
 
-func (t *tools) getAnalytics(ctx context.Context, _ *mcp.CallToolRequest, in analyticsIn) (*mcp.CallToolResult, core.AnalyticsView, error) {
+func (t *tools) getAnalytics(ctx context.Context, _ *mcp.CallToolRequest, in analyticsIn) (*mcp.CallToolResult, monitoring.AnalyticsView, error) {
 	if err := identity.Authenticated(ctx); err != nil {
-		return nil, core.AnalyticsView{}, err
+		return nil, monitoring.AnalyticsView{}, err
 	}
 	days := in.Days
 	if days <= 0 {
 		days = 7
 	}
 	now := time.Now()
-	q := core.AnalyticsQuery{From: now.AddDate(0, 0, -min(days, 730)), To: now, Interval: 86400, Filters: in.Filters}
+	q := monitoring.AnalyticsQuery{From: now.AddDate(0, 0, -min(days, 730)), To: now, Interval: 86400, Filters: in.Filters}
 	if in.Tracker != "" {
 		if err := identity.RequireAdmin(ctx); err != nil {
-			return nil, core.AnalyticsView{}, err
+			return nil, monitoring.AnalyticsView{}, err
 		}
 		v, err := t.c.TrackerAnalytics(ctx, in.Tracker, q)
-		return nil, core.AnalyticsView{Stats: v.Stats, Script: v.Tracker.URL}, friendly(err)
+		return nil, monitoring.AnalyticsView{Stats: v.Stats, Script: v.Tracker.URL}, friendly(err)
 	}
 	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
-		return nil, core.AnalyticsView{}, friendly(err)
+		return nil, monitoring.AnalyticsView{}, friendly(err)
 	}
 	out, err := t.c.ServiceAnalytics(ctx, svc.ID, q)
 	return nil, out, friendly(err)
@@ -69,7 +69,7 @@ func (t *tools) exportAnalytics(ctx context.Context, _ *mcp.CallToolRequest, in 
 		days = 7
 	}
 	now := time.Now()
-	q := core.AnalyticsQuery{From: now.AddDate(0, 0, -min(days, 730)), To: now, Interval: 86400, Filters: in.Filters}
+	q := monitoring.AnalyticsQuery{From: now.AddDate(0, 0, -min(days, 730)), To: now, Interval: 86400, Filters: in.Filters}
 	var b strings.Builder
 	err = t.c.ServiceAnalyticsCSV(ctx, svc.ID, q, in.Table, &b)
 	return nil, exportAnalyticsOut{CSV: b.String()}, friendly(err)
@@ -98,7 +98,7 @@ func (t *tools) getFunnel(ctx context.Context, _ *mcp.CallToolRequest, in funnel
 		days = 7
 	}
 	now := time.Now()
-	fs, err := t.c.ServiceFunnel(ctx, svc.ID, core.AnalyticsQuery{From: now.AddDate(0, 0, -min(days, 730)), To: now}, in.Steps)
+	fs, err := t.c.ServiceFunnel(ctx, svc.ID, monitoring.AnalyticsQuery{From: now.AddDate(0, 0, -min(days, 730)), To: now}, in.Steps)
 	return nil, funnelOut{Steps: fs}, friendly(err)
 }
 
@@ -170,7 +170,7 @@ func (t *tools) listVisits(ctx context.Context, _ *mcp.CallToolRequest, in visit
 		days = 7
 	}
 	now := time.Now()
-	vs, err := t.c.ServiceVisits(ctx, svc.ID, core.AnalyticsQuery{From: now.AddDate(0, 0, -min(days, 730)), To: now, Filters: in.Filters}, in.Before, in.Limit)
+	vs, err := t.c.ServiceVisits(ctx, svc.ID, monitoring.AnalyticsQuery{From: now.AddDate(0, 0, -min(days, 730)), To: now, Filters: in.Filters}, in.Before, in.Limit)
 	return nil, visitsOut{Visits: vs}, friendly(err)
 }
 

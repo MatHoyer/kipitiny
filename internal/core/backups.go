@@ -318,7 +318,7 @@ func (c *Core) notifyBackup(b domain.Backup, target domain.BackupTarget, path st
 		subject, path = "Manager state", "/backups"
 	}
 	e := notify.Event{
-		Type:  EventBackupSucceeded,
+		Type:  domain.EventBackupSucceeded,
 		Level: notify.Success,
 		Title: subject + " backed up",
 		Fields: []notify.Field{
@@ -328,13 +328,13 @@ func (c *Core) notifyBackup(b domain.Backup, target domain.BackupTarget, path st
 		},
 	}
 	if b.Status != domain.OpSucceeded {
-		e.Type, e.Level, e.Title, e.Message = EventBackupFailed, notify.Error, subject+" backup failed", b.Error
+		e.Type, e.Level, e.Title, e.Message = domain.EventBackupFailed, notify.Error, subject+" backup failed", b.Error
 		e.Fields = e.Fields[:1]
 	}
 	if b.Database != "" {
 		e.Fields = append([]notify.Field{{Name: "Database", Value: b.Database}}, e.Fields...)
 	}
-	c.notify(e, path, "")
+	c.Notify(e, path, "")
 }
 
 // humanSize formats a byte count with binary units.

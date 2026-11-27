@@ -1,4 +1,4 @@
-package core
+package monitoring
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
@@ -21,8 +22,8 @@ const webhook = "https://discord.com/api/webhooks/1/secret"
 
 func TestChannelValidationAndMasking(t *testing.T) {
 	ctx := context.Background()
-	c := newTestCore(t, config.Config{})
-	in := ChannelInput{Name: "ops", Kind: "discord", Config: map[string]string{"webhookUrl": webhook}, Events: []string{EventDeployFailed}, Enabled: true}
+	c := newTestMonitoring(t, config.Config{})
+	in := ChannelInput{Name: "ops", Kind: "discord", Config: map[string]string{"webhookUrl": webhook}, Events: []string{domain.EventDeployFailed}, Enabled: true}
 
 	bad := []func(*ChannelInput){
 		func(in *ChannelInput) { in.Name = " " },
@@ -34,8 +35,8 @@ func TestChannelValidationAndMasking(t *testing.T) {
 	for i, mutate := range bad {
 		b := in
 		mutate(&b)
-		if _, err := c.CreateChannel(ctx, b); !errors.Is(err, ErrInvalid) {
-			t.Errorf("case %d: got %v, want ErrInvalid", i, err)
+		if _, err := c.CreateChannel(ctx, b); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("case %d: got %v, want domain.ErrInvalid", i, err)
 		}
 	}
 
@@ -52,7 +53,7 @@ func TestChannelValidationAndMasking(t *testing.T) {
 	}
 
 	// Sending the mask back keeps the stored webhook.
-	in.Config["webhookUrl"], in.Name, in.Events = identity.SecretMask, "alerts", []string{EventBackupFailed, EventBackupFailed}
+	in.Config["webhookUrl"], in.Name, in.Events = identity.SecretMask, "alerts", []string{domain.EventBackupFailed, domain.EventBackupFailed}
 	if _, err := c.UpdateChannel(ctx, ch.ID, in); err != nil {
 		t.Fatal(err)
 	}
@@ -84,8 +85,8 @@ func TestNotifyDispatch(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer srv.Close()
-	c := newTestCore(t, config.Config{Domain: "kipi.example.com", Traefik: config.Traefik{Enabled: true}})
-	c.notifyHTTP = &http.Client{Transport: redirect{srv}}
+	c := newTestMonitoring(t, config.Config{Domain: "kipi.example.com", Traefik: config.Traefik{Enabled: true}})
+	c.NotifyHTTP = &http.Client{Transport: redirect{srv}}
 
 	add := func(name, hook string, enabled bool, events ...string) {
 		_, err := c.CreateChannel(ctx, ChannelInput{Name: name, Kind: "discord", Config: map[string]string{"webhookUrl": hook}, Events: events, Enabled: enabled})
@@ -93,13 +94,13 @@ func TestNotifyDispatch(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	add("a", "https://discord.com/api/webhooks/a/x", true, EventDeployFailed, EventServiceRestarted)
-	add("b", "https://discord.com/api/webhooks/b/x", true, EventBackupFailed)
-	add("off", "https://discord.com/api/webhooks/off/x", false, EventDeployFailed)
+	add("a", "https://discord.com/api/webhooks/a/x", true, domain.EventDeployFailed, domain.EventServiceRestarted)
+	add("b", "https://discord.com/api/webhooks/b/x", true, domain.EventBackupFailed)
+	add("off", "https://discord.com/api/webhooks/off/x", false, domain.EventDeployFailed)
 
-	c.notify(notify.Event{Type: EventDeployFailed, Title: "deploy"}, "/services/S1", "")
-	c.notify(notify.Event{Type: EventServiceRestarted, Title: "crash 1"}, "", "restarted:S1")
-	c.notify(notify.Event{Type: EventServiceRestarted, Title: "crash 2"}, "", "restarted:S1")
+	c.Notify(notify.Event{Type: domain.EventDeployFailed, Title: "deploy"}, "/services/S1", "")
+	c.Notify(notify.Event{Type: domain.EventServiceRestarted, Title: "crash 1"}, "", "restarted:S1")
+	c.Notify(notify.Event{Type: domain.EventServiceRestarted, Title: "crash 2"}, "", "restarted:S1")
 	c.ops.Wait()
 
 	want := map[string]bool{
@@ -116,8 +117,8 @@ func TestNotifyDispatch(t *testing.T) {
 	}
 
 	// The cooldown ends.
-	c.notified.Store("restarted:S1", time.Now().Add(-notifyCooldown))
-	c.notify(notify.Event{Type: EventServiceRestarted, Title: "crash 3"}, "", "restarted:S1")
+	c.notified.Store("restarted:S1", time.Now().Add(-NotifyCooldown))
+	c.Notify(notify.Event{Type: domain.EventServiceRestarted, Title: "crash 3"}, "", "restarted:S1")
 	c.ops.Wait()
 	if len(titles) != 3 {
 		t.Errorf("after cooldown: %q", titles)
@@ -130,13 +131,13 @@ func TestTestChannel(t *testing.T) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer srv.Close()
-	c := newTestCore(t, config.Config{})
-	c.notifyHTTP = &http.Client{Transport: redirect{srv}}
+	c := newTestMonitoring(t, config.Config{})
+	c.NotifyHTTP = &http.Client{Transport: redirect{srv}}
 	ch, err := c.CreateChannel(ctx, ChannelInput{Name: "ops", Kind: "discord", Config: map[string]string{"webhookUrl": webhook}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := c.TestChannel(ctx, ch.ID); !errors.Is(err, ErrInvalid) {
-		t.Errorf("failed delivery: got %v, want ErrInvalid", err)
+	if err := c.TestChannel(ctx, ch.ID); !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("failed delivery: got %v, want domain.ErrInvalid", err)
 	}
 }

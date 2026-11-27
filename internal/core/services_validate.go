@@ -10,6 +10,7 @@ import (
 	"github.com/distribution/reference"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
@@ -128,7 +129,7 @@ func validateService(s domain.Service) error {
 	if s.Analytics && (s.Kind.IsDatabase() || !network.HTTPRouted(s)) {
 		return fmt.Errorf("%w: analytics count the visits of an app's domain: set a domain and a container port", ErrInvalid)
 	}
-	if err := validateAnalyticsPaths(s.AnalyticsScript, s.AnalyticsHit); err != nil {
+	if err := monitoring.ValidateAnalyticsPaths(s.AnalyticsScript, s.AnalyticsHit); err != nil {
 		return err
 	}
 	for k := range s.Env {

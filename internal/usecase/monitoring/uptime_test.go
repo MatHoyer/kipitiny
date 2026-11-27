@@ -1,4 +1,4 @@
-package core
+package monitoring
 
 import (
 	"context"
@@ -90,10 +90,10 @@ func TestUptimeChecks(t *testing.T) {
 	}))
 	defer discord.Close()
 
-	c := newTestCore(t, config.Config{})
-	c.notifyHTTP = &http.Client{Transport: redirect{discord}}
-	c.uptimeHTTP = &http.Client{Transport: redirect{site}}
-	if _, err := c.CreateChannel(ctx, ChannelInput{Name: "ops", Kind: "discord", Config: map[string]string{"webhookUrl": webhook}, Events: []string{EventUptimeDown, EventUptimeUp}, Enabled: true}); err != nil {
+	c := newTestMonitoring(t, config.Config{})
+	c.NotifyHTTP = &http.Client{Transport: redirect{discord}}
+	c.UptimeHTTP = &http.Client{Transport: redirect{site}}
+	if _, err := c.CreateChannel(ctx, ChannelInput{Name: "ops", Kind: "discord", Config: map[string]string{"webhookUrl": webhook}, Events: []string{domain.EventUptimeDown, domain.EventUptimeUp}, Enabled: true}); err != nil {
 		t.Fatal(err)
 	}
 	p, err := c.store.CreateProject(ctx, domain.Project{Name: "shop", ServerID: domain.LocalServerID})
@@ -109,7 +109,7 @@ func TestUptimeChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := c.SetUptime(ctx, db.ID, UptimeInput{Enabled: true}); !errors.Is(err, ErrInvalid) {
+	if _, err := c.SetUptime(ctx, db.ID, UptimeInput{Enabled: true}); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("database: %v", err)
 	}
 	for _, in := range []UptimeInput{
@@ -118,7 +118,7 @@ func TestUptimeChecks(t *testing.T) {
 		{IntervalSec: 30, TimeoutSec: 30},
 		{ExpectedStatus: 42},
 	} {
-		if _, err := c.SetUptime(ctx, svc.ID, in); !errors.Is(err, ErrInvalid) {
+		if _, err := c.SetUptime(ctx, svc.ID, in); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("%+v: %v", in, err)
 		}
 	}
@@ -126,7 +126,7 @@ func TestUptimeChecks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Check.IntervalSec != defaultUptimeInterval || v.Check.TimeoutSec != defaultUptimeTimeout || v.Problem != "the service is not deployed yet" {
+	if v.Check.IntervalSec != DefaultUptimeInterval || v.Check.TimeoutSec != DefaultUptimeTimeout || v.Problem != "the service is not deployed yet" {
 		t.Fatalf("defaults: %+v", v)
 	}
 

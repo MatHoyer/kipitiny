@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -88,7 +89,7 @@ type appStatusOut struct {
 	// Usage is the current CPU, memory and network use; nil when not running.
 	Usage *core.Usage `json:"usage,omitempty"`
 	// Uptime is the uptime check and its results, when the service has one.
-	Uptime *core.UptimeView `json:"uptime,omitempty"`
+	Uptime *monitoring.UptimeView `json:"uptime,omitempty"`
 }
 
 func (t *tools) getAppStatus(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, appStatusOut, error) {

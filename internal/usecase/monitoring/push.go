@@ -1,4 +1,4 @@
-package core
+package monitoring
 
 import (
 	"context"
@@ -26,7 +26,7 @@ const pushSetting = "webpush"
 // has no public address.
 const pushSubject = "https://github.com/kipit-labs/kipitiny"
 
-func (c *Core) vapid(ctx context.Context) (notify.VAPID, error) {
+func (c *Monitoring) vapid(ctx context.Context) (notify.VAPID, error) {
 	c.pushMu.Lock()
 	defer c.pushMu.Unlock()
 	var v notify.VAPID
@@ -52,11 +52,11 @@ type PushDevices struct {
 }
 
 // PushDevices lists the signed-in admin's browsers that receive pushes.
-func (c *Core) PushDevices(ctx context.Context) (PushDevices, error) {
+func (c *Monitoring) PushDevices(ctx context.Context) (PushDevices, error) {
 	if err := identity.RequireAdmin(ctx); err != nil {
 		return PushDevices{}, err
 	}
-	u, err := c.CurrentUser(ctx)
+	u, err := c.mgr.CurrentUser(ctx)
 	if err != nil {
 		return PushDevices{}, err
 	}
@@ -79,19 +79,19 @@ type PushSubscribeInput struct {
 }
 
 // SubscribePush adds the browser the signed-in admin uses.
-func (c *Core) SubscribePush(ctx context.Context, in PushSubscribeInput) (domain.PushSubscription, error) {
+func (c *Monitoring) SubscribePush(ctx context.Context, in PushSubscribeInput) (domain.PushSubscription, error) {
 	if err := identity.RequireAdmin(ctx); err != nil {
 		return domain.PushSubscription{}, err
 	}
-	u, err := c.CurrentUser(ctx)
+	u, err := c.mgr.CurrentUser(ctx)
 	if err != nil {
 		return domain.PushSubscription{}, err
 	}
 	if !notify.ValidPushEndpoint(in.Endpoint) {
-		return domain.PushSubscription{}, fmt.Errorf("%w: not a known push service", ErrInvalid)
+		return domain.PushSubscription{}, fmt.Errorf("%w: not a known push service", domain.ErrInvalid)
 	}
 	if !pushKeyLen(in.Keys.P256dh, 65) || !pushKeyLen(in.Keys.Auth, 16) {
-		return domain.PushSubscription{}, fmt.Errorf("%w: invalid browser keys", ErrInvalid)
+		return domain.PushSubscription{}, fmt.Errorf("%w: invalid browser keys", domain.ErrInvalid)
 	}
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
@@ -113,8 +113,8 @@ func pushKeyLen(s string, n int) bool {
 }
 
 // UnsubscribePush removes one of the signed-in user's browsers.
-func (c *Core) UnsubscribePush(ctx context.Context, id string) error {
-	u, err := c.CurrentUser(ctx)
+func (c *Monitoring) UnsubscribePush(ctx context.Context, id string) error {
+	u, err := c.mgr.CurrentUser(ctx)
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func (c *Core) UnsubscribePush(ctx context.Context, id string) error {
 
 // pushToAdmins sends m to every admin's browsers, forgetting those that
 // unsubscribed. It fails only when no browser got it.
-func (c *Core) pushToAdmins(ctx context.Context, m notify.PushMessage) error {
+func (c *Monitoring) pushToAdmins(ctx context.Context, m notify.PushMessage) error {
 	subs, err := c.store.ListAdminPushSubscriptions(ctx)
 	if err != nil {
 		return err
@@ -139,8 +139,8 @@ func (c *Core) pushToAdmins(ctx context.Context, m notify.PushMessage) error {
 	if c.cfg.Domain != "" && c.cfg.Traefik.Enabled {
 		subject = "https://" + c.cfg.Domain
 	}
-	m.Icon = c.Branding(ctx).Logo
-	hc := c.notifyHTTP
+	m.Icon = c.mgr.BrandLogo(ctx)
+	hc := c.NotifyHTTP
 	if hc == nil {
 		hc = &http.Client{Timeout: notifyTimeout}
 	}

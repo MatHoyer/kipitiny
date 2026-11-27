@@ -443,7 +443,7 @@ func (c *Core) runJob(ctx context.Context, project domain.Project, svc domain.Se
 
 	name := project.Name + "/" + svc.Name + " " + j.Name
 	e := notify.Event{
-		Type:  EventJobSucceeded,
+		Type:  domain.EventJobSucceeded,
 		Level: notify.Success,
 		Title: "Job " + name + " succeeded",
 		Fields: []notify.Field{
@@ -455,11 +455,11 @@ func (c *Core) runJob(ctx context.Context, project domain.Project, svc domain.Se
 	}
 	key := ""
 	if err != nil {
-		e.Type, e.Level, e.Title, e.Message = EventJobFailed, notify.Error, "Job "+name+" failed", r.Error
+		e.Type, e.Level, e.Title, e.Message = domain.EventJobFailed, notify.Error, "Job "+name+" failed", r.Error
 		key = "job:" + j.ID // a job failing every minute pages once
 		log.Warn("job failed", "err", err)
 	}
-	c.notify(e, "/services/"+svc.ID+"?tab=jobs", key)
+	c.Notify(e, "/services/"+svc.ID+"?tab=jobs", key)
 }
 
 // execJob runs the command in a one-off container of the current

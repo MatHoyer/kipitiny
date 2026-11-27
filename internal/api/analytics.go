@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/analytics"
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
 func (a *API) getAnalytics(w http.ResponseWriter, r *http.Request) {
@@ -17,7 +17,7 @@ func (a *API) getAnalytics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) setAnalytics(w http.ResponseWriter, r *http.Request) {
-	var body core.AnalyticsSettings
+	var body monitoring.AnalyticsSettings
 	if !decode(w, r, &body) {
 		return
 	}
@@ -44,7 +44,7 @@ func (a *API) deleteAnalyticsData(w http.ResponseWriter, r *http.Request) {
 // analyticsQuery reads from and to (unix seconds, default the last 24
 // hours, to included), interval (seconds, default an hour), offset (seconds
 // east of UTC, for day buckets) and filter (<breakdown>:<value>, repeated).
-func analyticsQuery(r *http.Request) core.AnalyticsQuery {
+func analyticsQuery(r *http.Request) monitoring.AnalyticsQuery {
 	v := r.URL.Query()
 	num := func(k string, def int64) int64 {
 		n, err := strconv.ParseInt(v.Get(k), 10, 64)
@@ -54,7 +54,7 @@ func analyticsQuery(r *http.Request) core.AnalyticsQuery {
 		return n
 	}
 	now := time.Now().Unix() + 1 // to is exclusive: this second's visits count
-	return core.AnalyticsQuery{
+	return monitoring.AnalyticsQuery{
 		From:     time.Unix(num("from", now-86400), 0),
 		To:       time.Unix(num("to", now), 0),
 		Interval: int(num("interval", 3600)),

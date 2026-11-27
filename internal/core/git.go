@@ -48,9 +48,6 @@ const (
 	gitTimeout      = 2 * time.Minute
 	gitLoopEvery    = 30 * time.Second
 	maxComposeBytes = 1 << 20
-
-	EventGitSyncFailed    = "git.sync.failed"
-	EventGitSyncSucceeded = "git.sync.succeeded"
 )
 
 // ErrGitManaged refuses a change to a service a git repository owns.
@@ -394,13 +391,13 @@ func (c *Core) gitSynced(g domain.ProjectGit, commit string, plan ComposePlan, i
 	fields := []notify.Field{{Name: "Project", Value: project.Name}, {Name: "Repository", Value: g.RepoURL + " (" + g.Branch + ")"}}
 	switch {
 	case err != nil && err.Error() != prevErr:
-		c.notify(notify.Event{
-			Type: EventGitSyncFailed, Level: notify.Error, Title: project.Name + ": git sync failed",
+		c.Notify(notify.Event{
+			Type: domain.EventGitSyncFailed, Level: notify.Error, Title: project.Name + ": git sync failed",
 			Message: err.Error(), Fields: fields,
 		}, "/projects/"+g.ProjectID, "")
 	case err == nil && (len(plan.Create)+len(plan.Update)+len(plan.Delete) > 0 || prevErr != ""):
-		c.notify(notify.Event{
-			Type: EventGitSyncSucceeded, Level: notify.Success, Title: project.Name + " synced from git",
+		c.Notify(notify.Event{
+			Type: domain.EventGitSyncSucceeded, Level: notify.Success, Title: project.Name + " synced from git",
 			Message: syncSummary(plan), Fields: append(fields, notify.Field{Name: "Commit", Value: shortSHA(commit)}),
 		}, "/projects/"+g.ProjectID, "")
 	}

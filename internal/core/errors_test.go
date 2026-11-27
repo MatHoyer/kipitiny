@@ -9,23 +9,9 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
-
-func TestImageRelease(t *testing.T) {
-	for in, want := range map[string]string{
-		"ghcr.io/org/shop:sha-a1b2c3":            "sha-a1b2c3",
-		"registry.local:5000/shop:1.2.0":         "1.2.0",
-		"registry.local:5000/shop":               "latest",
-		"nginx":                                  "latest",
-		"shop@sha256:0123456789abcdef0123":       "0123456789ab",
-		"shop:2.0@sha256:0123456789abcdef0123ff": "2.0",
-	} {
-		if got := ImageRelease(in); got != want {
-			t.Errorf("%s: %s, want %s", in, got, want)
-		}
-	}
-}
 
 func TestServiceErrorsIdentityAndEnv(t *testing.T) {
 	ctx := context.Background()
@@ -65,17 +51,19 @@ func TestServiceErrorsIdentityAndEnv(t *testing.T) {
 	}
 
 	// No variables while analytics are off.
-	if env := c.errorsEnv(ctx, p, again); env != nil {
+	if env := c.ErrorsEnv(ctx, p, again); env != nil {
 		t.Errorf("analytics off: %v", env)
 	}
-	b, _ := json.Marshal(analyticsState{AnalyticsSettings: AnalyticsSettings{Enabled: true, Domain: "stats.example.com"}})
-	c.store.SetSetting(ctx, analyticsSetting, string(b))
-	env := c.errorsEnv(ctx, p, again)
+	b, _ := json.Marshal(monitoring.AnalyticsState{AnalyticsSettings: monitoring.AnalyticsSettings{Enabled: true, Domain: "stats.example.com"}})
+	if err := c.store.SetSetting(ctx, monitoring.AnalyticsSetting, string(b)); err != nil {
+		t.Fatal(err)
+	}
+	env := c.ErrorsEnv(ctx, p, again)
 	if env["SENTRY_DSN"] != "https://"+again.ErrorsKey+"@stats.example.com/2" || env["SENTRY_ENVIRONMENT"] != "production" {
 		t.Errorf("env: %v", env)
 	}
 	preview := domain.Project{Name: "shop-pr-12", ParentID: p.ID, Preview: domain.Preview{Name: "pr-12"}}
-	if env := c.errorsEnv(ctx, preview, again); env["SENTRY_ENVIRONMENT"] != "preview-pr-12" {
+	if env := c.ErrorsEnv(ctx, preview, again); env["SENTRY_ENVIRONMENT"] != "preview-pr-12" {
 		t.Errorf("preview: %v", env)
 	}
 
