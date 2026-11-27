@@ -11,7 +11,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -375,7 +374,7 @@ func (c *Data) stopLinkedApps(ctx context.Context, db domain.Service) ([]string,
 		}
 		secs := int(StopTimeoutFor(s).Seconds())
 		for _, ct := range cts {
-			if ct.State != container.StateRunning {
+			if ct.State != domain.StateRunning {
 				continue
 			}
 			if _, err := c.mgr.DockerFor(db.ServerID).ContainerStop(ctx, ct.ID, client.ContainerStopOptions{Timeout: &secs}); err != nil {
@@ -398,7 +397,7 @@ func (c *Data) runningContainer(ctx context.Context, svc domain.Service) (string
 		return "", err
 	}
 	for _, ct := range cts {
-		if ct.State == container.StateRunning {
+		if ct.State == domain.StateRunning {
 			return ct.ID, nil
 		}
 	}

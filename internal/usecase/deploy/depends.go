@@ -122,8 +122,8 @@ func (c *Deployer) waitCondition(ctx context.Context, dk *docker.Client, id stri
 func isJob(svc domain.Service) bool { return svc.Runtime.Restart != "" }
 
 // completed reports whether a container exited with code 0.
-func completed(ct container.Summary) bool {
-	return ct.State == container.StateExited && strings.HasPrefix(ct.Status, "Exited (0)")
+func completed(ct domain.Container) bool {
+	return ct.State == domain.StateExited && strings.HasPrefix(ct.Status, "Exited (0)")
 }
 
 // failedDependency names the first dependency of svc deployed in this run

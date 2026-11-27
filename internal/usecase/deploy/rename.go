@@ -8,8 +8,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -171,10 +169,10 @@ func (c *Deployer) renameContainers(ctx context.Context, svc domain.Service, old
 				}
 			}
 		}
-		if aliases == nil || ct.State != container.StateRunning || ct.NetworkSettings == nil {
+		if aliases == nil || ct.State != domain.StateRunning || ct.Networks == nil {
 			continue
 		}
-		for netName := range ct.NetworkSettings.Networks {
+		for netName := range ct.Networks {
 			if netName == prefix || strings.HasPrefix(netName, prefix+"-") {
 				if err := dk.SetAliases(ctx, netName, ct.ID, aliases); err != nil {
 					errs = append(errs, err)
@@ -198,11 +196,8 @@ func (c *Deployer) renameOnNetworks(ctx context.Context, project domain.Project,
 	return c.syncNetworks(ctx, project, svc, cts, true)
 }
 
-func onNetwork(ct container.Summary, name string) bool {
-	if ct.NetworkSettings == nil {
-		return false
-	}
-	_, ok := ct.NetworkSettings.Networks[name]
+func onNetwork(ct domain.Container, name string) bool {
+	_, ok := ct.Networks[name]
 	return ok
 }
 

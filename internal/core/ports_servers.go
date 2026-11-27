@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
@@ -76,7 +74,7 @@ func (p serversPorts) ReconcileService(ctx context.Context, project domain.Proje
 	return p.c.ReconcileService(ctx, project, svc)
 }
 
-func (p serversPorts) TrackHealth(project domain.Project, svc domain.Service, cts []container.Summary, now time.Time) {
+func (p serversPorts) TrackHealth(project domain.Project, svc domain.Service, cts []domain.Container, now time.Time) {
 	p.c.TrackHealth(project, svc, cts, now)
 }
 
@@ -88,7 +86,7 @@ func (p serversPorts) EnsureNetworks(ctx context.Context, sv domain.Server) erro
 	return p.c.EnsureNetworks(ctx, sv)
 }
 
-func (p serversPorts) ActiveContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error) {
+func (p serversPorts) ActiveContainers(ctx context.Context, svc domain.Service) ([]domain.Container, error) {
 	return p.c.ActiveContainers(ctx, svc)
 }
 
@@ -108,6 +106,6 @@ func (p serversPorts) CleanupRestoreTests(ctx context.Context, dk *docker.Client
 	return p.c.CleanupRestoreTests(ctx, dk)
 }
 
-func (p serversPorts) RemoveStaleJobContainers(ctx context.Context, dk *docker.Client, all []container.Summary) {
+func (p serversPorts) RemoveStaleJobContainers(ctx context.Context, dk *docker.Client, all []domain.Container) {
 	p.c.RemoveStaleJobContainers(ctx, dk, all)
 }

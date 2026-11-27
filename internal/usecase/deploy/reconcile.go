@@ -10,7 +10,6 @@ import (
 
 	cerrdefs "github.com/containerd/errdefs"
 
-	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -56,8 +55,8 @@ func (c *Deployer) ReconcileService(ctx context.Context, project domain.Project,
 		want.Replicas = 1
 	}
 
-	byReplica := map[int]container.Summary{}
-	var extra []container.Summary
+	byReplica := map[int]domain.Container{}
+	var extra []domain.Container
 	for _, ct := range cts {
 		if !IsActive(ct, svc) {
 			continue
@@ -80,9 +79,9 @@ func (c *Deployer) ReconcileService(ctx context.Context, project domain.Project,
 				return err
 			}
 			log.Info("reconcile: recreated missing replica", "replica", i)
-		case ct.State == container.StateExited && isJob(want):
+		case ct.State == domain.StateExited && isJob(want):
 			// Ran once (or Docker gave up on-failure): not restarted.
-		case ct.State == container.StateExited || ct.State == container.StateCreated:
+		case ct.State == domain.StateExited || ct.State == domain.StateCreated:
 			// Read before the start resets it.
 			in, err := dk.ContainerInspect(ctx, ct.ID, client.ContainerInspectOptions{})
 			oom := err == nil && in.Container.State != nil && in.Container.State.OOMKilled
@@ -116,7 +115,7 @@ func (c *Deployer) ReconcileService(ctx context.Context, project domain.Project,
 	}
 
 	// Scale down from the highest replica, one at a time.
-	slices.SortFunc(extra, func(a, b container.Summary) int {
+	slices.SortFunc(extra, func(a, b domain.Container) int {
 		ai, _ := strconv.Atoi(a.Labels[domain.LabelReplica])
 		bi, _ := strconv.Atoi(b.Labels[domain.LabelReplica])
 		return bi - ai

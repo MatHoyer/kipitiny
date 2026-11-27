@@ -129,11 +129,11 @@ func (c *Servers) removeUnusedImages(ctx context.Context, dk *docker.Client, ser
 			}
 		}
 	}
-	cts, err := dk.ContainerList(ctx, client.ContainerListOptions{All: true})
+	cts, err := dk.FindContainers(ctx, true, domain.Filter{})
 	if err != nil {
 		return 0, 0, err
 	}
-	for _, ct := range cts.Items {
+	for _, ct := range cts {
 		keep[ct.ImageID] = true
 	}
 	imgs, err := dk.ImageList(ctx, client.ImageListOptions{})

@@ -11,8 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -105,10 +103,10 @@ type Manager interface {
 	// Deploy: what the reconciler keeps in line on each server, a service's
 	// containers, deployment logs, registry credentials.
 	ReconcileService(ctx context.Context, project domain.Project, svc domain.Service) error
-	TrackHealth(project domain.Project, svc domain.Service, cts []container.Summary, now time.Time)
+	TrackHealth(project domain.Project, svc domain.Service, cts []domain.Container, now time.Time)
 	ForgetHealth(serverID string, known map[string]bool)
 	EnsureNetworks(ctx context.Context, sv domain.Server) error
-	ActiveContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error)
+	ActiveContainers(ctx context.Context, svc domain.Service) ([]domain.Container, error)
 	WakeFor(ctx context.Context, svc domain.Service) error
 	DeployLogPath(serviceID, deployID string) string
 	RegistryAuth(ctx context.Context, image string) string
@@ -117,5 +115,5 @@ type Manager interface {
 	CleanupRestoreTests(ctx context.Context, dk *docker.Client) error
 
 	// Projects: the containers of jobs that no longer run.
-	RemoveStaleJobContainers(ctx context.Context, dk *docker.Client, all []container.Summary)
+	RemoveStaleJobContainers(ctx context.Context, dk *docker.Client, all []domain.Container)
 }

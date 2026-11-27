@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/events"
 	"github.com/moby/moby/client"
 
@@ -173,12 +172,12 @@ func (c *Servers) reconcileServer(ctx context.Context, sv domain.Server, svcs []
 	if err := c.mgr.EnsureNetworks(ctx, sv); err != nil {
 		c.log.Warn("reconcile: networks", "server", sv.Name, "err", err)
 	}
-	all, err := dk.ListSummaries(ctx, map[string]string{domain.LabelManaged: "true"})
+	all, err := dk.ListContainers(ctx, map[string]string{domain.LabelManaged: "true"})
 	if err != nil {
 		return err
 	}
 	c.mgr.RemoveStaleJobContainers(ctx, dk, all)
-	byService := map[string][]container.Summary{}
+	byService := map[string][]domain.Container{}
 	for _, ct := range all {
 		if sid := ct.Labels[domain.LabelService]; sid != "" {
 			byService[sid] = append(byService[sid], ct)

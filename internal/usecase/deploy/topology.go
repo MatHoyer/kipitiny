@@ -11,9 +11,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/types/container"
 	dockernet "github.com/moby/moby/api/types/network"
-	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -198,9 +196,9 @@ func (c *Deployer) serverTopology(ctx context.Context, sv domain.Server, project
 	}
 
 	dk := c.mgr.DockerFor(sv.ID)
-	var cts []container.Summary
+	var cts []domain.Container
 	nets := map[string]dockernet.Summary{}
-	cts, err := dk.ListSummaries(ctx, map[string]string{domain.LabelManaged: "true"})
+	cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelManaged: "true"})
 	if err == nil {
 		var ns []dockernet.Summary
 		if ns, err = dk.ListNetworksMoby(ctx); err == nil {
@@ -235,7 +233,7 @@ func (c *Deployer) serverTopology(ctx context.Context, sv domain.Server, project
 		t.Manager = c.managerNode(ctx, dk)
 	}
 
-	byService := map[string][]container.Summary{}
+	byService := map[string][]domain.Container{}
 	for _, ct := range cts {
 		if id := ct.Labels[domain.LabelService]; id != "" {
 			byService[id] = append(byService[id], ct)
@@ -267,7 +265,7 @@ func (c *Deployer) serverTopology(ctx context.Context, sv domain.Server, project
 			}
 			ts.Volume = data.DataVolume(s)
 			views := make([]ContainerView, 0, len(byService[s.ID]))
-			nodes := map[string]container.Summary{}
+			nodes := map[string]domain.Container{}
 			for _, ct := range byService[s.ID] {
 				v := containerView(ct, s)
 				views = append(views, v)
@@ -306,10 +304,8 @@ func (c *Deployer) managerNode(ctx context.Context, dk *docker.Client) *ManagerN
 		return m
 	}
 	m.Upstream = network.ManagerAlias + ":" + port
-	f := make(client.Filters)
-	f.Add("id", id)
-	if res, err := dk.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: f}); err == nil && len(res.Items) == 1 {
-		m.Container = topoNode(res.Items[0], componentView(res.Items[0]))
+	if cts, err := dk.FindContainers(ctx, true, domain.Filter{}.Add("id", id)); err == nil && len(cts) == 1 {
+		m.Container = topoNode(cts[0], componentView(cts[0]))
 	}
 	return m
 }
@@ -333,26 +329,21 @@ func topoNetwork(nets map[string]dockernet.Summary, name, projectID string, know
 	return tn
 }
 
-func topoNode(ct container.Summary, v ContainerView) *TopoNode {
+func topoNode(ct domain.Container, v ContainerView) *TopoNode {
 	n := &TopoNode{ContainerView: v, Endpoints: []TopoEndpoint{}}
-	if ct.NetworkSettings != nil {
-		for name, ep := range ct.NetworkSettings.Networks {
-			e := TopoEndpoint{Network: name}
-			if ep != nil {
-				if ep.IPAddress.IsValid() {
-					e.IP = ep.IPAddress.String()
-				}
-				e.Aliases = ep.Aliases
-			}
-			n.Endpoints = append(n.Endpoints, e)
+	for name, ep := range ct.Networks {
+		e := TopoEndpoint{Network: name, Aliases: ep.Aliases}
+		if ep.IP.IsValid() {
+			e.IP = ep.IP.String()
 		}
+		n.Endpoints = append(n.Endpoints, e)
 	}
 	slices.SortFunc(n.Endpoints, func(a, b TopoEndpoint) int { return strings.Compare(a.Network, b.Network) })
 	return n
 }
 
 // componentView describes a container that belongs to no service.
-func componentView(ct container.Summary) ContainerView {
+func componentView(ct domain.Container) ContainerView {
 	v := containerView(ct, domain.Service{})
 	v.Retired = false
 	return v

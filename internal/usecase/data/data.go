@@ -8,8 +8,6 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -49,8 +47,8 @@ type Manager interface {
 	// ServiceContainers are a service's containers, ActiveContainers those
 	// of the deployment serving traffic; WakeFor wakes a sleeping service's
 	// project.
-	ServiceContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error)
-	ActiveContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error)
+	ServiceContainers(ctx context.Context, svc domain.Service) ([]domain.Container, error)
+	ActiveContainers(ctx context.Context, svc domain.Service) ([]domain.Container, error)
 	WakeFor(ctx context.Context, svc domain.Service) error
 	// PreviewSettings are a project's preview settings, its anonymization
 	// rules among them.

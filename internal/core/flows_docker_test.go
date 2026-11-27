@@ -26,7 +26,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 
-	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
@@ -288,7 +287,7 @@ func TestReconcileAfterRestartFlowDocker(t *testing.T) {
 	}
 }
 
-func containerIDs(cts []container.Summary) string {
+func containerIDs(cts []domain.Container) string {
 	var b bytes.Buffer
 	for _, c := range cts {
 		b.WriteString(c.ID[:12] + " ")

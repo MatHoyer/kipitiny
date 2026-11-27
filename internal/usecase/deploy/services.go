@@ -260,7 +260,7 @@ func (c *Deployer) ListServices(ctx context.Context, projectID string) ([]Servic
 	if err != nil {
 		return nil, err
 	}
-	cts, err := c.mgr.DockerFor(project.ServerID).ListSummaries(ctx, map[string]string{domain.LabelProject: projectID})
+	cts, err := c.mgr.DockerFor(project.ServerID).ListContainers(ctx, map[string]string{domain.LabelProject: projectID})
 	if err != nil {
 		return nil, err
 	}

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/moby/moby/api/types/container"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -131,12 +130,12 @@ func (c *Data) filesContainer(ctx context.Context, svc domain.Service, ref strin
 	if err != nil {
 		return "", err
 	}
-	slices.SortFunc(cts, func(a, b container.Summary) int {
+	slices.SortFunc(cts, func(a, b domain.Container) int {
 		return strings.Compare(a.Labels[domain.LabelReplica], b.Labels[domain.LabelReplica])
 	})
 	id := strings.TrimPrefix(ref, containerPrefix)
 	for _, ct := range cts {
-		if ct.State == container.StateRunning && (ref == FilesContainer || strings.HasPrefix(ct.ID, id)) {
+		if ct.State == domain.StateRunning && (ref == FilesContainer || strings.HasPrefix(ct.ID, id)) {
 			return ct.ID, nil
 		}
 	}

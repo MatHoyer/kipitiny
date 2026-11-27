@@ -279,14 +279,14 @@ func (c *Monitoring) EnsureAnalytics(ctx context.Context) error {
 	opts := c.analyticsSpec(ctx, st, apps)
 	hash := network.SpecHash(opts.Config.Image, opts.Config.Env, opts.Config.Labels)
 	opts.Config.Labels[domain.LabelConfigHash] = hash
-	existing, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: analyticsComponent})
+	existing, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: analyticsComponent})
 	if err != nil {
 		return err
 	}
 	var id string
 	if len(existing) == 1 && existing[0].Labels[domain.LabelConfigHash] == hash {
 		id = existing[0].ID
-		if existing[0].State != container.StateRunning {
+		if existing[0].State != domain.StateRunning {
 			if _, err := dk.ContainerStart(ctx, id, client.ContainerStartOptions{}); err != nil {
 				return err
 			}
@@ -320,7 +320,7 @@ func (c *Monitoring) EnsureAnalytics(ctx context.Context) error {
 }
 
 func (c *Monitoring) removeAnalytics(ctx context.Context, dk *docker.Client) error {
-	existing, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: analyticsComponent})
+	existing, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: analyticsComponent})
 	if err != nil {
 		return err
 	}
@@ -368,16 +368,16 @@ func (c *Monitoring) syncAnalyticsSites(ctx context.Context, id, token string, a
 // analyticsClient reaches the server's private port at its address on the
 // proxy network, which the manager is on (or, run on the host, routes to).
 func (c *Monitoring) analyticsClient(ctx context.Context, token string) (*analytics.Client, error) {
-	cts, err := c.mgr.DockerFor(domain.LocalServerID).ListSummaries(ctx, map[string]string{domain.LabelComponent: analyticsComponent})
+	cts, err := c.mgr.DockerFor(domain.LocalServerID).ListContainers(ctx, map[string]string{domain.LabelComponent: analyticsComponent})
 	if err != nil {
 		return nil, err
 	}
 	for _, ct := range cts {
-		if ct.State != container.StateRunning || ct.NetworkSettings == nil {
+		if ct.State != domain.StateRunning {
 			continue
 		}
-		if ep := ct.NetworkSettings.Networks[domain.ProxyNetwork]; ep != nil && ep.IPAddress.IsValid() {
-			return &analytics.Client{BaseURL: "http://" + ep.IPAddress.String() + ":" + strconv.Itoa(analytics.PrivatePort), Token: token}, nil
+		if ip := ct.Networks[domain.ProxyNetwork].IP; ip.IsValid() {
+			return &analytics.Client{BaseURL: "http://" + ip.String() + ":" + strconv.Itoa(analytics.PrivatePort), Token: token}, nil
 		}
 	}
 	return nil, errors.New("the analytics server isn't running")

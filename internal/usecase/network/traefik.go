@@ -73,12 +73,12 @@ func (c *Network) EnsureTraefik(ctx context.Context, sv domain.Server) error {
 	hash := SpecHash(parts...)
 	opts.Config.Labels[domain.LabelConfigHash] = hash
 
-	existing, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: TraefikComponent})
+	existing, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: TraefikComponent})
 	if err != nil {
 		return err
 	}
 	if len(existing) == 1 && existing[0].Labels[domain.LabelConfigHash] == hash {
-		if existing[0].State == container.StateRunning {
+		if existing[0].State == domain.StateRunning {
 			return nil
 		}
 		_, err := dk.ContainerStart(ctx, existing[0].ID, client.ContainerStartOptions{})

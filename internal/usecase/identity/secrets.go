@@ -115,7 +115,7 @@ func (c *Identity) CloseSecretProviders(ctx context.Context) error {
 // CleanupSecretHelpers removes the helper containers a crash left, of any
 // connection.
 func (c *Identity) CleanupSecretHelpers(ctx context.Context, dk *docker.Client) error {
-	cts, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: protonpass.Component})
+	cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: protonpass.Component})
 	if err != nil {
 		return err
 	}

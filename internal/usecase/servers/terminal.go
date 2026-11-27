@@ -95,11 +95,11 @@ func (c *Servers) OpenServiceTerminal(ctx context.Context, serviceID, containerR
 
 // pickContainer finds a running container by ID prefix or name, or the
 // lowest replica when ref is empty.
-func pickContainer(cts []container.Summary, ref string) (container.Summary, bool) {
-	var best container.Summary
+func pickContainer(cts []domain.Container, ref string) (domain.Container, bool) {
+	var best domain.Container
 	found := false
 	for _, ct := range cts {
-		if ct.State != container.StateRunning {
+		if ct.State != domain.StateRunning {
 			continue
 		}
 		if ref != "" {
@@ -115,7 +115,7 @@ func pickContainer(cts []container.Summary, ref string) (container.Summary, bool
 	return best, found
 }
 
-func replicaOf(ct container.Summary) int {
+func replicaOf(ct domain.Container) int {
 	n, _ := strconv.Atoi(ct.Labels[domain.LabelReplica])
 	return n
 }
@@ -171,7 +171,7 @@ func (c *Servers) OpenServerTerminal(ctx context.Context, serverID string, cols,
 // cleanupTerminals removes host shell and host check helpers left by a crash.
 func (c *Servers) cleanupTerminals(ctx context.Context, dk *docker.Client) error {
 	for _, component := range []string{terminalComponent, hostCheckComponent} {
-		cts, err := dk.ListSummaries(ctx, map[string]string{domain.LabelComponent: component})
+		cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: component})
 		if err != nil {
 			return err
 		}

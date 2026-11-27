@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -29,15 +28,15 @@ type ContainerView struct {
 	Retired bool `json:"retired,omitempty"`
 }
 
-func (c *Deployer) ServiceContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error) {
-	return c.mgr.DockerFor(svc.ServerID).ListSummaries(ctx, map[string]string{
+func (c *Deployer) ServiceContainers(ctx context.Context, svc domain.Service) ([]domain.Container, error) {
+	return c.mgr.DockerFor(svc.ServerID).ListContainers(ctx, map[string]string{
 		domain.LabelProject: svc.ProjectID,
 		domain.LabelService: svc.ID,
 	})
 }
 
 // ActiveContainers returns the containers of the deployment serving traffic.
-func (c *Deployer) ActiveContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error) {
+func (c *Deployer) ActiveContainers(ctx context.Context, svc domain.Service) ([]domain.Container, error) {
 	cts, err := c.ServiceContainers(ctx, svc)
 	if err != nil {
 		return nil, err
@@ -51,7 +50,7 @@ func (c *Deployer) ActiveContainers(ctx context.Context, svc domain.Service) ([]
 	return active, nil
 }
 
-func containerView(ct container.Summary, svc domain.Service) ContainerView {
+func containerView(ct domain.Container, svc domain.Service) ContainerView {
 	replica, _ := strconv.Atoi(ct.Labels[domain.LabelReplica])
 	name := ""
 	if len(ct.Names) > 0 {
@@ -59,8 +58,8 @@ func containerView(ct container.Summary, svc domain.Service) ContainerView {
 	}
 	health := ""
 	// A stopped container keeps its last health status; it means nothing then.
-	if ct.State == container.StateRunning && ct.Health != nil && ct.Health.Status != container.NoHealthcheck {
-		health = string(ct.Health.Status)
+	if ct.State == domain.StateRunning && ct.Health != domain.NoHealthcheck {
+		health = ct.Health
 	}
 	return ContainerView{
 		ID:       ct.ID[:12],
@@ -68,7 +67,7 @@ func containerView(ct container.Summary, svc domain.Service) ContainerView {
 		Replica:  replica,
 		DeployID: ct.Labels[domain.LabelDeploy],
 		Image:    ct.Image,
-		State:    string(ct.State),
+		State:    ct.State,
 		Status:   ct.Status,
 		Health:   health,
 		Retired:  !IsActive(ct, svc),
@@ -141,7 +140,7 @@ func (c *Deployer) ServiceAction(ctx context.Context, id string, action Action) 
 	for _, ct := range cts {
 		switch action {
 		case ActionStart:
-			if ct.State != container.StateRunning {
+			if ct.State != domain.StateRunning {
 				_, err = dk.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{})
 			}
 		case ActionStop:

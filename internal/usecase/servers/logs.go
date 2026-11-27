@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
-	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 type LogLine struct {
@@ -46,7 +46,7 @@ func (c *Servers) StreamLogs(ctx context.Context, serviceID string, tail int, em
 	// Read each backlog to its end, then follow from its last line, so the
 	// merged backlog can be sorted before anything is sent.
 	var backlog []LogLine
-	var follow []container.Summary
+	var follow []domain.Container
 	var since []time.Time
 	for _, ct := range cts {
 		lines, err := containerLogs(ctx, dk, ct, client.ContainerLogsOptions{Tail: strconv.Itoa(tail)})
@@ -95,7 +95,7 @@ func (c *Servers) StreamLogs(ctx context.Context, serviceID string, tail int, em
 
 // followContainer streams lines logged after since (the last backlog line),
 // or all of them when the backlog was empty.
-func followContainer(ctx context.Context, dk *docker.Client, ct container.Summary, since time.Time, out chan<- LogLine) error {
+func followContainer(ctx context.Context, dk *docker.Client, ct domain.Container, since time.Time, out chan<- LogLine) error {
 	opts := client.ContainerLogsOptions{Follow: true}
 	if !since.IsZero() {
 		// Docker's since is inclusive: the last backlog line comes back.
@@ -137,7 +137,7 @@ func (c *Servers) RecentLogs(ctx context.Context, serviceID string, tail int) ([
 	return lines, nil
 }
 
-func containerLogs(ctx context.Context, dk *docker.Client, ct container.Summary, opts client.ContainerLogsOptions) ([]LogLine, error) {
+func containerLogs(ctx context.Context, dk *docker.Client, ct domain.Container, opts client.ContainerLogsOptions) ([]LogLine, error) {
 	var lines []LogLine
 	err := readLogs(ctx, dk, ct, opts, func(l LogLine) bool {
 		lines = append(lines, l)
@@ -148,7 +148,7 @@ func containerLogs(ctx context.Context, dk *docker.Client, ct container.Summary,
 
 // readLogs calls fn for each timestamped log line until the stream ends or fn
 // returns false.
-func readLogs(ctx context.Context, dk *docker.Client, ct container.Summary, opts client.ContainerLogsOptions, fn func(LogLine) bool) error {
+func readLogs(ctx context.Context, dk *docker.Client, ct domain.Container, opts client.ContainerLogsOptions, fn func(LogLine) bool) error {
 	opts.ShowStdout, opts.ShowStderr, opts.Timestamps = true, true, true
 	rc, err := dk.ContainerLogs(ctx, ct.ID, opts)
 	if err != nil {
@@ -190,6 +190,6 @@ func sortLines(lines []LogLine) {
 	slices.SortStableFunc(lines, func(a, b LogLine) int { return a.Time.Compare(b.Time) })
 }
 
-func containerName(ct container.Summary) string {
+func containerName(ct domain.Container) string {
 	return strings.TrimPrefix(ct.Names[0], "/")
 }

@@ -9,15 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
-func replica(name, deploy string, state container.ContainerState, health container.HealthStatus) container.Summary {
-	ct := container.Summary{
+func replica(name, deploy string, state string, health string) domain.Container {
+	ct := domain.Container{
 		ID:     name,
 		Names:  []string{"/" + name},
 		State:  state,
@@ -25,7 +23,7 @@ func replica(name, deploy string, state container.ContainerState, health contain
 		Labels: map[string]string{domain.LabelDeploy: deploy},
 	}
 	if health != "" {
-		ct.Health = &container.HealthSummary{Status: health}
+		ct.Health = health
 	}
 	return ct
 }
@@ -35,24 +33,24 @@ func TestHealthOf(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		svc     domain.Service
-		cts     []container.Summary
+		cts     []domain.Container
 		judged  bool
 		healthy bool
 		detail  string
 	}{
 		{"not deployed", domain.Service{}, nil, false, false, ""},
 		{"stopped", domain.Service{CurrentDeploymentID: "d2", Stopped: true}, nil, false, false, ""},
-		{"no healthcheck", svc, []container.Summary{replica("web-1", "d2", container.StateRunning, "")}, true, true, ""},
-		{"one healthy is enough", svc, []container.Summary{
-			replica("web-1", "d2", container.StateRunning, container.Unhealthy),
-			replica("web-2", "d2", container.StateRunning, container.Healthy),
+		{"no healthcheck", svc, []domain.Container{replica("web-1", "d2", domain.StateRunning, "")}, true, true, ""},
+		{"one healthy is enough", svc, []domain.Container{
+			replica("web-1", "d2", domain.StateRunning, domain.Unhealthy),
+			replica("web-2", "d2", domain.StateRunning, domain.Healthy),
 		}, true, true, ""},
-		{"all unhealthy", svc, []container.Summary{
-			replica("web-2", "d2", container.StateRunning, container.Unhealthy),
-			replica("web-1", "d2", container.StateExited, container.Unhealthy),
-			replica("web-old", "d1", container.StateRunning, container.Healthy), // previous deployment
+		{"all unhealthy", svc, []domain.Container{
+			replica("web-2", "d2", domain.StateRunning, domain.Unhealthy),
+			replica("web-1", "d2", domain.StateExited, domain.Unhealthy),
+			replica("web-old", "d1", domain.StateRunning, domain.Healthy), // previous deployment
 		}, true, false, "web-1: exited (1) 2 minutes ago, web-2: unhealthy"},
-		{"starting", svc, []container.Summary{replica("web-1", "d2", container.StateRunning, container.Starting)}, true, false, "web-1: starting"},
+		{"starting", svc, []domain.Container{replica("web-1", "d2", domain.StateRunning, domain.HealthStarting)}, true, false, "web-1: starting"},
 		{"none left", svc, nil, true, false, "no replica is running"},
 	} {
 		judged, healthy, detail := healthOf(tc.svc, tc.cts)
@@ -110,8 +108,8 @@ func TestTrackHealthNotifies(t *testing.T) {
 	}
 	p := domain.Project{ID: "p1", Name: "shop"}
 	svc := domain.Service{ID: "s1", Name: "api", ServerID: "local", CurrentDeploymentID: "d1"}
-	bad := []container.Summary{replica("api-1", "d1", container.StateRunning, container.Unhealthy)}
-	good := []container.Summary{replica("api-1", "d1", container.StateRunning, container.Healthy)}
+	bad := []domain.Container{replica("api-1", "d1", domain.StateRunning, domain.Unhealthy)}
+	good := []domain.Container{replica("api-1", "d1", domain.StateRunning, domain.Healthy)}
 	t0 := time.Now()
 
 	c.TrackHealth(p, svc, bad, t0)
