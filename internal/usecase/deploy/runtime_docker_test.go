@@ -52,7 +52,7 @@ func TestRuntimeDocker(t *testing.T) {
 	delete(spec.Config.Labels, docker.LabelManaged)
 	spec.NetworkingConfig = &dockernet.NetworkingConfig{}
 	spec.HostConfig.RestartPolicy = container.RestartPolicy{}
-	id, err := dk.Run(ctx, spec)
+	id, err := dk.RunMoby(ctx, spec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestFilesDocker(t *testing.T) {
 	delete(spec.Config.Labels, docker.LabelManaged)
 	spec.NetworkingConfig = &dockernet.NetworkingConfig{}
 	spec.HostConfig.RestartPolicy = container.RestartPolicy{}
-	id, err := dk.Run(ctx, spec, serviceFiles(svc, envSources{project: map[string]string{"T": "s3cret"}})...)
+	id, err := dk.RunMoby(ctx, spec, serviceFiles(svc, envSources{project: map[string]string{"T": "s3cret"}})...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestJobsDocker(t *testing.T) {
 		delete(spec.Config.Labels, docker.LabelManaged)
 		spec.NetworkingConfig = &dockernet.NetworkingConfig{}
 		spec.Name += strconv.Itoa(i)
-		id, err := dk.Run(ctx, spec)
+		id, err := dk.RunMoby(ctx, spec)
 		if err != nil {
 			t.Fatal(err)
 		}

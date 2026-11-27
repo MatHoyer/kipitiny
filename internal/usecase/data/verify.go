@@ -194,7 +194,7 @@ func (c *Data) scratchPostgres(ctx context.Context, b domain.Backup, name, user,
 		return nil, "", fmt.Errorf("pull %s: %w", image, err)
 	}
 	step(VerifyServer)
-	id, err := dk.Run(ctx, client.ContainerCreateOptions{
+	id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{
 		Name: name,
 		Config: &container.Config{
 			Image: image,
@@ -279,7 +279,7 @@ func (c *Data) verifyImage(ctx context.Context, b domain.Backup) (image, serverI
 // helpers) and staging volumes left by a crash.
 func (c *Data) CleanupRestoreTests(ctx context.Context, dk *docker.Client) error {
 	for _, component := range []string{verifyComponent, volumeHelperComponent} {
-		cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: component})
+		cts, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: component})
 		if err != nil {
 			return err
 		}

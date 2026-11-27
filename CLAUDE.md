@@ -6,7 +6,7 @@ Design doc: `docs/design.md` — read before architectural changes. Roadmap in �
 - Manager is ONE process: no Postgres/Redis/worker containers for its own state.
 - RAM budget matters: no Node at runtime, no heavy deps.
 - Layers, dependencies pointing inward (kipitrek's layout, enforced by depguard in `.golangci.yml`):
-  `internal/domain` (entities, repository interfaces, the other ports such as `Encryption`, `Cron` and `Git`, shared errors; standard library only) ←
+  `internal/domain` (entities, repository interfaces, the other ports such as `ContainerRuntime`, `Encryption`, `Cron` and `Git`, shared errors; standard library only) ←
   `internal/usecase/<area>` (the logic) ← `internal/infrastructure/<adapter>` (SQLite, age, cron, go-git) and the delivery
   (`internal/api` REST, `internal/mcp` tools). Wiring only in `cmd/kipitiny`. Handlers/MCP never touch SQL or Docker
   directly. `internal/core` is the wiring and lifecycle around the areas: it embeds each area's struct
@@ -21,7 +21,9 @@ Design doc: `docs/design.md` — read before architectural changes. Roadmap in �
 - Store access only via the repositories in `internal/domain` (`domain.Store` holds them all; SQLite adapter in
   `internal/infrastructure/sqlite`); keep SQL portable (SQLite now, Postgres later). STRICT tables, TEXT ULIDs, one goose folder per dialect.
 - Docker SDK is `github.com/moby/moby/client` (Options/Result struct API, not the old `docker/docker/client` signatures). Use `cerrdefs.IsNotFound`.
-- Everything created on Docker carries `kipitiny.*` labels (`internal/docker`).
+- Use cases drive Docker through `domain.ContainerRuntime` and its types (`ContainerSpec`, `Container`…), implemented by
+  `internal/docker`; the areas still calling moby directly move to it one by one (#522).
+- Everything created on Docker carries `kipitiny.*` labels (`domain.Label*`, network names in `internal/domain/docker.go`).
 - Postgres services are always 1 replica.
 - UI primitives (`@kipit-labs/kipitidy/*`: buttons, dialogs, form fields, theme tokens) live in the kipitidy repo
   (`kipit-labs/kipitidy`): change them there, release, then bump the version in `web/`. Pages and the components one area uses live in

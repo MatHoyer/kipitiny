@@ -210,7 +210,7 @@ func (c *Servers) DeleteServer(ctx context.Context, id string) error {
 	}
 	dk := c.DockerFor(id)
 	for _, component := range []string{network.TraefikComponent, network.TunnelComponent} {
-		cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: component})
+		cts, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: component})
 		if err != nil {
 			continue
 		}

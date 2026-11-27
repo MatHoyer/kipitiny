@@ -65,7 +65,7 @@ func filesTestService(t *testing.T, svc domain.Service, vol, seed string) (*Data
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	code, err := dk.RunAttached(ctx, client.ContainerCreateOptions{
+	code, err := dk.RunAttachedMoby(ctx, client.ContainerCreateOptions{
 		Config:     &container.Config{Image: volumeHelperImage, Cmd: []string{"sh", "-ec", seed}},
 		HostConfig: &container.HostConfig{NetworkMode: "none", Mounts: []mount.Mount{{Type: mount.TypeVolume, Source: source, Target: "/seed"}}},
 	}, nil, &out)
@@ -420,7 +420,7 @@ func containerFilesTest(t *testing.T, kind domain.ServiceKind, image string, cmd
 	if err := dk.EnsureImage(ctx, image, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	id, err := dk.Run(ctx, client.ContainerCreateOptions{
+	id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{
 		Name: "kipitiny-test-" + strings.ToLower(svc.ID),
 		Config: &container.Config{Image: image, Cmd: cmd, User: "1000",
 			Labels: map[string]string{docker.LabelProject: p.ID, docker.LabelService: svc.ID, docker.LabelReplica: "1"}},

@@ -31,7 +31,7 @@ type ContainerView struct {
 }
 
 func (c *Deployer) ServiceContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error) {
-	return c.mgr.DockerFor(svc.ServerID).ListContainers(ctx, map[string]string{
+	return c.mgr.DockerFor(svc.ServerID).ListSummaries(ctx, map[string]string{
 		docker.LabelProject: svc.ProjectID,
 		docker.LabelService: svc.ID,
 	})

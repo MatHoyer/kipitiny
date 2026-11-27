@@ -140,14 +140,14 @@ func installProbe(ctx context.Context, dk *docker.Client, volume, bin string) er
 		}
 		pw.CloseWithError(err)
 	}()
-	_, err = dk.CopyToContainer(ctx, helper.ID, client.CopyToContainerOptions{DestinationPath: "/probe", Content: pr})
+	_, err = dk.Client.CopyToContainer(ctx, helper.ID, client.CopyToContainerOptions{DestinationPath: "/probe", Content: pr})
 	pr.Close()
 	return err
 }
 
 // imageHealthcheck reports whether an image defines its own HEALTHCHECK.
 func imageHealthcheck(ctx context.Context, dk *docker.Client, image, platform string) (bool, error) {
-	res, err := dk.InspectImage(ctx, image, platform)
+	res, err := dk.InspectImageMoby(ctx, image, platform)
 	if err != nil {
 		return false, err
 	}

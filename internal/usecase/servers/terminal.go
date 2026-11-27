@@ -15,6 +15,7 @@ import (
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
 )
 
@@ -31,7 +32,7 @@ var terminalEnv = []string{"TERM=xterm-256color"}
 // Terminal is an interactive shell session. Every session is recorded in the
 // audit log when it opens and when it closes.
 type Terminal struct {
-	*docker.TTY
+	domain.TTY
 	once  sync.Once
 	close func()
 }
@@ -44,7 +45,7 @@ func (t *Terminal) Close() error {
 
 // openTerminal records the session's start (or failure to start) and wraps
 // tty so closing it records the end.
-func (c *Servers) openTerminal(ctx context.Context, target string, tty *docker.TTY, err error) (*Terminal, error) {
+func (c *Servers) openTerminal(ctx context.Context, target string, tty domain.TTY, err error) (*Terminal, error) {
 	if err != nil {
 		c.mgr.Audit(ctx, "terminal open", target, http.StatusBadGateway, err)
 		return nil, err
@@ -147,7 +148,7 @@ func (c *Servers) OpenServerTerminal(ctx context.Context, serverID string, cols,
 	if err := dk.EnsureImage(ctx, hostShellImage, "", ""); err != nil {
 		return c.openTerminal(ctx, target, nil, fmt.Errorf("pull %s: %w", hostShellImage, err))
 	}
-	tty, err := dk.RunTTY(ctx, client.ContainerCreateOptions{
+	tty, err := dk.RunTTYMoby(ctx, client.ContainerCreateOptions{
 		Name: "kipitiny-terminal-" + strings.ToLower(ids.New()),
 		Config: &container.Config{
 			Image: hostShellImage,
@@ -170,7 +171,7 @@ func (c *Servers) OpenServerTerminal(ctx context.Context, serverID string, cols,
 // cleanupTerminals removes host shell and host check helpers left by a crash.
 func (c *Servers) cleanupTerminals(ctx context.Context, dk *docker.Client) error {
 	for _, component := range []string{terminalComponent, hostCheckComponent} {
-		cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: component})
+		cts, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: component})
 		if err != nil {
 			return err
 		}

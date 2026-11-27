@@ -279,7 +279,7 @@ func (c *Monitoring) EnsureAnalytics(ctx context.Context) error {
 	opts := c.analyticsSpec(ctx, st, apps)
 	hash := network.SpecHash(opts.Config.Image, opts.Config.Env, opts.Config.Labels)
 	opts.Config.Labels[docker.LabelConfigHash] = hash
-	existing, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: analyticsComponent})
+	existing, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: analyticsComponent})
 	if err != nil {
 		return err
 	}
@@ -302,7 +302,7 @@ func (c *Monitoring) EnsureAnalytics(ctx context.Context) error {
 			return fmt.Errorf("pull %s: %w", opts.Config.Image, err)
 		}
 		progress.Report(ctx, AnalyticsStepStart)
-		if id, err = dk.Run(ctx, opts); err != nil {
+		if id, err = dk.RunMoby(ctx, opts); err != nil {
 			return err
 		}
 		progress.Report(ctx, AnalyticsStepHealth)
@@ -320,7 +320,7 @@ func (c *Monitoring) EnsureAnalytics(ctx context.Context) error {
 }
 
 func (c *Monitoring) removeAnalytics(ctx context.Context, dk *docker.Client) error {
-	existing, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: analyticsComponent})
+	existing, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: analyticsComponent})
 	if err != nil {
 		return err
 	}
@@ -368,7 +368,7 @@ func (c *Monitoring) syncAnalyticsSites(ctx context.Context, id, token string, a
 // analyticsClient reaches the server's private port at its address on the
 // proxy network, which the manager is on (or, run on the host, routes to).
 func (c *Monitoring) analyticsClient(ctx context.Context, token string) (*analytics.Client, error) {
-	cts, err := c.mgr.DockerFor(domain.LocalServerID).ListContainers(ctx, map[string]string{docker.LabelComponent: analyticsComponent})
+	cts, err := c.mgr.DockerFor(domain.LocalServerID).ListSummaries(ctx, map[string]string{docker.LabelComponent: analyticsComponent})
 	if err != nil {
 		return nil, err
 	}

@@ -28,7 +28,6 @@ import (
 
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
-	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -259,10 +258,10 @@ func TestReconcileAfterRestartFlowDocker(t *testing.T) {
 	if err := f.dk.EnsureImage(f.ctx, "busybox", "", ""); err != nil {
 		t.Fatal(err)
 	}
-	stray, err := f.dk.Run(f.ctx, client.ContainerCreateOptions{Name: "kipitiny-test-stray", Config: &container.Config{
-		Image: "busybox", Cmd: []string{"sleep", "600"},
+	stray, err := f.dk.Run(f.ctx, domain.ContainerSpec{
+		Name: "kipitiny-test-stray", Image: "busybox", Cmd: []string{"sleep", "600"},
 		Labels: map[string]string{docker.LabelManaged: "true", docker.LabelProject: p.ID, docker.LabelService: "01STRAY0000000000000000000"},
-	}})
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -111,7 +111,7 @@ func TestRenameDocker(t *testing.T) {
 	if err := dk.EnsureImage(ctx, "busybox:stable", "", ""); err != nil {
 		t.Fatal(err)
 	}
-	id, err := dk.Run(ctx, client.ContainerCreateOptions{
+	id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{
 		Name: "renametest-main-1-abcdef",
 		Config: &container.Config{
 			Image:  "busybox:stable",

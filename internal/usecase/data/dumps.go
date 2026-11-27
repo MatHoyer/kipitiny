@@ -290,7 +290,7 @@ func (c *Data) scratchDump(ctx context.Context, b domain.Backup, name string, st
 	} else {
 		cfg.Cmd, cfg.Healthcheck = mysqlArgs(verifyMemoryMB), mysqlHealthcheck(svc.Kind)
 	}
-	id, err := dk.Run(ctx, client.ContainerCreateOptions{Name: name, Config: cfg, HostConfig: host})
+	id, err := dk.RunMoby(ctx, client.ContainerCreateOptions{Name: name, Config: cfg, HostConfig: host})
 	if err != nil {
 		return svc, nil, "", err
 	}

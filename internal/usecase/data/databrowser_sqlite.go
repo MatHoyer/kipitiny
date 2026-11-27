@@ -50,7 +50,7 @@ func (c *Data) startSQLiteHelper(ctx context.Context, dk *docker.Client, name st
 	if err := dk.EnsureImage(ctx, image, "", ""); err != nil {
 		return "", fmt.Errorf("pull %s: %w", image, err)
 	}
-	return dk.Run(ctx, client.ContainerCreateOptions{
+	return dk.RunMoby(ctx, client.ContainerCreateOptions{
 		Name: name,
 		Config: &container.Config{
 			Image:  image,

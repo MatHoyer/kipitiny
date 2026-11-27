@@ -73,7 +73,7 @@ func (c *Network) EnsureTraefik(ctx context.Context, sv domain.Server) error {
 	hash := SpecHash(parts...)
 	opts.Config.Labels[docker.LabelConfigHash] = hash
 
-	existing, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: TraefikComponent})
+	existing, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: TraefikComponent})
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func (c *Network) EnsureTraefik(ctx context.Context, sv domain.Server) error {
 	if err := dk.EnsureImage(ctx, cfg.Image, c.mgr.RegistryAuth(ctx, cfg.Image), ""); err != nil {
 		return fmt.Errorf("pull %s: %w", cfg.Image, err)
 	}
-	if _, err := dk.Run(ctx, opts, files...); err != nil {
+	if _, err := dk.RunMoby(ctx, opts, files...); err != nil {
 		return err
 	}
 	c.log.Info("traefik started", "server", sv.Name, "image", cfg.Image, "http", cfg.HTTPPort, "https", cfg.HTTPSPort)

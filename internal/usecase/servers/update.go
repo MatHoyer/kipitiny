@@ -344,7 +344,7 @@ func (c *Servers) launchUpdater(ctx context.Context, self, ref string) error {
 			}
 		}
 	}
-	old, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: updaterComponent})
+	old, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: updaterComponent})
 	if err != nil {
 		return err
 	}
@@ -354,7 +354,7 @@ func (c *Servers) launchUpdater(ctx context.Context, self, ref string) error {
 		}
 	}
 	// The new version's binary does the swap, so fixes to it apply at once.
-	_, err = dk.Run(ctx, client.ContainerCreateOptions{
+	_, err = dk.RunMoby(ctx, client.ContainerCreateOptions{
 		Name: updaterName,
 		Config: &container.Config{
 			Image:       ref,
@@ -390,7 +390,7 @@ func floatingTag(ref, image string) bool {
 // cleanupUpdater removes finished updater containers, copying their output
 // into the manager's log first: it is the only record of how an update went.
 func (c *Servers) cleanupUpdater(ctx context.Context, dk *docker.Client) {
-	cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: updaterComponent})
+	cts, err := dk.ListSummaries(ctx, map[string]string{docker.LabelComponent: updaterComponent})
 	if err != nil {
 		return
 	}

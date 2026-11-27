@@ -93,7 +93,7 @@ func (c *Servers) watchEvents(ctx context.Context, serverID string) {
 		f.Add("type", string(events.ContainerEventType))
 		f.Add("label", docker.LabelManaged+"=true")
 		f.Add("event", string(events.ActionDie), string(events.ActionDestroy), string(events.ActionOOM))
-		res := c.DockerFor(serverID).Events(ctx, client.EventsListOptions{Filters: f})
+		res := c.DockerFor(serverID).Client.Events(ctx, client.EventsListOptions{Filters: f})
 	stream:
 		for {
 			select {
@@ -174,7 +174,7 @@ func (c *Servers) reconcileServer(ctx context.Context, sv domain.Server, svcs []
 	if err := c.mgr.EnsureNetworks(ctx, sv); err != nil {
 		c.log.Warn("reconcile: networks", "server", sv.Name, "err", err)
 	}
-	all, err := dk.ListContainers(ctx, map[string]string{docker.LabelManaged: "true"})
+	all, err := dk.ListSummaries(ctx, map[string]string{docker.LabelManaged: "true"})
 	if err != nil {
 		return err
 	}

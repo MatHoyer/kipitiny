@@ -70,7 +70,7 @@ func (m fakeManager) Audit(ctx context.Context, action, target string, status in
 func (fakeManager) Notify(notify.Event, string, string) {}
 
 func (m fakeManager) ServiceContainers(ctx context.Context, svc domain.Service) ([]container.Summary, error) {
-	return m.dk.ListContainers(ctx, map[string]string{docker.LabelProject: svc.ProjectID, docker.LabelService: svc.ID})
+	return m.dk.ListSummaries(ctx, map[string]string{docker.LabelProject: svc.ProjectID, docker.LabelService: svc.ID})
 }
 
 // ActiveContainers is core's: the current deployment's, else the running ones.

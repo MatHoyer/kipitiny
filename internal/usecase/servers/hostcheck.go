@@ -149,7 +149,7 @@ func (c *Servers) runOnHost(ctx context.Context, serverID, script string) (strin
 		return "", fmt.Errorf("pull %s: %w", hostShellImage, err)
 	}
 	var out bytes.Buffer
-	code, err := dk.RunAttached(ctx, client.ContainerCreateOptions{
+	code, err := dk.RunAttachedMoby(ctx, client.ContainerCreateOptions{
 		Name: "kipitiny-hostcheck-" + strings.ToLower(ids.New()),
 		Config: &container.Config{
 			Image: hostShellImage,
