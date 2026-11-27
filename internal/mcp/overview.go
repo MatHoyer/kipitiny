@@ -11,9 +11,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/gitprovider"
+	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 )
 
 // The manager as a whole: git repositories it can read, the network map,
@@ -84,7 +84,7 @@ func (t *tools) listGitBranches(ctx context.Context, _ *mcp.CallToolRequest, in 
 	if err != nil {
 		return nil, listGitBranchesOut{}, err
 	}
-	i := slices.IndexFunc(ps, func(p core.GitProviderView) bool { return p.Name == in.Provider })
+	i := slices.IndexFunc(ps, func(p projects.GitProviderView) bool { return p.Name == in.Provider })
 	if i < 0 {
 		return nil, listGitBranchesOut{}, fmt.Errorf("not found: git provider %s", in.Provider)
 	}

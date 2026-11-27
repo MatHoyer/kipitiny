@@ -14,6 +14,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 )
 
 type API struct {
@@ -425,7 +426,7 @@ func (a *API) listTags(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"tags": tags, "colors": core.TagColors})
+	writeJSON(w, http.StatusOK, map[string]any{"tags": tags, "colors": projects.TagColors})
 }
 
 func (a *API) setTagColor(w http.ResponseWriter, r *http.Request) {

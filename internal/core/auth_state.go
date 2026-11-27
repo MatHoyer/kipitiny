@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
@@ -16,7 +17,7 @@ type AuthState struct {
 	// way to sign in.
 	SSO         []identity.SSOButton `json:"sso"`
 	SSORequired bool                 `json:"ssoRequired"`
-	Branding    Branding             `json:"branding"`
+	Branding    projects.Branding    `json:"branding"`
 }
 
 func (c *Core) AuthState(ctx context.Context, sessionToken string) (AuthState, error) {

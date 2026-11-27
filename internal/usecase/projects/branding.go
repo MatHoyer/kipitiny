@@ -1,4 +1,4 @@
-package core
+package projects
 
 import (
 	"bytes"
@@ -100,7 +100,7 @@ type brandingSettings struct {
 	LogoHash string `json:"logoHash,omitempty"`
 }
 
-func (c *Core) brandingSettings(ctx context.Context) brandingSettings {
+func (c *Projects) brandingSettings(ctx context.Context) brandingSettings {
 	var s brandingSettings
 	if v, err := c.store.GetSetting(ctx, brandingSetting); err == nil && v != "" {
 		_ = json.Unmarshal([]byte(v), &s)
@@ -109,7 +109,7 @@ func (c *Core) brandingSettings(ctx context.Context) brandingSettings {
 }
 
 // Branding returns the manager's branding, shown before sign-in too.
-func (c *Core) Branding(ctx context.Context) Branding {
+func (c *Projects) Branding(ctx context.Context) Branding {
 	s := c.brandingSettings(ctx)
 	b := Branding{Name: s.Name, Theme: s.Theme}
 	if s.LogoHash != "" {
@@ -119,7 +119,7 @@ func (c *Core) Branding(ctx context.Context) Branding {
 }
 
 // BrandName is the manager's name, kipitiny unless renamed.
-func (c *Core) BrandName(ctx context.Context) string {
+func (c *Projects) BrandName(ctx context.Context) string {
 	if n := c.brandingSettings(ctx).Name; n != "" {
 		return n
 	}
@@ -127,7 +127,7 @@ func (c *Core) BrandName(ctx context.Context) string {
 }
 
 // BrandingLogo returns the logo and its content type, or domain.ErrNotFound.
-func (c *Core) BrandingLogo(ctx context.Context) ([]byte, string, error) {
+func (c *Projects) BrandingLogo(ctx context.Context) ([]byte, string, error) {
 	s := c.brandingSettings(ctx)
 	if s.LogoHash == "" {
 		return nil, "", domain.ErrNotFound
@@ -144,7 +144,7 @@ func (c *Core) BrandingLogo(ctx context.Context) ([]byte, string, error) {
 }
 
 // SetBranding replaces the manager's branding.
-func (c *Core) SetBranding(ctx context.Context, in BrandingInput) (Branding, error) {
+func (c *Projects) SetBranding(ctx context.Context, in BrandingInput) (Branding, error) {
 	if err := identity.RequireAdmin(ctx); err != nil {
 		return Branding{}, err
 	}
@@ -182,7 +182,7 @@ func (c *Core) SetBranding(ctx context.Context, in BrandingInput) (Branding, err
 }
 
 // ResetBranding goes back to kipitiny's own name, colours and logo.
-func (c *Core) ResetBranding(ctx context.Context) error {
+func (c *Projects) ResetBranding(ctx context.Context) error {
 	if err := identity.RequireAdmin(ctx); err != nil {
 		return err
 	}
@@ -280,7 +280,7 @@ type ManifestIcon struct {
 
 // Manifest follows the branding: its name, accent and logo, else kipitiny's
 // icons (web/public).
-func (c *Core) Manifest(ctx context.Context) Manifest {
+func (c *Projects) Manifest(ctx context.Context) Manifest {
 	s := c.brandingSettings(ctx)
 	name := s.Name
 	if name == "" {
@@ -301,3 +301,6 @@ func (c *Core) Manifest(ctx context.Context) Manifest {
 		ThemeColor: s.Accent, Icons: icons,
 	}
 }
+
+// BrandAccent is the accent colour emails use, "" for the default.
+func (c *Projects) BrandAccent(ctx context.Context) string { return c.brandingSettings(ctx).Accent }

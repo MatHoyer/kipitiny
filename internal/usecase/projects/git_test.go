@@ -1,4 +1,4 @@
-package core
+package projects
 
 import (
 	"context"
@@ -123,7 +123,7 @@ func TestGitFetch(t *testing.T) {
 	ctx := context.Background()
 	dir, commit := localRepo(t)
 	sha := commit("services: {web: {image: nginx}}\n")
-	c := New(config.Config{DataDir: t.TempDir()}, nil, nil, nil)
+	c := New(ctx, &config.Config{DataDir: t.TempDir()}, nil, nil, nil)
 	g := domain.ProjectGit{RepoURL: dir, Branch: "main", Path: "deploy/compose.yaml"}
 	head, err := c.gitHead(ctx, g)
 	if err != nil || head != sha {
@@ -217,7 +217,7 @@ func TestGitApply(t *testing.T) {
 	}
 }
 
-func servicesByName(t *testing.T, c *Core, projectID string) map[string]domain.Service {
+func servicesByName(t *testing.T, c *testCore, projectID string) map[string]domain.Service {
 	t.Helper()
 	svcs, err := c.store.ListServices(context.Background(), projectID)
 	if err != nil {

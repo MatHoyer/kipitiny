@@ -109,5 +109,5 @@ func (p serversPorts) CleanupRestoreTests(ctx context.Context, dk *docker.Client
 }
 
 func (p serversPorts) RemoveStaleJobContainers(ctx context.Context, dk *docker.Client, all []container.Summary) {
-	p.c.removeStaleJobContainers(ctx, dk, all)
+	p.c.RemoveStaleJobContainers(ctx, dk, all)
 }

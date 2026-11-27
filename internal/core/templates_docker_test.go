@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
@@ -62,8 +63,8 @@ func TestTemplatesDocker(t *testing.T) {
 
 	for _, tpl := range templates.List() {
 		t.Run(tpl.ID, func(t *testing.T) {
-			res, err := c.InstallTemplate(ctx, tpl.ID, TemplateInstall{
-				NewProject: &NewProject{Name: "smoke-" + tpl.ID},
+			res, err := c.InstallTemplate(ctx, tpl.ID, projects.TemplateInstall{
+				NewProject: &projects.NewProject{Name: "smoke-" + tpl.ID},
 				Values:     smokeValues(t, tpl),
 			})
 			if err != nil {

@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 )
 
 // gitProvidersPage is where the browser lands after connecting a provider
@@ -26,7 +27,7 @@ func (a *API) listGitProviders(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createGitProvider(w http.ResponseWriter, r *http.Request) {
-	var in core.GitProviderInput
+	var in projects.GitProviderInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -39,7 +40,7 @@ func (a *API) createGitProvider(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateGitProvider(w http.ResponseWriter, r *http.Request) {
-	var in core.GitProviderInput
+	var in projects.GitProviderInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -93,7 +94,7 @@ func (a *API) authorizeGitProvider(w http.ResponseWriter, r *http.Request) {
 
 // startGitHubApp returns the manifest form the browser posts to GitHub.
 func (a *API) startGitHubApp(w http.ResponseWriter, r *http.Request) {
-	var in core.GitHubAppInput
+	var in projects.GitHubAppInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -195,7 +196,7 @@ func (a *API) gitProviderRedirect(w http.ResponseWriter, r *http.Request, id, ne
 func (a *API) gitProviderHook(w http.ResponseWriter, r *http.Request) {
 	err := a.core.HandleGitProviderWebhook(r.Context(), r.PathValue("id"), r.Header.Get, webhookBody(w, r, 25<<20))
 	switch {
-	case errors.Is(err, core.ErrIgnored):
+	case errors.Is(err, projects.ErrIgnored):
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
 	case err != nil:
 		a.fail(w, err)

@@ -13,6 +13,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/templates"
+	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 )
 
@@ -35,31 +36,31 @@ type installTemplateIn struct {
 	DryRun   bool              `json:"dry_run,omitempty" jsonschema:"only return what would be created"`
 }
 
-func (t *tools) installTemplate(ctx context.Context, _ *mcp.CallToolRequest, in installTemplateIn) (*mcp.CallToolResult, core.TemplateResult, error) {
-	out, err := mutate(ctx, t.c, "install_template", in.Project, func() (core.TemplateResult, error) {
-		req := core.TemplateInstall{Values: in.Values, DryRun: in.DryRun}
+func (t *tools) installTemplate(ctx context.Context, _ *mcp.CallToolRequest, in installTemplateIn) (*mcp.CallToolResult, projects.TemplateResult, error) {
+	out, err := mutate(ctx, t.c, "install_template", in.Project, func() (projects.TemplateResult, error) {
+		req := projects.TemplateInstall{Values: in.Values, DryRun: in.DryRun}
 		p, err := t.findProject(ctx, in.Project)
 		switch {
 		case err == nil:
 			if in.Server != "" {
-				return core.TemplateResult{}, fmt.Errorf("%w: project %s already exists; server is only for a new one", core.ErrInvalid, in.Project)
+				return projects.TemplateResult{}, fmt.Errorf("%w: project %s already exists; server is only for a new one", core.ErrInvalid, in.Project)
 			}
 			req.ProjectID = p.ID
 		case errors.Is(err, domain.ErrNotFound):
-			req.NewProject = &core.NewProject{Name: in.Project}
+			req.NewProject = &projects.NewProject{Name: in.Project}
 			if in.Server != "" {
 				svs, err := t.c.ListServers(ctx)
 				if err != nil {
-					return core.TemplateResult{}, err
+					return projects.TemplateResult{}, err
 				}
 				i := slices.IndexFunc(svs, func(sv servers.ServerView) bool { return sv.Name == in.Server })
 				if i < 0 {
-					return core.TemplateResult{}, fmt.Errorf("%w: server %s", domain.ErrNotFound, in.Server)
+					return projects.TemplateResult{}, fmt.Errorf("%w: server %s", domain.ErrNotFound, in.Server)
 				}
 				req.NewProject.ServerID = svs[i].ID
 			}
 		default:
-			return core.TemplateResult{}, err
+			return projects.TemplateResult{}, err
 		}
 		return t.c.InstallTemplate(ctx, in.Template, req)
 	})

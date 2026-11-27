@@ -1,4 +1,4 @@
-package core
+package projects
 
 import (
 	"context"
@@ -57,7 +57,7 @@ func TestJobs(t *testing.T) {
 	if _, err := c.RunJob(ctx, j.ID); !errors.Is(err, ErrBusy) {
 		t.Errorf("run while running: %v", err)
 	}
-	if !c.jobRunningIn(p.ID) || c.jobRunningIn("other") {
+	if !c.JobRunningIn(p.ID) || c.JobRunningIn("other") {
 		t.Error("jobRunningIn")
 	}
 

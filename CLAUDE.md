@@ -9,9 +9,10 @@ Design doc: `docs/design.md` — read before architectural changes. Roadmap in �
   `internal/domain` (entities, repository interfaces, shared errors; standard library only) ←
   `internal/usecase/<area>` (the logic) ← `internal/infrastructure/<adapter>` (SQLite now) and the delivery
   (`internal/api` REST, `internal/mcp` tools). Wiring only in `cmd/kipitiny`. Handlers/MCP never touch SQL or Docker
-  directly. `internal/core` is the use cases not moved to their area yet (#522): it embeds each area's struct
+  directly. `internal/core` is the wiring and lifecycle around the areas: it embeds each area's struct
   (`*identity.Identity`, `*network.Network`, `*monitoring.Monitoring`, `*data.Data`, `*deploy.Deployer`,
-  `*servers.Servers`), so handlers call `core.X` for every area.
+  `*servers.Servers`, `*projects.Projects`), so handlers call `core.X` for every area, implements each area's
+  `Manager` port (`ports_*.go`), and owns background work, shutdown and the service locks.
 - A use case area reaches another through a small interface it declares (`identity.Mailer`), never an import cycle;
   no interface for code with a single implementation otherwise.
 - `make lint` runs golangci-lint (`.golangci.yml`: depguard layer rules, files under 500 lines) on the code changed

@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 )
 
 func (a *API) listTemplates(w http.ResponseWriter, r *http.Request) {
@@ -19,7 +19,7 @@ func (a *API) templateLogos(w http.ResponseWriter, r *http.Request) {
 // installTemplate installs a template into a project, or a new one; with
 // dryRun, only returns what it would create.
 func (a *API) installTemplate(w http.ResponseWriter, r *http.Request) {
-	var body core.TemplateInstall
+	var body projects.TemplateInstall
 	if !decode(w, r, &body) {
 		return
 	}
