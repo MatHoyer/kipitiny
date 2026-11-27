@@ -19,7 +19,7 @@ export async function newProject(page: Page, name: string) {
   await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
 }
 
-/** Adds an app from a Docker image to the open project, deploys it and waits for it to run. */
+/** Adds an app from a Docker image to the open project, deploys it and waits for the deploy to finish. */
 export async function deployImage(page: Page, name: string, image: string) {
   await page.getByRole("main").getByRole("button", { name: "New service" }).first().click();
   await page.getByRole("button", { name: /^Docker image/ }).click();
@@ -29,4 +29,6 @@ export async function deployImage(page: Page, name: string, image: string) {
   await form.getByRole("button", { name: "Create & deploy" }).click();
   await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
   await expect(page.getByRole("main").getByText("1/1")).toBeVisible({ timeout: 90_000 });
+  // The replica runs before the deploy ends (it waits for the replica to stay up), and the deploy holds the service.
+  await expect(page.getByRole("button", { name: "Deploy", exact: true })).toBeEnabled({ timeout: 30_000 });
 }
