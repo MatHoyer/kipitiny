@@ -1,5 +1,6 @@
 # kipitfit: a workout tracker, installed on the phone as a PWA. One binary,
-# its SQLite database in a volume.
+# its SQLite database in a volume; exercise pictures in a single-node
+# Garage, which creates its bucket and key on the first start.
 x-template:
   title: kipitfit
   description: Workout tracker. Plan routines, log every set at the gym with a rest timer, see your records and progress.
@@ -13,6 +14,8 @@ x-template:
 
     - On the phone, add it to the home screen to install it.
     - Accounts and workouts are in `kipitfit.db` in the `data` volume: browse it from the **Data** tab, back it up from the **Backups** tab.
+    - Exercise pictures come from a pack, imported once into the `s3` service (a [Garage](https://garagehq.deuxfleurs.fr) bucket only the app reaches). The app's image has no shell, so run it from the server's terminal (**Settings › Servers**): `docker exec $(docker ps -q -f name=^kipitfit-app-1-) /kipitfit pack import repdb-free`, with your project's name in place of `kipitfit` if you changed it. Running it again skips the pictures already there.
+    - Back up the `garage-meta` and `garage-data` volumes of `s3` too.
   logo:
     label: kipitfit
     color: "#3DD6B0"
@@ -28,6 +31,16 @@ x-template:
       type: secret
       required: true
       help: Asked once, to create the first admin account.
+    # Garage wants its secrets in hex.
+    - name: RPC_SECRET
+      generate: 32
+      hex: true
+    - name: S3_KEY_ID
+      generate: 16
+      hex: true
+    - name: S3_SECRET
+      generate: 32
+      hex: true
 name: kipitfit
 services:
   app:
@@ -40,12 +53,50 @@ services:
       # Traefik, on a Docker network, sets X-Forwarded-For.
       KIPITFIT_REAL_IP_HEADER: X-Forwarded-For
       KIPITFIT_TRUSTED_PROXIES: 172.16.0.0/12,192.168.0.0/16,10.0.0.0/8
+      KIPITFIT_S3_ENDPOINT: http://s3:3900
+      KIPITFIT_S3_BUCKET: kipitfit
+      KIPITFIT_S3_REGION: garage
+      KIPITFIT_S3_ACCESS_KEY_ID: GK${S3_KEY_ID}
+      KIPITFIT_S3_SECRET_ACCESS_KEY: ${S3_SECRET}
     volumes:
       - data:/data
+    depends_on: [s3]
     x-kipitiny:
       domain: ${DOMAIN}
       icon: kipitfit
       health_path: /api/health
-      secrets: [KIPITFIT_SETUP_TOKEN]
+      secrets: [KIPITFIT_SETUP_TOKEN, KIPITFIT_S3_ACCESS_KEY_ID, KIPITFIT_S3_SECRET_ACCESS_KEY]
+  s3:
+    image: dxflrs/garage:v2.6.0
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    expose: ["3900"]
+    environment:
+      GARAGE_RPC_SECRET: ${RPC_SECRET}
+      GARAGE_DEFAULT_ACCESS_KEY: GK${S3_KEY_ID}
+      GARAGE_DEFAULT_SECRET_KEY: ${S3_SECRET}
+      GARAGE_DEFAULT_BUCKET: kipitfit
+    configs:
+      - source: garage
+        target: /etc/garage.toml
+    volumes:
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    x-kipitiny:
+      secrets: [GARAGE_RPC_SECRET, GARAGE_DEFAULT_ACCESS_KEY, GARAGE_DEFAULT_SECRET_KEY]
 volumes:
   data: {}
+  garage-meta: {}
+  garage-data: {}
+configs:
+  garage:
+    content: |
+      metadata_dir = "/var/lib/garage/meta"
+      data_dir = "/var/lib/garage/data"
+      db_engine = "sqlite"
+      replication_factor = 1
+      rpc_bind_addr = "[::]:3901"
+      rpc_public_addr = "127.0.0.1:3901"
+
+      [s3_api]
+      s3_region = "garage"
+      api_bind_addr = "[::]:3900"

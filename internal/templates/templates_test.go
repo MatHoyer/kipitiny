@@ -26,7 +26,7 @@ func TestCatalog(t *testing.T) {
 					values[in.Name] = sample(in)
 				}
 			}
-			env, err := tpl.Render(values, func(n int) string { return strings.Repeat("x", n) })
+			env, err := tpl.Render(values, func(n int) []byte { return make([]byte, n) })
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -72,18 +72,19 @@ func TestRender(t *testing.T) {
 		{Name: "DOMAIN", Label: "Domain", Type: "domain", Required: true},
 		{Name: "MODE", Label: "Mode", Type: "text", Default: "prod"},
 		{Name: "URL", Label: "URL", Type: "url"},
-		{Name: "SECRET", Type: "secret", Generate: 8},
+		{Name: "SECRET", Type: "secret", Generate: 6},
+		{Name: "KEY", Generate: 3, Hex: true},
 		{Name: "LEVEL", Label: "Level", Type: "select", Options: []string{"low", "high"}, Default: "low"},
 		{Name: "AGREE", Label: "Agree", Type: "checkbox", Required: true},
 		{Name: "EXTRA", Label: "Extra", Type: "checkbox"},
 	}}
-	gen := func(n int) string { return strings.Repeat("g", n) }
+	gen := func(n int) []byte { return []byte(strings.Repeat("\xff", n)) }
 
 	env, err := tpl.Render(map[string]string{"DOMAIN": " app.example.com ", "AGREE": "true"}, gen)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]string{"DOMAIN": "app.example.com", "MODE": "prod", "URL": "", "SECRET": "gggggggg", "LEVEL": "low", "AGREE": "true", "EXTRA": "false"}
+	want := map[string]string{"DOMAIN": "app.example.com", "MODE": "prod", "URL": "", "SECRET": "________", "KEY": "ffffff", "LEVEL": "low", "AGREE": "true", "EXTRA": "false"}
 	for k, v := range want {
 		if got, ok := env[k]; !ok || got != v {
 			t.Errorf("%s = %q, want %q", k, got, v)
@@ -115,6 +116,7 @@ func TestParseRefuses(t *testing.T) {
 		"bad category": "name: app\nx-template: {title: T, description: D, category: misc}\n",
 		"bad input":    head + ", inputs: [{name: lower, label: L}]}\n",
 		"no label":     head + ", inputs: [{name: A}]}\n",
+		"hex asked":    head + ", inputs: [{name: A, label: L, hex: true}]}\n",
 		"bad type":     head + ", inputs: [{name: A, label: L, type: number}]}\n",
 		"twice":        head + ", inputs: [{name: A, label: L}, {name: A, label: L}]}\n",
 		"no project":   "x-template: {title: T, description: D, category: games}\n",

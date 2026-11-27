@@ -72,7 +72,7 @@ volumes:
 - `notes` is markdown shown after the description, in the install dialog and in the list above: what to do after installing, ports to open, caveats. Paragraphs, lists, `**bold**`, `` `code` `` and `[links](…)` only, no headings; a link to `/docs/<page>` opens that page of the docs of the running version.
 - `category` groups the gallery: `monitoring`, `analytics`, `automation`, `development`, `storage`, `media`, `communication`, `productivity`, `security` or `games`. `tags` are extra words its search matches.
 - Each input becomes the variable `${NAME}` of the file (the `.env` of a compose import). A `${NAME}` that is a whole `environment` value is stored as a secret, unless `x-kipitiny.secrets` lists the secrets.
-- Input fields: `name` (UPPER_CASE), `label`, `type` (`text`, `secret`, `domain`, `url`, `select` with its `options`, or `checkbox`, whose value is `true` or `false` and which `required` makes mandatory), `help` (its `https://` URLs become links), `placeholder`, `default`, `required`, and `generate` (a number of random bytes: the value is generated, not asked). Inputs work anywhere compose variables do (`ports`, `mem_limit`…) and in `x-kipitiny.domain`.
+- Input fields: `name` (UPPER_CASE), `label`, `type` (`text`, `secret`, `domain`, `url`, `select` with its `options`, or `checkbox`, whose value is `true` or `false` and which `required` makes mandatory), `help` (its `https://` URLs become links), `placeholder`, `default`, `required`, and `generate` (a number of random bytes: the value is generated, not asked; base64url, or hex with `hex: true`). Inputs work anywhere compose variables do (`ports`, `mem_limit`…) and in `x-kipitiny.domain`.
 
 ### Logos
 

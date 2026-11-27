@@ -1285,6 +1285,7 @@ export interface TemplateInput {
   required?: boolean;
   /** Random bytes the manager generates; not asked. */
   generate?: number;
+  hex?: boolean;
 }
 
 export interface TemplateInstall {
