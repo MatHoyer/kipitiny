@@ -9,6 +9,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 // ServicePatch updates only the fields that are set. Env replaces the whole
@@ -39,8 +40,8 @@ type ServicePatch struct {
 	// Volumes replaces the app's volumes; nil keeps them.
 	Volumes []domain.Volume `json:"volumes"`
 	// Middlewares replaces the app's middlewares; nil keeps them.
-	Middlewares *MiddlewaresInput `json:"middlewares"`
-	PreBackup   *string           `json:"preBackup"`
+	Middlewares *network.MiddlewaresInput `json:"middlewares"`
+	PreBackup   *string                   `json:"preBackup"`
 	// PublishedPorts replaces the app's published ports; nil keeps them.
 	PublishedPorts []domain.PublishedPort `json:"publishedPorts"`
 	// Routes replaces the app's routes; nil keeps them.
@@ -118,7 +119,7 @@ func (c *Core) updateService(ctx context.Context, id string, p ServicePatch) (do
 		c.kick() // scaling applies right away, other changes on the next deploy
 	}
 	if svc.Domain != old.Domain {
-		c.kickDNS()
+		c.KickDNS()
 	}
 	if svc.Analytics != old.Analytics || svc.Analytics && (svc.Domain != old.Domain ||
 		svc.AnalyticsScript != old.AnalyticsScript || svc.AnalyticsHit != old.AnalyticsHit) {
@@ -201,10 +202,10 @@ func (c *Core) patched(old domain.Service, p ServicePatch) (domain.Service, erro
 		svc.PreBackup = strings.TrimSpace(*p.PreBackup)
 	}
 	if p.PublishedPorts != nil {
-		svc.PublishedPorts = normalizePorts(p.PublishedPorts)
+		svc.PublishedPorts = network.NormalizePorts(p.PublishedPorts)
 	}
 	if p.Routes != nil {
-		svc.Routes = normalizeRoutes(p.Routes)
+		svc.Routes = network.NormalizeRoutes(p.Routes)
 	}
 	if p.StopGraceSeconds != nil {
 		svc.StopGraceSeconds = *p.StopGraceSeconds
@@ -231,7 +232,7 @@ func (c *Core) patched(old domain.Service, p ServicePatch) (domain.Service, erro
 		svc.Preview = *p.Preview
 	}
 	if p.Middlewares != nil {
-		if svc.Middlewares, err = mergeMiddlewares(*p.Middlewares, old.Middlewares); err != nil {
+		if svc.Middlewares, err = network.MergeMiddlewares(*p.Middlewares, old.Middlewares); err != nil {
 			return domain.Service{}, err
 		}
 	}

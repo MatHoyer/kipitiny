@@ -1,8 +1,6 @@
 package core
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -14,6 +12,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 func TestValidateService(t *testing.T) {
@@ -78,7 +77,7 @@ func TestAppContainerSpec(t *testing.T) {
 		Env: map[string]string{"B": "2", "A": "1", "C": "{{ project.SHARED }}"},
 	}
 
-	spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 2, route{resolver: certResolver})
+	spec := containerSpec(p, svc, envSources{project: p.Env}, "D1", 2, network.Routing{Resolver: network.CertResolverTLS})
 	if spec.Name != "shop-web-2-d1" {
 		t.Errorf("name = %q", spec.Name)
 	}
@@ -98,7 +97,7 @@ func TestAppContainerSpec(t *testing.T) {
 	}
 
 	svc.Networks = []string{"N1"}
-	spec = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, route{})
+	spec = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, network.Routing{})
 	eps = spec.NetworkingConfig.EndpointsConfig
 	if len(eps) != 2 || !slices.Equal(eps[docker.CustomNetwork("N1")].Aliases, []string{"shop-web"}) {
 		t.Errorf("endpoints with a network created by hand = %v", eps)
@@ -106,7 +105,7 @@ func TestAppContainerSpec(t *testing.T) {
 	svc.Networks = nil
 
 	svc.Domain, svc.Port = "shop.example.com", 8080
-	spec = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, route{resolver: certResolver})
+	spec = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, network.Routing{Resolver: network.CertResolverTLS})
 	l = spec.Config.Labels
 	if l["traefik.enable"] != "true" || l["traefik.docker.network"] != docker.ProxyNetwork {
 		t.Errorf("traefik labels missing: %v", l)
@@ -124,7 +123,7 @@ func TestAppContainerSpec(t *testing.T) {
 	if l["traefik.http.routers."+r+".middlewares"] != "kipitiny-01abc-retry@docker" {
 		t.Error("retry middleware missing")
 	}
-	l = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, route{}).Config.Labels
+	l = containerSpec(p, svc, envSources{project: p.Env}, "D1", 1, network.Routing{}).Config.Labels
 	r = routerName(t, l)
 	if _, acme := l["traefik.http.routers."+r+".tls.certresolver"]; acme || l["traefik.http.routers."+r+".tls"] != "true" {
 		t.Error("no resolver must mean Traefik's default certificate")
@@ -163,106 +162,6 @@ func TestMasked(t *testing.T) {
 	}
 }
 
-func TestTraefikReadTimeout(t *testing.T) {
-	const flag = "--entrypoints.websecure.transport.respondingTimeouts.readTimeout="
-	has := func(c *Core) []string {
-		opts, _ := c.traefikSpec("/var/run/docker.sock", traefikOpts{})
-		return slices.DeleteFunc(slices.Clone(opts.Config.Cmd), func(a string) bool { return !strings.HasPrefix(a, flag) })
-	}
-	if got := has(&Core{}); len(got) != 0 {
-		t.Errorf("unset: %v (would recreate Traefik on upgrade)", got)
-	}
-	if got := has(&Core{cfg: config.Config{Traefik: config.Traefik{ReadTimeout: "0"}}}); !slices.Equal(got, []string{flag + "0"}) {
-		t.Errorf("0: %v", got)
-	}
-}
-
-func TestTraefikManagerRoute(t *testing.T) {
-	c := &Core{cfg: config.Config{Domain: "kipitiny.example.com"}}
-	opts, files := c.traefikSpec("/var/run/docker.sock", traefikOpts{})
-	if len(files) != 0 || slices.ContainsFunc(opts.Config.Cmd, func(a string) bool { return strings.HasPrefix(a, "--providers.file") }) {
-		t.Error("no manager URL must mean no file provider")
-	}
-
-	opts, files = c.traefikSpec("/var/run/docker.sock", traefikOpts{ManagerURL: "http://kipitiny-manager:3000", ManagerResolver: certResolver})
-	if len(files) != 1 || !slices.Contains(opts.Config.Cmd, "--providers.file.filename="+files[0].Path) {
-		t.Fatalf("file provider not wired: %v", opts.Config.Cmd)
-	}
-	var route struct {
-		HTTP struct {
-			Routers map[string]struct {
-				Rule string
-				TLS  struct{ CertResolver string } `json:"tls"`
-			}
-			Services map[string]struct {
-				LoadBalancer struct{ Servers []struct{ URL string } }
-			}
-		}
-	}
-	if err := json.Unmarshal(files[0].Content, &route); err != nil {
-		t.Fatal(err)
-	}
-	r := route.HTTP.Routers[managerAlias]
-	if r.Rule != "Host(`kipitiny.example.com`)" || r.TLS.CertResolver != certResolver {
-		t.Errorf("router = %+v", r)
-	}
-	if s := route.HTTP.Services[managerAlias].LoadBalancer.Servers; len(s) != 1 || s[0].URL != "http://kipitiny-manager:3000" {
-		t.Errorf("servers = %+v", s)
-	}
-	if len(opts.HostConfig.ExtraHosts) != 0 {
-		t.Error("container upstream needs no host-gateway")
-	}
-
-	opts, _ = c.traefikSpec("/var/run/docker.sock", traefikOpts{ManagerURL: "http://host.docker.internal:3000", ManagerResolver: certResolver})
-	if !slices.Equal(opts.HostConfig.ExtraHosts, []string{"host.docker.internal:host-gateway"}) {
-		t.Errorf("extra hosts = %v", opts.HostConfig.ExtraHosts)
-	}
-}
-
-func TestTunnelMode(t *testing.T) {
-	ctx := context.Background()
-	c := newTestCore(t, config.Config{Domain: "kipitiny.example.com", Tunnel: config.Tunnel{Token: "tok", Image: "cloudflare/cloudflared"}})
-	worker, err := c.store.CreateServer(ctx, domain.Server{Name: "w1", Kind: domain.ServerSSH, Host: "w1", Port: 22})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !c.viaTunnel(ctx, domain.LocalServerID) || !c.viaTunnel(ctx, "") || c.viaTunnel(ctx, worker.ID) {
-		t.Error("the environment token only serves the manager's own server")
-	}
-	worker.TunnelToken = "worker-tok"
-	if _, err := c.store.UpdateServer(ctx, worker); err != nil {
-		t.Fatal(err)
-	}
-	if !c.viaTunnel(ctx, worker.ID) || c.tunnelToken(worker) != "worker-tok" {
-		t.Error("a server's own token puts it behind its tunnel")
-	}
-
-	opts, files := c.traefikSpec("/var/run/docker.sock", traefikOpts{ManagerURL: "http://kipitiny-manager:3000", Tunnel: true})
-	if len(opts.HostConfig.PortBindings) != 0 {
-		t.Errorf("tunnel mode must publish no ports: %v", opts.HostConfig.PortBindings)
-	}
-	if slices.ContainsFunc(opts.Config.Cmd, func(a string) bool { return strings.Contains(a, "certificatesresolvers") }) {
-		t.Error("tunnel mode must not run ACME")
-	}
-	if strings.Contains(string(files[0].Content), "certResolver") {
-		t.Error("manager route must not reference the ACME resolver")
-	}
-
-	l := traefikLabels(domain.Service{ID: "01ABC", Domain: "shop.example.com", Port: 80}, route{})
-	r := routerName(t, l)
-	if _, acme := l["traefik.http.routers."+r+".tls.certresolver"]; acme || l["traefik.http.routers."+r+".tls"] != "true" {
-		t.Errorf("tunnel labels = %v", l)
-	}
-
-	spec := c.tunnelSpec("tok")
-	if !slices.Contains(spec.Config.Env, "TUNNEL_TOKEN=tok") || slices.Contains(spec.Config.Cmd, "tok") {
-		t.Error("token must be passed through the environment only")
-	}
-	if _, ok := spec.NetworkingConfig.EndpointsConfig[docker.ProxyNetwork]; !ok {
-		t.Error("cloudflared must reach Traefik on the proxy network")
-	}
-}
-
 func TestIconHint(t *testing.T) {
 	for _, tc := range []struct {
 		svc  domain.Service
@@ -283,7 +182,7 @@ func TestIconHint(t *testing.T) {
 func TestHostAccessContainerSpec(t *testing.T) {
 	p := domain.Project{ID: "P1", Name: "mon"}
 	svc := domain.Service{ID: "01ABC", ProjectID: "P1", Name: "agent", Image: "henrygd/beszel-agent", Replicas: 1, HostNetwork: true, DockerSocket: "ro"}
-	spec := containerSpec(p, svc, envSources{}, "D1", 1, route{dockerSocket: "/run/docker.sock"})
+	spec := containerSpec(p, svc, envSources{}, "D1", 1, network.Routing{DockerSocket: "/run/docker.sock"})
 	if spec.HostConfig.NetworkMode != "host" || len(spec.NetworkingConfig.EndpointsConfig) != 0 {
 		t.Errorf("network = %q, endpoints %v", spec.HostConfig.NetworkMode, spec.NetworkingConfig.EndpointsConfig)
 	}

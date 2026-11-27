@@ -1,4 +1,4 @@
-package core
+package network
 
 import (
 	"context"
@@ -26,7 +26,7 @@ type proxyState struct {
 // address in forwarding headers: loopback, KIPITINY_TRUSTED_PROXIES, or the
 // Traefik container the manager runs. Other containers on kipitiny-proxy can
 // reach the manager directly, so being on a private network isn't enough.
-func (c *Core) TrustedProxy(ctx context.Context, addr netip.Addr) bool {
+func (c *Network) TrustedProxy(ctx context.Context, addr netip.Addr) bool {
 	addr = addr.Unmap()
 	if addr.IsLoopback() {
 		return true
@@ -51,18 +51,18 @@ func (c *Core) TrustedProxy(ctx context.Context, addr netip.Addr) bool {
 	return slices.Contains(c.proxy.addrs, addr)
 }
 
-// refreshProxy re-reads Traefik's addresses after the reconciler touched it.
-func (c *Core) refreshProxy(ctx context.Context) {
+// RefreshProxy re-reads Traefik's addresses after the reconciler touched it.
+func (c *Network) RefreshProxy(ctx context.Context) {
 	c.proxy.mu.Lock()
 	defer c.proxy.mu.Unlock()
 	c.refreshProxyLocked(ctx)
 }
 
-func (c *Core) refreshProxyLocked(ctx context.Context) {
+func (c *Network) refreshProxyLocked(ctx context.Context) {
 	c.proxy.refreshed = time.Now()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	cts, err := c.dockerFor(domain.LocalServerID).ListContainers(ctx, map[string]string{docker.LabelComponent: traefikComponent})
+	cts, err := c.mgr.DockerFor(domain.LocalServerID).ListContainers(ctx, map[string]string{docker.LabelComponent: TraefikComponent})
 	if err != nil {
 		c.log.Warn("read traefik addresses", "err", err)
 		return // keep the last known ones

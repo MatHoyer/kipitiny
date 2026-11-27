@@ -19,6 +19,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 const sshKeySetting = "ssh_private_key"
@@ -208,7 +209,7 @@ func (c *Core) DeleteServer(ctx context.Context, id string) error {
 		return err
 	}
 	dk := c.dockerFor(id)
-	for _, component := range []string{traefikComponent, tunnelComponent} {
+	for _, component := range []string{network.TraefikComponent, network.TunnelComponent} {
 		cts, err := dk.ListContainers(ctx, map[string]string{docker.LabelComponent: component})
 		if err != nil {
 			continue
@@ -283,4 +284,26 @@ func applyServerInput(sv *domain.Server, in ServerInput) error {
 		return fmt.Errorf("%w: socket must be an absolute path", ErrInvalid)
 	}
 	return nil
+}
+
+// SetServerNetwork sets a server's public IP and tunnel
+// (network.SetServerNetwork), returning the server as clients see it.
+func (c *Core) SetServerNetwork(ctx context.Context, id string, in network.ServerNetwork) (ServerView, error) {
+	sv, err := c.Network.SetServerNetwork(ctx, id, in)
+	if err != nil {
+		return ServerView{}, err
+	}
+	return c.serverView(sv), nil
+}
+
+// serverView is a server as clients see it, without live status.
+func (c *Core) serverView(sv domain.Server) ServerView {
+	v := ServerView{Server: sv, DetectedIP: c.DetectedPublicIP(sv.ID)}
+	switch {
+	case sv.TunnelToken != "":
+		v.Tunnel = "server"
+	case sv.Kind == domain.ServerLocal && c.cfg.Tunnel.Token != "":
+		v.Tunnel = "env"
+	}
+	return v
 }

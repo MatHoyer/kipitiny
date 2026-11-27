@@ -12,6 +12,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/probe"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 const (
@@ -161,7 +162,7 @@ func (c *Core) scheduleUptime(ctx context.Context) {
 // uptimeTarget returns the URL a check requests, or why it can't run now.
 func uptimeTarget(svc domain.Service, chk domain.UptimeCheck) (url, problem string) {
 	switch {
-	case !httpRouted(svc):
+	case !network.HTTPRouted(svc):
 		return "", "the service has no public domain"
 	case svc.Stopped:
 		return "", "the service is stopped"
@@ -356,7 +357,7 @@ func (c *Core) SetUptime(ctx context.Context, serviceID string, in UptimeInput) 
 
 // uptimeCheck validates svc's check settings, with the defaults applied.
 func uptimeCheck(svc domain.Service, in UptimeInput) (domain.UptimeCheck, error) {
-	if svc.Kind != domain.ServiceKindApp || !httpRouted(svc) {
+	if svc.Kind != domain.ServiceKindApp || !network.HTTPRouted(svc) {
 		return domain.UptimeCheck{}, fmt.Errorf("%w: only an app with a public domain can have an uptime check", ErrInvalid)
 	}
 	chk := domain.UptimeCheck{

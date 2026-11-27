@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/pending"
 
@@ -35,6 +36,8 @@ var (
 type Core struct {
 	// Users, sign-in, tokens, permissions and password managers.
 	*identity.Identity
+	// Domains, DNS, Traefik, routes, middlewares, ports and tunnels.
+	*network.Network
 
 	cfg   config.Config
 	store domain.Store
@@ -63,12 +66,9 @@ type Core struct {
 	probes         sync.Map // server ID -> *mount.Mount (nil: no probe there)
 	readUsers      sync.Map // container ID -> struct{}: the data browser's read-only user exists in that database
 	update         updateState
-	dns            dnsState
-	dnsKick        chan struct{}
 	gitKick        chan string // project IDs to sync
 	gitFlows       pending.Map[gitFlow]
 	gitTokens      gitTokens
-	proxy          proxyState
 	cleaning       atomic.Bool  // a cleanup is running
 	securityBusy   atomic.Bool  // a security check started by hand is running
 	hostActionMu   sync.Mutex   // starting an update install or a reboot is check-then-start
@@ -99,10 +99,11 @@ type Core struct {
 // connected on demand over SSH.
 func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logger) *Core {
 	bg, cancel := context.WithCancel(context.Background())
-	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1), dnsKick: make(chan struct{}, 1), gitKick: make(chan string, 16),
+	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1), gitKick: make(chan string, 16),
 		errorsSeq: -1, spiked: map[string]bool{}}
 	c.pool = docker.NewPool(local, c.connectServer)
 	c.Identity = identity.New(cfg, s, identity.SecretKinds(cfg, local), c, log)
+	c.Network = network.New(bg, &c.cfg, s, networkPorts{c}, log)
 	return c
 }
 
@@ -163,11 +164,11 @@ func (c *Core) bootstrapServer(ctx context.Context, sv domain.Server) error {
 	}
 	if c.cfg.Traefik.Enabled {
 		progress.Report(ctx, ServerStepTraefik)
-		if err := c.ensureTraefik(ctx, sv); err != nil {
+		if err := c.EnsureTraefik(ctx, sv); err != nil {
 			return fmt.Errorf("traefik: %w", err)
 		}
 		progress.Report(ctx, ServerStepTunnel)
-		if err := c.ensureTunnel(ctx, sv); err != nil {
+		if err := c.EnsureTunnel(ctx, sv); err != nil {
 			return fmt.Errorf("cloudflared: %w", err)
 		}
 	}
@@ -224,7 +225,7 @@ func waitDone(wg *sync.WaitGroup) <-chan struct{} {
 // BehindTunnel reports whether the manager's traffic arrives through a
 // Cloudflare tunnel.
 func (c *Core) BehindTunnel(ctx context.Context) bool {
-	return c.cfg.Traefik.Enabled && c.viaTunnel(ctx, domain.LocalServerID)
+	return c.cfg.Traefik.Enabled && c.ViaTunnel(ctx, domain.LocalServerID)
 }
 
 // dockerFor returns the Docker client of a server ("" or "local": this one).

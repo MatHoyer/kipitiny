@@ -20,6 +20,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 const (
@@ -492,7 +493,7 @@ func (c *Core) execJob(ctx context.Context, project domain.Project, svc domain.S
 		return nil, fmt.Errorf("pull %s: %w", want.Image, err)
 	}
 
-	spec := containerSpec(project, want, src, dep.ID, 0, route{dockerSocket: c.dockerSocketFor(ctx, want)}) // never routed
+	spec := containerSpec(project, want, src, dep.ID, 0, network.Routing{DockerSocket: c.DockerSocketFor(ctx, want)}) // never routed
 	spec.Name = fmt.Sprintf("%s-%s-job-%s-%s", project.Name, svc.Name, j.Name, deploySuffix(r.ID))
 	spec.Config.Cmd = []string{"sh", "-c", j.Command}
 	spec.Config.Entrypoint = []string{}

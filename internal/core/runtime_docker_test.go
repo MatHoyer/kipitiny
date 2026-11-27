@@ -9,11 +9,12 @@ import (
 	"testing"
 
 	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/network"
+	dockernet "github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 // TestRuntimeDocker runs a container with an app's runtime settings on the
@@ -45,11 +46,11 @@ func TestRuntimeDocker(t *testing.T) {
 	if err := validateService(svc); err != nil {
 		t.Fatal(err)
 	}
-	spec := containerSpec(domain.Project{ID: "P", Name: "kipitiny-test"}, svc, envSources{}, "D1", 1, route{})
+	spec := containerSpec(domain.Project{ID: "P", Name: "kipitiny-test"}, svc, envSources{}, "D1", 1, network.Routing{})
 	// Not kipitiny.managed: a manager running on this daemon would remove
 	// it as an orphan. No project network either.
 	delete(spec.Config.Labels, docker.LabelManaged)
-	spec.NetworkingConfig = &network.NetworkingConfig{}
+	spec.NetworkingConfig = &dockernet.NetworkingConfig{}
 	spec.HostConfig.RestartPolicy = container.RestartPolicy{}
 	id, err := dk.Run(ctx, spec)
 	if err != nil {
@@ -102,9 +103,9 @@ func TestFilesDocker(t *testing.T) {
 	if err := validateService(svc); err != nil {
 		t.Fatal(err)
 	}
-	spec := containerSpec(domain.Project{ID: "P", Name: "kipitiny-test"}, svc, envSources{}, "D1", 1, route{})
+	spec := containerSpec(domain.Project{ID: "P", Name: "kipitiny-test"}, svc, envSources{}, "D1", 1, network.Routing{})
 	delete(spec.Config.Labels, docker.LabelManaged)
-	spec.NetworkingConfig = &network.NetworkingConfig{}
+	spec.NetworkingConfig = &dockernet.NetworkingConfig{}
 	spec.HostConfig.RestartPolicy = container.RestartPolicy{}
 	id, err := dk.Run(ctx, spec, serviceFiles(svc, envSources{project: map[string]string{"T": "s3cret"}})...)
 	if err != nil {
@@ -153,9 +154,9 @@ func TestJobsDocker(t *testing.T) {
 	} {
 		svc := domain.Service{ID: "01JOBTEST" + strconv.Itoa(i), Name: "job", Kind: domain.ServiceKindApp, Image: "busybox", Replicas: 1,
 			Runtime: domain.Runtime{Command: []string{"sh", "-c", tc.script}, Restart: tc.restart}}
-		spec := containerSpec(domain.Project{ID: "P", Name: "kipitiny-test"}, svc, envSources{}, "D1", 1, route{})
+		spec := containerSpec(domain.Project{ID: "P", Name: "kipitiny-test"}, svc, envSources{}, "D1", 1, network.Routing{})
 		delete(spec.Config.Labels, docker.LabelManaged)
-		spec.NetworkingConfig = &network.NetworkingConfig{}
+		spec.NetworkingConfig = &dockernet.NetworkingConfig{}
 		spec.Name += strconv.Itoa(i)
 		id, err := dk.Run(ctx, spec)
 		if err != nil {
@@ -194,7 +195,7 @@ func TestProjectNetworksDocker(t *testing.T) {
 	run := func(name string, nets []string, script string) string {
 		svc := domain.Service{ID: "01NET" + name, Name: name, Kind: domain.ServiceKindApp, Image: "busybox", Replicas: 1, ProjectNetworks: nets,
 			Runtime: domain.Runtime{Command: []string{"sh", "-c", script}}}
-		spec := containerSpec(p, svc, envSources{}, "D1", 1, route{})
+		spec := containerSpec(p, svc, envSources{}, "D1", 1, network.Routing{})
 		delete(spec.Config.Labels, docker.LabelManaged)
 		spec.HostConfig.RestartPolicy = container.RestartPolicy{}
 		id, err := c.runContainer(ctx, dk, spec)

@@ -1,4 +1,4 @@
-package core
+package network
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 
 func TestTrustedProxy(t *testing.T) {
 	traefik := netip.MustParseAddr("172.18.0.2")
-	c := &Core{cfg: config.Config{
+	c := &Network{cfg: &config.Config{
 		Traefik:        config.Traefik{Enabled: true},
 		TrustedProxies: []netip.Prefix{netip.MustParsePrefix("10.9.0.0/24")},
 	}}

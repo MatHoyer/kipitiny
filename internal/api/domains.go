@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 func (a *API) listDomains(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +74,7 @@ func (a *API) disconnectCloudflare(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) setServerNetwork(w http.ResponseWriter, r *http.Request) {
-	var body core.ServerNetwork
+	var body network.ServerNetwork
 	if !decode(w, r, &body) {
 		return
 	}

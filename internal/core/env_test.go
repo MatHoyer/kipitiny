@@ -64,7 +64,7 @@ func TestResolveDatabaseRefs(t *testing.T) {
 	if !usesDatabase(env, db.Name) || usesDatabase(map[string]string{"A": "{{ project.X }}"}, db.Name) {
 		t.Error("usesDatabase")
 	}
-	if !soleRefRe.MatchString(env["PGHOST"]) {
+	if !domain.SoleRefRe.MatchString(env["PGHOST"]) {
 		t.Error("a database reference must count as a sole reference (not masked)")
 	}
 }

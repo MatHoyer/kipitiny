@@ -54,7 +54,7 @@ func validateDatabase(s domain.Service) error {
 		return fmt.Errorf("%w: databases are never public", ErrInvalid)
 	}
 	for k, v := range s.Env {
-		for _, m := range envRefRe.FindAllStringSubmatch(v, -1) {
+		for _, m := range domain.EnvRefRe.FindAllStringSubmatch(v, -1) {
 			if m[2] != "" {
 				return fmt.Errorf("%w: %s: a database can't reference another database (%s)", ErrInvalid, k, refName(m))
 			}

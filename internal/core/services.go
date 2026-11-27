@@ -9,6 +9,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 type ServiceInput struct {
@@ -36,8 +37,8 @@ type ServiceInput struct {
 	// Volumes are named volumes mounted in every replica (apps only).
 	Volumes []domain.Volume `json:"volumes"`
 	// Middlewares apply to a public app's requests (apps only).
-	Middlewares *MiddlewaresInput `json:"middlewares"`
-	PreBackup   string            `json:"preBackup"`
+	Middlewares *network.MiddlewaresInput `json:"middlewares"`
+	PreBackup   string                    `json:"preBackup"`
 	// PublishedPorts bind host ports to the app's container (apps only).
 	PublishedPorts []domain.PublishedPort `json:"publishedPorts"`
 	// Routes send some paths of the domain to the app (apps only).
@@ -75,7 +76,7 @@ type ServiceView struct {
 	domain.Service
 	Containers []ContainerView `json:"containers"`
 	// DNS is set when the manager manages the domain's Cloudflare record.
-	DNS *DNSStatus `json:"dns,omitempty"`
+	DNS *network.DNSStatus `json:"dns,omitempty"`
 	// RoutePending is set when the domain or port changed since the running
 	// deployment: Traefik only routes the new one after a deploy.
 	RoutePending bool `json:"routePending,omitempty"`
@@ -112,7 +113,7 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 		return ServiceView{}, err
 	}
 	if svc.Domain != "" {
-		c.kickDNS()
+		c.KickDNS()
 	}
 	return ServiceView{Service: masked(svc), Containers: []ContainerView{}}, nil
 }
@@ -145,8 +146,8 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (domain.Servi
 		PreDeploy:        strings.TrimSpace(in.PreDeploy),
 		Volumes:          normalizeVolumes(in.Volumes),
 		PreBackup:        strings.TrimSpace(in.PreBackup),
-		PublishedPorts:   normalizePorts(in.PublishedPorts),
-		Routes:           normalizeRoutes(in.Routes),
+		PublishedPorts:   network.NormalizePorts(in.PublishedPorts),
+		Routes:           network.NormalizeRoutes(in.Routes),
 		StopGraceSeconds: in.StopGraceSeconds,
 		HostNetwork:      in.HostNetwork,
 		DockerSocket:     in.DockerSocket,
@@ -171,7 +172,7 @@ func (c *Core) serviceFromInput(projectID string, in ServiceInput) (domain.Servi
 	}
 	svc.Env, svc.Secrets = env, secrets
 	if in.Middlewares != nil {
-		mw, err := mergeMiddlewares(*in.Middlewares, domain.Middlewares{})
+		mw, err := network.MergeMiddlewares(*in.Middlewares, domain.Middlewares{})
 		if err != nil {
 			return domain.Service{}, err
 		}
@@ -278,7 +279,7 @@ func (c *Core) ListServices(ctx context.Context, projectID string) ([]ServiceVie
 	for i, s := range svcs {
 		views[i] = ServiceView{Service: masked(s), Containers: sortedContainers(byService[s.ID]), RoutePending: c.routePending(ctx, s)}
 		if s.Domain != "" {
-			views[i].DNS = c.dnsStatus(ctx, s.Domain)
+			views[i].DNS = c.DNSStatusOf(ctx, s.Domain)
 		}
 	}
 	return views, nil
@@ -295,7 +296,7 @@ func (c *Core) view(ctx context.Context, svc domain.Service) (ServiceView, error
 	}
 	v := ServiceView{Service: masked(svc), Containers: sortedContainers(views)}
 	if svc.Domain != "" {
-		v.DNS = c.dnsStatus(ctx, svc.Domain)
+		v.DNS = c.DNSStatusOf(ctx, svc.Domain)
 	}
 	v.RoutePending = c.routePending(ctx, svc)
 	if p, err := c.store.GetProject(ctx, svc.ProjectID); err == nil {
@@ -314,7 +315,7 @@ func (c *Core) routePending(ctx context.Context, svc domain.Service) bool {
 	if err != nil || d.Config.ID == "" { // older deployments didn't keep their config
 		return false
 	}
-	return d.Config.Domain != svc.Domain || d.Config.Port != svc.Port || !sameRoutes(d.Config.Routes, svc.Routes)
+	return d.Config.Domain != svc.Domain || d.Config.Port != svc.Port || !network.SameRoutes(d.Config.Routes, svc.Routes)
 }
 
 func masked(s domain.Service) domain.Service {
@@ -334,7 +335,7 @@ func masked(s domain.Service) domain.Service {
 		files[i] = f
 	}
 	s.Files = files
-	s.Middlewares = maskMiddlewares(s.Middlewares)
+	s.Middlewares = network.MaskMiddlewares(s.Middlewares)
 	return s
 }
 
@@ -377,7 +378,7 @@ func (c *Core) DeleteService(ctx context.Context, id, confirm string) error {
 	if err := c.store.DeleteService(ctx, id); err != nil {
 		return err
 	}
-	c.kickDNS()
+	c.KickDNS()
 	c.removeDeployLogs(id)
 	c.forgetServiceJobs(id)
 	return nil

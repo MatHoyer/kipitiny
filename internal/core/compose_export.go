@@ -93,7 +93,7 @@ func exportFile(p domain.Project, svcs []domain.Service, checks map[string]domai
 	if withProject && len(p.Env) > 0 {
 		f.X.Variables = map[string]string{}
 		for k, v := range p.Env {
-			if slices.Contains(p.Secrets, k) && !soleRefRe.MatchString(v) {
+			if slices.Contains(p.Secrets, k) && !domain.SoleRefRe.MatchString(v) {
 				v = secret(varName("PROJECT", k), v)
 			}
 			f.X.Variables[k] = v
@@ -199,7 +199,7 @@ func exportFile(p domain.Project, svcs []domain.Service, checks map[string]domai
 			// secret holding a reference).
 			implicit := true
 			for k, v := range s.Env {
-				if slices.Contains(s.Secrets, k) && !soleRefRe.MatchString(v) {
+				if slices.Contains(s.Secrets, k) && !domain.SoleRefRe.MatchString(v) {
 					cs.Environment[k] = secret(varName(s.Name, k), v)
 				} else {
 					cs.Environment[k] = compose.Escape(v)

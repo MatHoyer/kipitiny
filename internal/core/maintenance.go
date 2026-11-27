@@ -22,21 +22,13 @@ import (
 	"github.com/moby/moby/api/types/container"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 const (
 	maxPageTitle   = 200
 	maxPageMessage = 2000
 	maxPageHTML    = 64 << 10
-
-	// pagesService is the Traefik service (file provider) reaching the
-	// manager's pages; pagesDown the errors middleware every router of
-	// websecure goes through.
-	pagesService = "kipitiny-pages"
-	pagesDown    = "kipitiny-down"
-	// PagesPath is where the manager serves maintenance pages and the
-	// Traefik configuration that routes to them.
-	PagesPath = "/api/pages/"
 
 	// maintenanceReject is the status the maintenance IP allowlist refuses
 	// with, turned into the page by an errors middleware. Apps don't send
@@ -93,7 +85,7 @@ func (c *Core) SetMaintenance(ctx context.Context, projectID string, in Maintena
 		if err != nil {
 			return domain.Project{}, err
 		}
-		if !slices.ContainsFunc(svcs, httpRouted) {
+		if !slices.ContainsFunc(svcs, network.HTTPRouted) {
 			return domain.Project{}, fmt.Errorf("%w: maintenance mode needs an app with a domain and a container port", ErrInvalid)
 		}
 	}
@@ -123,7 +115,7 @@ func validateMaintenance(m domain.Maintenance) error {
 		return fmt.Errorf("%w: the HTML page must be UTF-8 text", ErrInvalid)
 	}
 	// The same rules as the IP allowlist middleware.
-	return validateMiddlewares(domain.Middlewares{IPAllowList: m.AllowIPs})
+	return network.ValidateMiddlewares(domain.Middlewares{IPAllowList: m.AllowIPs})
 }
 
 // Page is a maintenance page as served to visitors.
@@ -338,9 +330,9 @@ func (c *Core) pagesUpstream(ctx context.Context, sv domain.Server, managerURL s
 		if managerURL != "" {
 			return managerURL, nil
 		}
-		return c.managerUpstream(ctx, c.dockerFor(sv.ID))
+		return c.ManagerUpstream(ctx, c.dockerFor(sv.ID))
 	}
-	if c.cfg.Domain == "" || isLocalDomain(c.cfg.Domain) {
+	if c.cfg.Domain == "" || network.IsLocalDomain(c.cfg.Domain) {
 		return "", nil
 	}
 	return "https://" + c.cfg.Domain, nil
@@ -362,30 +354,6 @@ func (c *Core) providerToken(ctx context.Context, serverID string) (string, erro
 	mac := hmac.New(sha256.New, []byte(key))
 	mac.Write([]byte("traefik-provider:" + serverID))
 	return hex.EncodeToString(mac.Sum(nil)), nil
-}
-
-// pagesFileConfig is the part of the pages that never changes for a server,
-// in Traefik's file provider: if it came from the HTTP provider, a manager
-// that is down would take every router using kipitiny-down with it.
-func pagesFileConfig(upstream string) map[string]any {
-	return map[string]any{
-		"middlewares": map[string]any{pagesDown: map[string]any{"errors": map[string]any{
-			// Traefik's own failures to reach a replica. Apps' own 503s
-			// are theirs; an app without a ready replica has no router,
-			// which the fallback router of TraefikConfig catches.
-			"status":         []string{"502", "504"},
-			"statusRewrites": map[string]int{"502-504": 503},
-			"service":        pagesService,
-			"query":          PagesPath + "down?url={url}",
-			// Not the app's cookies or credentials. Accept tells a page
-			// from an API call (an app waking from sleep).
-			"errorRequestHeaders": []string{"Accept", "Accept-Language"},
-		}}},
-		"services": map[string]any{pagesService: map[string]any{"loadBalancer": map[string]any{
-			"servers":        []map[string]string{{"url": upstream}},
-			"passHostHeader": false,
-		}}},
-	}
 }
 
 // TraefikConfig is the dynamic configuration a server's Traefik polls (HTTP
@@ -415,17 +383,17 @@ func (c *Core) TraefikConfig(ctx context.Context, serverID, token string) ([]byt
 	}
 	routers, middlewares := map[string]any{}, map[string]any{}
 	for _, svc := range svcs {
-		if svc.Kind != domain.ServiceKindApp || svc.ServerID != serverID || !httpRouted(svc) {
+		if svc.Kind != domain.ServiceKindApp || svc.ServerID != serverID || !network.HTTPRouted(svc) {
 			continue
 		}
 		name := "kipitiny-" + strings.ToLower(svc.ID)
-		rt := c.routeFor(ctx, svc)
+		rt := c.RouteFor(ctx, svc)
 		tls := map[string]any{}
-		if rt.resolver != "" {
-			tls["certResolver"] = rt.resolver
+		if rt.Resolver != "" {
+			tls["certResolver"] = rt.Resolver
 		}
 		page := name + "-page"
-		middlewares[page] = map[string]any{"replacePath": map[string]string{"path": PagesPath + svc.ID}}
+		middlewares[page] = map[string]any{"replacePath": map[string]string{"path": network.PagesPath + svc.ID}}
 		router := func(rule string, priority int, service string, chain ...string) map[string]any {
 			return map[string]any{
 				"rule": rule, "entryPoints": []string{"websecure"}, "tls": tls,
@@ -445,7 +413,7 @@ func (c *Core) TraefikConfig(ctx context.Context, serverID, token string) ([]byt
 			paths = paths[:0]
 			for _, r := range svc.Routes {
 				for _, p := range r.Paths {
-					paths = append(paths, pathRoute{pathRule(svc.Domain, p), routeService(name, svc, r), len(p), r.Scheme == "h2c"})
+					paths = append(paths, pathRoute{network.PathRule(svc.Domain, p), network.RouteService(name, svc, r), len(p), r.Scheme == "h2c"})
 				}
 			}
 		}
@@ -457,9 +425,9 @@ func (c *Core) TraefikConfig(ctx context.Context, serverID, token string) ([]byt
 		}
 		for i, p := range paths {
 			if len(svc.Routes) == 0 {
-				routers[page] = router(p.rule, 1, pagesService+"@file", page)
+				routers[page] = router(p.rule, 1, network.PagesService+"@file", page)
 			} else {
-				routers[page+suffix(i)] = router(p.rule, routePriority+2*p.priority, pagesService+"@file", page)
+				routers[page+suffix(i)] = router(p.rule, network.RoutePriority+2*p.priority, network.PagesService+"@file", page)
 			}
 		}
 		m := maintenance[svc.ProjectID]
@@ -475,20 +443,20 @@ func (c *Core) TraefikConfig(ctx context.Context, serverID, token string) ([]byt
 		if appChain == nil {
 			// Nobody gets through: no allowlist, or no replica to reach.
 			for i, p := range paths {
-				routers[name+"-maintenance"+suffix(i)] = router(p.rule, maintenancePriority+p.priority, pagesService+"@file", page)
+				routers[name+"-maintenance"+suffix(i)] = router(p.rule, maintenancePriority+p.priority, network.PagesService+"@file", page)
 			}
 			continue
 		}
 		allow := map[string]any{"sourceRange": m.AllowIPs, "rejectStatusCode": maintenanceReject}
-		if rt.behindProxy {
+		if rt.BehindProxy {
 			allow["ipStrategy"] = map[string]int{"depth": 1}
 		}
 		middlewares[name+"-maintenance-allow"] = map[string]any{"ipAllowList": allow}
 		middlewares[name+"-maintenance-page"] = map[string]any{"errors": map[string]any{
 			"status":              []string{fmt.Sprint(maintenanceReject)},
 			"statusRewrites":      map[string]int{fmt.Sprint(maintenanceReject): 503},
-			"service":             pagesService + "@file",
-			"query":               PagesPath + svc.ID,
+			"service":             network.PagesService + "@file",
+			"query":               network.PagesPath + svc.ID,
 			"errorRequestHeaders": []string{"Accept-Language"},
 		}}
 		// The app's chain without its retry, which h2c routes go without.

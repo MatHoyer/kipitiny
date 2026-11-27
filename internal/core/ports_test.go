@@ -7,20 +7,21 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/moby/moby/api/types/network"
+	dockernet "github.com/moby/moby/api/types/network"
 
 	"github.com/kipit-labs/kipitiny/internal/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 func TestNormalizePorts(t *testing.T) {
-	got := normalizePorts([]domain.PublishedPort{{HostPort: 25565}, {HostPort: 19132, ContainerPort: 19133, Protocol: " UDP "}})
+	got := network.NormalizePorts([]domain.PublishedPort{{HostPort: 25565}, {HostPort: 19132, ContainerPort: 19133, Protocol: " UDP "}})
 	want := []domain.PublishedPort{{HostPort: 25565, ContainerPort: 25565, Protocol: "tcp"}, {HostPort: 19132, ContainerPort: 19133, Protocol: "udp"}}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got %+v", got)
 	}
-	if got := normalizePorts(nil); got == nil || len(got) != 0 {
+	if got := network.NormalizePorts(nil); got == nil || len(got) != 0 {
 		t.Fatalf("nil: %#v", got)
 	}
 }
@@ -46,7 +47,7 @@ func TestValidatePorts(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validatePorts(domain.Service{Replicas: tt.replicas, PublishedPorts: tt.ports})
+			err := network.ValidatePorts(domain.Service{Replicas: tt.replicas, PublishedPorts: tt.ports})
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("got %v, wantErr %v", err, tt.wantErr)
 			}
@@ -93,7 +94,7 @@ func TestCheckPortsFree(t *testing.T) {
 		{"udp 443", domain.Service{ProjectID: far.ID, PublishedPorts: []domain.PublishedPort{{HostPort: 443, ContainerPort: 443, Protocol: "udp"}}}, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			err := c.checkPortsFree(ctx, tt.svc)
+			err := c.CheckPortsFree(ctx, tt.svc)
 			if tt.taken != (err != nil) {
 				t.Fatalf("got %v, taken %v", err, tt.taken)
 			}
@@ -112,8 +113,8 @@ func TestPublishedPortsSpec(t *testing.T) {
 			{HostPort: 25566, ContainerPort: 25565, Protocol: "tcp"},
 			{HostPort: 19132, ContainerPort: 19132, Protocol: "udp"},
 		}}
-	spec := containerSpec(p, svc, envSources{}, "D1", 1, route{})
-	tcp, udp := network.MustParsePort("25565/tcp"), network.MustParsePort("19132/udp")
+	spec := containerSpec(p, svc, envSources{}, "D1", 1, network.Routing{})
+	tcp, udp := dockernet.MustParsePort("25565/tcp"), dockernet.MustParsePort("19132/udp")
 	if _, ok := spec.Config.ExposedPorts[tcp]; !ok || len(spec.Config.ExposedPorts) != 2 {
 		t.Errorf("exposed = %v", spec.Config.ExposedPorts)
 	}
@@ -125,14 +126,14 @@ func TestPublishedPortsSpec(t *testing.T) {
 		t.Error("a service without a domain must stay off the proxy network")
 	}
 
-	if got := probePort(svc); got != 25565 {
+	if got := network.ProbePort(svc); got != 25565 {
 		t.Errorf("probe port = %d", got)
 	}
 	svc.Port = 8123 // e.g. a web map, routed by Traefik
-	if got := probePort(svc); got != 8123 {
+	if got := network.ProbePort(svc); got != 8123 {
 		t.Errorf("probe port with HTTP port = %d", got)
 	}
-	if got := probePort(domain.Service{PublishedPorts: []domain.PublishedPort{{HostPort: 1, ContainerPort: 1, Protocol: "udp"}}}); got != 0 {
+	if got := network.ProbePort(domain.Service{PublishedPorts: []domain.PublishedPort{{HostPort: 1, ContainerPort: 1, Protocol: "udp"}}}); got != 0 {
 		t.Errorf("udp only: %d", got)
 	}
 }
@@ -161,14 +162,14 @@ func TestPublishedPortsDomain(t *testing.T) {
 		t.Fatal(err)
 	}
 	mc := view.Service
-	wants, err := c.wantedRecords(ctx, []cloudflare.Zone{{ID: "z", Name: "example.com"}})
+	wants, err := c.WantedRecords(ctx, []cloudflare.Zone{{ID: "z", Name: "example.com"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w := wants["mc.example.com"]; w.tunnel != "" || w.record.Type != "A" || w.record.Content != "203.0.113.7" || w.record.Proxied {
+	if w := wants["mc.example.com"]; w.Tunnel != "" || w.Record.Type != "A" || w.Record.Content != "203.0.113.7" || w.Record.Proxied {
 		t.Errorf("record = %+v", w)
 	}
-	spec := containerSpec(p, mc, envSources{}, "D1", 1, c.routeFor(ctx, mc))
+	spec := containerSpec(p, mc, envSources{}, "D1", 1, c.RouteFor(ctx, mc))
 	if spec.Config.Labels["traefik.enable"] != "" {
 		t.Errorf("a domain without a container port must not be routed: %v", spec.Config.Labels)
 	}
@@ -191,10 +192,10 @@ func TestPublishedPortsDomain(t *testing.T) {
 	if err := c.validate(ctx, mc); err != nil {
 		t.Fatalf("HTTP without a tunnel: %v", err)
 	}
-	if rt := c.routeFor(ctx, mc); rt.behindProxy {
+	if rt := c.RouteFor(ctx, mc); rt.BehindProxy {
 		t.Error("the record of an app with published ports is never proxied")
 	}
-	if l := containerSpec(p, mc, envSources{}, "D1", 1, c.routeFor(ctx, mc)).Config.Labels; l["traefik.enable"] != "true" {
+	if l := containerSpec(p, mc, envSources{}, "D1", 1, c.RouteFor(ctx, mc)).Config.Labels; l["traefik.enable"] != "true" {
 		t.Errorf("labels = %v", l)
 	}
 }

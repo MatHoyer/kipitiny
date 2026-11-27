@@ -13,12 +13,13 @@ import (
 	"time"
 
 	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/network"
+	dockernet "github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 // TestMaintenanceTraefikDocker runs Traefik as the manager configures it in
@@ -59,7 +60,7 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET "+PagesPath+"traefik/{server}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET "+network.PagesPath+"traefik/{server}", func(w http.ResponseWriter, r *http.Request) {
 		token, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 		b, err := c.TraefikConfig(r.Context(), r.PathValue("server"), token)
 		if err != nil {
@@ -73,10 +74,10 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write(p.Body)
 	}
-	mux.HandleFunc(PagesPath+"down", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(network.PagesPath+"down", func(w http.ResponseWriter, r *http.Request) {
 		page(w, c.MaintenancePage(r.Context(), "", r.URL.Query().Get("url")))
 	})
-	mux.HandleFunc(PagesPath+"{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(network.PagesPath+"{id}", func(w http.ResponseWriter, r *http.Request) {
 		page(w, c.MaintenancePage(r.Context(), r.PathValue("id"), ""))
 	})
 	srv := &http.Server{Handler: mux}
@@ -95,8 +96,8 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	upstream := "http://" + managerHost + ":" + portOf(t, ln.Addr())
-	opts, files := c.traefikSpec(cfg.Traefik.DockerSocket, traefikOpts{Pages: &pagesOpts{Upstream: upstream, ServerID: domain.LocalServerID, Token: token}})
+	upstream := "http://" + network.ManagerHost + ":" + portOf(t, ln.Addr())
+	opts, files := c.TraefikSpec(cfg.Traefik.DockerSocket, network.TraefikOpts{Pages: &network.PagesOpts{Upstream: upstream, ServerID: domain.LocalServerID, Token: token}})
 	constraint := "tt-" + strings.ToLower(svc.ID)
 	for i, a := range opts.Config.Cmd {
 		switch {
@@ -110,8 +111,8 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 	opts.Name = netName + "-traefik"
 	opts.Config.Labels = nil
 	opts.HostConfig.Mounts = opts.HostConfig.Mounts[:1] // the socket, not the real Traefik's ACME volume
-	opts.HostConfig.PortBindings = network.PortMap{network.MustParsePort("443/tcp"): {{HostIP: netip.MustParseAddr("127.0.0.1")}}}
-	opts.NetworkingConfig.EndpointsConfig = map[string]*network.EndpointSettings{netName: {}}
+	opts.HostConfig.PortBindings = dockernet.PortMap{dockernet.MustParsePort("443/tcp"): {{HostIP: netip.MustParseAddr("127.0.0.1")}}}
+	opts.NetworkingConfig.EndpointsConfig = map[string]*dockernet.EndpointSettings{netName: {}}
 	traefikID, err := dk.Run(ctx, opts, files...)
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +123,7 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 		t.Fatal(err)
 	}
 	var addr string
-	for _, b := range insp.Container.NetworkSettings.Ports[network.MustParsePort("443/tcp")] {
+	for _, b := range insp.Container.NetworkSettings.Ports[dockernet.MustParsePort("443/tcp")] {
 		addr = "127.0.0.1:" + b.HostPort
 	}
 	gateway := ""
@@ -132,13 +133,13 @@ func TestMaintenanceTraefikDocker(t *testing.T) {
 
 	runApp := func(cmd string) string {
 		t.Helper()
-		labels := traefikLabels(svc, route{})
+		labels := network.TraefikLabels(svc, network.Routing{})
 		labels["traefik.docker.network"] = netName
 		labels[constraint] = "true"
 		labels[docker.LabelProject], labels[docker.LabelService] = p.ID, svc.ID
 		id, err := dk.Run(ctx, client.ContainerCreateOptions{
 			Config:           &container.Config{Image: "busybox", Cmd: []string{"sh", "-c", cmd}, Labels: labels},
-			NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{netName: {}}},
+			NetworkingConfig: &dockernet.NetworkingConfig{EndpointsConfig: map[string]*dockernet.EndpointSettings{netName: {}}},
 		})
 		if err != nil {
 			t.Fatal(err)

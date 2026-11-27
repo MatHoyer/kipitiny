@@ -8,6 +8,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 func TestComposeDatabaseEnv(t *testing.T) {
@@ -39,7 +40,7 @@ configs:
 		t.Errorf("db env = %v, files %+v", db.Env, db.Files)
 	}
 	web := svcs[1-i]
-	if spec := containerSpec(p, web, envSources{}, "D1", 1, route{}); spec.HostConfig.MemoryReservation != 128<<20 {
+	if spec := containerSpec(p, web, envSources{}, "D1", 1, network.Routing{}); spec.HostConfig.MemoryReservation != 128<<20 {
 		t.Errorf("reservation = %d", spec.HostConfig.MemoryReservation)
 	}
 

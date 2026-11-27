@@ -12,6 +12,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 func TestValidateVolumes(t *testing.T) {
@@ -64,7 +65,7 @@ func TestAppVolumeMounts(t *testing.T) {
 	p := domain.Project{ID: "P1", Name: "shop"}
 	svc := domain.Service{ID: "01ABC", ProjectID: "P1", Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 2,
 		Volumes: []domain.Volume{{Name: "uploads", Path: "/app/uploads"}}}
-	mounts := containerSpec(p, svc, envSources{}, "D1", 1, route{}).HostConfig.Mounts
+	mounts := containerSpec(p, svc, envSources{}, "D1", 1, network.Routing{}).HostConfig.Mounts
 	if len(mounts) != 1 {
 		t.Fatalf("mounts = %+v", mounts)
 	}

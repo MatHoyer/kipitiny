@@ -9,6 +9,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
 // input turns a compose service into a ServiceInput.
@@ -64,7 +65,7 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 		// its own flag).
 		in.Secrets = []string{}
 		for _, k := range cs.VarEnv {
-			if v, ok := in.Env[k]; ok && !soleRefRe.MatchString(v) {
+			if v, ok := in.Env[k]; ok && !domain.SoleRefRe.MatchString(v) {
 				in.Secrets = append(in.Secrets, k)
 			}
 		}
@@ -80,12 +81,12 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 		}
 	}
 	if m := cs.X.Middlewares; m != nil {
-		mw := &MiddlewaresInput{IPAllowList: m.IPAllowList, Headers: m.Headers}
+		mw := &network.MiddlewaresInput{IPAllowList: m.IPAllowList, Headers: m.Headers}
 		if m.RateLimit != nil {
 			mw.RateLimit = &domain.RateLimit{Average: m.RateLimit.Average, Burst: m.RateLimit.Burst}
 		}
 		for _, u := range m.BasicAuth {
-			bu := BasicAuthInput{Name: u.Name, Password: u.Ref}
+			bu := network.BasicAuthInput{Name: u.Name, Password: u.Ref}
 			if u.Ref == "" {
 				h, ok := a.resolve(u.Hash)
 				if !ok {
@@ -103,7 +104,7 @@ func (a *applier) input(name string, cs compose.Service) (ServiceInput, error) {
 		}
 		in.Middlewares = mw
 	} else {
-		in.Middlewares = &MiddlewaresInput{}
+		in.Middlewares = &network.MiddlewaresInput{}
 	}
 	return in, nil
 }
@@ -316,7 +317,7 @@ func changedFields(old, svc domain.Service) []string {
 	add("preBackup", old.PreBackup != svc.PreBackup)
 	add("volumes", !reflect.DeepEqual(old.Volumes, svc.Volumes))
 	add("publishedPorts", !slices.Equal(old.PublishedPorts, svc.PublishedPorts))
-	add("routes", !sameRoutes(old.Routes, svc.Routes))
+	add("routes", !network.SameRoutes(old.Routes, svc.Routes))
 	add("stopGraceSeconds", old.StopGraceSeconds != svc.StopGraceSeconds)
 	add("hostNetwork", old.HostNetwork != svc.HostNetwork)
 	add("dockerSocket", old.DockerSocket != svc.DockerSocket)
