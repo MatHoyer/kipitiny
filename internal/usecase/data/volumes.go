@@ -9,9 +9,7 @@ import (
 	"strings"
 
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/moby/moby/client"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -91,12 +89,12 @@ func AppVolumeMounts(svc domain.Service) []domain.Mount {
 
 // CheckExternalVolumes refuses to deploy with a missing external volume:
 // Docker would create an empty one in its place, which compose refuses too.
-func CheckExternalVolumes(ctx context.Context, dk *docker.Client, svc domain.Service) error {
+func CheckExternalVolumes(ctx context.Context, dk domain.ContainerRuntime, svc domain.Service) error {
 	for _, v := range svc.Volumes {
 		if v.External == "" {
 			continue
 		}
-		if _, err := dk.VolumeInspect(ctx, v.External, client.VolumeInspectOptions{}); cerrdefs.IsNotFound(err) {
+		if _, err := dk.InspectVolume(ctx, v.External); cerrdefs.IsNotFound(err) {
 			return fmt.Errorf("external volume %s doesn't exist on the server: create it first", v.External)
 		} else if err != nil {
 			return err
@@ -152,20 +150,20 @@ func HasData(svc domain.Service) bool {
 
 // RemoveServiceVolumes removes a database's data volume and every volume
 // created for an app, including ones no longer in its settings.
-func RemoveServiceVolumes(ctx context.Context, dk *docker.Client, svc domain.Service) error {
+func RemoveServiceVolumes(ctx context.Context, dk domain.ContainerRuntime, svc domain.Service) error {
 	if vol := DataVolume(svc); vol != "" {
 		if err := dk.RemoveVolume(ctx, vol); err != nil {
 			return err
 		}
 	}
-	f := make(client.Filters).
+	f := domain.Filter{}.
 		Add("label", domain.LabelService+"="+svc.ID).
 		Add("label", domain.LabelComponent+"="+VolumeComponent)
-	vols, err := dk.VolumeList(ctx, client.VolumeListOptions{Filters: f})
+	vols, err := dk.ListVolumes(ctx, f)
 	if err != nil {
 		return err
 	}
-	for _, v := range vols.Items {
+	for _, v := range vols {
 		if err := dk.RemoveVolume(ctx, v.Name); err != nil {
 			return err
 		}

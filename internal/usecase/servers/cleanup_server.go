@@ -9,9 +9,7 @@ import (
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/moby/moby/client"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
@@ -30,7 +28,7 @@ func (c *Servers) cleanServer(ctx context.Context, sv domain.Server, svcs []doma
 	}
 	step := func(name string) { c.steps.SetOn(cleanupKey, name, sv.Name) }
 	step(CleanupConnect)
-	if _, err := dk.Client.Ping(ctx, client.PingOptions{}); err != nil {
+	if err := dk.Ping(ctx); err != nil {
 		fail("docker", err)
 		return r
 	}
@@ -38,22 +36,22 @@ func (c *Servers) cleanServer(ctx context.Context, sv domain.Server, svcs []doma
 	// Containers first: what they held becomes unused for the next steps.
 	if s.Containers {
 		step(CleanupContainers)
-		f := make(client.Filters).Add("until", until).Add("label!", domain.LabelManaged)
-		res, err := dk.ContainerPrune(ctx, client.ContainerPruneOptions{Filters: f})
+		f := domain.Filter{}.Add("until", until).Add("label!", domain.LabelManaged)
+		res, err := dk.PruneContainers(ctx, f)
 		fail("containers", err)
-		r.Containers += len(res.Report.ContainersDeleted)
-		r.Reclaimed += res.Report.SpaceReclaimed
+		r.Containers += res.Deleted
+		r.Reclaimed += res.Reclaimed
 	}
 	if s.Images != CleanOff {
 		step(CleanupImages)
 	}
 	switch s.Images {
 	case CleanDangling:
-		f := make(client.Filters).Add("dangling", "true").Add("until", until)
-		res, err := dk.ImagePrune(ctx, client.ImagePruneOptions{Filters: f})
+		f := domain.Filter{}.Add("dangling", "true").Add("until", until)
+		res, err := dk.PruneImages(ctx, f)
 		fail("images", err)
-		r.Images += len(res.Report.ImagesDeleted)
-		r.Reclaimed += res.Report.SpaceReclaimed
+		r.Images += res.Deleted
+		r.Reclaimed += res.Reclaimed
 	case CleanUnused:
 		n, size, err := c.removeUnusedImages(ctx, dk, sv.ID, svcs, time.Duration(s.MinAgeHours)*time.Hour)
 		fail("images", err)
@@ -62,11 +60,10 @@ func (c *Servers) cleanServer(ctx context.Context, sv domain.Server, svcs []doma
 	}
 	if s.BuildCache {
 		step(CleanupBuildCache)
-		f := make(client.Filters).Add("until", until)
-		res, err := dk.BuildCachePrune(ctx, client.BuildCachePruneOptions{All: true, Filters: f})
+		res, err := dk.PruneBuildCache(ctx, domain.Filter{}.Add("until", until))
 		fail("build cache", err)
-		r.BuildCache += len(res.Report.CachesDeleted)
-		r.Reclaimed += res.Report.SpaceReclaimed
+		r.BuildCache += res.Deleted
+		r.Reclaimed += res.Reclaimed
 	}
 	step(CleanupVolumes) // stale probe volumes go even when volumes are off
 	if s.Volumes != CleanOff {
@@ -81,10 +78,10 @@ func (c *Servers) cleanServer(ctx context.Context, sv domain.Server, svcs []doma
 	r.Volumes += n
 	if s.Networks {
 		step(CleanupNetworks)
-		f := make(client.Filters).Add("until", until).Add("label!", domain.LabelManaged)
-		res, err := dk.NetworkPrune(ctx, client.NetworkPruneOptions{Filters: f})
+		f := domain.Filter{}.Add("until", until).Add("label!", domain.LabelManaged)
+		res, err := dk.PruneNetworks(ctx, f)
 		fail("networks", err)
-		r.Networks += len(res.Report.NetworksDeleted)
+		r.Networks += res.Deleted
 	}
 	if len(r.Errors) > 0 {
 		c.log.Warn("cleanup errors", "server", sv.Name, "errors", r.Errors)
@@ -99,13 +96,13 @@ const keepRollbackImages = 5
 // removeUnusedImages removes images no container uses, except the images of
 // the server's services and of their recent successful deployments, which
 // deploys and rollbacks need.
-func (c *Servers) removeUnusedImages(ctx context.Context, dk *docker.Client, serverID string, svcs []domain.Service, minAge time.Duration) (int, uint64, error) {
+func (c *Servers) removeUnusedImages(ctx context.Context, dk domain.ContainerRuntime, serverID string, svcs []domain.Service, minAge time.Duration) (int, uint64, error) {
 	keep := map[string]bool{}
 	protect := func(ref string) {
 		if ref == "" {
 			return
 		}
-		if res, err := dk.ImageInspect(ctx, ref); err == nil {
+		if res, err := dk.InspectImage(ctx, ref, ""); err == nil {
 			keep[res.ID] = true
 		}
 	}
@@ -136,18 +133,17 @@ func (c *Servers) removeUnusedImages(ctx context.Context, dk *docker.Client, ser
 	for _, ct := range cts {
 		keep[ct.ImageID] = true
 	}
-	imgs, err := dk.ImageList(ctx, client.ImageListOptions{})
+	imgs, err := dk.ListImages(ctx)
 	if err != nil {
 		return 0, 0, err
 	}
 	n, size := 0, uint64(0)
-	for _, img := range imgs.Items {
+	for _, img := range imgs {
 		if keep[img.ID] || time.Since(time.Unix(img.Created, 0)) < minAge {
 			continue
 		}
 		// No force: an image a container started meanwhile stays.
-		_, err := dk.ImageRemove(ctx, img.ID, client.ImageRemoveOptions{PruneChildren: true})
-		if err != nil {
+		if err := dk.RemoveImage(ctx, img.ID); err != nil {
 			if !cerrdefs.IsNotFound(err) && !cerrdefs.IsConflict(err) {
 				return n, size, err
 			}
@@ -162,20 +158,19 @@ func (c *Servers) removeUnusedImages(ctx context.Context, dk *docker.Client, ser
 // removeUnusedVolumes removes volumes no container mounts: anonymous ones
 // only, or named ones too. Volumes of the manager (labelled, kipitiny-*) and
 // database volumes are never touched.
-func (c *Servers) removeUnusedVolumes(ctx context.Context, dk *docker.Client, svcs []domain.Service, named bool, minAge time.Duration) (int, uint64, error) {
+func (c *Servers) removeUnusedVolumes(ctx context.Context, dk domain.ContainerRuntime, svcs []domain.Service, named bool, minAge time.Duration) (int, uint64, error) {
 	protected := map[string]bool{}
 	for _, svc := range svcs {
 		if vol := data.DataVolume(svc); vol != "" {
 			protected[vol] = true
 		}
 	}
-	f := make(client.Filters).Add("dangling", "true")
-	vols, err := dk.VolumeList(ctx, client.VolumeListOptions{Filters: f})
+	vols, err := dk.ListVolumes(ctx, domain.Filter{}.Add("dangling", "true"))
 	if err != nil {
 		return 0, 0, err
 	}
 	n, size := 0, uint64(0)
-	for _, v := range vols.Items {
+	for _, v := range vols {
 		_, managed := v.Labels[domain.LabelManaged]
 		if managed || protected[v.Name] || strings.HasPrefix(v.Name, "kipitiny-") {
 			continue
@@ -186,15 +181,15 @@ func (c *Servers) removeUnusedVolumes(ctx context.Context, dk *docker.Client, sv
 		if created, err := time.Parse(time.RFC3339, v.CreatedAt); err == nil && time.Since(created) < minAge {
 			continue
 		}
-		if _, err := dk.VolumeRemove(ctx, v.Name, client.VolumeRemoveOptions{}); err != nil {
+		if err := dk.DeleteVolume(ctx, v.Name); err != nil {
 			if !cerrdefs.IsNotFound(err) && !cerrdefs.IsConflict(err) {
 				return n, size, err
 			}
 			continue
 		}
 		n++
-		if v.UsageData != nil && v.UsageData.Size > 0 {
-			size += uint64(v.UsageData.Size)
+		if v.Size > 0 {
+			size += uint64(v.Size)
 		}
 	}
 	return n, size, nil
@@ -208,22 +203,21 @@ func isAnonymousVolume(labels map[string]string) bool {
 }
 
 // removeStaleProbes removes unused probe volumes left by older manager binaries.
-func (c *Servers) removeStaleProbes(ctx context.Context, dk *docker.Client) (int, error) {
+func (c *Servers) removeStaleProbes(ctx context.Context, dk domain.ContainerRuntime) (int, error) {
 	_, current, err := deploy.OwnBinary()
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return 0, err
 	}
-	f := make(client.Filters).Add("dangling", "true").Add("label", domain.LabelComponent+"=probe")
-	vols, err := dk.VolumeList(ctx, client.VolumeListOptions{Filters: f})
+	vols, err := dk.ListVolumes(ctx, domain.Filter{}.Add("dangling", "true").Add("label", domain.LabelComponent+"=probe"))
 	if err != nil {
 		return 0, err
 	}
 	n := 0
-	for _, v := range vols.Items {
+	for _, v := range vols {
 		if current == "" || v.Name == "kipitiny-probe-"+current {
 			continue
 		}
-		if _, err := dk.VolumeRemove(ctx, v.Name, client.VolumeRemoveOptions{}); err == nil {
+		if err := dk.DeleteVolume(ctx, v.Name); err == nil {
 			n++
 		}
 	}

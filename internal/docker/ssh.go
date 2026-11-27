@@ -11,6 +11,8 @@ import (
 
 	"github.com/moby/moby/client"
 	"golang.org/x/crypto/ssh"
+
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // SSHConfig reaches a remote Docker daemon's Unix socket through an SSH
@@ -151,13 +153,14 @@ func NewPool(local *Client, connect func(id string) (*Client, error)) *Pool {
 	return &Pool{local: local, connect: connect, clients: map[string]*Client{}}
 }
 
-// Local is the daemon the manager runs next to.
-func (p *Pool) Local() *Client { return p.local }
-
 // For returns the client of a server. If it can't be built (unknown server,
-// bad key), the returned client fails every call with that error.
-func (p *Pool) For(id string) *Client {
+// bad key), the returned client fails every call with that error. Nil when
+// there is no local daemon and id is local.
+func (p *Pool) For(id string) domain.ContainerRuntime {
 	if id == "" || id == "local" {
+		if p.local == nil {
+			return nil
+		}
 		return p.local
 	}
 	p.mu.Lock()

@@ -211,7 +211,7 @@ func TestVolumeFilesDockerDatabase(t *testing.T) {
 		t.Fatalf("listing: %+v %v", l, err)
 	}
 	h := c.files.helpers[svc.ID]
-	err = c.mgr.DockerFor(svc.ServerID).Exec(ctx, h.id, docker.ExecOptions{Cmd: []string{"touch", "/v/data/x"}})
+	err = c.mgr.DockerFor(svc.ServerID).Exec(ctx, h.id, domain.ExecOptions{Cmd: []string{"touch", "/v/data/x"}})
 	if err == nil || !strings.Contains(err.Error(), "Read-only") {
 		t.Errorf("the helper can write a database volume: %v", err)
 	}
@@ -356,7 +356,7 @@ ln -s .. up`)
 		t.Fatal(err)
 	}
 	h := c.files.helpers[svc.ID]
-	if err := c.mgr.DockerFor(svc.ServerID).Exec(ctx, h.id, docker.ExecOptions{Cmd: []string{"test", "-f", "/etc/passwd"}}); err != nil {
+	if err := c.mgr.DockerFor(svc.ServerID).Exec(ctx, h.id, domain.ExecOptions{Cmd: []string{"test", "-f", "/etc/passwd"}}); err != nil {
 		t.Errorf("deleting a symlink followed it: %v", err)
 	}
 	l, err := c.ListVolumeFiles(ctx, svc.ID, "data")
@@ -467,7 +467,7 @@ func TestVolumeFilesDockerContainer(t *testing.T) {
 				t.Errorf("move: %v", err)
 			}
 			var out strings.Builder
-			if err := c.mgr.DockerFor(svc.ServerID).Exec(ctx, id, docker.ExecOptions{Cmd: []string{"cat", "/srv/conf/app.ini", "/srv/top.txt"}, Stdout: &out}); err != nil || out.String() != "a=1\ntop" {
+			if err := c.mgr.DockerFor(svc.ServerID).Exec(ctx, id, domain.ExecOptions{Cmd: []string{"cat", "/srv/conf/app.ini", "/srv/top.txt"}, Stdout: &out}); err != nil || out.String() != "a=1\ntop" {
 				t.Errorf("in the container: %q %v", out.String(), err)
 			}
 			if got := archiveNames(ctx, t, c, svc.ID, "@container/srv", nil); !slices.Contains(got, "srv/conf/app.ini") {

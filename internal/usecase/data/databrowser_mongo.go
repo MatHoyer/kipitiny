@@ -12,7 +12,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -64,14 +63,14 @@ db.getSiblingDB(e.KP_DB).getCollection(e.KP_COLL).find(filter).sort(sort).skip(N
 // mongosh runs a script as the read-only user (or the service's own, the
 // instance's root, when root is set), killed after timeout: mongosh would
 // otherwise outlive a cancelled exec.
-func (t dataTarget) mongosh(script string, root bool, timeout time.Duration, env ...string) docker.ExecOptions {
+func (t dataTarget) mongosh(script string, root bool, timeout time.Duration, env ...string) domain.ExecOptions {
 	auth := mongoAuth(readUser, readUserPassword(t.svc.Env[MongoPassword]))
 	if root {
 		auth = mongoAuthArgs(t.svc)
 	}
 	cmd := []string{"timeout", "-s", "KILL", strconv.Itoa(int(timeout.Seconds()) + 5), "mongosh", "--quiet", "--norc"}
 	cmd = append(append(cmd, auth...), t.db, "--eval", script)
-	return docker.ExecOptions{Cmd: cmd, Env: env}
+	return domain.ExecOptions{Cmd: cmd, Env: env}
 }
 
 // mongoJSON runs a browse script and hands each line, a JSON array, to fn.

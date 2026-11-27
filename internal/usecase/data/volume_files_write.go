@@ -12,7 +12,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
 )
@@ -195,7 +194,7 @@ fi
 	defer cancel()
 	in := &countingReader{r: r}
 	var size strings.Builder
-	err = c.filesExecIn(ctx, svc, vol, docker.ExecOptions{Cmd: cmd(check + `cat > "$t" && stat -c %s "$t"`), Stdin: in}, func(out io.Reader) error {
+	err = c.filesExecIn(ctx, svc, vol, domain.ExecOptions{Cmd: cmd(check + `cat > "$t" && stat -c %s "$t"`), Stdin: in}, func(out io.Reader) error {
 		_, err := io.Copy(&size, out)
 		return err
 	})

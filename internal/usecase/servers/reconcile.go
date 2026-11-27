@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/moby/moby/api/types/events"
-	"github.com/moby/moby/client"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -87,31 +84,25 @@ func (c *Servers) syncWatchers(watchers map[string]context.CancelFunc) {
 // if the event stream breaks.
 func (c *Servers) watchEvents(ctx context.Context, serverID string) {
 	for ctx.Err() == nil {
-		f := make(client.Filters)
-		f.Add("type", string(events.ContainerEventType))
-		f.Add("label", domain.LabelManaged+"=true")
-		f.Add("event", string(events.ActionDie), string(events.ActionDestroy), string(events.ActionOOM))
-		res := c.DockerFor(serverID).Client.Events(ctx, client.EventsListOptions{Filters: f})
-	stream:
-		for {
-			select {
-			case m := <-res.Messages:
-				if m.Action == events.ActionOOM {
-					// Docker restarts the replica itself: the reconciler wouldn't see it.
-					if sid := m.Actor.Attributes[domain.LabelService]; sid != "" {
-						c.NotifyOOM(ctx, sid, m.Actor.Attributes[domain.LabelReplica])
-					}
-					continue
+		f := domain.Filter{}.
+			Add("type", "container").
+			Add("label", domain.LabelManaged+"=true").
+			Add("event", "die", "destroy", "oom")
+		err := c.DockerFor(serverID).Events(ctx, f, func(e domain.ContainerEvent) {
+			if e.Action == "oom" {
+				// Docker restarts the replica itself: the reconciler wouldn't see it.
+				if sid := e.Attributes[domain.LabelService]; sid != "" {
+					c.NotifyOOM(ctx, sid, e.Attributes[domain.LabelReplica])
 				}
-				c.Kick()
-			case err := <-res.Err:
-				if err != nil && ctx.Err() == nil {
-					c.log.Debug("docker event stream ended", "server", serverID, "err", err)
-				}
-				break stream
-			case <-ctx.Done():
 				return
 			}
+			c.Kick()
+		})
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			c.log.Debug("docker event stream ended", "server", serverID, "err", err)
 		}
 		select {
 		case <-time.After(5 * time.Second):

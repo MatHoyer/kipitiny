@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
@@ -40,7 +39,7 @@ type testCore struct {
 
 	cfg   *config.Config
 	store domain.Store
-	dk    *docker.Client
+	dk    domain.ContainerRuntime
 	bg    context.Context
 	ops   sync.WaitGroup
 	locks sync.Map
@@ -65,7 +64,7 @@ func newTestCore(t *testing.T, cfg config.Config) *testCore {
 	return c
 }
 
-func (c *testCore) DockerFor(string) *docker.Client { return c.dk }
+func (c *testCore) DockerFor(string) domain.ContainerRuntime { return c.dk }
 
 func (c *testCore) GoBackground(f func()) error {
 	c.ops.Go(f)
@@ -122,7 +121,9 @@ func (c *testCore) ForgetServiceJobs(string)                  {}
 func (c *testCore) JobRunningIn(string) bool                  { return false }
 func (c *testCore) NotifyOOM(context.Context, string, string) {}
 
-func (c *testCore) RemoveJobContainers(context.Context, *docker.Client, string) error { return nil }
+func (c *testCore) RemoveJobContainers(context.Context, domain.ContainerRuntime, string) error {
+	return nil
+}
 
 // OwnImageRef is the image of cfg's version, as core's for a release.
 func (c *testCore) OwnImageRef() string { return c.cfg.Update.Image + ":" + c.cfg.Version }

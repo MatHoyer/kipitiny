@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
@@ -14,7 +13,9 @@ import (
 // (projects.Manager).
 type projectsPorts struct{ c *Core }
 
-func (p projectsPorts) DockerFor(serverID string) *docker.Client { return p.c.dockerFor(serverID) }
+func (p projectsPorts) DockerFor(serverID string) domain.ContainerRuntime {
+	return p.c.dockerFor(serverID)
+}
 
 func (p projectsPorts) GoBackground(f func()) error { return p.c.goBackground(f) }
 
@@ -48,7 +49,7 @@ func (p projectsPorts) PlanCompose(ctx context.Context, project domain.Project, 
 	return p.c.PlanCompose(ctx, project, data, opts)
 }
 
-func (p projectsPorts) StartJobContainer(ctx context.Context, project domain.Project, svc domain.Service, j domain.Job, runID string, logf func(string, ...any)) (*docker.Client, string, error) {
+func (p projectsPorts) StartJobContainer(ctx context.Context, project domain.Project, svc domain.Service, j domain.Job, runID string, logf func(string, ...any)) (domain.ContainerRuntime, string, error) {
 	return p.c.StartJobContainer(ctx, project, svc, j, runID, logf)
 }
 

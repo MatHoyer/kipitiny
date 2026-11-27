@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/progress"
@@ -27,7 +26,7 @@ var (
 type Manager interface {
 	// DockerFor is the Docker client of a server; RegistryAuth the
 	// credential to pull image with, "" for none.
-	DockerFor(serverID string) *docker.Client
+	DockerFor(serverID string) domain.ContainerRuntime
 	RegistryAuth(ctx context.Context, image string) string
 	// OwnImageRef is the manager's own image, which runs the SQLite helper.
 	OwnImageRef() string

@@ -9,7 +9,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -334,7 +333,7 @@ func networkIssues(project domain.Project, svc domain.Service, cts []domain.Cont
 
 // runContainer creates and starts spec after creating the networks it joins:
 // one removed outside kipitiny would fail the create.
-func (c *Deployer) runContainer(ctx context.Context, dk *docker.Client, spec domain.ContainerSpec, files ...domain.ContainerFile) (string, error) {
+func (c *Deployer) runContainer(ctx context.Context, dk domain.ContainerRuntime, spec domain.ContainerSpec, files ...domain.ContainerFile) (string, error) {
 	for name := range spec.Networks {
 		if err := dk.EnsureNetwork(ctx, name); err != nil {
 			return "", err

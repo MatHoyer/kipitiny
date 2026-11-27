@@ -12,9 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/moby/moby/client"
-
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
@@ -312,7 +309,7 @@ func (c *Deployer) putToSleep(ctx context.Context, projectID string) error {
 			if ct.State != domain.StateRunning {
 				continue
 			}
-			if _, err := dk.ContainerStop(ctx, ct.ID, client.ContainerStopOptions{Timeout: &secs}); err != nil {
+			if err := dk.StopContainer(ctx, ct.ID, &secs); err != nil {
 				return fmt.Errorf("stop %s: %w", ct.Names[0], err)
 			}
 		}
@@ -394,7 +391,7 @@ func (c *Deployer) wakeProject(ctx context.Context, projectID string) error {
 			if ct.State == domain.StateRunning || (isJob(svc) && completed(ct)) {
 				continue // a job that already did its work stays done
 			}
-			if _, err := dk.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{}); err != nil {
+			if err := dk.StartContainer(ctx, ct.ID); err != nil {
 				c.mgr.Kick() // the reconciler recreates what can't start
 				c.log.Warn("wake: start failed", "container", ct.Names[0], "err", err)
 			}
@@ -443,7 +440,7 @@ func (c *Deployer) routerRequests(ctx context.Context, serverID string) (map[str
 		pr.CloseWithError(err)
 		done <- err
 	}()
-	err = dk.Exec(ctx, cts[0].ID, docker.ExecOptions{
+	err = dk.Exec(ctx, cts[0].ID, domain.ExecOptions{
 		Cmd:    []string{"wget", "-qO-", "http://" + network.MetricsAddr + "/metrics"},
 		Stdout: pw,
 	})

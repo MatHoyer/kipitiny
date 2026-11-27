@@ -64,7 +64,7 @@ func TestVolumeBackupDocker(t *testing.T) {
 	exec := func(cmd string) string {
 		t.Helper()
 		var out strings.Builder
-		if err := dk.Exec(ctx, replica, docker.ExecOptions{Cmd: []string{"sh", "-c", cmd}, Stdout: &out}); err != nil {
+		if err := dk.Exec(ctx, replica, domain.ExecOptions{Cmd: []string{"sh", "-c", cmd}, Stdout: &out}); err != nil {
 			t.Fatalf("%s: %v", cmd, err)
 		}
 		return strings.TrimSpace(out.String())

@@ -72,7 +72,7 @@ func dataTestDB(t *testing.T, kind domain.ServiceKind, cfg *domain.ContainerSpec
 		var err error
 		for range 30 { // wait for the server to accept connections
 			out.Reset()
-			if err = dk.Exec(ctx, id, docker.ExecOptions{Cmd: []string{"sh", "-c", cmd}, Stdout: &out}); err == nil {
+			if err = dk.Exec(ctx, id, domain.ExecOptions{Cmd: []string{"sh", "-c", cmd}, Stdout: &out}); err == nil {
 				return strings.TrimSpace(out.String())
 			}
 			time.Sleep(time.Second)

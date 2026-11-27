@@ -5,21 +5,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 func TestMemoryUsedLeavesOutPageCache(t *testing.T) {
-	v2 := container.MemoryStats{Usage: 300, Stats: map[string]uint64{"inactive_file": 100}}
-	if got := memoryUsed(v2); got != 200 {
+	if got := memoryUsed(300, map[string]uint64{"inactive_file": 100}); got != 200 {
 		t.Errorf("cgroup v2: %d", got)
 	}
-	v1 := container.MemoryStats{Usage: 300, Stats: map[string]uint64{"total_inactive_file": 50, "inactive_file": 100}}
-	if got := memoryUsed(v1); got != 250 {
+	if got := memoryUsed(300, map[string]uint64{"total_inactive_file": 50, "inactive_file": 100}); got != 250 {
 		t.Errorf("cgroup v1: %d", got)
 	}
-	if got := memoryUsed(container.MemoryStats{Usage: 300}); got != 300 {
+	if got := memoryUsed(300, nil); got != 300 {
 		t.Errorf("no stats: %d", got)
 	}
 }

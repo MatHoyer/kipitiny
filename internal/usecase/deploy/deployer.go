@@ -10,7 +10,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
@@ -48,7 +47,7 @@ func New(bg context.Context, cfg *config.Config, store domain.Store, cron domain
 // Manager is what deploy uses from the rest of the manager.
 type Manager interface {
 	// DockerFor is the Docker client of a server.
-	DockerFor(serverID string) *docker.Client
+	DockerFor(serverID string) domain.ContainerRuntime
 	// GoBackground runs an operation the manager waits for on shutdown,
 	// GoLoop a loop that ends with it.
 	GoBackground(f func()) error
@@ -73,7 +72,7 @@ type Manager interface {
 	DeleteJob(ctx context.Context, j domain.Job) error
 	ReloadJobs(ctx context.Context) error
 	ForgetServiceJobs(serviceID string)
-	RemoveJobContainers(ctx context.Context, dk *docker.Client, serviceID string) error
+	RemoveJobContainers(ctx context.Context, dk domain.ContainerRuntime, serviceID string) error
 	JobRunningIn(projectID string) bool
 
 	// Identity: the audit log, the password check, password manager references.
@@ -90,7 +89,7 @@ type Manager interface {
 	ViaTunnel(ctx context.Context, serverID string) bool
 	TunnelToken(sv domain.Server) string
 	// ManagerUpstream is where a server's Traefik reaches the manager.
-	ManagerUpstream(ctx context.Context, dk *docker.Client) (string, error)
+	ManagerUpstream(ctx context.Context, dk domain.ContainerRuntime) (string, error)
 	CheckPortsFree(ctx context.Context, s domain.Service) error
 	DockerSocketFor(ctx context.Context, svc domain.Service) string
 	HashBasicAuth(ctx context.Context, svc *domain.Service) (int, error)

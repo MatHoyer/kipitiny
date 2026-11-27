@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 )
@@ -19,7 +18,7 @@ import (
 // password manager, analytics off, and a reconciler that does nothing.
 type fakeManager struct{}
 
-func (fakeManager) DockerFor(string) *docker.Client             { return nil }
+func (fakeManager) DockerFor(string) domain.ContainerRuntime    { return nil }
 func (fakeManager) RegistryAuth(context.Context, string) string { return "" }
 func (fakeManager) GoLoop(func()) error                         { return nil }
 func (fakeManager) Kick()                                       {}

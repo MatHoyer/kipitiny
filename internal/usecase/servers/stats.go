@@ -2,7 +2,6 @@ package servers
 
 import (
 	"context"
-	"encoding/json"
 	"maps"
 	"sync"
 	"time"
@@ -10,10 +9,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/client"
-
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -175,7 +170,7 @@ func (c *Servers) sampleStats(ctx context.Context) {
 
 // sampleServer reads the counters of the server's running replicas that
 // serve traffic (not the previous deployment's during a rollout).
-func sampleServer(ctx context.Context, dk *docker.Client, svcs map[string]domain.Service) (map[string]sample, map[string]string, error) {
+func sampleServer(ctx context.Context, dk domain.ContainerRuntime, svcs map[string]domain.Service) (map[string]sample, map[string]string, error) {
 	cts, err := dk.FindContainers(ctx, false, domain.Filter{}.Add("label", domain.LabelManaged+"=true", domain.LabelService))
 	if err != nil {
 		return nil, nil, err
@@ -210,41 +205,32 @@ func sampleServer(ctx context.Context, dk *docker.Client, svcs map[string]domain
 
 // containerSample takes a single reading, without the daemon's one-second
 // wait for a previous one: rates come from our own previous sample.
-func containerSample(ctx context.Context, dk *docker.Client, id string) (sample, error) {
-	res, err := dk.ContainerStats(ctx, id, client.ContainerStatsOptions{})
+func containerSample(ctx context.Context, dk domain.ContainerRuntime, id string) (sample, error) {
+	st, err := dk.Stats(ctx, id)
 	if err != nil {
-		return sample{}, err
-	}
-	defer res.Body.Close()
-	var st container.StatsResponse
-	if err := json.NewDecoder(res.Body).Decode(&st); err != nil {
 		return sample{}, err
 	}
 	return toSample(st, time.Now()), nil
 }
 
-func toSample(st container.StatsResponse, now time.Time) sample {
-	s := sample{read: st.Read, cpu: st.CPUStats.CPUUsage.TotalUsage, mem: memoryUsed(st.MemoryStats)}
+func toSample(st domain.ContainerStats, now time.Time) sample {
+	s := sample{read: st.Read, cpu: st.CPU, mem: memoryUsed(st.MemoryUsage, st.MemoryStats), rx: st.RxBytes, tx: st.TxBytes}
 	if s.read.IsZero() {
 		s.read = now
-	}
-	for _, n := range st.Networks {
-		s.rx += n.RxBytes
-		s.tx += n.TxBytes
 	}
 	return s
 }
 
 // memoryUsed leaves out the page cache the kernel can reclaim, like docker
 // stats does.
-func memoryUsed(m container.MemoryStats) uint64 {
-	if v, ok := m.Stats["total_inactive_file"]; ok && v < m.Usage { // cgroup v1
-		return m.Usage - v
+func memoryUsed(usage uint64, stats map[string]uint64) uint64 {
+	if v, ok := stats["total_inactive_file"]; ok && v < usage { // cgroup v1
+		return usage - v
 	}
-	if v := m.Stats["inactive_file"]; v < m.Usage {
-		return m.Usage - v
+	if v := stats["inactive_file"]; v < usage {
+		return usage - v
 	}
-	return m.Usage
+	return usage
 }
 
 // rates turns two samples of a container into CPU percent and bytes/s.

@@ -80,9 +80,9 @@ type Core struct {
 func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logger) *Core {
 	bg, cancel := context.WithCancel(context.Background())
 	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel}
-	c.Servers = servers.New(bg, &c.cfg, s, local, cron.Cron{}, &c.steps, &c.probes, serversPorts{c}, log)
+	c.Servers = c.newServers(local)
 	c.Monitoring = monitoring.New(bg, &c.cfg, s, monitoringPorts{c}, log)
-	c.Identity = identity.New(cfg, s, identity.SecretKinds(cfg, local), c.Monitoring, log)
+	c.Identity = identity.New(cfg, s, identity.SecretKinds(cfg, c.dockerFor(domain.LocalServerID)), c.Monitoring, log)
 	c.Network = network.New(bg, &c.cfg, s, networkPorts{c}, log)
 	c.Data = data.New(bg, &c.cfg, s, age.Encryption{}, cron.Cron{}, &c.steps, dataPorts{c}, log)
 	c.Deployer = deploy.New(bg, &c.cfg, s, cron.Cron{}, &c.probes, deployPorts{c}, log)
@@ -131,8 +131,23 @@ func waitDone(wg *sync.WaitGroup) <-chan struct{} {
 }
 
 // dockerFor returns the Docker client of a server ("" or "local": this one).
-func (c *Core) dockerFor(serverID string) *docker.Client {
+func (c *Core) dockerFor(serverID string) domain.ContainerRuntime {
 	return c.DockerFor(serverID)
+}
+
+// newServers builds servers around a pool of Docker clients: local, and
+// remote ones over SSH, built on demand from what servers knows of them.
+func (c *Core) newServers(local *docker.Client) *servers.Servers {
+	var s *servers.Servers
+	pool := docker.NewPool(local, func(id string) (*docker.Client, error) {
+		r, err := s.RemoteDocker(id)
+		if err != nil {
+			return nil, err
+		}
+		return docker.NewSSH(docker.SSHConfig(r))
+	})
+	s = servers.New(c.bg, &c.cfg, c.store, pool, cron.Cron{}, &c.steps, &c.probes, serversPorts{c}, c.log)
+	return s
 }
 
 // goBackground runs f as an operation that Shutdown lets finish, unless

@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
@@ -27,12 +26,12 @@ type fakeManager struct {
 	cfg   *config.Config
 	id    *identity.Identity
 	store domain.Store
-	dk    *docker.Client
+	dk    domain.ContainerRuntime
 	ops   *sync.WaitGroup
 	locks *sync.Map
 }
 
-func (m fakeManager) DockerFor(string) *docker.Client           { return m.dk }
+func (m fakeManager) DockerFor(string) domain.ContainerRuntime  { return m.dk }
 func (fakeManager) RegistryAuth(context.Context, string) string { return "" }
 func (fakeManager) ShuttingDown() bool                          { return false }
 
@@ -95,7 +94,7 @@ func (m fakeManager) PreviewSettings(ctx context.Context, projectID string) (dom
 
 // newTestData runs the data use cases on a temp SQLite store, on the Docker
 // daemon dk (nil: none); background work is awaited at cleanup.
-func newTestData(t *testing.T, cfg config.Config, dk *docker.Client) *Data {
+func newTestData(t *testing.T, cfg config.Config, dk domain.ContainerRuntime) *Data {
 	t.Helper()
 	st, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {

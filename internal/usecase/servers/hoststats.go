@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
@@ -53,9 +53,9 @@ const hostScript = `for f in stat meminfo loadavg uptime; do echo "== $f"; cat /
 // container, which runs on every server.
 // shortcut: needs cat and df in the Traefik image (alpine based); use a
 // helper container if it ever ships without a shell.
-func sampleHost(ctx context.Context, dk *docker.Client) (hostSample, error) {
+func sampleHost(ctx context.Context, dk domain.ContainerRuntime) (hostSample, error) {
 	var out bytes.Buffer
-	if err := dk.Exec(ctx, network.TraefikName, docker.ExecOptions{Cmd: []string{"sh", "-c", hostScript}, Stdout: &out}); err != nil {
+	if err := dk.Exec(ctx, network.TraefikName, domain.ExecOptions{Cmd: []string{"sh", "-c", hostScript}, Stdout: &out}); err != nil {
 		return hostSample{}, err
 	}
 	return parseHost(out.String())

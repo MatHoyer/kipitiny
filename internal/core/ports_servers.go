@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
@@ -40,7 +39,7 @@ func (p serversPorts) RequireOn(ctx context.Context, serviceID string, perm iden
 	return p.c.RequireOn(ctx, serviceID, perm)
 }
 
-func (p serversPorts) CleanupSecretHelpers(ctx context.Context, dk *docker.Client) error {
+func (p serversPorts) CleanupSecretHelpers(ctx context.Context, dk domain.ContainerRuntime) error {
 	return p.c.CleanupSecretHelpers(ctx, dk)
 }
 
@@ -102,10 +101,10 @@ func (p serversPorts) RegistryAuth(ctx context.Context, image string) string {
 	return p.c.RegistryAuth(ctx, image)
 }
 
-func (p serversPorts) CleanupRestoreTests(ctx context.Context, dk *docker.Client) error {
+func (p serversPorts) CleanupRestoreTests(ctx context.Context, dk domain.ContainerRuntime) error {
 	return p.c.CleanupRestoreTests(ctx, dk)
 }
 
-func (p serversPorts) RemoveStaleJobContainers(ctx context.Context, dk *docker.Client, all []domain.Container) {
+func (p serversPorts) RemoveStaleJobContainers(ctx context.Context, dk domain.ContainerRuntime, all []domain.Container) {
 	p.c.RemoveStaleJobContainers(ctx, dk, all)
 }

@@ -13,7 +13,6 @@ import (
 
 	cerrdefs "github.com/containerd/errdefs"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
 )
@@ -39,12 +38,12 @@ type filesHelper struct {
 // in svc's helper for a volume (started if needed; one removed behind the
 // manager's back is started again once), or as root in the container.
 func (c *Data) filesExec(ctx context.Context, svc domain.Service, vol fileVolume, cmd []string, read func(io.Reader) error) error {
-	return c.filesExecIn(ctx, svc, vol, docker.ExecOptions{Cmd: cmd}, read)
+	return c.filesExecIn(ctx, svc, vol, domain.ExecOptions{Cmd: cmd}, read)
 }
 
 // filesExecIn is filesExec with stdin; then the helper isn't retried, since
 // stdin may be partly consumed.
-func (c *Data) filesExecIn(ctx context.Context, svc domain.Service, vol fileVolume, opts docker.ExecOptions, read func(io.Reader) error) error {
+func (c *Data) filesExecIn(ctx context.Context, svc domain.Service, vol fileVolume, opts domain.ExecOptions, read func(io.Reader) error) error {
 	if vol.container {
 		id, err := c.filesContainer(ctx, svc, vol.name)
 		if err != nil {
@@ -59,7 +58,7 @@ func (c *Data) filesExecIn(ctx context.Context, svc domain.Service, vol fileVolu
 // helperExec runs opts in svc's helper (the SQLite one if sqlite), retried
 // once in a new helper if it was removed behind the manager's back, unless
 // stdin can't be rewound.
-func (c *Data) helperExec(ctx context.Context, svc domain.Service, sqlite bool, opts docker.ExecOptions, read func(io.Reader) error) error {
+func (c *Data) helperExec(ctx context.Context, svc domain.Service, sqlite bool, opts domain.ExecOptions, read func(io.Reader) error) error {
 	for attempt := 0; ; attempt++ {
 		h, id, err := c.acquireFilesHelper(ctx, svc, sqlite)
 		if err != nil {
@@ -93,7 +92,7 @@ func helperKey(serviceID string, sqlite bool) string {
 // filesStream runs opts in container id and hands its stdout to read. If read
 // fails, the exec is cancelled; errStopLines from read means it stopped on
 // purpose and is not an error.
-func filesStream(ctx context.Context, dk *docker.Client, id string, opts docker.ExecOptions, read func(io.Reader) error) error {
+func filesStream(ctx context.Context, dk domain.ContainerRuntime, id string, opts domain.ExecOptions, read func(io.Reader) error) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	pr, pw := io.Pipe()
@@ -107,7 +106,7 @@ func filesStream(ctx context.Context, dk *docker.Client, id string, opts docker.
 		cancel()
 		pr.CloseWithError(err)
 		execErr := <-done
-		var ee *docker.ExecError
+		var ee *domain.ExecError
 		switch {
 		case errors.Is(err, errStopLines):
 			return nil

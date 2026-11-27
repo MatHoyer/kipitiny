@@ -346,7 +346,7 @@ func TestDatabaseBackupFlowDocker(t *testing.T) {
 		}
 		var out bytes.Buffer
 		cmd := []string{"psql", "-U", db.Env[data.PGUser], "-d", db.Env[data.PGDatabase], "-tAc", sql}
-		if err := f.dk.Exec(f.ctx, cts[0].ID, docker.ExecOptions{Cmd: cmd, Stdout: &out}); err != nil {
+		if err := f.dk.Exec(f.ctx, cts[0].ID, domain.ExecOptions{Cmd: cmd, Stdout: &out}); err != nil {
 			t.Fatalf("%s: %v", sql, err)
 		}
 		return strings.TrimSpace(out.String())

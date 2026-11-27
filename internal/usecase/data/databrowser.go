@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -37,7 +36,7 @@ const (
 // dataTarget is a database's running container, ready for an exec.
 type dataTarget struct {
 	svc       domain.Service
-	dk        *docker.Client
+	dk        domain.ContainerRuntime
 	container string
 	// db is the database queries run against (postgres, mysql, mongodb),
 	// or an app's SQLite file as "<volume>/<path>".
@@ -146,7 +145,7 @@ func (t dataTarget) ensureReadUser(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, dataConsoleTimeout)
 	defer cancel()
 	if t.svc.Kind == domain.ServiceKindMongoDB {
-		return clientError(t.dk.Exec(ctx, t.container, docker.ExecOptions{
+		return clientError(t.dk.Exec(ctx, t.container, domain.ExecOptions{
 			Cmd: append([]string{"mongosh", "--quiet", "--norc", "--eval", `const a = db.getSiblingDB("admin"), u = process.env.KP_USER, pwd = process.env.KP_PASSWORD;
 if (a.getUser(u)) a.updateUser(u, { pwd, roles: ["readAnyDatabase"] });
 else a.createUser({ user: u, pwd, roles: ["readAnyDatabase"] });`}, mongoAuthArgs(t.svc)...),
@@ -155,7 +154,7 @@ else a.createUser({ user: u, pwd, roles: ["readAnyDatabase"] });`}, mongoAuthArg
 	}
 	user := fmt.Sprintf("'%s'@'localhost'", readUser)
 	pw := readUserPassword(t.svc.Env[MySQLRootPassword])
-	return clientError(t.dk.Exec(ctx, t.container, docker.ExecOptions{
+	return clientError(t.dk.Exec(ctx, t.container, domain.ExecOptions{
 		Cmd: []string{MySQLBin(t.svc.Kind, "mysql"), "-uroot", "-e", fmt.Sprintf(
 			"CREATE USER IF NOT EXISTS %[1]s IDENTIFIED BY '%[2]s'; ALTER USER %[1]s IDENTIFIED BY '%[2]s'; GRANT SELECT, SHOW VIEW ON *.* TO %[1]s",
 			user, pw)},
@@ -166,7 +165,7 @@ else a.createUser({ user: u, pwd, roles: ["readAnyDatabase"] });`}, mongoAuthArg
 // execLines runs opts in the target's container and hands each stdout line
 // to fn. Returning errStopLines from fn ends the read early (the exec is
 // cancelled and its error ignored).
-func (t dataTarget) execLines(ctx context.Context, opts docker.ExecOptions, fn func([]byte) error) error {
+func (t dataTarget) execLines(ctx context.Context, opts domain.ExecOptions, fn func([]byte) error) error {
 	return t.execStream(ctx, opts, func(r io.Reader) error {
 		sc := bufio.NewScanner(r)
 		sc.Buffer(make([]byte, 0, 64<<10), dataLineMax)
@@ -182,7 +181,7 @@ func (t dataTarget) execLines(ctx context.Context, opts docker.ExecOptions, fn f
 // execStream runs opts in the target's container and hands its stdout to
 // read. If read fails, the exec is cancelled; errStopLines from read means it
 // stopped on purpose and is not an error.
-func (t dataTarget) execStream(ctx context.Context, opts docker.ExecOptions, read func(io.Reader) error) error {
+func (t dataTarget) execStream(ctx context.Context, opts domain.ExecOptions, read func(io.Reader) error) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	pr, pw := io.Pipe()
@@ -212,7 +211,7 @@ var errStopLines = errors.New("stop reading")
 // database's own error ("relation does not exist", "WRONGTYPE ...") is the
 // useful part.
 func clientError(err error) error {
-	var ee *docker.ExecError
+	var ee *domain.ExecError
 	if !errors.As(err, &ee) {
 		return err
 	}

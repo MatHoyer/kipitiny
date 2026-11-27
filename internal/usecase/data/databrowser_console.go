@@ -15,7 +15,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -128,7 +127,7 @@ func (t dataTarget) pgConsole(ctx context.Context, sql string, write bool) (Cons
 	}
 	var res ConsoleResult
 	var records [][]string
-	err := t.execStream(ctx, docker.ExecOptions{Cmd: append(cmd, "-c", sql), Env: []string{"PGOPTIONS=" + opts}}, func(r io.Reader) error {
+	err := t.execStream(ctx, domain.ExecOptions{Cmd: append(cmd, "-c", sql), Env: []string{"PGOPTIONS=" + opts}}, func(r io.Reader) error {
 		lr := &io.LimitedReader{R: r, N: dataOutputMax}
 		cr := csv.NewReader(lr)
 		cr.FieldsPerRecord, cr.LazyQuotes = -1, true
@@ -237,7 +236,7 @@ func (t dataTarget) redisConsole(ctx context.Context, line string, write bool) (
 		}
 	}
 	out := &capWriter{max: dataOutputMax}
-	err = t.dk.Exec(ctx, t.container, docker.ExecOptions{Cmd: append([]string{"redis-cli", "--no-raw"}, args...), Stdout: out})
+	err = t.dk.Exec(ctx, t.container, domain.ExecOptions{Cmd: append([]string{"redis-cli", "--no-raw"}, args...), Stdout: out})
 	if err != nil {
 		return ConsoleResult{}, clientError(err)
 	}

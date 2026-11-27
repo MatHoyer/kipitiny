@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moby/moby/client"
-
 	"github.com/kipit-labs/kipitiny/internal/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
@@ -75,7 +73,7 @@ func (c *Network) EnsureTunnel(ctx context.Context, sv domain.Server) error {
 			if existing[0].State == domain.StateRunning {
 				return nil
 			}
-			_, err := dk.ContainerStart(ctx, existing[0].ID, client.ContainerStartOptions{})
+			err := dk.StartContainer(ctx, existing[0].ID)
 			return err
 		}
 	}

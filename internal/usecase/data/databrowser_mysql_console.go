@@ -16,7 +16,7 @@ func (t dataTarget) mysqlConsole(ctx context.Context, sql string, write bool) (C
 	var res ConsoleResult
 	var sets int
 	var set *ConsoleResult
-	err := t.execStream(ctx, t.mysql(sql, write, dataConsoleTimeout, nil, "--xml", "--binary-as-hex"), func(r io.Reader) error {
+	err := t.execStream(ctx, t.mysql(sql, write, dataConsoleTimeout, "--xml", "--binary-as-hex"), func(r io.Reader) error {
 		lr := &io.LimitedReader{R: r, N: dataOutputMax}
 		dec := xml.NewDecoder(&xmlSafeReader{r: lr})
 		var field *string

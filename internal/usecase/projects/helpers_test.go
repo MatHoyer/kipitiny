@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
@@ -71,7 +70,7 @@ func (m deployManager) DeleteJob(ctx context.Context, j domain.Job) error {
 	return m.RemoveJob(ctx, j)
 }
 
-func (c *testCore) DockerFor(string) *docker.Client { return nil }
+func (c *testCore) DockerFor(string) domain.ContainerRuntime { return nil }
 
 func (c *testCore) GoBackground(f func()) error {
 	c.ops.Go(f)

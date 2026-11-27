@@ -11,7 +11,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -183,9 +182,9 @@ func (t dataTarget) runDDL(ctx context.Context, sql string) error {
 	ctx, cancel := context.WithTimeout(ctx, dataConsoleTimeout)
 	defer cancel()
 	if t.svc.Kind.IsMySQL() {
-		return clientError(t.dk.Exec(ctx, t.container, t.mysql(sql, true, dataConsoleTimeout, nil)))
+		return clientError(t.dk.Exec(ctx, t.container, t.mysql(sql, true, dataConsoleTimeout)))
 	}
-	return clientError(t.dk.Exec(ctx, t.container, docker.ExecOptions{
+	return clientError(t.dk.Exec(ctx, t.container, domain.ExecOptions{
 		Cmd:   []string{"psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-U", t.svc.Env[PGUser], "-d", t.db, "-f", "-"},
 		Env:   []string{fmt.Sprintf("PGOPTIONS=-c statement_timeout=%ds", int(dataConsoleTimeout.Seconds()))},
 		Stdin: strings.NewReader(sql),

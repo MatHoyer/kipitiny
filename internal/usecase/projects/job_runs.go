@@ -13,11 +13,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/api/pkg/stdcopy"
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/client"
-
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 )
@@ -189,21 +184,18 @@ func (c *Projects) execJob(ctx context.Context, project domain.Project, svc doma
 	}
 	defer func() { _ = dk.RemoveContainer(context.WithoutCancel(ctx), id, domain.StopTimeout) }()
 
-	wait := dk.ContainerWait(ctx, id, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
 	var code *int
-	select {
-	case res := <-wait.Result:
-		n := int(res.StatusCode)
+	if status, werr := dk.WaitContainer(ctx, id); werr == nil {
+		n := int(status)
 		code = &n
-	case err = <-wait.Error:
+	} else {
+		err = werr
 	}
 	if code == nil { // timed out or cancelled: stop it before reading its logs
-		_, _ = dk.ContainerStop(context.WithoutCancel(ctx), id, client.ContainerStopOptions{})
+		_ = dk.StopContainer(context.WithoutCancel(ctx), id, nil)
 	}
-	if rc, lerr := dk.ContainerLogs(context.WithoutCancel(ctx), id, client.ContainerLogsOptions{
-		ShowStdout: true, ShowStderr: true, Tail: jobLogLines,
-	}); lerr == nil {
-		_, _ = stdcopy.StdCopy(out, out, rc)
+	if rc, lerr := dk.Logs(context.WithoutCancel(ctx), id, domain.LogOptions{Tail: jobLogLines}); lerr == nil {
+		_, _ = io.Copy(out, rc)
 		rc.Close()
 	}
 	switch {
@@ -231,7 +223,7 @@ func (c *Projects) pruneJobRuns(ctx context.Context, serviceID, jobID string) {
 
 // RemoveStaleJobContainers removes job containers no run in flight owns,
 // e.g. left by a manager that crashed.
-func (c *Projects) RemoveStaleJobContainers(ctx context.Context, dk *docker.Client, cts []domain.Container) {
+func (c *Projects) RemoveStaleJobContainers(ctx context.Context, dk domain.ContainerRuntime, cts []domain.Container) {
 	c.jobs.mu.Lock()
 	owned := map[string]bool{}
 	for id := range c.jobs.running {

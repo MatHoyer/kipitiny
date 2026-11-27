@@ -14,9 +14,7 @@ import (
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/moby/moby/client"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
@@ -81,7 +79,7 @@ func (c *Deployer) probeMount(ctx context.Context, serverID string) (*domain.Mou
 		return nil, err
 	}
 	name := "kipitiny-probe-" + hash
-	if _, err := dk.VolumeInspect(ctx, name, client.VolumeInspectOptions{}); cerrdefs.IsNotFound(err) {
+	if _, err := dk.InspectVolume(ctx, name); cerrdefs.IsNotFound(err) {
 		if err := installProbe(ctx, dk, name, bin); err != nil {
 			return nil, fmt.Errorf("install health probe: %w", err)
 		}
@@ -95,11 +93,8 @@ func (c *Deployer) probeMount(ctx context.Context, serverID string) (*domain.Mou
 
 // installProbe copies the binary into a new volume through a stopped helper
 // container, then removes the helper. The file is streamed, not buffered.
-func installProbe(ctx context.Context, dk *docker.Client, volume, bin string) error {
-	if _, err := dk.VolumeCreate(ctx, client.VolumeCreateOptions{
-		Name:   volume,
-		Labels: map[string]string{domain.LabelManaged: "true", domain.LabelComponent: "probe"},
-	}); err != nil {
+func installProbe(ctx context.Context, dk domain.ContainerRuntime, volume, bin string) error {
+	if err := dk.CreateVolume(ctx, volume, map[string]string{domain.LabelManaged: "true", domain.LabelComponent: "probe"}); err != nil {
 		return err
 	}
 	// A fixed public image: no registry credential.
@@ -136,20 +131,18 @@ func installProbe(ctx context.Context, dk *docker.Client, volume, bin string) er
 		}
 		pw.CloseWithError(err)
 	}()
-	_, err = dk.Client.CopyToContainer(ctx, helper, client.CopyToContainerOptions{DestinationPath: "/probe", Content: pr})
+	err = dk.CopyToContainer(ctx, helper, "/probe", pr)
 	pr.Close()
 	return err
 }
 
 // imageHealthcheck reports whether an image defines its own HEALTHCHECK.
-func imageHealthcheck(ctx context.Context, dk *docker.Client, image, platform string) (bool, error) {
-	res, err := dk.InspectImageMoby(ctx, image, platform)
+func imageHealthcheck(ctx context.Context, dk domain.ContainerRuntime, image, platform string) (bool, error) {
+	img, err := dk.InspectImage(ctx, image, platform)
 	if err != nil {
 		return false, err
 	}
-	cfg := res.Config
-	return cfg != nil && cfg.Healthcheck != nil && len(cfg.Healthcheck.Test) > 0 &&
-		!slices.Equal(cfg.Healthcheck.Test, []string{"NONE"}), nil
+	return len(img.Healthcheck) > 0 && !slices.Equal(img.Healthcheck, []string{"NONE"}), nil
 }
 
 // withProbe gives an app replica a healthcheck: an HTTP GET of the health

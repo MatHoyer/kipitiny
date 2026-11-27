@@ -9,10 +9,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
@@ -234,13 +231,13 @@ func TestPortsAndVolumesHostAccess(t *testing.T) {
 }
 
 func TestOtherPlatforms(t *testing.T) {
-	have := []ocispec.Platform{{OS: "linux", Architecture: "amd64"}, {OS: "linux", Architecture: "arm64", Variant: "v8"}, {OS: "unknown", Architecture: "unknown"}}
+	have := []domain.Platform{{OS: "linux", Architecture: "amd64"}, {OS: "linux", Architecture: "arm64", Variant: "v8"}, {OS: "unknown", Architecture: "unknown"}}
 	for want, found := range map[string]bool{"linux/amd64": true, "linux/arm64": true, "linux/arm64/v8": true, "linux/arm/v7": false, "linux/riscv64": false} {
-		if got := otherPlatforms(have, *docker.Platform(want)); (got == nil) != found {
+		if got := otherPlatforms(have, *domain.ParsePlatform(want)); (got == nil) != found {
 			t.Errorf("%s: %v", want, got)
 		}
 	}
-	if got := otherPlatforms(have, *docker.Platform("linux/s390x")); !slices.Equal(got, []string{"linux/amd64", "linux/arm64/v8"}) {
+	if got := otherPlatforms(have, *domain.ParsePlatform("linux/s390x")); !slices.Equal(got, []string{"linux/amd64", "linux/arm64/v8"}) {
 		t.Errorf("others = %v", got)
 	}
 }

@@ -12,12 +12,10 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
-	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 	"github.com/kipit-labs/kipitiny/internal/mail"
 	"github.com/kipit-labs/kipitiny/internal/mail/mailtest"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
-	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 )
 
 func newTestCore(t *testing.T, cfg config.Config) *Core {
@@ -48,5 +46,5 @@ func localProvider(name string, srv *mailtest.Server) monitoring.EmailProviderIn
 
 // useDocker has c's servers reach dk for the local server.
 func (c *Core) useDocker(dk *docker.Client) {
-	c.Servers = servers.New(c.bg, &c.cfg, c.store, dk, cron.Cron{}, &c.steps, &c.probes, serversPorts{c}, c.log)
+	c.Servers = c.newServers(dk)
 }

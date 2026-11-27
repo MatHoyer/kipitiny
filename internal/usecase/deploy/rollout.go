@@ -8,11 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moby/moby/api/pkg/stdcopy"
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/client"
-
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
@@ -56,12 +51,8 @@ func (c *Deployer) preDeploy(ctx context.Context, project domain.Project, svc do
 	}
 	defer func() { _ = dk.RemoveContainer(context.WithoutCancel(ctx), id, domain.StopTimeout) }()
 
-	wait := dk.ContainerWait(ctx, id, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
-	var code int64
-	select {
-	case res := <-wait.Result:
-		code = res.StatusCode
-	case err := <-wait.Error:
+	code, err := dk.WaitContainer(ctx, id)
+	if err != nil {
 		return fmt.Errorf("pre-deploy: %w", err)
 	}
 	copyContainerLogs(ctx, dk, []string{id}, out)
@@ -77,7 +68,7 @@ func (c *Deployer) preDeploy(ctx context.Context, project domain.Project, svc do
 // seconds. A container that exits or restarts fails immediately. With a
 // restart policy (domain.Runtime.Restart), exiting 0 is ready too; a job
 // (restart "no") is ready only then, and on-failure may restart.
-func (c *Deployer) waitReady(ctx context.Context, dk *docker.Client, id, restart string) error {
+func (c *Deployer) waitReady(ctx context.Context, dk domain.ContainerRuntime, id, restart string) error {
 	ctx, cancel := context.WithTimeout(ctx, readyTimeout)
 	defer cancel()
 	tick := time.NewTicker(500 * time.Millisecond)
@@ -91,29 +82,29 @@ func (c *Deployer) waitReady(ctx context.Context, dk *docker.Client, id, restart
 		return fmt.Errorf("%s not ready after %s", name, readyTimeout)
 	}
 	for {
-		res, err := dk.ContainerInspect(ctx, id, client.ContainerInspectOptions{})
+		res, err := dk.InspectContainer(ctx, id)
 		if err != nil {
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) { // the timeout hit during the call
 				return notReady()
 			}
 			return err
 		}
-		ct := res.Container
+		ct := res
 		name = ct.Name[1:]
 		st := ct.State
-		if restart != "" && st != nil && st.Status == container.StateExited && st.ExitCode == 0 {
+		if restart != "" && st != nil && st.Status == domain.StateExited && st.ExitCode == 0 {
 			return nil
 		}
 		onFailure := strings.HasPrefix(restart, "on-failure")
-		if st == nil || (!st.Running && !st.Restarting && st.Status != container.StateCreated) || (!onFailure && (st.Restarting || ct.RestartCount > 0)) {
+		if st == nil || (!st.Running && !st.Restarting && st.Status != domain.StateCreated) || (!onFailure && (st.Restarting || ct.RestartCount > 0)) {
 			return fmt.Errorf("%s crashed (exit code %d)", ct.Name[1:], exitCode(st))
 		}
 		switch {
 		case restart == "no" || st.Restarting: // a job: until it exits
-		case st.Health != nil && st.Health.Status == container.Unhealthy:
+		case st.Health == domain.Unhealthy:
 			return fmt.Errorf("%s is unhealthy", ct.Name[1:])
-		case st.Health != nil:
-			if st.Health.Status == container.Healthy {
+		case st.Health != "":
+			if st.Health == domain.Healthy {
 				return nil
 			}
 		case st.Running:
@@ -131,7 +122,7 @@ func (c *Deployer) waitReady(ctx context.Context, dk *docker.Client, id, restart
 	}
 }
 
-func exitCode(st *container.State) int {
+func exitCode(st *domain.ContainerState) int {
 	if st == nil {
 		return -1
 	}
@@ -140,17 +131,15 @@ func exitCode(st *container.State) int {
 
 // copyContainerLogs appends the last lines of containers' logs to the
 // deploy log, so a failed rollout shows why.
-func copyContainerLogs(ctx context.Context, dk *docker.Client, ids []string, out io.Writer) {
+func copyContainerLogs(ctx context.Context, dk domain.ContainerRuntime, ids []string, out io.Writer) {
 	ctx = context.WithoutCancel(ctx)
 	for _, id := range ids {
-		rc, err := dk.ContainerLogs(ctx, id, client.ContainerLogsOptions{
-			ShowStdout: true, ShowStderr: true, Tail: "50",
-		})
+		rc, err := dk.Logs(ctx, id, domain.LogOptions{Tail: "50"})
 		if err != nil {
 			continue
 		}
 		fmt.Fprintf(out, "--- last log lines of %s ---\n", id[:12])
-		_, _ = stdcopy.StdCopy(out, out, rc)
+		_, _ = io.Copy(out, rc)
 		rc.Close()
 	}
 }
@@ -262,7 +251,7 @@ func (c *Deployer) rollout(ctx context.Context, project domain.Project, svc doma
 			time.Sleep(retireGap)
 		}
 		logf("Retiring %s", old.Names[0][1:])
-		if _, err := dk.ContainerStop(ctx, old.ID, client.ContainerStopOptions{Timeout: &secs}); err != nil {
+		if err := dk.StopContainer(ctx, old.ID, &secs); err != nil {
 			logf("Warning: could not stop %s: %v", old.Names[0][1:], err)
 		}
 	}
@@ -318,7 +307,7 @@ func (c *Deployer) swap(ctx context.Context, project domain.Project, svc domain.
 	restore := func() {
 		for _, old := range stopped {
 			logf("Starting %s again", old.Names[0][1:])
-			if _, err := dk.ContainerStart(context.WithoutCancel(ctx), old.ID, client.ContainerStartOptions{}); err != nil {
+			if err := dk.StartContainer(context.WithoutCancel(ctx), old.ID); err != nil {
 				logf("Warning: could not start %s: %v", old.Names[0][1:], err)
 			}
 		}
@@ -329,7 +318,7 @@ func (c *Deployer) swap(ctx context.Context, project domain.Project, svc domain.
 			continue
 		}
 		logf("Stopping %s to free its ports", old.Names[0][1:])
-		if _, err := dk.ContainerStop(ctx, old.ID, client.ContainerStopOptions{Timeout: &secs}); err != nil {
+		if err := dk.StopContainer(ctx, old.ID, &secs); err != nil {
 			restore()
 			return err
 		}

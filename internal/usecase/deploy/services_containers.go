@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/moby/moby/client"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 )
@@ -141,12 +139,12 @@ func (c *Deployer) ServiceAction(ctx context.Context, id string, action Action) 
 		switch action {
 		case ActionStart:
 			if ct.State != domain.StateRunning {
-				_, err = dk.ContainerStart(ctx, ct.ID, client.ContainerStartOptions{})
+				err = dk.StartContainer(ctx, ct.ID)
 			}
 		case ActionStop:
-			_, err = dk.ContainerStop(ctx, ct.ID, client.ContainerStopOptions{Timeout: &secs})
+			err = dk.StopContainer(ctx, ct.ID, &secs)
 		case ActionRestart:
-			_, err = dk.ContainerRestart(ctx, ct.ID, client.ContainerRestartOptions{Timeout: &secs})
+			err = dk.RestartContainer(ctx, ct.ID, &secs)
 		default:
 			return ServiceView{}, fmt.Errorf("%w: unknown action %q", ErrInvalid, action)
 		}

@@ -10,9 +10,7 @@ import (
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/moby/moby/client"
 
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 	"github.com/kipit-labs/kipitiny/internal/secrets"
@@ -32,7 +30,7 @@ const (
 // wait for a new container each time. The helper is removed once idle for
 // the idle duration: nothing runs between uses.
 type ContainerRunner struct {
-	dk     *docker.Client
+	dk     domain.ContainerRuntime
 	image  string
 	idle   time.Duration
 	name   string // of the helper
@@ -46,7 +44,7 @@ type ContainerRunner struct {
 
 // NewContainerRunner runs pass-cli for the connection named conn ("" for
 // the default one): each has its own helper and session.
-func NewContainerRunner(dk *docker.Client, image, conn string, idle time.Duration) *ContainerRunner {
+func NewContainerRunner(dk domain.ContainerRuntime, image, conn string, idle time.Duration) *ContainerRunner {
 	r := &ContainerRunner{dk: dk, image: image, idle: idle, name: helperName, volume: sessionVolume}
 	if conn != "" {
 		r.name += "-" + conn
@@ -71,7 +69,7 @@ func (r *ContainerRunner) Run(ctx context.Context, cmd, env []string, stdin io.R
 	}
 	defer r.release()
 	stdout, stderr, err := r.exec(ctx, id, cmd, env, in)
-	var ee *docker.ExecError
+	var ee *domain.ExecError
 	if err != nil && !errors.As(err, &ee) && ctx.Err() == nil {
 		// The helper is gone (removed by hand, daemon restart): once more on
 		// a new one.
@@ -85,12 +83,12 @@ func (r *ContainerRunner) Run(ctx context.Context, cmd, env []string, stdin io.R
 
 func (r *ContainerRunner) exec(ctx context.Context, id string, cmd, env []string, in []byte) ([]byte, []byte, error) {
 	var stdout bytes.Buffer
-	opts := docker.ExecOptions{Cmd: cmd, Env: env, Stdout: &stdout}
+	opts := domain.ExecOptions{Cmd: cmd, Env: env, Stdout: &stdout}
 	if in != nil {
 		opts.Stdin = bytes.NewReader(in)
 	}
 	err := r.dk.Exec(ctx, id, opts)
-	var ee *docker.ExecError
+	var ee *domain.ExecError
 	if errors.As(err, &ee) {
 		return stdout.Bytes(), []byte(ee.Stderr), err
 	}
@@ -175,7 +173,7 @@ func (r *ContainerRunner) start(ctx context.Context) (string, error) {
 	if err := r.remove(ctx); err != nil {
 		return "", err
 	}
-	if _, err := r.dk.ImageInspect(ctx, r.image); cerrdefs.IsNotFound(err) {
+	if _, err := r.dk.InspectImage(ctx, r.image, ""); cerrdefs.IsNotFound(err) {
 		progress.Report(ctx, secrets.StepImage)
 	}
 	if err := r.dk.EnsureImage(ctx, r.image, "", ""); err != nil {
@@ -183,7 +181,7 @@ func (r *ContainerRunner) start(ctx context.Context) (string, error) {
 	}
 	labels := map[string]string{domain.LabelManaged: "true", domain.LabelComponent: Component}
 	// Creating an existing volume returns it.
-	if _, err := r.dk.VolumeCreate(ctx, client.VolumeCreateOptions{Name: r.volume, Labels: labels}); err != nil {
+	if err := r.dk.CreateVolume(ctx, r.volume, labels); err != nil {
 		return "", fmt.Errorf("session volume: %w", err)
 	}
 	progress.Report(ctx, secrets.StepHelper)
@@ -229,7 +227,7 @@ func (r *ContainerRunner) Reset(ctx context.Context) error {
 	if err := r.Close(ctx); err != nil {
 		return err
 	}
-	if _, err := r.dk.VolumeRemove(ctx, r.volume, client.VolumeRemoveOptions{}); err != nil && !cerrdefs.IsNotFound(err) {
+	if err := r.dk.DeleteVolume(ctx, r.volume); err != nil && !cerrdefs.IsNotFound(err) {
 		return err
 	}
 	return nil

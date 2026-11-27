@@ -12,9 +12,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/moby/moby/client"
-
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/storage"
 )
@@ -86,7 +83,7 @@ func helperMounts(svc domain.Service, names []string, readOnly bool) []domain.Mo
 
 // startVolumeHelper runs an idle helper with mounts; commands run in it
 // over exec. The caller removes it.
-func startVolumeHelper(ctx context.Context, dk *docker.Client, name string, mounts []domain.Mount) (string, error) {
+func startVolumeHelper(ctx context.Context, dk domain.ContainerRuntime, name string, mounts []domain.Mount) (string, error) {
 	// A fixed public image: no registry credential.
 	if err := dk.EnsureImage(ctx, volumeHelperImage, "", ""); err != nil {
 		return "", fmt.Errorf("pull %s: %w", volumeHelperImage, err)
@@ -120,7 +117,7 @@ func (c *Data) dumpVolumes(ctx context.Context, svc domain.Service, st storage.S
 	}
 	defer c.removeHelper(ctx, dk, id)
 	return c.upload(ctx, st, target, b, func(w io.Writer) error {
-		err := dk.Exec(ctx, id, docker.ExecOptions{
+		err := dk.Exec(ctx, id, domain.ExecOptions{
 			Cmd:    append([]string{"tar", "-czf", "-", "--numeric-owner", "-C", helperVolumeRoot}, b.Volumes...),
 			Stdout: w,
 		})
@@ -144,7 +141,7 @@ func (c *Data) preBackup(ctx context.Context, svc domain.Service) error {
 		if ct.State != domain.StateRunning {
 			continue
 		}
-		if err := c.mgr.DockerFor(svc.ServerID).Exec(ctx, ct.ID, docker.ExecOptions{Cmd: []string{"sh", "-c", svc.PreBackup}}); err != nil {
+		if err := c.mgr.DockerFor(svc.ServerID).Exec(ctx, ct.ID, domain.ExecOptions{Cmd: []string{"sh", "-c", svc.PreBackup}}); err != nil {
 			return fmt.Errorf("pre-backup command: %w", err)
 		}
 		return nil
@@ -152,7 +149,7 @@ func (c *Data) preBackup(ctx context.Context, svc domain.Service) error {
 	return nil
 }
 
-func (c *Data) removeHelper(ctx context.Context, dk *docker.Client, id string) {
+func (c *Data) removeHelper(ctx context.Context, dk domain.ContainerRuntime, id string) {
 	if err := dk.RemoveContainerAndVolumes(context.WithoutCancel(ctx), id); err != nil {
 		c.log.Warn("cannot remove volume helper", "id", id[:12], "err", err)
 	}
@@ -232,10 +229,7 @@ func (c *Data) restoreVolumes(ctx context.Context, svc domain.Service, st storag
 
 	dk := c.mgr.DockerFor(svc.ServerID)
 	stage := "kipitiny-stage-" + strings.ToLower(r.ID)
-	if _, err := dk.VolumeCreate(ctx, client.VolumeCreateOptions{
-		Name:   stage,
-		Labels: map[string]string{domain.LabelManaged: "true", domain.LabelComponent: volumeStageComponent},
-	}); err != nil {
+	if err := dk.CreateVolume(ctx, stage, map[string]string{domain.LabelManaged: "true", domain.LabelComponent: volumeStageComponent}); err != nil {
 		return false, fmt.Errorf("staging volume: %w", err)
 	}
 	defer func() {
@@ -255,7 +249,7 @@ func (c *Data) restoreVolumes(ctx context.Context, svc domain.Service, st storag
 	defer c.removeHelper(ctx, dk, id)
 
 	err = c.fromStorage(rc, target, b, func(archive io.Reader) error {
-		if err := dk.Exec(ctx, id, docker.ExecOptions{
+		if err := dk.Exec(ctx, id, domain.ExecOptions{
 			Cmd:   []string{"tar", "-xzf", "-", "--numeric-owner", "-C", helperStageRoot},
 			Stdin: archive,
 		}); err != nil {
@@ -267,7 +261,7 @@ func (c *Data) restoreVolumes(ctx context.Context, svc domain.Service, st storag
 		return false, err
 	}
 	check := `for n; do [ -d "` + helperStageRoot + `/$n" ] || { echo "volume $n is missing from the backup" >&2; exit 1; }; done`
-	if err := dk.Exec(ctx, id, docker.ExecOptions{Cmd: append([]string{"sh", "-c", check, "sh"}, b.Volumes...)}); err != nil {
+	if err := dk.Exec(ctx, id, domain.ExecOptions{Cmd: append([]string{"sh", "-c", check, "sh"}, b.Volumes...)}); err != nil {
 		return false, err
 	}
 
@@ -278,7 +272,7 @@ func (c *Data) restoreVolumes(ctx context.Context, svc domain.Service, st storag
 			c.steps.Set(key, RestoreStart)
 		}
 		for _, ct := range stopped {
-			if _, err := dk.ContainerStart(context.WithoutCancel(ctx), ct, client.ContainerStartOptions{}); err != nil {
+			if err := dk.StartContainer(context.WithoutCancel(ctx), ct); err != nil {
 				c.log.Error("cannot restart container after restore", "container", ct, "err", err)
 			}
 		}
@@ -292,7 +286,7 @@ for n; do
   cp -a "` + helperStageRoot + `/$n/." "` + helperVolumeRoot + `/$n/"
 done`
 	c.steps.Set(key, RestoreReplace)
-	if err := dk.Exec(context.WithoutCancel(ctx), id, docker.ExecOptions{Cmd: append([]string{"sh", "-c", swap, "sh"}, b.Volumes...)}); err != nil {
+	if err := dk.Exec(context.WithoutCancel(ctx), id, domain.ExecOptions{Cmd: append([]string{"sh", "-c", swap, "sh"}, b.Volumes...)}); err != nil {
 		return true, fmt.Errorf("replace volume content: %w", err)
 	}
 	return true, nil
@@ -311,7 +305,7 @@ func (c *Data) stopServiceContainers(ctx context.Context, svc domain.Service) ([
 		if ct.State != domain.StateRunning {
 			continue
 		}
-		if _, err := c.mgr.DockerFor(svc.ServerID).ContainerStop(ctx, ct.ID, client.ContainerStopOptions{Timeout: &secs}); err != nil {
+		if err := c.mgr.DockerFor(svc.ServerID).StopContainer(ctx, ct.ID, &secs); err != nil {
 			return stopped, err
 		}
 		stopped = append(stopped, ct.ID)
@@ -351,7 +345,7 @@ func (c *Data) verifyVolumes(ctx context.Context, b domain.Backup) (domain.Verif
 	defer rc.Close()
 	files := &lineCounter{}
 	err = c.fromStorage(rc, target, b, func(archive io.Reader) error {
-		if err := dk.Exec(ctx, id, docker.ExecOptions{Cmd: []string{"tar", "-tzf", "-"}, Stdin: archive, Stdout: files}); err != nil {
+		if err := dk.Exec(ctx, id, domain.ExecOptions{Cmd: []string{"tar", "-tzf", "-"}, Stdin: archive, Stdout: files}); err != nil {
 			return fmt.Errorf("read archive: %w", err)
 		}
 		return nil

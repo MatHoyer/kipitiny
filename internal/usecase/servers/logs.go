@@ -3,17 +3,12 @@ package servers
 import (
 	"bufio"
 	"context"
-	"io"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/moby/moby/api/pkg/stdcopy"
-	"github.com/moby/moby/client"
-
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -49,7 +44,7 @@ func (c *Servers) StreamLogs(ctx context.Context, serviceID string, tail int, em
 	var follow []domain.Container
 	var since []time.Time
 	for _, ct := range cts {
-		lines, err := containerLogs(ctx, dk, ct, client.ContainerLogsOptions{Tail: strconv.Itoa(tail)})
+		lines, err := containerLogs(ctx, dk, ct, domain.LogOptions{Tail: strconv.Itoa(tail)})
 		if err != nil {
 			// Typically removed since it was listed; the others still stream.
 			c.log.Debug("log backlog failed", "container", containerName(ct), "err", err)
@@ -95,8 +90,8 @@ func (c *Servers) StreamLogs(ctx context.Context, serviceID string, tail int, em
 
 // followContainer streams lines logged after since (the last backlog line),
 // or all of them when the backlog was empty.
-func followContainer(ctx context.Context, dk *docker.Client, ct domain.Container, since time.Time, out chan<- LogLine) error {
-	opts := client.ContainerLogsOptions{Follow: true}
+func followContainer(ctx context.Context, dk domain.ContainerRuntime, ct domain.Container, since time.Time, out chan<- LogLine) error {
+	opts := domain.LogOptions{Follow: true}
 	if !since.IsZero() {
 		// Docker's since is inclusive: the last backlog line comes back.
 		opts.Since = since.Format(time.RFC3339Nano)
@@ -127,7 +122,7 @@ func (c *Servers) RecentLogs(ctx context.Context, serviceID string, tail int) ([
 	}
 	var lines []LogLine
 	for _, ct := range cts {
-		l, err := containerLogs(ctx, c.DockerFor(svc.ServerID), ct, client.ContainerLogsOptions{Tail: strconv.Itoa(tail)})
+		l, err := containerLogs(ctx, c.DockerFor(svc.ServerID), ct, domain.LogOptions{Tail: strconv.Itoa(tail)})
 		if err != nil {
 			return nil, err
 		}
@@ -137,7 +132,7 @@ func (c *Servers) RecentLogs(ctx context.Context, serviceID string, tail int) ([
 	return lines, nil
 }
 
-func containerLogs(ctx context.Context, dk *docker.Client, ct domain.Container, opts client.ContainerLogsOptions) ([]LogLine, error) {
+func containerLogs(ctx context.Context, dk domain.ContainerRuntime, ct domain.Container, opts domain.LogOptions) ([]LogLine, error) {
 	var lines []LogLine
 	err := readLogs(ctx, dk, ct, opts, func(l LogLine) bool {
 		lines = append(lines, l)
@@ -148,24 +143,16 @@ func containerLogs(ctx context.Context, dk *docker.Client, ct domain.Container, 
 
 // readLogs calls fn for each timestamped log line until the stream ends or fn
 // returns false.
-func readLogs(ctx context.Context, dk *docker.Client, ct domain.Container, opts client.ContainerLogsOptions, fn func(LogLine) bool) error {
-	opts.ShowStdout, opts.ShowStderr, opts.Timestamps = true, true, true
-	rc, err := dk.ContainerLogs(ctx, ct.ID, opts)
+func readLogs(ctx context.Context, dk domain.ContainerRuntime, ct domain.Container, opts domain.LogOptions, fn func(LogLine) bool) error {
+	opts.Timestamps = true
+	rc, err := dk.Logs(ctx, ct.ID, opts)
 	if err != nil {
 		return err
 	}
 	defer rc.Close()
 
-	// Docker multiplexes stdout/stderr (no TTY); demux into one line stream.
-	pr, pw := io.Pipe()
-	go func() {
-		_, err := stdcopy.StdCopy(pw, pw, rc)
-		pw.CloseWithError(err)
-	}()
-	defer pr.Close()
-
 	name := containerName(ct)
-	sc := bufio.NewScanner(pr)
+	sc := bufio.NewScanner(rc)
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	for sc.Scan() {
 		if !fn(parseLogLine(name, sc.Text())) {

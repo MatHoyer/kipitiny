@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
@@ -23,7 +22,7 @@ type fakeManager struct {
 	ops   *sync.WaitGroup
 }
 
-func (fakeManager) DockerFor(string) *docker.Client             { return nil }
+func (fakeManager) DockerFor(string) domain.ContainerRuntime    { return nil }
 func (fakeManager) RegistryAuth(context.Context, string) string { return "" }
 func (fakeManager) OwnImageRef() string                         { return "kipitiny:dev" }
 func (fakeManager) GoLoop(func()) error                         { return errors.New("no background loops in tests") }

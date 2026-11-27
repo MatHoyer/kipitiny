@@ -15,7 +15,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/distribution/reference"
-	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/opencontainers/go-digest"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -307,9 +306,9 @@ func (c *Deployer) deploy(ctx context.Context, project domain.Project, svc domai
 	if err := dk.PullImage(ctx, svc.Image, c.RegistryAuth(ctx, svc.Image), svc.Runtime.Platform, out); err != nil {
 		return fmt.Errorf("pull %s: %w%s", svc.Image, err, pullHint(err))
 	}
-	if res, err := dk.InspectImageMoby(ctx, svc.Image, svc.Runtime.Platform); err != nil {
+	if res, err := dk.InspectImage(ctx, svc.Image, svc.Runtime.Platform); err != nil {
 		return err
-	} else if err := checkImageLabels(res.Config); err != nil {
+	} else if err := checkImageLabels(res.Labels); err != nil {
 		return err
 	} else if pinned := pinDigest(svc.Image, res.RepoDigests); pinned != svc.Image {
 		logf("Pinned to %s", pinned)
@@ -331,12 +330,9 @@ func (c *Deployer) deploy(ctx context.Context, project domain.Project, svc domai
 // image labels into the container's, and Traefik reads them all: an image
 // could add a router for another app's domain (or the manager's) and hijack
 // it. Routing labels must come from kipitiny only.
-func checkImageLabels(cfg *dockerspec.DockerOCIImageConfig) error {
-	if cfg == nil {
-		return nil
-	}
+func checkImageLabels(labels map[string]string) error {
 	var bad []string
-	for k := range cfg.Labels {
+	for k := range labels {
 		if strings.HasPrefix(strings.ToLower(k), "traefik.") {
 			bad = append(bad, k)
 		}
