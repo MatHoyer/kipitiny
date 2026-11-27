@@ -43,7 +43,8 @@ The tests are the safety net that lets agents change code: a change is done when
   journey.
 - Tests that deploy through core (`flows_docker_test.go`, `make e2e`) need a Docker daemon of their own: the
   reconciler removes `kipitiny.managed` containers it doesn't know. Locally, a throwaway one
-  (`docker run -d --privileged -p 127.0.0.1:2375:2375 docker:dind --tls=false`, then `DOCKER_HOST=tcp://127.0.0.1:2375`);
+  (`docker run -d --privileged -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 docker:dind`, then `DOCKER_HOST=tcp://127.0.0.1:2375`;
+  current images ignore `--tls=false` and serve TLS on 2376);
   outside CI, the flow tests skip and `make e2e` stops on a daemon that runs kipitiny containers.
 - UI tests find elements by role and label, as users and screen readers do, never by CSS class or test id: an element
   a test cannot find by name is an accessibility bug. They wait on state or responses, never on timeouts. Any
