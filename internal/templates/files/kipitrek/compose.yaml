@@ -1,0 +1,50 @@
+# kipitrek: a GPX viewer, every hike on one map. Its own PostGIS database
+# holds the tracks.
+x-template:
+  title: kipitrek
+  description: Import your GPX files and see all your hikes on one map, with stats, elevation profiles, summits and friends.
+  website: https://github.com/kipit-labs/kipitrek
+  docs: https://github.com/kipit-labs/kipitrek#self-hosting
+  icon: kipitrek
+  category: sport
+  tags: [gpx, hiking, maps, tracks, outdoor, kipit labs]
+  notes: |
+    Sign up right after installing: the first account becomes the admin. Invite everyone else from the admin panel (**account menu → Admin**).
+
+    - No email is sent: accounts sign in without verifying, and invites and password resets are links the admin copies from a user's page. To email them, add `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` and `SMTP_FROM` to the service's environment.
+    - Hikes are in the `db` database: back it up from its **Backups** tab.
+  logo:
+    label: kipitrek
+    color: "#FF6B4A"
+    images: [kipitrek]
+  inputs:
+    - name: DOMAIN
+      label: Domain
+      type: domain
+      required: true
+      placeholder: trek.example.com
+    - name: OPEN_SIGNUP
+      label: Open sign-up
+      type: checkbox
+      help: Anyone may create an account. Off, only the first account signs up; admins invite the others.
+name: kipitrek
+services:
+  app:
+    image: ghcr.io/kipit-labs/kipitrek:1.5.1
+    expose: ["8080"]
+    environment:
+      DATABASE_URL: "{{ db.db.URL }}"
+      APP_URL: https://${DOMAIN}
+      COOKIE_SECURE: "true"
+      REGISTRATION_ENABLED: ${OPEN_SIGNUP}
+      # Traefik, on a Docker network, sets X-Forwarded-For.
+      REAL_IP_HEADER: X-Forwarded-For
+      TRUSTED_PROXIES: 172.16.0.0/12,192.168.0.0/16,10.0.0.0/8
+    x-kipitiny:
+      domain: ${DOMAIN}
+      icon: kipitrek
+      health_path: /api/health
+  db:
+    image: postgis/postgis:17-3.6-alpine
+    x-kipitiny:
+      kind: postgres

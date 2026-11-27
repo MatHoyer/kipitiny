@@ -79,7 +79,7 @@ type Logo struct {
 }
 
 // Categories group the gallery.
-var Categories = []string{"monitoring", "analytics", "automation", "development", "storage", "media", "communication", "productivity", "security", "games"}
+var Categories = []string{"monitoring", "analytics", "automation", "development", "storage", "media", "communication", "productivity", "security", "games", "sport"}
 
 // builtinLogos are the logos the UI draws itself
 // (web/src/components/service-icon.tsx): a template may use them without

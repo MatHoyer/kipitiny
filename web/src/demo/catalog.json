@@ -496,6 +496,108 @@
           "domainInput": "DOMAIN"
         }
       ]
+    },
+    {
+      "id": "kipitfit",
+      "title": "kipitfit",
+      "description": "Workout tracker. Plan routines, log every set at the gym with a rest timer, see your records and progress.",
+      "website": "https://github.com/kipit-labs/kipitfit",
+      "docs": "https://github.com/kipit-labs/kipitfit#configuration",
+      "icon": "kipitfit",
+      "notes": "Open the app and create the admin account with the setup token you give here. Invite people from **Me → Invites**: each invite is a link that works once, for 7 days.\n\n- On the phone, add it to the home screen to install it.\n- Accounts and workouts are in `kipitfit.db` in the `data` volume: browse it from the **Data** tab, back it up from the **Backups** tab.",
+      "category": "sport",
+      "tags": [
+        "workout",
+        "gym",
+        "fitness",
+        "training",
+        "hevy",
+        "kipit labs"
+      ],
+      "inputs": [
+        {
+          "name": "DOMAIN",
+          "label": "Domain",
+          "type": "domain",
+          "placeholder": "fit.example.com",
+          "required": true
+        },
+        {
+          "name": "SETUP_TOKEN",
+          "label": "Setup token",
+          "type": "secret",
+          "help": "Asked once, to create the first admin account.",
+          "required": true
+        }
+      ],
+      "project": "kipitfit",
+      "compose": "",
+      "services": [
+        {
+          "name": "app",
+          "kind": "app",
+          "image": "ghcr.io/kipit-labs/kipitfit",
+          "icon": "kipitfit",
+          "port": 8080,
+          "volumes": [
+            {
+              "name": "data",
+              "path": "/data"
+            }
+          ],
+          "domainInput": "DOMAIN"
+        }
+      ]
+    },
+    {
+      "id": "kipitrek",
+      "title": "kipitrek",
+      "description": "Import your GPX files and see all your hikes on one map, with stats, elevation profiles, summits and friends.",
+      "website": "https://github.com/kipit-labs/kipitrek",
+      "docs": "https://github.com/kipit-labs/kipitrek#self-hosting",
+      "icon": "kipitrek",
+      "notes": "Sign up right after installing: the first account becomes the admin. Invite everyone else from the admin panel (**account menu → Admin**).\n\n- No email is sent: accounts sign in without verifying, and invites and password resets are links the admin copies from a user's page. To email them, add `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` and `SMTP_FROM` to the service's environment.\n- Hikes are in the `db` database: back it up from its **Backups** tab.",
+      "category": "sport",
+      "tags": [
+        "gpx",
+        "hiking",
+        "maps",
+        "tracks",
+        "outdoor",
+        "kipit labs"
+      ],
+      "inputs": [
+        {
+          "name": "DOMAIN",
+          "label": "Domain",
+          "type": "domain",
+          "placeholder": "trek.example.com",
+          "required": true
+        },
+        {
+          "name": "OPEN_SIGNUP",
+          "label": "Open sign-up",
+          "type": "checkbox",
+          "help": "Anyone may create an account. Off, only the first account signs up; admins invite the others."
+        }
+      ],
+      "project": "kipitrek",
+      "compose": "",
+      "services": [
+        {
+          "name": "app",
+          "kind": "app",
+          "image": "ghcr.io/kipit-labs/kipitrek",
+          "icon": "kipitrek",
+          "port": 8080,
+          "domainInput": "DOMAIN"
+        },
+        {
+          "name": "db",
+          "kind": "postgres",
+          "image": "postgis/postgis"
+        }
+      ]
     }
   ],
   "logos": [
@@ -508,6 +610,24 @@
         "beszel-agent"
       ],
       "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 56 70\"><defs><linearGradient id=\"g\" x1=\"0%\" y1=\"20%\" x2=\"100%\" y2=\"120%\"><stop offset=\"0%\" stop-color=\"#747bff\"/><stop offset=\"100%\" stop-color=\"#24eb5c\"/></linearGradient></defs><path fill=\"url(#g)\" d=\"M35 70H0V0h35q4.4 0 8.2 1.7a21.4 21.4 0 0 1 6.6 4.5q2.9 2.8 4.5 6.6Q56 16.7 56 21a15.4 15.4 0 0 1-.3 3.2 17.6 17.6 0 0 1-.2.8 19.4 19.4 0 0 1-1.5 4 17 17 0 0 1-2.4 3.4 13.5 13.5 0 0 1-2.6 2.3 12.5 12.5 0 0 1-.4.3q1.7 1 3 2.5Q53 39.1 54 41a18.3 18.3 0 0 1 1.5 4 17.4 17.4 0 0 1 .5 3 15.3 15.3 0 0 1 0 1q0 4.4-1.7 8.2a21.4 21.4 0 0 1-4.5 6.6q-2.8 2.9-6.6 4.6Q39.4 70 35 70ZM14 14v14h21a7 7 0 0 0 2.3-.3 6.6 6.6 0 0 0 .4-.2Q39 27 40 26a6.9 6.9 0 0 0 1.5-2.2q.5-1.3.5-2.8a7 7 0 0 0-.4-2.3 6.6 6.6 0 0 0-.1-.4Q40.9 17 40 16a7 7 0 0 0-2.3-1.4 6.9 6.9 0 0 0-2.5-.6 7.9 7.9 0 0 0-.2 0H14Zm0 28v14h21a7 7 0 0 0 2.3-.4 6.6 6.6 0 0 0 .4-.1Q39 54.9 40 54a7 7 0 0 0 1.5-2.2 6.9 6.9 0 0 0 .5-2.6 7.9 7.9 0 0 0 0-.2 7 7 0 0 0-.4-2.3 6.6 6.6 0 0 0-.1-.4Q40.9 45 40 44a7 7 0 0 0-2.3-1.5 6.9 6.9 0 0 0-2.5-.6 7.9 7.9 0 0 0-.2 0H14Z\"/></svg>"
+    },
+    {
+      "name": "kipitfit",
+      "label": "kipitfit",
+      "color": "#3DD6B0",
+      "images": [
+        "kipitfit"
+      ],
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 26 26\"><rect x=\"1\" y=\"1\" width=\"24\" height=\"24\" rx=\"5\" fill=\"#2a1a2e\"/><g fill=\"#3dd6b0\"><rect x=\"4.2\" y=\"15.9\" width=\"1.4\" height=\"3.2\" rx=\"0.5\"/><rect x=\"5.6\" y=\"14\" width=\"2.2\" height=\"7\" rx=\"0.7\"/><rect x=\"7.8\" y=\"16.85\" width=\"4.4\" height=\"1.3\"/><rect x=\"12.2\" y=\"14\" width=\"2.2\" height=\"7\" rx=\"0.7\"/><rect x=\"14.4\" y=\"15.9\" width=\"1.4\" height=\"3.2\" rx=\"0.5\"/></g></svg>"
+    },
+    {
+      "name": "kipitrek",
+      "label": "kipitrek",
+      "color": "#FF6B4A",
+      "images": [
+        "kipitrek"
+      ],
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 26 26\"><rect x=\"1\" y=\"1\" width=\"24\" height=\"24\" rx=\"5\" fill=\"#1a2b22\"/><path d=\"M5.5 20 9.5 13.5 13.5 20Z\" fill=\"#ff6b4a\" stroke=\"#ff6b4a\" stroke-width=\"1\" stroke-linejoin=\"round\"/></svg>"
     },
     {
       "name": "mailpit",
