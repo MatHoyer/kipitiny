@@ -5,12 +5,13 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
 )
 
 func TestApplyJobInput(t *testing.T) {
 	ok := JobInput{Name: "nightly", Command: "echo hi", Cron: "0 3 * * *", Enabled: true}
 	var j domain.Job
-	if err := ApplyJobInput(&j, ok); err != nil {
+	if err := ApplyJobInput(&j, ok, cron.Cron{}); err != nil {
 		t.Fatal(err)
 	}
 	if j.TimeoutSec != DefaultJobTimeout {
@@ -23,7 +24,7 @@ func TestApplyJobInput(t *testing.T) {
 		"long timeout": {Name: "x", Command: "x", Cron: "@daily", TimeoutSec: MaxJobTimeout + 1},
 		"neg timeout":  {Name: "x", Command: "x", Cron: "@daily", TimeoutSec: -1},
 	} {
-		if err := ApplyJobInput(&j, in); !errors.Is(err, ErrInvalid) {
+		if err := ApplyJobInput(&j, in, cron.Cron{}); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}

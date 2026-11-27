@@ -14,6 +14,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/progress"
@@ -37,7 +38,7 @@ func newTestCore(t *testing.T, cfg config.Config) testCore {
 	f := &fakeManager{store: st, logDir: t.TempDir()}
 	t.Cleanup(func() { cancel(); f.ops.Wait(); st.Close() })
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return testCore{Servers: New(bg, &cfg, st, nil, &progress.Steps{}, &sync.Map{}, f, log), fake: f}
+	return testCore{Servers: New(bg, &cfg, st, nil, cron.Cron{}, &progress.Steps{}, &sync.Map{}, f, log), fake: f}
 }
 
 // fakeManager is the rest of the manager for the servers tests: background

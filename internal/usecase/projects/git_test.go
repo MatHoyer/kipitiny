@@ -123,7 +123,7 @@ func TestGitFetch(t *testing.T) {
 	ctx := context.Background()
 	dir, commit := localRepo(t)
 	sha := commit("services: {web: {image: nginx}}\n")
-	c := New(ctx, &config.Config{DataDir: t.TempDir()}, nil, nil, nil)
+	c := New(ctx, &config.Config{DataDir: t.TempDir()}, nil, nil, nil, nil)
 	g := domain.ProjectGit{RepoURL: dir, Branch: "main", Path: "deploy/compose.yaml"}
 	head, err := c.gitHead(ctx, g)
 	if err != nil || head != sha {

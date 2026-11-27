@@ -27,8 +27,10 @@ type Projects struct {
 	// cfg is the manager's configuration, shared with core.
 	cfg   *config.Config
 	store domain.Store
-	mgr   Manager
-	log   *slog.Logger
+	// cron reads and runs the jobs' schedules.
+	cron domain.Cron
+	mgr  Manager
+	log  *slog.Logger
 	// bg ends when the manager stops: git syncs and jobs run under it.
 	bg context.Context
 
@@ -40,8 +42,8 @@ type Projects struct {
 }
 
 // New builds the projects use cases; bg is the manager's background context.
-func New(bg context.Context, cfg *config.Config, store domain.Store, mgr Manager, log *slog.Logger) *Projects {
-	return &Projects{cfg: cfg, store: store, mgr: mgr, log: log, bg: bg, gitKick: make(chan string, 16)}
+func New(bg context.Context, cfg *config.Config, store domain.Store, cron domain.Cron, mgr Manager, log *slog.Logger) *Projects {
+	return &Projects{cfg: cfg, store: store, cron: cron, mgr: mgr, log: log, bg: bg, gitKick: make(chan string, 16)}
 }
 
 // Manager is what projects uses from the rest of the manager.

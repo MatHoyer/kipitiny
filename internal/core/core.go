@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
@@ -78,13 +79,13 @@ type Core struct {
 func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logger) *Core {
 	bg, cancel := context.WithCancel(context.Background())
 	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel}
-	c.Servers = servers.New(bg, &c.cfg, s, local, &c.steps, &c.probes, serversPorts{c}, log)
+	c.Servers = servers.New(bg, &c.cfg, s, local, cron.Cron{}, &c.steps, &c.probes, serversPorts{c}, log)
 	c.Monitoring = monitoring.New(bg, &c.cfg, s, monitoringPorts{c}, log)
 	c.Identity = identity.New(cfg, s, identity.SecretKinds(cfg, local), c.Monitoring, log)
 	c.Network = network.New(bg, &c.cfg, s, networkPorts{c}, log)
-	c.Data = data.New(bg, &c.cfg, s, age.Encryption{}, &c.steps, dataPorts{c}, log)
-	c.Deployer = deploy.New(bg, &c.cfg, s, &c.probes, deployPorts{c}, log)
-	c.Projects = projects.New(bg, &c.cfg, s, projectsPorts{c}, log)
+	c.Data = data.New(bg, &c.cfg, s, age.Encryption{}, cron.Cron{}, &c.steps, dataPorts{c}, log)
+	c.Deployer = deploy.New(bg, &c.cfg, s, cron.Cron{}, &c.probes, deployPorts{c}, log)
+	c.Projects = projects.New(bg, &c.cfg, s, cron.Cron{}, projectsPorts{c}, log)
 	return c
 }
 

@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/robfig/cron/v3"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
@@ -128,7 +126,7 @@ func (c *Servers) Cleanup(ctx context.Context) CleanupView {
 	}
 	c.sched.mu.Lock()
 	if c.sched.cron != nil && c.sched.cleanup != 0 {
-		if next := c.sched.cron.Entry(c.sched.cleanup).Next; !next.IsZero() {
+		if next := c.sched.cron.Next(c.sched.cleanup); !next.IsZero() {
 			v.NextRun = &next
 		}
 	}
@@ -144,7 +142,7 @@ func (c *Servers) Cleanup(ctx context.Context) CleanupView {
 
 func (c *Servers) SetCleanup(ctx context.Context, s CleanupSettings) (CleanupView, error) {
 	s.Cron = strings.TrimSpace(s.Cron)
-	if _, err := data.CronParser.Parse(s.Cron); err != nil {
+	if _, err := c.cron.Next(s.Cron, time.Now().UTC()); err != nil {
 		return CleanupView{}, fmt.Errorf("%w: schedule: %s", ErrInvalid, err.Error())
 	}
 	if s.MinAgeHours < 1 || s.MinAgeHours > 24*365 {
@@ -196,15 +194,14 @@ func (c *Servers) scheduleCleanup(ctx context.Context) error {
 	if !s.Enabled {
 		return nil
 	}
-	job := cron.FuncJob(func() {
+	entry, err := c.sched.cron.Add(s.Cron, func() {
 		done := make(chan struct{})
 		if err := c.startCleanup(c.bg, "schedule", done); err != nil {
 			c.log.Warn("scheduled cleanup did not start", "err", err)
 			return
 		}
 		<-done
-	})
-	entry, err := c.sched.cron.AddJob(s.Cron, job)
+	}, false)
 	if err != nil {
 		c.log.Error("invalid cleanup schedule", "cron", s.Cron, "err", err)
 		return nil

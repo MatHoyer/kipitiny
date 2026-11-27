@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
@@ -58,7 +57,7 @@ func (c *Projects) ReloadJobs(ctx context.Context) error {
 		if !j.Enabled {
 			continue
 		}
-		entry, err := c.sched.cron.AddFunc(j.Cron, func() {
+		entry, err := c.sched.cron.Add(j.Cron, func() {
 			_, err := c.startJobRun(c.bg, j.ID)
 			switch {
 			case errors.Is(err, ErrBusy) || errors.Is(err, ErrInvalid): // still running, stopped, not deployed
@@ -66,7 +65,7 @@ func (c *Projects) ReloadJobs(ctx context.Context) error {
 			case err != nil && !errors.Is(err, ErrShuttingDown):
 				c.log.Warn("scheduled job did not start", "job", j.ID, "name", j.Name, "err", err)
 			}
-		})
+		}, false)
 		if err != nil {
 			c.log.Error("invalid job schedule", "job", j.ID, "cron", j.Cron, "err", err)
 			continue
@@ -116,11 +115,10 @@ func (c *Projects) jobView(ctx context.Context, j domain.Job) (JobView, error) {
 	c.sched.mu.Lock()
 	defer c.sched.mu.Unlock()
 	if entry, ok := c.sched.jobs[j.ID]; ok && c.sched.cron != nil {
-		if next := c.sched.cron.Entry(entry).Next; !next.IsZero() {
+		if next := c.sched.cron.Next(entry); !next.IsZero() {
 			v.NextRun = &next
 		}
-	} else if sched, err := data.CronParser.Parse(j.Cron); err == nil {
-		next := sched.Next(time.Now().UTC())
+	} else if next, err := c.cron.Next(j.Cron, time.Now().UTC()); err == nil {
 		v.NextRun = &next
 	}
 	return v, nil
@@ -138,7 +136,7 @@ func (c *Projects) CreateJob(ctx context.Context, serviceID string, in deploy.Jo
 		return JobView{}, err
 	}
 	j := domain.Job{ServiceID: serviceID}
-	if err := deploy.ApplyJobInput(&j, in); err != nil {
+	if err := deploy.ApplyJobInput(&j, in, c.cron); err != nil {
 		return JobView{}, err
 	}
 	if j, err = c.store.CreateJob(ctx, j); err != nil {
@@ -158,7 +156,7 @@ func (c *Projects) UpdateJob(ctx context.Context, id string, in deploy.JobInput)
 	if err := c.checkJobGitOwned(ctx, j); err != nil {
 		return JobView{}, err
 	}
-	if err := deploy.ApplyJobInput(&j, in); err != nil {
+	if err := deploy.ApplyJobInput(&j, in, c.cron); err != nil {
 		return JobView{}, err
 	}
 	if j, err = c.store.UpdateJob(ctx, j); err != nil {
