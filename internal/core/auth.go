@@ -225,6 +225,16 @@ func randomToken(n int) string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
+// randomPassword is a database password: a randomToken that never starts
+// with "-", which command line tools (the user's own too) read as an option.
+func randomPassword() string {
+	for {
+		if p := randomToken(24); p[0] != '-' {
+			return p
+		}
+	}
+}
+
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])

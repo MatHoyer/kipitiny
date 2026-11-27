@@ -40,7 +40,7 @@ var mongoManagedKeys = []string{mongoUser, mongoPassword, mongoDatabase}
 func newMongoEnv() map[string]string {
 	return map[string]string{
 		mongoUser:     "app",
-		mongoPassword: randomToken(24),
+		mongoPassword: randomPassword(),
 		mongoDatabase: "app",
 	}
 }
@@ -131,5 +131,11 @@ func mongoHealthcheck() *container.HealthConfig {
 
 // mongoAuthArgs authenticate the database tools as the service's user.
 func mongoAuthArgs(svc store.Service) []string {
-	return []string{"--username", svc.Env[mongoUser], "--password", svc.Env[mongoPassword], "--authenticationDatabase", "admin"}
+	return mongoAuth(svc.Env[mongoUser], svc.Env[mongoPassword])
+}
+
+// mongoAuth passes the credentials as --flag=value: a password starting
+// with "-" would otherwise be read as an option.
+func mongoAuth(user, password string) []string {
+	return []string{"--username=" + user, "--password=" + password, "--authenticationDatabase=admin"}
 }

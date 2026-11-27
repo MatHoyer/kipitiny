@@ -63,7 +63,7 @@ db.getSiblingDB(e.KP_DB).getCollection(e.KP_COLL).find(filter).sort(sort).skip(N
 // instance's root, when root is set), killed after timeout: mongosh would
 // otherwise outlive a cancelled exec.
 func (t dataTarget) mongosh(script string, root bool, timeout time.Duration, env ...string) docker.ExecOptions {
-	auth := []string{"--username", readUser, "--password", readUserPassword(t.svc.Env[mongoPassword]), "--authenticationDatabase", "admin"}
+	auth := mongoAuth(readUser, readUserPassword(t.svc.Env[mongoPassword]))
 	if root {
 		auth = mongoAuthArgs(t.svc)
 	}

@@ -41,7 +41,7 @@ var pgManagedKeys = []string{pgUser, pgPassword, pgDatabase}
 func newPostgresEnv() map[string]string {
 	return map[string]string{
 		pgUser:     "app",
-		pgPassword: randomToken(24),
+		pgPassword: randomPassword(),
 		pgDatabase: "postgres",
 	}
 }
