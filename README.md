@@ -149,11 +149,13 @@ updates.
 ```
 cmd/kipitiny/          entrypoint
 internal/config/       env config
-internal/core/         service layer (REST + future MCP call this)
-internal/api/          JSON HTTP handlers
-internal/docker/       Docker client wrapper, label/network conventions
-internal/domain/       entities and repository interfaces, one per area
+internal/domain/       entities, repository interfaces (one per area), shared errors
+internal/usecase/      use cases by area (identity so far), each its own package
+internal/core/         the remaining use cases; embeds each area for the handlers
 internal/infrastructure/sqlite/ SQLite store (bun + goose migrations)
-web/                   React SPA (Vite), embedded via go:embed
+internal/api/          JSON HTTP handlers
+internal/mcp/          MCP tools, one file per group
+internal/docker/       Docker client wrapper, label/network conventions
+web/                   React SPA (Vite), embedded via go:embed; src/features/<area>/
 site/                  website: landing page and docs (site/docs/*.md), own image
 ```
