@@ -43,7 +43,7 @@ site-demo:
 
 # Every Go test, the Docker-backed ones included (they need a daemon), with the race
 # detector and coverage of internal/; fails under COVERAGE_FLOOR, which only goes up.
-COVERAGE_FLOOR := 66
+COVERAGE_FLOOR := 68
 cover: ui-stub
 	CGO_ENABLED=1 KIPITINY_TEST_DOCKER=1 go test -race -timeout 30m -coverpkg=./internal/... -coverprofile=cover.out ./...
 	@go tool cover -func=cover.out | awk -v floor=$(COVERAGE_FLOOR) '/^total:/ { sub("%", "", $$3); print "coverage " $$3 "% (floor " floor "%)"; if ($$3 + 0 < floor) exit 1 }'
