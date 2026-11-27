@@ -21,6 +21,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/mcp"
 	"github.com/kipit-labs/kipitiny/internal/probe"
+	"github.com/kipit-labs/kipitiny/internal/sqlitehelper"
 	"github.com/kipit-labs/kipitiny/internal/store/sqlite"
 	"github.com/kipit-labs/kipitiny/web"
 )
@@ -65,6 +66,10 @@ func main() {
 				os.Exit(0)
 			}
 			run = serveAnalytics
+		case "sqlite":
+			// The data browser's SQLite client, run in a helper container of
+			// this image that mounts an app's volumes (core.sqliteRun).
+			os.Exit(sqlitehelper.Main(os.Args[2:], os.Stdin, os.Stdout))
 		case "healthcheck":
 			// Docker HEALTHCHECK for the manager image, which has no curl.
 			if probe.Check(healthURL(config.Load().Addr)) != nil {

@@ -156,11 +156,12 @@ func (c *Core) DeleteAnalyticsData(ctx context.Context) error {
 
 var releaseRe = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
-// analyticsImageRef is the manager's own image at this version (:dev for
-// builds between releases, `make docker`): the server is its `analytics`
-// command.
-func (c *Core) analyticsImageRef() string {
-	if releaseRe.MatchString(c.cfg.Version) {
+// ownImageRef is the manager's own image at this version (:dev for
+// builds between releases, `make docker`; :dev-<branch> for a test
+// environment's): its commands run the analytics server and the SQLite
+// helper.
+func (c *Core) ownImageRef() string {
+	if releaseRe.MatchString(c.cfg.Version) || strings.HasPrefix(c.cfg.Version, "dev-") {
 		return c.cfg.Update.Image + ":" + c.cfg.Version
 	}
 	return c.cfg.Update.Image + ":dev"
@@ -234,7 +235,7 @@ func (c *Core) analyticsSpec(ctx context.Context, st analyticsState, apps []stor
 	return client.ContainerCreateOptions{
 		Name: analyticsName,
 		Config: &container.Config{
-			Image: c.analyticsImageRef(),
+			Image: c.ownImageRef(),
 			Cmd:   []string{"analytics"},
 			// The image runs the manager as root; the server needs none of it
 			// (its volume is owned by nonroot, see the Dockerfile).

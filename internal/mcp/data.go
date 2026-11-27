@@ -43,8 +43,8 @@ func (t *tools) createDatabase(ctx context.Context, _ *mcp.CallToolRequest, in c
 }
 
 type listTablesIn struct {
-	Service  string `json:"service" jsonschema:"the PostgreSQL, MySQL, MariaDB or MongoDB service as project/service, or its ID"`
-	Database string `json:"database,omitempty" jsonschema:"one of the instance's databases (see list_databases); default the service's own"`
+	Service  string `json:"service" jsonschema:"the PostgreSQL, MySQL, MariaDB or MongoDB service, or an app with SQLite files in its volumes, as project/service, or its ID"`
+	Database string `json:"database,omitempty" jsonschema:"one of the instance's databases, or an app's SQLite file as <volume>/<path> (see list_databases); default the service's own, an app's first"`
 }
 
 type listTablesOut struct {
@@ -61,9 +61,9 @@ func (t *tools) listTables(ctx context.Context, _ *mcp.CallToolRequest, in listT
 }
 
 type readTableIn struct {
-	Service  string          `json:"service" jsonschema:"the PostgreSQL, MySQL or MariaDB service as project/service, or its ID"`
-	Database string          `json:"database,omitempty" jsonschema:"one of the instance's databases; default the service's own"`
-	Schema   string          `json:"schema,omitempty" jsonschema:"PostgreSQL: default public; MySQL and MariaDB: the database"`
+	Service  string          `json:"service" jsonschema:"the PostgreSQL, MySQL or MariaDB service, or an app with SQLite files, as project/service, or its ID"`
+	Database string          `json:"database,omitempty" jsonschema:"one of the instance's databases, or an app's SQLite file as <volume>/<path>; default the service's own, an app's first"`
+	Schema   string          `json:"schema,omitempty" jsonschema:"PostgreSQL: default public; MySQL and MariaDB: the database; SQLite: main"`
 	Table    string          `json:"table" jsonschema:"a table or view (see list_tables)"`
 	Limit    int             `json:"limit,omitempty" jsonschema:"rows to return, default 50, max 200"`
 	Offset   int             `json:"offset,omitempty"`
@@ -151,10 +151,10 @@ func (t *tools) getRedisKey(ctx context.Context, _ *mcp.CallToolRequest, in getR
 }
 
 type queryDatabaseIn struct {
-	Service  string `json:"service" jsonschema:"the database service as project/service, or its ID"`
-	Query    string `json:"query" jsonschema:"SQL for PostgreSQL, MySQL and MariaDB (only the last statement's rows are returned), a redis-cli command for Redis, mongosh JavaScript for MongoDB (its printout is returned)"`
-	Database string `json:"database,omitempty" jsonschema:"one of the instance's databases (all but Redis); default the service's own"`
-	Write    bool   `json:"write,omitempty" jsonschema:"allow changes; without it PostgreSQL runs read-only, MySQL, MariaDB and MongoDB run as a read-only user, and Redis refuses commands that write. With it, PostgreSQL runs the query in one transaction"`
+	Service  string `json:"service" jsonschema:"the database service, or an app with SQLite files, as project/service, or its ID"`
+	Query    string `json:"query" jsonschema:"SQL for PostgreSQL, MySQL, MariaDB and SQLite (only the last statement's rows are returned), a redis-cli command for Redis, mongosh JavaScript for MongoDB (its printout is returned)"`
+	Database string `json:"database,omitempty" jsonschema:"one of the instance's databases (all but Redis), or an app's SQLite file as <volume>/<path>; default the service's own, an app's first"`
+	Write    bool   `json:"write,omitempty" jsonschema:"allow changes; without it PostgreSQL and SQLite run read-only, MySQL, MariaDB and MongoDB run as a read-only user, and Redis refuses commands that write. With it, PostgreSQL and SQLite run the query in one transaction"`
 }
 
 // queryDatabase is audited by the core, without the query's text.
