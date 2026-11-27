@@ -3,6 +3,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 # Static binary everywhere: app containers run it as their health probe.
 export CGO_ENABLED := 0
 PLAYWRIGHT_VERSION := $(shell node -p "require('./web/package.json').devDependencies['@playwright/test']" 2>/dev/null)
+GOLANGCI_LINT_VERSION := v2.15.0
 DEV_ENV := KIPITINY_ADDR=:8080 KIPITINY_DATA_DIR=./data KIPITINY_LOG_LEVEL=debug
 
 .PHONY: all build ui ui-stub dev-api dev-ui dev-site site site-demo test cover e2e lint docker clean
@@ -71,7 +72,8 @@ e2e: build
 lint: ui-stub
 	@unformatted=$$(gofmt -l .); if [ -n "$$unformatted" ]; then echo "Run gofmt on:"; echo "$$unformatted"; exit 1; fi
 	go vet ./...
-	cd web && pnpm typecheck
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
+	cd web && pnpm typecheck && pnpm lint
 	cd site && pnpm typecheck
 
 docker:
