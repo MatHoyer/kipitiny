@@ -12,6 +12,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/git"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
@@ -85,7 +86,7 @@ func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logg
 	c.Network = network.New(bg, &c.cfg, s, networkPorts{c}, log)
 	c.Data = data.New(bg, &c.cfg, s, age.Encryption{}, cron.Cron{}, &c.steps, dataPorts{c}, log)
 	c.Deployer = deploy.New(bg, &c.cfg, s, cron.Cron{}, &c.probes, deployPorts{c}, log)
-	c.Projects = projects.New(bg, &c.cfg, s, cron.Cron{}, projectsPorts{c}, log)
+	c.Projects = projects.New(bg, &c.cfg, s, cron.Cron{}, git.Git{}, projectsPorts{c}, log)
 	return c
 }
 

@@ -13,39 +13,31 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 
-	"github.com/go-git/go-git/v5"
-	gitconfig "github.com/go-git/go-git/v5/config"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/filemode"
-	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/transport"
-	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
-	"github.com/go-git/go-git/v5/storage/memory"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/gitprovider"
 )
 
-// gitAuth is the credential reading the repository: its provider's token
-// (none for a public repository).
-func (c *Projects) gitAuth(ctx context.Context, g domain.ProjectGit) (transport.AuthMethod, error) {
+// gitRemote is how to reach the repository: its provider's token (none for
+// a public repository), and the dial guard of a member's fetches.
+func (c *Projects) gitRemote(ctx context.Context, g domain.ProjectGit) (domain.GitRemote, error) {
+	r := domain.GitRemote{URL: g.RepoURL, Branch: g.Branch, CheckAddr: repoAddrCheck(ctx, g)}
 	if g.ProviderID == "" {
-		return nil, nil
+		return r, nil
 	}
 	p, token, err := c.gitProviderToken(ctx, g.ProviderID)
 	if err != nil {
-		return nil, err
+		return r, err
 	}
 	if err := checkProviderRepo(p, g.RepoURL); err != nil {
-		return nil, err
+		return r, err
 	}
-	return &githttp.BasicAuth{Username: gitprovider.CloneUsername(p.Kind), Password: token}, nil
+	r.Username, r.Password = gitprovider.CloneUsername(p.Kind), token
+	return r, nil
 }
 
 // gitAccessError explains a refused repository.
 func gitAccessError(g domain.ProjectGit, op string, err error) error {
-	if errors.Is(err, transport.ErrAuthenticationRequired) || errors.Is(err, transport.ErrRepositoryNotFound) ||
-		errors.Is(err, transport.ErrAuthorizationFailed) {
+	if errors.Is(err, domain.ErrGitRefused) {
 		if g.ProviderID == "" {
 			return fmt.Errorf("%s %s: %w (a private repository? read it through a git provider)", op, g.RepoURL, err)
 		}
@@ -56,22 +48,18 @@ func gitAccessError(g domain.ProjectGit, op string, err error) error {
 
 // gitHead returns the commit the branch points at, without fetching.
 func (c *Projects) gitHead(ctx context.Context, g domain.ProjectGit) (string, error) {
-	auth, err := c.gitAuth(ctx, g)
+	r, err := c.gitRemote(ctx, g)
 	if err != nil {
 		return "", err
 	}
-	rem := git.NewRemote(memory.NewStorage(), &gitconfig.RemoteConfig{Name: "origin", URLs: []string{g.RepoURL}})
-	refs, err := rem.ListContext(guardRepo(ctx, g), &git.ListOptions{Auth: auth})
+	head, err := c.git.Head(ctx, r)
 	if err != nil {
 		return "", gitAccessError(g, "list", err)
 	}
-	want := plumbing.NewBranchReferenceName(g.Branch)
-	for _, r := range refs {
-		if r.Name() == want {
-			return r.Hash().String(), nil
-		}
+	if head == "" {
+		return "", fmt.Errorf("branch %s not found in %s", g.Branch, g.RepoURL)
 	}
-	return "", fmt.Errorf("branch %s not found in %s", g.Branch, g.RepoURL)
+	return head, nil
 }
 
 // gitReadFile reads the compose file of the branch: its content and the
@@ -99,7 +87,7 @@ type repoFiles = func(rel string) ([]domain.ServiceFile, error)
 // keep that memory for minutes before returning it, which shows as the
 // manager's usage: syncs are rare, so it goes back to the OS right away.
 func (c *Projects) WithGitFile(ctx context.Context, g domain.ProjectGit, fn func(data []byte, commit string, files repoFiles) error) error {
-	auth, err := c.gitAuth(ctx, g)
+	r, err := c.gitRemote(ctx, g)
 	if err != nil {
 		return err
 	}
@@ -113,28 +101,12 @@ func (c *Projects) WithGitFile(ctx context.Context, g domain.ProjectGit, fn func
 	}
 	defer os.RemoveAll(dir)
 	defer func() {
-		runtime.GC() // go-git's pooled buffers only go on the second cycle
+		runtime.GC() // the clone's pooled buffers only go on the second cycle
 		debug.FreeOSMemory()
 	}()
-	repo, err := git.PlainCloneContext(guardRepo(ctx, g), dir, true, &git.CloneOptions{
-		URL:           g.RepoURL,
-		Auth:          auth,
-		ReferenceName: plumbing.NewBranchReferenceName(g.Branch),
-		SingleBranch:  true,
-		Depth:         1,
-		NoCheckout:    true,
-		Tags:          git.NoTags,
-	})
+	commit, err := c.git.Clone(ctx, dir, r)
 	if err != nil {
 		return gitAccessError(g, "clone", err)
-	}
-	head, err := repo.Head()
-	if err != nil {
-		return fmt.Errorf("clone %s: %w", g.RepoURL, err)
-	}
-	commit, err := repo.CommitObject(head.Hash())
-	if err != nil {
-		return err
 	}
 	f, err := commit.File(g.Path)
 	if err != nil {
@@ -147,20 +119,20 @@ func (c *Projects) WithGitFile(ctx context.Context, g domain.ProjectGit, fn func
 	if err != nil {
 		return err
 	}
-	return fn([]byte(data), head.Hash().String(), func(rel string) ([]domain.ServiceFile, error) {
+	return fn(data, commit.Hash(), func(rel string) ([]domain.ServiceFile, error) {
 		return commitFiles(commit, path.Dir(g.Path), rel, g.Branch)
 	})
 }
 
 // commitFiles reads rel, relative to dir, from a commit: a file (Path "")
 // or a directory's files, within a service's limits.
-func commitFiles(commit *object.Commit, dir, rel, branch string) ([]domain.ServiceFile, error) {
+func commitFiles(commit domain.GitCommit, dir, rel, branch string) ([]domain.ServiceFile, error) {
 	p := path.Clean(path.Join(dir, rel))
 	if p == ".." || strings.HasPrefix(p, "../") || path.IsAbs(rel) {
 		return nil, fmt.Errorf("outside the repository")
 	}
-	read := func(f *object.File, name string) (domain.ServiceFile, error) {
-		if f.Mode == filemode.Symlink || f.Mode == filemode.Submodule {
+	read := func(f domain.GitFile, name string) (domain.ServiceFile, error) {
+		if f.Mode == domain.GitSymlink || f.Mode == domain.GitSubmodule {
 			return domain.ServiceFile{}, fmt.Errorf("%s is a symlink or submodule", path.Join(rel, name))
 		}
 		if f.Size > deploy.MaxServiceFileBytes {
@@ -168,25 +140,20 @@ func commitFiles(commit *object.Commit, dir, rel, branch string) ([]domain.Servi
 		}
 		content, err := f.Contents()
 		mode := int64(0o644)
-		if f.Mode == filemode.Executable {
+		if f.Mode == domain.GitExecutable {
 			mode = 0o755
 		}
-		return domain.ServiceFile{Path: name, Content: []byte(content), Mode: mode}, err
+		return domain.ServiceFile{Path: name, Content: content, Mode: mode}, err
 	}
 	if f, err := commit.File(p); err == nil {
 		sf, err := read(f, "")
 		return []domain.ServiceFile{sf}, err
 	}
-	tree, err := commit.Tree()
-	if err == nil && p != "." {
-		tree, err = tree.Tree(p)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("not found on %s", branch)
-	}
 	var out []domain.ServiceFile
 	total := int64(0)
-	err = tree.Files().ForEach(func(f *object.File) error {
+	walked := false // an error before the first file: no such directory
+	err := commit.Walk(p, func(f domain.GitFile) error {
+		walked = true
 		if total += f.Size; total > deploy.MaxServiceFileBytes || len(out) >= deploy.MaxServiceFiles {
 			return fmt.Errorf("more than %d files or %d MB", deploy.MaxServiceFiles, deploy.MaxServiceFileBytes>>20)
 		}
@@ -194,5 +161,8 @@ func commitFiles(commit *object.Commit, dir, rel, branch string) ([]domain.Servi
 		out = append(out, sf)
 		return err
 	})
+	if err != nil && !walked {
+		return nil, fmt.Errorf("not found on %s", branch)
+	}
 	return out, err
 }

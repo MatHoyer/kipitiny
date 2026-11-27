@@ -7,17 +7,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-git/go-git/v5"
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/git"
 )
 
 func TestGitRepoFiles(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	repo, err := git.PlainInitWithOptions(dir, &git.PlainInitOptions{InitOptions: git.InitOptions{DefaultBranch: "refs/heads/main"}})
+	repo, err := gogit.PlainInitWithOptions(dir, &gogit.PlainInitOptions{InitOptions: gogit.InitOptions{DefaultBranch: "refs/heads/main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,11 +42,11 @@ func TestGitRepoFiles(t *testing.T) {
 	if err := wt.AddGlob("."); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := wt.Commit("files", &git.CommitOptions{Author: &object.Signature{Name: "t", Email: "t@t", When: time.Now()}}); err != nil {
+	if _, err := wt.Commit("files", &gogit.CommitOptions{Author: &object.Signature{Name: "t", Email: "t@t", When: time.Now()}}); err != nil {
 		t.Fatal(err)
 	}
 
-	c := New(ctx, &config.Config{DataDir: t.TempDir()}, nil, nil, nil, nil)
+	c := New(ctx, &config.Config{DataDir: t.TempDir()}, nil, nil, git.Git{}, nil, nil)
 	g := domain.ProjectGit{RepoURL: dir, Branch: "main", Path: "deploy/compose.yaml"}
 	err = c.WithGitFile(ctx, g, func(_ []byte, _ string, files repoFiles) error {
 		f, err := files("./nginx.conf")
