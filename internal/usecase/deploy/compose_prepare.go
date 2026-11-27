@@ -332,7 +332,7 @@ func (a *applier) prepareJobs(_ context.Context, name string, svc domain.Service
 		}
 		was := j
 		in := JobInput{Name: jobName, Command: cj.Command, Cron: cj.Schedule, TimeoutSec: int(cj.Timeout), Enabled: !cj.Paused}
-		if err := ApplyJobInput(&j, in); err != nil {
+		if err := ApplyJobInput(&j, in, a.c.cron); err != nil {
 			return false, fmt.Errorf("service %s: job %s: %w", name, jobName, err)
 		}
 		if j.ID == "" || j != was {

@@ -3,9 +3,9 @@ package deploy
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 )
 
 // A job's timeout, in seconds, when it sets none, and at most.
@@ -23,8 +23,8 @@ type JobInput struct {
 	Enabled    bool   `json:"enabled"`
 }
 
-// ApplyJobInput validates in and sets it on j.
-func ApplyJobInput(j *domain.Job, in JobInput) error {
+// ApplyJobInput validates in (its schedule with cron) and sets it on j.
+func ApplyJobInput(j *domain.Job, in JobInput, cron domain.Cron) error {
 	in.Name, in.Command, in.Cron = strings.TrimSpace(in.Name), strings.TrimSpace(in.Command), strings.TrimSpace(in.Cron)
 	if !domain.ValidName(in.Name) {
 		return fmt.Errorf("%w: job name must be lowercase letters, digits and dashes", ErrInvalid)
@@ -32,7 +32,7 @@ func ApplyJobInput(j *domain.Job, in JobInput) error {
 	if in.Command == "" {
 		return fmt.Errorf("%w: a job needs a command", ErrInvalid)
 	}
-	if _, err := data.CronParser.Parse(in.Cron); err != nil {
+	if _, err := cron.Next(in.Cron, time.Now().UTC()); err != nil {
 		return fmt.Errorf("%w: schedule: %s", ErrInvalid, err.Error())
 	}
 	if in.TimeoutSec == 0 {

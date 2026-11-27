@@ -8,14 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/robfig/cron/v3"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
-)
-
-// CronParser reads the schedules of backups, jobs and the cleanup.
-var CronParser = cron.NewParser(
-	cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
 )
 
 const (
@@ -29,11 +22,11 @@ const (
 )
 
 // scheduler runs the backup schedules (jobs and the cleanup have their own,
-// in core).
+// in projects and servers).
 type scheduler struct {
 	mu      sync.Mutex
-	cron    *cron.Cron
-	entries map[string]cron.EntryID // schedule ID -> entry
+	cron    domain.Scheduler
+	entries map[string]domain.CronEntry // schedule ID -> entry
 }
 
 type ScheduleInput struct {
@@ -60,8 +53,8 @@ type ScheduleView struct {
 // the expression starts with CRON_TZ=<zone>.
 func (c *Data) StartSchedules(ctx context.Context) error {
 	c.sched.mu.Lock()
-	c.sched.cron = cron.New(cron.WithParser(CronParser), cron.WithLocation(time.UTC))
-	c.sched.entries = map[string]cron.EntryID{}
+	c.sched.cron = c.cron.NewScheduler()
+	c.sched.entries = map[string]domain.CronEntry{}
 	c.sched.mu.Unlock()
 	if err := c.seedManagerSchedule(ctx); err != nil {
 		return err
@@ -103,10 +96,7 @@ func (c *Data) reloadSchedules(ctx context.Context) error {
 		if !sc.Enabled {
 			continue
 		}
-		job := cron.NewChain(cron.SkipIfStillRunning(cron.DiscardLogger)).Then(cron.FuncJob(func() {
-			c.runScheduledBackup(sc.ID)
-		}))
-		entry, err := c.sched.cron.AddJob(sc.Cron, job)
+		entry, err := c.sched.cron.Add(sc.Cron, func() { c.runScheduledBackup(sc.ID) }, true)
 		if err != nil {
 			c.log.Error("invalid backup schedule", "schedule", sc.ID, "cron", sc.Cron, "err", err)
 			continue
@@ -216,11 +206,10 @@ func (c *Data) scheduleView(sc domain.BackupSchedule) ScheduleView {
 	c.sched.mu.Lock()
 	defer c.sched.mu.Unlock()
 	if entry, ok := c.sched.entries[sc.ID]; ok && c.sched.cron != nil {
-		if next := c.sched.cron.Entry(entry).Next; !next.IsZero() {
+		if next := c.sched.cron.Next(entry); !next.IsZero() {
 			v.NextRun = &next
 		}
-	} else if sched, err := CronParser.Parse(sc.Cron); err == nil && sc.Enabled {
-		next := sched.Next(time.Now().UTC())
+	} else if next, err := c.cron.Next(sc.Cron, time.Now().UTC()); err == nil && sc.Enabled {
 		v.NextRun = &next
 	}
 	return v
@@ -298,7 +287,7 @@ func (c *Data) DeleteBackupSchedule(ctx context.Context, id string) error {
 
 func (c *Data) applyScheduleInput(ctx context.Context, sc *domain.BackupSchedule, in ScheduleInput) error {
 	in.Cron = strings.TrimSpace(in.Cron)
-	if _, err := CronParser.Parse(in.Cron); err != nil {
+	if _, err := c.cron.Next(in.Cron, time.Now().UTC()); err != nil {
 		return fmt.Errorf("%w: schedule: %v", ErrInvalid, err)
 	}
 	for _, n := range []int{in.KeepLast, in.KeepDaily, in.KeepWeekly, in.KeepMonthly} {

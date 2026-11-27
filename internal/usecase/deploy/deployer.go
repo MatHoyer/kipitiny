@@ -26,8 +26,10 @@ type Deployer struct {
 	// cfg is the manager's configuration, shared with core.
 	cfg   *config.Config
 	store domain.Store
-	mgr   Manager
-	log   *slog.Logger
+	// cron reads the schedules of the jobs a compose file declares.
+	cron domain.Cron
+	mgr  Manager
+	log  *slog.Logger
 	// bg ends when the manager stops: deploys and loops run under it.
 	bg context.Context
 	// probes: server ID -> *mount.Mount of the health probe (nil: none
@@ -39,8 +41,8 @@ type Deployer struct {
 }
 
 // New builds the deploy use cases; bg is the manager's background context.
-func New(bg context.Context, cfg *config.Config, store domain.Store, probes *sync.Map, mgr Manager, log *slog.Logger) *Deployer {
-	return &Deployer{cfg: cfg, store: store, mgr: mgr, log: log, bg: bg, probes: probes}
+func New(bg context.Context, cfg *config.Config, store domain.Store, cron domain.Cron, probes *sync.Map, mgr Manager, log *slog.Logger) *Deployer {
+	return &Deployer{cfg: cfg, store: store, cron: cron, mgr: mgr, log: log, bg: bg, probes: probes}
 }
 
 // Manager is what deploy uses from the rest of the manager.

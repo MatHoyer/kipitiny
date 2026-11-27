@@ -32,8 +32,10 @@ type Servers struct {
 	// cfg is the manager's configuration, shared with core.
 	cfg   *config.Config
 	store domain.Store
-	mgr   Manager
-	log   *slog.Logger
+	// cron reads and runs the cleanup's schedule and the audit pruning.
+	cron domain.Cron
+	mgr  Manager
+	log  *slog.Logger
 	// bg ends when the manager stops: loops and the cleanup run under it.
 	bg context.Context
 	// pool holds a Docker client per server, remote ones connected on
@@ -57,8 +59,8 @@ type Servers struct {
 
 // New builds the servers use cases around the local Docker client; bg is the
 // manager's background context.
-func New(bg context.Context, cfg *config.Config, store domain.Store, local *docker.Client, steps *progress.Steps, probes *sync.Map, mgr Manager, log *slog.Logger) *Servers {
-	s := &Servers{cfg: cfg, store: store, mgr: mgr, log: log, bg: bg, steps: steps, probes: probes, reconcileKick: make(chan struct{}, 1)}
+func New(bg context.Context, cfg *config.Config, store domain.Store, local *docker.Client, cron domain.Cron, steps *progress.Steps, probes *sync.Map, mgr Manager, log *slog.Logger) *Servers {
+	s := &Servers{cfg: cfg, store: store, cron: cron, mgr: mgr, log: log, bg: bg, steps: steps, probes: probes, reconcileKick: make(chan struct{}, 1)}
 	s.pool = docker.NewPool(local, s.connectServer)
 	return s
 }

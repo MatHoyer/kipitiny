@@ -154,6 +154,7 @@ internal/usecase/      use cases by area, each its own package
 internal/core/         wiring and lifecycle; embeds each area for the handlers
 internal/infrastructure/sqlite/ SQLite store (bun + goose migrations)
 internal/infrastructure/age/    backup encryption (age X25519 keys)
+internal/infrastructure/cron/   cron expressions and schedulers (robfig/cron)
 internal/api/          JSON HTTP handlers
 internal/mcp/          MCP tools, one file per group
 internal/docker/       Docker client wrapper, label/network conventions

@@ -15,6 +15,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/progress"
@@ -108,5 +109,5 @@ func newTestData(t *testing.T, cfg config.Config, dk *docker.Client) *Data {
 		m.ops.Wait()
 		st.Close()
 	})
-	return New(context.Background(), m.cfg, st, age.Encryption{}, &progress.Steps{}, m, log)
+	return New(context.Background(), m.cfg, st, age.Encryption{}, cron.Cron{}, &progress.Steps{}, m, log)
 }
