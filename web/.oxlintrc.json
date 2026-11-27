@@ -9,9 +9,6 @@
   "overrides": [
     {
       "files": [
-        "src/features/projects/Project.tsx",
-        "src/features/account/Account.tsx",
-        "src/features/settings/Servers.tsx",
         "src/features/files/files-tab.tsx",
         "src/features/map/canvas/map3d.tsx"
       ],
