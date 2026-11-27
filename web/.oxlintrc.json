@@ -17,10 +17,7 @@
         "src/features/services/errors-tab.tsx",
         "src/features/files/files-tab.tsx",
         "src/features/map/canvas/map3d.tsx",
-        "src/features/services/settings/networking.tsx",
-        "src/features/data/mongo-browser.tsx",
-        "src/features/data/pg-browser.tsx",
-        "src/features/data/redis-browser.tsx"
+        "src/features/services/settings/networking.tsx"
       ],
       "rules": { "max-lines": "off" }
     },
