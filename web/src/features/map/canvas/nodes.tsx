@@ -9,7 +9,7 @@ import { ServiceIcon } from "@/components/service-icon";
 import { issueRing, issueText, projectProblems, serviceIssue, serviceState } from "@/features/map/topology";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { cn } from "@/lib/utils";
-import { NewServiceDialog } from "@/features/projects/Project";
+import { NewServiceDialog } from "@/features/projects/new-service-dialog";
 import { databasePorts, isDatabase } from "@/api";
 import type { InfraData, MapNode, NetworkData, ProjectData, ServerData, ServiceData } from "./build";
 
