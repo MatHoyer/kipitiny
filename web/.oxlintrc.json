@@ -8,13 +8,6 @@
   },
   "overrides": [
     {
-      "files": [
-        "src/features/files/files-tab.tsx",
-        "src/features/map/canvas/map3d.tsx"
-      ],
-      "rules": { "max-lines": "off" }
-    },
-    {
       "files": ["e2e/**"],
       "rules": {
         "react/rules-of-hooks": "off",
