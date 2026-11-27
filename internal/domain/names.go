@@ -25,5 +25,32 @@ var EnvRefRe = regexp.MustCompile(`\{\{\s*(?:project\.([A-Za-z_][A-Za-z0-9_]*)|d
 // SoleRefRe matches a value that is exactly one reference.
 var SoleRefRe = regexp.MustCompile(`^\s*` + EnvRefRe.String() + `\s*$`)
 
+// RefName is how an EnvRefRe match is named in messages: project.NAME,
+// db.SERVICE.FIELD, app.SERVICE.FIELD.
+func RefName(m []string) string {
+	if m[5] != "" {
+		return "app." + m[5] + "." + m[6]
+	}
+	if m[1] != "" {
+		return "project." + m[1]
+	}
+	if m[4] != "" {
+		return m[4]
+	}
+	return "db." + m[2] + "." + m[3]
+}
+
+// UsesDatabase reports whether env references the database named name.
+func UsesDatabase(env map[string]string, name string) bool {
+	for _, v := range env {
+		for _, m := range EnvRefRe.FindAllStringSubmatch(v, -1) {
+			if m[2] == name {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // DefaultBrandName is the name the manager goes by when no brand is set.
 const DefaultBrandName = "kipitiny"

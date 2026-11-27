@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
@@ -28,7 +29,7 @@ func previewParent(t *testing.T, c *Core) domain.Project {
 		t.Fatal(err)
 	}
 	for _, s := range []domain.Service{
-		{Name: "db", Kind: domain.ServiceKindPostgres, Image: "postgres:17", Env: map[string]string{pgUser: "u", pgPassword: "prod-pass", pgDatabase: "app"},
+		{Name: "db", Kind: domain.ServiceKindPostgres, Image: "postgres:17", Env: map[string]string{data.PGUser: "u", data.PGPassword: "prod-pass", data.PGDatabase: "app"},
 			Anonymize: anonymize.Rules{"users": {Action: anonymize.Truncate}}},
 		{Name: "web", Kind: domain.ServiceKindApp, Image: "ghcr.io/acme/web:v1", Domain: "shop.example.com", Port: 3000, Replicas: 3,
 			Env:     map[string]string{"DATABASE_URL": "{{ db.db.URL }}", "APP_URL": "{{ app.web.URL }}", "API_TOKEN": "t0ken", "STRIPE": "{{ project.STRIPE_KEY }}"},

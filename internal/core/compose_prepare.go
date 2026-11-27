@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
@@ -352,11 +353,11 @@ func (a *applier) prepareJobs(_ context.Context, name string, svc domain.Service
 func databasePasswordKey(k domain.ServiceKind) string {
 	switch k {
 	case domain.ServiceKindRedis:
-		return redisPassword
+		return data.RedisPassword
 	case domain.ServiceKindMySQL, domain.ServiceKindMariaDB:
-		return mysqlPassword
+		return data.MySQLPassword
 	case domain.ServiceKindMongoDB:
-		return mongoPassword
+		return data.MongoPassword
 	}
-	return pgPassword
+	return data.PGPassword
 }

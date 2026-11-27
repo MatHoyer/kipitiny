@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 )
 
 func (a *API) pgDatabases(w http.ResponseWriter, r *http.Request) {
@@ -80,9 +80,9 @@ func (a *API) pgExport(w http.ResponseWriter, r *http.Request) {
 }
 
 // rowQuery reads paging, sorting and filters (a JSON array) from the URL.
-func rowQuery(w http.ResponseWriter, r *http.Request) (core.RowQuery, bool) {
+func rowQuery(w http.ResponseWriter, r *http.Request) (data.RowQuery, bool) {
 	v := r.URL.Query()
-	q := core.RowQuery{OrderBy: v.Get("order"), Desc: v.Get("desc") == "true", Search: v.Get("search")}
+	q := data.RowQuery{OrderBy: v.Get("order"), Desc: v.Get("desc") == "true", Search: v.Get("search")}
 	q.Limit, _ = strconv.Atoi(v.Get("limit"))
 	q.Offset, _ = strconv.Atoi(v.Get("offset"))
 	if f := v.Get("filters"); f != "" {
@@ -114,7 +114,7 @@ func (l *lazyHeaders) Write(p []byte) (int, error) {
 // parameters.
 func (a *API) mongoDocuments(w http.ResponseWriter, r *http.Request) {
 	v := r.URL.Query()
-	q := core.DocQuery{Filter: v.Get("filter"), Sort: v.Get("sort")}
+	q := data.DocQuery{Filter: v.Get("filter"), Sort: v.Get("sort")}
 	q.Limit, _ = strconv.Atoi(v.Get("limit"))
 	q.Skip, _ = strconv.Atoi(v.Get("skip"))
 	docs, err := a.core.MongoDocuments(r.Context(), r.PathValue("id"), v.Get("database"), r.PathValue("collection"), q)
@@ -170,7 +170,7 @@ func (a *API) dataConsole(w http.ResponseWriter, r *http.Request) {
 func (a *API) rowChanges(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Database string          `json:"database"`
-		Changes  core.RowChanges `json:"changes"`
+		Changes  data.RowChanges `json:"changes"`
 		// Apply runs the changes; without it, only their statements return.
 		Apply bool `json:"apply"`
 	}
@@ -188,7 +188,7 @@ func (a *API) rowChanges(w http.ResponseWriter, r *http.Request) {
 func (a *API) docChanges(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Database string          `json:"database"`
-		Changes  core.DocChanges `json:"changes"`
+		Changes  data.DocChanges `json:"changes"`
 		Apply    bool            `json:"apply"`
 	}
 	if !decode(w, r, &body) {
@@ -205,7 +205,7 @@ func (a *API) docChanges(w http.ResponseWriter, r *http.Request) {
 func (a *API) keyChanges(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Key     string          `json:"key"`
-		Changes core.KeyChanges `json:"changes"`
+		Changes data.KeyChanges `json:"changes"`
 		Apply   bool            `json:"apply"`
 	}
 	if !decode(w, r, &body) {
@@ -224,7 +224,7 @@ func (a *API) createTable(w http.ResponseWriter, r *http.Request) {
 		Database string           `json:"database"`
 		Schema   string           `json:"schema"`
 		Name     string           `json:"name"`
-		Columns  []core.NewColumn `json:"columns"`
+		Columns  []data.NewColumn `json:"columns"`
 		Apply    bool             `json:"apply"`
 	}
 	if !decode(w, r, &body) {

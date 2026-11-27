@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -18,7 +18,7 @@ import (
 // them here.
 
 type listSchedulesOut struct {
-	Schedules []core.ScheduleView `json:"schedules"`
+	Schedules []data.ScheduleView `json:"schedules"`
 }
 
 func (t *tools) listBackupSchedules(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, listSchedulesOut, error) {
@@ -48,22 +48,22 @@ type setScheduleIn struct {
 	Verify      *bool   `json:"verify,omitempty" jsonschema:"restore-test each backup in a throwaway container (default false)"`
 }
 
-func (t *tools) setBackupSchedule(ctx context.Context, _ *mcp.CallToolRequest, in setScheduleIn) (*mcp.CallToolResult, core.ScheduleView, error) {
-	out, err := mutate(ctx, t.c, "set_backup_schedule", in.Service, func() (core.ScheduleView, error) {
+func (t *tools) setBackupSchedule(ctx context.Context, _ *mcp.CallToolRequest, in setScheduleIn) (*mcp.CallToolResult, data.ScheduleView, error) {
+	out, err := mutate(ctx, t.c, "set_backup_schedule", in.Service, func() (data.ScheduleView, error) {
 		svc, err := t.service(ctx, in.Service, identity.PermBackups)
 		if err != nil {
-			return core.ScheduleView{}, err
+			return data.ScheduleView{}, err
 		}
-		sc := core.ScheduleInput{KeepDaily: 7, KeepWeekly: 4, KeepMonthly: 6, Enabled: true}
+		sc := data.ScheduleInput{KeepDaily: 7, KeepWeekly: 4, KeepMonthly: 6, Enabled: true}
 		if in.ScheduleID != "" {
 			cur, err := t.schedule(ctx, svc.ID, in.ScheduleID)
 			if err != nil {
-				return core.ScheduleView{}, err
+				return data.ScheduleView{}, err
 			}
-			sc = core.ScheduleInput{TargetID: cur.TargetID, Database: cur.Database, Cron: cur.Cron, KeepLast: cur.KeepLast,
+			sc = data.ScheduleInput{TargetID: cur.TargetID, Database: cur.Database, Cron: cur.Cron, KeepLast: cur.KeepLast,
 				KeepDaily: cur.KeepDaily, KeepWeekly: cur.KeepWeekly, KeepMonthly: cur.KeepMonthly, Enabled: cur.Enabled, Verify: cur.Verify}
 		} else if in.Cron == nil {
-			return core.ScheduleView{}, fmt.Errorf("a new schedule needs a cron")
+			return data.ScheduleView{}, fmt.Errorf("a new schedule needs a cron")
 		}
 		set(&sc.Cron, in.Cron)
 		set(&sc.TargetID, in.Storage)
@@ -90,14 +90,14 @@ func set[T any](dst *T, v *T) {
 
 // schedule finds one of the service's schedules, so an ID can't reach
 // another service's (or the manager's) schedule.
-func (t *tools) schedule(ctx context.Context, serviceID, id string) (core.ScheduleView, error) {
+func (t *tools) schedule(ctx context.Context, serviceID, id string) (data.ScheduleView, error) {
 	scs, err := t.c.ListBackupSchedules(ctx, serviceID)
 	if err != nil {
-		return core.ScheduleView{}, err
+		return data.ScheduleView{}, err
 	}
-	i := slices.IndexFunc(scs, func(sc core.ScheduleView) bool { return sc.ID == id })
+	i := slices.IndexFunc(scs, func(sc data.ScheduleView) bool { return sc.ID == id })
 	if i < 0 {
-		return core.ScheduleView{}, fmt.Errorf("%w: schedule %s of this service", domain.ErrNotFound, id)
+		return data.ScheduleView{}, fmt.Errorf("%w: schedule %s of this service", domain.ErrNotFound, id)
 	}
 	return scs[i], nil
 }

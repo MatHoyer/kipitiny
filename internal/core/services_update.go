@@ -9,6 +9,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
@@ -196,7 +197,7 @@ func (c *Core) patched(old domain.Service, p ServicePatch) (domain.Service, erro
 		svc.Healthcheck = *p.Healthcheck
 	}
 	if p.Volumes != nil {
-		svc.Volumes = normalizeVolumes(p.Volumes)
+		svc.Volumes = data.NormalizeVolumes(p.Volumes)
 	}
 	if p.PreBackup != nil {
 		svc.PreBackup = strings.TrimSpace(*p.PreBackup)
@@ -237,7 +238,7 @@ func (c *Core) patched(old domain.Service, p ServicePatch) (domain.Service, erro
 		}
 	}
 	if svc.Kind.IsDatabase() {
-		if err := checkDatabaseUpdate(old, svc); err != nil {
+		if err := data.CheckDatabaseUpdate(old, svc); err != nil {
 			return domain.Service{}, err
 		}
 	}

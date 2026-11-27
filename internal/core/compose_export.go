@@ -9,6 +9,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
@@ -183,7 +184,7 @@ func exportFile(p domain.Project, svcs []domain.Service, checks map[string]domai
 		case s.Kind.IsDatabase():
 			cs.X.Kind = string(s.Kind)
 			cs.X.Password = secret(varName(s.Name, "PASSWORD"), s.Env[databasePasswordKey(s.Kind)])
-			for _, k := range databaseNameKeys { // to recreate it alike
+			for _, k := range data.DatabaseNameKeys { // to recreate it alike
 				if v, ok := s.Env[k]; ok {
 					if cs.Environment == nil {
 						cs.Environment = map[string]string{}

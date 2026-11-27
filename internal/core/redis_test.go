@@ -6,15 +6,9 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
-
-func redisService() domain.Service {
-	return domain.Service{
-		ID: "01CACHE", ProjectID: "P1", Name: "cache", Kind: domain.ServiceKindRedis,
-		Image: DefaultRedisImage, Replicas: 1, MemoryMB: 256, Env: newRedisEnv(),
-	}
-}
 
 func TestValidateRedis(t *testing.T) {
 	if err := validateService(redisService()); err != nil {
@@ -24,8 +18,8 @@ func TestValidateRedis(t *testing.T) {
 		"replicas":     func(s *domain.Service) { s.Replicas = 2 },
 		"public":       func(s *domain.Service) { s.Domain, s.Port = "cache.example.com", 6379 },
 		"low memory":   func(s *domain.Service) { s.MemoryMB = 16 },
-		"no password":  func(s *domain.Service) { delete(s.Env, redisPassword) },
-		"bad password": func(s *domain.Service) { s.Env[redisPassword] = "has space and is long" },
+		"no password":  func(s *domain.Service) { delete(s.Env, data.RedisPassword) },
+		"bad password": func(s *domain.Service) { s.Env[data.RedisPassword] = "has space and is long" },
 		"db reference": func(s *domain.Service) { s.Env["OTHER"] = "{{ db.other.URL }}" },
 		"pre-deploy":   func(s *domain.Service) { s.PreDeploy = "true" },
 	} {
@@ -37,24 +31,9 @@ func TestValidateRedis(t *testing.T) {
 	}
 }
 
-func TestCheckRedisUpdate(t *testing.T) {
-	old := redisService()
-	upgrade := old
-	upgrade.Image = "redis:8.2-alpine"
-	upgrade.MemoryMB = 512
-	if err := checkDatabaseUpdate(old, upgrade); err != nil {
-		t.Errorf("image/memory change refused: %v", err)
-	}
-	creds := old
-	creds.Env = newRedisEnv()
-	if err := checkDatabaseUpdate(old, creds); !errors.Is(err, ErrInvalid) {
-		t.Errorf("password change allowed: %v", err)
-	}
-}
-
 func TestRedisRefs(t *testing.T) {
 	db := redisService()
-	db.Env[redisPassword] = "s3cr3t-pass_word0"
+	db.Env[data.RedisPassword] = "s3cr3t-pass_word0"
 	src := envSources{dbs: map[string]domain.Service{db.Name: db}}
 	for ref, want := range map[string]string{
 		"{{ db.cache.URL }}":      "redis://:s3cr3t-pass_word0@cache:6379",
@@ -83,19 +62,19 @@ func TestRedisContainerSpec(t *testing.T) {
 		t.Errorf("memory = %d", spec.HostConfig.Memory)
 	}
 	cmd := spec.Config.Cmd
-	if i := slices.Index(cmd, "--requirepass"); i < 0 || cmd[i+1] != svc.Env[redisPassword] {
+	if i := slices.Index(cmd, "--requirepass"); i < 0 || cmd[i+1] != svc.Env[data.RedisPassword] {
 		t.Errorf("password not set: %v", cmd)
 	}
 	if i := slices.Index(cmd, "--maxmemory"); i < 0 || cmd[i+1] != "192mb" {
 		t.Errorf("maxmemory not set: %v", cmd)
 	}
-	if !slices.Contains(spec.Config.Env, "REDISCLI_AUTH="+svc.Env[redisPassword]) {
+	if !slices.Contains(spec.Config.Env, "REDISCLI_AUTH="+svc.Env[data.RedisPassword]) {
 		t.Errorf("REDISCLI_AUTH missing: %v", spec.Config.Env)
 	}
 	if spec.Config.Healthcheck == nil {
 		t.Error("healthcheck missing")
 	}
-	if len(spec.HostConfig.Mounts) != 1 || spec.HostConfig.Mounts[0].Source != RedisVolume(svc.ID) || DataVolume(svc) != RedisVolume(svc.ID) {
+	if len(spec.HostConfig.Mounts) != 1 || spec.HostConfig.Mounts[0].Source != data.RedisVolume(svc.ID) || data.DataVolume(svc) != data.RedisVolume(svc.ID) {
 		t.Errorf("mounts = %v", spec.HostConfig.Mounts)
 	}
 	if _, public := spec.Config.Labels["traefik.enable"]; public {

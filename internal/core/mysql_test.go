@@ -3,26 +3,12 @@ package core
 import (
 	"errors"
 	"maps"
-	"slices"
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
-
-func mysqlService(kind domain.ServiceKind) domain.Service {
-	return domain.Service{
-		ID: "01SQL", ProjectID: "P1", Name: "sql", Kind: kind,
-		Image: defaultMySQLImage(kind), Replicas: 1, MemoryMB: 512, Env: newMySQLEnv(),
-	}
-}
-
-func mongoService() domain.Service {
-	return domain.Service{
-		ID: "01DOCS", ProjectID: "P1", Name: "docs", Kind: domain.ServiceKindMongoDB,
-		Image: DefaultMongoImage, Replicas: 1, MemoryMB: 1024, Env: newMongoEnv(),
-	}
-}
 
 func TestValidateMySQLAndMongo(t *testing.T) {
 	for _, base := range []domain.Service{mysqlService(domain.ServiceKindMySQL), mysqlService(domain.ServiceKindMariaDB), mongoService()} {
@@ -47,12 +33,12 @@ func TestValidateMySQLAndMongo(t *testing.T) {
 		creds := base
 		creds.Env = maps.Clone(base.Env)
 		creds.Env[pw] = "changed"
-		if err := checkDatabaseUpdate(base, creds); !errors.Is(err, ErrInvalid) {
+		if err := data.CheckDatabaseUpdate(base, creds); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: password change allowed: %v", base.Kind, err)
 		}
 	}
 	root := mysqlService(domain.ServiceKindMySQL)
-	delete(root.Env, mysqlRootPassword)
+	delete(root.Env, data.MySQLRootPassword)
 	if err := validateService(root); !errors.Is(err, ErrInvalid) {
 		t.Errorf("no root password: %v", err)
 	}
@@ -60,9 +46,9 @@ func TestValidateMySQLAndMongo(t *testing.T) {
 
 func TestMySQLAndMongoRefs(t *testing.T) {
 	sql := mysqlService(domain.ServiceKindMariaDB)
-	sql.Env[mysqlPassword] = "p@ss"
+	sql.Env[data.MySQLPassword] = "p@ss"
 	docs := mongoService()
-	docs.Env[mongoPassword] = "s3cr3t"
+	docs.Env[data.MongoPassword] = "s3cr3t"
 	src := envSources{dbs: map[string]domain.Service{sql.Name: sql, docs.Name: docs}}
 	for ref, want := range map[string]string{
 		"{{ db.sql.URL }}":       "mysql://app:p%40ss@sql:3306/app",
@@ -90,7 +76,7 @@ func TestMySQLAndMongoContainerSpec(t *testing.T) {
 		if spec.Config.Healthcheck == nil || len(spec.Config.Cmd) == 0 || spec.Config.Cmd[0][0] != '-' {
 			t.Errorf("%s: cmd %v, healthcheck %v", svc.Kind, spec.Config.Cmd, spec.Config.Healthcheck)
 		}
-		if len(spec.HostConfig.Mounts) != 1 || spec.HostConfig.Mounts[0].Source != DataVolume(svc) || DataVolume(svc) == "" {
+		if len(spec.HostConfig.Mounts) != 1 || spec.HostConfig.Mounts[0].Source != data.DataVolume(svc) || data.DataVolume(svc) == "" {
 			t.Errorf("%s: mounts = %v", svc.Kind, spec.HostConfig.Mounts)
 		}
 		if spec.Config.Labels["kipitiny.component"] != string(svc.Kind) {
@@ -99,31 +85,10 @@ func TestMySQLAndMongoContainerSpec(t *testing.T) {
 		if _, public := spec.Config.Labels["traefik.enable"]; public {
 			t.Errorf("%s: database exposed to traefik", svc.Kind)
 		}
-		if k, err := backupKind(svc); k != domain.BackupKindDump || err != nil || volumeNames(svc) != nil {
-			t.Errorf("%s: backed up as %q (%v), volumes %v", svc.Kind, k, err, volumeNames(svc))
-		}
-	}
-	if cmd := mysqlArgs(512); !slices.Contains(cmd, "--innodb-buffer-pool-size=256M") {
-		t.Errorf("mysql args = %v", cmd)
-	}
-	for mem, want := range map[int]string{512: "0.25", 1024: "0.25", 4096: "1.50"} {
-		if got := mongoArgs(mem); got[1] != want {
-			t.Errorf("mongo cache for %d MB = %s, want %s", mem, got[1], want)
-		}
 	}
 	// Mongo's config VOLUME would leave an anonymous volume per recreate.
 	spec := containerSpec(p, mongoService(), envSources{}, "D1", 1, network.Routing{Resolver: network.CertResolverTLS})
-	if _, ok := spec.HostConfig.Tmpfs[mongoConfigMount]; !ok {
+	if _, ok := spec.HostConfig.Tmpfs[data.MongoConfigMount]; !ok {
 		t.Errorf("tmpfs = %v", spec.HostConfig.Tmpfs)
-	}
-}
-
-func TestMySQLDumpCmd(t *testing.T) {
-	if cmd := mysqlDumpCmd(domain.ServiceKindMariaDB, "app"); cmd[0] != "mariadb-dump" || slices.Contains(cmd, "--set-gtid-purged=OFF") ||
-		cmd[len(cmd)-1] != "app" || cmd[len(cmd)-2] != "--" {
-		t.Errorf("mariadb = %v", cmd)
-	}
-	if cmd := mysqlDumpCmd(domain.ServiceKindMySQL, "app"); cmd[0] != "mysqldump" || !slices.Contains(cmd, "--set-gtid-purged=OFF") {
-		t.Errorf("mysql = %v", cmd)
 	}
 }

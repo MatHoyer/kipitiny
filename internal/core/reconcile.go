@@ -17,6 +17,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
@@ -339,7 +340,7 @@ func (c *Core) reconcileService(ctx context.Context, project domain.Project, svc
 			time.Sleep(retireGap)
 		}
 		log.Info("reconcile: removing extra replica", "container", ct.Names[0][1:])
-		if err := dk.RemoveContainer(ctx, ct.ID, stopTimeoutFor(svc)); err != nil {
+		if err := dk.RemoveContainer(ctx, ct.ID, data.StopTimeoutFor(svc)); err != nil {
 			return err
 		}
 	}

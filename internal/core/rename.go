@@ -119,7 +119,7 @@ func (c *Core) RenameService(ctx context.Context, id, name string) (ServiceView,
 			if env := renameAppRefs(s.Env, old, name); !maps.Equal(env, s.Env) {
 				s.Env, changed = env, true
 			}
-		case usesDatabase(s.Env, old):
+		case domain.UsesDatabase(s.Env, old):
 			s.Env, changed = renameDatabaseRefs(s.Env, old, name), true
 			if s.Kind == domain.ServiceKindApp && !s.Stopped && s.CurrentDeploymentID != "" {
 				dependents = append(dependents, s.ID)

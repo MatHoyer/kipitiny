@@ -8,6 +8,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/anonymize"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 )
 
 // anonymizeRoundTrip backs svc up (seed writes its data), turns on
@@ -43,7 +44,7 @@ func anonymizeRoundTrip(ctx context.Context, t *testing.T, c *Core, svc, into do
 		t.Fatalf("the copy shows among backups: %+v", bs)
 	}
 	// Up to date: nothing new.
-	if err := c.refreshAnonymized(ctx, svc.ProjectID, false); err != nil {
+	if err := c.RefreshAnonymized(ctx, svc.ProjectID, false); err != nil {
 		t.Fatal(err)
 	}
 	if again, _ := c.store.ListBackups(ctx, domain.BackupFilter{Anonymized: true, SourceID: b.ID}); len(again) != 1 {
@@ -60,7 +61,7 @@ func anonymizeRoundTrip(ctx context.Context, t *testing.T, c *Core, svc, into do
 	if err := c.store.SetServiceAnonymize(ctx, svc.ID, anonymize.Rules{"nope": {Action: anonymize.Truncate}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.refreshAnonymized(ctx, svc.ProjectID, false); err != nil {
+	if err := c.RefreshAnonymized(ctx, svc.ProjectID, false); err != nil {
 		t.Fatal(err)
 	}
 	bad := waitCopy(t, c, b.ID, cp.ID)
@@ -158,7 +159,7 @@ func TestAnonymizeDockerMySQL(t *testing.T) {
 		t.Run(string(kind), func(t *testing.T) {
 			c, ctx, svc, exec := dumpTestDB(t, kind)
 			app := func(sql string) string {
-				return exec(`MYSQL_PWD="$MYSQL_PASSWORD" ` + mysqlBin(kind, "mysql") + ` -h 127.0.0.1 -u"$MYSQL_USER" -NB "$MYSQL_DATABASE" -e "` + sql + `"`)
+				return exec(`MYSQL_PWD="$MYSQL_PASSWORD" ` + data.MySQLBin(kind, "mysql") + ` -h 127.0.0.1 -u"$MYSQL_USER" -NB "$MYSQL_DATABASE" -e "` + sql + `"`)
 			}
 			rules := anonymize.Rules{
 				"users":    {Columns: map[string]string{"email": "fake:email", "name": "fake:name", "phone": "fake:phone", "pw": "fixed:o'k", "note": "null"}},

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -167,7 +168,7 @@ func TestPortsAndVolumesHostAccess(t *testing.T) {
 	app := domain.Service{ID: "S1", ProjectID: "P1", Kind: domain.ServiceKindApp, Image: "x", Replicas: 1, Env: map[string]string{},
 		PublishedPorts: network.NormalizePorts([]domain.PublishedPort{{HostIP: "127.0.0.1", HostPort: 5432}, {HostIP: "0.0.0.0", HostPort: 80},
 			{HostIP: "10.0.0.1", HostPort: 5432}}),
-		Volumes: normalizeVolumes([]domain.Volume{{Name: "conf", Path: "/conf", ReadOnly: true}, {Name: "media", Path: "/media", External: "nas"},
+		Volumes: data.NormalizeVolumes([]domain.Volume{{Name: "conf", Path: "/conf", ReadOnly: true}, {Name: "media", Path: "/media", External: "nas"},
 			{Name: "nfs", Path: "/nfs", DriverOpts: map[string]string{"type": "nfs", "o": "addr=10.0.0.5", "device": ":/x"}}})}
 	if err := validateService(app); err != nil {
 		t.Fatal(err)

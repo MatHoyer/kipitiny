@@ -41,6 +41,15 @@ type ServiceRepository interface {
 type ServiceKind string
 
 const (
+	// StopTimeout is how long a container gets to stop, unless its service
+	// sets its own grace.
+	StopTimeout = 10 * time.Second
+	// ProbeDir is where the probe volume is mounted in app containers: no
+	// volume or file of a service may go there.
+	ProbeDir = "/.kipitiny"
+)
+
+const (
 	ServiceKindApp      ServiceKind = "app"
 	ServiceKindPostgres ServiceKind = "postgres"
 	ServiceKindRedis    ServiceKind = "redis"

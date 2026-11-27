@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 )
 
 // maxUpload caps one file written to a volume.
@@ -84,7 +84,7 @@ func (a *API) downloadVolumeFiles(w http.ResponseWriter, r *http.Request) {
 // editor's save (overwrite=true and the modified time it read).
 func (a *API) writeVolumeFile(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	opts := core.WriteOptions{Overwrite: q.Get("overwrite") == "true"}
+	opts := data.WriteOptions{Overwrite: q.Get("overwrite") == "true"}
 	if m := q.Get("modified"); m != "" {
 		t, err := time.Parse(time.RFC3339, m)
 		if err != nil {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 )
 
 // TestExternalVolumesDocker checks that a missing external volume fails the
@@ -32,11 +33,11 @@ func TestExternalVolumesDocker(t *testing.T) {
 	t.Cleanup(func() { _, _ = dk.VolumeRemove(context.Background(), name, client.VolumeRemoveOptions{}) })
 
 	svc := domain.Service{Volumes: []domain.Volume{{Name: "data", Path: "/data", External: name}}}
-	if err := checkExternalVolumes(ctx, dk, svc); err != nil {
+	if err := data.CheckExternalVolumes(ctx, dk, svc); err != nil {
 		t.Fatalf("existing volume: %v", err)
 	}
 	svc.Volumes[0].External = "kipitiny-test-missing-vol"
-	if err := checkExternalVolumes(ctx, dk, svc); err == nil || !strings.Contains(err.Error(), "doesn't exist") {
+	if err := data.CheckExternalVolumes(ctx, dk, svc); err == nil || !strings.Contains(err.Error(), "doesn't exist") {
 		t.Fatalf("missing volume: got %v", err)
 	}
 	if _, err := dk.VolumeInspect(ctx, "kipitiny-test-missing-vol", client.VolumeInspectOptions{}); err == nil {

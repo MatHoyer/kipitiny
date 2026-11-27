@@ -8,32 +8,9 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
-
-func TestPostgresMajor(t *testing.T) {
-	for image, want := range map[string]int{
-		"postgres:17-alpine":         17,
-		"postgres:16.4":              16,
-		"postgres:18":                18,
-		"postgis/postgis:16-3.4":     16,
-		"postgres":                   0, // implicit latest
-		"postgres:latest":            0,
-		"postgres@sha256:" + sha:     0,
-		"ghcr.io/org/pg:15-bookworm": 15,
-	} {
-		if got := postgresMajor(image); got != want {
-			t.Errorf("postgresMajor(%q) = %d, want %d", image, got, want)
-		}
-	}
-}
-
-func pgService() domain.Service {
-	return domain.Service{
-		ID: "01DB", ProjectID: "P1", Name: "db", Kind: domain.ServiceKindPostgres,
-		Image: DefaultPostgresImage, Replicas: 1, MemoryMB: 512, Env: newPostgresEnv(),
-	}
-}
 
 func TestValidatePostgres(t *testing.T) {
 	if err := validateService(pgService()); err != nil {
@@ -44,7 +21,7 @@ func TestValidatePostgres(t *testing.T) {
 		"public":           func(s *domain.Service) { s.Domain, s.Port = "db.example.com", 5432 },
 		"low memory":       func(s *domain.Service) { s.MemoryMB = 64 },
 		"unpinned":         func(s *domain.Service) { s.Image = "postgres:latest" },
-		"no password":      func(s *domain.Service) { delete(s.Env, pgPassword) },
+		"no password":      func(s *domain.Service) { delete(s.Env, data.PGPassword) },
 		"db reference":     func(s *domain.Service) { s.Env["OTHER"] = "{{ project.A }}/{{ db.other.URL }}" },
 		"secret reference": func(s *domain.Service) { s.Env["OTHER"] = "{{ pass://V/I/password }}" },
 	} {
@@ -62,13 +39,13 @@ func TestCheckDatabaseUpdate(t *testing.T) {
 
 	minor := old
 	minor.Image = "postgres:17.2-alpine"
-	if err := checkDatabaseUpdate(old, minor); err != nil {
+	if err := data.CheckDatabaseUpdate(old, minor); err != nil {
 		t.Errorf("minor upgrade refused: %v", err)
 	}
 
 	major := old
 	major.Image = "postgres:18-alpine"
-	if err := checkDatabaseUpdate(old, major); !errors.Is(err, ErrInvalid) {
+	if err := data.CheckDatabaseUpdate(old, major); !errors.Is(err, ErrInvalid) {
 		t.Errorf("major upgrade allowed: %v", err)
 	}
 
@@ -83,31 +60,22 @@ func TestCheckDatabaseUpdate(t *testing.T) {
 	} {
 		libc := old
 		libc.Image = image
-		if err := checkDatabaseUpdate(old, libc); (err == nil) != ok {
+		if err := data.CheckDatabaseUpdate(old, libc); (err == nil) != ok {
 			t.Errorf("%s → %s: %v", old.Image, image, err)
 		}
 	}
 
 	creds := old
-	creds.Env = map[string]string{pgUser: "app", pgPassword: "changed", pgDatabase: "app"}
-	if err := checkDatabaseUpdate(old, creds); !errors.Is(err, ErrInvalid) {
+	creds.Env = map[string]string{data.PGUser: "app", data.PGPassword: "changed", data.PGDatabase: "app"}
+	if err := data.CheckDatabaseUpdate(old, creds); !errors.Is(err, ErrInvalid) {
 		t.Errorf("password change allowed: %v", err)
 	}
 
 	extra := old
 	extra.Env = map[string]string{"TZ": "Europe/Paris"}
 	maps.Copy(extra.Env, old.Env)
-	if err := checkDatabaseUpdate(old, extra); !errors.Is(err, ErrInvalid) {
+	if err := data.CheckDatabaseUpdate(old, extra); !errors.Is(err, ErrInvalid) {
 		t.Errorf("env change allowed: %v", err)
-	}
-}
-
-func TestDatabaseURLEscapes(t *testing.T) {
-	db := pgService()
-	db.Env[pgPassword] = "p@ss/w:rd"
-	got := DatabaseURL(db)
-	if got != "postgres://app:p%40ss%2Fw%3Ard@db:5432/postgres" {
-		t.Errorf("DatabaseURL = %q", got)
 	}
 }
 
@@ -123,7 +91,7 @@ func TestPostgresContainerSpec(t *testing.T) {
 	if spec.HostConfig.NanoCPUs != 1_500_000_000 {
 		t.Errorf("nano cpus = %d", spec.HostConfig.NanoCPUs)
 	}
-	if !slices.Contains(spec.Config.Env, "PGDATA="+pgDataDir) {
+	if !slices.Contains(spec.Config.Env, "PGDATA="+data.PGDataDir) {
 		t.Errorf("PGDATA missing: %v", spec.Config.Env)
 	}
 	if !slices.Contains(spec.Config.Cmd, "shared_buffers=128MB") {
@@ -132,7 +100,7 @@ func TestPostgresContainerSpec(t *testing.T) {
 	if spec.Config.Healthcheck == nil || !strings.Contains(spec.Config.Healthcheck.Test[1], "pg_isready") {
 		t.Error("healthcheck missing")
 	}
-	if len(spec.HostConfig.Mounts) != 1 || spec.HostConfig.Mounts[0].Source != PostgresVolume("01DB") {
+	if len(spec.HostConfig.Mounts) != 1 || spec.HostConfig.Mounts[0].Source != data.PostgresVolume("01DB") {
 		t.Errorf("mounts = %v", spec.HostConfig.Mounts)
 	}
 	if _, public := spec.Config.Labels["traefik.enable"]; public {
@@ -147,17 +115,7 @@ func TestDatabaseRefsInSpec(t *testing.T) {
 		Env: map[string]string{"DATABASE_URL": "{{ db." + db.Name + ".URL }}"}}
 
 	spec := containerSpec(p, app, envSources{project: p.Env, dbs: map[string]domain.Service{db.Name: db}}, "D1", 1, network.Routing{Resolver: network.CertResolverTLS})
-	if !slices.Contains(spec.Config.Env, "DATABASE_URL="+DatabaseURL(db)) {
+	if !slices.Contains(spec.Config.Env, "DATABASE_URL="+data.DatabaseURL(db)) {
 		t.Errorf("DATABASE_URL not resolved: %v", spec.Config.Env)
-	}
-}
-
-func TestParseVerifyOutput(t *testing.T) {
-	d, err := parseVerifyOutput("3|100000|8421376\n")
-	if err != nil || d.Tables != 3 || d.Rows != 100000 || d.DBBytes != 8421376 {
-		t.Fatalf("got %+v %v", d, err)
-	}
-	if _, err := parseVerifyOutput("ERROR"); err == nil {
-		t.Fatal("garbage accepted")
 	}
 }

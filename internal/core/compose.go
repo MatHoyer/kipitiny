@@ -124,7 +124,7 @@ func (c *Core) applyCompose(ctx context.Context, projectID string, data []byte, 
 		return a, err
 	}
 	if project.ParentID == "" { // rules may have changed
-		c.logAnonymizeErr(c.refreshAnonymized(ctx, projectID, false))
+		c.LogAnonymizeErr(c.RefreshAnonymized(ctx, projectID, false))
 	}
 	return a, nil
 }

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
@@ -93,7 +94,7 @@ func (src envSources) lookup(m []string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return databaseField(db, m[3])
+	return data.DatabaseField(db, m[3])
 }
 
 // expandSecrets substitutes the password manager and app references in
@@ -167,28 +168,13 @@ func (c *Core) envSources(ctx context.Context, project domain.Project, svc domai
 	return src, nil
 }
 
-// refName is how a reference is named in messages: project.NAME,
-// db.SERVICE.FIELD, app.SERVICE.FIELD.
-func refName(m []string) string {
-	if m[5] != "" {
-		return "app." + m[5] + "." + m[6]
-	}
-	if m[1] != "" {
-		return "project." + m[1]
-	}
-	if m[4] != "" {
-		return m[4]
-	}
-	return "db." + m[2] + "." + m[3]
-}
-
 // unresolved lists the references in env that src can't resolve, sorted.
 func unresolved(env map[string]string, src envSources) []string {
 	var out []string
 	for _, v := range env {
 		for _, m := range domain.EnvRefRe.FindAllStringSubmatch(v, -1) {
 			if _, ok := src.lookup(m); !ok {
-				out = append(out, refName(m))
+				out = append(out, domain.RefName(m))
 			}
 		}
 	}
@@ -201,18 +187,6 @@ func checkRefs(env map[string]string, src envSources) error {
 		return fmt.Errorf("%w: unknown reference %s", ErrInvalid, strings.Join(missing, ", "))
 	}
 	return nil
-}
-
-// usesDatabase reports whether env references the database named name.
-func usesDatabase(env map[string]string, name string) bool {
-	for _, v := range env {
-		for _, m := range domain.EnvRefRe.FindAllStringSubmatch(v, -1) {
-			if m[2] == name {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // resolveEnv substitutes references; unknown ones become empty (deploys

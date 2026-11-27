@@ -3,11 +3,11 @@ package mcp
 import (
 	"context"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -75,10 +75,10 @@ type scanStorageIn struct {
 	Storage string `json:"storage" jsonschema:"storage ID (see list_storage)"`
 }
 
-func (t *tools) scanStorage(ctx context.Context, _ *mcp.CallToolRequest, in scanStorageIn) (*mcp.CallToolResult, core.ScanResult, error) {
-	out, err := mutate(ctx, t.c, "scan_storage", in.Storage, func() (core.ScanResult, error) {
+func (t *tools) scanStorage(ctx context.Context, _ *mcp.CallToolRequest, in scanStorageIn) (*mcp.CallToolResult, data.ScanResult, error) {
+	out, err := mutate(ctx, t.c, "scan_storage", in.Storage, func() (data.ScanResult, error) {
 		if err := identity.RequireAdmin(ctx); err != nil {
-			return core.ScanResult{}, err
+			return data.ScanResult{}, err
 		}
 		return t.c.ScanBackupTarget(ctx, in.Storage)
 	})

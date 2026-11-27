@@ -11,9 +11,11 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 	"github.com/kipit-labs/kipitiny/internal/mail"
 	"github.com/kipit-labs/kipitiny/internal/mail/mailtest"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
@@ -41,4 +43,33 @@ func (r redirect) RoundTrip(req *http.Request) (*http.Response, error) {
 // localProvider is an email provider sending to a fake server.
 func localProvider(name string, srv *mailtest.Server) monitoring.EmailProviderInput {
 	return monitoring.EmailProviderInput{Name: name, Config: mail.Config{Host: "127.0.0.1", Port: srv.Port, Security: mail.None, From: "ops@example.com"}}
+}
+
+// The database services of the spec tests (the data tests have their own).
+func pgService() domain.Service {
+	return domain.Service{
+		ID: "01DB", ProjectID: "P1", Name: "db", Kind: domain.ServiceKindPostgres,
+		Image: data.DefaultPostgresImage, Replicas: 1, MemoryMB: 512, Env: data.NewPostgresEnv(),
+	}
+}
+
+func redisService() domain.Service {
+	return domain.Service{
+		ID: "01CACHE", ProjectID: "P1", Name: "cache", Kind: domain.ServiceKindRedis,
+		Image: data.DefaultRedisImage, Replicas: 1, MemoryMB: 256, Env: data.NewRedisEnv(),
+	}
+}
+
+func mysqlService(kind domain.ServiceKind) domain.Service {
+	return domain.Service{
+		ID: "01SQL", ProjectID: "P1", Name: "sql", Kind: kind,
+		Image: data.MySQLImageFor(kind), Replicas: 1, MemoryMB: 512, Env: data.NewMySQLEnv(),
+	}
+}
+
+func mongoService() domain.Service {
+	return domain.Service{
+		ID: "01DOCS", ProjectID: "P1", Name: "docs", Kind: domain.ServiceKindMongoDB,
+		Image: data.DefaultMongoImage, Replicas: 1, MemoryMB: 1024, Env: data.NewMongoEnv(),
+	}
 }

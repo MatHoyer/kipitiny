@@ -3,11 +3,11 @@ package mcp
 import (
 	"context"
 
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -15,7 +15,7 @@ import (
 // The core checks the permissions of the data browser itself.
 
 type listDatabasesOut struct {
-	Databases []core.PgDatabase `json:"databases"`
+	Databases []data.PgDatabase `json:"databases"`
 }
 
 func (t *tools) listDatabases(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, listDatabasesOut, error) {
@@ -33,11 +33,11 @@ type createDatabaseIn struct {
 	Collection string `json:"collection,omitempty" jsonschema:"MongoDB only, required: the new database's first collection (a database without one doesn't exist)"`
 }
 
-func (t *tools) createDatabase(ctx context.Context, _ *mcp.CallToolRequest, in createDatabaseIn) (*mcp.CallToolResult, core.PgDatabase, error) {
-	db, err := mutate(ctx, t.c, "create_database", in.Service+"/"+in.Name, func() (core.PgDatabase, error) {
+func (t *tools) createDatabase(ctx context.Context, _ *mcp.CallToolRequest, in createDatabaseIn) (*mcp.CallToolResult, data.PgDatabase, error) {
+	db, err := mutate(ctx, t.c, "create_database", in.Service+"/"+in.Name, func() (data.PgDatabase, error) {
 		svc, err := t.service(ctx, in.Service, identity.PermView)
 		if err != nil {
-			return core.PgDatabase{}, err
+			return data.PgDatabase{}, err
 		}
 		return t.c.CreatePgDatabase(ctx, svc.ID, in.Name, in.Collection)
 	})
@@ -50,7 +50,7 @@ type listTablesIn struct {
 }
 
 type listTablesOut struct {
-	Tables []core.PgTable `json:"tables"`
+	Tables []data.PgTable `json:"tables"`
 }
 
 func (t *tools) listTables(ctx context.Context, _ *mcp.CallToolRequest, in listTablesIn) (*mcp.CallToolResult, listTablesOut, error) {
@@ -72,13 +72,13 @@ type readTableIn struct {
 	OrderBy  string          `json:"order_by,omitempty" jsonschema:"column to sort by"`
 	Desc     bool            `json:"desc,omitempty" jsonschema:"sort descending"`
 	Search   string          `json:"search,omitempty" jsonschema:"keep rows where any column contains this text (case-insensitive)"`
-	Filters  []core.PgFilter `json:"filters,omitempty" jsonschema:"conditions all rows meet; op is one of = != < <= > >= like null notnull"`
+	Filters  []data.PgFilter `json:"filters,omitempty" jsonschema:"conditions all rows meet; op is one of = != < <= > >= like null notnull"`
 }
 
-func (t *tools) readTable(ctx context.Context, _ *mcp.CallToolRequest, in readTableIn) (*mcp.CallToolResult, core.PgRows, error) {
+func (t *tools) readTable(ctx context.Context, _ *mcp.CallToolRequest, in readTableIn) (*mcp.CallToolResult, data.PgRows, error) {
 	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
-		return nil, core.PgRows{}, friendly(err)
+		return nil, data.PgRows{}, friendly(err)
 	}
 	schema := in.Schema
 	if schema == "" && svc.Kind == domain.ServiceKindPostgres {
@@ -88,8 +88,8 @@ func (t *tools) readTable(ctx context.Context, _ *mcp.CallToolRequest, in readTa
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := t.c.PgRows(ctx, svc.ID, in.Database, schema, in.Table, core.RowQuery{
-		Limit: min(limit, core.DataPageMax), Offset: in.Offset, OrderBy: in.OrderBy, Desc: in.Desc,
+	rows, err := t.c.PgRows(ctx, svc.ID, in.Database, schema, in.Table, data.RowQuery{
+		Limit: min(limit, data.DataPageMax), Offset: in.Offset, OrderBy: in.OrderBy, Desc: in.Desc,
 		Search: in.Search, Filters: in.Filters,
 	})
 	return nil, rows, friendly(err)
@@ -105,17 +105,17 @@ type findDocumentsIn struct {
 	Skip       int    `json:"skip,omitempty"`
 }
 
-func (t *tools) findDocuments(ctx context.Context, _ *mcp.CallToolRequest, in findDocumentsIn) (*mcp.CallToolResult, core.MongoDocs, error) {
+func (t *tools) findDocuments(ctx context.Context, _ *mcp.CallToolRequest, in findDocumentsIn) (*mcp.CallToolResult, data.MongoDocs, error) {
 	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
-		return nil, core.MongoDocs{}, friendly(err)
+		return nil, data.MongoDocs{}, friendly(err)
 	}
 	limit := in.Limit
 	if limit <= 0 {
 		limit = 50
 	}
-	docs, err := t.c.MongoDocuments(ctx, svc.ID, in.Database, in.Collection, core.DocQuery{
-		Filter: in.Filter, Sort: in.Sort, Limit: min(limit, core.DataPageMax), Skip: in.Skip,
+	docs, err := t.c.MongoDocuments(ctx, svc.ID, in.Database, in.Collection, data.DocQuery{
+		Filter: in.Filter, Sort: in.Sort, Limit: min(limit, data.DataPageMax), Skip: in.Skip,
 	})
 	return nil, docs, friendly(err)
 }
@@ -127,10 +127,10 @@ type scanRedisKeysIn struct {
 	Count   int    `json:"count,omitempty" jsonschema:"keys to look at in this step, max 200"`
 }
 
-func (t *tools) scanRedisKeys(ctx context.Context, _ *mcp.CallToolRequest, in scanRedisKeysIn) (*mcp.CallToolResult, core.RedisKeys, error) {
+func (t *tools) scanRedisKeys(ctx context.Context, _ *mcp.CallToolRequest, in scanRedisKeysIn) (*mcp.CallToolResult, data.RedisKeys, error) {
 	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
-		return nil, core.RedisKeys{}, friendly(err)
+		return nil, data.RedisKeys{}, friendly(err)
 	}
 	keys, err := t.c.RedisScan(ctx, svc.ID, in.Cursor, in.Pattern, in.Count)
 	return nil, keys, friendly(err)
@@ -143,10 +143,10 @@ type getRedisKeyIn struct {
 	Count   int    `json:"count,omitempty" jsonschema:"items per page, max 200"`
 }
 
-func (t *tools) getRedisKey(ctx context.Context, _ *mcp.CallToolRequest, in getRedisKeyIn) (*mcp.CallToolResult, core.RedisValue, error) {
+func (t *tools) getRedisKey(ctx context.Context, _ *mcp.CallToolRequest, in getRedisKeyIn) (*mcp.CallToolResult, data.RedisValue, error) {
 	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
-		return nil, core.RedisValue{}, friendly(err)
+		return nil, data.RedisValue{}, friendly(err)
 	}
 	v, err := t.c.RedisGet(ctx, svc.ID, in.Key, in.Cursor, in.Count)
 	return nil, v, friendly(err)
@@ -160,20 +160,20 @@ type queryDatabaseIn struct {
 }
 
 // queryDatabase is audited by the core, without the query's text.
-func (t *tools) queryDatabase(ctx context.Context, _ *mcp.CallToolRequest, in queryDatabaseIn) (*mcp.CallToolResult, core.ConsoleResult, error) {
+func (t *tools) queryDatabase(ctx context.Context, _ *mcp.CallToolRequest, in queryDatabaseIn) (*mcp.CallToolResult, data.ConsoleResult, error) {
 	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
-		return nil, core.ConsoleResult{}, friendly(err)
+		return nil, data.ConsoleResult{}, friendly(err)
 	}
 	res, err := t.c.DataConsole(ctx, svc.ID, in.Database, in.Query, in.Write)
 	return nil, res, friendly(err)
 }
 
 // getConnection reveals credentials, like the REST route.
-func (t *tools) getConnection(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, core.Connection, error) {
+func (t *tools) getConnection(ctx context.Context, _ *mcp.CallToolRequest, in serviceArg) (*mcp.CallToolResult, data.Connection, error) {
 	svc, err := t.service(ctx, in.Service, identity.PermEnv)
 	if err != nil {
-		return nil, core.Connection{}, friendly(err)
+		return nil, data.Connection{}, friendly(err)
 	}
 	conn, err := t.c.DatabaseConnection(ctx, svc.ID)
 	return nil, conn, friendly(err)

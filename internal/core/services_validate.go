@@ -10,6 +10,7 @@ import (
 	"github.com/distribution/reference"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
@@ -95,21 +96,6 @@ func (c *Core) validateIn(ctx context.Context, s domain.Service, project domain.
 	return checkRefs(refEnv(s), envSources{project: project.Env, dbs: dbs})
 }
 
-// IconHint names the logo for svc: its icon, else its image's base name
-// (ghcr.io/n8n-io/n8n:1 → n8n). The UI shows the logo if it knows the name,
-// else one for the kind. Backups keep it, as they outlive the service.
-func IconHint(svc domain.Service) string {
-	if svc.Icon != "" {
-		return svc.Icon
-	}
-	named, err := reference.ParseNormalizedNamed(svc.Image)
-	if err != nil {
-		return ""
-	}
-	p := reference.Path(named)
-	return p[strings.LastIndex(p, "/")+1:]
-}
-
 func validateService(s domain.Service) error {
 	if err := validateProjectNetworks(s); err != nil {
 		return err
@@ -162,9 +148,9 @@ func validateService(s domain.Service) error {
 		if len(s.DependsOn) > 0 {
 			return fmt.Errorf("%w: databases start first, so depend on nothing", ErrInvalid)
 		}
-		return validateDatabase(s)
+		return data.ValidateDatabase(s)
 	}
-	if err := validateVolumes(s.Volumes); err != nil {
+	if err := data.ValidateVolumes(s.Volumes); err != nil {
 		return err
 	}
 	if err := network.ValidateMiddlewares(s.Middlewares); err != nil {
