@@ -1,64 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ChevronRight,
-  Container,
-  Copy,
-  Download,
-  Ellipsis,
-  Eye,
-  File,
-  FileSymlink,
-  Folder,
-  FolderInput,
-  FolderPlus,
-  FolderUp,
-  HardDrive,
-  Lock,
-  Pencil,
-  RefreshCw,
-  TextCursorInput,
-  Trash2,
-  TriangleAlert,
-  Upload,
-} from "lucide-react";
+import { ChevronRight, Copy, Download, File, FolderInput, FolderPlus, FolderUp, Lock, RefreshCw, Trash2, TriangleAlert, Upload } from "lucide-react";
 import { useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { ErrorText } from "@/components/common";
 import { Loading } from "@kipit-labs/kipitidy/loading";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogMedia,
-  AlertDialogTitle,
-} from "@kipit-labs/kipitidy/alert-dialog";
 import { Button } from "@kipit-labs/kipitidy/button";
 import { Checkbox } from "@kipit-labs/kipitidy/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@kipit-labs/kipitidy/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@kipit-labs/kipitidy/dropdown-menu";
-import { formatBytes, formatDateTime, timeAgo } from "@/lib/format";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@kipit-labs/kipitidy/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { api, isDatabase, type Service, type VolumeEntry } from "../../api";
+import { EntryRow } from "./entry-row";
 import { FileDialog } from "./file-dialog";
-import { PathDialog } from "./path-dialog";
+import { FilesDialogs, type FilesDialog } from "./files-dialogs";
+import { CONTAINER, inContainer, join } from "./paths";
 import { droppedFiles, pickedFiles, UploadPanel, useUploads } from "./uploads";
-
-const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
-/** "@container" is the first running replica's filesystem, "@<container ID>" a given one's. */
-const CONTAINER = "@container";
-const inContainer = (p: string) => p.startsWith("@");
-
-/** A name for an entry in a folder: no slashes, not . or .. */
-const nameProblem = (name: string) =>
-  name.includes("/") ? "A name can't contain /." : name === "." || name === ".." ? "Pick another name." : null;
-
-/** A destination "<volume>/<path>": relative, without . or .. segments. */
-const pathProblem = (p: string) =>
-  p.startsWith("/") ? "Start with the volume's name, e.g. data/mods." : p.split("/").some((s) => s === "." || s === "..") ? "Use a path without . or .." : null;
 
 /**
  * Browse and manage the files in a service's volumes. Databases' are
@@ -82,7 +39,7 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
   const selected = selection.dir === dir ? selection.names : new Set<string>();
   const setSelected = (next: Set<string> | ((s: Set<string>) => Set<string>)) =>
     setSelection((cur) => ({ dir, names: typeof next === "function" ? next(cur.dir === dir ? cur.names : new Set()) : next }));
-  const [dialog, setDialog] = useState<null | { kind: "mkdir" } | { kind: "rename"; entry: VolumeEntry } | { kind: "move" | "copy" | "delete"; names: string[] }>(null);
+  const [dialog, setDialog] = useState<FilesDialog | null>(null);
   const [dragging, setDragging] = useState(false);
   const [openFile, setOpenFile] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -354,96 +311,18 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
             </thead>
             <tbody>
               {entries.map((e) => (
-                // The whole row opens the entry; the name is its keyboard target (Enter clicks it, the click bubbles here).
-                <tr
+                <EntryRow
                   key={e.name}
-                  aria-selected={selected.has(e.name)}
-                  onClick={() => open(e)}
-                  className="group cursor-pointer hover:bg-muted/60 aria-selected:bg-muted"
-                >
-                  <td className="border-b py-3 pl-4" onClick={(ev) => ev.stopPropagation()}>
-                    {!atRoot && <Checkbox aria-label={`Select ${e.name}`} checked={selected.has(e.name)} onCheckedChange={() => toggle(e.name)} />}
-                  </td>
-                  <td className="max-w-0 border-b px-3 py-3">
-                    <button
-                      type="button"
-                      className="flex max-w-full items-center gap-3 text-left"
-                      title={e.target ? `${e.name} → ${e.target}` : e.name}
-                    >
-                      <EntryIcon type={e.type} />
-                      {e.type === "container" ? (
-                        <span className="truncate">Container filesystem</span>
-                      ) : (
-                        <span className="truncate font-mono text-[13px]">{e.name}</span>
-                      )}
-                      {e.target && <span className="truncate font-mono text-[13px] text-muted-foreground">→ {e.target}</span>}
-                    </button>
-                  </td>
-                  {atRoot ? (
-                    <td className="border-b px-3 py-3 font-mono text-[13px] text-muted-foreground">{e.mountPath}</td>
-                  ) : (
-                    <>
-                      <td className="border-b px-3 py-3 text-right whitespace-nowrap text-muted-foreground tabular-nums">
-                        {e.type === "file" ? formatBytes(e.size) : ""}
-                      </td>
-                      <td
-                        className="hidden border-b px-3 py-3 whitespace-nowrap text-muted-foreground sm:table-cell"
-                        title={e.modified && formatDateTime(e.modified)}
-                      >
-                        {e.modified && timeAgo(e.modified)}
-                      </td>
-                      <td className="hidden border-b px-3 py-3 font-mono text-xs whitespace-nowrap text-muted-foreground md:table-cell">
-                        {e.mode} · {e.uid}:{e.gid}
-                      </td>
-                    </>
-                  )}
-                  {/* Menu clicks (its items too: they're portaled, but React bubbles them here) don't open the row. */}
-                  <td className="border-b pr-3 text-right" onClick={(ev) => ev.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button size="icon-sm" variant="ghost" aria-label={`Actions for ${e.name}`}>
-                          <Ellipsis />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {e.type === "file" && (
-                          <DropdownMenuItem onSelect={() => setOpenFile(join(dir, e.name))}>
-                            {writable ? <Pencil /> : <Eye />} {writable ? "Edit" : "View"}
-                          </DropdownMenuItem>
-                        )}
-                        {e.type !== "container" && (
-                          <DropdownMenuItem asChild>
-                            <a href={downloadUrl([e.name])} download>
-                              <Download /> Download{e.type !== "file" && " (.tar.gz)"}
-                            </a>
-                          </DropdownMenuItem>
-                        )}
-                        {e.type === "container" && (
-                          <DropdownMenuItem onSelect={() => open(e)}>
-                            <Folder /> Open
-                          </DropdownMenuItem>
-                        )}
-                        {writable && (
-                          <>
-                            <DropdownMenuItem onSelect={() => setDialog({ kind: "rename", entry: e })}>
-                              <TextCursorInput /> Rename
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setDialog({ kind: "move", names: [e.name] })}>
-                              <FolderInput /> Move…
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setDialog({ kind: "copy", names: [e.name] })}>
-                              <Copy /> Copy…
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem variant="destructive" onSelect={() => setDialog({ kind: "delete", names: [e.name] })}>
-                              <Trash2 /> Delete…
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
-                </tr>
+                  entry={e}
+                  atRoot={atRoot}
+                  writable={writable}
+                  selected={selected.has(e.name)}
+                  downloadUrl={downloadUrl([e.name])}
+                  onOpen={() => open(e)}
+                  onToggle={() => toggle(e.name)}
+                  onEdit={() => setOpenFile(join(dir, e.name))}
+                  onDialog={setDialog}
+                />
               ))}
             </tbody>
           </table>
@@ -471,74 +350,15 @@ export function FilesTab({ svc, onBackups }: { svc: Service; onBackups: () => vo
 
       <FileDialog serviceId={svc.id} path={openFile} onClose={() => setOpenFile(null)} onSaved={() => changed("Saved")} />
 
-      <PathDialog
-        open={dialog?.kind === "mkdir"}
-        onOpenChange={(o) => !o && setDialog(null)}
-        title="New folder"
-        description={<>In <span className="font-mono">{dir}</span></>}
-        label="Name"
-        initial=""
-        submitLabel="Create"
-        validate={nameProblem}
-        onSubmit={(name) => mkdir.mutateAsync(name)}
+      <FilesDialogs
+        dialog={dialog}
+        dir={dir}
+        onClose={() => setDialog(null)}
+        onMkdir={(name) => mkdir.mutateAsync(name)}
+        onRename={(from, to) => rename.mutateAsync({ from, to })}
+        onTransfer={(v) => transfer.mutateAsync(v)}
+        onDelete={(names) => remove.mutate(names)}
       />
-      <PathDialog
-        open={dialog?.kind === "rename"}
-        onOpenChange={(o) => !o && setDialog(null)}
-        title="Rename"
-        label="Name"
-        initial={dialog?.kind === "rename" ? dialog.entry.name : ""}
-        submitLabel="Rename"
-        validate={nameProblem}
-        onSubmit={(to) => (dialog?.kind === "rename" && to !== dialog.entry.name ? rename.mutateAsync({ from: dialog.entry.name, to }) : Promise.resolve())}
-      />
-      <PathDialog
-        open={dialog?.kind === "move" || dialog?.kind === "copy"}
-        onOpenChange={(o) => !o && setDialog(null)}
-        title={dialog?.kind === "copy" ? "Copy to" : "Move to"}
-        description={
-          (dialog?.kind === "move" || dialog?.kind === "copy") && (
-            <>
-              {dialog.names.length === 1 ? <span className="font-mono">{dialog.names[0]}</span> : `${dialog.names.length} items`} into an existing folder:{" "}
-              {inContainer(dir) ? "in this container." : "in any of this service's volumes."}
-            </>
-          )
-        }
-        label="Folder (volume/path)"
-        initial={dir}
-        submitLabel={dialog?.kind === "copy" ? "Copy" : "Move"}
-        validate={(to) => pathProblem(to) ?? (dialog?.kind === "move" && to === dir ? "It's already there." : null)}
-        onSubmit={(to) =>
-          dialog?.kind === "move" || dialog?.kind === "copy"
-            ? transfer.mutateAsync({ kind: dialog.kind, names: dialog.names, to: to.replace(/\/+$/, "") })
-            : Promise.resolve()
-        }
-      />
-      <AlertDialog open={dialog?.kind === "delete"} onOpenChange={(o) => !o && setDialog(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogMedia className="bg-destructive/10 text-destructive">
-              <TriangleAlert />
-            </AlertDialogMedia>
-            <AlertDialogTitle>
-              {dialog?.kind === "delete" && (dialog.names.length === 1 ? `Delete ${dialog.names[0]}?` : `Delete ${dialog.names.length} items?`)}
-            </AlertDialogTitle>
-            <AlertDialogDescription>Folders go with everything in them. This can't be undone, except from a backup.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <Button
-              className="bg-destructive text-white hover:bg-destructive/80"
-              onClick={() => {
-                if (dialog?.kind === "delete") remove.mutate(dialog.names);
-                setDialog(null);
-              }}
-            >
-              Delete
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
@@ -554,19 +374,4 @@ function Crumb({ onClick, current, children }: { onClick: () => void; current: b
       {children}
     </button>
   );
-}
-
-function EntryIcon({ type }: { type: VolumeEntry["type"] }) {
-  const cls = "size-[18px] shrink-0";
-  switch (type) {
-    case "volume":
-      return <HardDrive className={cn(cls, "text-muted-foreground")} />;
-    case "container":
-      return <Container className={cn(cls, "text-muted-foreground")} />;
-    case "dir":
-      return <Folder className={cn(cls, "fill-current/15 text-sky-600 dark:text-sky-400")} />;
-    case "link":
-      return <FileSymlink className={cn(cls, "text-muted-foreground")} />;
-  }
-  return <File className={cn(cls, "text-muted-foreground")} />;
 }
