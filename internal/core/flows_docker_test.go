@@ -141,6 +141,24 @@ func (f flow) ok(t *testing.T) func(store.Deployment, error) store.Deployment {
 	}
 }
 
+// latest waits for the deployment a background deploy (compose, previews)
+// starts for svc, and fails unless it succeeded.
+func (f flow) latest(t *testing.T, svc store.Service) store.Deployment {
+	t.Helper()
+	for deadline := time.Now().Add(5 * time.Minute); ; time.Sleep(time.Second) {
+		deps, err := f.c.store.ListDeployments(f.ctx, svc.ID, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(deps) == 1 {
+			return f.ok(t)(deps[0], nil)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never deployed", svc.Name)
+		}
+	}
+}
+
 func (f flow) log(t *testing.T, deploymentID string) {
 	t.Helper()
 	if rc, err := f.c.DeploymentLog(f.ctx, deploymentID); err == nil {
@@ -300,16 +318,7 @@ func TestComposeFlowDocker(t *testing.T) {
 	}
 	ended := map[string]time.Time{}
 	for _, s := range svcs {
-		var deps []store.Deployment
-		for deadline := time.Now().Add(5 * time.Minute); len(deps) == 0; time.Sleep(time.Second) {
-			if deps, err = f.c.store.ListDeployments(f.ctx, s.ID, 1); err != nil {
-				t.Fatal(err)
-			}
-			if time.Now().After(deadline) {
-				t.Fatalf("%s never deployed", s.Name)
-			}
-		}
-		d := f.ok(t)(deps[0], nil)
+		d := f.latest(t, s)
 		ended[s.Name] = d.CreatedAt
 		if got := f.running(t, s); len(got) != 1 {
 			t.Errorf("%s running %v", s.Name, got)
@@ -381,5 +390,81 @@ func TestDatabaseBackupFlowDocker(t *testing.T) {
 	}
 	if got := psql("SELECT count(*) FROM orders"); got != "2" {
 		t.Errorf("rows after the restore: %s", got)
+	}
+}
+
+// A preview runs a copy of the project under the base domain, and closing it
+// removes all of it, the project it copies untouched.
+func TestPreviewFlowDocker(t *testing.T) {
+	f := newFlow(t)
+	p := f.project(t, "shop")
+	web := f.service(t, p.ID, ServiceInput{Name: "web", Kind: store.ServiceKindApp, Image: "nginx:1.29-alpine", Port: 80, Domain: "shop.localhost"})
+	parent := f.ok(t)(f.c.Deploy(f.ctx, web.ID, DeployOptions{}))
+
+	if _, err := f.c.DeployPreview(f.ctx, p.ID, "pr-1", PreviewOptions{}); err == nil {
+		t.Error("a preview without a base domain")
+	}
+	if _, err := f.c.SetPreviewSettings(f.ctx, p.ID, PreviewSettingsInput{BaseDomain: "preview.localhost"}); err != nil {
+		t.Fatal(err)
+	}
+	v, err := f.c.DeployPreview(f.ctx, p.ID, "pr-1", PreviewOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = f.c.ClosePreview(f.ctx, p.ID, "pr-1") })
+	svcs, err := f.c.store.ListServices(f.ctx, v.ID)
+	if err != nil || len(svcs) != 1 {
+		t.Fatalf("preview services: %d, %v", len(svcs), err)
+	}
+	f.latest(t, svcs[0])
+	if got := f.running(t, svcs[0]); len(got) != 1 {
+		t.Errorf("preview running %v", got)
+	}
+	if !strings.HasSuffix(strings.TrimSuffix(v.URLs["web"], "/"), ".preview.localhost") {
+		t.Errorf("preview URLs = %v", v.URLs)
+	}
+
+	if err := f.c.ClosePreview(f.ctx, p.ID, "pr-1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.c.store.GetProject(f.ctx, v.ID); err == nil {
+		t.Error("closed preview's project kept")
+	}
+	if left, _ := f.dk.ListContainers(f.ctx, map[string]string{docker.LabelProject: v.ID}); len(left) != 0 {
+		t.Errorf("closed preview's containers kept: %d", len(left))
+	}
+	if got := f.running(t, web); len(got) != 1 || got[0] != parent.ID {
+		t.Errorf("parent after the preview closed: running %v, want %s", got, parent.ID)
+	}
+}
+
+// The upgrade preflight sees Docker, and wants a recent manager backup.
+func TestUpdatePreflightFlowDocker(t *testing.T) {
+	f := newFlow(t)
+	check := func(id string) PreflightCheck {
+		t.Helper()
+		for _, c := range f.c.UpdatePreflight(f.ctx).Checks {
+			if c.ID == id {
+				return c
+			}
+		}
+		t.Fatalf("no %s check", id)
+		return PreflightCheck{}
+	}
+	if c := check("docker"); c.State != "ok" {
+		t.Errorf("docker check: %+v", c)
+	}
+	if c := check("backup"); c.State == "ok" {
+		t.Errorf("backup check ok without any manager backup: %+v", c)
+	}
+	b, err := f.c.BackupManager(f.ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b = waitBackup(t, f.c, b.ID, func(b store.Backup) bool { return b.Status != store.OpRunning }); b.Status != store.OpSucceeded {
+		t.Fatalf("manager backup: %+v", b)
+	}
+	if c := check("backup"); c.State != "ok" {
+		t.Errorf("backup check after a manager backup: %+v", c)
 	}
 }
