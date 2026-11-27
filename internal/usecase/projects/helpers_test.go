@@ -13,6 +13,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/git"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 	"github.com/kipit-labs/kipitiny/internal/mail"
 	"github.com/kipit-labs/kipitiny/internal/mail/mailtest"
@@ -59,7 +60,7 @@ func newTestCore(t *testing.T, cfg config.Config) *testCore {
 	c.Network = network.New(bg, c.cfg, st, c, log)
 	c.Data = data.New(bg, c.cfg, st, age.Encryption{}, cron.Cron{}, &c.steps, c, log)
 	c.Deployer = deploy.New(bg, c.cfg, st, cron.Cron{}, &sync.Map{}, deployManager{c}, log)
-	c.Projects = New(bg, c.cfg, st, cron.Cron{}, c, log)
+	c.Projects = New(bg, c.cfg, st, cron.Cron{}, git.Git{}, c, log)
 	return c
 }
 

@@ -16,11 +16,12 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
-	"github.com/go-git/go-git/v5"
+	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/git"
 )
 
 func TestWebhookAuthorized(t *testing.T) {
@@ -93,7 +94,7 @@ func TestValidateGit(t *testing.T) {
 // new version.
 func localRepo(t *testing.T) (dir string, commit func(content string) string) {
 	dir = t.TempDir()
-	repo, err := git.PlainInitWithOptions(dir, &git.PlainInitOptions{InitOptions: git.InitOptions{DefaultBranch: "refs/heads/main"}})
+	repo, err := gogit.PlainInitWithOptions(dir, &gogit.PlainInitOptions{InitOptions: gogit.InitOptions{DefaultBranch: "refs/heads/main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +112,7 @@ func localRepo(t *testing.T) (dir string, commit func(content string) string) {
 		if _, err := wt.Add("deploy/compose.yaml"); err != nil {
 			t.Fatal(err)
 		}
-		h, err := wt.Commit("update", &git.CommitOptions{Author: &object.Signature{Name: "t", Email: "t@t", When: time.Now()}})
+		h, err := wt.Commit("update", &gogit.CommitOptions{Author: &object.Signature{Name: "t", Email: "t@t", When: time.Now()}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -123,7 +124,7 @@ func TestGitFetch(t *testing.T) {
 	ctx := context.Background()
 	dir, commit := localRepo(t)
 	sha := commit("services: {web: {image: nginx}}\n")
-	c := New(ctx, &config.Config{DataDir: t.TempDir()}, nil, nil, nil, nil)
+	c := New(ctx, &config.Config{DataDir: t.TempDir()}, nil, nil, git.Git{}, nil, nil)
 	g := domain.ProjectGit{RepoURL: dir, Branch: "main", Path: "deploy/compose.yaml"}
 	head, err := c.gitHead(ctx, g)
 	if err != nil || head != sha {
