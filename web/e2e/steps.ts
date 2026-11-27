@@ -5,7 +5,10 @@ import { expect } from "./fixtures";
 /** Follows a sidebar link, opening the sidebar first where it's collapsed (on a phone). */
 export async function sidebar(page: Page, name: string | RegExp) {
   const nav = page.getByRole("link", { name, exact: true, disabled: false }).or(page.getByRole("button", { name }));
-  if (!(await nav.filter({ visible: true }).count())) await page.getByRole("button", { name: "Toggle sidebar" }).click();
+  const toggle = page.getByRole("button", { name: "Toggle sidebar" });
+  // The layout first: counting links on a page still loading would collapse a desktop's open sidebar.
+  await expect(toggle).toBeVisible();
+  if (!(await nav.filter({ visible: true }).count())) await toggle.click();
   await nav.filter({ visible: true }).first().click();
 }
 
