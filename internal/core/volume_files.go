@@ -498,11 +498,12 @@ func readEntry(br *bufio.Reader) (VolumeEntry, error) {
 // filesState holds the running helper of each service being browsed.
 type filesState struct {
 	mu      sync.Mutex
-	helpers map[string]*filesHelper // service ID ->
+	helpers map[string]*filesHelper // helperKey ->
 }
 
 type filesHelper struct {
 	mu        sync.Mutex
+	key       string
 	serviceID string
 	serverID  string
 	id        string // container; empty when not running
@@ -529,19 +530,41 @@ func (c *Core) filesExecIn(ctx context.Context, svc store.Service, vol fileVolum
 		opts.User = "0" // whatever user the image runs as
 		return filesStream(ctx, c.dockerFor(svc.ServerID), id, opts, read)
 	}
+	return c.helperExec(ctx, svc, false, opts, read)
+}
+
+// helperExec runs opts in svc's helper (the SQLite one if sqlite), retried
+// once in a new helper if it was removed behind the manager's back, unless
+// stdin can't be rewound.
+func (c *Core) helperExec(ctx context.Context, svc store.Service, sqlite bool, opts docker.ExecOptions, read func(io.Reader) error) error {
 	for attempt := 0; ; attempt++ {
-		h, id, err := c.acquireFilesHelper(ctx, svc)
+		h, id, err := c.acquireFilesHelper(ctx, svc, sqlite)
 		if err != nil {
 			return err
 		}
 		err = filesStream(ctx, c.dockerFor(svc.ServerID), id, opts, read)
 		gone := cerrdefs.IsNotFound(err) || cerrdefs.IsConflict(err) // removed, or not running
 		c.releaseFilesHelper(h, gone)
-		if gone && attempt == 0 && opts.Stdin == nil {
-			continue
+		if gone && attempt == 0 {
+			if opts.Stdin == nil {
+				continue
+			}
+			if s, ok := opts.Stdin.(io.Seeker); ok {
+				if _, serr := s.Seek(0, io.SeekStart); serr == nil {
+					continue
+				}
+			}
 		}
 		return err
 	}
+}
+
+// helperKey names svc's helper of a kind in filesState.
+func helperKey(serviceID string, sqlite bool) string {
+	if sqlite {
+		return serviceID + "/sqlite"
+	}
+	return serviceID
 }
 
 // filesStream runs opts in container id and hands its stdout to read. If read
@@ -599,9 +622,9 @@ func (c *Core) filesContainer(ctx context.Context, svc store.Service, ref string
 	return "", fmt.Errorf("%w: container %s of %s isn't running (it may have been replaced by a deploy)", ErrInvalid, id, svc.Name)
 }
 
-// acquireFilesHelper returns svc's running helper, marked busy until
-// releaseFilesHelper.
-func (c *Core) acquireFilesHelper(ctx context.Context, svc store.Service) (*filesHelper, string, error) {
+// acquireFilesHelper returns svc's running helper (the SQLite one if
+// sqlite), marked busy until releaseFilesHelper.
+func (c *Core) acquireFilesHelper(ctx context.Context, svc store.Service, sqlite bool) (*filesHelper, string, error) {
 	vols := fileVolumes(svc)
 	if len(vols) == 0 {
 		return nil, "", fmt.Errorf("%w: %s has no volumes", ErrInvalid, svc.Name)
@@ -622,10 +645,11 @@ func (c *Core) acquireFilesHelper(ctx context.Context, svc store.Service) (*file
 	if c.files.helpers == nil {
 		c.files.helpers = map[string]*filesHelper{}
 	}
-	h := c.files.helpers[svc.ID]
+	key := helperKey(svc.ID, sqlite)
+	h := c.files.helpers[key]
 	if h == nil {
-		h = &filesHelper{serviceID: svc.ID}
-		c.files.helpers[svc.ID] = h
+		h = &filesHelper{key: key, serviceID: svc.ID}
+		c.files.helpers[key] = h
 	}
 	c.files.mu.Unlock()
 
@@ -637,7 +661,14 @@ func (c *Core) acquireFilesHelper(ctx context.Context, svc store.Service) (*file
 	}
 	if h.id == "" {
 		dk := c.dockerFor(svc.ServerID)
-		id, err := startVolumeHelper(ctx, dk, "kipitiny-files-"+strings.ToLower(ids.New()), helperMounts(svc, names, helperVolumeRoot, filesReadOnly(svc)))
+		mounts := helperMounts(svc, names, helperVolumeRoot, filesReadOnly(svc))
+		var id string
+		var err error
+		if sqlite {
+			id, err = c.startSQLiteHelper(ctx, dk, "kipitiny-sqlite-"+strings.ToLower(ids.New()), mounts)
+		} else {
+			id, err = startVolumeHelper(ctx, dk, "kipitiny-files-"+strings.ToLower(ids.New()), mounts)
+		}
 		if err != nil {
 			return nil, "", fmt.Errorf("start file helper: %w", err)
 		}
@@ -678,8 +709,8 @@ func (c *Core) expireFilesHelper(h *filesHelper, t *time.Timer) {
 		c.files.mu.Unlock()
 		return
 	}
-	if c.files.helpers[h.serviceID] == h {
-		delete(c.files.helpers, h.serviceID)
+	if c.files.helpers[h.key] == h {
+		delete(c.files.helpers, h.key)
 	}
 	serverID, id := h.serverID, h.id
 	h.id, h.idle = "", nil
@@ -690,12 +721,17 @@ func (c *Core) expireFilesHelper(h *filesHelper, t *time.Timer) {
 	}
 }
 
-// closeFilesHelper removes svc's helper, if any, so its volumes are no longer
-// in use (before they are deleted). A transfer running in it is cut.
+// closeFilesHelper removes svc's helpers, if any, so its volumes are no
+// longer in use (before they are deleted). A transfer running in one is cut.
 func (c *Core) closeFilesHelper(serviceID string) {
+	c.closeHelper(helperKey(serviceID, false))
+	c.closeHelper(helperKey(serviceID, true))
+}
+
+func (c *Core) closeHelper(key string) {
 	c.files.mu.Lock()
-	h := c.files.helpers[serviceID]
-	delete(c.files.helpers, serviceID)
+	h := c.files.helpers[key]
+	delete(c.files.helpers, key)
 	c.files.mu.Unlock()
 	if h == nil {
 		return
@@ -716,13 +752,13 @@ func (c *Core) closeFilesHelper(serviceID string) {
 // closeFilesHelpers removes every helper, on shutdown.
 func (c *Core) closeFilesHelpers() {
 	c.files.mu.Lock()
-	svcs := make([]string, 0, len(c.files.helpers))
-	for id := range c.files.helpers {
-		svcs = append(svcs, id)
+	keys := make([]string, 0, len(c.files.helpers))
+	for key := range c.files.helpers {
+		keys = append(keys, key)
 	}
 	c.files.mu.Unlock()
-	for _, id := range svcs {
-		c.closeFilesHelper(id)
+	for _, key := range keys {
+		c.closeHelper(key)
 	}
 }
 

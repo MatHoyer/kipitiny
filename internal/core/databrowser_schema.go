@@ -48,8 +48,9 @@ func (c *Core) schemaAudit(ctx context.Context, id string, apply bool, err *erro
 	c.Audit(ctx, "data schema", id, status, *err)
 }
 
-// CreateTable creates a table in a PostgreSQL, MySQL or MariaDB database
-// (schema is PostgreSQL's; MySQL's is the database), or with apply unset
+// CreateTable creates a table in a PostgreSQL, MySQL, MariaDB or SQLite
+// database (schema is PostgreSQL's; MySQL's is the database, SQLite's
+// main), or with apply unset
 // only returns the statement. Admin only.
 func (c *Core) CreateTable(ctx context.Context, id, database, schema, table string, cols []NewColumn, apply bool) (res ChangeResult, err error) {
 	if err := c.requireOn(ctx, id, PermDataEdit); err != nil {
@@ -68,7 +69,7 @@ func (c *Core) CreateTable(ctx context.Context, id, database, schema, table stri
 	if table = strings.TrimSpace(table); table == "" || len(table) > 63 {
 		return ChangeResult{}, fmt.Errorf("%w: a table name has 1 to 63 characters", ErrInvalid)
 	}
-	if mysql {
+	if mysql || t.sqlite != nil {
 		name = ident(table)
 	} else {
 		if schema == "" {
@@ -128,7 +129,7 @@ func createTableSQL(name string, ident func(string) string, cols []NewColumn) (s
 	return "CREATE TABLE " + name + " (\n" + strings.Join(lines, ",\n") + "\n);", nil
 }
 
-// DropTable drops a table or view of a PostgreSQL, MySQL or MariaDB
+// DropTable drops a table or view of a PostgreSQL, MySQL, MariaDB or SQLite
 // database, or with apply unset only returns the statement. Nothing that
 // depends on it is dropped with it: the database refuses instead. Admin
 // only.
@@ -157,6 +158,8 @@ func (c *Core) DropTable(ctx context.Context, id, database, schema, table string
 	sql := "DROP " + what + " " + pgIdent(tables[i].Schema) + "." + pgIdent(table) + ";"
 	if mysql {
 		sql = "DROP " + what + " " + mysqlIdent(table) + ";"
+	} else if t.sqlite != nil {
+		sql = "DROP " + what + " " + pgIdent(table) + ";"
 	}
 	res = ChangeResult{Statements: []string{sql}}
 	if !apply {
@@ -172,6 +175,9 @@ func (c *Core) DropTable(ctx context.Context, id, database, schema, table string
 // runDDL runs one statement as the service's user (root on MySQL and
 // MariaDB), with the console's timeout.
 func (t dataTarget) runDDL(ctx context.Context, sql string) error {
+	if t.sqlite != nil {
+		return t.sqliteDDL(ctx, sql)
+	}
 	ctx, cancel := context.WithTimeout(ctx, dataConsoleTimeout)
 	defer cancel()
 	if t.svc.Kind.IsMySQL() {

@@ -60,8 +60,8 @@ func rowChanged(label string) string {
 	return label + " changed or was deleted since it was loaded; reload and make the change again"
 }
 
-// ApplyRowChanges saves edits to a table of a PostgreSQL, MySQL or MariaDB
-// database, or with apply unset only returns the statements it would run.
+// ApplyRowChanges saves edits to a table of a PostgreSQL, MySQL, MariaDB or
+// SQLite database, or with apply unset only returns the statements it would run.
 // Admin only.
 func (c *Core) ApplyRowChanges(ctx context.Context, id, database, schema, table string, ch RowChanges, apply bool) (res ChangeResult, err error) {
 	if err := c.requireOn(ctx, id, PermDataEdit); err != nil {
@@ -79,6 +79,9 @@ func (c *Core) ApplyRowChanges(ctx context.Context, id, database, schema, table 
 	t, err := c.sqlTarget(ctx, id, database)
 	if err != nil {
 		return ChangeResult{}, err
+	}
+	if t.sqlite != nil {
+		return t.sqliteApply(ctx, schema, table, ch, apply)
 	}
 	if t.svc.Kind.IsMySQL() {
 		return t.mysqlApply(ctx, schema, table, ch, apply)

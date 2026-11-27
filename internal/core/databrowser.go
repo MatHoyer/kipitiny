@@ -39,8 +39,12 @@ type dataTarget struct {
 	svc       store.Service
 	dk        *docker.Client
 	container string
-	// db is the database queries run against (postgres, mysql, mongodb).
+	// db is the database queries run against (postgres, mysql, mongodb),
+	// or an app's SQLite file as "<volume>/<path>".
 	db string
+	// sqlite is set for an app's SQLite file, queried through a helper
+	// rather than in container.
+	sqlite *sqliteFile
 }
 
 // dataTarget resolves a database service of one of the given kinds to its
@@ -83,10 +87,18 @@ func (c *Core) dataTarget(ctx context.Context, id string, kinds ...store.Service
 }
 
 // databaseTarget resolves a service with databases (PostgreSQL, MySQL,
-// MariaDB, MongoDB) and the one to query: its own when database is empty,
-// else one of its instance's. Names are checked against the instance's
-// list: clients would also take connection strings or odd names.
+// MariaDB, MongoDB, an app's SQLite files) and the one to query: its own
+// when database is empty, else one of its instance's. Names are checked
+// against the instance's list: clients would also take connection strings
+// or odd names.
 func (c *Core) databaseTarget(ctx context.Context, id, database string) (dataTarget, error) {
+	svc, err := c.store.GetService(ctx, id)
+	if err != nil {
+		return dataTarget{}, err
+	}
+	if svc.Kind == store.ServiceKindApp {
+		return c.sqliteTarget(ctx, svc, database)
+	}
 	t, err := c.dataTarget(ctx, id, store.ServiceKindPostgres, store.ServiceKindMySQL, store.ServiceKindMariaDB, store.ServiceKindMongoDB)
 	if err != nil || database == "" || database == t.db {
 		return t, err

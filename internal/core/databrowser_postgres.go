@@ -99,10 +99,16 @@ type PgDatabase struct {
 
 // PgDatabases lists the databases of a PostgreSQL, MySQL, MariaDB or
 // MongoDB service's instance: for postgres those that accept connections,
-// the server's own, templates and restore leftovers aside.
+// the server's own, templates and restore leftovers aside. An app's are the
+// SQLite files in its volumes.
 func (c *Core) PgDatabases(ctx context.Context, id string) ([]PgDatabase, error) {
 	if err := c.requireOn(ctx, id, PermData); err != nil {
 		return nil, err
+	}
+	if svc, err := c.store.GetService(ctx, id); err != nil {
+		return nil, err
+	} else if svc.Kind == store.ServiceKindApp {
+		return c.sqliteDatabases(ctx, svc)
 	}
 	t, err := c.databaseTarget(ctx, id, "")
 	if err != nil {
@@ -181,7 +187,8 @@ func (c *Core) CreatePgDatabase(ctx context.Context, id, name, collection string
 
 // PgTables lists the tables and views of one of a service's databases (its
 // own when database is empty), system schemas aside: PostgreSQL, MySQL and
-// MariaDB (whose schema is the database), MongoDB collections (no columns).
+// MariaDB (whose schema is the database), MongoDB collections (no columns),
+// an app's SQLite file (schema main).
 func (c *Core) PgTables(ctx context.Context, id, database string) ([]PgTable, error) {
 	if err := c.requireOn(ctx, id, PermData); err != nil {
 		return nil, err
@@ -191,6 +198,8 @@ func (c *Core) PgTables(ctx context.Context, id, database string) ([]PgTable, er
 		return nil, err
 	}
 	switch {
+	case t.sqlite != nil:
+		return t.sqliteTables(ctx)
 	case t.svc.Kind.IsMySQL():
 		return t.mysqlTables(ctx)
 	case t.svc.Kind == store.ServiceKindMongoDB:
@@ -237,7 +246,7 @@ ORDER BY n.nspname, c.relname;`, func(row []json.RawMessage) error {
 }
 
 // PgRows returns one page of a table's rows with its columns (PostgreSQL,
-// MySQL, MariaDB; MongoDB has MongoDocuments).
+// MySQL, MariaDB, SQLite; MongoDB has MongoDocuments).
 func (c *Core) PgRows(ctx context.Context, id, database, schema, table string, q RowQuery) (PgRows, error) {
 	if err := c.requireOn(ctx, id, PermData); err != nil {
 		return PgRows{}, err
@@ -245,6 +254,9 @@ func (c *Core) PgRows(ctx context.Context, id, database, schema, table string, q
 	t, err := c.sqlTarget(ctx, id, database)
 	if err != nil {
 		return PgRows{}, err
+	}
+	if t.sqlite != nil {
+		return t.sqliteRows(ctx, schema, table, q)
 	}
 	if t.svc.Kind.IsMySQL() {
 		return t.mysqlRows(ctx, schema, table, q)
@@ -296,6 +308,9 @@ func (c *Core) PgExport(ctx context.Context, id, database, schema, table string,
 	t, err := c.sqlTarget(ctx, id, database)
 	if err != nil {
 		return err
+	}
+	if t.sqlite != nil {
+		return t.sqliteExport(ctx, schema, table, q, w)
 	}
 	if t.svc.Kind.IsMySQL() {
 		return t.mysqlExport(ctx, schema, table, q, w)
