@@ -112,7 +112,7 @@ func (c *Core) runVerify(b domain.Backup) {
 
 	subject := b.ProjectName + "/" + b.ServiceName
 	e := notify.Event{
-		Type:    EventVerifySucceeded,
+		Type:    domain.EventVerifySucceeded,
 		Level:   notify.Success,
 		Title:   "Restore test passed for " + subject,
 		Message: fmt.Sprintf("The backup of %s restores cleanly.", b.CreatedAt.UTC().Format("2006-01-02 15:04 UTC")),
@@ -125,10 +125,10 @@ func (c *Core) runVerify(b domain.Backup) {
 		e.Fields = []notify.Field{{Name: "Files", Value: fmt.Sprint(details.Files)}}
 	}
 	if err != nil {
-		e.Type, e.Level, e.Title, e.Message, e.Fields = EventVerifyFailed, notify.Error, "Restore test failed for "+subject,
+		e.Type, e.Level, e.Title, e.Message, e.Fields = domain.EventVerifyFailed, notify.Error, "Restore test failed for "+subject,
 			fmt.Sprintf("The backup of %s could not be restored: %s", b.CreatedAt.UTC().Format("2006-01-02 15:04 UTC"), v.VerifyError), nil
 	}
-	c.notify(e, "/services/"+b.ServiceID, "")
+	c.Notify(e, "/services/"+b.ServiceID, "")
 }
 
 func (c *Core) verify(ctx context.Context, b domain.Backup) (domain.VerificationDetails, error) {

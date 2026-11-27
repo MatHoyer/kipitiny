@@ -9,6 +9,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
@@ -134,7 +135,7 @@ func (a *applier) prepareService(ctx context.Context, name string, in ServiceInp
 		}
 		a.planned[name] = svc
 		if u := a.uptimes[name]; u != nil {
-			chk, err := uptimeCheck(svc, uptimeInput(*u))
+			chk, err := monitoring.UptimeCheck(svc, uptimeInput(*u))
 			if err != nil {
 				return err
 			}

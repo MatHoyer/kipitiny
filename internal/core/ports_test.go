@@ -12,6 +12,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
@@ -173,7 +174,7 @@ func TestPublishedPortsDomain(t *testing.T) {
 	if spec.Config.Labels["traefik.enable"] != "" {
 		t.Errorf("a domain without a container port must not be routed: %v", spec.Config.Labels)
 	}
-	if _, err := c.SetUptime(ctx, mc.ID, UptimeInput{}); !errors.Is(err, ErrInvalid) {
+	if _, err := c.SetUptime(ctx, mc.ID, monitoring.UptimeInput{}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("uptime check on a port-only app: %v", err)
 	}
 

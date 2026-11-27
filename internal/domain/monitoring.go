@@ -77,3 +77,18 @@ type AuditEntry struct {
 	Error     string    `bun:"error" json:"error,omitempty"`
 	CreatedAt time.Time `bun:"created_at" json:"createdAt"`
 }
+
+// ResourceAlerts are the thresholds of the resource alerts, for every service
+// and server.
+type ResourceAlerts struct {
+	// MemoryPercent of the memory limit (of the host's RAM when unlimited),
+	// held for MemoryMinutes.
+	MemoryPercent int `json:"memoryPercent"`
+	MemoryMinutes int `json:"memoryMinutes"`
+	// CPUPercent of the CPU limit (of the host's cores when unlimited).
+	CPUPercent int `json:"cpuPercent"`
+	CPUMinutes int `json:"cpuMinutes"`
+	// DiskFreePercent is the free space on a server's Docker filesystem below
+	// which it is reported.
+	DiskFreePercent int `json:"diskFreePercent"`
+}

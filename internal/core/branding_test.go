@@ -24,7 +24,7 @@ func ptr[T any](v T) *T { return &v }
 func TestSetBranding(t *testing.T) {
 	c := newTestCore(t, config.Config{})
 	ctx := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
-	if got := c.Branding(ctx); got != (Branding{}) || c.BrandName(ctx) != DefaultBrandName {
+	if got := c.Branding(ctx); got != (Branding{}) || c.BrandName(ctx) != domain.DefaultBrandName {
 		t.Fatalf("default: %+v", got)
 	}
 
@@ -122,7 +122,7 @@ func TestBrandedEmail(t *testing.T) {
 
 	to := []*netmail.Address{{Address: "a@example.com"}}
 	inv := domain.Invite{Role: domain.RoleAdmin, ExpiresAt: time.Now().Add(time.Hour)}
-	if err := c.sendMail(ctx, "", to, c.inviteBody(ctx, inv, "https://ops.example.com/invite#t"), ""); err != nil {
+	if err := c.SendMail(ctx, "", to, c.InviteBody(ctx, inv, "https://ops.example.com/invite#t"), ""); err != nil {
 		t.Fatal(err)
 	}
 	m := <-srv.Messages

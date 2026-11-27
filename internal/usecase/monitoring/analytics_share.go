@@ -1,4 +1,4 @@
-package core
+package monitoring
 
 import (
 	"context"
@@ -25,13 +25,13 @@ func shareHash(token string) string {
 // ShareServiceAnalytics creates the app's public, read-only analytics link
 // and returns its token, shown only now. One link per app: a new one
 // revokes the one before.
-func (c *Core) ShareServiceAnalytics(ctx context.Context, serviceID string) (string, error) {
+func (c *Monitoring) ShareServiceAnalytics(ctx context.Context, serviceID string) (string, error) {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
 		return "", err
 	}
 	if !svc.Analytics {
-		return "", fmt.Errorf("%w: analytics are off for %s (its settings)", ErrInvalid, svc.Name)
+		return "", fmt.Errorf("%w: analytics are off for %s (its settings)", domain.ErrInvalid, svc.Name)
 	}
 	b := make([]byte, 24)
 	_, _ = rand.Read(b)
@@ -40,7 +40,7 @@ func (c *Core) ShareServiceAnalytics(ctx context.Context, serviceID string) (str
 }
 
 // UnshareServiceAnalytics revokes the app's analytics link.
-func (c *Core) UnshareServiceAnalytics(ctx context.Context, serviceID string) error {
+func (c *Monitoring) UnshareServiceAnalytics(ctx context.Context, serviceID string) error {
 	return c.store.SetServiceAnalyticsShare(ctx, serviceID, "")
 }
 
@@ -53,7 +53,7 @@ type SharedAnalyticsView struct {
 
 // SharedAnalytics answers a shared link, without a session: its token is
 // the credential. Filters are ignored.
-func (c *Core) SharedAnalytics(ctx context.Context, token string, q AnalyticsQuery) (SharedAnalyticsView, error) {
+func (c *Monitoring) SharedAnalytics(ctx context.Context, token string, q AnalyticsQuery) (SharedAnalyticsView, error) {
 	svc, err := c.store.GetServiceByAnalyticsShare(ctx, shareHash(token))
 	if err != nil {
 		return SharedAnalyticsView{}, err
@@ -66,7 +66,7 @@ func (c *Core) SharedAnalytics(ctx context.Context, token string, q AnalyticsQue
 		return SharedAnalyticsView{}, err
 	}
 	q.Filters = nil
-	aq, err := q.since(svc).query(svc.Domain)
+	aq, err := q.Since(svc).query(svc.Domain)
 	if err != nil {
 		return SharedAnalyticsView{}, err
 	}

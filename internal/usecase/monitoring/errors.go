@@ -1,4 +1,4 @@
-package core
+package monitoring
 
 import (
 	"context"
@@ -18,8 +18,8 @@ import (
 // app doesn't see a deleted one's issues.
 const errorsNextSetting = "errors_next_project"
 
-// errorsIdentity gives svc its DSN the first time error tracking is on.
-func (c *Core) errorsIdentity(ctx context.Context, svc *domain.Service) error {
+// ErrorsIdentity gives svc its DSN the first time error tracking is on.
+func (c *Monitoring) ErrorsIdentity(ctx context.Context, svc *domain.Service) error {
 	if !svc.Errors || svc.ErrorsProject != 0 {
 		return nil
 	}
@@ -58,10 +58,10 @@ func ImageRelease(image string) string {
 	return "latest"
 }
 
-// errorsEnv is what a deploy adds to svc's environment for its Sentry SDK
+// ErrorsEnv is what a deploy adds to svc's environment for its Sentry SDK
 // (SENTRY_RELEASE is added by containerSpec, from the image deployed);
 // variables the app sets itself win.
-func (c *Core) errorsEnv(ctx context.Context, project domain.Project, svc domain.Service) map[string]string {
+func (c *Monitoring) ErrorsEnv(ctx context.Context, project domain.Project, svc domain.Service) map[string]string {
 	if !svc.Errors || svc.ErrorsKey == "" {
 		return nil
 	}
@@ -78,7 +78,7 @@ func (c *Core) errorsEnv(ctx context.Context, project domain.Project, svc domain
 
 // syncErrorProjects sends the analytics server the apps taking errors, when
 // they changed since the last time (or the container is new).
-func (c *Core) syncErrorProjects(ctx context.Context, id, token string) error {
+func (c *Monitoring) syncErrorProjects(ctx context.Context, id, token string) error {
 	svcs, err := c.store.ListAllServices(ctx)
 	if err != nil {
 		return err
@@ -110,13 +110,13 @@ func (c *Core) syncErrorProjects(ctx context.Context, id, token string) error {
 
 // serviceErrors checks the app's error tracking is on and returns the
 // analytics server's client.
-func (c *Core) serviceErrors(ctx context.Context, serviceID string) (domain.Service, *analytics.Client, analyticsState, error) {
+func (c *Monitoring) serviceErrors(ctx context.Context, serviceID string) (domain.Service, *analytics.Client, AnalyticsState, error) {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
-		return svc, nil, analyticsState{}, err
+		return svc, nil, AnalyticsState{}, err
 	}
 	if !svc.Errors || svc.ErrorsProject == 0 {
-		return svc, nil, analyticsState{}, fmt.Errorf("%w: error tracking is off for %s (its settings)", ErrInvalid, svc.Name)
+		return svc, nil, AnalyticsState{}, fmt.Errorf("%w: error tracking is off for %s (its settings)", domain.ErrInvalid, svc.Name)
 	}
 	cl, st, err := c.analyticsOn(ctx)
 	return svc, cl, st, err
@@ -136,7 +136,7 @@ type ErrorsView struct {
 	DSN string `json:"dsn"`
 }
 
-func (c *Core) ServiceErrors(ctx context.Context, serviceID string, q ErrorsQuery) (ErrorsView, error) {
+func (c *Monitoring) ServiceErrors(ctx context.Context, serviceID string, q ErrorsQuery) (ErrorsView, error) {
 	svc, cl, st, err := c.serviceErrors(ctx, serviceID)
 	if err != nil {
 		return ErrorsView{}, err
@@ -152,7 +152,7 @@ func (c *Core) ServiceErrors(ctx context.Context, serviceID string, q ErrorsQuer
 
 // ServiceErrorSeries counts the app's events in [from, to), in buckets of
 // interval seconds (whole minutes).
-func (c *Core) ServiceErrorSeries(ctx context.Context, serviceID string, from, to time.Time, interval int) ([]analytics.ErrorPoint, error) {
+func (c *Monitoring) ServiceErrorSeries(ctx context.Context, serviceID string, from, to time.Time, interval int) ([]analytics.ErrorPoint, error) {
 	svc, cl, _, err := c.serviceErrors(ctx, serviceID)
 	if err != nil {
 		return nil, err
@@ -161,7 +161,7 @@ func (c *Core) ServiceErrorSeries(ctx context.Context, serviceID string, from, t
 	return ps, analyticsErr(err, "series")
 }
 
-func (c *Core) ServiceIssue(ctx context.Context, serviceID string, issue int64) (analytics.Issue, error) {
+func (c *Monitoring) ServiceIssue(ctx context.Context, serviceID string, issue int64) (analytics.Issue, error) {
 	svc, cl, _, err := c.serviceErrors(ctx, serviceID)
 	if err != nil {
 		return analytics.Issue{}, err
@@ -172,7 +172,7 @@ func (c *Core) ServiceIssue(ctx context.Context, serviceID string, issue int64) 
 
 // ServiceIssueEvent is one of the issue's kept events, its latest when
 // event is empty.
-func (c *Core) ServiceIssueEvent(ctx context.Context, serviceID string, issue int64, event string) (analytics.IssueEvent, error) {
+func (c *Monitoring) ServiceIssueEvent(ctx context.Context, serviceID string, issue int64, event string) (analytics.IssueEvent, error) {
 	svc, cl, _, err := c.serviceErrors(ctx, serviceID)
 	if err != nil {
 		return analytics.IssueEvent{}, err
@@ -183,7 +183,7 @@ func (c *Core) ServiceIssueEvent(ctx context.Context, serviceID string, issue in
 
 // SetServiceIssueStatus resolves, ignores or reopens an issue. A resolved
 // one reopens when it happens again.
-func (c *Core) SetServiceIssueStatus(ctx context.Context, serviceID string, issue int64, status string) (analytics.Issue, error) {
+func (c *Monitoring) SetServiceIssueStatus(ctx context.Context, serviceID string, issue int64, status string) (analytics.Issue, error) {
 	svc, cl, _, err := c.serviceErrors(ctx, serviceID)
 	if err != nil {
 		return analytics.Issue{}, err

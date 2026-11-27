@@ -377,7 +377,7 @@ Clients ────┤                            ├──→ use cases ──
             └── MCP tools (AI agents) ───┘
 ```
 
-- All logic in the use cases: `internal/usecase/<area>` (identity: sign-in, users, tokens, permissions, password managers; network: domains, DNS, Traefik, routes, middlewares, published ports, tunnels), and `internal/core` for the areas still to move (#522), which embeds each area so handlers see one API. `internal/domain` holds the entities and one repository interface per area; adapters live in `internal/infrastructure`. REST handlers and MCP tools are thin adapters. Permissions enforced in one place (`identity`).
+- All logic in the use cases: `internal/usecase/<area>` (identity: sign-in, users, tokens, permissions, password managers; network: domains, DNS, Traefik, routes, middlewares, published ports, tunnels; monitoring: notifications, email, push, uptime checks, analytics, error tracking), and `internal/core` for the areas still to move (#522), which embeds each area so handlers see one API. `internal/domain` holds the entities and one repository interface per area; adapters live in `internal/infrastructure`. REST handlers and MCP tools are thin adapters. Permissions enforced in one place (`identity`).
 - MCP built in (`/mcp` module), Streamable HTTP at `/mcp`, reusing auth, tokens, permissions, audit logs. Standalone stdio proxy later.
 - Dry-run mode (`/mcp?dry_run=true`, a second server with the same tools): read-only tools run, tools with a `dry_run` input have it forced, `query_database` runs without `write`, any other tool returns an error result naming its arguments and runs nothing.
 - Task-oriented tools, not 1:1 REST mapping: `deploy_image`, `get_app_status`, `get_logs`, `rollback`, `backup_database`, `restore_database`.

@@ -90,7 +90,7 @@ func (c *Core) updateService(ctx context.Context, id string, p ServicePatch) (do
 	if err := c.validate(ctx, svc); err != nil {
 		return domain.Service{}, err
 	}
-	if err := c.errorsIdentity(ctx, &svc); err != nil {
+	if err := c.ErrorsIdentity(ctx, &svc); err != nil {
 		return domain.Service{}, err
 	}
 	if svc.Domain != old.Domain || svc.Analytics && !old.Analytics {

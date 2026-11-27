@@ -1,4 +1,4 @@
-package core
+package monitoring
 
 import (
 	"context"
@@ -27,8 +27,8 @@ const (
 	// uptimeKeep is how long hourly counts are kept.
 	uptimeKeep = 30 * 24 * time.Hour
 
-	defaultUptimeInterval = 60
-	defaultUptimeTimeout  = 10
+	DefaultUptimeInterval = 60
+	DefaultUptimeTimeout  = 10
 )
 
 type UptimeResult = domain.UptimeResult
@@ -77,11 +77,11 @@ func (r *uptimeRun) observe(res UptimeResult) bool {
 }
 
 // StartUptime runs the uptime checks, each on its own interval.
-func (c *Core) StartUptime() error {
+func (c *Monitoring) StartUptime() error {
 	c.uptime.mu.Lock()
 	c.uptime.kick = make(chan struct{}, 1)
 	c.uptime.mu.Unlock()
-	return c.goLoop(func() {
+	return c.mgr.GoLoop(func() {
 		tick := time.NewTicker(uptimeTick)
 		defer tick.Stop()
 		for {
@@ -96,7 +96,7 @@ func (c *Core) StartUptime() error {
 	})
 }
 
-func (c *Core) kickUptime() {
+func (c *Monitoring) kickUptime() {
 	c.uptime.mu.Lock()
 	kick := c.uptime.kick
 	c.uptime.mu.Unlock()
@@ -110,7 +110,7 @@ func (c *Core) kickUptime() {
 }
 
 // scheduleUptime starts the checks that are due and forgets removed ones.
-func (c *Core) scheduleUptime(ctx context.Context) {
+func (c *Monitoring) scheduleUptime(ctx context.Context) {
 	checks, err := c.store.ListUptimeChecks(ctx)
 	if err != nil {
 		return
@@ -140,7 +140,7 @@ func (c *Core) scheduleUptime(ctx context.Context) {
 		}
 		r.running = true
 		r.next = now.Add(time.Duration(chk.IntervalSec) * time.Second)
-		err := c.goLoop(func() {
+		err := c.mgr.GoLoop(func() {
 			defer func() {
 				c.uptime.mu.Lock()
 				r.running = false
@@ -174,7 +174,7 @@ func uptimeTarget(svc domain.Service, chk domain.UptimeCheck) (url, problem stri
 	return "https://" + svc.Domain + chk.Path, ""
 }
 
-func (c *Core) runUptime(ctx context.Context, chk domain.UptimeCheck, r *uptimeRun) {
+func (c *Monitoring) runUptime(ctx context.Context, chk domain.UptimeCheck, r *uptimeRun) {
 	svc, err := c.store.GetService(ctx, chk.ServiceID)
 	if err != nil {
 		return
@@ -183,7 +183,7 @@ func (c *Core) runUptime(ctx context.Context, chk domain.UptimeCheck, r *uptimeR
 	if problem != "" {
 		return // not a failure: nothing is expected to answer
 	}
-	hc := c.uptimeHTTP
+	hc := c.UptimeHTTP
 	if hc == nil {
 		hc = probe.NewClient()
 	}
@@ -231,21 +231,21 @@ func uptimeError(err error, timeoutSec int) string {
 	return msg
 }
 
-func (c *Core) notifyUptime(ctx context.Context, svc domain.Service, url string, down bool, lastError string, since *time.Time, at time.Time) {
+func (c *Monitoring) notifyUptime(ctx context.Context, svc domain.Service, url string, down bool, lastError string, since *time.Time, at time.Time) {
 	project, err := c.store.GetProject(ctx, svc.ProjectID)
 	if err != nil {
 		return
 	}
 	name := project.Name + "/" + svc.Name
 	fields := []notify.Field{{Name: "Project", Value: project.Name}, {Name: "Service", Value: svc.Name}, {Name: "URL", Value: url}}
-	e := notify.Event{Type: EventUptimeUp, Level: notify.Success, Title: name + " is back up", Fields: fields}
+	e := notify.Event{Type: domain.EventUptimeUp, Level: notify.Success, Title: name + " is back up", Fields: fields}
 	if down {
-		e.Type, e.Level, e.Title = EventUptimeDown, notify.Error, name+" is down"
+		e.Type, e.Level, e.Title = domain.EventUptimeDown, notify.Error, name+" is down"
 		e.Message = fmt.Sprintf("%d checks in a row failed: %s", uptimeDownAfter, lastError)
 	} else if since != nil {
 		e.Message = "Down for " + at.Sub(*since).Round(time.Second).String() + "."
 	}
-	c.notify(e, "/services/"+svc.ID, "")
+	c.Notify(e, "/services/"+svc.ID, "")
 }
 
 type UptimeInput struct {
@@ -273,7 +273,7 @@ type UptimeView struct {
 }
 
 // Uptime returns a service's check and its results.
-func (c *Core) Uptime(ctx context.Context, serviceID string) (UptimeView, error) {
+func (c *Monitoring) Uptime(ctx context.Context, serviceID string) (UptimeView, error) {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
 		return UptimeView{}, err
@@ -337,28 +337,28 @@ func uptimeOver(hours []domain.UptimeHour, since time.Time) (pct *float64, laten
 
 // SetUptime creates or replaces a service's check. It runs right away. A
 // git project's checks are in its compose file.
-func (c *Core) SetUptime(ctx context.Context, serviceID string, in UptimeInput) (UptimeView, error) {
+func (c *Monitoring) SetUptime(ctx context.Context, serviceID string, in UptimeInput) (UptimeView, error) {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
 		return UptimeView{}, err
 	}
-	if err := c.checkGitOwned(ctx, svc.ProjectID); err != nil {
+	if err := c.mgr.CheckGitOwned(ctx, svc.ProjectID); err != nil {
 		return UptimeView{}, err
 	}
-	chk, err := uptimeCheck(svc, in)
+	chk, err := UptimeCheck(svc, in)
 	if err != nil {
 		return UptimeView{}, err
 	}
-	if err := c.saveUptime(ctx, chk); err != nil {
+	if err := c.SaveUptime(ctx, chk); err != nil {
 		return UptimeView{}, err
 	}
 	return c.Uptime(ctx, serviceID)
 }
 
-// uptimeCheck validates svc's check settings, with the defaults applied.
-func uptimeCheck(svc domain.Service, in UptimeInput) (domain.UptimeCheck, error) {
+// UptimeCheck validates svc's check settings, with the defaults applied.
+func UptimeCheck(svc domain.Service, in UptimeInput) (domain.UptimeCheck, error) {
 	if svc.Kind != domain.ServiceKindApp || !network.HTTPRouted(svc) {
-		return domain.UptimeCheck{}, fmt.Errorf("%w: only an app with a public domain can have an uptime check", ErrInvalid)
+		return domain.UptimeCheck{}, fmt.Errorf("%w: only an app with a public domain can have an uptime check", domain.ErrInvalid)
 	}
 	chk := domain.UptimeCheck{
 		ServiceID:      svc.ID,
@@ -372,33 +372,33 @@ func uptimeCheck(svc domain.Service, in UptimeInput) (domain.UptimeCheck, error)
 		chk.Path = "/"
 	}
 	if chk.IntervalSec == 0 {
-		chk.IntervalSec = defaultUptimeInterval
+		chk.IntervalSec = DefaultUptimeInterval
 	}
 	if chk.TimeoutSec == 0 {
-		chk.TimeoutSec = defaultUptimeTimeout
+		chk.TimeoutSec = DefaultUptimeTimeout
 	}
 	switch {
 	case !strings.HasPrefix(chk.Path, "/") || strings.ContainsAny(chk.Path, " #\t\r\n"):
-		return domain.UptimeCheck{}, fmt.Errorf("%w: path must start with / (e.g. /health)", ErrInvalid)
+		return domain.UptimeCheck{}, fmt.Errorf("%w: path must start with / (e.g. /health)", domain.ErrInvalid)
 	case chk.IntervalSec < 30 || chk.IntervalSec > 3600:
-		return domain.UptimeCheck{}, fmt.Errorf("%w: interval must be between 30 and 3600 seconds", ErrInvalid)
+		return domain.UptimeCheck{}, fmt.Errorf("%w: interval must be between 30 and 3600 seconds", domain.ErrInvalid)
 	case chk.TimeoutSec < 1 || chk.TimeoutSec > 60 || chk.TimeoutSec >= chk.IntervalSec:
-		return domain.UptimeCheck{}, fmt.Errorf("%w: timeout must be between 1 and 60 seconds, and shorter than the interval", ErrInvalid)
+		return domain.UptimeCheck{}, fmt.Errorf("%w: timeout must be between 1 and 60 seconds, and shorter than the interval", domain.ErrInvalid)
 	case chk.ExpectedStatus != 0 && (chk.ExpectedStatus < 100 || chk.ExpectedStatus > 599):
-		return domain.UptimeCheck{}, fmt.Errorf("%w: expected status must be an HTTP status (100-599), or 0 for any below 400", ErrInvalid)
+		return domain.UptimeCheck{}, fmt.Errorf("%w: expected status must be an HTTP status (100-599), or 0 for any below 400", domain.ErrInvalid)
 	}
 	return chk, nil
 }
 
-// sameUptime reports whether two checks have the same settings.
-func sameUptime(a, b domain.UptimeCheck) bool {
+// SameUptime reports whether two checks have the same settings.
+func SameUptime(a, b domain.UptimeCheck) bool {
 	return a.Path == b.Path && a.IntervalSec == b.IntervalSec && a.TimeoutSec == b.TimeoutSec &&
 		a.ExpectedStatus == b.ExpectedStatus && a.Enabled == b.Enabled
 }
 
-// saveUptime stores a check and runs it now with the new settings; the
+// SaveUptime stores a check and runs it now with the new settings; the
 // notified state is kept.
-func (c *Core) saveUptime(ctx context.Context, chk domain.UptimeCheck) error {
+func (c *Monitoring) SaveUptime(ctx context.Context, chk domain.UptimeCheck) error {
 	if _, err := c.store.SaveUptimeCheck(ctx, chk); err != nil {
 		return err
 	}
@@ -412,18 +412,18 @@ func (c *Core) saveUptime(ctx context.Context, chk domain.UptimeCheck) error {
 }
 
 // DeleteUptime removes a service's check and its results.
-func (c *Core) DeleteUptime(ctx context.Context, serviceID string) error {
+func (c *Monitoring) DeleteUptime(ctx context.Context, serviceID string) error {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
 		return err
 	}
-	if err := c.checkGitOwned(ctx, svc.ProjectID); err != nil {
+	if err := c.mgr.CheckGitOwned(ctx, svc.ProjectID); err != nil {
 		return err
 	}
-	return c.deleteUptime(ctx, serviceID)
+	return c.RemoveUptime(ctx, serviceID)
 }
 
-func (c *Core) deleteUptime(ctx context.Context, serviceID string) error {
+func (c *Monitoring) RemoveUptime(ctx context.Context, serviceID string) error {
 	if err := c.store.DeleteUptimeCheck(ctx, serviceID); err != nil {
 		return err
 	}

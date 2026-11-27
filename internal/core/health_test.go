@@ -14,6 +14,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
 func replica(name, deploy string, state container.ContainerState, health container.HealthStatus) container.Summary {
@@ -104,8 +105,8 @@ func TestTrackHealthNotifies(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newTestCore(t, config.Config{})
-	c.notifyHTTP = &http.Client{Transport: redirect{srv}}
-	if _, err := c.CreateChannel(ctx, ChannelInput{Name: "ops", Kind: "discord", Config: map[string]string{"webhookUrl": webhook}, Events: []string{EventServiceUnhealthy, EventServiceHealthy}, Enabled: true}); err != nil {
+	c.NotifyHTTP = &http.Client{Transport: redirect{srv}}
+	if _, err := c.CreateChannel(ctx, monitoring.ChannelInput{Name: "ops", Kind: "discord", Config: map[string]string{"webhookUrl": webhook}, Events: []string{domain.EventServiceUnhealthy, domain.EventServiceHealthy}, Enabled: true}); err != nil {
 		t.Fatal(err)
 	}
 	p := domain.Project{ID: "p1", Name: "shop"}

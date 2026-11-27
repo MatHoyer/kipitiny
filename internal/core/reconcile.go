@@ -17,6 +17,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/docker"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
 const (
@@ -167,7 +168,7 @@ func (c *Core) reconcileServer(ctx context.Context, sv domain.Server, svcs []dom
 			c.log.Warn("reconcile: cloudflared", "server", sv.Name, "err", err)
 		}
 		if sv.Kind == domain.ServerLocal {
-			if err := c.ensureAnalytics(ctx); err != nil {
+			if err := c.EnsureAnalytics(ctx); err != nil {
 				c.log.Warn("reconcile: analytics", "err", err)
 			}
 		}
@@ -317,11 +318,11 @@ func (c *Core) reconcileService(ctx context.Context, project domain.Project, svc
 				c.notifyOOM(ctx, svc.ID, strconv.Itoa(i))
 				continue
 			}
-			c.notify(notify.Event{
-				Type:    EventServiceRestarted,
+			c.Notify(notify.Event{
+				Type:    domain.EventServiceRestarted,
 				Level:   notify.Warning,
 				Title:   fmt.Sprintf("%s/%s restarted", project.Name, svc.Name),
-				Message: fmt.Sprintf("Replica %d had stopped (%s); kipitiny started it again. Further restarts are not reported for %s.", i, ct.Status, notifyCooldown),
+				Message: fmt.Sprintf("Replica %d had stopped (%s); kipitiny started it again. Further restarts are not reported for %s.", i, ct.Status, monitoring.NotifyCooldown),
 				Fields:  []notify.Field{{Name: "Project", Value: project.Name}, {Name: "Service", Value: svc.Name}},
 			}, "/services/"+svc.ID, "restarted:"+svc.ID)
 		}

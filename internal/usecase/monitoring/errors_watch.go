@@ -1,4 +1,4 @@
-package core
+package monitoring
 
 import (
 	"context"
@@ -44,15 +44,15 @@ type DeployErrors struct {
 }
 
 // ServiceDeployErrors is DeployErrors of the app's current deployment.
-func (c *Core) ServiceDeployErrors(ctx context.Context, serviceID string) (DeployErrors, error) {
+func (c *Monitoring) ServiceDeployErrors(ctx context.Context, serviceID string) (DeployErrors, error) {
 	svc, cl, _, err := c.serviceErrors(ctx, serviceID)
 	if err != nil {
 		return DeployErrors{}, err
 	}
-	return c.deployErrors(ctx, cl, svc, time.Now())
+	return c.DeployErrorsAt(ctx, cl, svc, time.Now())
 }
 
-func (c *Core) deployErrors(ctx context.Context, cl *analytics.Client, svc domain.Service, now time.Time) (DeployErrors, error) {
+func (c *Monitoring) DeployErrorsAt(ctx context.Context, cl *analytics.Client, svc domain.Service, now time.Time) (DeployErrors, error) {
 	deps, err := c.store.ListDeployments(ctx, svc.ID, 20)
 	if err != nil {
 		return DeployErrors{}, err
@@ -110,8 +110,8 @@ func (c *Core) deployErrors(ctx context.Context, cl *analytics.Client, svc domai
 
 // StartErrorsWatch alerts about new and regressed issues, and deploys
 // raising errors, every 30 seconds.
-func (c *Core) StartErrorsWatch() error {
-	return c.goLoop(func() {
+func (c *Monitoring) StartErrorsWatch() error {
+	return c.mgr.GoLoop(func() {
 		tick := time.NewTicker(errorsWatchEvery)
 		defer tick.Stop()
 		for {
@@ -127,7 +127,7 @@ func (c *Core) StartErrorsWatch() error {
 	})
 }
 
-func (c *Core) watchErrors(ctx context.Context, now time.Time) error {
+func (c *Monitoring) watchErrors(ctx context.Context, now time.Time) error {
 	st := c.analyticsState(ctx)
 	if !st.Enabled {
 		return nil
@@ -136,12 +136,12 @@ func (c *Core) watchErrors(ctx context.Context, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	return c.alertErrors(ctx, cl, now)
+	return c.AlertErrors(ctx, cl, now)
 }
 
-// alertErrors sends the issues opened or reopened since the last look, and
+// AlertErrors sends the issues opened or reopened since the last look, and
 // the deploys raising errors not alerted about yet.
-func (c *Core) alertErrors(ctx context.Context, cl *analytics.Client, now time.Time) error {
+func (c *Monitoring) AlertErrors(ctx context.Context, cl *analytics.Client, now time.Time) error {
 	svcs, err := c.store.ListAllServices(ctx)
 	if err != nil {
 		return err
@@ -189,7 +189,7 @@ func (c *Core) alertErrors(ctx context.Context, cl *analytics.Client, now time.T
 		if p.ParentID != "" {
 			continue
 		}
-		de, err := c.deployErrors(ctx, cl, svc, now)
+		de, err := c.DeployErrorsAt(ctx, cl, svc, now)
 		if err != nil || !de.Spike || c.spiked[de.DeploymentID] {
 			continue
 		}
@@ -199,24 +199,24 @@ func (c *Core) alertErrors(ctx context.Context, cl *analytics.Client, now time.T
 	return nil
 }
 
-func (c *Core) notifyIssue(p domain.Project, svc domain.Service, x analytics.ErrorChange) {
-	e := notify.Event{Type: EventErrorNew, Level: notify.Error, Title: fmt.Sprintf("New error in %s/%s", p.Name, svc.Name)}
+func (c *Monitoring) notifyIssue(p domain.Project, svc domain.Service, x analytics.ErrorChange) {
+	e := notify.Event{Type: domain.EventErrorNew, Level: notify.Error, Title: fmt.Sprintf("New error in %s/%s", p.Name, svc.Name)}
 	if x.Kind == "regression" {
-		e.Type, e.Level, e.Title = EventErrorRegression, notify.Warning, fmt.Sprintf("Error back in %s/%s", p.Name, svc.Name)
+		e.Type, e.Level, e.Title = domain.EventErrorRegression, notify.Warning, fmt.Sprintf("Error back in %s/%s", p.Name, svc.Name)
 	}
 	e.Message = x.Title
 	e.Fields = []notify.Field{{Name: "Where", Value: x.Culprit}, {Name: "Release", Value: x.Release}}
-	c.notify(e, "/services/"+svc.ID+"?tab=errors&issue="+strconv.FormatInt(x.Issue, 10), "")
+	c.Notify(e, "/services/"+svc.ID+"?tab=errors&issue="+strconv.FormatInt(x.Issue, 10), "")
 }
 
-func (c *Core) notifySpike(p domain.Project, svc domain.Service, de DeployErrors) {
+func (c *Monitoring) notifySpike(p domain.Project, svc domain.Service, de DeployErrors) {
 	msg := fmt.Sprintf("%d errors in the first %.0f minutes of %s (%.1f a minute", de.Events, de.Minutes, de.Release, de.Rate)
 	if de.PreviousRelease != "" {
 		msg += fmt.Sprintf(", %.1f before with %s", de.PreviousRate, de.PreviousRelease)
 	}
 	msg += fmt.Sprintf("), %d new issues. Roll back from its Deployments tab if it's the deploy's fault.", de.NewIssues)
-	c.notify(notify.Event{
-		Type: EventErrorSpike, Level: notify.Error, Title: fmt.Sprintf("Errors up after deploying %s/%s", p.Name, svc.Name),
+	c.Notify(notify.Event{
+		Type: domain.EventErrorSpike, Level: notify.Error, Title: fmt.Sprintf("Errors up after deploying %s/%s", p.Name, svc.Name),
 		Message: msg, Fields: []notify.Field{{Name: "Project", Value: p.Name}, {Name: "Service", Value: svc.Name}},
 	}, "/services/"+svc.ID+"?tab=deployments", "")
 }

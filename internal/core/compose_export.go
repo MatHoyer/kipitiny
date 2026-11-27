@@ -9,6 +9,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
 // ExportOptions picks what ExportCompose writes.
@@ -248,17 +249,17 @@ func composeUptime(chk domain.UptimeCheck) *compose.Uptime {
 	if chk.Path != "/" {
 		u.Path = chk.Path
 	}
-	if chk.IntervalSec != defaultUptimeInterval {
+	if chk.IntervalSec != monitoring.DefaultUptimeInterval {
 		u.Interval = compose.Seconds(chk.IntervalSec)
 	}
-	if chk.TimeoutSec != defaultUptimeTimeout {
+	if chk.TimeoutSec != monitoring.DefaultUptimeTimeout {
 		u.Timeout = compose.Seconds(chk.TimeoutSec)
 	}
 	return u
 }
 
-func uptimeInput(u compose.Uptime) UptimeInput {
-	return UptimeInput{Path: u.Path, IntervalSec: int(u.Interval), TimeoutSec: int(u.Timeout), ExpectedStatus: u.ExpectedStatus, Enabled: !u.Paused}
+func uptimeInput(u compose.Uptime) monitoring.UptimeInput {
+	return monitoring.UptimeInput{Path: u.Path, IntervalSec: int(u.Interval), TimeoutSec: int(u.Timeout), ExpectedStatus: u.ExpectedStatus, Enabled: !u.Paused}
 }
 
 var nonVarRe = regexp.MustCompile(`[^A-Z0-9]+`)

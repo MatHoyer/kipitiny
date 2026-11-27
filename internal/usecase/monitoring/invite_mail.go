@@ -1,4 +1,4 @@
-package core
+package monitoring
 
 import (
 	"context"
@@ -12,18 +12,18 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/mail"
 )
 
-// inviteBody is the email carrying an invite link.
-func (c *Core) inviteBody(ctx context.Context, i domain.Invite, link string) mail.Body {
+// InviteBody is the email carrying an invite link.
+func (c *Monitoring) InviteBody(ctx context.Context, i domain.Invite, link string) mail.Body {
 	who := "An admin"
 	if u, err := c.store.GetUser(ctx, i.CreatedBy); err == nil {
 		who = u.Username
 	}
-	brand := c.BrandName(ctx)
+	brand := c.mgr.BrandName(ctx)
 	where := "a " + brand + " server"
 	switch {
-	case brand != DefaultBrandName && c.cfg.Domain != "":
+	case brand != domain.DefaultBrandName && c.cfg.Domain != "":
 		where = brand + " (" + c.cfg.Domain + ")"
-	case brand != DefaultBrandName:
+	case brand != domain.DefaultBrandName:
 		where = brand
 	case c.cfg.Domain != "":
 		where = "the kipitiny server " + c.cfg.Domain
@@ -52,12 +52,12 @@ func (c *Core) inviteBody(ctx context.Context, i domain.Invite, link string) mai
 }
 
 // CheckMailer fails when no email provider is set up (identity.Mailer).
-func (c *Core) CheckMailer(ctx context.Context) error {
+func (c *Monitoring) CheckMailer(ctx context.Context) error {
 	_, err := c.emailProvider(ctx, "")
 	return err
 }
 
 // MailInvite emails an invite link (identity.Mailer).
-func (c *Core) MailInvite(ctx context.Context, to *netmail.Address, i domain.Invite, link string) error {
-	return c.sendMail(ctx, "", []*netmail.Address{to}, c.inviteBody(ctx, i, link), "")
+func (c *Monitoring) MailInvite(ctx context.Context, to *netmail.Address, i domain.Invite, link string) error {
+	return c.SendMail(ctx, "", []*netmail.Address{to}, c.InviteBody(ctx, i, link), "")
 }

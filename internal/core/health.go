@@ -119,16 +119,16 @@ func (c *Core) trackHealth(project domain.Project, svc domain.Service, cts []con
 	fields := []notify.Field{{Name: "Project", Value: project.Name}, {Name: "Service", Value: svc.Name}}
 	switch {
 	case down:
-		c.notify(notify.Event{
-			Type:    EventServiceUnhealthy,
+		c.Notify(notify.Event{
+			Type:    domain.EventServiceUnhealthy,
 			Level:   notify.Error,
 			Title:   name + " is unhealthy",
 			Message: fmt.Sprintf("No healthy replica for %s (%s).", healthGrace, detail),
 			Fields:  fields,
 		}, "/services/"+svc.ID, "")
 	case up:
-		c.notify(notify.Event{
-			Type:    EventServiceHealthy,
+		c.Notify(notify.Event{
+			Type:    domain.EventServiceHealthy,
 			Level:   notify.Success,
 			Title:   name + " is healthy again",
 			Message: "Unhealthy for " + now.Sub(since).Round(time.Second).String() + ".",

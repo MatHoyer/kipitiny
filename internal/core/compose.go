@@ -223,14 +223,14 @@ func (a *applier) apply(ctx context.Context) error {
 			id = a.byName[op.name].ID
 		}
 		if op.check == nil {
-			if err := c.deleteUptime(ctx, id); err != nil && !errors.Is(err, domain.ErrNotFound) {
+			if err := c.RemoveUptime(ctx, id); err != nil && !errors.Is(err, domain.ErrNotFound) {
 				return fmt.Errorf("uptime check of %s: %w", op.name, err)
 			}
 			continue
 		}
 		chk := *op.check
 		chk.ServiceID = id
-		if err := c.saveUptime(ctx, chk); err != nil {
+		if err := c.SaveUptime(ctx, chk); err != nil {
 			return fmt.Errorf("uptime check of %s: %w", op.name, err)
 		}
 	}

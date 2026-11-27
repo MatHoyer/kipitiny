@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -173,7 +174,7 @@ func TestGitApply(t *testing.T) {
 	if _, err := c.ApplyCompose(ctx, p.ID, []byte(v1), ApplyOptions{}); !errors.Is(err, ErrGitManaged) {
 		t.Errorf("apply: %v", err)
 	}
-	if _, err := c.SetUptime(ctx, svcs["web"].ID, UptimeInput{Enabled: true}); !errors.Is(err, ErrGitManaged) {
+	if _, err := c.SetUptime(ctx, svcs["web"].ID, monitoring.UptimeInput{Enabled: true}); !errors.Is(err, ErrGitManaged) {
 		t.Errorf("uptime: %v", err)
 	}
 	if err := c.DeleteUptime(ctx, svcs["web"].ID); !errors.Is(err, ErrGitManaged) {

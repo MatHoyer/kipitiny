@@ -207,8 +207,8 @@ func (c *Core) runAnonymize(src, cp domain.Backup, rules anonymize.Rules, salt, 
 	}
 	c.pruneAnonymized(context.WithoutCancel(ctx), cp)
 	if err != nil {
-		c.notify(notify.Event{
-			Type:    EventAnonymizeFailed,
+		c.Notify(notify.Event{
+			Type:    domain.EventAnonymizeFailed,
 			Level:   notify.Error,
 			Title:   "Anonymized copy failed for " + src.ProjectName + "/" + src.ServiceName,
 			Message: fmt.Sprintf("Previews can't be seeded with the backup of %s: %s", src.CreatedAt.UTC().Format("2006-01-02 15:04 UTC"), cp.Error),

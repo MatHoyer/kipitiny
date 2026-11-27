@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"slices"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/pending"
@@ -38,6 +38,8 @@ type Core struct {
 	*identity.Identity
 	// Domains, DNS, Traefik, routes, middlewares, ports and tunnels.
 	*network.Network
+	// Notifications, email, push, uptime checks, analytics and errors.
+	*monitoring.Monitoring
 
 	cfg   config.Config
 	store domain.Store
@@ -60,49 +62,33 @@ type Core struct {
 	sched     scheduler
 	verifySem chan struct{}
 	// anonymizeMu makes starting an anonymized copy check-then-create.
-	anonymizeMu    sync.Mutex
-	steps          opSteps
-	reconcileKick  chan struct{}
-	probes         sync.Map // server ID -> *mount.Mount (nil: no probe there)
-	readUsers      sync.Map // container ID -> struct{}: the data browser's read-only user exists in that database
-	update         updateState
-	gitKick        chan string // project IDs to sync
-	gitFlows       pending.Map[gitFlow]
-	gitTokens      gitTokens
-	cleaning       atomic.Bool  // a cleanup is running
-	securityBusy   atomic.Bool  // a security check started by hand is running
-	hostActionMu   sync.Mutex   // starting an update install or a reboot is check-then-start
-	notified       sync.Map     // notification key -> time.Time last sent
-	notifyHTTP     *http.Client // nil: notify's default; tests redirect it
-	pushMu         sync.Mutex   // generating the VAPID keys
-	analyticsMu    sync.Mutex
-	analyticsSites string // container ID and hostnames last sent to the analytics server
-	stats          statsState
-	sleep          sleepState
-	uptime         uptimeState
-	jobs           jobsState
-	health         healthState
-	uptimeHTTP     *http.Client // nil: probe's default; tests redirect it
-	files          filesState
-
-	errorsMu sync.Mutex // giving apps their DSN
-	// analyticsErrors is the container ID and DSN keys last sent to the
-	// analytics server.
-	analyticsErrors string
-	// errorsSeq is the last error change alerted about, -1 before the
-	// first look; spiked the deployments alerted about.
-	errorsSeq int64
-	spiked    map[string]bool
+	anonymizeMu   sync.Mutex
+	steps         opSteps
+	reconcileKick chan struct{}
+	probes        sync.Map // server ID -> *mount.Mount (nil: no probe there)
+	readUsers     sync.Map // container ID -> struct{}: the data browser's read-only user exists in that database
+	update        updateState
+	gitKick       chan string // project IDs to sync
+	gitFlows      pending.Map[gitFlow]
+	gitTokens     gitTokens
+	cleaning      atomic.Bool // a cleanup is running
+	securityBusy  atomic.Bool // a security check started by hand is running
+	hostActionMu  sync.Mutex  // starting an update install or a reboot is check-then-start
+	stats         statsState
+	sleep         sleepState
+	jobs          jobsState
+	health        healthState
+	files         filesState
 }
 
 // New builds the core around the local Docker client; remote servers are
 // connected on demand over SSH.
 func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logger) *Core {
 	bg, cancel := context.WithCancel(context.Background())
-	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1), gitKick: make(chan string, 16),
-		errorsSeq: -1, spiked: map[string]bool{}}
+	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel, verifySem: make(chan struct{}, 1), reconcileKick: make(chan struct{}, 1), gitKick: make(chan string, 16)}
 	c.pool = docker.NewPool(local, c.connectServer)
-	c.Identity = identity.New(cfg, s, identity.SecretKinds(cfg, local), c, log)
+	c.Monitoring = monitoring.New(bg, &c.cfg, s, monitoringPorts{c}, log)
+	c.Identity = identity.New(cfg, s, identity.SecretKinds(cfg, local), c.Monitoring, log)
 	c.Network = network.New(bg, &c.cfg, s, networkPorts{c}, log)
 	return c
 }
@@ -117,7 +103,7 @@ func (c *Core) Bootstrap(ctx context.Context) error {
 	if err := c.store.FailRunningOperations(ctx, "interrupted by manager restart"); err != nil {
 		return err
 	}
-	if err := c.migrateSMTPSetting(ctx); err != nil {
+	if err := c.MigrateSMTPSetting(ctx); err != nil {
 		return err
 	}
 	if c.cfg.Domain != "" && !c.cfg.Traefik.Enabled {

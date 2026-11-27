@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
 	"strings"
 	"testing"
@@ -144,7 +145,7 @@ services:
 		t.Errorf("web = %+v", web)
 	}
 	if chk, err := c.store.GetUptimeCheck(ctx, web.ID); err != nil || chk.Path != "/health" || chk.IntervalSec != 120 ||
-		chk.TimeoutSec != defaultUptimeTimeout || !chk.Enabled {
+		chk.TimeoutSec != monitoring.DefaultUptimeTimeout || !chk.Enabled {
 		t.Errorf("uptime check = %+v, %v", chk, err)
 	}
 	project, _ := c.store.GetProject(ctx, p.ID)

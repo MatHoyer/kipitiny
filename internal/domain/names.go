@@ -24,3 +24,6 @@ var EnvRefRe = regexp.MustCompile(`\{\{\s*(?:project\.([A-Za-z_][A-Za-z0-9_]*)|d
 
 // SoleRefRe matches a value that is exactly one reference.
 var SoleRefRe = regexp.MustCompile(`^\s*` + EnvRefRe.String() + `\s*$`)
+
+// DefaultBrandName is the name the manager goes by when no brand is set.
+const DefaultBrandName = "kipitiny"

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
 	"github.com/distribution/reference"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
@@ -258,7 +259,7 @@ func (c *Core) runDeploy(project domain.Project, svc domain.Service, dep domain.
 	}
 
 	e := notify.Event{
-		Type:  EventDeploySucceeded,
+		Type:  domain.EventDeploySucceeded,
 		Level: notify.Success,
 		Title: fmt.Sprintf("%s/%s deployed", project.Name, svc.Name),
 		Fields: []notify.Field{
@@ -269,9 +270,9 @@ func (c *Core) runDeploy(project domain.Project, svc domain.Service, dep domain.
 		},
 	}
 	if err != nil {
-		e.Type, e.Level, e.Title, e.Message = EventDeployFailed, notify.Error, fmt.Sprintf("%s/%s deployment failed", project.Name, svc.Name), msg
+		e.Type, e.Level, e.Title, e.Message = domain.EventDeployFailed, notify.Error, fmt.Sprintf("%s/%s deployment failed", project.Name, svc.Name), msg
 	}
-	c.notify(e, "/services/"+svc.ID, "")
+	c.Notify(e, "/services/"+svc.ID, "")
 }
 
 func (c *Core) deploy(ctx context.Context, project domain.Project, svc domain.Service, dep domain.Deployment,
@@ -645,7 +646,7 @@ func containerSpec(project domain.Project, svc domain.Service, src envSources, d
 	envMap := resolveEnv(svc.Env, src)
 	if src.errors != nil {
 		inject := maps.Clone(src.errors)
-		inject["SENTRY_RELEASE"] = ImageRelease(svc.Image)
+		inject["SENTRY_RELEASE"] = monitoring.ImageRelease(svc.Image)
 		for k, v := range inject {
 			if _, own := envMap[k]; !own {
 				envMap[k] = v

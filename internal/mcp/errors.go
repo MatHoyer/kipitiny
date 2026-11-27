@@ -4,11 +4,11 @@ import (
 	"context"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/analytics"
-	"github.com/kipit-labs/kipitiny/internal/core"
 )
 
 type listIssuesIn struct {
@@ -18,10 +18,10 @@ type listIssuesIn struct {
 	Sort    string `json:"sort,omitempty" jsonschema:"lastSeen (default), firstSeen, events or users"`
 }
 
-func (t *tools) listIssues(ctx context.Context, _ *mcp.CallToolRequest, in listIssuesIn) (*mcp.CallToolResult, core.ErrorsView, error) {
+func (t *tools) listIssues(ctx context.Context, _ *mcp.CallToolRequest, in listIssuesIn) (*mcp.CallToolResult, monitoring.ErrorsView, error) {
 	svc, err := t.service(ctx, in.Service, identity.PermView)
 	if err != nil {
-		return nil, core.ErrorsView{}, friendly(err)
+		return nil, monitoring.ErrorsView{}, friendly(err)
 	}
 	status := in.Status
 	switch status {
@@ -30,7 +30,7 @@ func (t *tools) listIssues(ctx context.Context, _ *mcp.CallToolRequest, in listI
 	case "all":
 		status = ""
 	}
-	out, err := t.c.ServiceErrors(ctx, svc.ID, core.ErrorsQuery{Status: status, Search: in.Search, Sort: in.Sort, Limit: 50})
+	out, err := t.c.ServiceErrors(ctx, svc.ID, monitoring.ErrorsQuery{Status: status, Search: in.Search, Sort: in.Sort, Limit: 50})
 	return nil, out, friendly(err)
 }
 

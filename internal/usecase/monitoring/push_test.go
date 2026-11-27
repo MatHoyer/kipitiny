@@ -1,4 +1,4 @@
-package core
+package monitoring
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 
 func TestPushNotifications(t *testing.T) {
 	ctx := context.Background()
-	c := newTestCore(t, config.Config{})
+	c := newTestMonitoring(t, config.Config{})
 	var mu sync.Mutex
 	hits := map[string]int{}
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,7 +33,7 @@ func TestPushNotifications(t *testing.T) {
 		w.WriteHeader(http.StatusCreated)
 	}))
 	t.Cleanup(srv.Close)
-	c.notifyHTTP = &http.Client{Transport: redirect{srv}}
+	c.NotifyHTTP = &http.Client{Transport: redirect{srv}}
 
 	actor := func(role domain.Role) context.Context {
 		u, err := c.store.CreateUser(ctx, domain.User{Username: string(role), PasswordHash: "x", Role: role})
@@ -55,21 +55,21 @@ func TestPushNotifications(t *testing.T) {
 	if _, err := c.SubscribePush(member, in("https://fcm.googleapis.com/fcm/send/m")); !errors.Is(err, identity.ErrForbidden) {
 		t.Fatalf("member subscribes: %v", err)
 	}
-	if _, err := c.SubscribePush(admin, in("https://example.com/push")); !errors.Is(err, ErrInvalid) {
+	if _, err := c.SubscribePush(admin, in("https://example.com/push")); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("unknown push service: %v", err)
 	}
 	bad := in("https://fcm.googleapis.com/fcm/send/a")
 	bad.Keys.Auth = "short"
-	if _, err := c.SubscribePush(admin, bad); !errors.Is(err, ErrInvalid) {
+	if _, err := c.SubscribePush(admin, bad); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("bad keys: %v", err)
 	}
 
 	// No device yet: a test of the push channel says why nothing arrived.
-	ch, err := c.CreateChannel(ctx, ChannelInput{Name: "phones", Kind: "push", Events: []string{EventDeployFailed}, Enabled: true})
+	ch, err := c.CreateChannel(ctx, ChannelInput{Name: "phones", Kind: "push", Events: []string{domain.EventDeployFailed}, Enabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := c.TestChannel(ctx, ch.ID); !errors.Is(err, ErrInvalid) {
+	if err := c.TestChannel(ctx, ch.ID); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("test without devices: %v", err)
 	}
 

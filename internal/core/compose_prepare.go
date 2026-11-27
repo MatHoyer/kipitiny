@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
 	"github.com/moby/moby/client"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -303,11 +304,11 @@ func (a *applier) prepareUptime(ctx context.Context, name string, svc domain.Ser
 		}
 		return has, nil
 	}
-	chk, err := uptimeCheck(svc, uptimeInput(*u))
+	chk, err := monitoring.UptimeCheck(svc, uptimeInput(*u))
 	if err != nil {
 		return false, err
 	}
-	if has && sameUptime(cur, chk) {
+	if has && monitoring.SameUptime(cur, chk) {
 		return false, nil
 	}
 	a.uptimeOps = append(a.uptimeOps, uptimeOp{name: name, check: &chk})

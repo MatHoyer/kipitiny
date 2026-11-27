@@ -1,4 +1,4 @@
-package core
+package monitoring
 
 import (
 	"context"
@@ -11,11 +11,11 @@ import (
 
 func TestAnalyticsShare(t *testing.T) {
 	ctx := context.Background()
-	c := newTestCore(t, config.Config{})
+	c := newTestMonitoring(t, config.Config{})
 	p, _ := c.store.CreateProject(ctx, domain.Project{Name: "shop"})
 	svc, _ := c.store.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "web", Kind: domain.ServiceKindApp, Image: "nginx", Replicas: 1,
 		Domain: "shop.example.com", Port: 80})
-	if _, err := c.ShareServiceAnalytics(ctx, svc.ID); !errors.Is(err, ErrInvalid) {
+	if _, err := c.ShareServiceAnalytics(ctx, svc.ID); !errors.Is(err, domain.ErrInvalid) {
 		t.Fatalf("analytics off: %v", err)
 	}
 	svc.Analytics = true
@@ -25,7 +25,7 @@ func TestAnalyticsShare(t *testing.T) {
 		t.Fatalf("share: %q %v", first, err)
 	}
 	// The link resolves to the app: past the token, analytics are off on this manager.
-	if _, err := c.SharedAnalytics(ctx, first, AnalyticsQuery{}); !errors.Is(err, ErrInvalid) {
+	if _, err := c.SharedAnalytics(ctx, first, AnalyticsQuery{}); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("shared: %v", err)
 	}
 	second, _ := c.ShareServiceAnalytics(ctx, svc.ID)
@@ -39,7 +39,7 @@ func TestAnalyticsShare(t *testing.T) {
 	got, _ := c.store.GetService(ctx, svc.ID)
 	got.Image = "nginx:2"
 	c.store.UpdateService(ctx, got)
-	if _, err := c.SharedAnalytics(ctx, second, AnalyticsQuery{}); !errors.Is(err, ErrInvalid) {
+	if _, err := c.SharedAnalytics(ctx, second, AnalyticsQuery{}); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("after an update: %v", err)
 	}
 	c.UnshareServiceAnalytics(ctx, svc.ID)

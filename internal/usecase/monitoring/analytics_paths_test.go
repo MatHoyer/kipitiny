@@ -1,4 +1,4 @@
-package core
+package monitoring
 
 import (
 	"context"
@@ -22,16 +22,16 @@ func TestAnalyticsPaths(t *testing.T) {
 		{"/x`) || Host(`evil", "/y", false},
 		{"js/app.js", "/y", false},
 	} {
-		if err := validateAnalyticsPaths(c.script, c.hit); (err == nil) != c.ok {
+		if err := ValidateAnalyticsPaths(c.script, c.hit); (err == nil) != c.ok {
 			t.Errorf("%q %q: %v", c.script, c.hit, err)
 		}
 	}
 
 	ctx := context.Background()
-	co := newTestCore(t, config.Config{})
+	co := newTestMonitoring(t, config.Config{})
 	own := domain.Service{ID: "01OWN", Domain: "shop.example.com", ServerID: domain.LocalServerID, AnalyticsScript: "/js/k.js", AnalyticsHit: "/k"}
 	plain := domain.Service{ID: "01PLAIN", Domain: "blog.example.com", ServerID: domain.LocalServerID}
-	labels := co.analyticsSpec(ctx, analyticsState{AnalyticsSettings: AnalyticsSettings{Domain: "stats.example.com"}}, []domain.Service{own, plain}).Config.Labels
+	labels := co.analyticsSpec(ctx, AnalyticsState{AnalyticsSettings: AnalyticsSettings{Domain: "stats.example.com"}}, []domain.Service{own, plain}).Config.Labels
 	if r := labels["traefik.http.routers.kipitiny-analytics-01own.rule"]; r != "Host(`shop.example.com`) && (Path(`/js/k.js`) || Path(`/k`))" {
 		t.Errorf("own paths' router: %q", r)
 	}

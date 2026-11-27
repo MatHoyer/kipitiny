@@ -173,7 +173,7 @@ func (c *Core) checkUpdate(ctx context.Context) {
 		c.log.Info("a new version is available", "current", c.cfg.Version, "latest", u.latest)
 		if u.notified != u.latest {
 			u.notified = u.latest
-			c.notify(updateEvent(c.cfg.Version, u.latest, notices), "/about", "")
+			c.Notify(updateEvent(c.cfg.Version, u.latest, notices), "/about", "")
 		}
 	}
 }
@@ -182,7 +182,7 @@ func (c *Core) checkUpdate(ctx context.Context) {
 // a warning when one of its notices is.
 func updateEvent(current, latest string, notices []upgrade.Notice) notify.Event {
 	e := notify.Event{
-		Type:    EventUpdateAvailable,
+		Type:    domain.EventUpdateAvailable,
 		Level:   notify.Info,
 		Title:   "kipitiny " + latest + " is available",
 		Message: "Running " + current + ". Update from the sidebar or System › About.",
@@ -400,4 +400,17 @@ func (c *Core) cleanupUpdater(ctx context.Context, dk *docker.Client) {
 			c.log.Warn("cannot remove updater container", "err", err)
 		}
 	}
+}
+
+var releaseRe = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
+
+// ownImageRef is the manager's own image at this version (:dev for
+// builds between releases, `make docker`; :dev-<branch> for a test
+// environment's): its commands run the analytics server and the SQLite
+// helper.
+func (c *Core) ownImageRef() string {
+	if releaseRe.MatchString(c.cfg.Version) || strings.HasPrefix(c.cfg.Version, "dev-") {
+		return c.cfg.Update.Image + ":" + c.cfg.Version
+	}
+	return c.cfg.Update.Image + ":dev"
 }

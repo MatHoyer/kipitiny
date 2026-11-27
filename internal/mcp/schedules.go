@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -129,13 +130,13 @@ type setUptimeIn struct {
 	Disabled       bool   `json:"disabled,omitempty" jsonschema:"keep the check and its history but pause it"`
 }
 
-func (t *tools) setUptimeCheck(ctx context.Context, _ *mcp.CallToolRequest, in setUptimeIn) (*mcp.CallToolResult, core.UptimeView, error) {
-	out, err := mutate(ctx, t.c, "set_uptime_check", in.Service, func() (core.UptimeView, error) {
+func (t *tools) setUptimeCheck(ctx context.Context, _ *mcp.CallToolRequest, in setUptimeIn) (*mcp.CallToolResult, monitoring.UptimeView, error) {
+	out, err := mutate(ctx, t.c, "set_uptime_check", in.Service, func() (monitoring.UptimeView, error) {
 		svc, err := t.service(ctx, in.Service, identity.PermSettings)
 		if err != nil {
-			return core.UptimeView{}, err
+			return monitoring.UptimeView{}, err
 		}
-		return t.c.SetUptime(ctx, svc.ID, core.UptimeInput{Path: in.Path, IntervalSec: in.IntervalSec, TimeoutSec: in.TimeoutSec,
+		return t.c.SetUptime(ctx, svc.ID, monitoring.UptimeInput{Path: in.Path, IntervalSec: in.IntervalSec, TimeoutSec: in.TimeoutSec,
 			ExpectedStatus: in.ExpectedStatus, Enabled: !in.Disabled})
 	})
 	return nil, out, err

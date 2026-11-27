@@ -1,4 +1,4 @@
-package core
+package monitoring
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/analytics"
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // AnalyticsExports are the tables ServiceAnalyticsCSV writes.
@@ -24,9 +25,9 @@ const maxExportVisits = 10000
 // ServiceAnalyticsCSV writes one table of the app's stats over q, filters
 // applied, as CSV: the summary (and the previous span's), the series, the
 // breakdowns or the visits.
-func (c *Core) ServiceAnalyticsCSV(ctx context.Context, serviceID string, q AnalyticsQuery, table string, w io.Writer) error {
+func (c *Monitoring) ServiceAnalyticsCSV(ctx context.Context, serviceID string, q AnalyticsQuery, table string, w io.Writer) error {
 	if !slices.Contains(AnalyticsExports, table) {
-		return fmt.Errorf("%w: export one of %s", ErrInvalid, strings.Join(AnalyticsExports, ", "))
+		return fmt.Errorf("%w: export one of %s", domain.ErrInvalid, strings.Join(AnalyticsExports, ", "))
 	}
 	if table == "visits" {
 		var all []analytics.Visit

@@ -17,6 +17,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/analytics"
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
 func TestErrorAlerts(t *testing.T) {
@@ -47,9 +48,9 @@ func TestErrorAlerts(t *testing.T) {
 	}))
 	defer hook.Close()
 	c := newTestCore(t, config.Config{Domain: "kipi.example.com", Traefik: config.Traefik{Enabled: true}})
-	c.notifyHTTP = &http.Client{Transport: redirect{hook}}
-	if _, err := c.CreateChannel(ctx, ChannelInput{Name: "d", Kind: "discord", Config: map[string]string{"webhookUrl": webhook}, Enabled: true,
-		Events: []string{EventErrorNew, EventErrorRegression, EventErrorSpike}}); err != nil {
+	c.NotifyHTTP = &http.Client{Transport: redirect{hook}}
+	if _, err := c.CreateChannel(ctx, monitoring.ChannelInput{Name: "d", Kind: "discord", Config: map[string]string{"webhookUrl": webhook}, Enabled: true,
+		Events: []string{domain.EventErrorNew, domain.EventErrorRegression, domain.EventErrorSpike}}); err != nil {
 		t.Fatal(err)
 	}
 	take := func() []string {
@@ -81,7 +82,7 @@ func TestErrorAlerts(t *testing.T) {
 
 	// The first look only takes the cursor: nothing from before alerts.
 	report(web, "old", "v1")
-	if err := c.alertErrors(ctx, cl, time.Now()); err != nil {
+	if err := c.AlertErrors(ctx, cl, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if got := take(); len(got) != 0 {
@@ -90,7 +91,9 @@ func TestErrorAlerts(t *testing.T) {
 	report(web, "boom", "v2")
 	report(web, "boom", "v2")
 	report(preview, "boom", "v2")
-	c.alertErrors(ctx, cl, time.Now())
+	if err := c.AlertErrors(ctx, cl, time.Now()); err != nil {
+		t.Fatal(err)
+	}
 	got := take()
 	if len(got) != 1 || !strings.HasPrefix(got[0], "New error in shop/web | boom | https://kipi.example.com/services/"+web.ID+"?tab=errors&issue=") {
 		t.Fatalf("new: %q", got)
@@ -104,25 +107,31 @@ func TestErrorAlerts(t *testing.T) {
 		t.Fatal(err)
 	}
 	cur, _ := c.store.CreateDeployment(ctx, domain.Deployment{ServiceID: web.ID, Status: domain.DeploymentSucceeded, Image: "shop:v2", FinishedAt: finished(15 * time.Minute)})
-	c.alertErrors(ctx, cl, now)
+	if err := c.AlertErrors(ctx, cl, now); err != nil {
+		t.Fatal(err)
+	}
 	if got := take(); len(got) != 0 {
 		t.Fatalf("2 errors: %q", got)
 	}
 	for range 10 {
 		report(web, "boom", "v2")
 	}
-	de, err := c.deployErrors(ctx, cl, web, now.Add(time.Minute))
+	de, err := c.DeployErrorsAt(ctx, cl, web, now.Add(time.Minute))
 	if err != nil || !de.Spike || de.DeploymentID != cur.ID || de.Release != "v2" || de.PreviousRelease != "v1" || de.Events != 12 || de.NewIssues != 1 {
 		t.Fatalf("deploy errors: %+v %v", de, err)
 	}
-	c.alertErrors(ctx, cl, now.Add(time.Minute))
-	c.alertErrors(ctx, cl, now.Add(2*time.Minute))
+	if err := c.AlertErrors(ctx, cl, now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.AlertErrors(ctx, cl, now.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
 	got = take()
 	if len(got) != 1 || !strings.HasPrefix(got[0], "Errors up after deploying shop/web | 12 errors in the first") {
 		t.Fatalf("spike: %q", got)
 	}
 	// Too early to tell.
-	if de, _ := c.deployErrors(ctx, cl, web, now.Add(-10*time.Minute)); de.Spike {
+	if de, _ := c.DeployErrorsAt(ctx, cl, web, now.Add(-10*time.Minute)); de.Spike {
 		t.Errorf("5 minutes in: %+v", de)
 	}
 
@@ -130,7 +139,9 @@ func TestErrorAlerts(t *testing.T) {
 	l, _ := cl.Issues(ctx, analytics.IssueQuery{Project: web.ErrorsProject, Search: "old"})
 	cl.SetIssueStatus(ctx, web.ErrorsProject, l.Issues[0].ID, analytics.IssueResolved)
 	report(web, "old", "v2")
-	c.alertErrors(ctx, cl, now.Add(3*time.Minute))
+	if err := c.AlertErrors(ctx, cl, now.Add(3*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
 	if got := take(); len(got) != 1 || !strings.HasPrefix(got[0], "Error back in shop/web | old") {
 		t.Fatalf("regression: %q", got)
 	}

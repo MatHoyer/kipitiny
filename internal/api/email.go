@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
 func (a *API) email(w http.ResponseWriter, r *http.Request) {
@@ -32,7 +32,7 @@ func (a *API) setEmailInvites(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createEmailProvider(w http.ResponseWriter, r *http.Request) {
-	var in core.EmailProviderInput
+	var in monitoring.EmailProviderInput
 	if !decode(w, r, &in) {
 		return
 	}
@@ -45,7 +45,7 @@ func (a *API) createEmailProvider(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateEmailProvider(w http.ResponseWriter, r *http.Request) {
-	var in core.EmailProviderInput
+	var in monitoring.EmailProviderInput
 	if !decode(w, r, &in) {
 		return
 	}

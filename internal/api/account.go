@@ -6,8 +6,8 @@ import (
 	"net/http"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
@@ -197,7 +197,7 @@ func (a *API) pushDevices(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) subscribePush(w http.ResponseWriter, r *http.Request) {
-	var body core.PushSubscribeInput
+	var body monitoring.PushSubscribeInput
 	if !decode(w, r, &body) {
 		return
 	}

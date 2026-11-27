@@ -102,7 +102,7 @@ func (c *Core) CreateService(ctx context.Context, projectID string, in ServiceIn
 	if err := c.validate(ctx, svc); err != nil {
 		return ServiceView{}, err
 	}
-	if err := c.errorsIdentity(ctx, &svc); err != nil {
+	if err := c.ErrorsIdentity(ctx, &svc); err != nil {
 		return ServiceView{}, err
 	}
 	if svc.Analytics && svc.Domain != "" {

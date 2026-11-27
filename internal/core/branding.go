@@ -26,9 +26,7 @@ const (
 	brandingSetting     = "branding"
 	brandingLogoSetting = "branding_logo"
 
-	// DefaultBrandName is the name when none is set.
-	DefaultBrandName = "kipitiny"
-	maxBrandName     = 40
+	maxBrandName = 40
 	// MaxBrandLogo is the largest logo accepted, decoded.
 	MaxBrandLogo = 128 << 10
 )
@@ -124,7 +122,7 @@ func (c *Core) BrandName(ctx context.Context) string {
 	if n := c.brandingSettings(ctx).Name; n != "" {
 		return n
 	}
-	return DefaultBrandName
+	return domain.DefaultBrandName
 }
 
 // BrandingLogo returns the logo and its content type, or domain.ErrNotFound.
@@ -285,7 +283,7 @@ func (c *Core) Manifest(ctx context.Context) Manifest {
 	s := c.brandingSettings(ctx)
 	name := s.Name
 	if name == "" {
-		name = DefaultBrandName
+		name = domain.DefaultBrandName
 	}
 	icons := []ManifestIcon{
 		{Src: "/icon-192.png", Sizes: "192x192", Type: "image/png"},
