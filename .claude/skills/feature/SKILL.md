@@ -19,7 +19,7 @@ Four phases, in order. Never skip the questions or the real-usage tests.
 ## 2. Implement
 
 Follow CLAUDE.md rules. Unit/integration tests for new logic, user docs in `site/docs/`, an `UPGRADE.md` notice if
-running servers are disrupted. `make test` and `make lint` green before phase 3.
+running servers are disrupted. `make cover`, `make e2e` and `make lint` green before phase 3.
 
 ## 3. Test in real usage
 
@@ -75,7 +75,7 @@ Put the report in the PR description (the last PR of a stack, or each PR for its
 ```markdown
 ## Testing
 
-`make test` / `make lint`: green.
+`make cover` / `make e2e` / `make lint`: green.
 
 Real usage on the test environment (`:dev-<branch>` built from <sha>):
 
