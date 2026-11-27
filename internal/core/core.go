@@ -50,7 +50,7 @@ type Core struct {
 	running atomic.Int64
 	bgMu    sync.Mutex
 	closed  bool
-	locks   sync.Map // service ID -> *sync.Mutex
+	locks   sync.Map // service ID -> *serviceLock
 	busy    sync.Map // service ID -> struct{}: its lock is held
 
 	setupMu    sync.Mutex
@@ -278,18 +278,53 @@ func (c *Core) track(f func(), op bool) error {
 	return nil
 }
 
+// serviceLock is one service's lock.
+type serviceLock struct {
+	mu       sync.Mutex
+	released sync.Cond // on mu
+	held     bool
+	// background: the reconciler holds it, for one short pass users don't see.
+	background bool
+}
+
 // lockService serializes mutating operations on one service. It never
-// blocks: a second caller gets ErrBusy.
+// waits for another operation (a deploy can take minutes): a second caller
+// gets ErrBusy. It only waits out a reconciler pass, which would otherwise
+// fail what the user just asked, like a rename right after scaling.
 func (c *Core) lockService(id string) (unlock func(), err error) {
-	m, _ := c.locks.LoadOrStore(id, &sync.Mutex{})
-	mu := m.(*sync.Mutex)
-	if !mu.TryLock() {
+	return c.acquireService(id, false)
+}
+
+// lockServiceBackground is the reconciler's: it never waits, and gives up on
+// a service an operation holds.
+func (c *Core) lockServiceBackground(id string) (unlock func(), err error) {
+	return c.acquireService(id, true)
+}
+
+func (c *Core) acquireService(id string, background bool) (func(), error) {
+	m, ok := c.locks.Load(id)
+	if !ok {
+		l := &serviceLock{}
+		l.released.L = &l.mu
+		m, _ = c.locks.LoadOrStore(id, l)
+	}
+	l := m.(*serviceLock)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for l.held && l.background && !background {
+		l.released.Wait()
+	}
+	if l.held {
 		return nil, ErrBusy
 	}
+	l.held, l.background = true, background
 	c.busy.Store(id, struct{}{})
 	return func() {
+		l.mu.Lock()
+		l.held, l.background = false, false
 		c.busy.Delete(id)
-		mu.Unlock()
+		l.mu.Unlock()
+		l.released.Broadcast()
 	}, nil
 }
 
