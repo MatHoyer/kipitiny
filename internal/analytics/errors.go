@@ -129,7 +129,7 @@ func ingestErrors(st *Store, log *slog.Logger, envelope bool) http.HandlerFunc {
 			id = p.Event.ID
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"id": id})
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": id})
 	}
 }
 
@@ -137,7 +137,7 @@ func sentryError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("X-Sentry-Error", msg)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"detail": msg})
+	_ = json.NewEncoder(w).Encode(map[string]string{"detail": msg})
 }
 
 // readBody reads the request's body, decompressed, within the limits.

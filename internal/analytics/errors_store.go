@@ -266,7 +266,7 @@ func (s *Store) Issues(ctx context.Context, q IssueQuery) ([]Issue, map[string]i
 		N     int
 	}
 	if err := s.db.NewRaw("SELECT issue, (minute - ?) / 3600 AS hour, sum(n) AS n FROM error_counts WHERE minute >= ? AND issue IN (?) GROUP BY issue, hour",
-		start, start, bun.In(in)).Scan(ctx, &spark); err != nil {
+		start, start, bun.List(in)).Scan(ctx, &spark); err != nil {
 		return nil, nil, err
 	}
 	for _, p := range spark {
