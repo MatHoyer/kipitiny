@@ -43,7 +43,7 @@ func TestTags(t *testing.T) {
 }
 
 func TestTagsPrivate(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("WWW-Authenticate", `Basic realm="registry"`)
 		w.WriteHeader(http.StatusUnauthorized)
 	}))

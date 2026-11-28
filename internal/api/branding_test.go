@@ -20,16 +20,20 @@ func TestBrandingLogo(t *testing.T) {
 	m := newMembers(t)
 	srv := httptest.NewServer(m.api)
 	t.Cleanup(srv.Close)
-	get := func() *http.Response {
+	get := func() (int, http.Header, []byte) {
 		resp, err := http.Get(srv.URL + "/api/branding/logo?v=1")
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { resp.Body.Close() })
-		return resp
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp.StatusCode, resp.Header, body
 	}
-	if resp := get(); resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("no logo: %d", resp.StatusCode)
+	if status, _, _ := get(); status != http.StatusNotFound {
+		t.Fatalf("no logo: %d", status)
 	}
 
 	svg := `<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`
@@ -38,19 +42,18 @@ func TestBrandingLogo(t *testing.T) {
 	if _, err := m.c.SetBranding(admin, projects.BrandingInput{Logo: &logo}); err != nil {
 		t.Fatal(err)
 	}
-	resp := get() // without a session
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK || string(body) != svg {
-		t.Fatalf("logo: %d %q", resp.StatusCode, body)
+	status, header, body := get() // without a session
+	if status != http.StatusOK || string(body) != svg {
+		t.Fatalf("logo: %d %q", status, body)
 	}
-	if typ := resp.Header.Get("Content-Type"); typ != "image/svg+xml" {
+	if typ := header.Get("Content-Type"); typ != "image/svg+xml" {
 		t.Errorf("content type %q", typ)
 	}
-	if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "sandbox") || !strings.Contains(csp, "default-src 'none'") {
+	if csp := header.Get("Content-Security-Policy"); !strings.Contains(csp, "sandbox") || !strings.Contains(csp, "default-src 'none'") {
 		t.Errorf("CSP %q", csp)
 	}
-	if !strings.Contains(resp.Header.Get("Cache-Control"), "immutable") {
-		t.Errorf("cache %q", resp.Header.Get("Cache-Control"))
+	if !strings.Contains(header.Get("Cache-Control"), "immutable") {
+		t.Errorf("cache %q", header.Get("Cache-Control"))
 	}
 }
 

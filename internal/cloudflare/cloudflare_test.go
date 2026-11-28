@@ -52,7 +52,9 @@ func TestCreateRecordMarksIt(t *testing.T) {
 		if r.Method != http.MethodPost || r.URL.Path != "/zones/z1/dns_records" {
 			t.Errorf("%s %s", r.Method, r.URL.Path)
 		}
-		json.NewDecoder(r.Body).Decode(&got)
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Error(err)
+		}
 		fmt.Fprint(w, `{"success":true,"result":{}}`)
 	})
 	if err := c.CreateRecord(context.Background(), "z1", Record{Type: "A", Name: "shop.example.com", Content: "203.0.113.7", TTL: 1}); err != nil {
@@ -70,7 +72,9 @@ func TestTunnelIngressKeepsUnknownFields(t *testing.T) {
 			fmt.Fprint(w, `{"success":true,"result":{"config":{"warp-routing":{"enabled":true},"ingress":[{"hostname":"a.example.com","service":"http://x:80","originRequest":{"noTLSVerify":true}},{"service":"http_status:404"}]}}}`)
 			return
 		}
-		json.NewDecoder(r.Body).Decode(&put)
+		if err := json.NewDecoder(r.Body).Decode(&put); err != nil {
+			t.Error(err)
+		}
 		fmt.Fprint(w, `{"success":true,"result":{}}`)
 	})
 	tun := Tunnel{AccountID: "acc", ID: "tid"}
