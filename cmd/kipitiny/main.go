@@ -103,73 +103,14 @@ func serve() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
-		return err
-	}
-	st, err := sqlite.Open(ctx, cfg.DBPath())
+	handler, shutdown, err := wire(ctx, cfg, log)
 	if err != nil {
 		return err
 	}
-	defer st.Close()
-
-	dc, err := docker.New()
-	if err != nil {
-		return err
-	}
-	defer dc.Close()
-
-	c := core.New(cfg, st, dc, log)
-	if err := c.InitAuth(ctx); err != nil {
-		return err
-	}
-	if err := c.Bootstrap(ctx); err != nil {
-		// Keep serving the UI so the problem is visible there.
-		log.Warn("docker bootstrap failed", "err", err)
-	}
-	if err := c.StartScheduler(ctx); err != nil {
-		return err
-	}
-	if err := c.StartReconciler(ctx); err != nil {
-		return err
-	}
-	if err := c.StartUpdateChecker(); err != nil {
-		return err
-	}
-	if err := c.StartDNSSync(); err != nil {
-		return err
-	}
-	if err := c.StartStats(); err != nil {
-		return err
-	}
-	if err := c.StartUptime(); err != nil {
-		return err
-	}
-	if err := c.StartErrorsWatch(); err != nil {
-		return err
-	}
-	if err := c.StartSecurityChecks(); err != nil {
-		return err
-	}
-	if err := c.StartSleep(); err != nil {
-		return err
-	}
-	if err := c.StartPreviewExpiry(); err != nil {
-		return err
-	}
-	if err := c.StartGitSync(); err != nil {
-		return err
-	}
-
-	mux := http.NewServeMux()
-	a := api.New(c, log)
-	mux.Handle("/api/", a)
-	mux.Handle(network.PagesPath, api.Pages(c, log))
-	mux.Handle("/mcp", a.Authenticated(mcp.Handler(c, version)))
-	mux.Handle("/", web.Handler())
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           api.SecureHeaders(mux, c.TrustedProxy),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		// Closes keep-alive connections nobody uses. No read or write
 		// timeout: uploads, downloads and log streams can take long.
@@ -201,10 +142,72 @@ func serve() error {
 	// (stop_grace_period in the compose file; the updater uses the same).
 	drainCtx, cancelDrain := context.WithTimeout(context.Background(), servers.DrainTimeout)
 	defer cancelDrain()
-	if err := c.Shutdown(drainCtx); err != nil {
+	if err := shutdown(drainCtx); err != nil {
 		log.Warn("background work did not stop in time", "err", err)
 	}
 	return srvErr
+}
+
+// wire opens the store and the Docker daemon, starts the manager's
+// background work (it stops with ctx) and returns the HTTP handler.
+// shutdown waits for running operations until its ctx, then closes both.
+func wire(ctx context.Context, cfg config.Config, log *slog.Logger) (handler http.Handler, shutdown func(context.Context) error, err error) {
+	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
+		return nil, nil, err
+	}
+	st, err := sqlite.Open(ctx, cfg.DBPath())
+	if err != nil {
+		return nil, nil, err
+	}
+	dc, err := docker.New()
+	if err != nil {
+		st.Close()
+		return nil, nil, err
+	}
+	closeAll := func() {
+		dc.Close()
+		st.Close()
+	}
+
+	c := core.New(cfg, st, dc, log)
+	if err := c.InitAuth(ctx); err != nil {
+		closeAll()
+		return nil, nil, err
+	}
+	if err := c.Bootstrap(ctx); err != nil {
+		// Keep serving the UI so the problem is visible there.
+		log.Warn("docker bootstrap failed", "err", err)
+	}
+	for _, start := range []func() error{
+		func() error { return c.StartScheduler(ctx) },
+		func() error { return c.StartReconciler(ctx) },
+		c.StartUpdateChecker,
+		c.StartDNSSync,
+		c.StartStats,
+		c.StartUptime,
+		c.StartErrorsWatch,
+		c.StartSecurityChecks,
+		c.StartSleep,
+		c.StartPreviewExpiry,
+		c.StartGitSync,
+	} {
+		if err := start(); err != nil {
+			closeAll()
+			return nil, nil, err
+		}
+	}
+
+	mux := http.NewServeMux()
+	a := api.New(c, log)
+	mux.Handle("/api/", a)
+	mux.Handle(network.PagesPath, api.Pages(c, log))
+	mux.Handle("/mcp", a.Authenticated(mcp.Handler(c, version)))
+	mux.Handle("/", web.Handler())
+	shutdown = func(ctx context.Context) error {
+		defer closeAll()
+		return c.Shutdown(ctx)
+	}
+	return api.SecureHeaders(mux, c.TrustedProxy), shutdown, nil
 }
 
 // selfUpdate replaces the manager container os.Args[2] with image os.Args[3].
