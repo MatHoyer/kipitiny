@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 
-import { test as base, expect, request, type APIRequestContext } from "@playwright/test";
+import { test as base, expect, request, type APIRequestContext, type Browser, type Page } from "@playwright/test";
 
 export { expect };
 
@@ -95,3 +95,17 @@ export const test = base.extend<Fixtures & { errors: string[] }>({
     await api.dispose();
   },
 });
+
+/** A page in another browser of the test's device, signed out, offline and failing the test on errors like page. */
+export async function otherPage(browser: Browser, errors: string[]): Promise<Page> {
+  const context = await browser.newContext();
+  await context.route(
+    (url) => url.hostname !== "localhost",
+    (route) => route.fulfill({ status: 404, body: "" }),
+  );
+  const page = await context.newPage();
+  page.on("pageerror", (e) => {
+    if (!cancelledByNavigation.test(e.message)) errors.push(e.message);
+  });
+  return page;
+}
