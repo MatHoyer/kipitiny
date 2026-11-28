@@ -36,7 +36,7 @@ func errorsStore(t *testing.T) (*Store, *time.Time, http.Handler) {
 	return st, now, Public(st, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
-func post(t *testing.T, h http.Handler, target string, body []byte, hdr map[string]string) *http.Response {
+func post(t *testing.T, h http.Handler, target string, body []byte, hdr map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest("POST", target, bytes.NewReader(body))
 	for k, v := range hdr {
@@ -44,13 +44,13 @@ func post(t *testing.T, h http.Handler, target string, body []byte, hdr map[stri
 	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	return rec.Result()
+	return rec
 }
 
 func gz(b []byte) []byte {
 	var buf bytes.Buffer
 	w := gzip.NewWriter(&buf)
-	w.Write(b)
+	_, _ = w.Write(b) // into a bytes.Buffer: never fails
 	w.Close()
 	return buf.Bytes()
 }
@@ -64,15 +64,17 @@ func TestIngestSDKEnvelopes(t *testing.T) {
 	res := post(t, pub, "/api/7/envelope/", gz(fixture(t, "python-exception.envelope")),
 		map[string]string{"Content-Encoding": "gzip", "X-Sentry-Auth": pyAuth, "CF-IPCountry": "FR"})
 	var out struct{ ID string }
-	json.NewDecoder(res.Body).Decode(&out)
-	if res.StatusCode != 200 || out.ID != "577a9f35aa76458f898743e8c9cde3f3" || res.Header.Get("Access-Control-Allow-Origin") != "*" {
-		t.Fatalf("python: %d %+v", res.StatusCode, out)
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if res.Code != 200 || out.ID != "577a9f35aa76458f898743e8c9cde3f3" || res.Header().Get("Access-Control-Allow-Origin") != "*" {
+		t.Fatalf("python: %d %+v", res.Code, out)
 	}
 	// Node: query auth, items without length; its session envelope is dropped.
 	q := "?sentry_version=7&sentry_key=k_test&sentry_client=sentry.javascript.node%2F11.19.0"
 	for _, f := range []string{"node-session.envelope", "node-exception.envelope"} {
-		if res := post(t, pub, "/api/7/envelope/"+q, fixture(t, f), nil); res.StatusCode != 200 {
-			t.Fatalf("%s: %d %s", f, res.StatusCode, res.Header.Get("X-Sentry-Error"))
+		if res := post(t, pub, "/api/7/envelope/"+q, fixture(t, f), nil); res.Code != 200 {
+			t.Fatalf("%s: %d %s", f, res.Code, res.Header().Get("X-Sentry-Error"))
 		}
 	}
 
@@ -135,18 +137,18 @@ func TestIngestRefusals(t *testing.T) {
 		{"bomb", "/api/7/envelope/", map[string]string{"X-Sentry-Auth": pyAuth, "Content-Encoding": "gzip"}, gz(make([]byte, maxDecoded+1)), 413},
 		{"bad length", "/api/7/envelope/", map[string]string{"X-Sentry-Auth": pyAuth}, []byte("{}\n{\"type\":\"event\",\"length\":2}\n{}x"), 400},
 	} {
-		if res := post(t, pub, c.target, c.body, c.hdr); res.StatusCode != c.want {
-			t.Errorf("%s: %d (%s), want %d", c.name, res.StatusCode, res.Header.Get("X-Sentry-Error"), c.want)
+		if res := post(t, pub, c.target, c.body, c.hdr); res.Code != c.want {
+			t.Errorf("%s: %d (%s), want %d", c.name, res.Code, res.Header().Get("X-Sentry-Error"), c.want)
 		}
 	}
 	// The envelope header's DSN authenticates too (the legacy /store/ takes
 	// a bare event, with its key in the query).
 	body := []byte(`{"dsn":"https://k_test@stats.example.com/7"}` + "\n" + `{"type":"event"}` + "\n" + `{"message":"hi"}`)
-	if res := post(t, pub, "/api/7/envelope/", body, nil); res.StatusCode != 200 {
-		t.Errorf("dsn header: %d", res.StatusCode)
+	if res := post(t, pub, "/api/7/envelope/", body, nil); res.Code != 200 {
+		t.Errorf("dsn header: %d", res.Code)
 	}
-	if res := post(t, pub, "/api/7/store/?sentry_key=k_test", []byte(`{"message":"hi"}`), nil); res.StatusCode != 200 {
-		t.Errorf("store: %d", res.StatusCode)
+	if res := post(t, pub, "/api/7/store/?sentry_key=k_test", []byte(`{"message":"hi"}`), nil); res.Code != 200 {
+		t.Errorf("store: %d", res.Code)
 	}
 }
 
@@ -154,20 +156,20 @@ func TestIngestRateLimit(t *testing.T) {
 	_, now, pub := errorsStore(t)
 	body := []byte(`{"message":"loop"}`)
 	for range errorBurst {
-		if res := post(t, pub, "/api/7/store/?sentry_key=k_test", body, nil); res.StatusCode != 200 {
-			t.Fatalf("within the burst: %d", res.StatusCode)
+		if res := post(t, pub, "/api/7/store/?sentry_key=k_test", body, nil); res.Code != 200 {
+			t.Fatalf("within the burst: %d", res.Code)
 		}
 	}
 	res := post(t, pub, "/api/7/store/?sentry_key=k_test", body, nil)
-	if res.StatusCode != 429 || res.Header.Get("Retry-After") != "10" || res.Header.Get("X-Sentry-Rate-Limits") != "10::key" {
-		t.Fatalf("over: %d %v", res.StatusCode, res.Header)
+	if res.Code != 429 || res.Header().Get("Retry-After") != "10" || res.Header().Get("X-Sentry-Rate-Limits") != "10::key" {
+		t.Fatalf("over: %d %v", res.Code, res.Header())
 	}
-	if res := post(t, pub, "/api/8/store/?sentry_key=k_other", body, nil); res.StatusCode != 200 {
-		t.Errorf("another project: %d", res.StatusCode)
+	if res := post(t, pub, "/api/8/store/?sentry_key=k_other", body, nil); res.Code != 200 {
+		t.Errorf("another project: %d", res.Code)
 	}
 	*now = now.Add(time.Second)
-	if res := post(t, pub, "/api/7/store/?sentry_key=k_test", body, nil); res.StatusCode != 200 {
-		t.Errorf("refilled: %d", res.StatusCode)
+	if res := post(t, pub, "/api/7/store/?sentry_key=k_test", body, nil); res.Code != 200 {
+		t.Errorf("refilled: %d", res.Code)
 	}
 }
 
@@ -246,7 +248,9 @@ func TestIssueLifecycle(t *testing.T) {
 		t.Errorf("regression: %+v %+v", r, is)
 	}
 	// Ignored stays ignored.
-	st.SetIssueStatus(ctx, 7, first.Issue, IssueIgnored)
+	if _, err := st.SetIssueStatus(ctx, 7, first.Issue, IssueIgnored); err != nil {
+		t.Fatal(err)
+	}
 	if r := record(t, st, 7, `{"message":"boom"}`); r.Regressed {
 		t.Error("ignored issue regressed")
 	}
@@ -328,7 +332,9 @@ func TestKeptEvents(t *testing.T) {
 	if _, err := st.Issue(ctx, 7, issue); err != nil {
 		t.Errorf("issue pruned early: %v", err)
 	}
-	st.Prune(ctx, 24*time.Hour)
+	if err := st.Prune(ctx, 24*time.Hour); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := st.Issue(ctx, 7, issue); err == nil {
 		t.Error("stale issue kept")
 	}
@@ -356,7 +362,9 @@ func TestErrorChangesAndReleases(t *testing.T) {
 	}
 	a := record(t, st, 7, `{"message":"a","release":"r1"}`)
 	record(t, st, 7, `{"message":"a","release":"r1"}`)
-	st.SetIssueStatus(ctx, 7, a.Issue, IssueResolved)
+	if _, err := st.SetIssueStatus(ctx, 7, a.Issue, IssueResolved); err != nil {
+		t.Fatal(err)
+	}
 	*now = now.Add(10 * time.Minute)
 	deploy := *now
 	record(t, st, 7, `{"message":"a","release":"r2"}`)

@@ -30,7 +30,7 @@ func open(t *testing.T) (*Store, *time.Time) {
 	return st, &now
 }
 
-func hit(t *testing.T, h http.Handler, ua, ip, body string) *http.Response {
+func hit(t *testing.T, h http.Handler, ua, ip, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest("POST", "/e", strings.NewReader(body))
 	req.Header.Set("User-Agent", ua)
@@ -38,7 +38,7 @@ func hit(t *testing.T, h http.Handler, ua, ip, body string) *http.Response {
 	req.Header.Set("CF-IPCountry", "FR")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	return rec.Result()
+	return rec
 }
 
 func TestRecordAndStats(t *testing.T) {
@@ -48,8 +48,8 @@ func TestRecordAndStats(t *testing.T) {
 
 	pv := func(ua, ip, url, ref string) {
 		res := hit(t, pub, ua, ip, `{"u":"`+url+`","r":"`+ref+`","s":"1920x1080","l":"fr-FR"}`)
-		if res.StatusCode != http.StatusNoContent || len(res.Cookies()) > 0 || res.Header.Get("Set-Cookie") != "" {
-			t.Fatalf("hit: %d, cookies %v", res.StatusCode, res.Cookies())
+		if res.Code != http.StatusNoContent || res.Header().Get("Set-Cookie") != "" {
+			t.Fatalf("hit: %d, cookies %v", res.Code, res.Header().Values("Set-Cookie"))
 		}
 	}
 	// Visitor A: two pages in one visit, then a new visit after 31 min.
@@ -150,7 +150,9 @@ func TestRecordAndStats(t *testing.T) {
 	*now = now.Add(24 * time.Hour)
 	pv(chromeUA, "1.1.1.1", "https://shop.example.com/", "")
 	var salts int
-	st.db.NewRaw("SELECT COUNT(*) FROM salts").Scan(ctx, &salts)
+	if err := st.db.NewRaw("SELECT COUNT(*) FROM salts").Scan(ctx, &salts); err != nil {
+		t.Fatal(err)
+	}
 	if salts != 1 {
 		t.Errorf("salts kept = %d", salts)
 	}
@@ -269,7 +271,7 @@ func TestTrackers(t *testing.T) {
 		}
 	}
 
-	get := func(path, ua string) *http.Response {
+	get := func(path, ua string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest("GET", path, nil)
 		req.Header.Set("User-Agent", ua)
 		req.Header.Set("X-Real-Ip", "1.1.1.1")
@@ -278,25 +280,25 @@ func TestTrackers(t *testing.T) {
 		rec := httptest.NewRecorder()
 		pub.ServeHTTP(rec, req)
 		*now = now.Add(time.Second)
-		return rec.Result()
+		return rec
 	}
-	if res := get("/p/"+px.Slug+".gif", chromeUA); res.StatusCode != 200 || res.Header.Get("Content-Type") != "image/gif" || res.Header.Get("Cache-Control") == "" {
-		t.Errorf("pixel: %d %v", res.StatusCode, res.Header)
+	if res := get("/p/"+px.Slug+".gif", chromeUA); res.Code != 200 || res.Header().Get("Content-Type") != "image/gif" || res.Header().Get("Cache-Control") == "" {
+		t.Errorf("pixel: %d %v", res.Code, res.Header())
 	}
 	get("/p/"+px.Slug+".gif", chromeUA)
 	get("/p/"+px.Slug+".gif", "Slackbot-LinkExpanding 1.0")
-	if res := get("/p/nope.gif", chromeUA); res.StatusCode != 200 {
-		t.Errorf("unknown pixel: %d (same GIF)", res.StatusCode)
+	if res := get("/p/nope.gif", chromeUA); res.Code != 200 {
+		t.Errorf("unknown pixel: %d (same GIF)", res.Code)
 	}
 	res := get("/l/launch?utm_source=twitter", chromeUA)
-	if res.StatusCode != http.StatusFound || res.Header.Get("Location") != ln.Target {
-		t.Errorf("link: %d %s", res.StatusCode, res.Header.Get("Location"))
+	if res.Code != http.StatusFound || res.Header().Get("Location") != ln.Target {
+		t.Errorf("link: %d %s", res.Code, res.Header().Get("Location"))
 	}
-	if res := get("/l/launch", "facebookexternalhit/1.1"); res.StatusCode != http.StatusFound {
-		t.Errorf("link for a bot: %d (redirected, not counted)", res.StatusCode)
+	if res := get("/l/launch", "facebookexternalhit/1.1"); res.Code != http.StatusFound {
+		t.Errorf("link for a bot: %d (redirected, not counted)", res.Code)
 	}
-	if res := get("/l/"+px.Slug, chromeUA); res.StatusCode != http.StatusNotFound {
-		t.Errorf("pixel slug as a link: %d", res.StatusCode)
+	if res := get("/l/"+px.Slug, chromeUA); res.Code != http.StatusNotFound {
+		t.Errorf("pixel slug as a link: %d", res.Code)
 	}
 
 	ts, _ := c.Trackers(ctx)
@@ -319,11 +321,13 @@ func TestTrackers(t *testing.T) {
 	if err := c.DeleteTracker(ctx, px.ID); err != nil {
 		t.Fatal(err)
 	}
-	if res := get("/p/"+px.Slug+".gif", chromeUA); res.StatusCode != 200 {
-		t.Errorf("deleted pixel: %d", res.StatusCode)
+	if res := get("/p/"+px.Slug+".gif", chromeUA); res.Code != 200 {
+		t.Errorf("deleted pixel: %d", res.Code)
 	}
 	var left int
-	st.db.NewRaw("SELECT COUNT(*) FROM events WHERE hostname = ?", px.Host()).Scan(ctx, &left)
+	if err := st.db.NewRaw("SELECT COUNT(*) FROM events WHERE hostname = ?", px.Host()).Scan(ctx, &left); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := c.Tracker(ctx, px.ID); !errors.Is(err, ErrNotFound) || left != 0 {
 		t.Errorf("after delete: %v, %d events left", err, left)
 	}
