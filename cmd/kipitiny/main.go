@@ -15,12 +15,12 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/analytics"
-	"github.com/kipit-labs/kipitiny/internal/api"
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/core"
+	httpdelivery "github.com/kipit-labs/kipitiny/internal/delivery/http"
+	"github.com/kipit-labs/kipitiny/internal/delivery/mcp"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/docker"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
-	"github.com/kipit-labs/kipitiny/internal/mcp"
 	"github.com/kipit-labs/kipitiny/internal/probe"
 	"github.com/kipit-labs/kipitiny/internal/sqlitehelper"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
@@ -198,16 +198,16 @@ func wire(ctx context.Context, cfg config.Config, log *slog.Logger) (handler htt
 	}
 
 	mux := http.NewServeMux()
-	a := api.New(c, log)
+	a := httpdelivery.New(c, log)
 	mux.Handle("/api/", a)
-	mux.Handle(network.PagesPath, api.Pages(c, log))
+	mux.Handle(network.PagesPath, httpdelivery.Pages(c, log))
 	mux.Handle("/mcp", a.Authenticated(mcp.Handler(c, version)))
 	mux.Handle("/", web.Handler())
 	shutdown = func(ctx context.Context) error {
 		defer closeAll()
 		return c.Shutdown(ctx)
 	}
-	return api.SecureHeaders(mux, c.TrustedProxy), shutdown, nil
+	return httpdelivery.SecureHeaders(mux, c.TrustedProxy), shutdown, nil
 }
 
 // selfUpdate replaces the manager container os.Args[2] with image os.Args[3].
