@@ -95,7 +95,7 @@ func (a *API) exportServiceAnalytics(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", "analytics-"+table+".csv"))
-	w.Write(b.Bytes())
+	_, _ = w.Write(b.Bytes())
 }
 
 // serviceFunnel takes the range of analyticsQuery and its steps (step,

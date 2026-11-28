@@ -3,6 +3,7 @@ package mailtest
 
 import (
 	"bufio"
+	"context"
 	"net"
 	"strings"
 	"testing"
@@ -27,7 +28,7 @@ type Server struct {
 // advertised in the EHLO reply (STARTTLS…).
 func NewServer(t testing.TB, extensions ...string) *Server {
 	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	l, err := new(net.ListenConfig).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}

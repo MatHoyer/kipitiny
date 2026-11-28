@@ -279,10 +279,10 @@ func (t Table) parsed() (cols, fns, vals []string) {
 // actions lists the tables of each action and those with column rules.
 func (r Rules) actions() (exclude, truncate, update []string) {
 	for _, name := range slices.Sorted(maps.Keys(r)) {
-		switch t := r[name]; {
-		case t.Action == Exclude:
+		switch t := r[name]; t.Action {
+		case Exclude:
 			exclude = append(exclude, name)
-		case t.Action == Truncate:
+		case Truncate:
 			truncate = append(truncate, name)
 		default:
 			if cols, _, _ := t.parsed(); len(cols) > 0 {

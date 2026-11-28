@@ -22,16 +22,16 @@ func Check(target string) error {
 	if err != nil {
 		return err
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 	switch u.Scheme {
 	case "tcp":
-		conn, err := net.DialTimeout("tcp", u.Host, timeout)
+		conn, err := new(net.Dialer).DialContext(ctx, "tcp", u.Host)
 		if err != nil {
 			return err
 		}
 		return conn.Close()
 	case "http":
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
 		_, err := HTTP(ctx, NewClient(), target, 0)
 		return err
 	default:

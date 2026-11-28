@@ -297,7 +297,7 @@ func find(ctx context.Context, roots []string) ([]File, error) {
 		depth0 := strings.Count(filepath.Clean(root), "/")
 		err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
-				return nil // unreadable: skipped
+				return fs.SkipDir // unreadable: skipped
 			}
 			if visited++; visited > findVisited || len(files) == findMax || ctx.Err() != nil {
 				return fs.SkipAll
@@ -311,11 +311,9 @@ func find(ctx context.Context, roots []string) ([]File, error) {
 			if !d.Type().IsRegular() || strings.HasSuffix(p, "-wal") || strings.HasSuffix(p, "-shm") || strings.HasSuffix(p, "-journal") {
 				return nil
 			}
-			info, err := d.Info()
-			if err != nil || info.Size() < 100 || !isSQLite(p) {
-				return nil
+			if info, err := d.Info(); err == nil && info.Size() >= 100 && isSQLite(p) { // gone since listed: skipped
+				files = append(files, File{Path: p, Size: info.Size()})
 			}
-			files = append(files, File{Path: p, Size: info.Size()})
 			return nil
 		})
 		if err != nil {
@@ -405,15 +403,15 @@ func readRows(ctx context.Context, conn *sql.Conn, req Request) (Response, error
 	return res, rows.Err()
 }
 
-// Text is how a cell reads: blobs as 0x hex, text cut at max bytes (0: not
+// Text is how a cell reads: blobs as 0x hex, text cut at limit bytes (0: not
 // cut) without splitting a character. ok is false for NULL.
-func Text(v any, max int) (s string, ok, cut bool) {
+func Text(v any, limit int) (s string, ok, cut bool) {
 	switch v := v.(type) {
 	case nil:
 		return "", false, false
 	case []byte:
-		if max > 0 && 2+2*len(v) > max {
-			return "0x" + hex.EncodeToString(v[:(max-2)/2]), true, true
+		if limit > 0 && 2+2*len(v) > limit {
+			return "0x" + hex.EncodeToString(v[:(limit-2)/2]), true, true
 		}
 		return "0x" + hex.EncodeToString(v), true, false
 	case string:
@@ -432,8 +430,8 @@ func Text(v any, max int) (s string, ok, cut bool) {
 	default:
 		s = fmt.Sprint(v)
 	}
-	if max > 0 && len(s) > max {
-		cut := max
+	if limit > 0 && len(s) > limit {
+		cut := limit
 		for cut > 0 && !utf8.RuneStart(s[cut]) {
 			cut--
 		}
