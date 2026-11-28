@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"iter"
 	"strings"
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/storage"
 )
 
 type TargetInput struct {
@@ -33,8 +34,17 @@ type TargetInput struct {
 	AgeIdentity string `json:"ageIdentity"`
 }
 
-func (c *Data) openStorage(t domain.BackupTarget) (storage.Storage, error) {
-	return storage.Open(t, storage.Env{DataDir: c.cfg.DataDir})
+// Storage is a backup target's objects: local disk or an S3 bucket
+// (infrastructure/storage).
+type Storage interface {
+	// Put stores r under key. On error nothing is left behind.
+	Put(ctx context.Context, key string, r io.Reader) error
+	Get(ctx context.Context, key string) (io.ReadCloser, error)
+	Delete(ctx context.Context, key string) error
+	// Check verifies the target is reachable and writable.
+	Check(ctx context.Context) error
+	// List yields the objects under prefix, keys as Put takes them.
+	List(ctx context.Context, prefix string) iter.Seq2[domain.StorageObject, error]
 }
 
 func (c *Data) ListBackupTargets(ctx context.Context) ([]domain.BackupTarget, error) {

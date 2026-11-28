@@ -46,7 +46,7 @@ func TestGitRepoFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := New(ctx, &config.Config{DataDir: t.TempDir()}, nil, nil, git.Git{}, nil, nil)
+	c := New(ctx, &config.Config{DataDir: t.TempDir()}, nil, nil, git.Git{}, nil, nil, nil)
 	g := domain.ProjectGit{RepoURL: dir, Branch: "main", Path: "deploy/compose.yaml"}
 	err = c.WithGitFile(ctx, g, func(_ []byte, _ string, files repoFiles) error {
 		f, err := files("./nginx.conf")

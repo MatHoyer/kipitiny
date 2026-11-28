@@ -16,10 +16,8 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"golang.org/x/oauth2"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/gitprovider"
+	"github.com/kipit-labs/kipitiny/internal/domain/gitprovider"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 )
 
@@ -52,7 +50,7 @@ type gitFlow struct {
 // refreshes (a refresh token is single use).
 type gitTokens struct {
 	mu     sync.Mutex
-	github map[string]oauth2.Token // provider ID -> installation token
+	github map[string]gitprovider.Token // provider ID -> installation token
 }
 
 // GitProviderView is a provider with its credentials masked.
@@ -198,7 +196,7 @@ func (c *Projects) TestGitProvider(ctx context.Context, id string) error {
 		return err
 	}
 	progress.Report(ctx, "repos")
-	if _, err := gitprovider.Repos(ctx, p.Kind, p.BaseURL, token); err != nil {
+	if _, err := c.forges.Repos(ctx, p.Kind, p.BaseURL, token); err != nil {
 		return fmt.Errorf("%w: %s: %s", ErrInvalid, p.Name, err.Error())
 	}
 	return nil
@@ -224,7 +222,7 @@ func (c *Projects) GitProviderRepos(ctx context.Context, id string) ([]gitprovid
 	if err != nil {
 		return nil, err
 	}
-	repos, err := gitprovider.Repos(ctx, p.Kind, p.BaseURL, token)
+	repos, err := c.forges.Repos(ctx, p.Kind, p.BaseURL, token)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %s", ErrInvalid, p.Name, err.Error())
 	}
@@ -240,7 +238,7 @@ func (c *Projects) GitProviderBranches(ctx context.Context, id, repo string) ([]
 	if err != nil {
 		return nil, err
 	}
-	bs, err := gitprovider.Branches(ctx, p.Kind, p.BaseURL, token, repo)
+	bs, err := c.forges.Branches(ctx, p.Kind, p.BaseURL, token, repo)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %s", ErrInvalid, repo, err.Error())
 	}
@@ -265,20 +263,20 @@ func (c *Projects) gitProviderToken(ctx context.Context, id string) (domain.GitP
 		if t, ok := c.gitTokens.github[id]; ok && t.Expiry.After(soon) {
 			return p, t.AccessToken, nil
 		}
-		token, exp, err := gitprovider.InstallationToken(ctx, p)
+		token, exp, err := c.forges.InstallationToken(ctx, p)
 		if err != nil {
 			return p, "", fmt.Errorf("%w: %s (is the app still installed?)", ErrInvalid, err.Error())
 		}
 		if c.gitTokens.github == nil {
-			c.gitTokens.github = map[string]oauth2.Token{}
+			c.gitTokens.github = map[string]gitprovider.Token{}
 		}
-		c.gitTokens.github[id] = oauth2.Token{AccessToken: token, Expiry: exp}
+		c.gitTokens.github[id] = gitprovider.Token{AccessToken: token, Expiry: exp}
 		return p, token, nil
 	}
 	if p.TokenExpiresAt == nil || p.TokenExpiresAt.After(soon) {
 		return p, p.AccessToken, nil
 	}
-	tok, err := gitprovider.OAuthConfig(p).TokenSource(ctx, &oauth2.Token{RefreshToken: p.RefreshToken}).Token()
+	tok, err := c.forges.Refresh(ctx, p)
 	if err != nil {
 		return p, "", fmt.Errorf("%w: %s: the authorization expired or was revoked; connect it again (%s)", ErrInvalid, p.Name, err.Error())
 	}

@@ -13,7 +13,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/storage"
 )
 
 // RestoreBackup restores a backup into a service (the backup's own when
@@ -110,7 +109,7 @@ func (c *Data) RestoreBackup(ctx context.Context, backupID, targetServiceID, con
 	return r, nil
 }
 
-func (c *Data) runRestore(svc domain.Service, containerID string, st storage.Storage, target domain.BackupTarget, b domain.Backup, r domain.Restore) {
+func (c *Data) runRestore(svc domain.Service, containerID string, st Storage, target domain.BackupTarget, b domain.Backup, r domain.Restore) {
 	ctx, cancel := context.WithTimeout(c.bg, RestoreTimeout)
 	defer cancel()
 	key := restoreKey(r.ID)
@@ -183,7 +182,7 @@ func (c *Data) finishRestore(ctx context.Context, svc domain.Service, target dom
 // so the result is exactly the backup (objects created since are gone) and
 // a failure leaves the live database untouched.
 // key names the restore, for its steps.
-func (c *Data) restore(ctx context.Context, svc domain.Service, containerID string, st storage.Storage, target domain.BackupTarget, b domain.Backup, key string) error {
+func (c *Data) restore(ctx context.Context, svc domain.Service, containerID string, st Storage, target domain.BackupTarget, b domain.Backup, key string) error {
 	c.steps.Set(key, RestoreLoad)
 	rc, err := st.Get(ctx, b.ObjectKey)
 	if err != nil {

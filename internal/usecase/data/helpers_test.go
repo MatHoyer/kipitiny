@@ -14,6 +14,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/storage"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
@@ -106,5 +107,8 @@ func newTestData(t *testing.T, cfg config.Config, dk domain.ContainerRuntime) *D
 		m.ops.Wait()
 		st.Close()
 	})
-	return New(context.Background(), m.cfg, st, age.Encryption{}, cron.Cron{}, &progress.Steps{}, m, log)
+	open := func(t domain.BackupTarget) (Storage, error) {
+		return storage.Open(t, storage.Env{DataDir: m.cfg.DataDir})
+	}
+	return New(context.Background(), m.cfg, st, age.Encryption{}, cron.Cron{}, open, &progress.Steps{}, m, log)
 }

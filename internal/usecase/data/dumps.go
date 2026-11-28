@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/storage"
 )
 
 // Dump backups (kind dump) are made by the database's own tool inside its
@@ -30,7 +29,7 @@ func DumpExt(k domain.ServiceKind) string {
 
 // dumpDatabase streams a dump of svc to storage, filling in size, checksum
 // and server version on b.
-func (c *Data) dumpDatabase(ctx context.Context, svc domain.Service, containerID string, st storage.Storage, target domain.BackupTarget, b *domain.Backup) error {
+func (c *Data) dumpDatabase(ctx context.Context, svc domain.Service, containerID string, st Storage, target domain.BackupTarget, b *domain.Backup) error {
 	c.steps.Set(backupKey(b.ID), BackupPrepare)
 	dk := c.mgr.DockerFor(svc.ServerID)
 	version, err := dumpServerVersion(ctx, dk, containerID, svc)
@@ -105,7 +104,7 @@ func dumpServerVersion(ctx context.Context, dk domain.ContainerRuntime, containe
 // collection it holds (mongorestore --drop), and collections created since
 // the backup stay.
 // key names the restore, for its steps.
-func (c *Data) restoreDump(ctx context.Context, svc domain.Service, containerID string, st storage.Storage, target domain.BackupTarget, b domain.Backup, key string) error {
+func (c *Data) restoreDump(ctx context.Context, svc domain.Service, containerID string, st Storage, target domain.BackupTarget, b domain.Backup, key string) error {
 	c.steps.Set(key, RestoreCheck)
 	if err := c.checkDump(ctx, st, target, b); err != nil {
 		return err
@@ -151,7 +150,7 @@ func (c *Data) restoreDump(ctx context.Context, svc domain.Service, containerID 
 }
 
 // checkDump reads a stored dump through: checksum, decryption and gzip.
-func (c *Data) checkDump(ctx context.Context, st storage.Storage, target domain.BackupTarget, b domain.Backup) error {
+func (c *Data) checkDump(ctx context.Context, st Storage, target domain.BackupTarget, b domain.Backup) error {
 	rc, err := st.Get(ctx, b.ObjectKey)
 	if err != nil {
 		return fmt.Errorf("open backup: %w", err)
@@ -172,7 +171,7 @@ func (c *Data) checkDump(ctx context.Context, st storage.Storage, target domain.
 // loadDump streams a stored dump into the container ct of a server like
 // svc: a MySQL dump into database db, a MongoDB archive into the instance.
 func (c *Data) loadDump(ctx context.Context, dk domain.ContainerRuntime, ct string, svc domain.Service, db string,
-	st storage.Storage, target domain.BackupTarget, b domain.Backup) error {
+	st Storage, target domain.BackupTarget, b domain.Backup) error {
 
 	rc, err := st.Get(ctx, b.ObjectKey)
 	if err != nil {

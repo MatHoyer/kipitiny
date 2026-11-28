@@ -6,14 +6,19 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/git"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/gitprovider"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/protonpass"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/registry"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/storage"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
@@ -85,11 +90,16 @@ func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logg
 	c.Servers = c.newServers(local)
 	c.Monitoring = monitoring.New(bg, &c.cfg, s, monitoringPorts{c}, log)
 	c.Identity = identity.New(cfg, s, secretKinds(cfg, c.dockerFor(domain.LocalServerID)), c.Monitoring, log)
-	c.Network = network.New(bg, &c.cfg, s, networkPorts{c}, log)
-	c.Data = data.New(bg, &c.cfg, s, age.Encryption{}, cron.Cron{}, &c.steps, dataPorts{c}, log)
+	c.Network = network.New(bg, &c.cfg, s, func(token string) network.DNS { return cloudflare.New(token) }, networkPorts{c}, log)
+	c.Data = data.New(bg, &c.cfg, s, age.Encryption{}, cron.Cron{}, c.openStorage, &c.steps, dataPorts{c}, log)
 	c.Deployer = deploy.New(bg, &c.cfg, s, cron.Cron{}, &c.probes, deployPorts{c}, log)
-	c.Projects = projects.New(bg, &c.cfg, s, cron.Cron{}, git.Git{}, projectsPorts{c}, log)
+	c.Projects = projects.New(bg, &c.cfg, s, cron.Cron{}, git.Git{}, gitprovider.Client{}, projectsPorts{c}, log)
 	return c
+}
+
+// openStorage opens a backup target: local ones under the data directory.
+func (c *Core) openStorage(t domain.BackupTarget) (data.Storage, error) {
+	return storage.Open(t, storage.Env{DataDir: c.cfg.DataDir})
 }
 
 // secretKinds are the password managers this build offers. Their CLIs run in
@@ -161,7 +171,7 @@ func (c *Core) newServers(local *docker.Client) *servers.Servers {
 		}
 		return docker.NewSSH(docker.SSHConfig(r))
 	})
-	s = servers.New(c.bg, &c.cfg, c.store, pool, cron.Cron{}, &c.steps, &c.probes, serversPorts{c}, c.log)
+	s = servers.New(c.bg, &c.cfg, c.store, pool, registry.Client{HTTP: http.DefaultClient}, cron.Cron{}, &c.steps, &c.probes, serversPorts{c}, c.log)
 	return s
 }
 

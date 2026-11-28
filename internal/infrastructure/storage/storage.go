@@ -21,6 +21,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/progress"
 )
 
+// Storage is what Open returns: *Local or *S3.
 type Storage interface {
 	// Put stores r under key. On error nothing is left behind.
 	Put(ctx context.Context, key string, r io.Reader) error
@@ -29,12 +30,7 @@ type Storage interface {
 	// Check verifies the target is reachable and writable.
 	Check(ctx context.Context) error
 	// List yields the objects under prefix, keys as Put takes them.
-	List(ctx context.Context, prefix string) iter.Seq2[Object, error]
-}
-
-type Object struct {
-	Key  string
-	Size int64
+	List(ctx context.Context, prefix string) iter.Seq2[domain.StorageObject, error]
 }
 
 // Env is what drivers need besides the target.
@@ -125,8 +121,8 @@ func (l *Local) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-func (l *Local) List(ctx context.Context, prefix string) iter.Seq2[Object, error] {
-	return func(yield func(Object, error) bool) {
+func (l *Local) List(ctx context.Context, prefix string) iter.Seq2[domain.StorageObject, error] {
+	return func(yield func(domain.StorageObject, error) bool) {
 		err := filepath.WalkDir(filepath.Join(l.Root, filepath.FromSlash(prefix)), func(p string, d fs.DirEntry, err error) error {
 			if errors.Is(err, fs.ErrNotExist) {
 				return nil
@@ -149,13 +145,13 @@ func (l *Local) List(ctx context.Context, prefix string) iter.Seq2[Object, error
 			if err != nil {
 				return err
 			}
-			if !yield(Object{Key: filepath.ToSlash(rel), Size: info.Size()}, nil) {
+			if !yield(domain.StorageObject{Key: filepath.ToSlash(rel), Size: info.Size()}, nil) {
 				return fs.SkipAll
 			}
 			return nil
 		})
 		if err != nil {
-			yield(Object{}, err)
+			yield(domain.StorageObject{}, err)
 		}
 	}
 }
@@ -221,8 +217,8 @@ func (s *S3) Delete(ctx context.Context, key string) error {
 	return s.client.RemoveObject(ctx, s.bucket, s.key(key), minio.RemoveObjectOptions{})
 }
 
-func (s *S3) List(ctx context.Context, prefix string) iter.Seq2[Object, error] {
-	return func(yield func(Object, error) bool) {
+func (s *S3) List(ctx context.Context, prefix string) iter.Seq2[domain.StorageObject, error] {
+	return func(yield func(domain.StorageObject, error) bool) {
 		ctx, cancel := context.WithCancel(ctx) // stops the listing when the caller does
 		defer cancel()
 		root := ""
@@ -231,14 +227,14 @@ func (s *S3) List(ctx context.Context, prefix string) iter.Seq2[Object, error] {
 		}
 		for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{Prefix: root + prefix, Recursive: true}) {
 			if obj.Err != nil {
-				yield(Object{}, obj.Err)
+				yield(domain.StorageObject{}, obj.Err)
 				return
 			}
 			key := strings.TrimPrefix(obj.Key, root)
 			if key == ".kipitiny-check" || strings.HasSuffix(key, "/") {
 				continue
 			}
-			if !yield(Object{Key: key, Size: obj.Size}, nil) {
+			if !yield(domain.StorageObject{Key: key, Size: obj.Size}, nil) {
 				return
 			}
 		}

@@ -38,6 +38,8 @@ type Servers struct {
 	// pool holds a Docker client per server, remote ones connected on
 	// demand over SSH.
 	pool Pool
+	// registry is where the update check reads the manager's published versions.
+	registry Registry
 	// steps is where the cleanup reports its step, and where the update
 	// preflight reads the restore tests', shared with core.
 	steps *progress.Steps
@@ -64,10 +66,16 @@ type Pool interface {
 	Invalidate(serverID string)
 }
 
+// Registry reads a public image's tags and labels from its registry.
+type Registry interface {
+	Tags(ctx context.Context, ref string) ([]string, error)
+	Labels(ctx context.Context, ref, tag string) (map[string]string, error)
+}
+
 // New builds the servers use cases around the pool of Docker clients; bg is
 // the manager's background context.
-func New(bg context.Context, cfg *config.Config, store domain.Store, pool Pool, cron domain.Cron, steps *progress.Steps, probes *sync.Map, mgr Manager, log *slog.Logger) *Servers {
-	return &Servers{cfg: cfg, store: store, pool: pool, cron: cron, mgr: mgr, log: log, bg: bg, steps: steps, probes: probes, reconcileKick: make(chan struct{}, 1)}
+func New(bg context.Context, cfg *config.Config, store domain.Store, pool Pool, registry Registry, cron domain.Cron, steps *progress.Steps, probes *sync.Map, mgr Manager, log *slog.Logger) *Servers {
+	return &Servers{cfg: cfg, store: store, pool: pool, registry: registry, cron: cron, mgr: mgr, log: log, bg: bg, steps: steps, probes: probes, reconcileKick: make(chan struct{}, 1)}
 }
 
 // DockerFor returns the Docker client of a server ("" or "local": this one).

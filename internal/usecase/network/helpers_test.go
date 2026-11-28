@@ -11,6 +11,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	cfapi "github.com/kipit-labs/kipitiny/internal/infrastructure/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 )
 
@@ -44,7 +45,7 @@ func newTestNetwork(t *testing.T, cfg config.Config) *Network {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	return New(context.Background(), &cfg, st, fakeManager{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return New(context.Background(), &cfg, st, newDNS, fakeManager{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 // routerName is the one router labels define.
@@ -61,3 +62,6 @@ func routerName(t *testing.T, labels map[string]string) string {
 	}
 	return out[0]
 }
+
+// newDNS is the real Cloudflare client: tests point cfapi.BaseURL at a fake.
+func newDNS(token string) DNS { return cfapi.New(token) }

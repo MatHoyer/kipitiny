@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/cloudflare"
 )
 
 // StartDNSSync keeps Cloudflare DNS records and tunnel routes in line with
@@ -86,7 +86,7 @@ func (c *Network) syncDNS(ctx context.Context) error {
 	defer s.syncing.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	cf := cloudflare.New(token)
+	cf := c.newDNS(token)
 
 	zones, err := cf.Zones(ctx)
 	if err != nil {
@@ -240,7 +240,7 @@ func proxiedFor(domains []domain.Domain, host string) bool {
 
 // applyRecord makes Cloudflare hold w's record, never touching records the
 // manager didn't create.
-func (c *Network) applyRecord(ctx context.Context, cf *cloudflare.Client, w Want) DNSStatus {
+func (c *Network) applyRecord(ctx context.Context, cf DNS, w Want) DNSStatus {
 	if w.Problem != "" {
 		return DNSStatus{State: "error", Message: w.Problem}
 	}

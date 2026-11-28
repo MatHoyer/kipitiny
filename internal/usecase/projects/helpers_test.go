@@ -14,6 +14,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/git"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/storage"
 	"github.com/kipit-labs/kipitiny/internal/mail"
 	"github.com/kipit-labs/kipitiny/internal/mail/mailtest"
 	"github.com/kipit-labs/kipitiny/internal/progress"
@@ -56,10 +57,13 @@ func newTestCore(t *testing.T, cfg config.Config) *testCore {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	c.Monitoring = monitoring.New(bg, c.cfg, st, c, log)
 	c.Identity = identity.New(cfg, st, nil, c.Monitoring, log)
-	c.Network = network.New(bg, c.cfg, st, c, log)
-	c.Data = data.New(bg, c.cfg, st, age.Encryption{}, cron.Cron{}, &c.steps, c, log)
+	c.Network = network.New(bg, c.cfg, st, nil, c, log)
+	openStorage := func(t domain.BackupTarget) (data.Storage, error) {
+		return storage.Open(t, storage.Env{DataDir: c.cfg.DataDir})
+	}
+	c.Data = data.New(bg, c.cfg, st, age.Encryption{}, cron.Cron{}, openStorage, &c.steps, c, log)
 	c.Deployer = deploy.New(bg, c.cfg, st, cron.Cron{}, &sync.Map{}, deployManager{c}, log)
-	c.Projects = New(bg, c.cfg, st, cron.Cron{}, git.Git{}, c, log)
+	c.Projects = New(bg, c.cfg, st, cron.Cron{}, git.Git{}, nil, c, log)
 	return c
 }
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/cloudflare"
 )
 
 // Manager is what network uses from the rest of the manager.
@@ -35,12 +36,28 @@ type Manager interface {
 	ResolveSecrets(ctx context.Context, refs []string) (map[string]string, error)
 }
 
+// DNS is Cloudflare's API with a token (infrastructure/cloudflare): zones,
+// the records the manager owns and remotely-managed tunnel routes.
+type DNS interface {
+	Zones(ctx context.Context) ([]cloudflare.Zone, error)
+	SSLMode(ctx context.Context, zoneID string) (string, error)
+	Records(ctx context.Context, zoneID, name string) ([]cloudflare.Record, error)
+	ManagedRecords(ctx context.Context, zoneID string) ([]cloudflare.Record, error)
+	CreateRecord(ctx context.Context, zoneID string, r cloudflare.Record) error
+	UpdateRecord(ctx context.Context, zoneID, id string, r cloudflare.Record) error
+	DeleteRecord(ctx context.Context, zoneID, id string) error
+	TunnelIngress(ctx context.Context, t cloudflare.Tunnel) ([]cloudflare.Ingress, map[string]any, error)
+	SetTunnelIngress(ctx context.Context, t cloudflare.Tunnel, cfg map[string]any, rules []cloudflare.Ingress) error
+}
+
 type Network struct {
 	// cfg is the manager's configuration, shared with core.
 	cfg   *config.Config
 	store domain.Store
-	mgr   Manager
-	log   *slog.Logger
+	// newDNS opens Cloudflare's API with a token.
+	newDNS func(token string) DNS
+	mgr    Manager
+	log    *slog.Logger
 	// bg ends when the manager stops: the DNS sync loop runs under it.
 	bg context.Context
 
@@ -50,6 +67,6 @@ type Network struct {
 }
 
 // New builds the network use cases; bg is the manager's background context.
-func New(bg context.Context, cfg *config.Config, store domain.Store, mgr Manager, log *slog.Logger) *Network {
-	return &Network{cfg: cfg, store: store, mgr: mgr, log: log, bg: bg, dnsKick: make(chan struct{}, 1)}
+func New(bg context.Context, cfg *config.Config, store domain.Store, newDNS func(token string) DNS, mgr Manager, log *slog.Logger) *Network {
+	return &Network{cfg: cfg, store: store, newDNS: newDNS, mgr: mgr, log: log, bg: bg, dnsKick: make(chan struct{}, 1)}
 }

@@ -35,7 +35,7 @@ func newTestCore(t *testing.T, cfg config.Config) testCore {
 	f := &fakeManager{store: st, logDir: t.TempDir()}
 	t.Cleanup(func() { cancel(); f.ops.Wait(); st.Close() })
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return testCore{Servers: New(bg, &cfg, st, nil, cron.Cron{}, &progress.Steps{}, &sync.Map{}, f, log), fake: f}
+	return testCore{Servers: New(bg, &cfg, st, nil, nil, cron.Cron{}, &progress.Steps{}, &sync.Map{}, f, log), fake: f}
 }
 
 // fakeManager is the rest of the manager for the servers tests: background

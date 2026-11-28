@@ -17,6 +17,19 @@ import (
 
 const maxPages = 20
 
+// Client reads a registry over HTTP (servers.Registry).
+type Client struct {
+	HTTP *http.Client
+}
+
+func (c Client) Tags(ctx context.Context, ref string) ([]string, error) {
+	return Tags(ctx, c.HTTP, ref)
+}
+
+func (c Client) Labels(ctx context.Context, ref, tag string) (map[string]string, error) {
+	return Labels(ctx, c.HTTP, ref, tag)
+}
+
 // Tags returns every tag of ref (e.g. "ghcr.io/owner/name").
 func Tags(ctx context.Context, hc *http.Client, ref string) ([]string, error) {
 	host, repo := split(ref)

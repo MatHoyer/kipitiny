@@ -11,9 +11,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/cloudflare"
+	cfapi "github.com/kipit-labs/kipitiny/internal/infrastructure/cloudflare"
 )
 
 func TestCertResolver(t *testing.T) {
@@ -49,7 +50,7 @@ func TestZoneNamesSurviveRestart(t *testing.T) {
 	}
 	c.saveZoneNames(ctx, []cloudflare.Zone{{ID: "z", Name: "example.com"}})
 
-	restarted := New(context.Background(), &config.Config{}, c.store, fakeManager{}, c.log)
+	restarted := New(context.Background(), &config.Config{}, c.store, newDNS, fakeManager{}, c.log)
 	if !restarted.onCloudflare(ctx, "shop.example.com") {
 		t.Error("certificates would use the wrong challenge until the first sync")
 	}
@@ -236,8 +237,8 @@ func TestSyncDNS(t *testing.T) {
 	}
 	srv := httptest.NewServer(fake)
 	defer srv.Close()
-	defer func(old string) { cloudflare.BaseURL = old }(cloudflare.BaseURL)
-	cloudflare.BaseURL = srv.URL
+	defer func(old string) { cfapi.BaseURL = old }(cfapi.BaseURL)
+	cfapi.BaseURL = srv.URL
 
 	tok := base64.StdEncoding.EncodeToString([]byte(`{"a":"acc","t":"tid","s":"x"}`))
 	c := newTestNetwork(t, config.Config{Tunnel: config.Tunnel{Token: tok}, Traefik: config.Traefik{Enabled: true}})
@@ -351,8 +352,8 @@ func TestConnectCloudflareAddsZones(t *testing.T) {
 	ctx := context.Background()
 	srv := httptest.NewServer(&fakeCloudflare{})
 	defer srv.Close()
-	defer func(old string) { cloudflare.BaseURL = old }(cloudflare.BaseURL)
-	cloudflare.BaseURL = srv.URL
+	defer func(old string) { cfapi.BaseURL = old }(cfapi.BaseURL)
+	cfapi.BaseURL = srv.URL
 
 	c := newTestNetwork(t, config.Config{})
 	for range 2 { // reconnecting keeps the listed domain
