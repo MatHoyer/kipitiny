@@ -100,7 +100,18 @@ func mongoArgs(memoryMB int) []string {
 	return []string{"--wiredTigerCacheSizeGB", strconv.FormatFloat(cacheGB, 'f', 2, 64)}
 }
 
+// mongoFirstStartRestart lets Docker start a MongoDB again when its first
+// start fails: the image's entrypoint stops its init server with
+// `mongod --shutdown`, which returns once the lock file is released but
+// before that server lets go of the port, so the real server can fail to
+// bind it (exit 48, docker-library/mongo#730). Started again on the
+// initialized data, the entrypoint skips the init server.
+var mongoFirstStartRestart = domain.RestartPolicy{Name: domain.RestartOnFailure, MaxRetries: 1}
+
 func applyMongoSpec(spec *domain.ContainerSpec, svc domain.Service) {
+	if spec.Restart.Name == "" { // a service's container already has unless-stopped
+		spec.Restart = mongoFirstStartRestart
+	}
 	spec.Cmd = mongoArgs(svc.MemoryMB)
 	spec.Healthcheck = mongoHealthcheck()
 	spec.Mounts = append(spec.Mounts, domain.Mount{

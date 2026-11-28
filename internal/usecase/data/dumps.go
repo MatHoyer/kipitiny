@@ -281,7 +281,7 @@ func (c *Data) scratchDump(ctx context.Context, b domain.Backup, name string, st
 		spec.Env = append(spec.Env, k+"="+v)
 	}
 	if svc.Kind == domain.ServiceKindMongoDB {
-		spec.Cmd, spec.Healthcheck = mongoArgs(verifyMemoryMB), mongoHealthcheck()
+		spec.Cmd, spec.Healthcheck, spec.Restart = mongoArgs(verifyMemoryMB), mongoHealthcheck(), mongoFirstStartRestart
 	} else {
 		spec.Cmd, spec.Healthcheck = mysqlArgs(verifyMemoryMB), mysqlHealthcheck(svc.Kind)
 	}

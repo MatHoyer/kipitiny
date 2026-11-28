@@ -48,3 +48,19 @@ func TestMySQLAndMongoBackupAndArgs(t *testing.T) {
 		}
 	}
 }
+
+// A MongoDB without a restart policy gets one for its first start (the
+// image's init can lose the port, docker-library/mongo#730); a service's
+// container keeps its own.
+func TestMongoSpecRestart(t *testing.T) {
+	spec := domain.ContainerSpec{Labels: map[string]string{}}
+	ApplyDatabaseSpec(&spec, mongoService())
+	if spec.Restart != (domain.RestartPolicy{Name: domain.RestartOnFailure, MaxRetries: 1}) {
+		t.Errorf("scratch restart = %+v", spec.Restart)
+	}
+	spec = domain.ContainerSpec{Labels: map[string]string{}, Restart: domain.RestartPolicy{Name: domain.RestartUnlessStopped}}
+	ApplyDatabaseSpec(&spec, mongoService())
+	if spec.Restart.Name != domain.RestartUnlessStopped {
+		t.Errorf("service restart = %+v", spec.Restart)
+	}
+}
