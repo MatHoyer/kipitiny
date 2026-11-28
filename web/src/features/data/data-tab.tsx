@@ -62,6 +62,8 @@ function Data({ svc }: { svc: Service }) {
       );
   } else if (!isDatabase(svc.kind)) return null;
   else if (!svc.containers.some((c) => !c.retired && c.state === "running")) return <Empty>The database is stopped. Start it to see its data.</Empty>;
+  // The views are keyed on the database: shown before the list, they'd remount once it lands, dropping what was typed.
+  else if (multi && databases.isPending) return <Loading />;
   const hue = { "--db": app ? sqliteColor : serviceLogos[svc.kind].color } as CSSProperties;
 
   return (
