@@ -6,6 +6,8 @@ export { expect };
 
 export const PASSWORD = "correct horse battery";
 export const ADMIN = "admin";
+/** The analytics server's domain, which global-setup turns on. */
+export const ANALYTICS_DOMAIN = "stats.localhost";
 
 // Every uncaught error in a page fails the test that caused it. Except one: WebKit reports each request still in
 // flight when a test navigates away (page.goto) as "… due to access control checks", same-origin ones included.

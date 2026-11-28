@@ -43,7 +43,7 @@ The tests are the safety net that lets agents change code: a change is done when
 | Docker integration | `internal/core/*_docker_test.go` (`KIPITINY_TEST_DOCKER=1`), `flows_docker_test.go` for deploy, rollback, reconcile, compose, backups, previews | what core does on a real daemon |
 | HTTP and MCP contract | `internal/api/*_test.go`, `routeAccess` (`access.go`) checked over HTTP by `TestRouteAccessOverHTTP`; `internal/mcp` `toolAccess` by `TestToolAccess` | status codes, who may call each route and tool |
 | API end to end | `cmd/kipitiny/api_integration_test.go` (`KIPITINY_TEST_DOCKER=1`): the real `wire()` over HTTP, temp SQLite, deploying on a Docker daemon, CI's `kipitiny preview` included; only email and outside services may be faked | user journeys across every layer |
-| UI end to end | `web/e2e/*.e2e.ts` (Playwright): the real binary deploying on a Docker daemon, WebKit at iPhone size and desktop Chromium, outside requests answered locally | user journeys in a browser, phone layout, uncaught page errors |
+| UI end to end | `web/e2e/*.e2e.ts` (Playwright): the real binary deploying on a Docker daemon with Traefik and the analytics server built from it, WebKit at iPhone size and desktop Chromium, outside requests answered locally | user journeys in a browser, phone layout, uncaught page errors |
 
 - A new route goes into `routeAccess`, a new MCP tool into `toolAccess`; a new user-facing flow adds or extends a
   journey in both end-to-end suites (API, and UI for what users click); a new page or tab is opened by `e2e/pages.e2e.ts` (a render error shows the router's error page instead of

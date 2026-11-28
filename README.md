@@ -123,7 +123,7 @@ make dev-api   # Go API on :8080 (data in ./data)
 make dev-ui    # Vite on :5173, proxies /api to :8080
 make test      # go test ./...
 make cover     # unit, API, Docker and API end-to-end tests, under the coverage floor
-make e2e       # UI tests: Playwright on the real binary (DOCKER_HOST: a daemon of its own)
+make e2e       # UI tests: Playwright on the real binary, Traefik and analytics (DOCKER_HOST: a daemon of its own)
 make lint      # go vet + tsc
 make build     # UI + static binary in bin/
 make docker    # images `kipitiny` and `ghcr.io/kipit-labs/kipitiny:dev`

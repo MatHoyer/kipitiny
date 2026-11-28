@@ -59,20 +59,30 @@ test: ui-stub
 	cd web && node --test 'src/**/*.test.ts'
 
 # UI tests: Playwright in its Docker image (no browser to install) against bin/kipitiny, which deploys on the daemon
-# of DOCKER_HOST, else the local socket. Its reconciler removes kipitiny containers it doesn't know, so outside CI the
-# daemon must have none (the Playwright container itself runs on the local daemon): give it a throwaway one (docker run -d --privileged
-# -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 docker:dind, then DOCKER_HOST=tcp://127.0.0.1:2375). ARGS= passes options, e.g. ARGS="--project=iphone deploy".
-# The browsers get a network namespace of their own, like a user's on another machine: Chromium aborts the requests in
-# flight (ERR_NETWORK_CHANGED) when the daemon adds a bridge next to it, as creating a project does. Host networking
-# only to reach a DOCKER_HOST on the loopback, a dind whose bridges stay in its own namespace.
+# of DOCKER_HOST, else the local socket, with Traefik and the analytics server running as on a server. Its reconciler
+# removes kipitiny containers it doesn't know, so outside CI the daemon must have none (the Playwright container itself
+# runs on the local daemon): give it a throwaway one (docker run -d --privileged -e DOCKER_TLS_CERTDIR= -p
+# 127.0.0.1:2375:2375 docker:dind, then DOCKER_HOST=tcp://127.0.0.1:2375), emptied of them and of the analytics data
+# afterwards. ARGS= passes options, e.g. ARGS="--project=iphone deploy".
+# The analytics server runs the manager's image: kipitiny-e2e:dev (the tag of VERSION dev), built on that daemon from
+# bin/kipitiny. The manager reaches it on the proxy network, and the tests reach Traefik's ports:
+# - with a dind, from its network namespace (its hostname is its container's ID);
+# - on the runner, the manager joins the proxy network itself and Traefik's ports are on the host. The container keeps
+#   a network namespace of its own: in the host's, Chromium aborts the requests in flight (ERR_NETWORK_CHANGED) when
+#   a project adds a bridge.
+e2e: VERSION := dev
 e2e: build
 	@test -n "$$CI" || { ids=$$(docker ps -aq --filter label=kipitiny.managed) || \
 		{ echo "make e2e: can't reach the Docker daemon$${DOCKER_HOST:+ at $$DOCKER_HOST}"; exit 1; }; test -z "$$ids" || \
 		{ echo "make e2e: this Docker daemon runs kipitiny containers the tests would remove; set DOCKER_HOST to a throwaway one"; exit 1; }; }
-	env -u DOCKER_HOST docker run --rm $(if $(DOCKER_HOST),--network host) --ipc host -u $$(id -u):$$(id -g) -e HOME=/tmp -e CI \
-		$(if $(DOCKER_HOST),-e DOCKER_HOST=$(DOCKER_HOST),-v /var/run/docker.sock:/var/run/docker.sock --group-add $$(stat -c %g /var/run/docker.sock)) \
+	docker build -q -t kipitiny-e2e:dev -f web/e2e/Dockerfile bin
+	env -u DOCKER_HOST docker run --rm --ipc host -u $$(id -u):$$(id -g) -e HOME=/tmp -e CI \
+		$(if $(DOCKER_HOST),--network container:$$(docker info -f '{{.Name}}') -e DOCKER_HOST=tcp://127.0.0.1:2375,-v /var/run/docker.sock:/var/run/docker.sock --group-add $$(stat -c %g /var/run/docker.sock) --add-host host.docker.internal:host-gateway -e TRAEFIK_HOST=host.docker.internal) \
 		-v $(CURDIR):$(CURDIR) -w $(CURDIR)/web mcr.microsoft.com/playwright:v$(PLAYWRIGHT_VERSION)-noble \
-		node_modules/.bin/playwright test $(ARGS)
+		node_modules/.bin/playwright test $(ARGS); status=$$?; \
+	test -n "$$CI" || { ids=$$(docker ps -aq --filter label=kipitiny.managed); test -z "$$ids" || docker rm -fv $$ids >/dev/null; \
+		docker volume rm -f kipitiny-analytics >/dev/null; }; \
+	exit $$status
 
 lint: ui-stub
 	@unformatted=$$(gofmt -l .); if [ -n "$$unformatted" ]; then echo "Run gofmt on:"; echo "$$unformatted"; exit 1; fi
