@@ -91,7 +91,9 @@ func (c *deployClient) deploy(ctx context.Context, service string, opts deployOp
 			return err
 		}
 		if log, err := c.text(ctx, "/api/deployments/"+dep.ID+"/log"); err == nil && len(log) > printed {
-			io.WriteString(c.out, log[printed:])
+			if _, err := io.WriteString(c.out, log[printed:]); err != nil {
+				return err
+			}
 			printed = len(log)
 		}
 		switch dep.Status {

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,23 +16,23 @@ func fakeManager(t *testing.T, outcome string, gotOpts *deployOptions) *httptest
 	t.Helper()
 	polls := 0
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/projects", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode([]map[string]string{{"id": "P1", "name": "other"}, {"id": "P2", "name": "shop"}})
+	mux.HandleFunc("GET /api/projects", func(w http.ResponseWriter, _ *http.Request) {
+		reply(t, w, []map[string]string{{"id": "P1", "name": "other"}, {"id": "P2", "name": "shop"}})
 	})
-	mux.HandleFunc("GET /api/projects/P2/services", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode([]map[string]string{{"id": "S1", "name": "db"}, {"id": "S2", "name": "web"}})
+	mux.HandleFunc("GET /api/projects/P2/services", func(w http.ResponseWriter, _ *http.Request) {
+		reply(t, w, []map[string]string{{"id": "S1", "name": "db"}, {"id": "S2", "name": "web"}})
 	})
 	mux.HandleFunc("POST /api/services/S2/deploy", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer kpt_x" {
 			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]string{"error": "bad token"})
+			reply(t, w, map[string]string{"error": "bad token"})
 			return
 		}
-		json.NewDecoder(r.Body).Decode(gotOpts)
+		decode(t, r, gotOpts)
 		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(deployment{ID: "D1", Status: "running"})
+		reply(t, w, deployment{ID: "D1", Status: "running"})
 	})
-	mux.HandleFunc("GET /api/deployments/D1", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/deployments/D1", func(w http.ResponseWriter, _ *http.Request) {
 		polls++
 		d := deployment{ID: "D1", Status: "running", Image: "app:v2"}
 		if polls >= 2 {
@@ -40,10 +41,12 @@ func fakeManager(t *testing.T, outcome string, gotOpts *deployOptions) *httptest
 				d.Error = "pull app:v2: not found"
 			}
 		}
-		json.NewEncoder(w).Encode(d)
+		reply(t, w, d)
 	})
-	mux.HandleFunc("GET /api/deployments/D1/log", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("[12:00:00] Pulling app:v2\n"))
+	mux.HandleFunc("GET /api/deployments/D1/log", func(w http.ResponseWriter, _ *http.Request) {
+		if _, err := io.WriteString(w, "[12:00:00] Pulling app:v2\n"); err != nil {
+			t.Error(err)
+		}
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -76,5 +79,21 @@ func TestDeployCmd(t *testing.T) {
 	}
 	if err := c.deploy(context.Background(), "shop/missing", deployOptions{}, true); err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Errorf("unknown service: %v", err)
+	}
+}
+
+// reply writes v as JSON; a failed write fails the test.
+func reply(t *testing.T, w io.Writer, v any) {
+	t.Helper()
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		t.Error(err)
+	}
+}
+
+// decode reads the request's JSON body into v; a bad body fails the test.
+func decode(t *testing.T, r *http.Request, v any) {
+	t.Helper()
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		t.Error(err)
 	}
 }

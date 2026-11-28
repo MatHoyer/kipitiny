@@ -16,16 +16,16 @@ func fakePreviews(t *testing.T, outcome string, got *previewOptions) *httptest.S
 	t.Helper()
 	polls := 0
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/projects", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode([]map[string]string{{"id": "P1", "name": "shop"}})
+	mux.HandleFunc("GET /api/projects", func(w http.ResponseWriter, _ *http.Request) {
+		reply(t, w, []map[string]string{{"id": "P1", "name": "shop"}})
 	})
-	mux.HandleFunc("GET /api/projects/P1/previews", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`[{"id":"P9","name":"shop-pr-1","preview":{"name":"pr-1"}}]`))
+	mux.HandleFunc("GET /api/projects/P1/previews", func(w http.ResponseWriter, _ *http.Request) {
+		reply(t, w, json.RawMessage(`[{"id":"P9","name":"shop-pr-1","preview":{"name":"pr-1"}}]`))
 	})
-	mux.HandleFunc("GET /api/projects/P9/services", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode([]map[string]string{{"id": "S1", "name": "web"}})
+	mux.HandleFunc("GET /api/projects/P9/services", func(w http.ResponseWriter, _ *http.Request) {
+		reply(t, w, []map[string]string{{"id": "S1", "name": "web"}})
 	})
-	mux.HandleFunc("GET /api/services/S1/deployments", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/services/S1/deployments", func(w http.ResponseWriter, _ *http.Request) {
 		d := deployment{ID: "D0", Status: "succeeded", Image: "app:v1"}
 		if got.Tags != nil { // after the PUT
 			polls++
@@ -37,14 +37,14 @@ func fakePreviews(t *testing.T, outcome string, got *previewOptions) *httptest.S
 				}
 			}
 		}
-		json.NewEncoder(w).Encode([]deployment{d})
+		reply(t, w, []deployment{d})
 	})
 	mux.HandleFunc("PUT /api/projects/P1/previews/pr-1", func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(got)
+		decode(t, r, got)
 		w.WriteHeader(http.StatusAccepted)
-		w.Write([]byte(`{"id":"P9","urls":{"web":"https://pr-1.preview.example.com"},"plan":{"deploying":["web"],"warnings":["game: published ports left out"]}}`))
+		reply(t, w, json.RawMessage(`{"id":"P9","urls":{"web":"https://pr-1.preview.example.com"},"plan":{"deploying":["web"],"warnings":["game: published ports left out"]}}`))
 	})
-	mux.HandleFunc("DELETE /api/projects/P1/previews/pr-1", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("DELETE /api/projects/P1/previews/pr-1", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	srv := httptest.NewServer(mux)
