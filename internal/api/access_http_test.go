@@ -26,12 +26,12 @@ func TestRouteAccessOverHTTP(t *testing.T) {
 	param := regexp.MustCompile(`\{[a-zA-Z]+(\.\.\.)?\}`)
 	path := func(pattern string, kind identity.IDKind, ids map[string]string) (string, string) {
 		method, p, _ := strings.Cut(pattern, " ")
-		return method, strings.Replace(param.ReplaceAllStringFunc(p, func(s string) string {
+		return method, strings.ReplaceAll(param.ReplaceAllStringFunc(p, func(s string) string {
 			if s == "{id}" && kind != "" {
 				return ids[string(kind)]
 			}
 			return "x"
-		}), "//", "/", -1)
+		}), "//", "/")
 	}
 	do := func(tok, pattern string, kind identity.IDKind, ids map[string]string) (int, string) {
 		t.Helper()

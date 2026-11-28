@@ -69,9 +69,11 @@ func TestDiscordSend(t *testing.T) {
 		if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/json" {
 			t.Errorf("request %s %s", r.Method, r.Header.Get("Content-Type"))
 		}
-		json.NewDecoder(r.Body).Decode(&got)
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Error(err)
+		}
 		w.WriteHeader(status)
-		w.Write([]byte(`{"message": "Unknown Webhook"}`))
+		_, _ = w.Write([]byte(`{"message": "Unknown Webhook"}`))
 	}))
 	defer srv.Close()
 	d := &discord{url: srv.URL + "/api/webhooks/1/secret-token", hc: srv.Client(), brand: "kipitiny"}

@@ -41,7 +41,7 @@ func TestDryRunWrapper(t *testing.T) {
 	}
 
 	ran := false
-	query := dryRun("query_database", func(_ context.Context, _ *mcp.CallToolRequest, in queryIn) (*mcp.CallToolResult, out, error) {
+	query := dryRun("query_database", func(_ context.Context, _ *mcp.CallToolRequest, _ queryIn) (*mcp.CallToolResult, out, error) {
 		ran = true
 		return nil, out{Ran: true}, nil
 	})

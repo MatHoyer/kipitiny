@@ -51,7 +51,7 @@ func TestMemberTools(t *testing.T) {
 		out, failed := e.call(all, tool.Name, e.toolArgs(t, tool, secret))
 		leaked := strings.Contains(out, secretSvc.ID) || strings.Contains(out, secretSvc.ProjectID) || strings.Contains(out, "hunter2") ||
 			(!failed && strings.Contains(out, "secretproj"))
-		if leaked || (!failed && !(tool.Annotations != nil && tool.Annotations.ReadOnlyHint)) {
+		if leaked || (!failed && (tool.Annotations == nil || !tool.Annotations.ReadOnlyHint)) {
 			t.Errorf("%s on a project not granted: %s", tool.Name, out)
 		}
 	}

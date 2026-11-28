@@ -11,7 +11,9 @@ import (
 func TestPrunePreMigrate(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "k.db")
 	for _, v := range []int{2, 9, 10, 11, 12} {
-		os.WriteFile(fmt.Sprintf("%s.pre-migrate-%d", path, v), nil, 0o600)
+		if err := os.WriteFile(fmt.Sprintf("%s.pre-migrate-%d", path, v), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	prunePreMigrate(path)
 	left, _ := filepath.Glob(path + ".pre-migrate-*")

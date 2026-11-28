@@ -40,7 +40,7 @@ func TestReferenceExamples(t *testing.T) {
 		t.Fatal("no yaml examples")
 	}
 	for i, b := range blocks {
-		src := b[:strings.Index(b, "```")]
+		src, _, _ := strings.Cut(b, "```")
 		if !strings.Contains(src, "services:") {
 			continue // a fragment
 		}

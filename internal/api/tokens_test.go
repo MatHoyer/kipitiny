@@ -17,7 +17,9 @@ func (c *client) token(name string) string {
 	}
 	defer res.Body.Close()
 	var body struct{ Token string }
-	json.NewDecoder(res.Body).Decode(&body)
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		c.t.Fatal(err)
+	}
 	return body.Token
 }
 
@@ -43,7 +45,9 @@ func TestTokens(t *testing.T) {
 	}
 	defer res.Body.Close()
 	var entries []struct{ Actor, Action, Target string }
-	json.NewDecoder(res.Body).Decode(&entries)
+	if err := json.NewDecoder(res.Body).Decode(&entries); err != nil {
+		t.Fatal(err)
+	}
 	found := false
 	for _, e := range entries {
 		if e.Actor == "token:t-admin" && e.Action == "PATCH /api/services/{id}" {

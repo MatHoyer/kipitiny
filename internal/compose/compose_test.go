@@ -286,7 +286,7 @@ services:
     environment:
       - TOKEN
 `)
-	f, warns, err := Parse(data, Vars{Lookup: func(n string) (string, bool) { return "v", true }})
+	f, warns, err := Parse(data, Vars{Lookup: func(_ string) (string, bool) { return "v", true }})
 	if err != nil {
 		t.Fatal(err)
 	}
