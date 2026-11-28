@@ -49,6 +49,8 @@ export async function newApp(page: Page, name: string, image: string) {
 
 /** Deploys the open app for the first time and waits for the deploy to finish. */
 export async function firstDeploy(page: Page) {
+  // On a phone a toast covers the header, Deploy included, and a tap while it slides in lands on it.
+  await expect(page.getByRole("region", { name: /^Notifications/ }).getByRole("listitem")).toHaveCount(0, { timeout: 10_000 });
   await page.getByRole("button", { name: "Deploy", exact: true }).click();
   await expect(page.getByRole("main").getByText("1/1")).toBeVisible({ timeout: 90_000 });
   await expect(page.getByRole("button", { name: "Deploy", exact: true })).toBeEnabled({ timeout: 30_000 });
