@@ -72,11 +72,11 @@ export function TokensPage() {
           action={add}
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div role="list" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {tokens.data?.map((t) => {
             const Icon = t.restricted ? SlidersHorizontal : ShieldCheck;
             return (
-              <Card key={t.id} className="gap-3 px-4">
+              <Card key={t.id} role="listitem" className="gap-3 px-4">
                 <div className="flex items-start gap-3">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted [&>svg]:size-5">
                     <Icon />
