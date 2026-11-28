@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
@@ -77,7 +78,7 @@ func (c *Projects) InstallTemplate(ctx context.Context, id string, in TemplateIn
 		if err != nil {
 			return TemplateResult{ProjectID: in.ProjectID, Plan: plan}, err
 		}
-		if taken := append(plan.Unchanged, serviceNames(plan.Update)...); len(taken) > 0 {
+		if taken := slices.Concat(plan.Unchanged, serviceNames(plan.Update)); len(taken) > 0 {
 			return TemplateResult{}, fmt.Errorf("%w: the project already has %s", ErrInvalid, strings.Join(taken, ", "))
 		}
 		if in.DryRun {

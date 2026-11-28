@@ -372,7 +372,7 @@ func (c *Identity) ResolveSecrets(ctx context.Context, refs []string) (map[strin
 		vals, err := p.Resolve(ctx, base)
 		if err != nil {
 			if lerr := p.Connect(ctx, conn.Token); lerr != nil {
-				return nil, fmt.Errorf("%s: %v (logging in again: %v)", name, err, lerr)
+				return nil, fmt.Errorf("%s: %w (logging in again: %w)", name, err, lerr)
 			}
 			if vals, err = p.Resolve(ctx, base); err != nil {
 				return nil, fmt.Errorf("%s: %w", name, err)

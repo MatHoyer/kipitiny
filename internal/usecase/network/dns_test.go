@@ -173,7 +173,10 @@ func (f *fakeCloudflare) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ok(out)
 	case path == "/zones/z1/dns_records" && r.Method == http.MethodPost:
 		var rec cloudflare.Record
-		json.NewDecoder(r.Body).Decode(&rec)
+		if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
+			http.Error(w, `{"success":false,"errors":[{"message":"bad body"}]}`, http.StatusBadRequest)
+			return
+		}
 		f.nextID++
 		rec.ID = fmt.Sprintf("new%d", f.nextID)
 		f.records[rec.ID] = rec
@@ -186,7 +189,10 @@ func (f *fakeCloudflare) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			delete(f.records, id)
 		} else {
 			var rec cloudflare.Record
-			json.NewDecoder(r.Body).Decode(&rec)
+			if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
+				http.Error(w, `{"success":false,"errors":[{"message":"bad body"}]}`, http.StatusBadRequest)
+				return
+			}
 			rec.ID = id
 			f.records[id] = rec
 		}
@@ -202,7 +208,10 @@ func (f *fakeCloudflare) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Ingress []any `json:"ingress"`
 			} `json:"config"`
 		}
-		json.NewDecoder(r.Body).Decode(&body)
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, `{"success":false,"errors":[{"message":"bad body"}]}`, http.StatusBadRequest)
+			return
+		}
 		f.ingress[tid] = body.Config.Ingress
 		f.writes++
 		ok(map[string]any{})

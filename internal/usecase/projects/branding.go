@@ -154,7 +154,7 @@ func (c *Projects) SetBranding(ctx context.Context, in BrandingInput) (Branding,
 		return Branding{}, fmt.Errorf("%w: the name must be one line of at most %d characters", ErrInvalid, maxBrandName)
 	}
 	s.Theme = in.Theme
-	if err := s.Theme.normalize(); err != nil {
+	if err := s.normalize(); err != nil {
 		return Branding{}, err
 	}
 	if in.Logo != nil {
