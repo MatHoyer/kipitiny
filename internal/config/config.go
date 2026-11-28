@@ -31,6 +31,9 @@ type Config struct {
 	// Version is the running build (set by main, not the environment).
 	Version string
 	Update  Update
+	// SelfContainerID is the Docker container the manager runs in, "" on a
+	// host (set by main, not the environment).
+	SelfContainerID string
 
 	Traefik       Traefik
 	Tunnel        Tunnel

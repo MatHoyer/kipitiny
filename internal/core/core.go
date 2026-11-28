@@ -13,6 +13,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/git"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/protonpass"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/secrets"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/docker"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 )
@@ -82,12 +84,25 @@ func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logg
 	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel}
 	c.Servers = c.newServers(local)
 	c.Monitoring = monitoring.New(bg, &c.cfg, s, monitoringPorts{c}, log)
-	c.Identity = identity.New(cfg, s, identity.SecretKinds(cfg, c.dockerFor(domain.LocalServerID)), c.Monitoring, log)
+	c.Identity = identity.New(cfg, s, secretKinds(cfg, c.dockerFor(domain.LocalServerID)), c.Monitoring, log)
 	c.Network = network.New(bg, &c.cfg, s, networkPorts{c}, log)
 	c.Data = data.New(bg, &c.cfg, s, age.Encryption{}, cron.Cron{}, &c.steps, dataPorts{c}, log)
 	c.Deployer = deploy.New(bg, &c.cfg, s, cron.Cron{}, &c.probes, deployPorts{c}, log)
 	c.Projects = projects.New(bg, &c.cfg, s, cron.Cron{}, git.Git{}, projectsPorts{c}, log)
 	return c
+}
+
+// secretKinds are the password managers this build offers. Their CLIs run in
+// helper containers on the manager's own Docker (none without one, in tests).
+func secretKinds(cfg config.Config, local domain.ContainerRuntime) []identity.SecretKind {
+	if local == nil {
+		return nil
+	}
+	return []identity.SecretKind{
+		identity.NewSecretKind(func(conn string) secrets.Provider {
+			return protonpass.New(protonpass.NewContainerRunner(local, cfg.ProtonPass.Image, conn, identity.SecretHelperIdle))
+		}),
+	}
 }
 
 // Shutdown refuses new operations, waits until ctx for running ones (a deploy

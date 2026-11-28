@@ -20,9 +20,9 @@ import (
 	httpdelivery "github.com/kipit-labs/kipitiny/internal/delivery/http"
 	"github.com/kipit-labs/kipitiny/internal/delivery/mcp"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/docker"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/selfcontainer"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
-	"github.com/kipit-labs/kipitiny/internal/probe"
-	"github.com/kipit-labs/kipitiny/internal/sqlitehelper"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlitehelper"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 	"github.com/kipit-labs/kipitiny/web"
@@ -45,7 +45,7 @@ func main() {
 			run = allowPasswordLogin
 		case "probe":
 			// Healthcheck injected into app containers: keep it dependency-free.
-			if len(os.Args) != 3 || probe.Check(os.Args[2]) != nil {
+			if len(os.Args) != 3 || probeCheck(os.Args[2]) != nil {
 				os.Exit(1)
 			}
 			os.Exit(0)
@@ -74,7 +74,7 @@ func main() {
 			os.Exit(sqlitehelper.Main(os.Args[2:], os.Stdin, os.Stdout))
 		case "healthcheck":
 			// Docker HEALTHCHECK for the manager image, which has no curl.
-			if probe.Check(healthURL(config.Load().Addr)) != nil {
+			if probeCheck(healthURL(config.Load().Addr)) != nil {
 				os.Exit(1)
 			}
 			os.Exit(0)
@@ -92,6 +92,7 @@ func main() {
 func serve() error {
 	cfg := config.Load()
 	cfg.Version = version
+	cfg.SelfContainerID = selfcontainer.ID()
 
 	var level slog.Level
 	if err := level.UnmarshalText([]byte(cfg.LogLevel)); err != nil {

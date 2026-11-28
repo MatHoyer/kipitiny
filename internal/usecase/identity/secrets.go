@@ -8,11 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/domain/secrets"
 	"github.com/kipit-labs/kipitiny/internal/progress"
-	"github.com/kipit-labs/kipitiny/internal/secrets/protonpass"
 )
 
 // SecretProviderView is a password manager this build offers, in Settings.
@@ -31,9 +29,9 @@ type SecretConnectionView struct {
 	ProviderName string `json:"providerName"`
 }
 
-// secretHelperIdle is how long a password manager's helper container stays
+// SecretHelperIdle is how long a password manager's helper container stays
 // after its last call, and its listings stay cached.
-const secretHelperIdle = 5 * time.Minute
+const SecretHelperIdle = 5 * time.Minute
 
 // SecretKind is a password manager this build offers. Each connection gets
 // its own provider from open (conn is the connection's name): its own
@@ -47,19 +45,6 @@ type SecretKind struct {
 func NewSecretKind(open func(conn string) secrets.Provider) SecretKind {
 	p := open("")
 	return SecretKind{info: p.Info(), available: p.Available(), open: open}
-}
-
-// SecretKinds are the password managers this build offers. Their CLIs run in
-// helper containers on the manager's own Docker (none without one, in tests).
-func SecretKinds(cfg config.Config, local domain.ContainerRuntime) []SecretKind {
-	if local == nil {
-		return nil
-	}
-	return []SecretKind{
-		NewSecretKind(func(conn string) secrets.Provider {
-			return protonpass.New(protonpass.NewContainerRunner(local, cfg.ProtonPass.Image, conn, secretHelperIdle))
-		}),
-	}
 }
 
 // connNameRe is a connection's name: it goes into references and container
@@ -114,7 +99,7 @@ func (c *Identity) CloseSecretProviders(ctx context.Context) error {
 // CleanupSecretHelpers removes the helper containers a crash left, of any
 // connection.
 func (c *Identity) CleanupSecretHelpers(ctx context.Context, dk domain.ContainerRuntime) error {
-	cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: protonpass.Component})
+	cts, err := dk.ListContainers(ctx, map[string]string{domain.LabelComponent: secrets.HelperComponent})
 	if err != nil {
 		return err
 	}

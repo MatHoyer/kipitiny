@@ -15,7 +15,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/registry"
-	"github.com/kipit-labs/kipitiny/internal/selfcontainer"
 	"github.com/kipit-labs/kipitiny/internal/usecase/upgrade"
 )
 
@@ -210,7 +209,7 @@ func (c *Servers) inspectPin(ctx context.Context) {
 	u.mu.Lock()
 	done := u.inspected
 	u.mu.Unlock()
-	self := selfcontainer.ID()
+	self := c.cfg.SelfContainerID
 	if done || self == "" {
 		return
 	}
@@ -264,7 +263,7 @@ func (c *Servers) Update() UpdateInfo {
 		info.CheckedAt = &t
 	}
 	switch {
-	case selfcontainer.ID() == "":
+	case c.cfg.SelfContainerID == "":
 		info.Reason = "the manager isn't running in a container: update it the way it was installed"
 	case u.pinned != "":
 		info.Reason = "the compose file pins version " + u.pinned + " (KIPITINY_VERSION), which its next up would " +
@@ -280,7 +279,7 @@ func (c *Servers) Update() UpdateInfo {
 // the docker adapter's ReplaceContainer) and restores it if the new one isn't healthy.
 // Apps, Traefik and databases keep running throughout.
 func (c *Servers) ApplyUpdate(ctx context.Context) (UpdateInfo, error) {
-	self := selfcontainer.ID()
+	self := c.cfg.SelfContainerID
 	if self == "" {
 		return UpdateInfo{}, fmt.Errorf("%w: the manager isn't running in a container", ErrInvalid)
 	}

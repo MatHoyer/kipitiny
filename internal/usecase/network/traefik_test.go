@@ -176,7 +176,6 @@ func (d *daemonWith) ConnectNetwork(_ context.Context, _, id string, _ ...string
 
 func TestManagerUpstream(t *testing.T) {
 	const self = "3f4e5d6c7b8a99887766554433221100ffeeddccbbaa00112233445566778899"
-	c := &Network{cfg: &config.Config{Addr: ":3000"}}
 	for _, tc := range []struct {
 		name, self string
 		daemon     []string
@@ -188,9 +187,7 @@ func TestManagerUpstream(t *testing.T) {
 		{"in a container of another daemon", self, nil, "http://" + ManagerHost + ":3000"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			old := selfID
-			selfID = func() string { return tc.self }
-			t.Cleanup(func() { selfID = old })
+			c := &Network{cfg: &config.Config{Addr: ":3000", SelfContainerID: tc.self}}
 			dk := &daemonWith{ids: tc.daemon}
 			got, err := c.ManagerUpstream(context.Background(), dk)
 			if err != nil || got != tc.want {
