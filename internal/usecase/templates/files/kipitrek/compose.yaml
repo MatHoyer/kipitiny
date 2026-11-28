@@ -45,6 +45,6 @@ services:
       icon: kipitrek
       health_path: /api/health
   db:
-    image: postgis/postgis:17-3.6-alpine
+    image: postgis/postgis:18-3.7-alpine
     x-kipitiny:
       kind: postgres
