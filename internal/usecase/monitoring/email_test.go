@@ -28,9 +28,9 @@ func TestEmailProviders(t *testing.T) {
 	}
 
 	a, b := mailtest.NewServer(t), mailtest.NewServer(t)
-	clear := localProvider("relay", a)
-	clear.Username, clear.Password = "u", "p"
-	if _, err := c.CreateEmailProvider(ctx, clear); !errors.Is(err, domain.ErrInvalid) {
+	plain := localProvider("relay", a)
+	plain.Username, plain.Password = "u", "p"
+	if _, err := c.CreateEmailProvider(ctx, plain); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("password in clear text: %v", err)
 	}
 	if _, err := c.CreateEmailProvider(ctx, EmailProviderInput{Config: localProvider("", a).Config}); !errors.Is(err, domain.ErrInvalid) {

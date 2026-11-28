@@ -28,7 +28,9 @@ func TestAnalyticsCSV(t *testing.T) {
 		}
 	}
 	var b strings.Builder
-	visitsCSV(&b, []analytics.Visit{{ID: "01V", StartedAt: 60, LastAt: 120, Pageviews: 2, Entry: "/", Exit: "-x", Identity: "u1"}})
+	if err := visitsCSV(&b, []analytics.Visit{{ID: "01V", StartedAt: 60, LastAt: 120, Pageviews: 2, Entry: "/", Exit: "-x", Identity: "u1"}}); err != nil {
+		t.Fatal(err)
+	}
 	if lines := strings.Split(b.String(), "\n"); len(lines) != 3 || lines[1] != "01V,1970-01-01T00:01:00Z,1970-01-01T00:02:00Z,2,0,/,'-x,,,,,,,,,,,u1" {
 		t.Errorf("visits:\n%s", b.String())
 	}

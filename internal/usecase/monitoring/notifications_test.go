@@ -78,7 +78,11 @@ func TestNotifyDispatch(t *testing.T) {
 	var titles []string
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var m struct{ Embeds []struct{ Title, URL string } }
-		json.NewDecoder(r.Body).Decode(&m)
+		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		mu.Lock()
 		titles = append(titles, r.URL.Path+" "+m.Embeds[0].Title+" "+m.Embeds[0].URL)
 		mu.Unlock()
@@ -127,7 +131,7 @@ func TestNotifyDispatch(t *testing.T) {
 
 func TestTestChannel(t *testing.T) {
 	ctx := context.Background()
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer srv.Close()

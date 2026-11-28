@@ -19,7 +19,9 @@ func TestAnalyticsShare(t *testing.T) {
 		t.Fatalf("analytics off: %v", err)
 	}
 	svc.Analytics = true
-	c.store.UpdateService(ctx, svc)
+	if _, err := c.store.UpdateService(ctx, svc); err != nil {
+		t.Fatal(err)
+	}
 	first, err := c.ShareServiceAnalytics(ctx, svc.ID)
 	if err != nil || len(first) < 32 {
 		t.Fatalf("share: %q %v", first, err)
@@ -38,11 +40,15 @@ func TestAnalyticsShare(t *testing.T) {
 	// An ordinary update keeps the link.
 	got, _ := c.store.GetService(ctx, svc.ID)
 	got.Image = "nginx:2"
-	c.store.UpdateService(ctx, got)
+	if _, err := c.store.UpdateService(ctx, got); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := c.SharedAnalytics(ctx, second, AnalyticsQuery{}); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("after an update: %v", err)
 	}
-	c.UnshareServiceAnalytics(ctx, svc.ID)
+	if err := c.UnshareServiceAnalytics(ctx, svc.ID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := c.SharedAnalytics(ctx, second, AnalyticsQuery{}); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("revoked: %v", err)
 	}
