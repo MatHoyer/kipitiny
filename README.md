@@ -157,8 +157,8 @@ internal/infrastructure/age/    backup encryption (age X25519 keys)
 internal/infrastructure/cron/   cron expressions and schedulers (robfig/cron)
 internal/infrastructure/git/    reading git repositories (go-git)
 internal/infrastructure/docker/ Docker Engine API client (moby), local or over SSH: domain.ContainerRuntime
-internal/api/          JSON HTTP handlers
-internal/mcp/          MCP tools, one file per group
+internal/delivery/http/ JSON HTTP handlers
+internal/delivery/mcp/  MCP tools, one file per group
 web/                   React SPA (Vite), embedded via go:embed; src/features/<area>/
 site/                  website: landing page and docs (site/docs/*.md), own image
 ```

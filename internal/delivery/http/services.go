@@ -1,0 +1,245 @@
+package http
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+
+	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
+	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
+	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
+)
+
+func (a *API) listServices(w http.ResponseWriter, r *http.Request) {
+	svcs, err := a.core.ListServices(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, svcs)
+}
+
+func (a *API) createService(w http.ResponseWriter, r *http.Request) {
+	var in deploy.ServiceInput
+	if !decode(w, r, &in) {
+		return
+	}
+	svc, err := a.core.CreateService(r.Context(), r.PathValue("id"), in)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, svc)
+}
+
+func (a *API) getService(w http.ResponseWriter, r *http.Request) {
+	svc, err := a.core.GetService(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, svc)
+}
+
+func (a *API) updateService(w http.ResponseWriter, r *http.Request) {
+	var p deploy.ServicePatch
+	if !decode(w, r, &p) {
+		return
+	}
+	svc, err := a.core.UpdateService(r.Context(), r.PathValue("id"), p)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, svc)
+}
+
+func (a *API) renameService(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	svc, err := a.core.RenameService(r.Context(), r.PathValue("id"), body.Name)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, svc)
+}
+
+func (a *API) deleteService(w http.ResponseWriter, r *http.Request) {
+	if err := a.core.DeleteService(r.Context(), r.PathValue("id"), r.URL.Query().Get("confirm")); err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *API) connection(w http.ResponseWriter, r *http.Request) {
+	conn, err := a.core.DatabaseConnection(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, conn)
+}
+
+func (a *API) serviceStats(w http.ResponseWriter, r *http.Request) {
+	st, err := a.core.ServiceStats(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, st)
+}
+
+// usage returns the current resource use of every running service.
+func (a *API) usage(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.core.CurrentUsage(r.Context()))
+}
+
+func (a *API) uptime(w http.ResponseWriter, r *http.Request) {
+	v, err := a.core.Uptime(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+func (a *API) setUptime(w http.ResponseWriter, r *http.Request) {
+	var in monitoring.UptimeInput
+	if !decode(w, r, &in) {
+		return
+	}
+	v, err := a.core.SetUptime(r.Context(), r.PathValue("id"), in)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+func (a *API) deleteUptime(w http.ResponseWriter, r *http.Request) {
+	if err := a.core.DeleteUptime(r.Context(), r.PathValue("id")); err != nil {
+		a.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *API) deployService(w http.ResponseWriter, r *http.Request) {
+	var opts deploy.DeployOptions // optional: an empty body deploys the current settings
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&opts); err != nil && !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	dep, err := a.core.Deploy(r.Context(), r.PathValue("id"), opts)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, dep)
+}
+
+func (a *API) rollbackService(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		DeploymentID string `json:"deploymentId"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	dep, err := a.core.Rollback(r.Context(), r.PathValue("id"), body.DeploymentID)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, dep)
+}
+
+func (a *API) serviceAction(w http.ResponseWriter, r *http.Request) {
+	action := deploy.Action(r.PathValue("action"))
+	switch action {
+	case deploy.ActionStart, deploy.ActionStop, deploy.ActionRestart:
+	default:
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	svc, err := a.core.ServiceAction(r.Context(), r.PathValue("id"), action)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, svc)
+}
+
+func (a *API) listDeployments(w http.ResponseWriter, r *http.Request) {
+	ds, err := a.core.ListDeployments(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ds)
+}
+
+func (a *API) getDeployment(w http.ResponseWriter, r *http.Request) {
+	d, err := a.core.GetDeployment(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
+
+func (a *API) deploymentLog(w http.ResponseWriter, r *http.Request) {
+	rc, err := a.core.DeploymentLog(r.Context(), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	defer rc.Close()
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = io.Copy(w, rc)
+}
+
+// streamLogs sends container log lines as Server-Sent Events. A final "end"
+// event tells the client the streams closed (e.g. containers were replaced),
+// so it can reconnect deliberately instead of EventSource's blind retry.
+func (a *API) streamLogs(w http.ResponseWriter, r *http.Request) {
+	rc := http.NewResponseController(w)
+	tail, _ := strconv.Atoi(r.URL.Query().Get("tail"))
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	started := false
+	start := func() {
+		if !started {
+			w.WriteHeader(http.StatusOK)
+			started = true
+		}
+	}
+	err := a.core.StreamLogs(r.Context(), r.PathValue("id"), tail, func(l servers.LogLine) {
+		start()
+		b, _ := json.Marshal(l)
+		fmt.Fprintf(w, "data: %s\n\n", b)
+		_ = rc.Flush()
+	})
+	if err != nil && !started {
+		w.Header().Set("Content-Type", "application/json")
+		a.fail(w, err)
+		return
+	}
+	start()
+	fmt.Fprint(w, "event: end\ndata: {}\n\n")
+	_ = rc.Flush()
+}

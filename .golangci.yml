@@ -34,10 +34,6 @@ linters:
               desc: use cases go through the ports in domain, wiring is in cmd/kipitiny
             - pkg: github.com/kipit-labs/kipitiny/internal/delivery
               desc: use cases know nothing about HTTP or MCP
-            - pkg: github.com/kipit-labs/kipitiny/internal/api
-              desc: use cases know nothing about HTTP
-            - pkg: github.com/kipit-labs/kipitiny/internal/mcp
-              desc: use cases know nothing about MCP
             - pkg: github.com/uptrace/bun
               desc: SQL stays in the store adapter
             - pkg: github.com/moby
@@ -61,11 +57,9 @@ linters:
               desc: adapters know nothing about HTTP or MCP
         # REST handlers and MCP tools are thin adapters over the use cases.
         delivery:
-          files: ["**/internal/delivery/**", "**/internal/api/**", "**/internal/mcp/**"]
+          files: ["**/internal/delivery/**"]
           deny:
             - pkg: github.com/kipit-labs/kipitiny/internal/infrastructure
-              desc: handlers go through use cases, wiring is in cmd/kipitiny
-            - pkg: github.com/kipit-labs/kipitiny/internal/store/sqlite
               desc: handlers go through use cases, wiring is in cmd/kipitiny
             - pkg: github.com/moby/moby
               desc: handlers never touch Docker, they go through use cases
