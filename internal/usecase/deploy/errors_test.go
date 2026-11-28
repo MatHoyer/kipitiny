@@ -33,13 +33,17 @@ func TestServiceErrorsIdentityAndEnv(t *testing.T) {
 	if err != nil || worker.ErrorsProject != 2 {
 		t.Fatalf("turned on: %+v %v", worker, err)
 	}
-	c.updateService(ctx, worker.ID, ServicePatch{Errors: &off})
+	if _, err := c.updateService(ctx, worker.ID, ServicePatch{Errors: &off}); err != nil {
+		t.Fatal(err)
+	}
 	again, _ := c.updateService(ctx, worker.ID, ServicePatch{Errors: &on})
 	if again.ErrorsProject != 2 || again.ErrorsKey != worker.ErrorsKey {
 		t.Errorf("DSN changed: %+v", again)
 	}
 	// A deleted app's number isn't reused.
-	c.store.DeleteService(ctx, web.ID)
+	if err := c.store.DeleteService(ctx, web.ID); err != nil {
+		t.Fatal(err)
+	}
 	v, _ = c.CreateService(ctx, p.ID, ServiceInput{Name: "api", Image: "shop-api", Errors: true})
 	if api, _ := c.store.GetService(ctx, v.ID); api.ErrorsProject != 3 {
 		t.Errorf("reused: %d", api.ErrorsProject)

@@ -201,31 +201,31 @@ func onNetwork(ct domain.Container, name string) bool {
 	return ok
 }
 
-// renameAppRefs points the {{ app.<old>.FIELD }} references of env to new.
-func renameAppRefs(env map[string]string, old, new string) map[string]string {
+// renameAppRefs points the {{ app.<from>.FIELD }} references of env to <to>.
+func renameAppRefs(env map[string]string, from, to string) map[string]string {
 	out := make(map[string]string, len(env))
 	for k, v := range env {
 		out[k] = domain.EnvRefRe.ReplaceAllStringFunc(v, func(m string) string {
 			sub := domain.EnvRefRe.FindStringSubmatch(m)
-			if sub[5] != old {
+			if sub[5] != from {
 				return m
 			}
-			return "{{ app." + new + "." + sub[6] + " }}"
+			return "{{ app." + to + "." + sub[6] + " }}"
 		})
 	}
 	return out
 }
 
-// renameDatabaseRefs points the {{ db.<old>.FIELD }} references of env to new.
-func renameDatabaseRefs(env map[string]string, old, new string) map[string]string {
+// renameDatabaseRefs points the {{ db.<from>.FIELD }} references of env to <to>.
+func renameDatabaseRefs(env map[string]string, from, to string) map[string]string {
 	out := make(map[string]string, len(env))
 	for k, v := range env {
 		out[k] = domain.EnvRefRe.ReplaceAllStringFunc(v, func(m string) string {
 			sub := domain.EnvRefRe.FindStringSubmatch(m)
-			if sub[2] != old {
+			if sub[2] != from {
 				return m
 			}
-			return "{{ db." + new + "." + sub[3] + " }}"
+			return "{{ db." + to + "." + sub[3] + " }}"
 		})
 	}
 	return out

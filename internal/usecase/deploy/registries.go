@@ -70,7 +70,7 @@ func (c *Deployer) TestRegistry(ctx context.Context, id string) error {
 	defer cancel()
 	progress.Report(ctx, "login")
 	if err := c.mgr.DockerFor(domain.LocalServerID).Login(ctx, loginAddress(r.Host), r.Username, r.Password); err != nil {
-		return fmt.Errorf("%w: %s refused the credentials: %v", ErrInvalid, r.Host, err)
+		return fmt.Errorf("%w: %s refused the credentials: %w", ErrInvalid, r.Host, err)
 	}
 	return nil
 }
@@ -91,7 +91,7 @@ func (c *Deployer) applyRegistry(ctx context.Context, r *domain.Registry, in Reg
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	if err := c.mgr.DockerFor(domain.LocalServerID).Login(ctx, loginAddress(r.Host), r.Username, r.Password); err != nil {
-		return fmt.Errorf("%w: %s refused the credentials: %v", ErrInvalid, r.Host, err)
+		return fmt.Errorf("%w: %s refused the credentials: %w", ErrInvalid, r.Host, err)
 	}
 	return nil
 }

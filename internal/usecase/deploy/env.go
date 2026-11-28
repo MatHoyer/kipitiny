@@ -14,9 +14,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
-// dbFields are the credentials a database reference can name.
-var dbFields = []string{"URL", "HOST", "PORT", "USER", "PASSWORD", "DATABASE"}
-
 // envSources holds what references resolve against.
 type envSources struct {
 	project map[string]string
@@ -144,7 +141,7 @@ func (c *Deployer) checkSecretSchemes(ctx context.Context, env map[string]string
 				continue
 			}
 			if err := c.mgr.CheckSecretScheme(ctx, m[4]); err != nil {
-				return fmt.Errorf("%w: %s: %v", ErrInvalid, k, err)
+				return fmt.Errorf("%w: %s: %w", ErrInvalid, k, err)
 			}
 		}
 	}
