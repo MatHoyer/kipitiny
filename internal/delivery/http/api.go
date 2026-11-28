@@ -1,24 +1,16 @@
-// Package api exposes the core layer over JSON/HTTP.
+// Package http exposes the use cases (through the app facade) over JSON/HTTP.
 package http
 
 import (
-	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
-	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
-
-	"github.com/kipit-labs/kipitiny/internal/core"
-	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 )
 
 type API struct {
-	core    *core.Core
+	core    *app.App
 	log     *slog.Logger
 	limiter *failLimiter
 	// begins counts unauthenticated passkey sign-in starts per IP.
@@ -26,7 +18,7 @@ type API struct {
 	handler http.Handler
 }
 
-func New(c *core.Core, log *slog.Logger) *API {
+func New(c *app.App, log *slog.Logger) *API {
 	a := &API{core: c, log: log, limiter: newFailLimiter(10, 15*time.Minute), begins: newFailLimiter(30, time.Minute)}
 	mux := http.NewServeMux()
 	// Each route checks what the caller may do once the mux has set its
@@ -321,225 +313,4 @@ func (a *API) updatePreflight(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) checkUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a.core.CheckUpdate(r.Context()))
-}
-
-func (a *API) listProjects(w http.ResponseWriter, r *http.Request) {
-	ps, err := a.core.ListProjects(r.Context())
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, ps)
-}
-
-func (a *API) createProject(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Name     string `json:"name"`
-		ServerID string `json:"serverId"`
-	}
-	if !decode(w, r, &body) {
-		return
-	}
-	p, err := a.core.CreateProject(r.Context(), body.Name, body.ServerID)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, p)
-}
-
-func (a *API) getProject(w http.ResponseWriter, r *http.Request) {
-	p, err := a.core.GetProject(r.Context(), r.PathValue("id"))
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, p)
-}
-
-// setProjectEnv replaces the shared variables and secrets; masked secrets
-// are kept.
-func (a *API) setProjectEnv(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Env     map[string]string `json:"env"`
-		Secrets []string          `json:"secrets"`
-	}
-	if !decode(w, r, &body) {
-		return
-	}
-	p, err := a.core.SetProjectEnv(r.Context(), r.PathValue("id"), body.Env, body.Secrets)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, p)
-}
-
-func (a *API) renameProject(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Name string `json:"name"`
-	}
-	if !decode(w, r, &body) {
-		return
-	}
-	p, err := a.core.RenameProject(r.Context(), r.PathValue("id"), body.Name)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, p)
-}
-
-func (a *API) setProjectTags(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Tags []string `json:"tags"`
-	}
-	if !decode(w, r, &body) {
-		return
-	}
-	p, err := a.core.SetProjectTags(r.Context(), r.PathValue("id"), body.Tags)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, p)
-}
-
-func (a *API) setServiceTags(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Tags []string `json:"tags"`
-	}
-	if !decode(w, r, &body) {
-		return
-	}
-	v, err := a.core.SetServiceTags(r.Context(), r.PathValue("id"), body.Tags)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, v)
-}
-
-func (a *API) listTags(w http.ResponseWriter, r *http.Request) {
-	tags, err := a.core.ListTags(r.Context())
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"tags": tags, "colors": projects.TagColors})
-}
-
-func (a *API) setTagColor(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Color string `json:"color"`
-	}
-	if !decode(w, r, &body) {
-		return
-	}
-	t, err := a.core.SetTagColor(r.Context(), r.PathValue("name"), body.Color)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, t)
-}
-
-func (a *API) setProjectSleep(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		SleepAfterSeconds int `json:"sleepAfterSeconds"`
-	}
-	if !decode(w, r, &body) {
-		return
-	}
-	p, err := a.core.SetProjectSleep(r.Context(), r.PathValue("id"), body.SleepAfterSeconds)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, p)
-}
-
-func (a *API) setMaintenance(w http.ResponseWriter, r *http.Request) {
-	var in deploy.MaintenanceInput
-	if !decode(w, r, &in) {
-		return
-	}
-	v, err := a.core.SetMaintenance(r.Context(), r.PathValue("id"), in)
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, v)
-}
-
-func (a *API) deleteProject(w http.ResponseWriter, r *http.Request) {
-	if err := a.core.DeleteProject(r.Context(), r.PathValue("id"), r.URL.Query().Get("confirm")); err != nil {
-		a.fail(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (a *API) fail(w http.ResponseWriter, err error) {
-	code, msg := a.failure(err)
-	writeError(w, code, msg)
-}
-
-// failure maps err to the status and message the API answers with.
-func (a *API) failure(err error) (int, string) {
-	switch {
-	case errors.Is(err, identity.ErrUnauthorized):
-		return http.StatusUnauthorized, reason(err, identity.ErrUnauthorized)
-	case errors.Is(err, identity.ErrForbidden):
-		return http.StatusForbidden, reason(err, identity.ErrForbidden)
-	case errors.Is(err, core.ErrInvalid):
-		return http.StatusBadRequest, reason(err, core.ErrInvalid)
-	case errors.Is(err, domain.ErrNotFound):
-		return http.StatusNotFound, "not found"
-	case errors.Is(err, domain.ErrConflict):
-		msg := "already exists (name or domain taken)"
-		if strings.Contains(err.Error(), domain.ErrConflict.Error()+": ") {
-			msg = reason(err, domain.ErrConflict) // core's own explanation
-		}
-		return http.StatusConflict, msg
-	case errors.Is(err, core.ErrBusy):
-		msg := "another operation is in progress for this service"
-		if strings.Contains(err.Error(), core.ErrBusy.Error()+": ") {
-			msg = reason(err, core.ErrBusy)
-		}
-		return http.StatusConflict, msg
-	default:
-		a.log.Error("request failed", "err", err)
-		return http.StatusInternalServerError, "internal error"
-	}
-}
-
-// reason drops the sentinel's own text ("invalid input: ") so the UI shows
-// only the explanation; a bare sentinel stays as is.
-func reason(err, sentinel error) string {
-	msg, prefix := err.Error(), sentinel.Error()+": "
-	if i := strings.Index(msg, prefix); i >= 0 {
-		return msg[i+len(prefix):]
-	}
-	return msg
-}
-
-func decode(w http.ResponseWriter, r *http.Request, v any) bool {
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(v); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
-		return false
-	}
-	return true
-}
-
-func writeJSON(w http.ResponseWriter, code int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, code int, msg string) {
-	writeJSON(w, code, map[string]string{"error": msg})
 }

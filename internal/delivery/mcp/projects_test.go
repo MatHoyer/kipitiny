@@ -16,7 +16,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/core"
 	httpdelivery "github.com/kipit-labs/kipitiny/internal/delivery/http"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/docker"
@@ -34,7 +33,7 @@ func TestProjectTools(t *testing.T) {
 	defer st.Close()
 	dc, _ := docker.New()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	c := core.New(config.Config{DataDir: t.TempDir()}, st, dc, log)
+	c := newTestApp(config.Config{DataDir: t.TempDir()}, st, dc, log)
 	srv := httptest.NewServer(httpdelivery.New(c, log).Authenticated(Handler(c, "test")))
 	defer srv.Close()
 

@@ -11,8 +11,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 )
 
 type getServerStatusIn struct {
@@ -84,7 +84,7 @@ func (t *tools) runCleanup(ctx context.Context, _ *mcp.CallToolRequest, _ struct
 			return servers.CleanupView{}, err
 		}
 		v, err := t.c.RunCleanup(ctx)
-		if errors.Is(err, core.ErrBusy) {
+		if errors.Is(err, app.ErrBusy) {
 			err = errors.New("a cleanup is already running; get_cleanup shows its step")
 		}
 		return v, err
@@ -104,7 +104,7 @@ func (t *tools) installServerUpdates(ctx context.Context, _ *mcp.CallToolRequest
 			return servers.SecurityReport{}, err
 		}
 		rep, err := t.c.InstallUpdates(ctx, id, in.All)
-		if errors.Is(err, core.ErrBusy) {
+		if errors.Is(err, app.ErrBusy) {
 			err = errors.New("updates are already being installed on this server; get_server_status shows the install")
 		}
 		return rep, err
@@ -134,8 +134,8 @@ func (t *tools) rebootServer(ctx context.Context, _ *mcp.CallToolRequest, in reb
 			return servers.SecurityReport{}, fmt.Errorf("rebooting stops every app on the server: confirm must repeat the server name (%s)", names[id])
 		}
 		rep, err := t.c.RebootServer(ctx, id)
-		if errors.Is(err, core.ErrBusy) {
-			err = errors.New(strings.TrimPrefix(err.Error(), core.ErrBusy.Error()+": "))
+		if errors.Is(err, app.ErrBusy) {
+			err = errors.New(strings.TrimPrefix(err.Error(), app.ErrBusy.Error()+": "))
 		}
 		return rep, err
 	})

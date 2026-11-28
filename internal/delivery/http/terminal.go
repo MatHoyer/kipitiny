@@ -14,8 +14,8 @@ import (
 
 	"golang.org/x/net/websocket"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 )
 
 // terminalMsg is what the browser sends: keystrokes or a new size. The
@@ -120,8 +120,8 @@ func (a *API) message(err error) string {
 	switch {
 	case errors.Is(err, identity.ErrForbidden):
 		return reason(err, identity.ErrForbidden)
-	case errors.Is(err, core.ErrInvalid):
-		return reason(err, core.ErrInvalid)
+	case errors.Is(err, app.ErrInvalid):
+		return reason(err, app.ErrInvalid)
 	case errors.Is(err, domain.ErrNotFound):
 		return "not found"
 	}

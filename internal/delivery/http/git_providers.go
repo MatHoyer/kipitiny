@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 )
 
@@ -182,10 +182,10 @@ func (a *API) gitProviderRedirect(w http.ResponseWriter, r *http.Request, id, ne
 	}
 	a.core.Audit(r.Context(), pattern, id, status, err)
 	if err != nil {
-		if !errors.Is(err, core.ErrInvalid) {
+		if !errors.Is(err, app.ErrInvalid) {
 			a.log.Error("git provider connection failed", "err", err)
 		}
-		next = gitProvidersPage + "?error=" + url.QueryEscape(reason(err, core.ErrInvalid))
+		next = gitProvidersPage + "?error=" + url.QueryEscape(reason(err, app.ErrInvalid))
 	} else if next == "" {
 		next = gitProvidersPage + "?connected=" + url.QueryEscape(id)
 	}

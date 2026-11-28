@@ -10,7 +10,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 )
 
 const (
@@ -26,7 +26,7 @@ const (
 // answer, and the configuration Traefik routes them with. Public: visitors
 // of any app reach it through Traefik, whatever the request (a form post to
 // an app that is down too).
-func Pages(c *core.Core, log *slog.Logger) http.Handler {
+func Pages(c *app.App, log *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET "+network.PagesPath+"traefik/{server}", func(w http.ResponseWriter, r *http.Request) {
 		token, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")

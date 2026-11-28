@@ -16,18 +16,18 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/core"
 	httpdelivery "github.com/kipit-labs/kipitiny/internal/delivery/http"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/docker"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 )
 
 // env is an MCP server over a fresh store, for tools that refuse before
 // reaching Docker.
 type env struct {
 	st domain.Store
-	c  *core.Core
+	c  *app.App
 	// session is a session with a token of an admin, restricted to perms on
 	// every existing project when some are given.
 	session func(perms ...identity.Perm) *mcp.ClientSession
@@ -47,7 +47,7 @@ func newEnv(t *testing.T) env {
 	t.Cleanup(func() { st.Close() })
 	dc, _ := docker.New()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	c := core.New(config.Config{DataDir: t.TempDir()}, st, dc, log)
+	c := newTestApp(config.Config{DataDir: t.TempDir()}, st, dc, log)
 	srv := httptest.NewServer(httpdelivery.New(c, log).Authenticated(Handler(c, "test")))
 	t.Cleanup(srv.Close)
 	e := env{st: st, c: c}

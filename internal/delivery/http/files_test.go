@@ -20,7 +20,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/docker"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
@@ -73,7 +72,7 @@ func TestVolumeFilesDockerHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	c := core.New(config.Config{DataDir: t.TempDir()}, st, dk, log)
+	c := newTestApp(config.Config{DataDir: t.TempDir()}, st, dk, log)
 	p, _ := st.CreateProject(ctx, domain.Project{Name: "game", ServerID: domain.LocalServerID})
 	svc, err := st.CreateService(ctx, domain.Service{ProjectID: p.ID, Name: "mc", Kind: domain.ServiceKindApp, Replicas: 1, Env: map[string]string{},
 		Volumes: []domain.Volume{{Name: "data", Path: "/data"}}})

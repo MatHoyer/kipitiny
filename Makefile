@@ -46,7 +46,7 @@ site-demo:
 # Every Go test, the Docker-backed ones included (they need a daemon), with the race
 # detector and coverage of internal/; fails under COVERAGE_FLOOR, which only goes up.
 # cmd/kipitiny's API journeys run a whole manager, whose reconciler removes the containers
-# it doesn't know: they run after the other packages, never beside internal/core's.
+# it doesn't know: they run after the other packages, never beside internal/usecase/app's.
 COVERAGE_FLOOR := 68
 cover: ui-stub
 	CGO_ENABLED=1 KIPITINY_TEST_DOCKER=1 go test -race -timeout 30m -coverpkg=./internal/... -coverprofile=cover.out $$(go list ./... | grep -v '/cmd/kipitiny$$')
@@ -87,6 +87,7 @@ e2e: build
 	exit $$status
 
 lint: ui-stub
+	@test "$$(ls internal | xargs)" = "config delivery domain ids infrastructure progress usecase" || { echo "internal/ holds the layers and the kernels only: $$(ls internal | xargs)"; exit 1; }
 	@unformatted=$$(gofmt -l .); if [ -n "$$unformatted" ]; then echo "Run gofmt on:"; echo "$$unformatted"; exit 1; fi
 	go vet ./...
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run

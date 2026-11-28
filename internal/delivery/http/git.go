@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 )
 
@@ -75,7 +75,7 @@ func webhookBody(w http.ResponseWriter, r *http.Request, limit int64) func() ([]
 		_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(webhookReadTimeout))
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
 		if err != nil {
-			return nil, fmt.Errorf("%w: payload too large or too slow", core.ErrInvalid)
+			return nil, fmt.Errorf("%w: payload too large or too slow", app.ErrInvalid)
 		}
 		return body, nil
 	}

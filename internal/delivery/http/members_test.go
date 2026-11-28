@@ -17,17 +17,17 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/docker"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 )
 
 // members is a manager with an admin, a member and two projects: shop,
 // which tests grant the member permissions on, and other, never granted.
 type members struct {
 	st     domain.Store
-	c      *core.Core
+	c      *app.App
 	api    *API
 	member domain.User
 	// IDs by route kind, in shop and in other.
@@ -47,7 +47,7 @@ func newMembers(t *testing.T) members {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	c := core.New(config.Config{DataDir: t.TempDir()}, st, dc, log)
+	c := newTestApp(config.Config{DataDir: t.TempDir()}, st, dc, log)
 	m := members{st: st, c: c, api: New(c, log)}
 	if _, err := st.CreateUser(ctx, domain.User{Username: "admin", PasswordHash: "x", Role: domain.RoleAdmin}); err != nil {
 		t.Fatal(err)
@@ -365,7 +365,7 @@ func TestRestrictedTokens(t *testing.T) {
 	if _, err := restricted(memberCtx, []string{string(identity.FeatureServers)}, nil); !errors.Is(err, identity.ErrForbidden) {
 		t.Errorf("token with a feature the member lacks: %v", err)
 	}
-	if _, err := restricted(memberCtx, nil, map[string][]string{shop: {"nope"}}); !errors.Is(err, core.ErrInvalid) {
+	if _, err := restricted(memberCtx, nil, map[string][]string{shop: {"nope"}}); !errors.Is(err, app.ErrInvalid) {
 		t.Errorf("unknown permission: %v", err)
 	}
 	tok, err := m.c.CreateAPIToken(memberCtx, identity.TokenInput{Name: "viewer", Restricted: true,

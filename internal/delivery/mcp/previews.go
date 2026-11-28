@@ -14,9 +14,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/domain/anonymize"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 )
 
 type listPreviewsIn struct {
@@ -209,7 +209,7 @@ func (t *tools) setAnonymizeRules(ctx context.Context, _ *mcp.CallToolRequest, i
 			rules = anonymize.Rules{}
 			raw, _ := json.Marshal(in.Rules)
 			if err := json.Unmarshal(raw, &rules); err != nil {
-				return data.SeedDatabase{}, fmt.Errorf("%w: rules: %s", core.ErrInvalid, err.Error())
+				return data.SeedDatabase{}, fmt.Errorf("%w: rules: %s", app.ErrInvalid, err.Error())
 			}
 		}
 		return t.c.SetAnonymizeRules(ctx, p.ID, in.Service, rules)
