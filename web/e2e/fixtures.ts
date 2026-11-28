@@ -90,7 +90,8 @@ export const test = base.extend<Fixtures & { errors: string[] }>({
     const projects: { id: string; name: string }[] = await (await api.get("/api/projects")).json();
     for (const p of projects.filter((p) => p.name.startsWith(`${username}-`))) {
       const res = await api.delete(`/api/projects/${p.id}?confirm=${encodeURIComponent(p.name)}`);
-      expect(res.ok(), `delete ${p.name}: ${await res.text()}`).toBeTruthy();
+      // A preview goes with its project: deleted before it in this loop, it's already gone.
+      expect(res.ok() || res.status() === 404, `delete ${p.name}: ${await res.text()}`).toBeTruthy();
     }
     await api.dispose();
   },
