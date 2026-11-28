@@ -105,18 +105,29 @@ func socketPath(sv domain.Server, cfg config.Config) string {
 	return cfg.Traefik.DockerSocket
 }
 
+// selfID is the manager's container ("" on a host), a variable for the tests.
+var selfID = selfcontainer.ID
+
 // ManagerUpstream is the URL Traefik uses to reach the manager. In a container
-// the manager joins the proxy network itself, so its port needn't be published.
+// of the server's daemon the manager joins the proxy network itself, so its
+// port needn't be published.
 func (c *Network) ManagerUpstream(ctx context.Context, dk domain.ContainerRuntime) (string, error) {
 	_, port, err := net.SplitHostPort(c.cfg.Addr)
 	if err != nil {
 		return "", fmt.Errorf("KIPITINY_ADDR %q: %w", c.cfg.Addr, err)
 	}
-	if id := selfcontainer.ID(); id != "" {
-		if err := dk.ConnectNetwork(ctx, domain.ProxyNetwork, id, ManagerAlias); err != nil {
+	if id := selfID(); id != "" {
+		// Its container may be another daemon's (DOCKER_HOST): then it's reached like a host's.
+		mine, err := dk.FindContainers(ctx, true, domain.Filter{}.Add("id", id))
+		if err != nil {
 			return "", err
 		}
-		return "http://" + ManagerAlias + ":" + port, nil
+		if len(mine) > 0 {
+			if err := dk.ConnectNetwork(ctx, domain.ProxyNetwork, id, ManagerAlias); err != nil {
+				return "", err
+			}
+			return "http://" + ManagerAlias + ":" + port, nil
+		}
 	}
 	return "http://" + ManagerHost + ":" + port, nil
 }

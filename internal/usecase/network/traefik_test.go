@@ -151,3 +151,54 @@ func TestTraefikPages(t *testing.T) {
 		t.Errorf("remote: %s %v", files[0].Content, opts.ExtraHosts)
 	}
 }
+
+// daemonWith is a Docker daemon running only the containers of ids.
+type daemonWith struct {
+	domain.ContainerRuntime
+	ids       []string
+	connected []string
+}
+
+func (d *daemonWith) FindContainers(_ context.Context, _ bool, f domain.Filter) ([]domain.Container, error) {
+	var out []domain.Container
+	for _, id := range f["id"] {
+		if slices.Contains(d.ids, id) {
+			out = append(out, domain.Container{ID: id})
+		}
+	}
+	return out, nil
+}
+
+func (d *daemonWith) ConnectNetwork(_ context.Context, _, id string, _ ...string) error {
+	d.connected = append(d.connected, id)
+	return nil
+}
+
+func TestManagerUpstream(t *testing.T) {
+	const self = "3f4e5d6c7b8a99887766554433221100ffeeddccbbaa00112233445566778899"
+	c := &Network{cfg: &config.Config{Addr: ":3000"}}
+	for _, tc := range []struct {
+		name, self string
+		daemon     []string
+		want       string
+	}{
+		{"on the host", "", nil, "http://" + ManagerHost + ":3000"},
+		{"in a container of this daemon", self, []string{self}, "http://" + ManagerAlias + ":3000"},
+		// DOCKER_HOST names another daemon: it can't connect the manager to its network.
+		{"in a container of another daemon", self, nil, "http://" + ManagerHost + ":3000"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			old := selfID
+			selfID = func() string { return tc.self }
+			t.Cleanup(func() { selfID = old })
+			dk := &daemonWith{ids: tc.daemon}
+			got, err := c.ManagerUpstream(context.Background(), dk)
+			if err != nil || got != tc.want {
+				t.Fatalf("got %q, %v; want %q", got, err, tc.want)
+			}
+			if want := len(tc.daemon); len(dk.connected) != want {
+				t.Errorf("connected %v", dk.connected)
+			}
+		})
+	}
+}
