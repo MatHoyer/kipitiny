@@ -14,7 +14,14 @@ import (
 
 // Healthcheck is the container's: the image is distroless, without curl.
 func Healthcheck() error {
-	res, err := http.Get("http://127.0.0.1:" + strconv.Itoa(PublicPort) + "/healthz")
+	// Within the container healthcheck's 5s, so a hung server fails it here.
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://127.0.0.1:"+strconv.Itoa(PublicPort)+"/healthz", nil)
+	if err != nil {
+		return err
+	}
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -74,7 +81,7 @@ func Serve(ctx context.Context, log *slog.Logger) error {
 	shut, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	for _, s := range servers {
-		s.Shutdown(shut)
+		err = errors.Join(err, s.Shutdown(shut))
 	}
 	return err
 }
