@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
+	analyticsclient "github.com/kipit-labs/kipitiny/internal/infrastructure/analytics"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/git"
@@ -90,7 +91,7 @@ func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logg
 	bg, cancel := context.WithCancel(context.Background())
 	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel}
 	c.Servers = c.newServers(local)
-	c.Monitoring = monitoring.New(bg, &c.cfg, s, smtp.Client{}, notify.Channels{}, monitoringPorts{c}, log)
+	c.Monitoring = monitoring.New(bg, &c.cfg, s, smtp.Client{}, notify.Channels{}, newAnalytics, monitoringPorts{c}, log)
 	c.Identity = identity.New(cfg, s, secretKinds(cfg, c.dockerFor(domain.LocalServerID)), c.Monitoring, log)
 	c.Network = network.New(bg, &c.cfg, s, func(token string) network.DNS { return cloudflare.New(token) }, networkPorts{c}, log)
 	c.Data = data.New(bg, &c.cfg, s, age.Encryption{}, cron.Cron{}, c.openStorage, &c.steps, dataPorts{c}, log)
@@ -264,4 +265,9 @@ func (c *Core) acquireService(id string, background bool) (func(), error) {
 // server as clients see it (servers; network's returns the bare record).
 func (c *Core) SetServerNetwork(ctx context.Context, id string, in network.ServerNetwork) (servers.ServerView, error) {
 	return c.Servers.SetServerNetwork(ctx, id, in)
+}
+
+// newAnalytics is monitoring's client of the analytics server.
+func newAnalytics(baseURL, token string) monitoring.Analytics {
+	return analyticsclient.New(baseURL, token)
 }

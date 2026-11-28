@@ -1,4 +1,4 @@
-package analytics
+package analyticsdb
 
 import (
 	"context"
@@ -8,19 +8,24 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/kipit-labs/kipitiny/internal/delivery/collector"
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
+	"github.com/kipit-labs/kipitiny/internal/usecase/ingest"
 )
 
 func TestSitePaths(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "a.db")
-	st, err := Open(ctx, path)
+	st, err := Open(ctx, path, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	pub := Public(st, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	pub := collector.Public(ingest.New(st, st.now), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err := st.SetSites(ctx, []string{"shop.example.com", "blog.example.com"},
-		map[string]Paths{"Shop.example.com": {Script: "/js/k.js", Hit: "/api/k"}, "gone.example.com": {Script: "/x.js", Hit: "/x"}}); err != nil {
+		map[string]analytics.Paths{"Shop.example.com": {Script: "/js/k.js", Hit: "/api/k"}, "gone.example.com": {Script: "/x.js", Hit: "/x"}}); err != nil {
 		t.Fatal(err)
 	}
 	get := func(host, path string) (int, string) {
@@ -54,15 +59,15 @@ func TestSitePaths(t *testing.T) {
 	}
 	st.Close()
 	// Kept across a restart: the manager only sends them when they change.
-	st2, err := Open(ctx, path)
+	st2, err := Open(ctx, path, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer st2.Close()
-	if p, ok := st2.sitePaths("shop.example.com"); !ok || p.Hit != "/api/k" {
+	if p, ok := st2.SitePaths("shop.example.com"); !ok || p.Hit != "/api/k" {
 		t.Errorf("reopened: %+v %v", p, ok)
 	}
-	if _, ok := st2.sitePaths("gone.example.com"); ok {
+	if _, ok := st2.SitePaths("gone.example.com"); ok {
 		t.Error("paths of an untracked host kept")
 	}
 }

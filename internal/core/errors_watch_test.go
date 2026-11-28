@@ -14,26 +14,31 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/analytics"
 	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/delivery/collector"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
+	analyticsclient "github.com/kipit-labs/kipitiny/internal/infrastructure/analytics"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/analyticsdb"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
+	"github.com/kipit-labs/kipitiny/internal/usecase/ingest"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
 func TestErrorAlerts(t *testing.T) {
 	ctx := context.Background()
-	ast, err := analytics.Open(ctx, filepath.Join(t.TempDir(), "a.db"))
+	ast, err := analyticsdb.Open(ctx, filepath.Join(t.TempDir(), "a.db"), time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer ast.Close()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	pub := httptest.NewServer(analytics.Public(ast, log))
+	svc := ingest.New(ast, time.Now)
+	pub := httptest.NewServer(collector.Public(svc, log))
 	defer pub.Close()
-	priv := httptest.NewServer(analytics.Private(ast, "tok"))
+	priv := httptest.NewServer(collector.Private(svc, "tok"))
 	defer priv.Close()
-	cl := &analytics.Client{BaseURL: priv.URL, Token: "tok"}
+	cl := &analyticsclient.Client{BaseURL: priv.URL, Token: "tok"}
 
 	var mu sync.Mutex
 	var sent []string

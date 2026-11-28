@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/analytics"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
 )
 
 // errorsNextSetting is the next DSN project number: never reused, so a new
@@ -110,7 +110,7 @@ func (c *Monitoring) syncErrorProjects(ctx context.Context, id, token string) er
 
 // serviceErrors checks the app's error tracking is on and returns the
 // analytics server's client.
-func (c *Monitoring) serviceErrors(ctx context.Context, serviceID string) (domain.Service, *analytics.Client, AnalyticsState, error) {
+func (c *Monitoring) serviceErrors(ctx context.Context, serviceID string) (domain.Service, Analytics, AnalyticsState, error) {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
 		return svc, nil, AnalyticsState{}, err

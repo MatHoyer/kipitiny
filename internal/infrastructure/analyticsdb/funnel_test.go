@@ -1,4 +1,4 @@
-package analytics
+package analyticsdb
 
 import (
 	"context"
@@ -7,12 +7,17 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/kipit-labs/kipitiny/internal/delivery/collector"
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
+	analyticsclient "github.com/kipit-labs/kipitiny/internal/infrastructure/analytics"
+	"github.com/kipit-labs/kipitiny/internal/usecase/ingest"
 )
 
 func TestFunnel(t *testing.T) {
 	ctx := context.Background()
 	st, now := open(t)
-	pub := Public(st, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	pub := collector.Public(ingest.New(st, st.now), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	start := *now
 	send := func(ip, body string) { hit(t, pub, chromeUA, ip, body) }
 	pv := func(ip, path string) { send(ip, `{"u":"https://shop.example.com`+path+`"}`) }
@@ -34,8 +39,8 @@ func TestFunnel(t *testing.T) {
 	pv("1.0.0.1", "/pricing")
 	ev("1.0.0.1", "signup")
 
-	q := Query{Hosts: []string{"shop.example.com"}, From: start.Add(-time.Hour), To: now.Add(time.Minute)}
-	steps, err := ParseSteps([]string{"page:/", "page:/pricing", "event:signup"})
+	q := analytics.Query{Hosts: []string{"shop.example.com"}, From: start.Add(-time.Hour), To: now.Add(time.Minute)}
+	steps, err := analytics.ParseSteps([]string{"page:/", "page:/pricing", "event:signup"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +52,7 @@ func TestFunnel(t *testing.T) {
 		t.Errorf("funnel = %+v, want 4 → 2 → 1", fs)
 	}
 	// The same page twice needs two pageviews of it.
-	twice, _ := ParseSteps([]string{"page:/pricing", "page:/pricing"})
+	twice, _ := analytics.ParseSteps([]string{"page:/pricing", "page:/pricing"})
 	if fs, _ := st.Funnel(ctx, q, twice); fs[0].Visits != 4 || fs[1].Visits != 0 {
 		t.Errorf("twice = %+v", fs)
 	}
@@ -57,14 +62,14 @@ func TestFunnel(t *testing.T) {
 		t.Errorf("later range = %+v", fs)
 	}
 	for _, bad := range [][]string{{"page:/"}, {"page:/", "click:x"}, {"page:/", "event:"}} {
-		if _, err := ParseSteps(bad); err == nil {
+		if _, err := analytics.ParseSteps(bad); err == nil {
 			t.Errorf("%v accepted", bad)
 		}
 	}
 
-	srv := httptest.NewServer(Private(st, "secret"))
+	srv := httptest.NewServer(collector.Private(ingest.New(st, st.now), "secret"))
 	defer srv.Close()
-	c := &Client{BaseURL: srv.URL, Token: "secret"}
+	c := &analyticsclient.Client{BaseURL: srv.URL, Token: "secret"}
 	q.Interval = time.Hour
 	q.From = start.Add(-time.Hour)
 	if fs, err := c.Funnel(ctx, q, []string{"page:/", "event:signup"}); err != nil || fs[0].Visits != 4 || fs[1].Visits != 2 {

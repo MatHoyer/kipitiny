@@ -11,6 +11,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	analyticsclient "github.com/kipit-labs/kipitiny/internal/infrastructure/analytics"
 	notifych "github.com/kipit-labs/kipitiny/internal/infrastructure/notify"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/smtp"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
@@ -69,6 +70,7 @@ func newTestMonitoring(t *testing.T, cfg config.Config) testMonitoring {
 	}
 	t.Cleanup(func() { st.Close() })
 	ops := &sync.WaitGroup{}
-	m := New(context.Background(), &cfg, st, smtp.Client{}, notifych.Channels{}, fakeManager{store: st, ops: ops}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	m := New(context.Background(), &cfg, st, smtp.Client{}, notifych.Channels{},
+		func(u, tok string) Analytics { return analyticsclient.New(u, tok) }, fakeManager{store: st, ops: ops}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	return testMonitoring{Monitoring: m, ops: ops}
 }

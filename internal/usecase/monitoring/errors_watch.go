@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/analytics"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
 	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 )
 
@@ -52,7 +52,7 @@ func (c *Monitoring) ServiceDeployErrors(ctx context.Context, serviceID string) 
 	return c.DeployErrorsAt(ctx, cl, svc, time.Now())
 }
 
-func (c *Monitoring) DeployErrorsAt(ctx context.Context, cl *analytics.Client, svc domain.Service, now time.Time) (DeployErrors, error) {
+func (c *Monitoring) DeployErrorsAt(ctx context.Context, cl Analytics, svc domain.Service, now time.Time) (DeployErrors, error) {
 	deps, err := c.store.ListDeployments(ctx, svc.ID, 20)
 	if err != nil {
 		return DeployErrors{}, err
@@ -141,7 +141,7 @@ func (c *Monitoring) watchErrors(ctx context.Context, now time.Time) error {
 
 // AlertErrors sends the issues opened or reopened since the last look, and
 // the deploys raising errors not alerted about yet.
-func (c *Monitoring) AlertErrors(ctx context.Context, cl *analytics.Client, now time.Time) error {
+func (c *Monitoring) AlertErrors(ctx context.Context, cl Analytics, now time.Time) error {
 	svcs, err := c.store.ListAllServices(ctx)
 	if err != nil {
 		return err

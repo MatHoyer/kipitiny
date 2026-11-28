@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/analytics"
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 

@@ -16,6 +16,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
+	analyticsclient "github.com/kipit-labs/kipitiny/internal/infrastructure/analytics"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
 	notifych "github.com/kipit-labs/kipitiny/internal/infrastructure/notify"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/smtp"
@@ -59,7 +60,8 @@ func newTestCore(t *testing.T, cfg config.Config) *testCore {
 	c := &testCore{cfg: &cfg, store: st, bg: bg}
 	t.Cleanup(func() { cancel(); c.ops.Wait(); st.Close() })
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	c.Monitoring = monitoring.New(bg, c.cfg, st, smtp.Client{}, notifych.Channels{}, c, log)
+	c.Monitoring = monitoring.New(bg, c.cfg, st, smtp.Client{}, notifych.Channels{},
+		func(u, tok string) monitoring.Analytics { return analyticsclient.New(u, tok) }, c, log)
 	c.Identity = identity.New(cfg, st, nil, c.Monitoring, log)
 	c.Network = network.New(bg, c.cfg, st, nil, c, log)
 	openStorage := func(t domain.BackupTarget) (data.Storage, error) {

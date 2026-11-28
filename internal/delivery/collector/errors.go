@@ -1,4 +1,4 @@
-package analytics
+package collector
 
 import (
 	"bytes"
@@ -14,48 +14,20 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/klauspost/compress/zstd"
+
+	"github.com/kipit-labs/kipitiny/internal/usecase/ingest"
 )
 
 // Limits of what an SDK may send: a request's body as sent and once
-// decompressed, and a project's requests (a bucket of errorBurst refilled
-// at errorRate a second).
+// decompressed; errorCooldown is the seconds an SDK waits once its project
+// is rate limited (ingest.Service.Allow).
 const (
 	maxEnvelope   = 1 << 20
 	maxDecoded    = 4 << 20
-	errorRate     = 20
-	errorBurst    = 200
-	errorCooldown = 10 // seconds an SDK waits once limited
+	errorCooldown = 10
 )
-
-type bucket struct {
-	tokens float64
-	at     time.Time
-}
-
-// allow takes a token of project's bucket.
-func (s *Store) allow(project int64) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := s.now()
-	if s.limits == nil {
-		s.limits = map[int64]*bucket{}
-	}
-	b := s.limits[project]
-	if b == nil {
-		b = &bucket{tokens: errorBurst, at: now}
-		s.limits[project] = b
-	}
-	b.tokens = min(errorBurst, b.tokens+now.Sub(b.at).Seconds()*errorRate)
-	b.at = now
-	if b.tokens < 1 {
-		return false
-	}
-	b.tokens--
-	return true
-}
 
 // errorsCORS lets browser SDKs post from any page: the key is public
 // anyway, and only checked against its project.
@@ -69,11 +41,11 @@ func errorsCORS(w http.ResponseWriter) {
 
 // ingestErrors takes the errors of Sentry SDKs at /api/{project}/envelope/
 // (and the older /store/, one event as JSON).
-func ingestErrors(st *Store, log *slog.Logger, envelope bool) http.HandlerFunc {
+func ingestErrors(svc *ingest.Service, log *slog.Logger, envelope bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		errorsCORS(w)
 		project, err := strconv.ParseInt(r.PathValue("project"), 10, 64)
-		want := st.errorKey(project)
+		want := svc.ErrorKey(project)
 		if err != nil || want == "" {
 			sentryError(w, http.StatusForbidden, "unknown project")
 			return
@@ -102,7 +74,7 @@ func ingestErrors(st *Store, log *slog.Logger, envelope bool) http.HandlerFunc {
 			sentryError(w, http.StatusForbidden, "wrong key for this project")
 			return
 		}
-		if !st.allow(project) {
+		if !svc.Allow(project) {
 			w.Header().Set("Retry-After", strconv.Itoa(errorCooldown))
 			w.Header().Set("X-Sentry-Rate-Limits", strconv.Itoa(errorCooldown)+"::key")
 			sentryError(w, http.StatusTooManyRequests, "too many errors, try again later")
@@ -110,7 +82,7 @@ func ingestErrors(st *Store, log *slog.Logger, envelope bool) http.HandlerFunc {
 		}
 		id := hdr.EventID
 		for _, raw := range events {
-			p, err := parseEvent(raw, st.now())
+			p, err := svc.ParseError(raw)
 			if err != nil {
 				sentryError(w, http.StatusBadRequest, err.Error())
 				return
@@ -118,10 +90,10 @@ func ingestErrors(st *Store, log *slog.Logger, envelope bool) http.HandlerFunc {
 			if p.Event.ID == "" {
 				p.Event.ID = strings.ReplaceAll(hdr.EventID, "-", "")
 			}
-			if c := r.Header.Get("CF-IPCountry"); countryRe.MatchString(c) && c != "XX" {
+			if c := ingest.Country(r.Header.Get("CF-IPCountry")); c != "" {
 				p.Event.Country = c
 			}
-			if _, err := st.RecordError(r.Context(), project, p); err != nil {
+			if _, err := svc.RecordError(r.Context(), project, p); err != nil {
 				log.Error("record error", "err", err)
 				sentryError(w, http.StatusInternalServerError, "not recorded")
 				return

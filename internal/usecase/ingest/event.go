@@ -1,6 +1,7 @@
-package analytics
+package ingest
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -10,65 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
 )
-
-// ErrorEvent is an error as kept: what the UI shows of the SDK's payload.
-// Request bodies, headers, cookies, local variables and extras are dropped.
-type ErrorEvent struct {
-	ID          string `json:"id"`
-	At          int64  `json:"at"`
-	Level       string `json:"level,omitempty"`
-	Platform    string `json:"platform,omitempty"`
-	Release     string `json:"release,omitempty"`
-	Environment string `json:"environment,omitempty"`
-	ServerName  string `json:"serverName,omitempty"`
-	Transaction string `json:"transaction,omitempty"`
-	Message     string `json:"message,omitempty"`
-	// Exceptions as the SDK sorts them: the last one is the one raised.
-	Exceptions  []Exception       `json:"exceptions,omitempty"`
-	Breadcrumbs []Breadcrumb      `json:"breadcrumbs,omitempty"`
-	Tags        map[string]string `json:"tags,omitempty"`
-	// Contexts are e.g. browser: "Firefox 147", os: "Linux", runtime: "node v22.1.0".
-	Contexts map[string]string `json:"contexts,omitempty"`
-	// User is the id (or else username) the app gave the SDK.
-	User string `json:"user,omitempty"`
-	// URL is the request's, its query keys only.
-	URL     string `json:"url,omitempty"`
-	Method  string `json:"method,omitempty"`
-	Country string `json:"country,omitempty"`
-	SDK     string `json:"sdk,omitempty"`
-}
-
-type Exception struct {
-	Type      string `json:"type,omitempty"`
-	Value     string `json:"value,omitempty"`
-	Module    string `json:"module,omitempty"`
-	Mechanism string `json:"mechanism,omitempty"`
-	Handled   *bool  `json:"handled,omitempty"`
-	// Frames oldest first: the last one threw.
-	Frames []Frame `json:"frames,omitempty"`
-}
-
-type Frame struct {
-	Function string `json:"function,omitempty"`
-	Module   string `json:"module,omitempty"`
-	File     string `json:"file,omitempty"`
-	Line     int    `json:"line,omitempty"`
-	Col      int    `json:"col,omitempty"`
-	InApp    bool   `json:"inApp,omitempty"`
-	// Context is the source around Line, which is Context[ContextLine].
-	Context     []string `json:"context,omitempty"`
-	ContextLine int      `json:"contextLine,omitempty"`
-}
-
-type Breadcrumb struct {
-	At       float64           `json:"at,omitempty"`
-	Type     string            `json:"type,omitempty"`
-	Category string            `json:"category,omitempty"`
-	Level    string            `json:"level,omitempty"`
-	Message  string            `json:"message,omitempty"`
-	Data     map[string]string `json:"data,omitempty"`
-}
 
 // sentryEvent is the part of an SDK's event payload read.
 type sentryEvent struct {
@@ -142,22 +87,32 @@ const (
 	maxContextRows = 5
 )
 
-// parsedEvent is an SDK's event read: what is kept, its own fingerprint
+// ParsedEvent is an SDK's event read: what is kept, its own fingerprint
 // if any, and a hash telling its user apart (no email or address kept).
-type parsedEvent struct {
-	Event       ErrorEvent
+type ParsedEvent struct {
+	Event       analytics.ErrorEvent
 	Fingerprint []string
 	User        string
 }
 
+// ParseError reads an SDK's event.
+func (s *Service) ParseError(raw []byte) (ParsedEvent, error) { return parseEvent(raw, s.now()) }
+
+// RecordError adds p to its issue in project, opening one for a new
+// fingerprint and reopening a resolved one.
+func (s *Service) RecordError(ctx context.Context, project int64, p ParsedEvent) (analytics.Recorded, error) {
+	fp, title, culprit := fingerprint(p.Event, p.Fingerprint)
+	return s.AddError(ctx, project, analytics.ErrorRecord{Event: p.Event, Fingerprint: fp, Title: title, Culprit: culprit, User: p.User})
+}
+
 // parseEvent reads an SDK's event; now stamps one without a timestamp.
-func parseEvent(raw []byte, now time.Time) (parsedEvent, error) {
+func parseEvent(raw []byte, now time.Time) (ParsedEvent, error) {
 	var in sentryEvent
 	if err := json.Unmarshal(raw, &in); err != nil {
-		return parsedEvent{}, fmt.Errorf("event: %w", err)
+		return ParsedEvent{}, fmt.Errorf("event: %w", err)
 	}
-	p := parsedEvent{Fingerprint: in.Fingerprint}
-	ev := ErrorEvent{
+	p := ParsedEvent{Fingerprint: in.Fingerprint}
+	ev := analytics.ErrorEvent{
 		ID: cut(strings.ReplaceAll(in.EventID, "-", ""), 32), At: timestamp(in.Timestamp, now),
 		Level: cut(in.Level, 16), Platform: cut(in.Platform, 32),
 		Release: cut(in.Release, 200), Environment: cut(in.Environment, 64),
@@ -190,7 +145,7 @@ func parseEvent(raw []byte, now time.Time) (parsedEvent, error) {
 	ev.Exceptions = exceptions(in.Exception)
 	if len(ev.Exceptions) == 0 && in.Stacktrace != nil {
 		// captureMessage with attach_stacktrace.
-		ev.Exceptions = []Exception{{Frames: frames(in.Stacktrace)}}
+		ev.Exceptions = []analytics.Exception{{Frames: frames(in.Stacktrace)}}
 	}
 	ev.Tags = tags(in.Tags)
 	ev.Breadcrumbs = breadcrumbs(in.Breadcrumbs)
@@ -263,7 +218,7 @@ func message(in sentryEvent) string {
 }
 
 // exceptions reads {"values": [...]} or a bare list.
-func exceptions(raw json.RawMessage) []Exception {
+func exceptions(raw json.RawMessage) []analytics.Exception {
 	var list []sentryException
 	var wrapped struct {
 		Values []sentryException `json:"values"`
@@ -276,12 +231,12 @@ func exceptions(raw json.RawMessage) []Exception {
 	if len(list) > maxExceptions {
 		list = list[len(list)-maxExceptions:]
 	}
-	var out []Exception
+	var out []analytics.Exception
 	for _, e := range list {
 		if e.Type == "" && e.Value == "" {
 			continue
 		}
-		x := Exception{Type: cut(e.Type, 200), Value: cut(e.Value, 2048), Module: cut(e.Module, 200), Frames: frames(e.Stack)}
+		x := analytics.Exception{Type: cut(e.Type, 200), Value: cut(e.Value, 2048), Module: cut(e.Module, 200), Frames: frames(e.Stack)}
 		if e.Mechanism != nil {
 			x.Mechanism, x.Handled = cut(e.Mechanism.Type, 64), e.Mechanism.Handled
 		}
@@ -290,7 +245,7 @@ func exceptions(raw json.RawMessage) []Exception {
 	return out
 }
 
-func frames(st *sentryStack) []Frame {
+func frames(st *sentryStack) []analytics.Frame {
 	if st == nil {
 		return nil
 	}
@@ -298,13 +253,13 @@ func frames(st *sentryStack) []Frame {
 	if len(fs) > maxFrames {
 		fs = fs[len(fs)-maxFrames:] // the ones nearest the error
 	}
-	out := make([]Frame, 0, len(fs))
+	out := make([]analytics.Frame, 0, len(fs))
 	for _, f := range fs {
 		file := f.Filename
 		if file == "" {
 			file = f.AbsPath
 		}
-		fr := Frame{Function: cut(f.Function, 200), Module: cut(f.Module, 200), File: cut(file, 300), Line: f.Lineno, Col: f.Colno}
+		fr := analytics.Frame{Function: cut(f.Function, 200), Module: cut(f.Module, 200), File: cut(file, 300), Line: f.Lineno, Col: f.Colno}
 		fr.InApp = f.InApp != nil && *f.InApp
 		if f.ContextLine != nil {
 			pre := tail(f.PreContext, maxContextRows)
@@ -357,7 +312,7 @@ func tags(raw json.RawMessage) map[string]string {
 // their query values.
 var breadcrumbData = map[string]bool{"method": true, "status_code": true, "url": true, "from": true, "to": true, "reason": true}
 
-func breadcrumbs(raw json.RawMessage) []Breadcrumb {
+func breadcrumbs(raw json.RawMessage) []analytics.Breadcrumb {
 	type crumb struct {
 		Timestamp json.RawMessage `json:"timestamp"`
 		Type      string          `json:"type"`
@@ -378,9 +333,9 @@ func breadcrumbs(raw json.RawMessage) []Breadcrumb {
 	if len(list) > maxBreadcrumbs {
 		list = list[len(list)-maxBreadcrumbs:]
 	}
-	var out []Breadcrumb
+	var out []analytics.Breadcrumb
 	for _, c := range list {
-		b := Breadcrumb{Type: cut(c.Type, 32), Category: cut(c.Category, 64), Level: cut(c.Level, 16), Message: cut(c.Message, 512)}
+		b := analytics.Breadcrumb{Type: cut(c.Type, 32), Category: cut(c.Category, 64), Level: cut(c.Level, 16), Message: cut(c.Message, 512)}
 		var f float64
 		if json.Unmarshal(c.Timestamp, &f) == nil {
 			b.At = f
@@ -442,7 +397,7 @@ func normalized(s string) string {
 
 // frameFile is a frame's file without what changes per build: the
 // scheme and host of a script's URL, the query, a bundle's content hash.
-func frameFile(f Frame) string {
+func frameFile(f analytics.Frame) string {
 	if f.Module != "" {
 		return f.Module
 	}
@@ -455,7 +410,7 @@ func frameFile(f Frame) string {
 // place it was thrown: the raised exception's type and its 3 innermost
 // frames of the app's own code (any frames when none is marked as such),
 // or its normalized message when it has no frames.
-func grouped(ev ErrorEvent) (parts []string, title, culprit string) {
+func grouped(ev analytics.ErrorEvent) (parts []string, title, culprit string) {
 	if len(ev.Exceptions) == 0 {
 		title = firstLine(ev.Message)
 		if title == "" {
@@ -472,7 +427,7 @@ func grouped(ev ErrorEvent) (parts []string, title, culprit string) {
 		}
 		title += v
 	}
-	var fs []Frame
+	var fs []analytics.Frame
 	for _, f := range x.Frames {
 		if f.InApp {
 			fs = append(fs, f)
@@ -508,7 +463,7 @@ func grouped(ev ErrorEvent) (parts []string, title, culprit string) {
 
 // fingerprint is the issue key of ev: its SDK's fingerprint when set,
 // where "{{ default }}" stands for the default one.
-func fingerprint(ev ErrorEvent, custom []string) (fp, title, culprit string) {
+func fingerprint(ev analytics.ErrorEvent, custom []string) (fp, title, culprit string) {
 	parts, title, culprit := grouped(ev)
 	if len(custom) > 0 {
 		var out []string

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/analytics"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
@@ -355,7 +355,7 @@ func (c *Monitoring) syncAnalyticsSites(ctx context.Context, id, token string, a
 
 // analyticsClient reaches the server's private port at its address on the
 // proxy network, which the manager is on (or, run on the host, routes to).
-func (c *Monitoring) analyticsClient(ctx context.Context, token string) (*analytics.Client, error) {
+func (c *Monitoring) analyticsClient(ctx context.Context, token string) (Analytics, error) {
 	cts, err := c.mgr.DockerFor(domain.LocalServerID).ListContainers(ctx, map[string]string{domain.LabelComponent: analyticsComponent})
 	if err != nil {
 		return nil, err
@@ -365,7 +365,7 @@ func (c *Monitoring) analyticsClient(ctx context.Context, token string) (*analyt
 			continue
 		}
 		if ip := ct.Networks[domain.ProxyNetwork].IP; ip.IsValid() {
-			return &analytics.Client{BaseURL: "http://" + ip.String() + ":" + strconv.Itoa(analytics.PrivatePort), Token: token}, nil
+			return c.newAnalytics("http://"+ip.String()+":"+strconv.Itoa(analytics.PrivatePort), token), nil
 		}
 	}
 	return nil, errors.New("the analytics server isn't running")
