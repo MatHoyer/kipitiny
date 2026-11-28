@@ -303,7 +303,7 @@ func (c *Client) WaitHealthy(ctx context.Context, id string, timeout time.Durati
 		case st.Health != nil && st.Health.Status == container.Healthy:
 			return nil
 		case st.Health != nil && st.Health.Status == container.Unhealthy:
-			return errors.New("container is unhealthy")
+			return fmt.Errorf("container is unhealthy%s%s", lastHealthcheck(st.Health), c.lastLogLines(ctx, id))
 		}
 		select {
 		case <-ctx.Done():
@@ -314,6 +314,19 @@ func (c *Client) WaitHealthy(ctx context.Context, id string, timeout time.Durati
 }
 
 var errWaitTimeout = errors.New("wait timeout")
+
+// lastHealthcheck is the output of a container's last healthcheck, as an
+// error's suffix: the probe often says what is wrong.
+func lastHealthcheck(h *container.Health) string {
+	if len(h.Log) == 0 || h.Log[len(h.Log)-1] == nil {
+		return ""
+	}
+	s := strings.TrimSpace(h.Log[len(h.Log)-1].Output)
+	if s == "" {
+		return ""
+	}
+	return ", last healthcheck output:\n" + s
+}
 
 // lastLogLines is the end of a container's logs, as an error's suffix: a
 // container that exits on start says why there.
