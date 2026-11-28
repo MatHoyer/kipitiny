@@ -8,8 +8,8 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/kipit-labs/kipitiny/internal/analytics"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
 )
 
 // sharedHidden are the breakdowns a shared link leaves out: who the app

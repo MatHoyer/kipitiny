@@ -1,4 +1,4 @@
-package analytics
+package analyticsdb
 
 import (
 	"context"
@@ -11,13 +11,18 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/kipit-labs/kipitiny/internal/delivery/collector"
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
+	analyticsclient "github.com/kipit-labs/kipitiny/internal/infrastructure/analytics"
+	"github.com/kipit-labs/kipitiny/internal/usecase/ingest"
 )
 
 const chromeUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 
 func open(t *testing.T) (*Store, *time.Time) {
 	t.Helper()
-	st, err := Open(context.Background(), filepath.Join(t.TempDir(), "a.db"))
+	st, err := Open(context.Background(), filepath.Join(t.TempDir(), "a.db"), time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +49,7 @@ func hit(t *testing.T, h http.Handler, ua, ip, body string) *httptest.ResponseRe
 func TestRecordAndStats(t *testing.T) {
 	ctx := context.Background()
 	st, now := open(t)
-	pub := Public(st, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	pub := collector.Public(ingest.New(st, st.now), slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	pv := func(ua, ip, url, ref string) {
 		res := hit(t, pub, ua, ip, `{"u":"`+url+`","r":"`+ref+`","s":"1920x1080","l":"fr-FR"}`)
@@ -66,16 +71,16 @@ func TestRecordAndStats(t *testing.T) {
 	pv("Googlebot/2.1", "2.2.2.2", "https://shop.example.com/", "")
 	pv(chromeUA, "3.3.3.3", "https://other.example.com/", "")
 
-	s, err := st.Stats(ctx, Query{Hosts: []string{"shop.example.com"}, From: now.Add(-time.Hour), To: now.Add(time.Minute), Interval: 30 * time.Minute})
+	s, err := st.Stats(ctx, analytics.Query{Hosts: []string{"shop.example.com"}, From: now.Add(-time.Hour), To: now.Add(time.Minute), Interval: 30 * time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if s.Pageviews != 4 || s.Visitors != 2 || s.Visits != 3 || s.Bounces != 2 || s.Duration != 60 || s.Active != 2 {
 		t.Errorf("summary = %+v", s)
 	}
-	top := func(k string) Row {
+	top := func(k string) analytics.Row {
 		if len(s.Breakdowns[k]) == 0 {
-			return Row{}
+			return analytics.Row{}
 		}
 		return s.Breakdowns[k][0]
 	}
@@ -112,13 +117,13 @@ func TestRecordAndStats(t *testing.T) {
 	}
 
 	// Filters: pageview columns keep their events, the others the visits with them.
-	filtered := func(fs ...string) Stats {
+	filtered := func(fs ...string) analytics.Stats {
 		t.Helper()
-		f, err := ParseFilters(fs)
+		f, err := analytics.ParseFilters(fs)
 		if err != nil {
 			t.Fatal(err)
 		}
-		s, err := st.Stats(ctx, Query{Hosts: []string{"shop.example.com"}, From: now.Add(-time.Hour), To: now.Add(time.Minute),
+		s, err := st.Stats(ctx, analytics.Query{Hosts: []string{"shop.example.com"}, From: now.Add(-time.Hour), To: now.Add(time.Minute),
 			Interval: 30 * time.Minute, Filters: f})
 		if err != nil {
 			t.Fatal(err)
@@ -141,7 +146,7 @@ func TestRecordAndStats(t *testing.T) {
 		t.Errorf("countries:DE = %+v", f)
 	}
 	for _, bad := range []string{"props:x", "nokey", "drop:1"} {
-		if _, err := ParseFilters([]string{bad}); err == nil {
+		if _, err := analytics.ParseFilters([]string{bad}); err == nil {
 			t.Errorf("filter %q accepted", bad)
 		}
 	}
@@ -156,15 +161,15 @@ func TestRecordAndStats(t *testing.T) {
 	if salts != 1 {
 		t.Errorf("salts kept = %d", salts)
 	}
-	s, _ = st.Stats(ctx, Query{Hosts: []string{"shop.example.com"}, From: now.Add(-48 * time.Hour), To: now.Add(time.Minute), Interval: 24 * time.Hour})
+	s, _ = st.Stats(ctx, analytics.Query{Hosts: []string{"shop.example.com"}, From: now.Add(-48 * time.Hour), To: now.Add(time.Minute), Interval: 24 * time.Hour})
 	if s.Visitors != 3 {
 		t.Errorf("visitors over two days = %d, want 3", s.Visitors)
 	}
-	s, _ = st.Stats(ctx, Query{Hosts: []string{"shop.example.com"}, From: now.Add(-time.Hour), To: now.Add(time.Minute), Interval: time.Hour})
+	s, _ = st.Stats(ctx, analytics.Query{Hosts: []string{"shop.example.com"}, From: now.Add(-time.Hour), To: now.Add(time.Minute), Interval: time.Hour})
 	if s.Pageviews != 1 || s.Previous.Pageviews != 0 {
 		t.Errorf("today = %+v", s.Summary)
 	}
-	s, _ = st.Stats(ctx, Query{Hosts: []string{"shop.example.com"}, From: now.Add(-23 * time.Hour), To: now.Add(time.Minute), Interval: time.Hour})
+	s, _ = st.Stats(ctx, analytics.Query{Hosts: []string{"shop.example.com"}, From: now.Add(-23 * time.Hour), To: now.Add(time.Minute), Interval: time.Hour})
 	if s.Pageviews != 1 || s.Previous.Pageviews != 4 || s.Previous.Visits != 3 || s.Previous.Visitors != 2 {
 		t.Errorf("previous day = %+v", s.Previous)
 	}
@@ -172,7 +177,7 @@ func TestRecordAndStats(t *testing.T) {
 	if err := st.Prune(ctx, 12*time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	s, _ = st.Stats(ctx, Query{Hosts: []string{"shop.example.com"}, From: now.Add(-48 * time.Hour), To: now.Add(time.Minute), Interval: 24 * time.Hour})
+	s, _ = st.Stats(ctx, analytics.Query{Hosts: []string{"shop.example.com"}, From: now.Add(-48 * time.Hour), To: now.Add(time.Minute), Interval: 24 * time.Hour})
 	if s.Pageviews != 1 || s.Visits != 1 {
 		t.Errorf("after prune = %+v", s)
 	}
@@ -181,7 +186,7 @@ func TestRecordAndStats(t *testing.T) {
 func TestVisits(t *testing.T) {
 	ctx := context.Background()
 	st, now := open(t)
-	pub := Public(st, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	pub := collector.Public(ingest.New(st, st.now), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	send := func(ip, body string) {
 		t.Helper()
 		hit(t, pub, chromeUA, ip, body)
@@ -196,7 +201,7 @@ func TestVisits(t *testing.T) {
 	// Identify with no visit yet is dropped.
 	send("3.3.3.3", `{"u":"https://shop.example.com/","n":"$identify","i":"ghost"}`)
 
-	q := Query{Hosts: []string{"shop.example.com"}, From: now.Add(-time.Hour), To: now.Add(time.Minute), Interval: time.Hour}
+	q := analytics.Query{Hosts: []string{"shop.example.com"}, From: now.Add(-time.Hour), To: now.Add(time.Minute), Interval: time.Hour}
 	vs, err := st.Visits(ctx, q, "", 0)
 	if err != nil {
 		t.Fatal(err)
@@ -212,8 +217,8 @@ func TestVisits(t *testing.T) {
 	if page, _ := st.Visits(ctx, q, vs[0].ID, 10); len(page) != 1 || page[0].ID != a.ID {
 		t.Errorf("before = %+v", page)
 	}
-	f, _ := ParseFilters([]string{"identities:user-42"})
-	if got, _ := st.Visits(ctx, Query{Hosts: q.Hosts, From: q.From, To: q.To, Filters: f}, "", 0); len(got) != 1 || got[0].ID != a.ID {
+	f, _ := analytics.ParseFilters([]string{"identities:user-42"})
+	if got, _ := st.Visits(ctx, analytics.Query{Hosts: q.Hosts, From: q.From, To: q.To, Filters: f}, "", 0); len(got) != 1 || got[0].ID != a.ID {
 		t.Errorf("identity filter = %+v", got)
 	}
 	s, _ := st.Stats(ctx, q)
@@ -228,17 +233,17 @@ func TestVisits(t *testing.T) {
 	if len(d.Journey) != 3 || d.Journey[0].Path != "/" || d.Journey[2].Name != "checkout" || d.Journey[2].Props["total"] != float64(12) {
 		t.Errorf("journey = %+v", d.Journey)
 	}
-	if _, err := st.Visit(ctx, []string{"other.example.com"}, a.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := st.Visit(ctx, []string{"other.example.com"}, a.ID); !errors.Is(err, analytics.ErrNotFound) {
 		t.Errorf("visit of another host: %v", err)
 	}
 
-	srv := httptest.NewServer(Private(st, "secret"))
+	srv := httptest.NewServer(collector.Private(ingest.New(st, st.now), "secret"))
 	defer srv.Close()
-	c := &Client{BaseURL: srv.URL, Token: "secret"}
+	c := &analyticsclient.Client{BaseURL: srv.URL, Token: "secret"}
 	if got, err := c.Visits(ctx, q, "", 0); err != nil || len(got) != 2 {
 		t.Errorf("client visits = %v, %v", got, err)
 	}
-	if _, err := c.Visit(ctx, []string{"other.example.com"}, a.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := c.Visit(ctx, []string{"other.example.com"}, a.ID); !errors.Is(err, analytics.ErrNotFound) {
 		t.Errorf("client visit of another host: %v", err)
 	}
 }
@@ -246,27 +251,27 @@ func TestVisits(t *testing.T) {
 func TestTrackers(t *testing.T) {
 	ctx := context.Background()
 	st, now := open(t)
-	pub := Public(st, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	priv := httptest.NewServer(Private(st, "secret"))
+	pub := collector.Public(ingest.New(st, st.now), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	priv := httptest.NewServer(collector.Private(ingest.New(st, st.now), "secret"))
 	defer priv.Close()
-	c := &Client{BaseURL: priv.URL, Token: "secret"}
+	c := &analyticsclient.Client{BaseURL: priv.URL, Token: "secret"}
 
-	px, err := c.CreateTracker(ctx, Tracker{Kind: KindPixel, Name: "Newsletter", Target: "https://ignored.example"})
+	px, err := c.CreateTracker(ctx, analytics.Tracker{Kind: analytics.KindPixel, Name: "Newsletter", Target: "https://ignored.example"})
 	if err != nil || len(px.Slug) != 8 || px.Target != "" {
 		t.Fatalf("pixel = %+v, %v", px, err)
 	}
-	ln, err := c.CreateTracker(ctx, Tracker{Kind: KindLink, Name: "Launch", Slug: "Launch", Target: "https://shop.example.com/?utm_source=x"})
+	ln, err := c.CreateTracker(ctx, analytics.Tracker{Kind: analytics.KindLink, Name: "Launch", Slug: "Launch", Target: "https://shop.example.com/?utm_source=x"})
 	if err != nil || ln.Slug != "launch" {
 		t.Fatalf("link = %+v, %v", ln, err)
 	}
-	for _, bad := range []Tracker{
-		{Kind: KindLink, Name: "dup", Slug: "launch", Target: "https://a.example"},
-		{Kind: KindLink, Name: "no target"},
-		{Kind: KindLink, Name: "js", Target: "javascript:alert(1)"},
-		{Kind: KindPixel, Name: "bad slug", Slug: "no spaces"},
+	for _, bad := range []analytics.Tracker{
+		{Kind: analytics.KindLink, Name: "dup", Slug: "launch", Target: "https://a.example"},
+		{Kind: analytics.KindLink, Name: "no target"},
+		{Kind: analytics.KindLink, Name: "js", Target: "javascript:alert(1)"},
+		{Kind: analytics.KindPixel, Name: "bad slug", Slug: "no spaces"},
 		{Kind: "badge", Name: "x"},
 	} {
-		if _, err := c.CreateTracker(ctx, bad); !errors.Is(err, ErrInvalid) {
+		if _, err := c.CreateTracker(ctx, bad); !errors.Is(err, analytics.ErrInvalid) {
 			t.Errorf("%+v: %v", bad, err)
 		}
 	}
@@ -305,17 +310,17 @@ func TestTrackers(t *testing.T) {
 	if len(ts) != 2 || ts[0].ID != ln.ID || ts[0].Hits != 1 || ts[1].Hits != 2 {
 		t.Errorf("trackers = %+v", ts)
 	}
-	s, _ := c.Stats(ctx, Query{Hosts: []string{px.Host()}, From: now.Add(-time.Hour), To: now.Add(time.Minute), Interval: time.Hour})
+	s, _ := c.Stats(ctx, analytics.Query{Hosts: []string{px.Host()}, From: now.Add(-time.Hour), To: now.Add(time.Minute), Interval: time.Hour})
 	if s.Pageviews != 2 || s.Visitors != 1 || s.Breakdowns["referrers"][0].Value != "mail.example" || s.Breakdowns["languages"][0].Value != "fr-fr" {
 		t.Errorf("pixel stats = %+v", s)
 	}
-	s, _ = c.Stats(ctx, Query{Hosts: []string{ln.Host()}, From: now.Add(-time.Hour), To: now.Add(time.Minute), Interval: time.Hour})
+	s, _ = c.Stats(ctx, analytics.Query{Hosts: []string{ln.Host()}, From: now.Add(-time.Hour), To: now.Add(time.Minute), Interval: time.Hour})
 	if s.Pageviews != 1 || s.Breakdowns["utm_source"][0].Value != "twitter" {
 		t.Errorf("link stats = %+v", s)
 	}
 
 	ln.Slug, ln.Name = "", "Launch day"
-	if up, err := c.UpdateTracker(ctx, ln); err != nil || up.Slug != "launch" || up.Name != "Launch day" || up.Kind != KindLink {
+	if up, err := c.UpdateTracker(ctx, ln); err != nil || up.Slug != "launch" || up.Name != "Launch day" || up.Kind != analytics.KindLink {
 		t.Errorf("update = %+v, %v", up, err)
 	}
 	if err := c.DeleteTracker(ctx, px.ID); err != nil {
@@ -328,50 +333,33 @@ func TestTrackers(t *testing.T) {
 	if err := st.db.NewRaw("SELECT COUNT(*) FROM events WHERE hostname = ?", px.Host()).Scan(ctx, &left); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Tracker(ctx, px.ID); !errors.Is(err, ErrNotFound) || left != 0 {
+	if _, err := c.Tracker(ctx, px.ID); !errors.Is(err, analytics.ErrNotFound) || left != 0 {
 		t.Errorf("after delete: %v, %d events left", err, left)
 	}
 }
 
 func TestPrivateNeedsToken(t *testing.T) {
 	st, _ := open(t)
-	srv := httptest.NewServer(Private(st, "secret"))
+	srv := httptest.NewServer(collector.Private(ingest.New(st, st.now), "secret"))
 	defer srv.Close()
 	for _, tok := range []string{"", "wrong"} {
-		c := &Client{BaseURL: srv.URL, Token: tok}
+		c := &analyticsclient.Client{BaseURL: srv.URL, Token: tok}
 		if err := c.SetSites(context.Background(), []string{"x.com"}, nil); err == nil || !strings.Contains(err.Error(), "401") {
 			t.Errorf("token %q: %v", tok, err)
 		}
 	}
-	c := &Client{BaseURL: srv.URL, Token: "secret"}
+	c := &analyticsclient.Client{BaseURL: srv.URL, Token: "secret"}
 	if err := c.SetSites(context.Background(), []string{"x.com"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if !st.tracked("x.com") || st.tracked("shop.example.com") {
+	if !st.Tracked("x.com") || st.Tracked("shop.example.com") {
 		t.Error("sites not replaced")
 	}
 	now := time.Now()
-	if _, err := c.Stats(context.Background(), Query{Hosts: []string{"x.com"}, From: now.Add(-time.Hour), To: now, Interval: time.Minute}); err != nil {
+	if _, err := c.Stats(context.Background(), analytics.Query{Hosts: []string{"x.com"}, From: now.Add(-time.Hour), To: now, Interval: time.Minute}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Stats(context.Background(), Query{Hosts: []string{"x.com"}, From: now.Add(-30 * 24 * time.Hour), To: now, Interval: time.Minute}); err == nil {
+	if _, err := c.Stats(context.Background(), analytics.Query{Hosts: []string{"x.com"}, From: now.Add(-30 * 24 * time.Hour), To: now, Interval: time.Minute}); err == nil {
 		t.Error("43200 buckets accepted")
-	}
-}
-
-func TestUA(t *testing.T) {
-	for _, c := range []struct{ ua, browser, os, device string }{
-		{chromeUA, "Chrome", "Windows", "desktop"},
-		{"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15", "Safari", "macOS", "desktop"},
-		{"Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0", "Firefox", "Linux", "desktop"},
-		{"Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36 EdgA/130.0", "Edge", "Android", "mobile"},
-		{"Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Safari/604.1", "Safari", "iOS", "tablet"},
-	} {
-		if b, o, d := first(c.ua, browsers), first(c.ua, systems), device(c.ua, 0); b != c.browser || o != c.os || d != c.device {
-			t.Errorf("%s: %s %s %s", c.ua, b, o, d)
-		}
-	}
-	if !isBot("curl/8.0") || !isBot("") || isBot(chromeUA) {
-		t.Error("bot detection")
 	}
 }

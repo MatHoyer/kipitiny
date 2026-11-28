@@ -58,6 +58,8 @@ linters:
               desc: use cases reach backup targets through data.Storage (infrastructure/storage)
             - pkg: github.com/golang-jwt/jwt
               desc: tokens are signed in the adapters (infrastructure/notify, gitprovider)
+            - pkg: github.com/klauspost/compress
+              desc: request bodies are decompressed by the handlers (delivery/collector)
         # identity's SSO is an OAuth client of its own; the git forges go
         # through projects.GitProviders (infrastructure/gitprovider).
         usecase-oauth2:
@@ -83,6 +85,8 @@ linters:
             - pkg: github.com/moby/moby
               desc: handlers never touch Docker, they go through use cases
             - pkg: github.com/uptrace/bun
+              desc: handlers never touch SQL
+            - pkg: modernc.org/sqlite
               desc: handlers never touch SQL
     revive:
       enable-default-rules: true

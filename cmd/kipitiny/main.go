@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/analytics"
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/core"
 	httpdelivery "github.com/kipit-labs/kipitiny/internal/delivery/http"
@@ -62,7 +61,7 @@ func main() {
 			// The analytics server's container, started by the manager from
 			// its own image (core.ensureAnalytics).
 			if len(os.Args) == 3 && os.Args[2] == "healthcheck" {
-				if analytics.Healthcheck() != nil {
+				if analyticsHealthcheck() != nil {
 					os.Exit(1)
 				}
 				os.Exit(0)
@@ -212,12 +211,6 @@ func wire(ctx context.Context, cfg config.Config, log *slog.Logger) (handler htt
 }
 
 // selfUpdate replaces the manager container os.Args[2] with image os.Args[3].
-func serveAnalytics() error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	return analytics.Serve(ctx, slog.New(slog.NewTextHandler(os.Stderr, nil)))
-}
-
 func selfUpdate() error {
 	if len(os.Args) != 4 {
 		return errors.New("usage: self-update <container> <image>")

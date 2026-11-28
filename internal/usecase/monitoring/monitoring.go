@@ -8,9 +8,11 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
 	"github.com/kipit-labs/kipitiny/internal/domain/mail"
 	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 )
@@ -64,6 +66,28 @@ type Channels interface {
 	WebPush(ctx context.Context, hc *http.Client, v notify.VAPID, subject string, s notify.Subscription, m notify.PushMessage) error
 }
 
+// Analytics is the analytics server's private API (infrastructure/analytics).
+type Analytics interface {
+	SetSites(ctx context.Context, hosts []string, paths map[string]analytics.Paths) error
+	Stats(ctx context.Context, q analytics.Query) (analytics.Stats, error)
+	Visits(ctx context.Context, q analytics.Query, before string, limit int) ([]analytics.Visit, error)
+	Visit(ctx context.Context, hosts []string, id string) (analytics.VisitDetail, error)
+	Funnel(ctx context.Context, q analytics.Query, steps []string) ([]analytics.FunnelStep, error)
+	Trackers(ctx context.Context) ([]analytics.Tracker, error)
+	Tracker(ctx context.Context, id string) (analytics.Tracker, error)
+	CreateTracker(ctx context.Context, t analytics.Tracker) (analytics.Tracker, error)
+	UpdateTracker(ctx context.Context, t analytics.Tracker) (analytics.Tracker, error)
+	DeleteTracker(ctx context.Context, id string) error
+	SetErrorProjects(ctx context.Context, ps []analytics.ErrorProject) error
+	Issues(ctx context.Context, q analytics.IssueQuery) (analytics.IssueList, error)
+	Issue(ctx context.Context, project, id int64) (analytics.Issue, error)
+	SetIssueStatus(ctx context.Context, project, id int64, status string) (analytics.Issue, error)
+	Event(ctx context.Context, project, id int64, event string) (analytics.IssueEvent, error)
+	ErrorSeries(ctx context.Context, project int64, from, to time.Time, interval time.Duration) ([]analytics.ErrorPoint, error)
+	ErrorChanges(ctx context.Context, after int64) (analytics.ErrorChanges, error)
+	ReleaseErrors(ctx context.Context, project int64, release string, from, to time.Time) (analytics.ReleaseErrors, error)
+}
+
 type Monitoring struct {
 	// cfg is the manager's configuration, shared with core.
 	cfg   *config.Config
@@ -71,8 +95,10 @@ type Monitoring struct {
 	// smtp sends email, channels the notifications.
 	smtp     SMTP
 	channels Channels
-	mgr      Manager
-	log      *slog.Logger
+	// newAnalytics is a client of the analytics server at baseURL.
+	newAnalytics func(baseURL, token string) Analytics
+	mgr          Manager
+	log          *slog.Logger
 	// bg ends when the manager stops: the uptime and error loops run under it.
 	bg context.Context
 
@@ -97,6 +123,7 @@ type Monitoring struct {
 }
 
 // New builds the monitoring use cases; bg is the manager's background context.
-func New(bg context.Context, cfg *config.Config, store domain.Store, smtp SMTP, channels Channels, mgr Manager, log *slog.Logger) *Monitoring {
-	return &Monitoring{cfg: cfg, store: store, smtp: smtp, channels: channels, mgr: mgr, log: log, bg: bg, errorsSeq: -1, spiked: map[string]bool{}}
+func New(bg context.Context, cfg *config.Config, store domain.Store, smtp SMTP, channels Channels,
+	newAnalytics func(baseURL, token string) Analytics, mgr Manager, log *slog.Logger) *Monitoring {
+	return &Monitoring{cfg: cfg, store: store, smtp: smtp, channels: channels, newAnalytics: newAnalytics, mgr: mgr, log: log, bg: bg, errorsSeq: -1, spiked: map[string]bool{}}
 }

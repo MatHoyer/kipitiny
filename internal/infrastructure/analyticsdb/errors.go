@@ -1,6 +1,8 @@
-package analytics
+package analyticsdb
 
 import (
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
+
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -14,40 +16,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/ids"
 )
 
-// ErrorProject is an app with error tracking on: ID is its DSN's project,
-// Key the DSN's public key.
-type ErrorProject struct {
-	ID  int64  `json:"id"`
-	Key string `json:"key"`
-}
-
-// Issue statuses.
-const (
-	IssueOpen     = "open"
-	IssueResolved = "resolved"
-	IssueIgnored  = "ignored"
-)
-
-// Issue is the events of one fingerprint.
-type Issue struct {
-	ID           int64  `json:"id"`
-	Title        string `json:"title"`
-	Culprit      string `json:"culprit"`
-	Level        string `json:"level"`
-	Platform     string `json:"platform"`
-	Status       string `json:"status"`
-	FirstSeen    int64  `json:"firstSeen"`
-	LastSeen     int64  `json:"lastSeen"`
-	Events       int    `json:"events"`
-	Users        int    `json:"users"`
-	FirstRelease string `json:"firstRelease"`
-	LastRelease  string `json:"lastRelease"`
-	ResolvedAt   int64  `json:"resolvedAt,omitempty"`
-	RegressedAt  int64  `json:"regressedAt,omitempty"`
-	// Spark is its events per hour of the last 24, oldest first (lists only).
-	Spark []int `json:"spark,omitempty" bun:"-"`
-}
-
 // Caps of what is kept per issue: the latest events, and a minute's.
 const (
 	keptEvents      = 100
@@ -57,11 +25,11 @@ const (
 
 // SetErrorProjects replaces the projects taking errors. Issues of the
 // others stay.
-func (s *Store) SetErrorProjects(ctx context.Context, ps []ErrorProject) error {
+func (s *Store) SetErrorProjects(ctx context.Context, ps []analytics.ErrorProject) error {
 	m := make(map[int64]string, len(ps))
 	for _, p := range ps {
 		if p.ID < 1 || p.Key == "" {
-			return fmt.Errorf("%w: a project needs an id and a key", ErrInvalid)
+			return fmt.Errorf("%w: a project needs an id and a key", analytics.ErrInvalid)
 		}
 		m[p.ID] = p.Key
 	}
@@ -86,7 +54,7 @@ func (s *Store) SetErrorProjects(ctx context.Context, ps []ErrorProject) error {
 }
 
 func (s *Store) loadErrorProjects(ctx context.Context) error {
-	var ps []ErrorProject
+	var ps []analytics.ErrorProject
 	if err := s.db.NewRaw("SELECT id, key FROM error_projects").Scan(ctx, &ps); err != nil {
 		return err
 	}
@@ -97,27 +65,19 @@ func (s *Store) loadErrorProjects(ctx context.Context) error {
 	return nil
 }
 
-// errorKey is project's DSN key, "" when it takes no errors.
-func (s *Store) errorKey(project int64) string {
+// ErrorKey is project's DSN key, "" when it takes no errors.
+func (s *Store) ErrorKey(project int64) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.errorKeys[project]
 }
 
-// Recorded tells what an event did to its issue.
-type Recorded struct {
-	Issue     int64 `json:"issue"`
-	New       bool  `json:"new"`
-	Regressed bool  `json:"regressed"`
-}
-
-// RecordError adds p to its issue in project, opening one for a new
+// AddError adds r to its issue in project, opening one for a new
 // fingerprint and reopening a resolved one.
-func (s *Store) RecordError(ctx context.Context, project int64, p parsedEvent) (Recorded, error) {
+func (s *Store) AddError(ctx context.Context, project int64, r analytics.ErrorRecord) (analytics.Recorded, error) {
 	now := s.now().Unix()
-	ev := p.Event
-	fp, title, culprit := fingerprint(ev, p.Fingerprint)
-	var rec Recorded
+	ev, fp, title, culprit := r.Event, r.Fingerprint, r.Title, r.Culprit
+	var rec analytics.Recorded
 	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		var cur struct {
 			ID     int64
@@ -130,12 +90,12 @@ func (s *Store) RecordError(ctx context.Context, project int64, p parsedEvent) (
 			err = tx.NewRaw(`INSERT INTO error_issues (project, fingerprint, title, culprit, level, platform, status,
 				first_seen, last_seen, events, users, first_release, last_release, resolved_at, regressed_at)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, 0, 0) RETURNING id`,
-				project, fp, title, culprit, ev.Level, ev.Platform, IssueOpen, now, now, ev.Release, ev.Release).Scan(ctx, &rec.Issue)
+				project, fp, title, culprit, ev.Level, ev.Platform, analytics.IssueOpen, now, now, ev.Release, ev.Release).Scan(ctx, &rec.Issue)
 		case err == nil:
 			rec.Issue = cur.ID
 			status := cur.Status
-			if status == IssueResolved {
-				status, rec.Regressed = IssueOpen, true
+			if status == analytics.IssueResolved {
+				status, rec.Regressed = analytics.IssueOpen, true
 			}
 			_, err = tx.NewRaw(`UPDATE error_issues SET title = ?, culprit = ?, level = ?, status = ?, last_seen = ?,
 				events = events + 1, last_release = ?, regressed_at = CASE WHEN ? THEN ? ELSE regressed_at END WHERE id = ?`,
@@ -157,8 +117,8 @@ func (s *Store) RecordError(ctx context.Context, project int64, p parsedEvent) (
 				return err
 			}
 		}
-		if p.User != "" {
-			res, err := tx.NewRaw("INSERT INTO error_users (issue, user) VALUES (?, ?) ON CONFLICT DO NOTHING", rec.Issue, p.User).Exec(ctx)
+		if r.User != "" {
+			res, err := tx.NewRaw("INSERT INTO error_users (issue, user) VALUES (?, ?) ON CONFLICT DO NOTHING", rec.Issue, r.User).Exec(ctx)
 			if err != nil {
 				return err
 			}
@@ -192,19 +152,6 @@ func (s *Store) RecordError(ctx context.Context, project int64, p parsedEvent) (
 	return rec, err
 }
 
-// IssueQuery lists a project's issues.
-type IssueQuery struct {
-	Project int64
-	// Status is open, resolved or ignored; all when empty.
-	Status string
-	// Search matches the title or the culprit.
-	Search string
-	// Sort is lastSeen (default), firstSeen, events or users.
-	Sort   string
-	Limit  int
-	Offset int
-}
-
 var issueSorts = map[string]string{"": "last_seen", "lastSeen": "last_seen", "firstSeen": "first_seen", "events": "events", "users": "users"}
 
 const issueColumns = `id, title, culprit, level, platform, status, first_seen, last_seen, events, users,
@@ -212,13 +159,13 @@ const issueColumns = `id, title, culprit, level, platform, status, first_seen, l
 
 // Issues lists q's issues with their last 24 hours, and how many each
 // status has.
-func (s *Store) Issues(ctx context.Context, q IssueQuery) ([]Issue, map[string]int, error) {
+func (s *Store) Issues(ctx context.Context, q analytics.IssueQuery) ([]analytics.Issue, map[string]int, error) {
 	sort, ok := issueSorts[q.Sort]
 	if !ok {
-		return nil, nil, fmt.Errorf("%w: sort by lastSeen, firstSeen, events or users", ErrInvalid)
+		return nil, nil, fmt.Errorf("%w: sort by lastSeen, firstSeen, events or users", analytics.ErrInvalid)
 	}
-	if q.Status != "" && q.Status != IssueOpen && q.Status != IssueResolved && q.Status != IssueIgnored {
-		return nil, nil, fmt.Errorf("%w: status is open, resolved or ignored", ErrInvalid)
+	if q.Status != "" && q.Status != analytics.IssueOpen && q.Status != analytics.IssueResolved && q.Status != analytics.IssueIgnored {
+		return nil, nil, fmt.Errorf("%w: status is open, resolved or ignored", analytics.ErrInvalid)
 	}
 	if q.Limit < 1 || q.Limit > 100 {
 		q.Limit = 50
@@ -229,7 +176,7 @@ func (s *Store) Issues(ctx context.Context, q IssueQuery) ([]Issue, map[string]i
 		where += ` AND (lower(title) LIKE ? ESCAPE '\' OR lower(culprit) LIKE ? ESCAPE '\')`
 		args = append(args, pat, pat)
 	}
-	counts := map[string]int{IssueOpen: 0, IssueResolved: 0, IssueIgnored: 0}
+	counts := map[string]int{analytics.IssueOpen: 0, analytics.IssueResolved: 0, analytics.IssueIgnored: 0}
 	var rows []struct {
 		Status string
 		N      int
@@ -244,7 +191,7 @@ func (s *Store) Issues(ctx context.Context, q IssueQuery) ([]Issue, map[string]i
 		where += " AND status = ?"
 		args = append(args, q.Status)
 	}
-	issues := []Issue{}
+	issues := []analytics.Issue{}
 	if err := s.db.NewRaw("SELECT "+issueColumns+" FROM error_issues WHERE "+where+" ORDER BY "+sort+" DESC, id DESC LIMIT ? OFFSET ?",
 		append(args, q.Limit, q.Offset)...).Scan(ctx, &issues); err != nil {
 		return nil, nil, err
@@ -278,49 +225,38 @@ func (s *Store) Issues(ctx context.Context, q IssueQuery) ([]Issue, map[string]i
 }
 
 // Issue is one of project's issues.
-func (s *Store) Issue(ctx context.Context, project, id int64) (Issue, error) {
-	var is Issue
+func (s *Store) Issue(ctx context.Context, project, id int64) (analytics.Issue, error) {
+	var is analytics.Issue
 	err := s.db.NewRaw("SELECT "+issueColumns+" FROM error_issues WHERE project = ? AND id = ?", project, id).Scan(ctx, &is)
 	if errors.Is(err, sql.ErrNoRows) {
-		return is, fmt.Errorf("%w: issue %d", ErrNotFound, id)
+		return is, fmt.Errorf("%w: issue %d", analytics.ErrNotFound, id)
 	}
 	return is, err
 }
 
 // SetIssueStatus resolves, ignores or reopens an issue.
-func (s *Store) SetIssueStatus(ctx context.Context, project, id int64, status string) (Issue, error) {
-	if status != IssueOpen && status != IssueResolved && status != IssueIgnored {
-		return Issue{}, fmt.Errorf("%w: status is open, resolved or ignored", ErrInvalid)
+func (s *Store) SetIssueStatus(ctx context.Context, project, id int64, status string) (analytics.Issue, error) {
+	if status != analytics.IssueOpen && status != analytics.IssueResolved && status != analytics.IssueIgnored {
+		return analytics.Issue{}, fmt.Errorf("%w: status is open, resolved or ignored", analytics.ErrInvalid)
 	}
 	resolved := int64(0)
-	if status == IssueResolved {
+	if status == analytics.IssueResolved {
 		resolved = s.now().Unix()
 	}
 	res, err := s.db.NewRaw("UPDATE error_issues SET status = ?, resolved_at = ? WHERE project = ? AND id = ?", status, resolved, project, id).Exec(ctx)
 	if err != nil {
-		return Issue{}, err
+		return analytics.Issue{}, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return Issue{}, fmt.Errorf("%w: issue %d", ErrNotFound, id)
+		return analytics.Issue{}, fmt.Errorf("%w: issue %d", analytics.ErrNotFound, id)
 	}
 	return s.Issue(ctx, project, id)
 }
 
-// IssueEvent is one kept event of an issue, and its neighbours: Older and
-// Newer are their ids, empty at the ends.
-type IssueEvent struct {
-	Event ErrorEvent `json:"event"`
-	Older string     `json:"older,omitempty"`
-	Newer string     `json:"newer,omitempty"`
-	// Index counts from the newest (1), of Kept.
-	Index int `json:"index"`
-	Kept  int `json:"kept"`
-}
-
 // Event is the issue's kept event id, its latest when id is empty.
-func (s *Store) Event(ctx context.Context, project, issue int64, id string) (IssueEvent, error) {
+func (s *Store) Event(ctx context.Context, project, issue int64, id string) (analytics.IssueEvent, error) {
 	if _, err := s.Issue(ctx, project, issue); err != nil {
-		return IssueEvent{}, err
+		return analytics.IssueEvent{}, err
 	}
 	var row struct {
 		ID   string
@@ -333,14 +269,14 @@ func (s *Store) Event(ctx context.Context, project, issue int64, id string) (Iss
 	}
 	err := s.db.NewRaw(q, args...).Scan(ctx, &row)
 	if errors.Is(err, sql.ErrNoRows) {
-		return IssueEvent{}, fmt.Errorf("%w: event", ErrNotFound)
+		return analytics.IssueEvent{}, fmt.Errorf("%w: event", analytics.ErrNotFound)
 	}
 	if err != nil {
-		return IssueEvent{}, err
+		return analytics.IssueEvent{}, err
 	}
-	var out IssueEvent
+	var out analytics.IssueEvent
 	if err := json.Unmarshal([]byte(row.Data), &out.Event); err != nil {
-		return IssueEvent{}, err
+		return analytics.IssueEvent{}, err
 	}
 	for _, x := range []struct {
 		dst *string
@@ -350,29 +286,23 @@ func (s *Store) Event(ctx context.Context, project, issue int64, id string) (Iss
 		{&out.Newer, "SELECT id FROM error_events WHERE issue = ? AND id > ? ORDER BY id LIMIT 1"},
 	} {
 		if err := s.db.NewRaw(x.q, issue, row.ID).Scan(ctx, x.dst); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return IssueEvent{}, err
+			return analytics.IssueEvent{}, err
 		}
 	}
 	if err := s.db.NewRaw("SELECT count(*) FROM error_events WHERE issue = ? AND id >= ?", issue, row.ID).Scan(ctx, &out.Index); err != nil {
-		return IssueEvent{}, err
+		return analytics.IssueEvent{}, err
 	}
 	err = s.db.NewRaw("SELECT count(*) FROM error_events WHERE issue = ?", issue).Scan(ctx, &out.Kept)
 	return out, err
 }
 
-// ErrorPoint is a bucket of a project's events.
-type ErrorPoint struct {
-	T int64 `json:"t"`
-	N int   `json:"n"`
-}
-
 // ErrorSeries counts project's events in [from, to), in buckets of
 // interval (a whole number of minutes) aligned on from; empty ones too.
-func (s *Store) ErrorSeries(ctx context.Context, project int64, from, to time.Time, interval time.Duration) ([]ErrorPoint, error) {
+func (s *Store) ErrorSeries(ctx context.Context, project int64, from, to time.Time, interval time.Duration) ([]analytics.ErrorPoint, error) {
 	iv := int64(interval.Seconds())
 	f, t := from.Unix(), to.Unix()
 	if iv < 60 || iv%60 != 0 || t <= f || (t-f)/iv > 1000 {
-		return nil, fmt.Errorf("%w: range: from < to, at most 1000 buckets of whole minutes", ErrInvalid)
+		return nil, fmt.Errorf("%w: range: from < to, at most 1000 buckets of whole minutes", analytics.ErrInvalid)
 	}
 	var rows []struct {
 		B int64
@@ -382,7 +312,7 @@ func (s *Store) ErrorSeries(ctx context.Context, project int64, from, to time.Ti
 		WHERE i.project = ? AND c.minute >= ? AND c.minute < ? GROUP BY b`, f, iv, project, f, t).Scan(ctx, &rows); err != nil {
 		return nil, err
 	}
-	out := make([]ErrorPoint, (t-f+iv-1)/iv)
+	out := make([]analytics.ErrorPoint, (t-f+iv-1)/iv)
 	for i := range out {
 		out[i].T = f + int64(i)*iv
 	}
@@ -419,22 +349,10 @@ func (s *Store) pruneErrors(ctx context.Context, keep time.Duration) error {
 	return nil
 }
 
-// ErrorChange is an issue that opened (Kind new) or reopened (regression).
-type ErrorChange struct {
-	Seq     int64  `json:"seq"`
-	Project int64  `json:"project"`
-	Issue   int64  `json:"issue"`
-	Kind    string `json:"kind"`
-	At      int64  `json:"at"`
-	Title   string `json:"title"`
-	Culprit string `json:"culprit"`
-	Release string `json:"release"`
-}
-
 // ErrorChanges are the changes after seq (at most 100, oldest first), and
 // the last seq there is.
-func (s *Store) ErrorChanges(ctx context.Context, after int64) ([]ErrorChange, int64, error) {
-	cs := []ErrorChange{}
+func (s *Store) ErrorChanges(ctx context.Context, after int64) ([]analytics.ErrorChange, int64, error) {
+	cs := []analytics.ErrorChange{}
 	if err := s.db.NewRaw(`SELECT c.seq, c.project, c.issue, c.kind, c.at, i.title, i.culprit, i.last_release AS release
 		FROM error_changes c JOIN error_issues i ON i.id = c.issue WHERE c.seq > ? ORDER BY c.seq LIMIT 100`, after).Scan(ctx, &cs); err != nil {
 		return nil, 0, err
@@ -444,16 +362,9 @@ func (s *Store) ErrorChanges(ctx context.Context, after int64) ([]ErrorChange, i
 	return cs, last, err
 }
 
-// ReleaseErrors is what a release of a project did in a span.
-type ReleaseErrors struct {
-	Events int `json:"events"`
-	// NewIssues first seen in it, in the span.
-	NewIssues int `json:"newIssues"`
-}
-
 // ReleaseErrors counts project's events of release in [from, to).
-func (s *Store) ReleaseErrors(ctx context.Context, project int64, release string, from, to time.Time) (ReleaseErrors, error) {
-	var r ReleaseErrors
+func (s *Store) ReleaseErrors(ctx context.Context, project int64, release string, from, to time.Time) (analytics.ReleaseErrors, error) {
+	var r analytics.ReleaseErrors
 	if err := s.db.NewRaw(`SELECT coalesce(sum(c.n), 0) FROM error_counts c JOIN error_issues i ON i.id = c.issue
 		WHERE i.project = ? AND c.release = ? AND c.minute >= ? AND c.minute < ?`, project, release, from.Unix(), to.Unix()).Scan(ctx, &r.Events); err != nil {
 		return r, err

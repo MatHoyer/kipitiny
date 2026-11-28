@@ -1,4 +1,4 @@
-package analytics
+package analyticsdb
 
 import (
 	"context"
@@ -6,56 +6,25 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
 	"github.com/uptrace/bun"
 )
-
-// Step of a funnel: a pageview of a path (Kind "page") or a custom event
-// (Kind "event").
-type Step struct{ Kind, Value string }
-
-func (s Step) String() string { return s.Kind + ":" + s.Value }
-
-// maxSteps caps a funnel.
-const maxSteps = 8
-
-// ParseSteps reads "page:<path>" and "event:<name>" steps, in order.
-func ParseSteps(vs []string) ([]Step, error) {
-	if len(vs) < 2 || len(vs) > maxSteps {
-		return nil, fmt.Errorf("a funnel has 2 to %d steps", maxSteps)
-	}
-	steps := make([]Step, 0, len(vs))
-	for _, v := range vs {
-		k, val, ok := strings.Cut(v, ":")
-		if !ok || (k != "page" && k != "event") || val == "" || len(val) > 512 {
-			return nil, fmt.Errorf("step %q: want page:<path> or event:<name>", v)
-		}
-		steps = append(steps, Step{k, val})
-	}
-	return steps, nil
-}
-
-// FunnelStep is how many of the range's visits reached a step, each after
-// the ones before.
-type FunnelStep struct {
-	Step   string `json:"step"`
-	Visits int    `json:"visits"`
-}
 
 // Funnel counts the visits of q's range (by their first step's time) that
 // went through steps in order, within the visit; q's filters aside. Event
 // ids order the steps: they grow as they're recorded.
-func (s *Store) Funnel(ctx context.Context, q Query, steps []Step) ([]FunnelStep, error) {
+func (s *Store) Funnel(ctx context.Context, q analytics.Query, steps []analytics.Step) ([]analytics.FunnelStep, error) {
 	if len(steps) == 0 {
 		return nil, errors.New("no steps")
 	}
-	out := make([]FunnelStep, len(steps))
+	out := make([]analytics.FunnelStep, len(steps))
 	for i, st := range steps {
 		out[i].Step = st.String()
 	}
 	if len(q.Hosts) == 0 {
 		return out, nil
 	}
-	match := func(st Step) (string, any) {
+	match := func(st analytics.Step) (string, any) {
 		if st.Kind == "page" {
 			return "e.name = '' AND e.path = ?", st.Value
 		}

@@ -1,3 +1,5 @@
+// Package analytics is the manager's client of the analytics server's
+// private API.
 package analytics
 
 import (
@@ -10,6 +12,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
 )
 
 // Client reads the analytics server's private API, from the manager.
@@ -18,6 +22,9 @@ type Client struct {
 	Token   string
 	HTTP    *http.Client
 }
+
+// New is a client of the server at baseURL.
+func New(baseURL, token string) *Client { return &Client{BaseURL: baseURL, Token: token} }
 
 func (c *Client) do(ctx context.Context, method, path string, body any, out any) error {
 	var rd io.Reader
@@ -47,9 +54,9 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 		err := fmt.Errorf("analytics: %s: %s", res.Status, bytes.TrimSpace(msg))
 		switch res.StatusCode {
 		case http.StatusNotFound:
-			err = fmt.Errorf("%w: %w", ErrNotFound, err)
+			err = fmt.Errorf("%w: %w", analytics.ErrNotFound, err)
 		case http.StatusBadRequest:
-			err = fmt.Errorf("%w: %s", ErrInvalid, bytes.TrimSpace(msg))
+			err = fmt.Errorf("%w: %s", analytics.ErrInvalid, bytes.TrimSpace(msg))
 		}
 		return err
 	}
@@ -61,14 +68,14 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 
 // SetSites sends the tracked hostnames, and the paths of those with their
 // own.
-func (c *Client) SetSites(ctx context.Context, hosts []string, paths map[string]Paths) error {
+func (c *Client) SetSites(ctx context.Context, hosts []string, paths map[string]analytics.Paths) error {
 	if hosts == nil {
 		hosts = []string{}
 	}
 	return c.do(ctx, http.MethodPut, "/api/sites", map[string]any{"hostnames": hosts, "paths": paths}, nil)
 }
 
-func (q Query) values() url.Values {
+func values(q analytics.Query) url.Values {
 	v := url.Values{"host": q.Hosts}
 	v.Set("from", strconv.FormatInt(q.From.Unix(), 10))
 	v.Set("to", strconv.FormatInt(q.To.Unix(), 10))
@@ -80,57 +87,57 @@ func (q Query) values() url.Values {
 	return v
 }
 
-func (c *Client) Stats(ctx context.Context, q Query) (Stats, error) {
-	var s Stats
-	err := c.do(ctx, http.MethodGet, "/api/stats?"+q.values().Encode(), nil, &s)
+func (c *Client) Stats(ctx context.Context, q analytics.Query) (analytics.Stats, error) {
+	var s analytics.Stats
+	err := c.do(ctx, http.MethodGet, "/api/stats?"+values(q).Encode(), nil, &s)
 	return s, err
 }
 
 // Visits lists q's visits (q.Interval only checked): see Store.Visits.
-func (c *Client) Visits(ctx context.Context, q Query, before string, limit int) ([]Visit, error) {
-	v := q.values()
+func (c *Client) Visits(ctx context.Context, q analytics.Query, before string, limit int) ([]analytics.Visit, error) {
+	v := values(q)
 	v.Set("before", before)
 	v.Set("limit", strconv.Itoa(limit))
-	var vs []Visit
+	var vs []analytics.Visit
 	err := c.do(ctx, http.MethodGet, "/api/visits?"+v.Encode(), nil, &vs)
 	return vs, err
 }
 
-func (c *Client) Visit(ctx context.Context, hosts []string, id string) (VisitDetail, error) {
-	var d VisitDetail
+func (c *Client) Visit(ctx context.Context, hosts []string, id string) (analytics.VisitDetail, error) {
+	var d analytics.VisitDetail
 	err := c.do(ctx, http.MethodGet, "/api/visits/"+url.PathEscape(id)+"?"+url.Values{"host": hosts}.Encode(), nil, &d)
 	return d, err
 }
 
 // Funnel counts q's visits through steps ("page:<path>", "event:<name>").
-func (c *Client) Funnel(ctx context.Context, q Query, steps []string) ([]FunnelStep, error) {
-	v := q.values()
+func (c *Client) Funnel(ctx context.Context, q analytics.Query, steps []string) ([]analytics.FunnelStep, error) {
+	v := values(q)
 	v["step"] = steps
-	var fs []FunnelStep
+	var fs []analytics.FunnelStep
 	err := c.do(ctx, http.MethodGet, "/api/funnel?"+v.Encode(), nil, &fs)
 	return fs, err
 }
 
-func (c *Client) Trackers(ctx context.Context) ([]Tracker, error) {
-	var ts []Tracker
+func (c *Client) Trackers(ctx context.Context) ([]analytics.Tracker, error) {
+	var ts []analytics.Tracker
 	err := c.do(ctx, http.MethodGet, "/api/trackers", nil, &ts)
 	return ts, err
 }
 
-func (c *Client) Tracker(ctx context.Context, id string) (Tracker, error) {
-	var t Tracker
+func (c *Client) Tracker(ctx context.Context, id string) (analytics.Tracker, error) {
+	var t analytics.Tracker
 	err := c.do(ctx, http.MethodGet, "/api/trackers/"+url.PathEscape(id), nil, &t)
 	return t, err
 }
 
-func (c *Client) CreateTracker(ctx context.Context, t Tracker) (Tracker, error) {
-	var out Tracker
+func (c *Client) CreateTracker(ctx context.Context, t analytics.Tracker) (analytics.Tracker, error) {
+	var out analytics.Tracker
 	err := c.do(ctx, http.MethodPost, "/api/trackers", t, &out)
 	return out, err
 }
 
-func (c *Client) UpdateTracker(ctx context.Context, t Tracker) (Tracker, error) {
-	var out Tracker
+func (c *Client) UpdateTracker(ctx context.Context, t analytics.Tracker) (analytics.Tracker, error) {
+	var out analytics.Tracker
 	err := c.do(ctx, http.MethodPut, "/api/trackers/"+url.PathEscape(t.ID), t, &out)
 	return out, err
 }

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/analytics"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
 )
 
 // AnalyticsQuery is a range of an app's stats: [From, To), in buckets of
@@ -29,7 +29,7 @@ type AnalyticsView struct {
 
 // serviceAnalytics checks the app's analytics are on and returns its
 // domain's client.
-func (c *Monitoring) serviceAnalytics(ctx context.Context, serviceID string) (domain.Service, *analytics.Client, AnalyticsState, error) {
+func (c *Monitoring) serviceAnalytics(ctx context.Context, serviceID string) (domain.Service, Analytics, AnalyticsState, error) {
 	svc, err := c.store.GetService(ctx, serviceID)
 	if err != nil {
 		return svc, nil, AnalyticsState{}, err
@@ -45,7 +45,7 @@ func (c *Monitoring) serviceAnalytics(ctx context.Context, serviceID string) (do
 }
 
 // analyticsOn returns the server's client while analytics are on.
-func (c *Monitoring) analyticsOn(ctx context.Context) (*analytics.Client, AnalyticsState, error) {
+func (c *Monitoring) analyticsOn(ctx context.Context) (Analytics, AnalyticsState, error) {
 	st := c.analyticsState(ctx)
 	if !st.Enabled {
 		return nil, st, fmt.Errorf("%w: analytics are off (Settings › Analytics)", domain.ErrInvalid)

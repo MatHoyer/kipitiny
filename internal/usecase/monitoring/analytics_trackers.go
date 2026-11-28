@@ -3,8 +3,8 @@ package monitoring
 import (
 	"context"
 
-	"github.com/kipit-labs/kipitiny/internal/analytics"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/analytics"
 )
 
 // withURL sets t's public URL on the analytics domain.
