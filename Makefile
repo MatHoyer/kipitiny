@@ -74,7 +74,9 @@ e2e: VERSION := dev
 e2e: build
 	@test -n "$$CI" || { ids=$$(docker ps -aq --filter label=kipitiny.managed) || \
 		{ echo "make e2e: can't reach the Docker daemon$${DOCKER_HOST:+ at $$DOCKER_HOST}"; exit 1; }; test -z "$$ids" || \
-		{ echo "make e2e: this Docker daemon runs kipitiny containers the tests would remove; set DOCKER_HOST to a throwaway one"; exit 1; }; }
+		{ echo "make e2e: this Docker daemon runs kipitiny containers the tests would remove; set DOCKER_HOST to a throwaway one"; exit 1; }; \
+		! docker volume inspect kipitiny-analytics >/dev/null 2>&1 || \
+		{ echo "make e2e: this Docker daemon has analytics data (volume kipitiny-analytics) the tests would remove; set DOCKER_HOST to a throwaway one"; exit 1; }; }
 	docker build -q -t kipitiny-e2e:dev -f web/e2e/Dockerfile bin
 	env -u DOCKER_HOST docker run --rm --ipc host -u $$(id -u):$$(id -g) -e HOME=/tmp -e CI \
 		$(if $(DOCKER_HOST),--network container:$$(docker info -f '{{.Name}}') -e DOCKER_HOST=tcp://127.0.0.1:2375,-v /var/run/docker.sock:/var/run/docker.sock --group-add $$(stat -c %g /var/run/docker.sock) --add-host host.docker.internal:host-gateway -e TRAEFIK_HOST=host.docker.internal) \
