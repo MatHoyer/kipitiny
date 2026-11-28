@@ -12,8 +12,8 @@ func TestDemoCatalogUpToDate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := os.ReadFile("../../../web/src/demo/catalog.json")
+	got, err := os.ReadFile("../../../../web/src/demo/catalog.json")
 	if err != nil || !bytes.Equal(got, want) {
-		t.Fatalf("web/src/demo/catalog.json is stale: run go generate ./internal/templates (%v)", err)
+		t.Fatalf("web/src/demo/catalog.json is stale: run go generate ./internal/usecase/templates (%v)", err)
 	}
 }

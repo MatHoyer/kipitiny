@@ -13,10 +13,10 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/anonymize"
-	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/anonymize"
+	"github.com/kipit-labs/kipitiny/internal/usecase/compose"
 )
 
 // previewParent is a project like most: an app on a domain using a

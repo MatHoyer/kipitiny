@@ -68,7 +68,7 @@ func TestReleaseNotes(t *testing.T) {
 
 // The repository's own file must parse, or the release fails.
 func TestRepositoryFile(t *testing.T) {
-	f, err := os.Open("../../UPGRADE.md")
+	f, err := os.Open("../../../UPGRADE.md")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,7 +7,7 @@ name: templates
 on:
   pull_request:
     paths:
-      - internal/templates/files/**
+      - internal/usecase/templates/files/**
       - internal/core/templates_docker_test.go
       - .github/workflows/templates.yml
   schedule:

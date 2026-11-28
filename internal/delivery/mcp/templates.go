@@ -12,9 +12,9 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/templates"
 	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
+	"github.com/kipit-labs/kipitiny/internal/usecase/templates"
 )
 
 type listTemplatesOut struct {

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/upgrade"
+	"github.com/kipit-labs/kipitiny/internal/usecase/upgrade"
 )
 
 func TestUpdateEvent(t *testing.T) {

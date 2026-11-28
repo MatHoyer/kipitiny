@@ -21,7 +21,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/docker"
-	"github.com/kipit-labs/kipitiny/internal/templates"
+	"github.com/kipit-labs/kipitiny/internal/usecase/templates"
 )
 
 // TestTemplatesDocker installs every template with sample inputs on a

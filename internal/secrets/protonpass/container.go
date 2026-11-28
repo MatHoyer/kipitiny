@@ -12,8 +12,8 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/secrets"
 	"github.com/kipit-labs/kipitiny/internal/progress"
-	"github.com/kipit-labs/kipitiny/internal/secrets"
 )
 
 const (

@@ -5,8 +5,8 @@ import catalog from "./catalog.json";
 type DemoService = Partial<Service> & Pick<Service, "name" | "image" | "kind"> & { domainInput?: string };
 
 /**
- * The manager's templates, generated from internal/templates/files by
- * `go generate ./internal/templates`: what the gallery lists, the logos they
+ * The manager's templates, generated from internal/usecase/templates/files by
+ * `go generate ./internal/usecase/templates`: what the gallery lists, the logos they
  * bring and the services an install creates.
  */
 export const demoTemplates = catalog.templates as (AppTemplate & { services: DemoService[] })[];

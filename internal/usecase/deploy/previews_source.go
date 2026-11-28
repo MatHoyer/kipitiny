@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/compose"
 )
 
 // previewSource is the parent as a compose file: its git file at branch

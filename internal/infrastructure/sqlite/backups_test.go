@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/anonymize"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/anonymize"
 )
 
 func TestBackups(t *testing.T) {

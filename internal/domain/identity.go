@@ -218,7 +218,7 @@ type SSOIdentity struct {
 }
 
 // SecretConnection is a password manager account the manager is logged
-// into. Kind is the provider (internal/secrets); Name is "" for the default
+// into. Kind is the provider (internal/domain/secrets); Name is "" for the default
 // connection of its kind, which the plain scheme references (pass://), else
 // the suffix of its scheme (pass+work://).
 type SecretConnection struct {

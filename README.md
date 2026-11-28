@@ -132,7 +132,7 @@ KIPITINY_VERSION=dev docker compose up -d   # run that build
 ```
 
 Docs are `site/docs/<slug>.md`: a new file is a new page. `go test
-./internal/compose/` checks that `site/docs/compose.md` documents every key the
+./internal/usecase/compose/` checks that `site/docs/compose.md` documents every key the
 parser reads.
 
 ## Releasing

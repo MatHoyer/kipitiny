@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/secrets"
+	"github.com/kipit-labs/kipitiny/internal/domain/secrets"
 )
 
 // secretListings caches what providers list for the env picker (names and

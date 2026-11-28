@@ -16,7 +16,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/registry"
 	"github.com/kipit-labs/kipitiny/internal/selfcontainer"
-	"github.com/kipit-labs/kipitiny/internal/upgrade"
+	"github.com/kipit-labs/kipitiny/internal/usecase/upgrade"
 )
 
 const (
