@@ -11,7 +11,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 )
 
 // EventType describes an event a channel can subscribe to.
@@ -78,12 +78,12 @@ func (c *Monitoring) Notifications(ctx context.Context) (NotificationsView, erro
 		return NotificationsView{}, err
 	}
 	for i := range chs {
-		chs[i] = maskedChannel(chs[i])
+		chs[i] = c.maskedChannel(chs[i])
 		if identity.IsMember(ctx) { // where alerts go is the admins'
 			chs[i].Config = map[string]string{}
 		}
 	}
-	kinds := notify.Kinds()
+	kinds := c.channels.Kinds()
 	if !identity.IsMember(ctx) {
 		if kinds, err = c.withEmailProviders(ctx, kinds); err != nil {
 			return NotificationsView{}, err
@@ -134,14 +134,14 @@ type ChannelInput struct {
 
 func (c *Monitoring) CreateChannel(ctx context.Context, in ChannelInput) (domain.NotificationChannel, error) {
 	ch := domain.NotificationChannel{Kind: in.Kind, Config: map[string]string{}}
-	if err := applyChannelInput(&ch, in); err != nil {
+	if err := c.applyChannelInput(&ch, in); err != nil {
 		return domain.NotificationChannel{}, err
 	}
 	if err := c.checkChannelProvider(ctx, ch); err != nil {
 		return domain.NotificationChannel{}, err
 	}
 	ch, err := c.store.CreateNotificationChannel(ctx, ch)
-	return maskedChannel(ch), err
+	return c.maskedChannel(ch), err
 }
 
 // UpdateChannel replaces a channel's settings; masked secrets are kept.
@@ -150,14 +150,14 @@ func (c *Monitoring) UpdateChannel(ctx context.Context, id string, in ChannelInp
 	if err != nil {
 		return domain.NotificationChannel{}, err
 	}
-	if err := applyChannelInput(&ch, in); err != nil {
+	if err := c.applyChannelInput(&ch, in); err != nil {
 		return domain.NotificationChannel{}, err
 	}
 	if err := c.checkChannelProvider(ctx, ch); err != nil {
 		return domain.NotificationChannel{}, err
 	}
 	ch, err = c.store.UpdateNotificationChannel(ctx, ch)
-	return maskedChannel(ch), err
+	return c.maskedChannel(ch), err
 }
 
 func (c *Monitoring) DeleteChannel(ctx context.Context, id string) error {
@@ -186,8 +186,8 @@ func (c *Monitoring) TestChannel(ctx context.Context, id string) error {
 
 // applyChannelInput validates in and copies it onto ch, keeping the stored
 // value of secrets sent back masked.
-func applyChannelInput(ch *domain.NotificationChannel, in ChannelInput) error {
-	kind, ok := notify.Lookup(ch.Kind)
+func (c *Monitoring) applyChannelInput(ch *domain.NotificationChannel, in ChannelInput) error {
+	kind, ok := c.channels.Lookup(ch.Kind)
 	if !ok {
 		return fmt.Errorf("%w: unknown notification kind %q", domain.ErrInvalid, ch.Kind)
 	}
@@ -205,7 +205,7 @@ func applyChannelInput(ch *domain.NotificationChannel, in ChannelInput) error {
 			cfg[f.Key] = v
 		}
 	}
-	if _, err := notify.New(ch.Kind, cfg, notify.Deps{}); err != nil {
+	if _, err := c.channels.New(ch.Kind, cfg, notify.Deps{}); err != nil {
 		return fmt.Errorf("%w: %s", domain.ErrInvalid, strings.TrimPrefix(err.Error(), notify.ErrConfig.Error()+": "))
 	}
 	events := []string{}
@@ -234,8 +234,8 @@ func (c *Monitoring) checkChannelProvider(ctx context.Context, ch domain.Notific
 	return nil
 }
 
-func maskedChannel(ch domain.NotificationChannel) domain.NotificationChannel {
-	kind, _ := notify.Lookup(ch.Kind)
+func (c *Monitoring) maskedChannel(ch domain.NotificationChannel) domain.NotificationChannel {
+	kind, _ := c.channels.Lookup(ch.Kind)
 	cfg := make(map[string]string, len(ch.Config))
 	for k, v := range ch.Config {
 		cfg[k] = v
@@ -283,7 +283,7 @@ func (c *Monitoring) Notify(e notify.Event, path, key string) {
 }
 
 func (c *Monitoring) send(ctx context.Context, ch domain.NotificationChannel, e notify.Event) error {
-	s, err := notify.New(ch.Kind, ch.Config, notify.Deps{HTTP: c.NotifyHTTP, Mail: c.SendMail, Push: c.pushToAdmins, Brand: c.mgr.BrandName(ctx)})
+	s, err := c.channels.New(ch.Kind, ch.Config, notify.Deps{HTTP: c.NotifyHTTP, Mail: c.SendMail, Push: c.pushToAdmins, Brand: c.mgr.BrandName(ctx)})
 	if err != nil {
 		return err
 	}

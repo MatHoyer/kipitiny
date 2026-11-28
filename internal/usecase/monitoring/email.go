@@ -13,8 +13,8 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/mail"
-	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/domain/mail"
+	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 )
 
 // Email goes out through SMTP servers the admin configures, its email
@@ -168,7 +168,7 @@ func (c *Monitoring) checkEmailProvider(ctx context.Context, p domain.EmailProvi
 	}
 	cctx, cancel := context.WithTimeout(ctx, mailTimeout)
 	defer cancel()
-	if err := mail.Check(cctx, cfg); err != nil {
+	if err := c.smtp.Check(cctx, cfg); err != nil {
 		return p, fmt.Errorf("%w: %s", domain.ErrInvalid, err.Error())
 	}
 	p.Name, p.Host, p.Port, p.Security = name, cfg.Host, cfg.Port, string(cfg.Security)
@@ -242,7 +242,7 @@ func (c *Monitoring) SendMail(ctx context.Context, provider string, to []*netmai
 	}
 	ctx, cancel := context.WithTimeout(ctx, mailTimeout)
 	defer cancel()
-	return mail.Send(ctx, mailConfig(p), m)
+	return c.smtp.Send(ctx, mailConfig(p), m)
 }
 
 // mailFooter says where an email comes from.

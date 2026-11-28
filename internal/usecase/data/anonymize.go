@@ -11,7 +11,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/domain/anonymize"
-	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 )
 
 // Previews seeded with anonymized data restore an anonymized copy of the

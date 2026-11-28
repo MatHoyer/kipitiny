@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/mail"
+	"github.com/kipit-labs/kipitiny/internal/domain/mail"
 )
 
 // InviteBody is the email carrying an invite link.

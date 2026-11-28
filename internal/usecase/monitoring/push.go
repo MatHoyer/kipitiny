@@ -12,7 +12,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 )
 
 // Push notifications reach the browsers admins turned them on in (Account),
@@ -147,7 +147,7 @@ func (c *Monitoring) pushToAdmins(ctx context.Context, m notify.PushMessage) err
 	var errs []error
 	sent := 0
 	for _, s := range subs {
-		err := notify.WebPush(ctx, hc, v, subject, notify.Subscription{Endpoint: s.Endpoint, P256dh: s.P256dh, Auth: s.Auth}, m)
+		err := c.channels.WebPush(ctx, hc, v, subject, notify.Subscription{Endpoint: s.Endpoint, P256dh: s.P256dh, Auth: s.Auth}, m)
 		switch {
 		case err == nil:
 			sent++

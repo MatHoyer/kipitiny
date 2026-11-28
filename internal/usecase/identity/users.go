@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/mail"
+	"github.com/kipit-labs/kipitiny/internal/domain/mail"
 )
 
 // Users and invites: admins manage who signs in and what members may do.

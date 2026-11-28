@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 )
 
 // RFC 8291 appendix A.
@@ -43,7 +45,7 @@ func TestEncryptPushVector(t *testing.T) {
 }
 
 func TestWebPush(t *testing.T) {
-	v, err := NewVAPID()
+	v, err := notify.NewVAPID()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,8 +61,8 @@ func TestWebPush(t *testing.T) {
 		w.WriteHeader(status)
 	}))
 	t.Cleanup(srv.Close)
-	sub := Subscription{Endpoint: srv.URL + "/push/abc", P256dh: b64.EncodeToString(ua.PublicKey().Bytes()), Auth: b64.EncodeToString([]byte("0123456789abcdef"))}
-	m := PushMessage{Title: "Deployment failed", Body: "shop/web", Level: Error}
+	sub := notify.Subscription{Endpoint: srv.URL + "/push/abc", P256dh: b64.EncodeToString(ua.PublicKey().Bytes()), Auth: b64.EncodeToString([]byte("0123456789abcdef"))}
+	m := notify.PushMessage{Title: "Deployment failed", Body: "shop/web", Level: notify.Error}
 	if err := WebPush(context.Background(), srv.Client(), v, "mailto:ops@example.com", sub, m); err != nil {
 		t.Fatal(err)
 	}
@@ -95,11 +97,11 @@ func TestWebPush(t *testing.T) {
 	}
 
 	status = http.StatusGone
-	if err := WebPush(context.Background(), srv.Client(), v, "mailto:ops@example.com", sub, m); !errors.Is(err, ErrPushGone) {
+	if err := WebPush(context.Background(), srv.Client(), v, "mailto:ops@example.com", sub, m); !errors.Is(err, notify.ErrPushGone) {
 		t.Fatalf("gone: %v", err)
 	}
 	status = http.StatusBadRequest
-	if err := WebPush(context.Background(), srv.Client(), v, "mailto:ops@example.com", sub, m); err == nil || errors.Is(err, ErrPushGone) {
+	if err := WebPush(context.Background(), srv.Client(), v, "mailto:ops@example.com", sub, m); err == nil || errors.Is(err, notify.ErrPushGone) {
 		t.Fatalf("bad request: %v", err)
 	}
 }
@@ -112,41 +114,21 @@ func TestPushKindJSON(t *testing.T) {
 }
 
 func TestPushSender(t *testing.T) {
-	var got PushMessage
-	s, err := New("push", nil, Deps{Push: func(_ context.Context, m PushMessage) error { got = m; return nil }})
+	var got notify.PushMessage
+	s, err := New("push", nil, notify.Deps{Push: func(_ context.Context, m notify.PushMessage) error { got = m; return nil }})
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := Event{Title: "Backup failed", Message: "disk full", Level: Error, URL: "https://m/x", Fields: []Field{{"Project", "shop"}}}
+	e := notify.Event{Title: "Backup failed", Message: "disk full", Level: notify.Error, URL: "https://m/x", Fields: []notify.Field{{Name: "Project", Value: "shop"}}}
 	if err := s.Send(context.Background(), e); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := json.Marshal(got); string(b) != `{"title":"Backup failed","body":"disk full\nProject: shop","url":"https://m/x","level":"error"}` {
 		t.Errorf("message %s", b)
 	}
-	s, _ = New("push", nil, Deps{})
+	s, _ = New("push", nil, notify.Deps{})
 	if err := s.Send(context.Background(), e); err == nil {
 		t.Error("sent without a transport")
-	}
-}
-
-func TestValidPushEndpoint(t *testing.T) {
-	for ep, want := range map[string]bool{
-		"https://fcm.googleapis.com/fcm/send/abc":                true,
-		"https://updates.push.services.mozilla.com/wpush/v2/abc": true,
-		"https://web.push.apple.com/QGx":                         true,
-		"https://wns2-par02p.notify.windows.com/w/?token=abc":    true,
-		"http://fcm.googleapis.com/fcm/send/abc":                 false,
-		"https://fcm.googleapis.com:8443/fcm/send/abc":           false,
-		"https://evil.com/fcm.googleapis.com":                    false,
-		"https://push.apple.com.evil.com/x":                      false,
-		"https://evilpush.apple.com/x":                           false,
-		"https://user@fcm.googleapis.com/x":                      false,
-		"https://169.254.169.254/latest/meta-data":               false,
-	} {
-		if ValidPushEndpoint(ep) != want {
-			t.Errorf("%s: want %v", ep, want)
-		}
 	}
 }
 

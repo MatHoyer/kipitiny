@@ -11,12 +11,14 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 )
 
-var discordKind = Kind{
+var discordKind = notify.Kind{
 	Name:  "discord",
 	Label: "Discord",
-	Fields: []ConfigField{{
+	Fields: []notify.ConfigField{{
 		Key:         "webhookUrl",
 		Label:       "Webhook URL",
 		Placeholder: "https://discord.com/api/webhooks/…",
@@ -35,12 +37,12 @@ var discordHosts = map[string]bool{
 	"canary.discord.com": true,
 }
 
-func newDiscord(cfg map[string]string, d Deps) (Sender, error) {
+func newDiscord(cfg map[string]string, d notify.Deps) (notify.Sender, error) {
 	u, err := url.Parse(strings.TrimSpace(cfg["webhookUrl"]))
 	if err != nil || u.Scheme != "https" || !discordHosts[u.Hostname()] || !strings.HasPrefix(u.Path, "/api/webhooks/") {
-		return nil, fmt.Errorf("%w: not a Discord webhook URL (https://discord.com/api/webhooks/…)", ErrConfig)
+		return nil, fmt.Errorf("%w: not a Discord webhook URL (https://discord.com/api/webhooks/…)", notify.ErrConfig)
 	}
-	return &discord{url: u.String(), hc: d.HTTP, brand: d.brand()}, nil
+	return &discord{url: u.String(), hc: d.HTTP, brand: brand(d)}, nil
 }
 
 type discord struct {
@@ -49,11 +51,11 @@ type discord struct {
 	brand string
 }
 
-var discordColors = map[Level]int{
-	Info:    0x5865f2,
-	Success: 0x22c55e,
-	Warning: 0xf59e0b,
-	Error:   0xef4444,
+var discordColors = map[notify.Level]int{
+	notify.Info:    0x5865f2,
+	notify.Success: 0x22c55e,
+	notify.Warning: 0xf59e0b,
+	notify.Error:   0xef4444,
 }
 
 type discordMessage struct {
@@ -82,7 +84,7 @@ type discordFooter struct {
 }
 
 // discordPayload respects Discord's embed limits.
-func discordPayload(e Event, brand string) discordMessage {
+func discordPayload(e notify.Event, brand string) discordMessage {
 	em := discordEmbed{
 		Title:       truncate(e.Title, 256),
 		Description: truncate(e.Message, 4096),
@@ -103,7 +105,7 @@ func discordPayload(e Event, brand string) discordMessage {
 	return discordMessage{Username: brand, Embeds: []discordEmbed{em}}
 }
 
-func (d *discord) Send(ctx context.Context, e Event) error {
+func (d *discord) Send(ctx context.Context, e notify.Event) error {
 	body, err := json.Marshal(discordPayload(e, d.brand))
 	if err != nil {
 		return err

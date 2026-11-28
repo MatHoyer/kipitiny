@@ -11,6 +11,8 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/mail"
+	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 )
 
 // Manager is what monitoring uses from the rest of the manager.
@@ -43,12 +45,34 @@ type Manager interface {
 	KickDNS()
 }
 
+// SMTP is the admin's mail server (infrastructure/smtp).
+type SMTP interface {
+	// Check connects and signs in without sending anything.
+	Check(ctx context.Context, cfg mail.Config) error
+	// Send delivers m; ctx bounds the whole exchange.
+	Send(ctx context.Context, cfg mail.Config, m mail.Message) error
+}
+
+// Channels are the notification delivery methods and web push
+// (infrastructure/notify).
+type Channels interface {
+	Kinds() []notify.Kind
+	Lookup(name string) (notify.Kind, bool)
+	// New returns the sender of a channel, checking its configuration.
+	New(kind string, cfg map[string]string, d notify.Deps) (notify.Sender, error)
+	// WebPush delivers m to one browser.
+	WebPush(ctx context.Context, hc *http.Client, v notify.VAPID, subject string, s notify.Subscription, m notify.PushMessage) error
+}
+
 type Monitoring struct {
 	// cfg is the manager's configuration, shared with core.
 	cfg   *config.Config
 	store domain.Store
-	mgr   Manager
-	log   *slog.Logger
+	// smtp sends email, channels the notifications.
+	smtp     SMTP
+	channels Channels
+	mgr      Manager
+	log      *slog.Logger
 	// bg ends when the manager stops: the uptime and error loops run under it.
 	bg context.Context
 
@@ -73,6 +97,6 @@ type Monitoring struct {
 }
 
 // New builds the monitoring use cases; bg is the manager's background context.
-func New(bg context.Context, cfg *config.Config, store domain.Store, mgr Manager, log *slog.Logger) *Monitoring {
-	return &Monitoring{cfg: cfg, store: store, mgr: mgr, log: log, bg: bg, errorsSeq: -1, spiked: map[string]bool{}}
+func New(bg context.Context, cfg *config.Config, store domain.Store, smtp SMTP, channels Channels, mgr Manager, log *slog.Logger) *Monitoring {
+	return &Monitoring{cfg: cfg, store: store, smtp: smtp, channels: channels, mgr: mgr, log: log, bg: bg, errorsSeq: -1, spiked: map[string]bool{}}
 }

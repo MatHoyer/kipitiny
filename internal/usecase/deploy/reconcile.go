@@ -11,7 +11,7 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )

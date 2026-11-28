@@ -11,12 +11,12 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/mail"
-	"github.com/kipit-labs/kipitiny/internal/mail/mailtest"
+	"github.com/kipit-labs/kipitiny/internal/domain/mail"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/smtp/smtptest"
 )
 
 // localProvider is an email provider sending to a fake server.
-func localProvider(name string, srv *mailtest.Server) EmailProviderInput {
+func localProvider(name string, srv *smtptest.Server) EmailProviderInput {
 	return EmailProviderInput{Name: name, Config: mail.Config{Host: "127.0.0.1", Port: srv.Port, Security: mail.None, From: "ops@example.com"}}
 }
 
@@ -27,7 +27,7 @@ func TestEmailProviders(t *testing.T) {
 		t.Fatalf("default = %+v, %v", v, err)
 	}
 
-	a, b := mailtest.NewServer(t), mailtest.NewServer(t)
+	a, b := smtptest.NewServer(t), smtptest.NewServer(t)
 	plain := localProvider("relay", a)
 	plain.Username, plain.Password = "u", "p"
 	if _, err := c.CreateEmailProvider(ctx, plain); !errors.Is(err, domain.ErrInvalid) {
@@ -113,7 +113,7 @@ func TestEmailChannel(t *testing.T) {
 		t.Errorf("unknown provider: %v", err)
 	}
 
-	a, b := mailtest.NewServer(t), mailtest.NewServer(t)
+	a, b := smtptest.NewServer(t), smtptest.NewServer(t)
 	if _, err := c.CreateEmailProvider(ctx, localProvider("invites", a)); err != nil {
 		t.Fatal(err)
 	}

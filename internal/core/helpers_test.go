@@ -11,10 +11,10 @@ import (
 	"testing"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/domain/mail"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/docker"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/smtp/smtptest"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
-	"github.com/kipit-labs/kipitiny/internal/mail"
-	"github.com/kipit-labs/kipitiny/internal/mail/mailtest"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
 
@@ -40,7 +40,7 @@ func (r redirect) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 // localProvider is an email provider sending to a fake server.
-func localProvider(name string, srv *mailtest.Server) monitoring.EmailProviderInput {
+func localProvider(name string, srv *smtptest.Server) monitoring.EmailProviderInput {
 	return monitoring.EmailProviderInput{Name: name, Config: mail.Config{Host: "127.0.0.1", Port: srv.Port, Security: mail.None, From: "ops@example.com"}}
 }
 

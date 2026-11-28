@@ -11,11 +11,11 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/storage"
-	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )

@@ -12,7 +12,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 )
 
 // RestoreBackup restores a backup into a service (the backup's own when

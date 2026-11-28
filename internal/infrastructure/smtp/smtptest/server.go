@@ -1,5 +1,5 @@
-// Package mailtest runs a fake SMTP server for tests.
-package mailtest
+// Package smtptest runs a fake SMTP server for tests.
+package smtptest
 
 import (
 	"bufio"

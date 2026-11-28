@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 )
 
 // Web Push (RFC 8030): the payload is encrypted for the browser (RFC 8291),
@@ -31,33 +33,22 @@ import (
 // only its size and timing, and signed with the manager's VAPID key
 // (RFC 8292).
 
-var pushKind = Kind{
+var pushKind = notify.Kind{
 	Name:   "push",
 	Label:  "Push",
-	Fields: []ConfigField{}, // nothing to set: it goes to the admins' browsers
+	Fields: []notify.ConfigField{}, // nothing to set: it goes to the admins' browsers
 	New:    newPush,
 }
 
-// PushMessage is what a push notification shows; core delivers it to every
-// admin's browsers through Deps.Push.
-type PushMessage struct {
-	Title string `json:"title"`
-	Body  string `json:"body,omitempty"`
-	URL   string `json:"url,omitempty"`
-	Level Level  `json:"level"`
-	// Icon is the manager's logo; the browser shows kipitiny's without one.
-	Icon string `json:"icon,omitempty"`
-}
-
-func newPush(_ map[string]string, d Deps) (Sender, error) {
+func newPush(_ map[string]string, d notify.Deps) (notify.Sender, error) {
 	return &push{send: d.Push}, nil
 }
 
 type push struct {
-	send func(ctx context.Context, m PushMessage) error
+	send func(ctx context.Context, m notify.PushMessage) error
 }
 
-func (p *push) Send(ctx context.Context, e Event) error {
+func (p *push) Send(ctx context.Context, e notify.Event) error {
 	if p.send == nil {
 		return errors.New("push notifications are not available")
 	}
@@ -66,56 +57,7 @@ func (p *push) Send(ctx context.Context, e Event) error {
 		body += "\n" + f.Name + ": " + f.Value
 	}
 	// a push message holds about 4 KB once encrypted
-	return p.send(ctx, PushMessage{Title: truncate(e.Title, 200), Body: truncate(strings.TrimSpace(body), 1000), URL: e.URL, Level: e.Level})
-}
-
-// Push service hosts browsers subscribe with; anything else is refused so a
-// subscription can't make the manager call arbitrary URLs.
-var pushHosts = []string{
-	"fcm.googleapis.com",                // Chrome, Brave, Opera, Samsung
-	"jmt17.google.com",                  // Chromium builds
-	"updates.push.services.mozilla.com", // Firefox
-	".push.apple.com",                   // Safari
-	".notify.windows.com",               // Edge
-}
-
-// ValidPushEndpoint tells whether a browser's endpoint is a known push
-// service.
-func ValidPushEndpoint(endpoint string) bool {
-	u, err := url.Parse(endpoint)
-	if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" {
-		return false
-	}
-	host := strings.ToLower(u.Hostname())
-	for _, h := range pushHosts {
-		if host == h || strings.HasPrefix(h, ".") && strings.HasSuffix(host, h) {
-			return true
-		}
-	}
-	return false
-}
-
-// VAPID is the manager's key pair push services identify it by, base64url:
-// the public key is the browser's applicationServerKey.
-type VAPID struct {
-	PublicKey  string `json:"publicKey"`
-	PrivateKey string `json:"privateKey"`
-}
-
-func NewVAPID() (VAPID, error) {
-	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return VAPID{}, err
-	}
-	priv, err := k.Bytes()
-	if err != nil {
-		return VAPID{}, err
-	}
-	pub, err := k.PublicKey.Bytes()
-	if err != nil {
-		return VAPID{}, err
-	}
-	return VAPID{PublicKey: b64.EncodeToString(pub), PrivateKey: b64.EncodeToString(priv)}, nil
+	return p.send(ctx, notify.PushMessage{Title: truncate(e.Title, 200), Body: truncate(strings.TrimSpace(body), 1000), URL: e.URL, Level: e.Level})
 }
 
 var b64 = base64.RawURLEncoding
@@ -125,19 +67,9 @@ func decode64(s string) ([]byte, error) {
 	return b64.DecodeString(strings.TrimRight(s, "="))
 }
 
-// Subscription is where one browser receives pushes.
-type Subscription struct {
-	Endpoint string
-	P256dh   string
-	Auth     string
-}
-
-// ErrPushGone means the browser unsubscribed: forget the subscription.
-var ErrPushGone = errors.New("push subscription expired")
-
 // WebPush delivers m to one browser. subject is a mailto: or https: URL
 // push services may contact the sender at.
-func WebPush(ctx context.Context, hc *http.Client, v VAPID, subject string, s Subscription, m PushMessage) error {
+func WebPush(ctx context.Context, hc *http.Client, v notify.VAPID, subject string, s notify.Subscription, m notify.PushMessage) error {
 	payload, err := json.Marshal(m)
 	if err != nil {
 		return err
@@ -174,7 +106,7 @@ func WebPush(ctx context.Context, hc *http.Client, v VAPID, subject string, s Su
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("TTL", strconv.Itoa(24*60*60))
 	urgency := "normal"
-	if m.Level == Error || m.Level == Warning {
+	if m.Level == notify.Error || m.Level == notify.Warning {
 		urgency = "high"
 	}
 	req.Header.Set("Urgency", urgency)
@@ -185,7 +117,7 @@ func WebPush(ctx context.Context, hc *http.Client, v VAPID, subject string, s Su
 	defer resp.Body.Close()
 	switch {
 	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone:
-		return ErrPushGone
+		return notify.ErrPushGone
 	case resp.StatusCode >= 300:
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return fmt.Errorf("push service answered %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
@@ -244,7 +176,7 @@ func encryptPush(asPriv *ecdh.PrivateKey, salt, uaPub, auth, plaintext []byte) (
 }
 
 // vapidHeader signs a VAPID token for the endpoint's push service.
-func vapidHeader(v VAPID, subject, endpoint string, now time.Time) (string, error) {
+func vapidHeader(v notify.VAPID, subject, endpoint string, now time.Time) (string, error) {
 	raw, err := decode64(v.PrivateKey)
 	if err != nil {
 		return "", fmt.Errorf("VAPID key: %w", err)
