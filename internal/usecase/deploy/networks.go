@@ -108,7 +108,7 @@ func (c *Deployer) CreateNetwork(ctx context.Context, in NetworkInput) (NetworkV
 	}
 	v := NetworkView{Network: n, DockerName: domain.CustomNetwork(n.ID), Services: []NetworkMember{}}
 	if err := c.mgr.DockerFor(n.ServerID).EnsureNetwork(ctx, v.DockerName); err != nil {
-		return v, fmt.Errorf("%w: network saved but not created on the server yet (retried in the background): %v", ErrInvalid, err)
+		return v, fmt.Errorf("%w: network saved but not created on the server yet (retried in the background): %w", ErrInvalid, err)
 	}
 	return v, nil
 }
@@ -148,7 +148,7 @@ func (c *Deployer) DeleteNetwork(ctx context.Context, id string) error {
 	}
 	// Containers kipitiny doesn't manage keep the network in use.
 	if err := dk.RemoveNetwork(ctx, name); err != nil {
-		return fmt.Errorf("%w: services detached, but the server kept the network (other containers on it?): %v", ErrInvalid, errors.Join(append(errs, err)...))
+		return fmt.Errorf("%w: services detached, but the server kept the network (other containers on it?): %w", ErrInvalid, errors.Join(append(errs, err)...))
 	}
 	if err := c.store.DeleteNetwork(ctx, id); err != nil {
 		return err
@@ -197,7 +197,7 @@ func (c *Deployer) SetServiceNetworks(ctx context.Context, serviceID string, net
 		err = c.syncNetworks(ctx, project, svc, cts, false)
 	}
 	if err != nil {
-		return ServiceView{}, fmt.Errorf("%w: networks saved, but not applied to the containers yet (retried in the background): %v", ErrInvalid, err)
+		return ServiceView{}, fmt.Errorf("%w: networks saved, but not applied to the containers yet (retried in the background): %w", ErrInvalid, err)
 	}
 	return c.view(ctx, svc)
 }

@@ -23,14 +23,14 @@ func TestImageRegistry(t *testing.T) {
 			t.Errorf("imageRegistry(%q) = %q, want %q", image, got, want)
 		}
 	}
-	for in, want := range map[string]string{
-		"https://index.docker.io/v1/": "docker.io",
-		"hub.docker.com":              "docker.io",
-		" GHCR.io/ ":                  "ghcr.io",
-		"https://registry.gitlab.com": "registry.gitlab.com",
+	for _, tc := range []struct{ in, want string }{
+		{"https://index.docker.io/v1/", "docker.io"},
+		{"hub.docker.com", "docker.io"},
+		{" GHCR.io/ ", "ghcr.io"},
+		{"https://registry.gitlab.com", "registry.gitlab.com"},
 	} {
-		if got := normalizeRegistryHost(in); got != want {
-			t.Errorf("normalizeRegistryHost(%q) = %q, want %q", in, got, want)
+		if got := normalizeRegistryHost(tc.in); got != tc.want {
+			t.Errorf("normalizeRegistryHost(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
 }
@@ -52,12 +52,12 @@ func TestRegistryAuth(t *testing.T) {
 
 	var auth struct{ Username, Password, ServerAddress string }
 	raw, _ := base64.URLEncoding.DecodeString(c.RegistryAuth(ctx, "ghcr.io/org/app:v1"))
-	if json.Unmarshal(raw, &auth); auth.Username != "me" || auth.Password != "ghp_x" || auth.ServerAddress != "ghcr.io" {
-		t.Fatalf("ghcr auth = %+v", auth)
+	if err := json.Unmarshal(raw, &auth); err != nil || auth.Username != "me" || auth.Password != "ghp_x" || auth.ServerAddress != "ghcr.io" {
+		t.Fatalf("ghcr auth = %+v, %v", auth, err)
 	}
 	raw, _ = base64.URLEncoding.DecodeString(c.RegistryAuth(ctx, "postgres:17"))
-	if json.Unmarshal(raw, &auth); auth.Username != "hub" || auth.ServerAddress != "https://index.docker.io/v1/" {
-		t.Fatalf("hub auth = %+v", auth)
+	if err := json.Unmarshal(raw, &auth); err != nil || auth.Username != "hub" || auth.ServerAddress != "https://index.docker.io/v1/" {
+		t.Fatalf("hub auth = %+v, %v", auth, err)
 	}
 	if c.RegistryAuth(ctx, "quay.io/org/app") != "" {
 		t.Fatal("credential sent to another registry")

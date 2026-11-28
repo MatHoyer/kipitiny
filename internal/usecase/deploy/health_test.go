@@ -63,7 +63,7 @@ func TestHealthOf(t *testing.T) {
 func TestHealthGrace(t *testing.T) {
 	t0 := time.Unix(1700000000, 0)
 	h := &svcHealth{}
-	at := func(d time.Duration) time.Time { return t0.Add(d) }
+	at := t0.Add
 	// A blip shorter than the grace period is not reported.
 	if down, up := h.observe(false, "x", at(0)); down || up {
 		t.Fatal("reported at once")
@@ -94,7 +94,11 @@ func TestTrackHealthNotifies(t *testing.T) {
 		var m struct {
 			Embeds []struct{ Title, Description string }
 		}
-		json.NewDecoder(r.Body).Decode(&m)
+		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		mu.Lock()
 		sent = append(sent, m.Embeds[0].Title+": "+m.Embeds[0].Description)
 		mu.Unlock()
