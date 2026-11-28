@@ -62,8 +62,10 @@ type Data struct {
 	crypt domain.Encryption
 	// cron reads and runs the backup schedules.
 	cron domain.Cron
-	mgr  Manager
-	log  *slog.Logger
+	// openStorage opens a backup target's objects.
+	openStorage func(domain.BackupTarget) (Storage, error)
+	mgr         Manager
+	log         *slog.Logger
 	// bg ends when the manager stops: scheduled backups run under it.
 	bg context.Context
 	// steps is where backups, restores and restore tests report their step,
@@ -79,6 +81,6 @@ type Data struct {
 }
 
 // New builds the data use cases; bg is the manager's background context.
-func New(bg context.Context, cfg *config.Config, store domain.Store, crypt domain.Encryption, cron domain.Cron, steps *progress.Steps, mgr Manager, log *slog.Logger) *Data {
-	return &Data{cfg: cfg, store: store, crypt: crypt, cron: cron, mgr: mgr, log: log, bg: bg, steps: steps, verifySem: make(chan struct{}, 1)}
+func New(bg context.Context, cfg *config.Config, store domain.Store, crypt domain.Encryption, cron domain.Cron, openStorage func(domain.BackupTarget) (Storage, error), steps *progress.Steps, mgr Manager, log *slog.Logger) *Data {
+	return &Data{cfg: cfg, store: store, crypt: crypt, cron: cron, openStorage: openStorage, mgr: mgr, log: log, bg: bg, steps: steps, verifySem: make(chan struct{}, 1)}
 }

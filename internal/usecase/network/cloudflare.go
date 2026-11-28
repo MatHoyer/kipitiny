@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 )
 
@@ -167,7 +167,7 @@ func (c *Network) CloudflareStatus(ctx context.Context) CloudflareView {
 // ConnectCloudflare checks and saves an API token, then syncs DNS.
 func (c *Network) ConnectCloudflare(ctx context.Context, token string) (CloudflareView, error) {
 	token = strings.TrimSpace(token)
-	zones, err := cloudflare.New(token).Zones(ctx)
+	zones, err := c.newDNS(token).Zones(ctx)
 	if err != nil {
 		return CloudflareView{}, fmt.Errorf("%w: %s", domain.ErrInvalid, err.Error())
 	}
@@ -184,7 +184,7 @@ func (c *Network) ConnectCloudflare(ctx context.Context, token string) (Cloudfla
 	c.saveZoneNames(ctx, zones)
 	// The token's zones become domains: no need to type them in. Proxied
 	// only where the SSL/TLS mode allows it, else sites loop on HTTPS.
-	cf := cloudflare.New(token)
+	cf := c.newDNS(token)
 	for _, z := range zones {
 		mode, _ := cf.SSLMode(ctx, z.ID)
 		d := domain.Domain{Name: z.Name, Proxied: mode == "full" || mode == "strict"}
@@ -206,7 +206,7 @@ func (c *Network) TestCloudflare(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	progress.Report(ctx, "zones")
-	zones, err := cloudflare.New(token).Zones(ctx)
+	zones, err := c.newDNS(token).Zones(ctx)
 	if err != nil {
 		return fmt.Errorf("%w: %s", domain.ErrInvalid, err.Error())
 	}

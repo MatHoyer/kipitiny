@@ -2,12 +2,13 @@ package cloudflare
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	cf "github.com/kipit-labs/kipitiny/internal/domain/cloudflare"
 )
 
 func fake(t *testing.T, h http.HandlerFunc) *Client {
@@ -41,13 +42,13 @@ func TestAPIError(t *testing.T) {
 	c := fake(t, nil)
 	c.token = "wrong"
 	_, err := c.Zones(context.Background())
-	if !Forbidden(err) || err.Error() != "cloudflare: Authentication error (HTTP 401)" {
+	if !cf.Forbidden(err) || err.Error() != "cloudflare: Authentication error (HTTP 401)" {
 		t.Errorf("err = %v", err)
 	}
 }
 
 func TestCreateRecordMarksIt(t *testing.T) {
-	var got Record
+	var got cf.Record
 	c := fake(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/zones/z1/dns_records" {
 			t.Errorf("%s %s", r.Method, r.URL.Path)
@@ -57,7 +58,7 @@ func TestCreateRecordMarksIt(t *testing.T) {
 		}
 		fmt.Fprint(w, `{"success":true,"result":{}}`)
 	})
-	if err := c.CreateRecord(context.Background(), "z1", Record{Type: "A", Name: "shop.example.com", Content: "203.0.113.7", TTL: 1}); err != nil {
+	if err := c.CreateRecord(context.Background(), "z1", cf.Record{Type: "A", Name: "shop.example.com", Content: "203.0.113.7", TTL: 1}); err != nil {
 		t.Fatal(err)
 	}
 	if !got.Managed() || got.Content != "203.0.113.7" {
@@ -77,7 +78,7 @@ func TestTunnelIngressKeepsUnknownFields(t *testing.T) {
 		}
 		fmt.Fprint(w, `{"success":true,"result":{}}`)
 	})
-	tun := Tunnel{AccountID: "acc", ID: "tid"}
+	tun := cf.Tunnel{AccountID: "acc", ID: "tid"}
 	rules, cfg, err := c.TunnelIngress(context.Background(), tun)
 	if err != nil || len(rules) != 2 || rules[0].Hostname() != "a.example.com" || rules[1].Service() != "http_status:404" {
 		t.Fatalf("rules = %+v, %v", rules, err)
@@ -87,31 +88,5 @@ func TestTunnelIngressKeepsUnknownFields(t *testing.T) {
 	}
 	if put["config"]["warp-routing"] == nil || len(put["config"]["ingress"].([]any)) != 1 {
 		t.Errorf("put = %+v", put)
-	}
-}
-
-func TestParseTunnelToken(t *testing.T) {
-	tok := base64.StdEncoding.EncodeToString([]byte(`{"a":"acc","t":"6ff42ae2-765d-4adf-8112-31c55c1551ef","s":"secret"}`))
-	tun, err := ParseTunnelToken(tok)
-	if err != nil || tun.AccountID != "acc" || tun.Target() != "6ff42ae2-765d-4adf-8112-31c55c1551ef.cfargotunnel.com" {
-		t.Errorf("tunnel = %+v, %v", tun, err)
-	}
-	if _, err := ParseTunnelToken("fake"); err == nil {
-		t.Error("expected an error for a bad token")
-	}
-}
-
-func TestZoneFor(t *testing.T) {
-	zones := []Zone{{ID: "1", Name: "example.com"}, {ID: "2", Name: "eu.example.com"}, {ID: "3", Name: "other.org"}}
-	for name, want := range map[string]string{
-		"example.com":         "1",
-		"shop.example.com":    "1",
-		"shop.eu.example.com": "2",
-		"notexample.com":      "",
-	} {
-		z, _ := ZoneFor(zones, name)
-		if z.ID != want {
-			t.Errorf("ZoneFor(%q) = %q, want %q", name, z.ID, want)
-		}
 	}
 }

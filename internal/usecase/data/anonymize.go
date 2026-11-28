@@ -12,7 +12,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/domain/anonymize"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/storage"
 )
 
 // Previews seeded with anonymized data restore an anonymized copy of the
@@ -165,7 +164,7 @@ func anonymizedKey(src domain.Backup, hash string, target domain.BackupTarget) s
 // database MongoDB rules apply to). Once it succeeded,
 // the service's older copies go; a failed one stays to tell why seeding is
 // refused, and the previous good copy keeps seeding previews.
-func (c *Data) runAnonymize(src, cp domain.Backup, rules anonymize.Rules, salt, mongoDB string, st storage.Storage, target domain.BackupTarget) {
+func (c *Data) runAnonymize(src, cp domain.Backup, rules anonymize.Rules, salt, mongoDB string, st Storage, target domain.BackupTarget) {
 	defer c.steps.Done(backupKey(cp.ID))
 	// One throwaway server at a time, restore tests included.
 	select {
@@ -234,7 +233,7 @@ func (c *Data) pruneAnonymized(ctx context.Context, cp domain.Backup) {
 // anonymizePostgres restores src into a throwaway server, applies the
 // rules in one transaction and dumps the result as cp.
 func (c *Data) anonymizePostgres(ctx context.Context, src domain.Backup, cp *domain.Backup, rules anonymize.Rules, salt string,
-	st storage.Storage, target domain.BackupTarget) error {
+	st Storage, target domain.BackupTarget) error {
 
 	script, err := anonymize.Postgres(rules, salt)
 	if err != nil {
@@ -282,7 +281,7 @@ func (c *Data) anonymizePostgres(ctx context.Context, src domain.Backup, cp *dom
 // anonymizeDump loads a MySQL, MariaDB or MongoDB dump into a throwaway
 // server, applies the rules and dumps the result as cp.
 func (c *Data) anonymizeDump(ctx context.Context, src domain.Backup, cp *domain.Backup, rules anonymize.Rules, salt, mongoDB string,
-	st storage.Storage, target domain.BackupTarget) error {
+	st Storage, target domain.BackupTarget) error {
 
 	key := backupKey(cp.ID)
 	svc, dk, id, err := c.scratchDump(ctx, src, "kipitiny-anonymize-"+strings.ToLower(cp.ID), func(s string) { c.steps.Set(key, s) })

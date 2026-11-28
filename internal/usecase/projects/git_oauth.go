@@ -9,10 +9,8 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"golang.org/x/oauth2"
-
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/gitprovider"
+	"github.com/kipit-labs/kipitiny/internal/domain/gitprovider"
 	"github.com/kipit-labs/kipitiny/internal/ids"
 )
 
@@ -106,7 +104,7 @@ func (c *Projects) FinishGitHubApp(ctx context.Context, code, state string) (str
 	if err != nil {
 		return "", err
 	}
-	app, err := gitprovider.ConvertManifest(ctx, flow.baseURL, code)
+	app, err := c.forges.ConvertManifest(ctx, flow.baseURL, code)
 	if err != nil {
 		return "", fmt.Errorf("%w: %s", ErrInvalid, err.Error())
 	}
@@ -149,7 +147,7 @@ func (c *Projects) GitHubAppInstalled(ctx context.Context, installationID int64,
 		return "", err
 	}
 	// Asked as the app: an installation of another app is refused.
-	account, err := gitprovider.InstallationAccount(ctx, p, installationID)
+	account, err := c.forges.InstallationAccount(ctx, p, installationID)
 	if err != nil {
 		return "", fmt.Errorf("%w: %s", ErrInvalid, err.Error())
 	}
@@ -179,7 +177,7 @@ func (c *Projects) AuthorizeGitProvider(ctx context.Context, id, managerURL stri
 		return "", err
 	}
 	state := c.putGitFlow(gitFlow{step: gitStepOAuth, providerID: p.ID})
-	return gitprovider.OAuthConfig(p).AuthCodeURL(state), nil
+	return c.forges.AuthCodeURL(p, state), nil
 }
 
 // FinishGitProviderOAuth exchanges the code GitLab or Gitea redirected
@@ -195,11 +193,11 @@ func (c *Projects) FinishGitProviderOAuth(ctx context.Context, code, state strin
 	if err != nil {
 		return "", err
 	}
-	tok, err := gitprovider.OAuthConfig(p).Exchange(ctx, code)
+	tok, err := c.forges.Exchange(ctx, p, code)
 	if err != nil {
 		return "", fmt.Errorf("%w: %s refused the authorization: %s", ErrInvalid, p.BaseURL, err.Error())
 	}
-	account, err := gitprovider.Account(ctx, p.Kind, p.BaseURL, tok.AccessToken)
+	account, err := c.forges.Account(ctx, p.Kind, p.BaseURL, tok.AccessToken)
 	if err != nil {
 		return "", fmt.Errorf("%w: %s", ErrInvalid, err.Error())
 	}
@@ -209,7 +207,7 @@ func (c *Projects) FinishGitProviderOAuth(ctx context.Context, code, state strin
 	return p.ID, err
 }
 
-func setOAuthToken(p *domain.GitProvider, tok *oauth2.Token) {
+func setOAuthToken(p *domain.GitProvider, tok gitprovider.Token) {
 	p.AccessToken = tok.AccessToken
 	if tok.RefreshToken != "" {
 		p.RefreshToken = tok.RefreshToken

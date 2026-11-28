@@ -63,6 +63,12 @@ type BackupTarget struct {
 
 func (t BackupTarget) Encrypted() bool { return t.AgeRecipient != "" }
 
+// StorageObject is an object a backup target holds.
+type StorageObject struct {
+	Key  string
+	Size int64
+}
+
 // OpStatus is the lifecycle of a background operation (backup, restore).
 type OpStatus string
 

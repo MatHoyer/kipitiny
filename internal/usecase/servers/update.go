@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/registry"
 	"github.com/kipit-labs/kipitiny/internal/usecase/upgrade"
 )
 
@@ -148,11 +146,11 @@ func (c *Servers) checkUpdate(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	c.inspectPin(ctx)
-	tags, err := registry.Tags(ctx, http.DefaultClient, c.cfg.Update.Image)
+	tags, err := c.registry.Tags(ctx, c.cfg.Update.Image)
 	var notices []upgrade.Notice
 	if latest := latestVersion(tags); err == nil && newer(latest, c.cfg.Version) {
 		// Without them the update is still offered: they are a courtesy.
-		labels, lerr := registry.Labels(ctx, http.DefaultClient, c.cfg.Update.Image, latest)
+		labels, lerr := c.registry.Labels(ctx, c.cfg.Update.Image, latest)
 		if lerr != nil {
 			c.log.Warn("cannot read the new version's upgrade notices", "version", latest, "err", lerr)
 		}

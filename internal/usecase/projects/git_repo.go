@@ -14,7 +14,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/gitprovider"
+	"github.com/kipit-labs/kipitiny/internal/domain/gitprovider"
 )
 
 // gitRemote is how to reach the repository: its provider's token (none for

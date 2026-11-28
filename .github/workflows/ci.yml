@@ -15,7 +15,7 @@ jobs:
   go:
     runs-on: ubuntu-latest
     services:
-      # S3-compatible server for internal/storage's TestS3.
+      # S3-compatible server for internal/infrastructure/storage's TestS3.
       s3:
         image: rustfs/rustfs
         ports: ["19000:9000"]

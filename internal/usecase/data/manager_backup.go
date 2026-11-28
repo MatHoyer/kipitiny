@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/storage"
 )
 
 // managerLockID serializes manager backups like a service.
@@ -85,7 +84,7 @@ func (c *Data) startManagerBackup(ctx context.Context, targetID, scheduleID stri
 	return b, nil
 }
 
-func (c *Data) runManagerBackup(st storage.Storage, target domain.BackupTarget, b domain.Backup) bool {
+func (c *Data) runManagerBackup(st Storage, target domain.BackupTarget, b domain.Backup) bool {
 	ctx, cancel := context.WithTimeout(c.bg, time.Hour)
 	defer cancel()
 	defer c.steps.Done(backupKey(b.ID))
@@ -106,7 +105,7 @@ func (c *Data) runManagerBackup(st storage.Storage, target domain.BackupTarget, 
 	return b.Status == domain.OpSucceeded
 }
 
-func (c *Data) snapshotTo(ctx context.Context, st storage.Storage, target domain.BackupTarget, b *domain.Backup) error {
+func (c *Data) snapshotTo(ctx context.Context, st Storage, target domain.BackupTarget, b *domain.Backup) error {
 	dir := filepath.Join(c.cfg.DataDir, "tmp")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err

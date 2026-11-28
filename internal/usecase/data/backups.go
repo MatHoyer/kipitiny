@@ -18,7 +18,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/ids"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/storage"
 )
 
 const (
@@ -181,7 +180,7 @@ func (c *Data) BackupProject(ctx context.Context, projectID, targetID string) ([
 }
 
 // runBackup performs the backup and records the outcome; it reports success.
-func (c *Data) runBackup(svc domain.Service, containerID string, st storage.Storage, target domain.BackupTarget, b domain.Backup) bool {
+func (c *Data) runBackup(svc domain.Service, containerID string, st Storage, target domain.BackupTarget, b domain.Backup) bool {
 	ctx, cancel := context.WithTimeout(c.bg, backupTimeout)
 	defer cancel()
 	defer c.steps.Done(backupKey(b.ID))
@@ -227,7 +226,7 @@ func (c *Data) runBackup(svc domain.Service, containerID string, st storage.Stor
 
 // dump streams pg_dump output to storage, filling in size, checksum and
 // server version on b.
-func (c *Data) dump(ctx context.Context, svc domain.Service, containerID string, st storage.Storage, target domain.BackupTarget, b *domain.Backup) error {
+func (c *Data) dump(ctx context.Context, svc domain.Service, containerID string, st Storage, target domain.BackupTarget, b *domain.Backup) error {
 	c.steps.Set(backupKey(b.ID), BackupPrepare)
 	version, err := c.serverVersion(ctx, svc, containerID)
 	if err != nil {
@@ -254,7 +253,7 @@ func (c *Data) dump(ctx context.Context, svc domain.Service, containerID string,
 // age encryption when the target has a recipient, and records size and
 // SHA-256 of the stored bytes on b. produce's error takes precedence: a
 // producer can fail after data already flowed.
-func (c *Data) upload(ctx context.Context, st storage.Storage, target domain.BackupTarget, b *domain.Backup,
+func (c *Data) upload(ctx context.Context, st Storage, target domain.BackupTarget, b *domain.Backup,
 	produce func(w io.Writer) error) error {
 
 	pr, pw := io.Pipe()
@@ -446,7 +445,7 @@ func (c *Data) DeleteBackup(ctx context.Context, id string) error {
 	return c.store.DeleteBackup(ctx, id)
 }
 
-func (c *Data) storageFor(ctx context.Context, targetID string) (storage.Storage, error) {
+func (c *Data) storageFor(ctx context.Context, targetID string) (Storage, error) {
 	t, err := c.store.GetBackupTarget(ctx, targetID)
 	if err != nil {
 		return nil, err

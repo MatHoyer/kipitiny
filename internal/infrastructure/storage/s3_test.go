@@ -17,7 +17,7 @@ import (
 //
 //	docker run -d -p 19000:9000 -e RUSTFS_ACCESS_KEY=test -e RUSTFS_SECRET_KEY=testsecret rustfs/rustfs
 //	KIPITINY_TEST_S3_ENDPOINT=localhost:19000 KIPITINY_TEST_S3_ACCESS_KEY=test \
-//	  KIPITINY_TEST_S3_SECRET_KEY=testsecret go test ./internal/storage/
+//	  KIPITINY_TEST_S3_SECRET_KEY=testsecret go test ./internal/infrastructure/storage/
 func TestS3(t *testing.T) {
 	endpoint := os.Getenv("KIPITINY_TEST_S3_ENDPOINT")
 	if endpoint == "" {

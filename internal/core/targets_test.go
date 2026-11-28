@@ -10,7 +10,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/storage"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/storage"
 )
 
 func TestEncryptWithExistingKey(t *testing.T) {

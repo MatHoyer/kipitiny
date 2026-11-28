@@ -54,6 +54,15 @@ linters:
               desc: SQLite stays in the adapters (infrastructure/sqlite, sqlitedb, sqlitehelper)
             - pkg: github.com/pressly/goose
               desc: migrations stay in the adapters (infrastructure/sqlite, sqlitedb)
+            - pkg: github.com/minio/minio-go
+              desc: use cases reach backup targets through data.Storage (infrastructure/storage)
+        # identity's SSO is an OAuth client of its own; the git forges go
+        # through projects.GitProviders (infrastructure/gitprovider).
+        usecase-oauth2:
+          files: ["**/internal/usecase/**", "!**/internal/usecase/identity/**"]
+          deny:
+            - pkg: golang.org/x/oauth2
+              desc: use cases reach the git forges through projects.GitProviders (infrastructure/gitprovider)
         infrastructure:
           files: ["**/internal/infrastructure/**"]
           deny:

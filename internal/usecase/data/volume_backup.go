@@ -13,7 +13,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/storage"
 )
 
 // HelperImage is the small image helper containers run in, mounting
@@ -102,7 +101,7 @@ func startVolumeHelper(ctx context.Context, dk domain.ContainerRuntime, name str
 // dumpVolumes streams an archive of the backup's volumes to storage. The
 // service keeps running: files are copied as they are (run a pre-backup
 // command to flush them first).
-func (c *Data) dumpVolumes(ctx context.Context, svc domain.Service, st storage.Storage, target domain.BackupTarget, b *domain.Backup) error {
+func (c *Data) dumpVolumes(ctx context.Context, svc domain.Service, st Storage, target domain.BackupTarget, b *domain.Backup) error {
 	if svc.PreBackup != "" {
 		c.steps.Set(backupKey(b.ID), BackupPreBackup)
 		if err := c.preBackup(ctx, svc); err != nil {
@@ -218,7 +217,7 @@ func (c *Data) restoreVolumeBackup(ctx context.Context, b domain.Backup, svc dom
 // then stops the service, replaces the content of each volume with the
 // staged copy and starts the service again. It reports whether the live
 // volumes were touched.
-func (c *Data) restoreVolumes(ctx context.Context, svc domain.Service, st storage.Storage, target domain.BackupTarget, b domain.Backup, r domain.Restore) (bool, error) {
+func (c *Data) restoreVolumes(ctx context.Context, svc domain.Service, st Storage, target domain.BackupTarget, b domain.Backup, r domain.Restore) (bool, error) {
 	key := restoreKey(r.ID)
 	c.steps.Set(key, RestoreExtract)
 	rc, err := st.Get(ctx, b.ObjectKey)

@@ -6,9 +6,11 @@ package projects
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/gitprovider"
 	"github.com/kipit-labs/kipitiny/internal/notify"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
@@ -30,8 +32,10 @@ type Projects struct {
 	cron domain.Cron
 	// git reads the linked repositories.
 	git domain.Git
-	mgr Manager
-	log *slog.Logger
+	// forges are the git providers' APIs.
+	forges GitProviders
+	mgr    Manager
+	log    *slog.Logger
 	// bg ends when the manager stops: git syncs and jobs run under it.
 	bg context.Context
 
@@ -43,8 +47,27 @@ type Projects struct {
 }
 
 // New builds the projects use cases; bg is the manager's background context.
-func New(bg context.Context, cfg *config.Config, store domain.Store, cron domain.Cron, git domain.Git, mgr Manager, log *slog.Logger) *Projects {
-	return &Projects{cfg: cfg, store: store, cron: cron, git: git, mgr: mgr, log: log, bg: bg, gitKick: make(chan string, 16)}
+func New(bg context.Context, cfg *config.Config, store domain.Store, cron domain.Cron, git domain.Git, forges GitProviders, mgr Manager, log *slog.Logger) *Projects {
+	return &Projects{cfg: cfg, store: store, cron: cron, git: git, forges: forges, mgr: mgr, log: log, bg: bg, gitKick: make(chan string, 16)}
+}
+
+// GitProviders are the APIs of the git forges (infrastructure/gitprovider):
+// GitHub Apps, OAuth applications, and what a credential can read.
+type GitProviders interface {
+	Repos(ctx context.Context, kind domain.GitProviderKind, baseURL, token string) ([]gitprovider.Repo, error)
+	Branches(ctx context.Context, kind domain.GitProviderKind, baseURL, token, fullName string) ([]string, error)
+	// Account is the user token belongs to.
+	Account(ctx context.Context, kind domain.GitProviderKind, baseURL, token string) (string, error)
+	// ConvertManifest exchanges the code GitHub redirected with for the app.
+	ConvertManifest(ctx context.Context, baseURL, code string) (gitprovider.App, error)
+	// InstallationToken mints a token reading the installation's
+	// repositories, and when it expires.
+	InstallationToken(ctx context.Context, p domain.GitProvider) (string, time.Time, error)
+	InstallationAccount(ctx context.Context, p domain.GitProvider, installationID int64) (string, error)
+	// AuthCodeURL, Exchange and Refresh are p's OAuth application.
+	AuthCodeURL(p domain.GitProvider, state string) string
+	Exchange(ctx context.Context, p domain.GitProvider, code string) (gitprovider.Token, error)
+	Refresh(ctx context.Context, p domain.GitProvider) (gitprovider.Token, error)
 }
 
 // Manager is what projects uses from the rest of the manager.

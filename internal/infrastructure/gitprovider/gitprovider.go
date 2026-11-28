@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	gp "github.com/kipit-labs/kipitiny/internal/domain/gitprovider"
 )
 
 // maxPages bounds listings, enough for any account a picker can show.
@@ -32,26 +33,6 @@ func pageSize(kind domain.GitProviderKind) int {
 
 var client = &http.Client{Timeout: 30 * time.Second}
 
-// Repo is a repository a provider can read.
-type Repo struct {
-	// FullName is owner/name (group/subgroup/name on GitLab).
-	FullName      string `json:"fullName"`
-	CloneURL      string `json:"cloneUrl"`
-	DefaultBranch string `json:"defaultBranch"`
-	Private       bool   `json:"private"`
-}
-
-// DefaultBaseURL is the hosted forge of a kind.
-func DefaultBaseURL(kind domain.GitProviderKind) string {
-	switch kind {
-	case domain.GitHub:
-		return "https://github.com"
-	case domain.GitLab:
-		return "https://gitlab.com"
-	}
-	return ""
-}
-
 // APIURL is the REST API root of a forge.
 func APIURL(kind domain.GitProviderKind, baseURL string) string {
 	switch kind {
@@ -66,20 +47,12 @@ func APIURL(kind domain.GitProviderKind, baseURL string) string {
 	return baseURL + "/api/v1"
 }
 
-// CloneUsername goes with the token in HTTPS clone credentials.
-func CloneUsername(kind domain.GitProviderKind) string {
-	if kind == domain.GitHub {
-		return "x-access-token"
-	}
-	return "oauth2"
-}
-
 // Repos lists the repositories token can read.
-func Repos(ctx context.Context, kind domain.GitProviderKind, baseURL, token string) ([]Repo, error) {
+func Repos(ctx context.Context, kind domain.GitProviderKind, baseURL, token string) ([]gp.Repo, error) {
 	api, size := APIURL(kind, baseURL), pageSize(kind)
-	repos := []Repo{}
+	repos := []gp.Repo{}
 	for page := 1; page <= maxPages; page++ {
-		var batch []Repo
+		var batch []gp.Repo
 		var n int
 		var err error
 		switch kind {
@@ -89,7 +62,7 @@ func Repos(ctx context.Context, kind domain.GitProviderKind, baseURL, token stri
 			}
 			err = getJSON(ctx, kind, fmt.Sprintf("%s/installation/repositories?per_page=%d&page=%d", api, size, page), token, &body)
 			for _, r := range body.Repositories {
-				batch = append(batch, Repo(r))
+				batch = append(batch, gp.Repo(r))
 			}
 			n = len(body.Repositories)
 		case domain.GitLab:
@@ -101,14 +74,14 @@ func Repos(ctx context.Context, kind domain.GitProviderKind, baseURL, token stri
 			}
 			err = getJSON(ctx, kind, fmt.Sprintf("%s/projects?membership=true&simple=true&order_by=last_activity_at&per_page=%d&page=%d", api, size, page), token, &body)
 			for _, r := range body {
-				batch = append(batch, Repo{r.PathWithNamespace, r.HTTPURLToRepo, r.DefaultBranch, r.Visibility != "public"})
+				batch = append(batch, gp.Repo{FullName: r.PathWithNamespace, CloneURL: r.HTTPURLToRepo, DefaultBranch: r.DefaultBranch, Private: r.Visibility != "public"})
 			}
 			n = len(body)
 		default:
 			var body []githubRepo // Gitea's shape matches GitHub's
 			err = getJSON(ctx, kind, fmt.Sprintf("%s/user/repos?limit=%d&page=%d", api, size, page), token, &body)
 			for _, r := range body {
-				batch = append(batch, Repo(r))
+				batch = append(batch, gp.Repo(r))
 			}
 			n = len(body)
 		}

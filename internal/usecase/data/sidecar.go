@@ -8,7 +8,6 @@ import (
 	"io"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/storage"
 )
 
 // sidecarExt names a backup's sidecar: <object key>.json, the backup's
@@ -18,7 +17,7 @@ const sidecarExt = ".json"
 
 // writeSidecar stores b's record next to it. Manager backups get none: they
 // belong to the manager that made them.
-func (c *Data) writeSidecar(ctx context.Context, st storage.Storage, target domain.BackupTarget, b domain.Backup) error {
+func (c *Data) writeSidecar(ctx context.Context, st Storage, target domain.BackupTarget, b domain.Backup) error {
 	// What belongs to this manager (IDs, schedule, verification) stays out.
 	b.ID, b.ServiceID, b.ProjectID, b.TargetID, b.ScheduleID = "", "", "", "", ""
 	b.Verification = domain.Verification{}
@@ -45,7 +44,7 @@ func (c *Data) writeSidecar(ctx context.Context, st storage.Storage, target doma
 // readSidecar reads the record stored next to a backup, decrypting it with
 // ageIdentity when it is encrypted. Its ObjectKey is the one the other manager
 // used, relative to its own prefix.
-func (c *Data) readSidecar(ctx context.Context, st storage.Storage, key, ageIdentity string) (domain.Backup, error) {
+func (c *Data) readSidecar(ctx context.Context, st Storage, key, ageIdentity string) (domain.Backup, error) {
 	rc, err := st.Get(ctx, key)
 	if err != nil {
 		return domain.Backup{}, err

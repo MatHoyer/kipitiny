@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/cloudflare"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 
@@ -156,7 +156,7 @@ func (c *Network) SetServerNetwork(ctx context.Context, id string, in ServerNetw
 // syncTunnelRoutes points each tunnel's routes for its hostnames at the
 // Traefik of its server, keeping routes the user added. It returns the
 // problems to show, if any.
-func (c *Network) syncTunnelRoutes(ctx context.Context, cf *cloudflare.Client, wants map[string]Want) string {
+func (c *Network) syncTunnelRoutes(ctx context.Context, cf DNS, wants map[string]Want) string {
 	if !c.cfg.Traefik.Enabled {
 		return ""
 	}
@@ -215,7 +215,7 @@ func (c *Network) saveManagedTunnels(ctx context.Context, ts map[string]cloudfla
 	}
 }
 
-func (c *Network) syncTunnel(ctx context.Context, cf *cloudflare.Client, t cloudflare.Tunnel, wants map[string]Want) error {
+func (c *Network) syncTunnel(ctx context.Context, cf DNS, t cloudflare.Tunnel, wants map[string]Want) error {
 	rules, cfg, err := cf.TunnelIngress(ctx, t)
 	if err != nil {
 		if cloudflare.Forbidden(err) {
