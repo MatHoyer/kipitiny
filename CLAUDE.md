@@ -45,7 +45,8 @@ The tests are the safety net that lets agents change code: a change is done when
 | UI end to end | `web/e2e/*.e2e.ts` (Playwright): the real binary deploying on a Docker daemon, WebKit at iPhone size and desktop Chromium, outside requests answered locally | user journeys in a browser, phone layout, uncaught page errors |
 
 - A new route goes into `routeAccess`, a new MCP tool into `toolAccess`; a new user-facing flow adds or extends a UI
-  journey.
+  journey; a new page or tab is opened by `e2e/pages.e2e.ts` (a render error shows the router's error page instead of
+  throwing, so only that test sees it).
 - Tests that deploy through core (`flows_docker_test.go`, `make e2e`) need a Docker daemon of their own: the
   reconciler removes `kipitiny.managed` containers it doesn't know. Locally, a throwaway one
   (`docker run -d --privileged -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 docker:dind`, then `DOCKER_HOST=tcp://127.0.0.1:2375`;
