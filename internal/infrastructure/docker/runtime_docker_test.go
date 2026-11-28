@@ -180,3 +180,34 @@ func TestWaitHealthyExitDocker(t *testing.T) {
 		wantLogs(t, c.WaitHealthy(ctx, id, time.Minute), "container keeps restarting")
 	})
 }
+
+// A container whose healthcheck fails says why: the probe's last output and
+// the program's last log lines.
+func TestWaitHealthyUnhealthyDocker(t *testing.T) {
+	if os.Getenv("KIPITINY_TEST_DOCKER") == "" {
+		t.Skip("KIPITINY_TEST_DOCKER not set")
+	}
+	ctx := context.Background()
+	c, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.EnsureImage(ctx, "busybox", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	name := "kipitiny-test-unhealthy-" + strings.ToLower(ids.New())
+	id, err := c.Run(ctx, domain.ContainerSpec{
+		Name: name, Image: "busybox", Labels: map[string]string{"kipitiny.test": name}, Log: true,
+		Cmd:         []string{"sh", "-c", "echo 'table users is corrupt' >&2; exec sleep 300"},
+		Healthcheck: &domain.HealthConfig{Test: []string{"CMD-SHELL", "echo 'probe: connection refused'; exit 1"}, Interval: 100 * time.Millisecond, Retries: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = c.RemoveContainer(context.Background(), id, 0) })
+	err = c.WaitHealthy(ctx, id, time.Minute)
+	if err == nil || !strings.Contains(err.Error(), "container is unhealthy") ||
+		!strings.Contains(err.Error(), "probe: connection refused") || !strings.Contains(err.Error(), "table users is corrupt") {
+		t.Fatalf("err = %v", err)
+	}
+}
