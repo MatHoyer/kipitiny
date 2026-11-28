@@ -217,7 +217,7 @@ func (c *Servers) DeleteServer(ctx context.Context, id string) error {
 		return fmt.Errorf("%w: this server can't be removed", ErrInvalid)
 	}
 	if err := c.store.DeleteServer(ctx, id); errors.Is(err, domain.ErrConflict) {
-		return fmt.Errorf("%w: %v; move or delete them first", ErrInvalid, err)
+		return fmt.Errorf("%w: %w; move or delete them first", ErrInvalid, err)
 	} else if err != nil {
 		return err
 	}
@@ -256,13 +256,13 @@ func (c *Servers) checkServer(ctx context.Context, sv domain.Server) (ServerView
 	progress.Report(ctx, ServerStepConnect)
 	info, err := c.DockerFor(sv.ID).Info(ctx)
 	if err != nil {
-		return ServerView{}, fmt.Errorf("%w: cannot reach Docker on %s: %v", ErrInvalid, sv.Name, err)
+		return ServerView{}, fmt.Errorf("%w: cannot reach Docker on %s: %w", ErrInvalid, sv.Name, err)
 	}
 	if sv, err = c.store.GetServer(ctx, sv.ID); err != nil { // host key may have been pinned
 		return ServerView{}, err
 	}
 	if err := c.bootstrapServer(ctx, sv); err != nil {
-		return ServerView{}, fmt.Errorf("%w: prepare %s: %v", ErrInvalid, sv.Name, err)
+		return ServerView{}, fmt.Errorf("%w: prepare %s: %w", ErrInvalid, sv.Name, err)
 	}
 	v := c.serverView(sv)
 	v.Docker = &info

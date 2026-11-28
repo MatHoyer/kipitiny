@@ -38,7 +38,7 @@ func newFakeIssuer(t *testing.T) *fakeIssuer {
 	}
 	f := &fakeIssuer{key: key, codes: map[string]map[string]any{}}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"issuer":                                f.URL,
 			"authorization_endpoint":                f.URL + "/authorize",
@@ -47,7 +47,7 @@ func newFakeIssuer(t *testing.T) *fakeIssuer {
 			"id_token_signing_alg_values_supported": []string{"RS256"},
 		})
 	})
-	mux.HandleFunc("GET /jwks", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /jwks", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{Key: &key.PublicKey, KeyID: "k", Algorithm: "RS256", Use: "sig"}}})
 	})
 	mux.HandleFunc("POST /token", func(w http.ResponseWriter, r *http.Request) {

@@ -53,7 +53,7 @@ type alertState struct {
 	since   time.Time // when the reading first disagreed with alerted; zero while it agrees
 }
 
-func (a *alertState) observe(over bool, now time.Time, raise, clear time.Duration) (fire, recovered bool) {
+func (a *alertState) observe(over bool, now time.Time, raise, settle time.Duration) (fire, recovered bool) {
 	if over == a.alerted {
 		a.since = time.Time{}
 		return false, false
@@ -63,7 +63,7 @@ func (a *alertState) observe(over bool, now time.Time, raise, clear time.Duratio
 	}
 	wait := raise
 	if a.alerted {
-		wait = clear
+		wait = settle
 	}
 	if now.Sub(a.since) < wait {
 		return false, false
