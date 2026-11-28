@@ -64,11 +64,11 @@ func cell(s string) string {
 func utc(t int64) string { return time.Unix(t, 0).UTC().Format(time.RFC3339) }
 
 func statsCSV(w io.Writer, s analytics.Stats, table string) error {
-	cw := csv.NewWriter(w)
 	n := strconv.Itoa
+	var rows [][]string
 	switch table {
 	case "summary":
-		cw.Write([]string{"metric", "value", "previous"})
+		rows = append(rows, []string{"metric", "value", "previous"})
 		for _, m := range []struct {
 			name      string
 			now, prev int64
@@ -79,15 +79,15 @@ func statsCSV(w io.Writer, s analytics.Stats, table string) error {
 			{"bounces", int64(s.Bounces), int64(s.Previous.Bounces)},
 			{"duration_seconds", s.Duration, s.Previous.Duration},
 		} {
-			cw.Write([]string{m.name, strconv.FormatInt(m.now, 10), strconv.FormatInt(m.prev, 10)})
+			rows = append(rows, []string{m.name, strconv.FormatInt(m.now, 10), strconv.FormatInt(m.prev, 10)})
 		}
 	case "series":
-		cw.Write([]string{"time", "pageviews", "visitors"})
+		rows = append(rows, []string{"time", "pageviews", "visitors"})
 		for _, p := range s.Series {
-			cw.Write([]string{utc(p.T), n(p.Pageviews), n(p.Visitors)})
+			rows = append(rows, []string{utc(p.T), n(p.Pageviews), n(p.Visitors)})
 		}
 	case "breakdowns":
-		cw.Write([]string{"breakdown", "value", "visitors", "count"})
+		rows = append(rows, []string{"breakdown", "value", "visitors", "count"})
 		keys := make([]string, 0, len(s.Breakdowns))
 		for k := range s.Breakdowns {
 			keys = append(keys, k)
@@ -95,23 +95,20 @@ func statsCSV(w io.Writer, s analytics.Stats, table string) error {
 		slices.Sort(keys)
 		for _, k := range keys {
 			for _, r := range s.Breakdowns[k] {
-				cw.Write([]string{k, cell(r.Value), n(r.Visitors), n(r.Count)})
+				rows = append(rows, []string{k, cell(r.Value), n(r.Visitors), n(r.Count)})
 			}
 		}
 	}
-	cw.Flush()
-	return cw.Error()
+	return csv.NewWriter(w).WriteAll(rows)
 }
 
 func visitsCSV(w io.Writer, vs []analytics.Visit) error {
-	cw := csv.NewWriter(w)
-	cw.Write([]string{"id", "started_at", "last_at", "pageviews", "events", "entry", "exit", "referrer",
-		"utm_source", "utm_medium", "utm_campaign", "country", "browser", "os", "device", "screen", "language", "identity"})
+	rows := [][]string{{"id", "started_at", "last_at", "pageviews", "events", "entry", "exit", "referrer",
+		"utm_source", "utm_medium", "utm_campaign", "country", "browser", "os", "device", "screen", "language", "identity"}}
 	for _, v := range vs {
-		cw.Write([]string{v.ID, utc(v.StartedAt), utc(v.LastAt), strconv.Itoa(v.Pageviews), strconv.Itoa(v.Events),
+		rows = append(rows, []string{v.ID, utc(v.StartedAt), utc(v.LastAt), strconv.Itoa(v.Pageviews), strconv.Itoa(v.Events),
 			cell(v.Entry), cell(v.Exit), cell(v.Referrer), cell(v.UTMSource), cell(v.UTMMedium), cell(v.UTMCampaign),
 			v.Country, v.Browser, v.OS, v.Device, v.Screen, cell(v.Language), cell(v.Identity)})
 	}
-	cw.Flush()
-	return cw.Error()
+	return csv.NewWriter(w).WriteAll(rows)
 }

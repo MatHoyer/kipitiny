@@ -82,7 +82,11 @@ func TestUptimeChecks(t *testing.T) {
 		var m struct {
 			Embeds []struct{ Title, Description string }
 		}
-		json.NewDecoder(r.Body).Decode(&m)
+		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		mu.Lock()
 		sent = append(sent, m.Embeds[0].Title)
 		mu.Unlock()
