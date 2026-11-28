@@ -274,14 +274,21 @@ func (c *Client) RemoveVolume(ctx context.Context, name string) error {
 // restart policy is waited through (Docker reports it unhealthy meanwhile);
 // a second one means it keeps crashing.
 func (c *Client) WaitHealthy(ctx context.Context, id string, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeoutCause(ctx, timeout, errWaitTimeout)
 	defer cancel()
+	// timedOut tells the timeout, even mid-call, from the caller cancelling.
+	timedOut := func(err error) error {
+		if !errors.Is(context.Cause(ctx), errWaitTimeout) {
+			return err
+		}
+		return fmt.Errorf("not healthy after %s%s", timeout, c.lastLogLines(ctx, id))
+	}
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	for {
 		res, err := c.ContainerInspect(ctx, id, client.ContainerInspectOptions{})
 		if err != nil {
-			return err
+			return timedOut(err)
 		}
 		st := res.Container.State
 		switch {
@@ -300,11 +307,13 @@ func (c *Client) WaitHealthy(ctx context.Context, id string, timeout time.Durati
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("not healthy after %s", timeout)
+			return timedOut(ctx.Err())
 		case <-tick.C:
 		}
 	}
 }
+
+var errWaitTimeout = errors.New("wait timeout")
 
 // lastLogLines is the end of a container's logs, as an error's suffix: a
 // container that exits on start says why there.
