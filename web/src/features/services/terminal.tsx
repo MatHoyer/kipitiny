@@ -21,6 +21,7 @@ export function TerminalView({ path, onClose, className }: { path: string; onClo
     const el = host.current!;
     const term = new XTerm({
       cursorBlink: true,
+      screenReaderMode: true, // the output as text screen readers read, not only pixels
       fontSize: 13,
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
       scrollback: 5000,
@@ -73,6 +74,8 @@ export function TerminalView({ path, onClose, className }: { path: string; onClo
 
   return (
     <div
+      role="region"
+      aria-label="Terminal"
       className={cn(
         "overflow-hidden rounded-lg bg-neutral-950 p-3 dark:ring-1 dark:ring-foreground/10",
         className,
