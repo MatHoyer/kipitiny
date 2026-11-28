@@ -317,11 +317,11 @@ func sqliteSelect(table string, cols []PgColumn, q RowQuery, page bool) (string,
 		}
 		// Matched literally; SQLite's LIKE ignores ASCII case already.
 		pattern := pgLiteral("%" + likeEscaper.Replace(q.Search) + "%")
-		any := make([]string, len(cols))
+		likes := make([]string, len(cols))
 		for i, col := range cols {
-			any[i] = fmt.Sprintf(`CAST(%s AS TEXT) LIKE %s ESCAPE '\'`, pgIdent(col.Name), pattern)
+			likes[i] = fmt.Sprintf(`CAST(%s AS TEXT) LIKE %s ESCAPE '\'`, pgIdent(col.Name), pattern)
 		}
-		where = append(where, "("+strings.Join(any, " OR ")+")")
+		where = append(where, "("+strings.Join(likes, " OR ")+")")
 	}
 	if len(where) > 0 {
 		b.WriteString(" WHERE " + strings.Join(where, " AND "))

@@ -278,11 +278,11 @@ func (t dataTarget) mysqlSelect(table string, cols []mysqlColumn, q RowQuery, pa
 		// Matched literally: LIKE's own wildcards are escaped (\ is its
 		// default escape character).
 		pattern := mysqlString("%" + likeEscaper.Replace(q.Search) + "%")
-		any := make([]string, len(cols))
+		likes := make([]string, len(cols))
 		for i, col := range cols {
-			any[i] = fmt.Sprintf("CAST(%s AS CHAR) LIKE %s", mysqlIdent(col.Name), pattern)
+			likes[i] = fmt.Sprintf("CAST(%s AS CHAR) LIKE %s", mysqlIdent(col.Name), pattern)
 		}
-		where = append(where, "("+strings.Join(any, " OR ")+")")
+		where = append(where, "("+strings.Join(likes, " OR ")+")")
 	}
 	if len(where) > 0 {
 		b.WriteString(" WHERE " + strings.Join(where, " AND "))

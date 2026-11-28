@@ -288,7 +288,7 @@ func (c *Data) DeleteBackupSchedule(ctx context.Context, id string) error {
 func (c *Data) applyScheduleInput(ctx context.Context, sc *domain.BackupSchedule, in ScheduleInput) error {
 	in.Cron = strings.TrimSpace(in.Cron)
 	if _, err := c.cron.Next(in.Cron, time.Now().UTC()); err != nil {
-		return fmt.Errorf("%w: schedule: %v", ErrInvalid, err)
+		return fmt.Errorf("%w: schedule: %w", ErrInvalid, err)
 	}
 	for _, n := range []int{in.KeepLast, in.KeepDaily, in.KeepWeekly, in.KeepMonthly} {
 		if n < 0 || n > MaxKeep {

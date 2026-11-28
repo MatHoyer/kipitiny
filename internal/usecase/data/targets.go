@@ -93,7 +93,7 @@ func (c *Data) DeleteBackupTarget(ctx context.Context, id string) error {
 	}
 	err := c.store.DeleteBackupTarget(ctx, id)
 	if errors.Is(err, domain.ErrConflict) {
-		return fmt.Errorf("%w: %v; delete them first", ErrInvalid, err)
+		return fmt.Errorf("%w: %w; delete them first", ErrInvalid, err)
 	}
 	return err
 }
@@ -132,30 +132,30 @@ func (c *Data) targetKey(ctx context.Context, t domain.BackupTarget, ageIdentity
 	}
 	canonical, recipient, err := c.crypt.ParseIdentity(ageIdentity)
 	if err != nil {
-		return "", "", fmt.Errorf("%w: not an age key (AGE-SECRET-KEY-1…): %v", ErrInvalid, err)
+		return "", "", fmt.Errorf("%w: not an age key (AGE-SECRET-KEY-1…): %w", ErrInvalid, err)
 	}
 	st, err := c.openStorage(t)
 	if err != nil {
-		return "", "", fmt.Errorf("%w: %v", ErrInvalid, err)
+		return "", "", fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	for obj, err := range st.List(ctx, "") {
 		if err != nil {
-			return "", "", fmt.Errorf("%w: cannot list the storage to check the key: %v", ErrInvalid, err)
+			return "", "", fmt.Errorf("%w: cannot list the storage to check the key: %w", ErrInvalid, err)
 		}
 		if !strings.HasSuffix(obj.Key, ".age") {
 			continue
 		}
 		rc, err := st.Get(ctx, obj.Key)
 		if err != nil {
-			return "", "", fmt.Errorf("%w: cannot read %s to check the key: %v", ErrInvalid, obj.Key, err)
+			return "", "", fmt.Errorf("%w: cannot read %s to check the key: %w", ErrInvalid, obj.Key, err)
 		}
 		// Decrypt unwraps the file key from the header: nothing more is read.
 		_, err = c.crypt.Decrypt(rc, canonical)
 		rc.Close()
 		if err != nil {
-			return "", "", fmt.Errorf("%w: this key doesn't open %s, already on this storage: %v", ErrInvalid, obj.Key, err)
+			return "", "", fmt.Errorf("%w: this key doesn't open %s, already on this storage: %w", ErrInvalid, obj.Key, err)
 		}
 		break
 	}
@@ -215,12 +215,12 @@ func (c *Data) checkTarget(ctx context.Context, t *domain.BackupTarget) error {
 	}
 	st, err := c.openStorage(*t)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalid, err)
+		return fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	if err := st.Check(ctx); err != nil {
-		return fmt.Errorf("%w: cannot use bucket: %v", ErrInvalid, err)
+		return fmt.Errorf("%w: cannot use bucket: %w", ErrInvalid, err)
 	}
 	return nil
 }
@@ -233,12 +233,12 @@ func (c *Data) TestBackupTarget(ctx context.Context, id string) error {
 	}
 	st, err := c.openStorage(t)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalid, err)
+		return fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	if err := st.Check(ctx); err != nil {
-		return fmt.Errorf("%w: cannot write to %s: %v", ErrInvalid, t.Name, err)
+		return fmt.Errorf("%w: cannot write to %s: %w", ErrInvalid, t.Name, err)
 	}
 	return nil
 }

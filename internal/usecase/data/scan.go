@@ -42,7 +42,7 @@ func (c *Data) ScanBackupTarget(ctx context.Context, id string) (ScanResult, err
 	}
 	st, err := c.openStorage(target)
 	if err != nil {
-		return ScanResult{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+		return ScanResult{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
@@ -52,7 +52,7 @@ func (c *Data) ScanBackupTarget(ctx context.Context, id string) (ScanResult, err
 	sizes := map[string]int64{}
 	for obj, err := range st.List(ctx, "") {
 		if err != nil {
-			return ScanResult{}, fmt.Errorf("%w: cannot list %s: %v", ErrInvalid, target.Name, err)
+			return ScanResult{}, fmt.Errorf("%w: cannot list %s: %w", ErrInvalid, target.Name, err)
 		}
 		sizes[obj.Key] = obj.Size
 	}

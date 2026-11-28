@@ -161,7 +161,7 @@ func volumePath(svc domain.Service, p string) (vol fileVolume, abs string, err e
 		switch s {
 		case "", ".":
 		case "..":
-			return vol, "", fmt.Errorf("%w: path %q must not contain ..", ErrInvalid, p)
+			return vol, "", fmt.Errorf("%w: path %q must not contain .. segments", ErrInvalid, p)
 		default:
 			segs = append(segs, s)
 		}
@@ -423,7 +423,7 @@ func readEntries(r io.Reader, fn func(VolumeEntry) error) error {
 	br := bufio.NewReader(r)
 	for {
 		e, err := readEntry(br)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil
 		}
 		if err != nil {
@@ -439,7 +439,7 @@ func readEntries(r io.Reader, fn func(VolumeEntry) error) error {
 func readEntry(br *bufio.Reader) (VolumeEntry, error) {
 	meta, err := br.ReadString('\n')
 	if err != nil {
-		if err == io.EOF && meta == "" {
+		if errors.Is(err, io.EOF) && meta == "" {
 			return VolumeEntry{}, io.EOF
 		}
 		return VolumeEntry{}, fmt.Errorf("read listing: %w", err)

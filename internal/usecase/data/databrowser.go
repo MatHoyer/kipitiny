@@ -192,17 +192,21 @@ func (t dataTarget) execStream(ctx context.Context, opts domain.ExecOptions, rea
 		done <- t.dk.Exec(ctx, t.container, opts)
 		pw.Close()
 	}()
-	if err := read(pr); err != nil {
+	rerr := read(pr)
+	if rerr != nil {
 		cancel()
-		pr.CloseWithError(err)
-		<-done
-		if errors.Is(err, errStopLines) {
+		pr.CloseWithError(rerr)
+	} else {
+		_, _ = io.Copy(io.Discard, pr)
+	}
+	xerr := <-done
+	if rerr != nil { // the exec was cancelled: its error says nothing more
+		if errors.Is(rerr, errStopLines) {
 			return nil
 		}
-		return err
+		return rerr
 	}
-	_, _ = io.Copy(io.Discard, pr)
-	return clientError(<-done)
+	return clientError(xerr)
 }
 
 var errStopLines = errors.New("stop reading")
