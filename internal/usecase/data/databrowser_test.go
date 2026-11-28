@@ -67,7 +67,7 @@ func TestClientError(t *testing.T) {
 		}
 	}
 	other := errors.New("exec attach: boom")
-	if err := clientError(other); err != other {
+	if err := clientError(other); !errors.Is(err, other) {
 		t.Errorf("non-exec error changed: %v", err)
 	}
 }

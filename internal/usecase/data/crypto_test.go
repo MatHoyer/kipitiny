@@ -67,7 +67,9 @@ func TestUploadProducerFailureWins(t *testing.T) {
 	b := &domain.Backup{ObjectKey: "a.dump"}
 	boom := errors.New("pg_dump exploded")
 	err := c.upload(ctx, st, domain.BackupTarget{}, b, func(w io.Writer) error {
-		io.WriteString(w, "partial data")
+		if _, err := io.WriteString(w, "partial data"); err != nil {
+			return err
+		}
 		return boom
 	})
 	if !errors.Is(err, boom) {

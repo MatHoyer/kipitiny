@@ -409,11 +409,11 @@ func pgSelect(schema, table string, cols []PgColumn, q RowQuery, page bool) (str
 	if q.Search != "" {
 		// Matched literally: LIKE's own wildcards are escaped.
 		pattern := pgLiteral("%" + likeEscaper.Replace(q.Search) + "%")
-		any := make([]string, len(cols))
+		likes := make([]string, len(cols))
 		for i, col := range cols {
-			any[i] = fmt.Sprintf("%s::text ILIKE %s", pgIdent(col.Name), pattern)
+			likes[i] = fmt.Sprintf("%s::text ILIKE %s", pgIdent(col.Name), pattern)
 		}
-		where = append(where, "("+strings.Join(any, " OR ")+")")
+		where = append(where, "("+strings.Join(likes, " OR ")+")")
 	}
 	if len(where) > 0 {
 		b.WriteString(" WHERE " + strings.Join(where, " AND "))

@@ -26,7 +26,9 @@ func TestScanBackupTarget(t *testing.T) {
 		t.Helper()
 		var sealed strings.Builder
 		w, _ := age.Encryption{}.Encrypt(&sealed, recipient)
-		w.Write([]byte("dump"))
+		if _, err := w.Write([]byte("dump")); err != nil {
+			t.Fatal(err)
+		}
 		w.Close()
 		b.Status, b.Encrypted, b.CreatedAt = domain.OpSucceeded, true, created
 		if b.SizeBytes == 0 {

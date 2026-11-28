@@ -161,7 +161,7 @@ func mongoOps(collection string, ch DocChanges) ([]mongoOp, error) {
 	value := func(v, what string) (string, error) {
 		var b bytes.Buffer
 		if err := json.Compact(&b, []byte(v)); err != nil {
-			return "", fmt.Errorf("%w: %s is not JSON: %v", ErrInvalid, what, err)
+			return "", fmt.Errorf("%w: %s is not JSON: %w", ErrInvalid, what, err)
 		}
 		return b.String(), nil
 	}
