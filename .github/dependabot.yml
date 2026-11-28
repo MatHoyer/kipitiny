@@ -1,10 +1,10 @@
-# Template images (internal/templates/files/<id>/compose.yaml): one pull
+# Template images (internal/usecase/templates/files/<id>/compose.yaml): one pull
 # request per image, or per group of images that must move together, checked
 # by CI like any change to a template. Go and npm: security updates only.
 version: 2
 updates:
   - package-ecosystem: docker-compose
-    directories: ["/internal/templates/files/*"]
+    directories: ["/internal/usecase/templates/files/*"]
     schedule:
       interval: weekly
     commit-message:

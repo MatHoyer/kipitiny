@@ -21,12 +21,16 @@ linters:
       rules:
         domain:
           list-mode: strict
-          files: ["**/internal/domain/**"]
-          # anonymize: the anonymization rules, a pure package (no I/O).
-          allow: [$gostd, github.com/kipit-labs/kipitiny/internal/domain, github.com/kipit-labs/kipitiny/internal/anonymize]
+          files: ["**/internal/domain/**", "!**/internal/domain/anonymize/**"]
+          allow: [$gostd, github.com/kipit-labs/kipitiny/internal/domain]
           deny:
             - pkg: github.com/moby
               desc: the domain's container types are its own, the docker adapter converts
+        # The anonymization rules: pure, plus the YAML shorthand x-kipitiny writes them in.
+        domain-anonymize:
+          list-mode: strict
+          files: ["**/internal/domain/anonymize/**"]
+          allow: [$gostd, go.yaml.in/yaml/v3]
         usecase:
           files: ["**/internal/usecase/**"]
           deny:

@@ -20,10 +20,10 @@ Each template asks only what it can't guess (a domain, a key from another app). 
 
 ## Writing a template
 
-A template is a folder in `internal/templates/files/`, built into kipitiny:
+A template is a folder in `internal/usecase/templates/files/`, built into kipitiny:
 
 ```
-internal/templates/files/beszel-hub/
+internal/usecase/templates/files/beszel-hub/
 ├── compose.yaml   the template
 └── logo.svg       optional: the logo it brings
 ```
@@ -84,5 +84,5 @@ The SVG is a plain drawing: one `<svg>` element with `xmlns`, at most 16 KB, no 
 
 - A test checks that every template parses, that it uses exactly the variables it declares, and that its logo exists.
 - A smoke test installs every template on a throwaway Docker, with its required inputs filled in, and checks that each service deploys and stays up. CI runs it on pull requests that change a template, and weekly. Locally, against a Docker daemon without kipitiny on it (a `docker:dind` container works): `KIPITINY_TEST_TEMPLATES=1 go test ./internal/core/ -run TemplatesDocker`.
-- After adding or changing one, run `go generate ./internal/templates`: the demo on this website and the list above come from the file it generates, and a test fails while that file is stale.
+- After adding or changing one, run `go generate ./internal/usecase/templates`: the demo on this website and the list above come from the file it generates, and a test fails while that file is stale.
 - Pin images by version. Dependabot opens a pull request when a newer one is out (the Beszel images move together); CI checks the template still parses and runs. Apps already installed keep their version.

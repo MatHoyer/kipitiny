@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/secrets"
+	"github.com/kipit-labs/kipitiny/internal/domain/secrets"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 )
 

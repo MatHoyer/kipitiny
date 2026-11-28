@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/compose"
 )
 
 // databaseReadyTimeout bounds the wait for a recreated database to pass its

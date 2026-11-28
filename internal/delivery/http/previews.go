@@ -3,7 +3,7 @@ package http
 import (
 	"net/http"
 
-	"github.com/kipit-labs/kipitiny/internal/anonymize"
+	"github.com/kipit-labs/kipitiny/internal/domain/anonymize"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 )
 

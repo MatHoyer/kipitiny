@@ -29,7 +29,7 @@ const versionFiles = import.meta.glob<string>("../../versions/*/*.md", {
 /**
  * The template catalog of each release (site/versions/<minor>/catalog.json);
  * the latest docs use web/src/demo/catalog.json. Both are generated from
- * internal/templates/files by `go generate ./internal/templates`.
+ * internal/usecase/templates/files by `go generate ./internal/usecase/templates`.
  */
 const versionCatalogs = import.meta.glob<Catalog>("../../versions/*/catalog.json", { import: "default", eager: true });
 

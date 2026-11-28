@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/kipit-labs/kipitiny/internal/anonymize"
-	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/anonymize"
+	"github.com/kipit-labs/kipitiny/internal/usecase/compose"
 )
 
 // AnonymizeRules: an anonymized copy is applying the database's rules.

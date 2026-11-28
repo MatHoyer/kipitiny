@@ -22,7 +22,7 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-//go:generate go run ./gen ../../web/src/demo/catalog.json
+//go:generate go run ./gen ../../../web/src/demo/catalog.json
 
 // ExtKey is the top-level block describing a template; compose ignores it.
 const ExtKey = "x-template"

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kipit-labs/kipitiny/internal/upgrade"
+	"github.com/kipit-labs/kipitiny/internal/usecase/upgrade"
 )
 
 func main() {

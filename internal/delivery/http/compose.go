@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/kipit-labs/kipitiny/internal/compose"
+	"github.com/kipit-labs/kipitiny/internal/usecase/compose"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
 )
 

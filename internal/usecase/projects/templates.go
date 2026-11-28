@@ -11,7 +11,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/templates"
+	"github.com/kipit-labs/kipitiny/internal/usecase/templates"
 )
 
 // TemplateInstall installs a template into a project: an existing one

@@ -44,7 +44,7 @@ matches `[0-9]+.[0-9]+.[0-9]+`).
    printf 'X.Y.Z\n' > VERSION
    # The next release's notices become this one's (no-op without any).
    sed -i 's/^## Unreleased$/## X.Y.Z/' UPGRADE.md
-   go run ./internal/upgrade/notes release X.Y.Z   # must succeed: the workflow runs it
+   go run ./internal/usecase/upgrade/notes release X.Y.Z   # must succeed: the workflow runs it
    git add VERSION UPGRADE.md
    git commit -m "chore(release): X.Y.Z"
    git push -u origin chore/release-X.Y.Z

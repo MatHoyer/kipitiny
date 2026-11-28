@@ -8,10 +8,10 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/usecase/compose"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 

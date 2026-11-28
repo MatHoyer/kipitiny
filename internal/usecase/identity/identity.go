@@ -12,7 +12,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/secrets"
+	"github.com/kipit-labs/kipitiny/internal/domain/secrets"
 	"github.com/kipit-labs/kipitiny/internal/usecase/pending"
 )
 

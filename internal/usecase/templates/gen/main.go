@@ -1,6 +1,6 @@
 // Command gen writes the catalog the UI's demo build serves
 // (web/src/demo/catalog.json), so the demo shows the real templates: run
-// `go generate ./internal/templates` after changing one. A test fails when
+// `go generate ./internal/usecase/templates` after changing one. A test fails when
 // the file is stale. Images are written without their tag and the compose
 // file is left out, so bumping an image's version (Dependabot) doesn't
 // change it.
@@ -13,9 +13,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/kipit-labs/kipitiny/internal/compose"
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/templates"
+	"github.com/kipit-labs/kipitiny/internal/usecase/compose"
+	"github.com/kipit-labs/kipitiny/internal/usecase/templates"
 )
 
 // demoTemplate is a template plus the services the demo creates for it.

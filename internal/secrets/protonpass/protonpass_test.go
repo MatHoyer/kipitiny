@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kipit-labs/kipitiny/internal/domain/secrets"
 	"github.com/kipit-labs/kipitiny/internal/progress"
-	"github.com/kipit-labs/kipitiny/internal/secrets"
 )
 
 // fakeRunner stands in for pass-cli: run prefixes each reference with
