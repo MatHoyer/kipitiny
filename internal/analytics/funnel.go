@@ -66,7 +66,7 @@ func (s *Store) Funnel(ctx context.Context, q Query, steps []Step) ([]FunnelStep
 	m, v := match(steps[0])
 	ctes := []string{`s1 AS (SELECT e.visit_id, MIN(e.id) AS id FROM events e
 		WHERE e.hostname IN (?) AND e.created_at >= ? AND e.created_at < ? AND ` + m + ` GROUP BY e.visit_id)`}
-	args := []any{bun.In(q.Hosts), q.From.Unix(), q.To.Unix(), v}
+	args := []any{bun.List(q.Hosts), q.From.Unix(), q.To.Unix(), v}
 	counts := []string{"(SELECT COUNT(*) FROM s1)"}
 	for i := 1; i < len(steps); i++ {
 		m, v := match(steps[i])

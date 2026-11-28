@@ -45,9 +45,9 @@ func Public(st *Store, log *slog.Logger) http.Handler {
 	script := func(w http.ResponseWriter, js []byte) {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=3600")
-		w.Write(js)
+		_, _ = w.Write(js)
 	}
-	preflight := func(w http.ResponseWriter, r *http.Request) {
+	preflight := func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -69,7 +69,7 @@ func Public(st *Store, log *slog.Logger) http.Handler {
 		// Same answer either way: a page can't probe what is tracked.
 		w.WriteHeader(http.StatusNoContent)
 	}
-	mux.HandleFunc("GET /a.js", func(w http.ResponseWriter, r *http.Request) { script(w, tracker) })
+	mux.HandleFunc("GET /a.js", func(w http.ResponseWriter, _ *http.Request) { script(w, tracker) })
 	mux.HandleFunc("OPTIONS /e", preflight)
 	mux.HandleFunc("POST /e", hit)
 	mux.HandleFunc("GET /p/{file}", func(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +81,7 @@ func Public(st *Store, log *slog.Logger) http.Handler {
 		// The same GIF whatever the slug, never cached so each load counts.
 		w.Header().Set("Content-Type", "image/gif")
 		w.Header().Set("Cache-Control", "no-store, max-age=0")
-		w.Write(pixelGIF)
+		_, _ = w.Write(pixelGIF)
 	})
 	mux.HandleFunc("GET /l/{slug}", func(w http.ResponseWriter, r *http.Request) {
 		t, ok := st.tracker(KindLink, r.PathValue("slug"))
@@ -95,11 +95,11 @@ func Public(st *Store, log *slog.Logger) http.Handler {
 	})
 	mux.HandleFunc("POST /api/{project}/envelope/", ingestErrors(st, log, true))
 	mux.HandleFunc("POST /api/{project}/store/", ingestErrors(st, log, false))
-	mux.HandleFunc("OPTIONS /api/{project}/{kind}/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("OPTIONS /api/{project}/{kind}/", func(w http.ResponseWriter, _ *http.Request) {
 		errorsCORS(w)
 		w.WriteHeader(http.StatusNoContent)
 	})
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {})
+	mux.HandleFunc("GET /healthz", func(http.ResponseWriter, *http.Request) {})
 	// A site's own paths, on its own domain (Traefik routes only those
 	// there); anything else falls through to the analytics domain's.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -280,7 +280,7 @@ func Private(st *Store, token string) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(vs)
+		_ = json.NewEncoder(w).Encode(vs)
 	})
 	mux.HandleFunc("GET /api/visits/{id}", func(w http.ResponseWriter, r *http.Request) {
 		d, err := st.Visit(r.Context(), r.URL.Query()["host"], r.PathValue("id"))
@@ -293,7 +293,7 @@ func Private(st *Store, token string) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(d)
+		_ = json.NewEncoder(w).Encode(d)
 	})
 	mux.HandleFunc("GET /api/stats", func(w http.ResponseWriter, r *http.Request) {
 		q, err := parseQuery(r.URL.Query())
@@ -307,7 +307,7 @@ func Private(st *Store, token string) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(s)
+		_ = json.NewEncoder(w).Encode(s)
 	})
 	mux.HandleFunc("GET /api/funnel", func(w http.ResponseWriter, r *http.Request) {
 		q, err := parseQuery(r.URL.Query())
@@ -317,7 +317,7 @@ func Private(st *Store, token string) http.Handler {
 		}
 		steps, err := ParseSteps(r.URL.Query()["step"])
 		if err != nil {
-			reply(w, nil, fmt.Errorf("%w: %v", ErrInvalid, err))
+			reply(w, nil, fmt.Errorf("%w: %w", ErrInvalid, err))
 			return
 		}
 		fs, err := st.Funnel(r.Context(), q, steps)
@@ -378,7 +378,7 @@ func reply(w http.ResponseWriter, v any, err error) {
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(v)
+		_ = json.NewEncoder(w).Encode(v)
 	}
 }
 

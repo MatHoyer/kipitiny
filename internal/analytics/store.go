@@ -279,7 +279,7 @@ func ParseFilters(vs []string) ([]Filter, error) {
 		k, val, ok := strings.Cut(v, ":")
 		_, pv := pageviewBreakdowns[k]
 		_, vi := visitFilters[k]
-		if !ok || !(pv || vi || k == "events") || len(val) > 512 {
+		if !ok || !pv && !vi && k != "events" || len(val) > 512 {
 			return nil, fmt.Errorf("filter %q: want <breakdown>:<value>", v)
 		}
 		fs = append(fs, Filter{k, val})
@@ -300,7 +300,7 @@ func (c *cond) add(sql string, args ...any) {
 
 // filters are the conditions of q.Filters on events and on visits.
 func (q Query) filters() (ev, vi cond) {
-	hosts := bun.In(q.Hosts)
+	hosts := bun.List(q.Hosts)
 	for _, f := range q.Filters {
 		if col, ok := pageviewBreakdowns[f.Key]; ok {
 			ev.add(col+" = ?", f.Value)
@@ -366,7 +366,7 @@ func (s *Store) Stats(ctx context.Context, q Query) (Stats, error) {
 	if len(q.Hosts) == 0 {
 		return st, nil
 	}
-	hosts := bun.In(q.Hosts)
+	hosts := bun.List(q.Hosts)
 	from, to := q.From.Unix(), q.To.Unix()
 	evf, vif := q.filters()
 	// ev and vi select the range's events and visits, filtered; args go first.
@@ -558,7 +558,7 @@ func (s *Store) Visits(ctx context.Context, q Query, before string, limit int) (
 	}
 	_, vif := q.filters()
 	where := "visits.hostname IN (?) AND visits.started_at >= ? AND visits.started_at < ?" + vif.sql
-	args := append([]any{bun.In(q.Hosts), q.From.Unix(), q.To.Unix()}, vif.args...)
+	args := append([]any{bun.List(q.Hosts), q.From.Unix(), q.To.Unix()}, vif.args...)
 	if before != "" {
 		where += " AND visits.id < ?"
 		args = append(args, before)
@@ -579,7 +579,7 @@ func (s *Store) Visit(ctx context.Context, hosts []string, id string) (VisitDeta
 	if len(hosts) == 0 {
 		return d, ErrNotFound
 	}
-	err := s.db.NewRaw("SELECT "+visitCols+" WHERE visits.id = ? AND visits.hostname IN (?)", id, bun.In(hosts)).Scan(ctx, &d.Visit)
+	err := s.db.NewRaw("SELECT "+visitCols+" WHERE visits.id = ? AND visits.hostname IN (?)", id, bun.List(hosts)).Scan(ctx, &d.Visit)
 	if errors.Is(err, sql.ErrNoRows) {
 		return d, ErrNotFound
 	}

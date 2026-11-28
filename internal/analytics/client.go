@@ -47,7 +47,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 		err := fmt.Errorf("analytics: %s: %s", res.Status, bytes.TrimSpace(msg))
 		switch res.StatusCode {
 		case http.StatusNotFound:
-			err = fmt.Errorf("%w: %v", ErrNotFound, err)
+			err = fmt.Errorf("%w: %w", ErrNotFound, err)
 		case http.StatusBadRequest:
 			err = fmt.Errorf("%w: %s", ErrInvalid, bytes.TrimSpace(msg))
 		}
