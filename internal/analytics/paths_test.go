@@ -46,7 +46,9 @@ func TestSitePaths(t *testing.T) {
 	rec := httptest.NewRecorder()
 	pub.ServeHTTP(rec, req)
 	var n int
-	st.db.NewRaw("SELECT COUNT(*) FROM events WHERE path = '/pricing'").Scan(ctx, &n)
+	if err := st.db.NewRaw("SELECT COUNT(*) FROM events WHERE path = '/pricing'").Scan(ctx, &n); err != nil {
+		t.Fatal(err)
+	}
 	if rec.Code != 204 || n != 1 {
 		t.Errorf("hit on the own path: %d, %d events", rec.Code, n)
 	}
