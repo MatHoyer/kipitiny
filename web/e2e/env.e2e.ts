@@ -27,8 +27,11 @@ test("add a variable and a secret, deploy, and the app gets both", async ({ page
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Environment saved")).toBeVisible();
 
-  // Saved, the secret reads back masked, in both views.
+  // Saved, the secret reads back masked: in what the browser receives, and in both views (the list masks whatever it
+  // receives).
+  const service = page.waitForResponse((r) => r.request().method() === "GET" && /\/api\/services\/[^/?]+$/.test(r.url()));
   await page.reload();
+  expect((await (await service).json()).env).toMatchObject({ API_TOKEN: "********" });
   await expect(env.getByRole("listitem").filter({ hasText: "GREETING" })).toContainText("hello from e2e");
   await expect(env.getByRole("listitem").filter({ hasText: "API_TOKEN" })).toContainText("••••••••");
   await expect(env.getByText(SECRET)).toHaveCount(0);
