@@ -44,7 +44,7 @@ x-template:
 name: kipitfit
 services:
   app:
-    image: ghcr.io/kipit-labs/kipitfit:0.3.0
+    image: ghcr.io/kipit-labs/kipitfit:0.4.0
     expose: ["8080"]
     environment:
       KIPITFIT_APP_URL: https://${DOMAIN}
