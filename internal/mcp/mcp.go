@@ -311,6 +311,8 @@ func friendly(err error) error {
 	switch {
 	case err == nil:
 		return nil
+	case errors.Is(err, core.ErrInvalid): // its own reason, whatever cause it wraps
+		return err
 	case errors.Is(err, domain.ErrNotFound):
 		return fmt.Errorf("not found: %s", strings.TrimPrefix(err.Error(), "not found: "))
 	case errors.Is(err, core.ErrBusy):
