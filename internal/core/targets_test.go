@@ -24,7 +24,9 @@ func TestEncryptWithExistingKey(t *testing.T) {
 	st := &storage.Local{Root: dir + "/backups"}
 	var sealed strings.Builder
 	w, _ := age.Encrypt(&sealed, mine.Recipient())
-	w.Write([]byte("pg_dump output"))
+	if _, err := w.Write([]byte("pg_dump output")); err != nil {
+		t.Fatal(err)
+	}
 	w.Close()
 	if err := st.Put(ctx, "shop/db/a.dump", strings.NewReader("plain, older")); err != nil {
 		t.Fatal(err)

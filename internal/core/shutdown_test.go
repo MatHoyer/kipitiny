@@ -35,8 +35,8 @@ func TestShutdownDrainsOperations(t *testing.T) {
 		t.Errorf("new work during drain: %v", err)
 	}
 	select {
-	case <-done:
-		t.Fatal("Shutdown returned before the operation finished")
+	case err := <-done:
+		t.Fatalf("Shutdown returned before the operation finished: %v", err)
 	default:
 	}
 	close(release)
