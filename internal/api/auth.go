@@ -368,8 +368,8 @@ type failLimiter struct {
 	busy   map[string]map[context.Context]bool // attempts running, by request
 }
 
-func newFailLimiter(max int, window time.Duration) *failLimiter {
-	return &failLimiter{max: max, window: window, fails: map[string][]time.Time{}, busy: map[string]map[context.Context]bool{}}
+func newFailLimiter(limit int, window time.Duration) *failLimiter {
+	return &failLimiter{max: limit, window: window, fails: map[string][]time.Time{}, busy: map[string]map[context.Context]bool{}}
 }
 
 // allow reports whether ip may make an attempt, which then counts until it

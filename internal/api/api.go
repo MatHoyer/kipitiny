@@ -289,7 +289,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 	handle("DELETE /api/invites/{id}", a.deleteInvite)
 	handle("POST /api/auth/invite", a.invite)
 	handle("POST /api/auth/invite/accept", a.acceptInvite)
-	handle("/api/", func(w http.ResponseWriter, r *http.Request) {
+	handle("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 	})
 	a.handler = a.protect(mux)
@@ -298,7 +298,7 @@ func New(c *core.Core, log *slog.Logger) *API {
 
 func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) { a.handler.ServeHTTP(w, r) }
 
-func (a *API) health(w http.ResponseWriter, r *http.Request) {
+func (a *API) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

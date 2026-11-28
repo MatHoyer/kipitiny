@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-func (a *API) secretProviders(w http.ResponseWriter, r *http.Request) {
+func (a *API) secretProviders(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, a.core.SecretProviders())
 }
 

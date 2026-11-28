@@ -68,12 +68,12 @@ func (a *API) syncProjectGit(w http.ResponseWriter, r *http.Request) {
 // its body: the server has no read timeout (uploads, streams).
 const webhookReadTimeout = 30 * time.Second
 
-// webhookBody reads a webhook's body, at most max bytes, when core asks for
+// webhookBody reads a webhook's body, at most limit bytes, when core asks for
 // it: after the sender is known, so unknown callers aren't buffered.
-func webhookBody(w http.ResponseWriter, r *http.Request, max int64) func() ([]byte, error) {
+func webhookBody(w http.ResponseWriter, r *http.Request, limit int64) func() ([]byte, error) {
 	return func() ([]byte, error) {
 		_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(webhookReadTimeout))
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, max))
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
 		if err != nil {
 			return nil, fmt.Errorf("%w: payload too large or too slow", core.ErrInvalid)
 		}

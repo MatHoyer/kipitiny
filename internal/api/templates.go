@@ -6,13 +6,13 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 )
 
-func (a *API) listTemplates(w http.ResponseWriter, r *http.Request) {
+func (a *API) listTemplates(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, a.core.ListTemplates())
 }
 
 // templateLogos serves the logos templates bring, drawn by the UI for
 // services that use them.
-func (a *API) templateLogos(w http.ResponseWriter, r *http.Request) {
+func (a *API) templateLogos(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, a.core.TemplateLogos())
 }
 

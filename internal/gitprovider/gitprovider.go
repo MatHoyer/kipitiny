@@ -89,7 +89,7 @@ func Repos(ctx context.Context, kind domain.GitProviderKind, baseURL, token stri
 			}
 			err = getJSON(ctx, kind, fmt.Sprintf("%s/installation/repositories?per_page=%d&page=%d", api, size, page), token, &body)
 			for _, r := range body.Repositories {
-				batch = append(batch, Repo{r.FullName, r.CloneURL, r.DefaultBranch, r.Private})
+				batch = append(batch, Repo(r))
 			}
 			n = len(body.Repositories)
 		case domain.GitLab:
@@ -108,7 +108,7 @@ func Repos(ctx context.Context, kind domain.GitProviderKind, baseURL, token stri
 			var body []githubRepo // Gitea's shape matches GitHub's
 			err = getJSON(ctx, kind, fmt.Sprintf("%s/user/repos?limit=%d&page=%d", api, size, page), token, &body)
 			for _, r := range body {
-				batch = append(batch, Repo{r.FullName, r.CloneURL, r.DefaultBranch, r.Private})
+				batch = append(batch, Repo(r))
 			}
 			n = len(body)
 		}
