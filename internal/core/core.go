@@ -16,8 +16,10 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/git"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/gitprovider"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/notify"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/protonpass"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/registry"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/smtp"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/storage"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
@@ -88,7 +90,7 @@ func New(cfg config.Config, s domain.Store, local *docker.Client, log *slog.Logg
 	bg, cancel := context.WithCancel(context.Background())
 	c := &Core{cfg: cfg, store: s, log: log, bg: bg, cancel: cancel}
 	c.Servers = c.newServers(local)
-	c.Monitoring = monitoring.New(bg, &c.cfg, s, monitoringPorts{c}, log)
+	c.Monitoring = monitoring.New(bg, &c.cfg, s, smtp.Client{}, notify.Channels{}, monitoringPorts{c}, log)
 	c.Identity = identity.New(cfg, s, secretKinds(cfg, c.dockerFor(domain.LocalServerID)), c.Monitoring, log)
 	c.Network = network.New(bg, &c.cfg, s, func(token string) network.DNS { return cloudflare.New(token) }, networkPorts{c}, log)
 	c.Data = data.New(bg, &c.cfg, s, age.Encryption{}, cron.Cron{}, c.openStorage, &c.steps, dataPorts{c}, log)

@@ -56,6 +56,8 @@ linters:
               desc: migrations stay in the adapters (infrastructure/sqlite, sqlitedb)
             - pkg: github.com/minio/minio-go
               desc: use cases reach backup targets through data.Storage (infrastructure/storage)
+            - pkg: github.com/golang-jwt/jwt
+              desc: tokens are signed in the adapters (infrastructure/notify, gitprovider)
         # identity's SSO is an OAuth client of its own; the git forges go
         # through projects.GitProviders (infrastructure/gitprovider).
         usecase-oauth2:

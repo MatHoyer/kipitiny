@@ -1,7 +1,8 @@
-// Package mail sends email through an SMTP server the admin configures
-// (their provider's relay: SES, Postmark, Gmail…). The manager never runs a
-// mail server itself: deliverability needs a reputation it doesn't have.
-package mail
+// Package smtp sends email through an SMTP server the admin configures
+// (their provider's relay: SES, Postmark, Gmail…), as monitoring.SMTP. The
+// manager never runs a mail server itself: deliverability needs a
+// reputation it doesn't have.
+package smtp
 
 import (
 	"bytes"
@@ -9,118 +10,25 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
 	"mime/quotedprintable"
 	"net"
-	"net/mail"
+	netmail "net/mail"
 	"net/smtp"
 	"net/textproto"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kipit-labs/kipitiny/internal/domain/mail"
 )
-
-// Security is how the connection to the server is encrypted.
-type Security string
-
-const (
-	// StartTLS upgrades a plain connection (port 587); refused when the
-	// server doesn't offer it.
-	StartTLS Security = "starttls"
-	// TLS connects with TLS from the start (port 465).
-	TLS Security = "tls"
-	// None sends in clear text: only for a relay on the same host or
-	// network, and never with a password.
-	None Security = "none"
-)
-
-// MaxRecipients bounds one message's To list.
-const MaxRecipients = 50
-
-// ErrConfig wraps every configuration or address error.
-var ErrConfig = errors.New("invalid email settings")
-
-// Config is the server email goes through.
-type Config struct {
-	Host     string   `json:"host"`
-	Port     int      `json:"port"`
-	Security Security `json:"security"`
-	Username string   `json:"username"`
-	Password string   `json:"password"`
-	// From is the sender, an address with an optional name
-	// ("kipitiny <ops@example.com>").
-	From string `json:"from"`
-}
-
-// Validate checks c is complete and consistent.
-func (c Config) Validate() error {
-	if c.Host == "" || strings.ContainsAny(c.Host, " /:") {
-		return fmt.Errorf("%w: host must be a hostname or IP address", ErrConfig)
-	}
-	if c.Port < 1 || c.Port > 65535 {
-		return fmt.Errorf("%w: port must be between 1 and 65535", ErrConfig)
-	}
-	if !slices.Contains([]Security{StartTLS, TLS, None}, c.Security) {
-		return fmt.Errorf("%w: security must be starttls, tls or none", ErrConfig)
-	}
-	if c.Security == None && c.Username != "" {
-		return fmt.Errorf("%w: signing in needs TLS or STARTTLS, or the password would travel in clear text", ErrConfig)
-	}
-	if c.Password != "" && c.Username == "" {
-		return fmt.Errorf("%w: a password needs a username", ErrConfig)
-	}
-	if _, err := ParseAddress(c.From); err != nil {
-		return fmt.Errorf("%w: sender %q is not an email address", ErrConfig, c.From)
-	}
-	return nil
-}
-
-// ParseAddress parses one address, with an optional display name.
-func ParseAddress(s string) (*mail.Address, error) {
-	a, err := mail.ParseAddress(strings.TrimSpace(s))
-	if err != nil {
-		return nil, fmt.Errorf("%w: %q is not an email address", ErrConfig, s)
-	}
-	return a, nil
-}
-
-// ParseList parses comma or newline separated addresses.
-func ParseList(s string) ([]*mail.Address, error) {
-	var out []*mail.Address
-	for p := range strings.FieldsFuncSeq(s, func(r rune) bool { return r == ',' || r == ';' || r == '\n' }) {
-		if p = strings.TrimSpace(p); p == "" {
-			continue
-		}
-		a, err := ParseAddress(p)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, a)
-	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("%w: no recipient", ErrConfig)
-	}
-	if len(out) > MaxRecipients {
-		return nil, fmt.Errorf("%w: at most %d recipients", ErrConfig, MaxRecipients)
-	}
-	return out, nil
-}
-
-// Message is one email, sent with a plain text and an HTML part.
-type Message struct {
-	To      []*mail.Address
-	Subject string
-	Text    string
-	HTML    string
-}
 
 // Check connects and signs in without sending anything.
-func Check(ctx context.Context, cfg Config) error {
+func Check(ctx context.Context, cfg mail.Config) error {
 	c, err := dial(ctx, cfg)
 	if err != nil {
 		return err
@@ -130,11 +38,11 @@ func Check(ctx context.Context, cfg Config) error {
 }
 
 // Send delivers m through the server; ctx bounds the whole exchange.
-func Send(ctx context.Context, cfg Config, m Message) error {
+func Send(ctx context.Context, cfg mail.Config, m mail.Message) error {
 	if len(m.To) == 0 {
-		return fmt.Errorf("%w: no recipient", ErrConfig)
+		return fmt.Errorf("%w: no recipient", mail.ErrConfig)
 	}
-	from, err := ParseAddress(cfg.From)
+	from, err := mail.ParseAddress(cfg.From)
 	if err != nil {
 		return err
 	}
@@ -170,7 +78,7 @@ func Send(ctx context.Context, cfg Config, m Message) error {
 
 // dial connects, upgrades to TLS as configured and signs in. The
 // connection is closed when ctx ends.
-func dial(ctx context.Context, cfg Config) (*smtp.Client, error) {
+func dial(ctx context.Context, cfg mail.Config) (*smtp.Client, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -178,7 +86,7 @@ func dial(ctx context.Context, cfg Config) (*smtp.Client, error) {
 	tc := &tls.Config{ServerName: cfg.Host, MinVersion: tls.VersionTLS12}
 	var conn net.Conn
 	var err error
-	if cfg.Security == TLS {
+	if cfg.Security == mail.TLS {
 		conn, err = (&tls.Dialer{Config: tc}).DialContext(ctx, "tcp", addr)
 	} else {
 		conn, err = (&net.Dialer{}).DialContext(ctx, "tcp", addr)
@@ -204,11 +112,11 @@ func dial(ctx context.Context, cfg Config) (*smtp.Client, error) {
 	return c, nil
 }
 
-func setup(c *smtp.Client, cfg Config, tc *tls.Config) error {
+func setup(c *smtp.Client, cfg mail.Config, tc *tls.Config) error {
 	if err := c.Hello("localhost"); err != nil {
 		return fmt.Errorf("smtp: %w", err)
 	}
-	if cfg.Security == StartTLS {
+	if cfg.Security == mail.StartTLS {
 		if ok, _ := c.Extension("STARTTLS"); !ok {
 			return fmt.Errorf("smtp: %s doesn't offer STARTTLS; pick TLS or another port", cfg.Host)
 		}
@@ -259,7 +167,7 @@ func (a loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
 }
 
 // build renders m as a MIME message with CRLF line endings.
-func build(from *mail.Address, m Message, now time.Time) ([]byte, error) {
+func build(from *netmail.Address, m mail.Message, now time.Time) ([]byte, error) {
 	var b bytes.Buffer
 	to := make([]string, len(m.To))
 	for i, a := range m.To {
@@ -321,4 +229,13 @@ func messageID(from string) string {
 // oneLine keeps a header value on one line, whatever it was given.
 func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
+}
+
+// Client is the admin's mail server, as monitoring.SMTP.
+type Client struct{}
+
+func (Client) Check(ctx context.Context, cfg mail.Config) error { return Check(ctx, cfg) }
+
+func (Client) Send(ctx context.Context, cfg mail.Config, m mail.Message) error {
+	return Send(ctx, cfg, m)
 }

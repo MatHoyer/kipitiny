@@ -27,7 +27,7 @@ type NotificationRepository interface {
 }
 
 // NotificationChannel is one destination for notifications. Config is
-// specific to the kind (see internal/notify) and may hold secrets.
+// specific to the kind (see internal/infrastructure/notify) and may hold secrets.
 type NotificationChannel struct {
 	ID     string            `bun:"id,pk" json:"id"`
 	Name   string            `bun:"name" json:"name"`

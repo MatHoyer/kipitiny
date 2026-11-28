@@ -10,13 +10,15 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/domain/mail"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/git"
+	notifych "github.com/kipit-labs/kipitiny/internal/infrastructure/notify"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/smtp"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/smtp/smtptest"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/storage"
-	"github.com/kipit-labs/kipitiny/internal/mail"
-	"github.com/kipit-labs/kipitiny/internal/mail/mailtest"
 	"github.com/kipit-labs/kipitiny/internal/progress"
 	"github.com/kipit-labs/kipitiny/internal/usecase/data"
 	"github.com/kipit-labs/kipitiny/internal/usecase/deploy"
@@ -55,7 +57,7 @@ func newTestCore(t *testing.T, cfg config.Config) *testCore {
 	c := &testCore{cfg: &cfg, store: st}
 	t.Cleanup(func() { cancel(); c.ops.Wait(); st.Close() })
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	c.Monitoring = monitoring.New(bg, c.cfg, st, c, log)
+	c.Monitoring = monitoring.New(bg, c.cfg, st, smtp.Client{}, notifych.Channels{}, c, log)
 	c.Identity = identity.New(cfg, st, nil, c.Monitoring, log)
 	c.Network = network.New(bg, c.cfg, st, nil, c, log)
 	openStorage := func(t domain.BackupTarget) (data.Storage, error) {
@@ -110,6 +112,6 @@ func (c *testCore) ResourceAlerts(context.Context) domain.ResourceAlerts {
 func (c *testCore) AnalyticsDomain(context.Context) string { return "" }
 
 // localProvider is an email provider sending to a fake server.
-func localProvider(name string, srv *mailtest.Server) monitoring.EmailProviderInput {
+func localProvider(name string, srv *smtptest.Server) monitoring.EmailProviderInput {
 	return monitoring.EmailProviderInput{Name: name, Config: mail.Config{Host: "127.0.0.1", Port: srv.Port, Security: mail.None, From: "ops@example.com"}}
 }

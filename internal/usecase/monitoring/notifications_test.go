@@ -15,7 +15,7 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 )
 
 const webhook = "https://discord.com/api/webhooks/1/secret"

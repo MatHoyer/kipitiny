@@ -14,7 +14,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/mail/mailtest"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/smtp/smtptest"
 )
 
 var pngLogo = []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00")
@@ -111,7 +111,7 @@ func TestSetBrandingValidates(t *testing.T) {
 func TestBrandedEmail(t *testing.T) {
 	c := newTestCore(t, config.Config{Domain: "ops.example.com"})
 	ctx := identity.WithActor(context.Background(), identity.Actor{Kind: "user", Name: "admin", Role: domain.RoleAdmin})
-	srv := mailtest.NewServer(t)
+	srv := smtptest.NewServer(t)
 	p, err := c.CreateEmailProvider(ctx, localProvider("relay", srv))
 	if err != nil {
 		t.Fatal(err)

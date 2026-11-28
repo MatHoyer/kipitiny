@@ -1,63 +1,28 @@
-package mail
+package smtp
 
 import (
 	"context"
-	"errors"
 	"io"
 	"mime"
 	"mime/multipart"
 	"net"
-	"net/mail"
+	netmail "net/mail"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/kipit-labs/kipitiny/internal/mail/mailtest"
+	"github.com/kipit-labs/kipitiny/internal/domain/mail"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/smtp/smtptest"
 )
 
-func TestValidate(t *testing.T) {
-	ok := Config{Host: "smtp.example.com", Port: 587, Security: StartTLS, Username: "u", Password: "p", From: "kipitiny <ops@example.com>"}
-	if err := ok.Validate(); err != nil {
-		t.Fatal(err)
-	}
-	tests := map[string]func(*Config){
-		"no host":          func(c *Config) { c.Host = "" },
-		"url host":         func(c *Config) { c.Host = "smtp://x" },
-		"port":             func(c *Config) { c.Port = 0 },
-		"security":         func(c *Config) { c.Security = "ssl" },
-		"clear password":   func(c *Config) { c.Security = None },
-		"password no user": func(c *Config) { c.Username = "" },
-		"from":             func(c *Config) { c.From = "ops" },
-	}
-	for name, change := range tests {
-		c := ok
-		change(&c)
-		if err := c.Validate(); !errors.Is(err, ErrConfig) {
-			t.Errorf("%s: got %v", name, err)
-		}
-	}
-}
-
-func TestParseList(t *testing.T) {
-	as, err := ParseList("a@example.com, Bob <b@example.com>;\n c@example.com")
-	if err != nil || len(as) != 3 || as[1].Name != "Bob" {
-		t.Fatalf("got %v, %v", as, err)
-	}
-	for _, s := range []string{"", " , ", "a@example.com, nope"} {
-		if _, err := ParseList(s); !errors.Is(err, ErrConfig) {
-			t.Errorf("%q: got %v", s, err)
-		}
-	}
-}
-
 func TestBuild(t *testing.T) {
-	from, _ := ParseAddress("kipitiny <ops@example.com>")
-	to, _ := ParseList("a@example.com")
-	m, err := Body{
+	from, _ := mail.ParseAddress("kipitiny <ops@example.com>")
+	to, _ := mail.ParseList("a@example.com")
+	m, err := mail.Body{
 		Title:      "shop/web deployment failed",
 		Paragraphs: []string{"exit 1"},
-		Fields:     []Field{{"Project", "shop"}, {"Empty", ""}},
-		Button:     &Link{"Open", "https://kipitiny.example.com/services/1"},
+		Fields:     []mail.Field{{Name: "Project", Value: "shop"}, {Name: "Empty", Value: ""}},
+		Button:     &mail.Link{Label: "Open", URL: "https://kipitiny.example.com/services/1"},
 	}.Message(to, "Déploiement\r\nBcc: x@evil.example")
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +31,7 @@ func TestBuild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	msg, err := mail.ReadMessage(strings.NewReader(string(raw)))
+	msg, err := netmail.ReadMessage(strings.NewReader(string(raw)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,12 +85,12 @@ func TestLoginAuth(t *testing.T) {
 }
 
 func TestSend(t *testing.T) {
-	srv := mailtest.NewServer(t)
-	cfg := Config{Host: "127.0.0.1", Port: srv.Port, Security: None, From: "ops@example.com"}
-	to, _ := ParseList("a@example.com, b@example.com")
+	srv := smtptest.NewServer(t)
+	cfg := mail.Config{Host: "127.0.0.1", Port: srv.Port, Security: mail.None, From: "ops@example.com"}
+	to, _ := mail.ParseList("a@example.com, b@example.com")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := Send(ctx, cfg, Message{To: to, Subject: "hi", Text: "hello"}); err != nil {
+	if err := Send(ctx, cfg, mail.Message{To: to, Subject: "hi", Text: "hello"}); err != nil {
 		t.Fatal(err)
 	}
 	m := <-srv.Messages
@@ -138,8 +103,8 @@ func TestSend(t *testing.T) {
 }
 
 func TestStartTLSRequired(t *testing.T) {
-	srv := mailtest.NewServer(t)
-	cfg := Config{Host: "127.0.0.1", Port: srv.Port, Security: StartTLS, From: "ops@example.com"}
+	srv := smtptest.NewServer(t)
+	cfg := mail.Config{Host: "127.0.0.1", Port: srv.Port, Security: mail.StartTLS, From: "ops@example.com"}
 	err := Check(context.Background(), cfg)
 	if err == nil || !strings.Contains(err.Error(), "STARTTLS") {
 		t.Fatalf("got %v", err)
@@ -154,7 +119,7 @@ func TestDialTimeout(t *testing.T) {
 	defer l.Close() // accepts nothing: the greeting never comes
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-	cfg := Config{Host: "127.0.0.1", Port: l.Addr().(*net.TCPAddr).Port, Security: None, From: "ops@example.com"}
+	cfg := mail.Config{Host: "127.0.0.1", Port: l.Addr().(*net.TCPAddr).Port, Security: mail.None, From: "ops@example.com"}
 	start := time.Now()
 	if err := Check(ctx, cfg); err == nil {
 		t.Fatal("no error")

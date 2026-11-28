@@ -7,35 +7,33 @@ import (
 	netmail "net/mail"
 	"strings"
 
-	"github.com/kipit-labs/kipitiny/internal/mail"
+	"github.com/kipit-labs/kipitiny/internal/domain/mail"
+
+	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 )
 
-// EmailProviderKey is the email field naming the provider mail goes
-// through; its options are the manager's.
-const EmailProviderKey = "provider"
-
-var emailKind = Kind{
+var emailKind = notify.Kind{
 	Name:  "email",
 	Label: "Email",
-	Fields: []ConfigField{{
+	Fields: []notify.ConfigField{{
 		Key:         "to",
 		Label:       "Recipients",
 		Placeholder: "ops@example.com, oncall@example.com",
 		Required:    true,
 	}, {
-		Key:      EmailProviderKey,
+		Key:      notify.EmailProviderKey,
 		Label:    "Send through",
 		Required: true,
 	}},
 	New: newEmail,
 }
 
-func newEmail(cfg map[string]string, d Deps) (Sender, error) {
+func newEmail(cfg map[string]string, d notify.Deps) (notify.Sender, error) {
 	to, err := mail.ParseList(cfg["to"])
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrConfig, strings.TrimPrefix(err.Error(), mail.ErrConfig.Error()+": "))
+		return nil, fmt.Errorf("%w: %s", notify.ErrConfig, strings.TrimPrefix(err.Error(), mail.ErrConfig.Error()+": "))
 	}
-	return &email{provider: cfg[EmailProviderKey], to: to, send: d.Mail, brand: d.brand()}, nil
+	return &email{provider: cfg[notify.EmailProviderKey], to: to, send: d.Mail, brand: brand(d)}, nil
 }
 
 type email struct {
@@ -45,14 +43,14 @@ type email struct {
 	brand    string
 }
 
-var emailColors = map[Level]string{
-	Info:    "#5865f2",
-	Success: "#22c55e",
-	Warning: "#f59e0b",
-	Error:   "#ef4444",
+var emailColors = map[notify.Level]string{
+	notify.Info:    "#5865f2",
+	notify.Success: "#22c55e",
+	notify.Warning: "#f59e0b",
+	notify.Error:   "#ef4444",
 }
 
-func emailBody(e Event, brand string) mail.Body {
+func emailBody(e notify.Event, brand string) mail.Body {
 	b := mail.Body{
 		Title:  e.Title,
 		Accent: emailColors[e.Level],
@@ -70,7 +68,7 @@ func emailBody(e Event, brand string) mail.Body {
 	return b
 }
 
-func (m *email) Send(ctx context.Context, e Event) error {
+func (m *email) Send(ctx context.Context, e notify.Event) error {
 	if m.send == nil {
 		return errors.New("email: no email provider")
 	}

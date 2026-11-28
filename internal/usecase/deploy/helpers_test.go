@@ -17,6 +17,8 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/age"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/cron"
+	notifych "github.com/kipit-labs/kipitiny/internal/infrastructure/notify"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/smtp"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/storage"
 	"github.com/kipit-labs/kipitiny/internal/progress"
@@ -57,7 +59,7 @@ func newTestCore(t *testing.T, cfg config.Config) *testCore {
 	c := &testCore{cfg: &cfg, store: st, bg: bg}
 	t.Cleanup(func() { cancel(); c.ops.Wait(); st.Close() })
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	c.Monitoring = monitoring.New(bg, c.cfg, st, c, log)
+	c.Monitoring = monitoring.New(bg, c.cfg, st, smtp.Client{}, notifych.Channels{}, c, log)
 	c.Identity = identity.New(cfg, st, nil, c.Monitoring, log)
 	c.Network = network.New(bg, c.cfg, st, nil, c, log)
 	openStorage := func(t domain.BackupTarget) (data.Storage, error) {

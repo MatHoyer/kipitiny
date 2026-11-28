@@ -8,7 +8,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/config"
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/mail/mailtest"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/smtp/smtptest"
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 	"github.com/kipit-labs/kipitiny/internal/usecase/monitoring"
 )
@@ -24,7 +24,7 @@ func TestInviteEmail(t *testing.T) {
 	if _, err := c.CreateInvite(ctx, in); !errors.Is(err, monitoring.ErrNoEmail) {
 		t.Fatalf("without SMTP: %v", err)
 	}
-	srv := mailtest.NewServer(t)
+	srv := smtptest.NewServer(t)
 	if _, err := c.CreateEmailProvider(ctx, localProvider("relay", srv)); err != nil {
 		t.Fatal(err)
 	}

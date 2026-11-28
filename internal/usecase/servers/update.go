@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/notify"
+	"github.com/kipit-labs/kipitiny/internal/domain/notify"
 	"github.com/kipit-labs/kipitiny/internal/usecase/upgrade"
 )
 
