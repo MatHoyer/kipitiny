@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/docker"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 )
@@ -33,7 +32,7 @@ func newServer(t *testing.T) *httptest.Server {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	c := core.New(config.Config{SetupToken: "setup-secret", DataDir: t.TempDir()}, st, dc, log)
+	c := newTestApp(config.Config{SetupToken: "setup-secret", DataDir: t.TempDir()}, st, dc, log)
 	if err := c.InitAuth(ctx); err != nil {
 		t.Fatal(err)
 	}

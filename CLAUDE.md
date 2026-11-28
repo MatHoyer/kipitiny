@@ -5,14 +5,22 @@ Design doc: `docs/design.md` — read before architectural changes. Roadmap in �
 ## Rules
 - Manager is ONE process: no Postgres/Redis/worker containers for its own state.
 - RAM budget matters: no Node at runtime, no heavy deps.
-- Layers, dependencies pointing inward (kipitrek's layout, enforced by depguard in `.golangci.yml`):
-  `internal/domain` (entities, repository interfaces, the other ports such as `ContainerRuntime`, `Encryption`, `Cron` and `Git`, shared errors; standard library only) ←
-  `internal/usecase/<area>` (the logic) ← `internal/infrastructure/<adapter>` (SQLite, age, cron, go-git) and the delivery
-  (`internal/delivery/http` REST, `internal/delivery/mcp` tools). Wiring only in `cmd/kipitiny`. Handlers/MCP never touch SQL or Docker
-  directly. `internal/core` is the wiring and lifecycle around the areas: it embeds each area's struct
-  (`*identity.Identity`, `*network.Network`, `*monitoring.Monitoring`, `*data.Data`, `*deploy.Deployer`,
-  `*servers.Servers`, `*projects.Projects`), so handlers call `core.X` for every area, implements each area's
-  `Manager` port (`ports_*.go`), and owns background work, shutdown and the service locks.
+- Layers, dependencies pointing inward (kipitrek's layout, enforced by depguard in `.golangci.yml`); `internal/` holds
+  exactly `domain usecase infrastructure delivery` and the kernels `config ids progress` (`make lint` checks it):
+  `internal/domain` (entities, repository interfaces, the other ports such as `ContainerRuntime`, `Encryption`, `Cron` and `Git`,
+  shared errors, the vocabulary packages `analytics`, `anonymize`, `cloudflare`, `gitprovider`, `mail`, `notify`, `secrets`;
+  standard library only) ← `internal/usecase/<area>` (the logic; a strict allowlist of outside modules) ←
+  `internal/infrastructure/<adapter>` (SQLite, age, cron, go-git, Docker, SMTP…) and the delivery (`internal/delivery/http` REST,
+  `internal/delivery/mcp` tools, `internal/delivery/collector` the analytics server's routes). Wiring only in `cmd/kipitiny`
+  (`wire.go` builds every adapter and hands them to `app.New`). Handlers/MCP never touch SQL or Docker directly.
+- Two documented exceptions to kipitrek's layout:
+  - `internal/progress` is a kernel next to `config` and `ids`, not a use case: infrastructure imports it too
+    (storage and protonpass report their steps through it).
+  - The delivery calls one facade, `internal/usecase/app`, instead of one service per handler. It embeds each area's
+    struct (`*identity.Identity`, `*network.Network`, `*monitoring.Monitoring`, `*data.Data`, `*deploy.Deployer`,
+    `*servers.Servers`, `*projects.Projects`), so handlers call `app.X` for every area, implements each area's `Manager`
+    port (`ports_*.go`), and owns background work, shutdown and the service locks. Splitting it per handler would rewrite
+    some 650 call sites for no gain in safety.
 - A use case area reaches another through a small interface it declares (`identity.Mailer`), never an import cycle;
   no interface for code with a single implementation otherwise.
 - `make lint` runs golangci-lint (`.golangci.yml`: depguard layer rules, files under 500 lines) on the code changed
@@ -22,7 +30,7 @@ Design doc: `docs/design.md` — read before architectural changes. Roadmap in �
   `internal/infrastructure/sqlite`); keep SQL portable (SQLite now, Postgres later). STRICT tables, TEXT ULIDs, one goose folder per dialect.
 - Docker SDK is `github.com/moby/moby/client` (Options/Result struct API, not the old `docker/docker/client` signatures). Use `cerrdefs.IsNotFound`.
 - Use cases drive Docker through `domain.ContainerRuntime` and its types (`ContainerSpec`, `Container`…), implemented by
-  `internal/infrastructure/docker` (local daemon, remote ones over SSH, the pool core hands servers). Only adapters
+  `internal/infrastructure/docker` (local daemon, remote ones over SSH, the pool cmd/kipitiny/wire.go hands servers). Only adapters
   import moby, go-git, age, robfig/cron, SQLite, goose, minio, jwt or oauth2 (identity's SSO aside): depguard refuses them in `internal/usecase` (moby in `internal/domain` too).
 - Everything created on Docker carries `kipitiny.*` labels (`domain.Label*`, network names in `internal/domain/docker.go`).
 - Postgres services are always 1 replica.
@@ -39,8 +47,8 @@ The tests are the safety net that lets agents change code: a change is done when
 
 | Layer | Where | Covers |
 |---|---|---|
-| Unit | `*_test.go` next to the code (`internal/usecase/*`, `internal/core`), store on a temp SQLite | business rules, edge cases |
-| Docker integration | `internal/core/*_docker_test.go` (`KIPITINY_TEST_DOCKER=1`), `flows_docker_test.go` for deploy, rollback, reconcile, compose, backups, previews | what core does on a real daemon |
+| Unit | `*_test.go` next to the code (`internal/usecase/*`), store on a temp SQLite | business rules, edge cases |
+| Docker integration | `internal/usecase/app/*_docker_test.go` (`KIPITINY_TEST_DOCKER=1`), `flows_docker_test.go` for deploy, rollback, reconcile, compose, backups, previews | what the use cases do on a real daemon |
 | HTTP and MCP contract | `internal/delivery/http/*_test.go`, `routeAccess` (`access.go`) checked over HTTP by `TestRouteAccessOverHTTP`; `internal/delivery/mcp` `toolAccess` by `TestToolAccess` | status codes, who may call each route and tool |
 | API end to end | `cmd/kipitiny/api_integration_test.go` (`KIPITINY_TEST_DOCKER=1`): the real `wire()` over HTTP, temp SQLite, deploying on a Docker daemon, CI's `kipitiny preview` included; only email and outside services may be faked | user journeys across every layer |
 | UI end to end | `web/e2e/*.e2e.ts` (Playwright): the real binary deploying on a Docker daemon with Traefik and the analytics server built from it, WebKit at iPhone size and desktop Chromium, outside requests answered locally | user journeys in a browser, phone layout, uncaught page errors |
@@ -48,7 +56,7 @@ The tests are the safety net that lets agents change code: a change is done when
 - A new route goes into `routeAccess`, a new MCP tool into `toolAccess`; a new user-facing flow adds or extends a
   journey in both end-to-end suites (API, and UI for what users click); a new page or tab is opened by `e2e/pages.e2e.ts` (a render error shows the router's error page instead of
   throwing, so only that test sees it).
-- Tests that deploy through core (`flows_docker_test.go`, the API journeys, `make e2e`) need a Docker daemon of their
+- Tests that deploy through the app facade (`flows_docker_test.go`, the API journeys, `make e2e`) need a Docker daemon of their
   own: the reconciler removes `kipitiny.managed` containers it doesn't know (`make cover` runs the API journeys after
   the other packages for that reason). Locally, a throwaway one
   (`docker run -d --privileged -e DOCKER_TLS_CERTDIR= -p 127.0.0.1:2375:2375 docker:dind`, then `DOCKER_HOST=tcp://127.0.0.1:2375`;

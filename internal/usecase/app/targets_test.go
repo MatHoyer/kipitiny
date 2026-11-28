@@ -1,0 +1,63 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"filippo.io/age"
+
+	"github.com/kipit-labs/kipitiny/internal/config"
+	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/storage"
+)
+
+func TestEncryptWithExistingKey(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	c := newTestCore(t, config.Config{DataDir: dir})
+	mine, _ := age.GenerateX25519Identity()
+	other, _ := age.GenerateX25519Identity()
+
+	// A backup another manager encrypted with mine.
+	st := &storage.Local{Root: dir + "/backups"}
+	var sealed strings.Builder
+	w, _ := age.Encrypt(&sealed, mine.Recipient())
+	if _, err := w.Write([]byte("pg_dump output")); err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	if err := st.Put(ctx, "shop/db/a.dump", strings.NewReader("plain, older")); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Put(ctx, "shop/db/b.dump.age", strings.NewReader(sealed.String())); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, bad := range []string{"not a key", other.String()} {
+		if _, err := c.EncryptBackupTarget(ctx, domain.LocalTargetID, bad); !errors.Is(err, ErrInvalid) {
+			t.Errorf("key %.20q accepted: %v", bad, err)
+		}
+	}
+	tg, err := c.EncryptBackupTarget(ctx, domain.LocalTargetID, "  "+mine.String()+"\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tg.AgeRecipient != mine.Recipient().String() {
+		t.Fatalf("recipient %q", tg.AgeRecipient)
+	}
+	if k, _ := c.BackupTargetKey(ctx, domain.LocalTargetID); k.Identity != mine.String() {
+		t.Fatalf("stored identity %q", k.Identity)
+	}
+	// The key can't be replaced, even by a valid one.
+	if _, err := c.EncryptBackupTarget(ctx, domain.LocalTargetID, mine.String()); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("re-encrypted: %v", err)
+	}
+
+	// Nothing encrypted yet: any key will do.
+	empty := newTestCore(t, config.Config{DataDir: t.TempDir()})
+	if tg, err := empty.EncryptBackupTarget(ctx, domain.LocalTargetID, other.String()); err != nil || tg.AgeRecipient != other.Recipient().String() {
+		t.Fatalf("empty storage: %+v %v", tg, err)
+	}
+}

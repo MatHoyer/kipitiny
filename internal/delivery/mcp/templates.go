@@ -10,8 +10,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 	"github.com/kipit-labs/kipitiny/internal/usecase/projects"
 	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 	"github.com/kipit-labs/kipitiny/internal/usecase/templates"
@@ -43,7 +43,7 @@ func (t *tools) installTemplate(ctx context.Context, _ *mcp.CallToolRequest, in 
 		switch {
 		case err == nil:
 			if in.Server != "" {
-				return projects.TemplateResult{}, fmt.Errorf("%w: project %s already exists; server is only for a new one", core.ErrInvalid, in.Project)
+				return projects.TemplateResult{}, fmt.Errorf("%w: project %s already exists; server is only for a new one", app.ErrInvalid, in.Project)
 			}
 			req.ProjectID = p.ID
 		case errors.Is(err, domain.ErrNotFound):

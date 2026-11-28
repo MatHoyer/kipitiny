@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 )
 
 // test answers a call checking an integration still works: 204 or the
@@ -39,7 +39,7 @@ func (a *API) progress(w http.ResponseWriter, r *http.Request, op func(context.C
 		_ = enc.Encode(v)
 		_ = rc.Flush()
 	}
-	ctx := core.WithProgress(r.Context(), func(step string) { send(map[string]string{"step": step}) })
+	ctx := app.WithProgress(r.Context(), func(step string) { send(map[string]string{"step": step}) })
 	v, err := op(ctx)
 	if err != nil {
 		code, msg := a.failure(err)

@@ -151,7 +151,7 @@ cmd/kipitiny/          entrypoint
 internal/config/       env config
 internal/domain/       entities, repository interfaces (one per area), ports (ContainerRuntime, Git, Encryption, Cron), label/network names, shared errors
 internal/usecase/      use cases by area, each its own package
-internal/core/         wiring and lifecycle; embeds each area for the handlers
+internal/usecase/app/  the facade: embeds each area for the handlers, background work and shutdown
 internal/infrastructure/sqlite/ SQLite store (bun + goose migrations)
 internal/infrastructure/age/    backup encryption (age X25519 keys)
 internal/infrastructure/cron/   cron expressions and schedulers (robfig/cron)

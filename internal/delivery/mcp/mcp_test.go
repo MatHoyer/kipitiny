@@ -16,11 +16,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/core"
 	httpdelivery "github.com/kipit-labs/kipitiny/internal/delivery/http"
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/docker"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 )
 
 type bearer struct{ token string }
@@ -32,7 +32,7 @@ func (b bearer) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 // asUser creates a user and returns a context acting as them.
-func asUser(t *testing.T, c *core.Core, st domain.Store, name string, role domain.Role) (context.Context, domain.User) {
+func asUser(t *testing.T, c *app.App, st domain.Store, name string, role domain.Role) (context.Context, domain.User) {
 	t.Helper()
 	ctx := context.Background()
 	u, err := st.CreateUser(ctx, domain.User{Username: name, PasswordHash: "x", Role: role})
@@ -55,7 +55,7 @@ func TestTools(t *testing.T) {
 	defer st.Close()
 	dc, _ := docker.New()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	c := core.New(config.Config{DataDir: t.TempDir()}, st, dc, log)
+	c := newTestApp(config.Config{DataDir: t.TempDir()}, st, dc, log)
 	a := httpdelivery.New(c, log)
 	srv := httptest.NewServer(a.Authenticated(Handler(c, "test")))
 	defer srv.Close()
@@ -175,7 +175,7 @@ func TestDeployImageKeepsSettings(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "unix://"+filepath.Join(t.TempDir(), "none.sock")) // the deploy must never reach the host's Docker
 	dc, _ := docker.New()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	c := core.New(config.Config{DataDir: t.TempDir()}, st, dc, log)
+	c := newTestApp(config.Config{DataDir: t.TempDir()}, st, dc, log)
 	srv := httptest.NewServer(httpdelivery.New(c, log).Authenticated(Handler(c, "test")))
 	defer srv.Close()
 

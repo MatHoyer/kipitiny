@@ -9,7 +9,7 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 )
 
 func (a *API) listSSOProviders(w http.ResponseWriter, r *http.Request) {
@@ -167,7 +167,7 @@ func (a *API) ssoCallback(w http.ResponseWriter, r *http.Request) {
 		}
 		// The flow is dropped all the same: its state is single use.
 		res, _ = a.core.FinishSSO(r.Context(), q.Get("state"), "", "")
-		err = fmt.Errorf("%w: the provider refused the sign-in: %s", core.ErrInvalid, msg)
+		err = fmt.Errorf("%w: the provider refused the sign-in: %s", app.ErrInvalid, msg)
 	} else {
 		res, err = a.core.FinishSSO(r.Context(), q.Get("state"), cookie, q.Get("code"))
 	}
@@ -224,8 +224,8 @@ func (a *API) ssoRedirect(w http.ResponseWriter, r *http.Request, page, done str
 	case err != nil:
 		msg := "the sign-in failed; see the manager logs"
 		switch {
-		case errors.Is(err, core.ErrInvalid):
-			msg = reason(err, core.ErrInvalid)
+		case errors.Is(err, app.ErrInvalid):
+			msg = reason(err, app.ErrInvalid)
 		case errors.Is(err, identity.ErrUnauthorized):
 			msg = reason(err, identity.ErrUnauthorized)
 		default:

@@ -17,8 +17,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 )
 
 var release = regexp.MustCompile(`^(\d+\.\d+)\.\d+$`)
@@ -36,9 +36,9 @@ func docs(version string) (index, base, sources string) {
 }
 
 // Handler serves MCP. It must run behind authentication that puts a
-// core.Actor in the request context. /mcp?dry_run=true serves the same tools
+// app.Actor in the request context. /mcp?dry_run=true serves the same tools
 // in dry-run mode (see addTool).
-func Handler(c *core.Core, version string) http.Handler {
+func Handler(c *app.App, version string) http.Handler {
 	live, dry := newServer(c, version, false), newServer(c, version, true)
 	return mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		if on, _ := strconv.ParseBool(r.URL.Query().Get("dry_run")); on {
@@ -51,7 +51,7 @@ func Handler(c *core.Core, version string) http.Handler {
 	})
 }
 
-func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
+func newServer(c *app.App, version string, dryRun bool) *mcp.Server {
 	docsIndex, docsBase, docsSources := docs(version)
 	instructions := "Manage apps and databases (PostgreSQL, Redis, MySQL, MariaDB, MongoDB) on this kipitiny server. " +
 		"Refer to services as project/service. A token may do what its owner may, or only the projects and permissions it was restricted to; " +
@@ -286,10 +286,10 @@ func newServer(c *core.Core, version string, dryRun bool) *mcp.Server {
 	return server
 }
 
-type tools struct{ c *core.Core }
+type tools struct{ c *app.App }
 
 // mutate checks there is an actor, runs f and records the outcome in the audit log.
-func mutate[T any](ctx context.Context, c *core.Core, action, target string, f func() (T, error)) (T, error) {
+func mutate[T any](ctx context.Context, c *app.App, action, target string, f func() (T, error)) (T, error) {
 	var zero T
 	if err := identity.Authenticated(ctx); err != nil {
 		c.Audit(ctx, "mcp "+action, target, http.StatusForbidden, err) // denied attempts matter too
@@ -311,11 +311,11 @@ func friendly(err error) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, core.ErrInvalid): // its own reason, whatever cause it wraps
+	case errors.Is(err, app.ErrInvalid): // its own reason, whatever cause it wraps
 		return err
 	case errors.Is(err, domain.ErrNotFound):
 		return fmt.Errorf("not found: %s", strings.TrimPrefix(err.Error(), "not found: "))
-	case errors.Is(err, core.ErrBusy):
+	case errors.Is(err, app.ErrBusy):
 		return errors.New("another operation (deploy, backup, restore) is running on this service; retry shortly")
 	}
 	return err

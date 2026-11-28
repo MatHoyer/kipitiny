@@ -31,8 +31,27 @@ linters:
           list-mode: strict
           files: ["**/internal/domain/anonymize/**"]
           allow: [$gostd, go.yaml.in/yaml/v3]
+        # Use cases: the standard library, the domain, the kernels and the
+        # few pure libraries below. Anything else goes behind a port.
         usecase:
+          list-mode: strict
           files: ["**/internal/usecase/**"]
+          allow:
+            - $gostd
+            - github.com/kipit-labs/kipitiny/internal/domain
+            - github.com/kipit-labs/kipitiny/internal/usecase
+            - github.com/kipit-labs/kipitiny/internal/config
+            - github.com/kipit-labs/kipitiny/internal/ids
+            - github.com/kipit-labs/kipitiny/internal/progress
+            - go.yaml.in/yaml/v3
+            - github.com/distribution/reference
+            - github.com/opencontainers/go-digest
+            - github.com/containerd/errdefs
+            - golang.org/x/crypto
+            - github.com/go-webauthn/webauthn
+            # identity's SSO is an OpenID Connect client of its own (usecase-oauth2).
+            - github.com/coreos/go-oidc/v3
+            - golang.org/x/oauth2
           deny:
             - pkg: github.com/kipit-labs/kipitiny/internal/infrastructure
               desc: use cases go through the ports in domain, wiring is in cmd/kipitiny
@@ -67,12 +86,16 @@ linters:
           deny:
             - pkg: golang.org/x/oauth2
               desc: use cases reach the git forges through projects.GitProviders (infrastructure/gitprovider)
+        # Shared kernels every layer imports, infrastructure included (progress
+        # reports the steps of a backup or a password manager's login).
+        kernel:
+          list-mode: strict
+          files: ["**/internal/ids/**", "**/internal/progress/**", "**/internal/config/**"]
+          allow: [$gostd, github.com/oklog/ulid/v2]
         infrastructure:
           files: ["**/internal/infrastructure/**"]
           deny:
             - pkg: github.com/kipit-labs/kipitiny/internal/usecase
-              desc: adapters implement domain ports, they never call use cases
-            - pkg: github.com/kipit-labs/kipitiny/internal/core
               desc: adapters implement domain ports, they never call use cases
             - pkg: github.com/kipit-labs/kipitiny/internal/delivery
               desc: adapters know nothing about HTTP or MCP

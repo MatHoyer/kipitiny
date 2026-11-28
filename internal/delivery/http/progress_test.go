@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/progress"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 )
 
 func TestProgress(t *testing.T) {
@@ -30,7 +30,7 @@ func TestProgress(t *testing.T) {
 	}
 
 	body, status = run(func(context.Context) (any, error) {
-		return nil, fmt.Errorf("%w: Invalid token", core.ErrInvalid)
+		return nil, fmt.Errorf("%w: Invalid token", app.ErrInvalid)
 	})
 	if want := "{\"error\":\"Invalid token\"}\n"; body != want || status != http.StatusBadRequest {
 		t.Errorf("error: %d %q, want %q", status, body, want)

@@ -15,16 +15,11 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/config"
-	"github.com/kipit-labs/kipitiny/internal/core"
-	httpdelivery "github.com/kipit-labs/kipitiny/internal/delivery/http"
-	"github.com/kipit-labs/kipitiny/internal/delivery/mcp"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/docker"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/selfcontainer"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlite"
 	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlitehelper"
-	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
-	"github.com/kipit-labs/kipitiny/web"
 )
 
 // version is set at build time (-ldflags "-X main.version=...").
@@ -49,7 +44,7 @@ func main() {
 			}
 			os.Exit(0)
 		case "self-update":
-			// Run by the updater container the manager starts (core.ApplyUpdate).
+			// Run by the updater container the manager starts (app.ApplyUpdate).
 			run = selfUpdate
 		case "deploy":
 			// Run from CI against a manager's API (deployCmd).
@@ -59,7 +54,7 @@ func main() {
 			run = previewCmd
 		case "analytics":
 			// The analytics server's container, started by the manager from
-			// its own image (core.ensureAnalytics).
+			// its own image (app.ensureAnalytics).
 			if len(os.Args) == 3 && os.Args[2] == "healthcheck" {
 				if analyticsHealthcheck() != nil {
 					os.Exit(1)
@@ -69,7 +64,7 @@ func main() {
 			run = serveAnalytics
 		case "sqlite":
 			// The data browser's SQLite client, run in a helper container of
-			// this image that mounts an app's volumes (core.sqliteRun).
+			// this image that mounts an app's volumes (app.sqliteRun).
 			os.Exit(sqlitehelper.Main(os.Args[2:], os.Stdin, os.Stdout))
 		case "healthcheck":
 			// Docker HEALTHCHECK for the manager image, which has no curl.
@@ -148,68 +143,6 @@ func serve() error {
 	return srvErr
 }
 
-// wire opens the store and the Docker daemon, starts the manager's
-// background work (it stops with ctx) and returns the HTTP handler.
-// shutdown waits for running operations until its ctx, then closes both.
-func wire(ctx context.Context, cfg config.Config, log *slog.Logger) (handler http.Handler, shutdown func(context.Context) error, err error) {
-	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
-		return nil, nil, err
-	}
-	st, err := sqlite.Open(ctx, cfg.DBPath())
-	if err != nil {
-		return nil, nil, err
-	}
-	dc, err := docker.New()
-	if err != nil {
-		st.Close()
-		return nil, nil, err
-	}
-	closeAll := func() {
-		dc.Close()
-		st.Close()
-	}
-
-	c := core.New(cfg, st, dc, log)
-	if err := c.InitAuth(ctx); err != nil {
-		closeAll()
-		return nil, nil, err
-	}
-	if err := c.Bootstrap(ctx); err != nil {
-		// Keep serving the UI so the problem is visible there.
-		log.Warn("docker bootstrap failed", "err", err)
-	}
-	for _, start := range []func() error{
-		func() error { return c.StartScheduler(ctx) },
-		func() error { return c.StartReconciler(ctx) },
-		c.StartUpdateChecker,
-		c.StartDNSSync,
-		c.StartStats,
-		c.StartUptime,
-		c.StartErrorsWatch,
-		c.StartSecurityChecks,
-		c.StartSleep,
-		c.StartPreviewExpiry,
-		c.StartGitSync,
-	} {
-		if err := start(); err != nil {
-			closeAll()
-			return nil, nil, err
-		}
-	}
-
-	mux := http.NewServeMux()
-	a := httpdelivery.New(c, log)
-	mux.Handle("/api/", a)
-	mux.Handle(network.PagesPath, httpdelivery.Pages(c, log))
-	mux.Handle("/mcp", a.Authenticated(mcp.Handler(c, version)))
-	mux.Handle("/", web.Handler())
-	shutdown = func(ctx context.Context) error {
-		defer closeAll()
-		return c.Shutdown(ctx)
-	}
-	return httpdelivery.SecureHeaders(mux, c.TrustedProxy), shutdown, nil
-}
-
 // selfUpdate replaces the manager container os.Args[2] with image os.Args[3].
 func selfUpdate() error {
 	if len(os.Args) != 4 {
@@ -257,7 +190,7 @@ func resetPassword() error {
 	}
 	password := strings.TrimRight(line, "\r\n")
 
-	c := core.New(cfg, st, nil, slog.Default())
+	c := newApp(cfg, st, nil, slog.Default())
 	if err := c.ResetPassword(ctx, os.Args[2], password); err != nil {
 		return err
 	}
@@ -279,7 +212,7 @@ func makeAdmin() error {
 	}
 	defer st.Close()
 
-	if err := core.New(cfg, st, nil, slog.Default()).MakeAdmin(ctx, os.Args[2]); err != nil {
+	if err := newApp(cfg, st, nil, slog.Default()).MakeAdmin(ctx, os.Args[2]); err != nil {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, os.Args[2]+" is an admin; their sessions were signed out.")
@@ -300,7 +233,7 @@ func allowPasswordLogin() error {
 	}
 	defer st.Close()
 
-	if err := core.New(cfg, st, nil, slog.Default()).AllowPasswordLogin(ctx); err != nil {
+	if err := newApp(cfg, st, nil, slog.Default()).AllowPasswordLogin(ctx); err != nil {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "Single sign-on is no longer required: passwords and passkeys sign in again.")
@@ -321,7 +254,7 @@ func disable2FA() error {
 	}
 	defer st.Close()
 
-	if err := core.New(cfg, st, nil, slog.Default()).ResetTOTP(ctx, os.Args[2]); err != nil {
+	if err := newApp(cfg, st, nil, slog.Default()).ResetTOTP(ctx, os.Args[2]); err != nil {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "Two-factor authentication is off; the password alone signs in again.")

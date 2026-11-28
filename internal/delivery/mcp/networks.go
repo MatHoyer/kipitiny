@@ -10,8 +10,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kipit-labs/kipitiny/internal/core"
 	"github.com/kipit-labs/kipitiny/internal/domain"
+	"github.com/kipit-labs/kipitiny/internal/usecase/app"
 	"github.com/kipit-labs/kipitiny/internal/usecase/servers"
 )
 
@@ -156,7 +156,7 @@ func (t *tools) findNetwork(ctx context.Context, name, server string) (deploy.Ne
 	case 1:
 		return found[0], nil
 	}
-	return deploy.NetworkView{}, fmt.Errorf("%w: several servers have a network named %s; give the server", core.ErrInvalid, name)
+	return deploy.NetworkView{}, fmt.Errorf("%w: several servers have a network named %s; give the server", app.ErrInvalid, name)
 }
 
 // serverID resolves a server by name; empty is this one.
