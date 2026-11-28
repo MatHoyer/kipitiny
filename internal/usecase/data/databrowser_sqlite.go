@@ -10,13 +10,12 @@ import (
 	"time"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/sqlitehelper"
 )
 
 // An app's SQLite databases are files in its volumes. Most images have no
 // sqlite3, so the browser runs the manager's own `sqlite` command
-// (internal/sqlitehelper) in a helper of the manager's image that mounts the
-// volumes, kept like the file browser's. A database is its path,
+// (internal/infrastructure/sqlitehelper) in a helper of the manager's image
+// that mounts the volumes, kept like the file browser's. A database is its path,
 // "<volume>/<path>"; its schema is "main". The shapes are PostgreSQL's
 // (PgTable, PgRows, ConsoleResult), the SQL is built here as for the
 // other kinds, names checked against the file first.
@@ -65,10 +64,10 @@ func (c *Data) startSQLiteHelper(ctx context.Context, dk domain.ContainerRuntime
 
 // sqliteExec runs one request of the helper in svc's SQLite helper and
 // decodes its answer; an error it reports is the caller's.
-func (c *Data) sqliteExec(ctx context.Context, svc domain.Service, req sqlitehelper.Request) (sqlitehelper.Response, error) {
+func (c *Data) sqliteExec(ctx context.Context, svc domain.Service, req domain.SQLiteRequest) (domain.SQLiteResponse, error) {
 	b, err := json.Marshal(req)
 	if err != nil {
-		return sqlitehelper.Response{}, err
+		return domain.SQLiteResponse{}, err
 	}
 	// Read whole, decoded after: an exec that failed (a helper gone, to
 	// start again) then reports its own error, not an empty answer.
@@ -78,11 +77,11 @@ func (c *Data) sqliteExec(ctx context.Context, svc domain.Service, req sqlitehel
 		return err
 	})
 	if err != nil {
-		return sqlitehelper.Response{}, clientError(err)
+		return domain.SQLiteResponse{}, clientError(err)
 	}
-	var res sqlitehelper.Response
+	var res domain.SQLiteResponse
 	if err := json.Unmarshal(out, &res); err != nil {
-		return sqlitehelper.Response{}, fmt.Errorf("sqlite helper output: %w", err)
+		return domain.SQLiteResponse{}, fmt.Errorf("sqlite helper output: %w", err)
 	}
 	if res.Error != "" && res.Failed == 0 {
 		return res, fmt.Errorf("%w: %s", ErrInvalid, res.Error)
@@ -100,7 +99,7 @@ func (c *Data) sqliteDatabases(ctx context.Context, svc domain.Service) ([]PgDat
 	}
 	ctx, cancel := context.WithTimeout(ctx, filesBrowseTimeout)
 	defer cancel()
-	res, err := c.sqliteExec(ctx, svc, sqlitehelper.Request{Op: sqlitehelper.OpFind, Roots: roots, TimeoutMS: int((filesBrowseTimeout - 5*time.Second).Milliseconds())})
+	res, err := c.sqliteExec(ctx, svc, domain.SQLiteRequest{Op: domain.SQLiteOpFind, Roots: roots, TimeoutMS: int((filesBrowseTimeout - 5*time.Second).Milliseconds())})
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +143,7 @@ func (c *Data) sqliteTarget(ctx context.Context, svc domain.Service, database st
 }
 
 // sqliteRun runs a request on the target's file.
-func (t dataTarget) sqliteRun(ctx context.Context, req sqlitehelper.Request) (sqlitehelper.Response, error) {
+func (t dataTarget) sqliteRun(ctx context.Context, req domain.SQLiteRequest) (domain.SQLiteResponse, error) {
 	req.Root, req.File = t.sqlite.vol.root(), t.sqlite.abs
 	if req.TimeoutMS == 0 {
 		req.TimeoutMS = int(dataBrowseTimeout.Milliseconds())
@@ -157,7 +156,7 @@ func (t dataTarget) sqliteRun(ctx context.Context, req sqlitehelper.Request) (sq
 // sqliteRowsOf runs a read-only query the manager built and returns all its
 // cells as text (names, types: nothing long).
 func (t dataTarget) sqliteRowsOf(ctx context.Context, sql string) ([][]*string, error) {
-	res, err := t.sqliteRun(ctx, sqlitehelper.Request{Op: sqlitehelper.OpQuery, SQL: sql, Cell: DataCellMax})
+	res, err := t.sqliteRun(ctx, domain.SQLiteRequest{Op: domain.SQLiteOpQuery, SQL: sql, Cell: DataCellMax})
 	return res.Rows, err
 }
 
@@ -358,7 +357,7 @@ func (t dataTarget) sqliteRows(ctx context.Context, schema, table string, q RowQ
 	if err != nil {
 		return PgRows{}, err
 	}
-	res, err := t.sqliteRun(ctx, sqlitehelper.Request{Op: sqlitehelper.OpQuery, SQL: sql, Rows: q.Limit, Cell: DataCellMax, Bytes: sqliteBrowseBytes})
+	res, err := t.sqliteRun(ctx, domain.SQLiteRequest{Op: domain.SQLiteOpQuery, SQL: sql, Rows: q.Limit, Cell: DataCellMax, Bytes: sqliteBrowseBytes})
 	if err != nil {
 		return PgRows{}, err
 	}
@@ -381,7 +380,7 @@ func (t dataTarget) sqliteExport(ctx context.Context, schema, table string, q Ro
 	if err != nil {
 		return err
 	}
-	req := sqlitehelper.Request{Op: sqlitehelper.OpCSV, SQL: sql, Root: t.sqlite.vol.root(), File: t.sqlite.abs, TimeoutMS: int(dataExportTimeout.Milliseconds())}
+	req := domain.SQLiteRequest{Op: domain.SQLiteOpCSV, SQL: sql, Root: t.sqlite.vol.root(), File: t.sqlite.abs, TimeoutMS: int(dataExportTimeout.Milliseconds())}
 	b, err := json.Marshal(req)
 	if err != nil {
 		return err
@@ -398,8 +397,8 @@ func (t dataTarget) sqliteExport(ctx context.Context, schema, table string, q Ro
 // sqliteConsole runs sql, read-only unless write (then in one
 // transaction); the last statement's rows show.
 func (t dataTarget) sqliteConsole(ctx context.Context, sql string, write bool) (ConsoleResult, error) {
-	res, err := t.sqliteRun(ctx, sqlitehelper.Request{
-		Op: sqlitehelper.OpQuery, SQL: sql, Write: write,
+	res, err := t.sqliteRun(ctx, domain.SQLiteRequest{
+		Op: domain.SQLiteOpQuery, SQL: sql, Write: write,
 		Rows: DataPageMax, Cell: DataCellMax, Bytes: dataOutputMax, TimeoutMS: int(dataConsoleTimeout.Milliseconds()),
 	})
 	if err != nil {
@@ -453,11 +452,11 @@ func (t dataTarget) sqliteApply(ctx context.Context, schema, table string, ch Ro
 	if !apply {
 		return res, nil
 	}
-	run := make([]sqlitehelper.Statement, len(stmts))
+	run := make([]domain.SQLiteStatement, len(stmts))
 	for i, s := range stmts {
-		run[i] = sqlitehelper.Statement{SQL: s.sql, One: s.where != ""}
+		run[i] = domain.SQLiteStatement{SQL: s.sql, One: s.where != ""}
 	}
-	out, err := t.sqliteRun(ctx, sqlitehelper.Request{Op: sqlitehelper.OpApply, Write: true, Statements: run, TimeoutMS: int(dataConsoleTimeout.Milliseconds())})
+	out, err := t.sqliteRun(ctx, domain.SQLiteRequest{Op: domain.SQLiteOpApply, Write: true, Statements: run, TimeoutMS: int(dataConsoleTimeout.Milliseconds())})
 	if err != nil {
 		return ChangeResult{}, err
 	}
@@ -470,7 +469,7 @@ func (t dataTarget) sqliteApply(ctx context.Context, schema, table string, ch Ro
 
 // sqliteDDL runs one statement read-write.
 func (t dataTarget) sqliteDDL(ctx context.Context, sql string) error {
-	_, err := t.sqliteRun(ctx, sqlitehelper.Request{Op: sqlitehelper.OpApply, Write: true,
-		Statements: []sqlitehelper.Statement{{SQL: sql}}, TimeoutMS: int(dataConsoleTimeout.Milliseconds())})
+	_, err := t.sqliteRun(ctx, domain.SQLiteRequest{Op: domain.SQLiteOpApply, Write: true,
+		Statements: []domain.SQLiteStatement{{SQL: sql}}, TimeoutMS: int(dataConsoleTimeout.Milliseconds())})
 	return err
 }

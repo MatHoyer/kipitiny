@@ -50,6 +50,10 @@ linters:
               desc: use cases encrypt through domain.Encryption (infrastructure/age)
             - pkg: github.com/robfig/cron
               desc: use cases schedule through domain.Cron (infrastructure/cron)
+            - pkg: modernc.org/sqlite
+              desc: SQLite stays in the adapters (infrastructure/sqlite, sqlitedb, sqlitehelper)
+            - pkg: github.com/pressly/goose
+              desc: migrations stay in the adapters (infrastructure/sqlite, sqlitedb)
         infrastructure:
           files: ["**/internal/infrastructure/**"]
           deny:

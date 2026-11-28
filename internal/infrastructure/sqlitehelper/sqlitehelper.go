@@ -3,10 +3,11 @@
 // own image that mounts an app's volumes. Most images have no sqlite3, so
 // the manager brings its own (modernc.org/sqlite, already in the binary).
 //
-// It reads one Request as JSON on stdin and writes one Response as JSON on
-// stdout (CSV for an export). The manager builds the SQL; this side only
-// runs it, bounded: rows, cells and bytes capped, a timeout, read-only
-// unless asked, and never on a file outside the volume it was given.
+// It reads one domain.SQLiteRequest as JSON on stdin and writes one
+// domain.SQLiteResponse as JSON on stdout (CSV for an export). The manager
+// builds the SQL; this side only runs it, bounded: rows, cells and bytes
+// capped, a timeout, read-only unless asked, and never on a file outside the
+// volume it was given.
 package sqlitehelper
 
 import (
@@ -31,64 +32,12 @@ import (
 
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
+
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
 // Header starts every SQLite database file.
 const Header = "SQLite format 3\x00"
-
-// Ops a Request runs.
-const (
-	OpFind  = "find"  // list the SQLite files under Roots
-	OpQuery = "query" // run SQL, return the last statement's rows
-	OpCSV   = "csv"   // run one SELECT, stream its rows as CSV
-	OpApply = "apply" // run Statements in one transaction
-)
-
-type Request struct {
-	Op string `json:"op"`
-	// Root is the volume File must stay in, symlinks resolved; Roots are
-	// the volumes a find walks.
-	Root  string   `json:"root,omitempty"`
-	Roots []string `json:"roots,omitempty"`
-	File  string   `json:"file,omitempty"`
-	SQL   string   `json:"sql,omitempty"`
-	// Write opens the file read-write; otherwise SQLite refuses any write.
-	Write bool `json:"write,omitempty"`
-	// Rows caps the rows kept (more are read but dropped, so writes run to
-	// the end); Cell the bytes of a cell (0: whole); Bytes all the cells.
-	Rows  int `json:"rows,omitempty"`
-	Cell  int `json:"cell,omitempty"`
-	Bytes int `json:"bytes,omitempty"`
-	// Statements of an apply; those with One must change exactly one row.
-	Statements []Statement `json:"statements,omitempty"`
-	TimeoutMS  int         `json:"timeoutMs,omitempty"`
-}
-
-type Statement struct {
-	SQL string `json:"sql"`
-	One bool   `json:"one,omitempty"`
-}
-
-type Response struct {
-	// Error is SQLite's (or the helper's) message.
-	Error string `json:"error,omitempty"`
-	// Failed is the 1-based statement of an apply whose row wasn't there.
-	Failed int `json:"failed,omitempty"`
-	// Columns is set when the last statement returns rows (even none).
-	Columns   []string    `json:"columns,omitempty"`
-	Rows      [][]*string `json:"rows,omitempty"`
-	Truncated [][2]int    `json:"truncated,omitempty"`
-	More      bool        `json:"more,omitempty"`
-	// Changes is the rows the last statement changed.
-	Changes int64  `json:"changes,omitempty"`
-	Files   []File `json:"files,omitempty"`
-}
-
-// File is a SQLite database found by a find, its path absolute.
-type File struct {
-	Path string `json:"path"`
-	Size int64  `json:"size"`
-}
 
 // Limits of a find: a volume of uploads shouldn't take long to scan.
 const (
@@ -108,9 +57,9 @@ func Main(args []string, stdin io.Reader, stdout io.Writer) int {
 		<-stop
 		return 0
 	}
-	var req Request
+	var req domain.SQLiteRequest
 	if err := json.NewDecoder(stdin).Decode(&req); err != nil {
-		return reply(stdout, Response{Error: "request: " + err.Error()})
+		return reply(stdout, domain.SQLiteResponse{Error: "request: " + err.Error()})
 	}
 	timeout := time.Duration(req.TimeoutMS) * time.Millisecond
 	if timeout <= 0 {
@@ -118,32 +67,32 @@ func Main(args []string, stdin io.Reader, stdout io.Writer) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	if req.Op == OpFind {
+	if req.Op == domain.SQLiteOpFind {
 		files, err := find(ctx, req.Roots)
 		if err != nil {
-			return reply(stdout, Response{Error: err.Error()})
+			return reply(stdout, domain.SQLiteResponse{Error: err.Error()})
 		}
-		return reply(stdout, Response{Files: files})
+		return reply(stdout, domain.SQLiteResponse{Files: files})
 	}
 	db, err := open(req)
 	if err != nil {
-		return reply(stdout, Response{Error: err.Error()})
+		return reply(stdout, domain.SQLiteResponse{Error: err.Error()})
 	}
 	defer db.Close()
 	switch req.Op {
-	case OpQuery:
+	case domain.SQLiteOpQuery:
 		res, err := query(ctx, db, req)
 		if err != nil {
-			return reply(stdout, Response{Error: message(ctx, err)})
+			return reply(stdout, domain.SQLiteResponse{Error: message(ctx, err)})
 		}
 		return reply(stdout, res)
-	case OpApply:
+	case domain.SQLiteOpApply:
 		failed, err := apply(ctx, db, req.Statements)
 		if err != nil {
-			return reply(stdout, Response{Error: message(ctx, err), Failed: failed})
+			return reply(stdout, domain.SQLiteResponse{Error: message(ctx, err), Failed: failed})
 		}
-		return reply(stdout, Response{})
-	case OpCSV:
+		return reply(stdout, domain.SQLiteResponse{})
+	case domain.SQLiteOpCSV:
 		// Rows already went out: an error can only go to stderr.
 		if err := export(ctx, db, req.SQL, stdout); err != nil {
 			fmt.Fprintln(os.Stderr, message(ctx, err))
@@ -151,10 +100,10 @@ func Main(args []string, stdin io.Reader, stdout io.Writer) int {
 		}
 		return 0
 	}
-	return reply(stdout, Response{Error: fmt.Sprintf("unknown op %q", req.Op)})
+	return reply(stdout, domain.SQLiteResponse{Error: fmt.Sprintf("unknown op %q", req.Op)})
 }
 
-func reply(w io.Writer, res Response) int {
+func reply(w io.Writer, res domain.SQLiteResponse) int {
 	if err := json.NewEncoder(w).Encode(res); err != nil {
 		return 1
 	}
@@ -180,7 +129,7 @@ func message(ctx context.Context, err error) string {
 // open checks the request's file and opens it as its owner: read-only
 // unless Write (SQLite enforces it, ATTACH included), with a busy timeout
 // so a write by the app is waited for, not failed on.
-func open(req Request) (*sql.DB, error) {
+func open(req domain.SQLiteRequest) (*sql.DB, error) {
 	path, err := Resolve(req.Root, req.File)
 	if err != nil {
 		return nil, err
@@ -290,8 +239,8 @@ func becomeOwner(path string) error {
 }
 
 // find walks roots for SQLite files, without following symlinks.
-func find(ctx context.Context, roots []string) ([]File, error) {
-	files := []File{}
+func find(ctx context.Context, roots []string) ([]domain.SQLiteFile, error) {
+	files := []domain.SQLiteFile{}
 	visited := 0
 	for _, root := range roots {
 		depth0 := strings.Count(filepath.Clean(root), "/")
@@ -312,7 +261,7 @@ func find(ctx context.Context, roots []string) ([]File, error) {
 				return nil
 			}
 			if info, err := d.Info(); err == nil && info.Size() >= 100 && isSQLite(p) { // gone since listed: skipped
-				files = append(files, File{Path: p, Size: info.Size()})
+				files = append(files, domain.SQLiteFile{Path: p, Size: info.Size()})
 			}
 			return nil
 		})
@@ -326,46 +275,46 @@ func find(ctx context.Context, roots []string) ([]File, error) {
 // query runs req.SQL (one or more statements; the last one's rows are
 // returned), in one transaction when writing. Every row is read, so a
 // write's statement runs to the end, but only req.Rows are kept.
-func query(ctx context.Context, db *sql.DB, req Request) (Response, error) {
+func query(ctx context.Context, db *sql.DB, req domain.SQLiteRequest) (domain.SQLiteResponse, error) {
 	conn, err := connect(ctx, db)
 	if err != nil {
-		return Response{}, err
+		return domain.SQLiteResponse{}, err
 	}
 	defer conn.Close()
 	if req.Write {
 		if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
-			return Response{}, err
+			return domain.SQLiteResponse{}, err
 		}
 		defer conn.ExecContext(context.WithoutCancel(ctx), "ROLLBACK") //nolint:errcheck // no-op after COMMIT
 	}
 	res, err := readRows(ctx, conn, req)
 	if err != nil {
-		return Response{}, err
+		return domain.SQLiteResponse{}, err
 	}
 	if res.Columns == nil {
 		if err := conn.QueryRowContext(ctx, "SELECT changes()").Scan(&res.Changes); err != nil {
-			return Response{}, err
+			return domain.SQLiteResponse{}, err
 		}
 	}
 	if req.Write {
 		if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
-			return Response{}, err
+			return domain.SQLiteResponse{}, err
 		}
 	}
 	return res, nil
 }
 
-func readRows(ctx context.Context, conn *sql.Conn, req Request) (Response, error) {
+func readRows(ctx context.Context, conn *sql.Conn, req domain.SQLiteRequest) (domain.SQLiteResponse, error) {
 	rows, err := conn.QueryContext(ctx, req.SQL)
 	if err != nil {
-		return Response{}, err
+		return domain.SQLiteResponse{}, err
 	}
 	defer rows.Close()
 	cols, err := rows.Columns()
 	if err != nil {
-		return Response{}, err
+		return domain.SQLiteResponse{}, err
 	}
-	res := Response{}
+	res := domain.SQLiteResponse{}
 	if len(cols) > 0 {
 		res.Columns, res.Rows, res.Truncated = cols, [][]*string{}, [][2]int{}
 	}
@@ -384,7 +333,7 @@ func readRows(ctx context.Context, conn *sql.Conn, req Request) (Response, error
 			continue
 		}
 		if err := rows.Scan(ptrs...); err != nil {
-			return Response{}, err
+			return domain.SQLiteResponse{}, err
 		}
 		row := make([]*string, len(cols))
 		for j, v := range vals {
@@ -442,7 +391,7 @@ func Text(v any, limit int) (s string, ok, cut bool) {
 
 // apply runs statements in one transaction; failed is the 1-based one that
 // didn't find its row (the transaction is rolled back).
-func apply(ctx context.Context, db *sql.DB, stmts []Statement) (failed int, err error) {
+func apply(ctx context.Context, db *sql.DB, stmts []domain.SQLiteStatement) (failed int, err error) {
 	conn, err := connect(ctx, db)
 	if err != nil {
 		return 0, err

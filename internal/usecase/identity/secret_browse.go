@@ -27,7 +27,7 @@ func (l *secretListings) get(id, vault string) (any, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	e, ok := l.m[id+"\x00"+vault]
-	if !ok || time.Since(e.at) > secretHelperIdle {
+	if !ok || time.Since(e.at) > SecretHelperIdle {
 		return nil, false
 	}
 	return e.val, true

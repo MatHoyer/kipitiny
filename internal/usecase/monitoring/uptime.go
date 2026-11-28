@@ -11,7 +11,6 @@ import (
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
 	"github.com/kipit-labs/kipitiny/internal/notify"
-	"github.com/kipit-labs/kipitiny/internal/probe"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
@@ -185,10 +184,10 @@ func (c *Monitoring) runUptime(ctx context.Context, chk domain.UptimeCheck, r *u
 	}
 	hc := c.UptimeHTTP
 	if hc == nil {
-		hc = probe.NewClient()
+		hc = NewProbeClient()
 	}
 	rctx, cancel := context.WithTimeout(ctx, time.Duration(chk.TimeoutSec)*time.Second)
-	res, err := probe.HTTP(rctx, hc, url, chk.ExpectedStatus)
+	res, err := ProbeHTTP(rctx, hc, url, chk.ExpectedStatus)
 	cancel()
 	if ctx.Err() != nil {
 		return // shutting down: not the service's fault

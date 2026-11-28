@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+// HelperComponent labels (domain.LabelComponent) the containers and volumes
+// a provider's CLI runs in.
+const HelperComponent = "secrets"
+
 // Provider is a password manager the manager can log into.
 type Provider interface {
 	// Info describes the provider for Settings.

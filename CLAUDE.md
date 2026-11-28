@@ -23,7 +23,7 @@ Design doc: `docs/design.md` — read before architectural changes. Roadmap in �
 - Docker SDK is `github.com/moby/moby/client` (Options/Result struct API, not the old `docker/docker/client` signatures). Use `cerrdefs.IsNotFound`.
 - Use cases drive Docker through `domain.ContainerRuntime` and its types (`ContainerSpec`, `Container`…), implemented by
   `internal/infrastructure/docker` (local daemon, remote ones over SSH, the pool core hands servers). Only adapters
-  import moby, go-git, age or robfig/cron: depguard refuses them in `internal/usecase` (moby in `internal/domain` too).
+  import moby, go-git, age, robfig/cron, SQLite or goose: depguard refuses them in `internal/usecase` (moby in `internal/domain` too).
 - Everything created on Docker carries `kipitiny.*` labels (`domain.Label*`, network names in `internal/domain/docker.go`).
 - Postgres services are always 1 replica.
 - UI primitives (`@kipit-labs/kipitidy/*`: buttons, dialogs, form fields, theme tokens) live in the kipitidy repo

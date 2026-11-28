@@ -12,7 +12,6 @@ import (
 	"github.com/kipit-labs/kipitiny/internal/usecase/identity"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/selfcontainer"
 	"github.com/kipit-labs/kipitiny/internal/usecase/network"
 )
 
@@ -296,7 +295,7 @@ func (c *Deployer) managerNode(ctx context.Context, dk domain.ContainerRuntime) 
 		m.Domain = c.cfg.Domain
 	}
 	_, port, _ := net.SplitHostPort(c.cfg.Addr)
-	id := selfcontainer.ID()
+	id := c.cfg.SelfContainerID
 	if id == "" {
 		m.Upstream = network.ManagerHost + ":" + port
 		return m

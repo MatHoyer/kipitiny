@@ -21,8 +21,6 @@ const (
 	helperName = "kipitiny-protonpass"
 	// sessionVolume keeps the CLI session (and the key that encrypts it).
 	sessionVolume = "kipitiny-protonpass"
-	// Component labels the helper and its volume.
-	Component = "secrets"
 )
 
 // ContainerRunner runs pass-cli in a helper container started from image on
@@ -179,7 +177,7 @@ func (r *ContainerRunner) start(ctx context.Context) (string, error) {
 	if err := r.dk.EnsureImage(ctx, r.image, "", ""); err != nil {
 		return "", fmt.Errorf("pull %s: %w", r.image, err)
 	}
-	labels := map[string]string{domain.LabelManaged: "true", domain.LabelComponent: Component}
+	labels := map[string]string{domain.LabelManaged: "true", domain.LabelComponent: secrets.HelperComponent}
 	// Creating an existing volume returns it.
 	if err := r.dk.CreateVolume(ctx, r.volume, labels); err != nil {
 		return "", fmt.Errorf("session volume: %w", err)

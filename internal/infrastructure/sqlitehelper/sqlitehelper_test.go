@@ -8,16 +8,18 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/kipit-labs/kipitiny/internal/domain"
 )
 
-func run(t *testing.T, req Request) Response {
+func run(t *testing.T, req domain.SQLiteRequest) domain.SQLiteResponse {
 	t.Helper()
 	in, _ := json.Marshal(req)
 	var out bytes.Buffer
 	if code := Main(nil, bytes.NewReader(in), &out); code != 0 {
 		t.Fatalf("exit %d: %s", code, out.String())
 	}
-	var res Response
+	var res domain.SQLiteResponse
 	if err := json.Unmarshal(out.Bytes(), &res); err != nil {
 		t.Fatalf("%v: %s", err, out.String())
 	}
@@ -46,7 +48,7 @@ INSERT INTO users (name, avatar) VALUES ('ada', x'0102'), ('bob', NULL), ('` + s
 
 func TestQueryReadOnly(t *testing.T) {
 	root, file := fixture(t)
-	res := run(t, Request{Op: OpQuery, Root: root, File: file, SQL: "SELECT id, name, avatar FROM users ORDER BY id", Rows: 2, Cell: 100})
+	res := run(t, domain.SQLiteRequest{Op: domain.SQLiteOpQuery, Root: root, File: file, SQL: "SELECT id, name, avatar FROM users ORDER BY id", Rows: 2, Cell: 100})
 	if res.Error != "" {
 		t.Fatal(res.Error)
 	}
@@ -58,7 +60,7 @@ func TestQueryReadOnly(t *testing.T) {
 	}
 	// Writes are refused by SQLite itself, whatever the SQL tries.
 	for _, q := range []string{"DELETE FROM users", "PRAGMA query_only = 0; DELETE FROM users"} {
-		if res := run(t, Request{Op: OpQuery, Root: root, File: file, SQL: q}); !strings.Contains(res.Error, "readonly") {
+		if res := run(t, domain.SQLiteRequest{Op: domain.SQLiteOpQuery, Root: root, File: file, SQL: q}); !strings.Contains(res.Error, "readonly") {
 			t.Errorf("%s: %+v", q, res)
 		}
 	}
@@ -66,7 +68,7 @@ func TestQueryReadOnly(t *testing.T) {
 	// which attaches) would create or change one.
 	for _, write := range []bool{false, true} {
 		for _, q := range []string{"ATTACH 'file:" + root + "/x.db?mode=rwc' AS x", "ATTACH 'file:" + file + "?mode=rw' AS b", "VACUUM INTO '" + root + "/x.db'"} {
-			if res := run(t, Request{Op: OpQuery, Root: root, File: file, SQL: q, Write: write}); res.Error == "" || strings.Contains(res.Error, "too many") {
+			if res := run(t, domain.SQLiteRequest{Op: domain.SQLiteOpQuery, Root: root, File: file, SQL: q, Write: write}); res.Error == "" || strings.Contains(res.Error, "too many") {
 				t.Errorf("%s (write %v): %+v", q, write, res)
 			}
 		}
@@ -75,7 +77,7 @@ func TestQueryReadOnly(t *testing.T) {
 		t.Error("a file was created")
 	}
 	// A cut cell keeps whole characters.
-	res = run(t, Request{Op: OpQuery, Root: root, File: file, SQL: "SELECT name FROM users WHERE id = 3", Cell: 5})
+	res = run(t, domain.SQLiteRequest{Op: domain.SQLiteOpQuery, Root: root, File: file, SQL: "SELECT name FROM users WHERE id = 3", Cell: 5})
 	if got := *res.Rows[0][0]; got != "éé" || len(res.Truncated) != 1 {
 		t.Errorf("cut: %q %v", got, res.Truncated)
 	}
@@ -83,16 +85,16 @@ func TestQueryReadOnly(t *testing.T) {
 
 func TestQueryWrite(t *testing.T) {
 	root, file := fixture(t)
-	res := run(t, Request{Op: OpQuery, Root: root, File: file, Write: true, SQL: "UPDATE users SET name = 'x' WHERE id < 3"})
+	res := run(t, domain.SQLiteRequest{Op: domain.SQLiteOpQuery, Root: root, File: file, Write: true, SQL: "UPDATE users SET name = 'x' WHERE id < 3"})
 	if res.Error != "" || res.Changes != 2 || res.Columns != nil {
 		t.Fatalf("%+v", res)
 	}
 	// A failing statement rolls the whole run back.
-	res = run(t, Request{Op: OpQuery, Root: root, File: file, Write: true, SQL: "DELETE FROM users; SELECT * FROM nope"})
+	res = run(t, domain.SQLiteRequest{Op: domain.SQLiteOpQuery, Root: root, File: file, Write: true, SQL: "DELETE FROM users; SELECT * FROM nope"})
 	if res.Error == "" {
 		t.Fatal("no error")
 	}
-	res = run(t, Request{Op: OpQuery, Root: root, File: file, SQL: "SELECT count(*) FROM users"})
+	res = run(t, domain.SQLiteRequest{Op: domain.SQLiteOpQuery, Root: root, File: file, SQL: "SELECT count(*) FROM users"})
 	if *res.Rows[0][0] != "3" {
 		t.Errorf("rolled back: %v", *res.Rows[0][0])
 	}
@@ -100,14 +102,14 @@ func TestQueryWrite(t *testing.T) {
 
 func TestApply(t *testing.T) {
 	root, file := fixture(t)
-	res := run(t, Request{Op: OpApply, Root: root, File: file, Write: true, Statements: []Statement{
+	res := run(t, domain.SQLiteRequest{Op: domain.SQLiteOpApply, Root: root, File: file, Write: true, Statements: []domain.SQLiteStatement{
 		{SQL: "UPDATE users SET name = 'z' WHERE id = 1", One: true},
 		{SQL: "DELETE FROM users WHERE id = 99", One: true},
 	}})
 	if res.Failed != 2 {
 		t.Fatalf("%+v", res)
 	}
-	res = run(t, Request{Op: OpQuery, Root: root, File: file, SQL: "SELECT name FROM users WHERE id = 1"})
+	res = run(t, domain.SQLiteRequest{Op: domain.SQLiteOpQuery, Root: root, File: file, SQL: "SELECT name FROM users WHERE id = 1"})
 	if *res.Rows[0][0] != "ada" {
 		t.Errorf("not rolled back: %v", *res.Rows[0][0])
 	}
@@ -128,7 +130,7 @@ func TestResolveAndFind(t *testing.T) {
 	if _, err := Resolve(root, filepath.Join(root, "notes.txt")); err == nil {
 		t.Error("a text file was accepted")
 	}
-	res := run(t, Request{Op: OpFind, Roots: []string{root, other}})
+	res := run(t, domain.SQLiteRequest{Op: domain.SQLiteOpFind, Roots: []string{root, other}})
 	if len(res.Files) != 1 || res.Files[0].Path != file {
 		t.Errorf("found: %+v", res.Files)
 	}
@@ -136,7 +138,7 @@ func TestResolveAndFind(t *testing.T) {
 
 func TestExport(t *testing.T) {
 	root, file := fixture(t)
-	in, _ := json.Marshal(Request{Op: OpCSV, Root: root, File: file, SQL: "SELECT id, avatar FROM users ORDER BY id"})
+	in, _ := json.Marshal(domain.SQLiteRequest{Op: domain.SQLiteOpCSV, Root: root, File: file, SQL: "SELECT id, avatar FROM users ORDER BY id"})
 	var out bytes.Buffer
 	if code := Main(nil, bytes.NewReader(in), &out); code != 0 {
 		t.Fatal(code)

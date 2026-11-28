@@ -16,7 +16,7 @@ import (
 	sqlite3 "modernc.org/sqlite/lib"
 
 	"github.com/kipit-labs/kipitiny/internal/domain"
-	"github.com/kipit-labs/kipitiny/internal/sqlitedb"
+	"github.com/kipit-labs/kipitiny/internal/infrastructure/sqlitedb"
 )
 
 //go:embed migrations/*.sql
