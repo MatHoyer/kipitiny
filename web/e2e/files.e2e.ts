@@ -5,7 +5,9 @@ import { firstDeploy, newApp, newProject } from "./steps";
 
 /** Opens an entry of the files tab's folder: a volume, a folder, or a file in its dialog. */
 async function open(files: Locator, name: string) {
-  await files.getByRole("button", { name, exact: true }).click();
+  const entry = files.getByRole("button", { name, exact: true });
+  await expect(entry, `${name} is in the folder`).toBeVisible(); // a bare click would wait for the test timeout
+  await entry.click();
 }
 
 /** Picks an action from an entry's menu. */
