@@ -41,7 +41,11 @@ func TestErrorAlerts(t *testing.T) {
 		var m struct {
 			Embeds []struct{ Title, Description, URL string }
 		}
-		json.NewDecoder(r.Body).Decode(&m)
+		if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		mu.Lock()
 		sent = append(sent, m.Embeds[0].Title+" | "+m.Embeds[0].Description+" | "+m.Embeds[0].URL)
 		mu.Unlock()
@@ -76,8 +80,12 @@ func TestErrorAlerts(t *testing.T) {
 		t.Helper()
 		res, err := http.Post(pub.URL+"/api/"+strconv.FormatInt(s.ErrorsProject, 10)+"/store/?sentry_key="+s.ErrorsKey, "application/json",
 			strings.NewReader(`{"message":"`+msg+`","release":"`+release+`"}`))
-		if err != nil || res.StatusCode != 200 {
-			t.Fatalf("report: %v %v", res, err)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Fatalf("report: %s", res.Status)
 		}
 	}
 
@@ -138,7 +146,9 @@ func TestErrorAlerts(t *testing.T) {
 
 	// A resolved issue coming back.
 	l, _ := cl.Issues(ctx, analytics.IssueQuery{Project: web.ErrorsProject, Search: "old"})
-	cl.SetIssueStatus(ctx, web.ErrorsProject, l.Issues[0].ID, analytics.IssueResolved)
+	if _, err := cl.SetIssueStatus(ctx, web.ErrorsProject, l.Issues[0].ID, analytics.IssueResolved); err != nil {
+		t.Fatal(err)
+	}
 	report(web, "old", "v2")
 	if err := c.AlertErrors(ctx, cl, now.Add(3*time.Minute)); err != nil {
 		t.Fatal(err)
