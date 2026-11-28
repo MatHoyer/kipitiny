@@ -35,3 +35,21 @@ export async function deployImage(page: Page, name: string, image: string) {
   // The replica runs before the deploy ends (it waits for the replica to stay up), and the deploy holds the service.
   await expect(page.getByRole("button", { name: "Deploy", exact: true })).toBeEnabled({ timeout: 30_000 });
 }
+
+/** Adds an app from a Docker image to the open project without deploying it, to set it up first. */
+export async function newApp(page: Page, name: string, image: string) {
+  await page.getByRole("main").getByRole("button", { name: "New service" }).first().click();
+  await page.getByRole("button", { name: /^Docker image/ }).click();
+  const form = page.getByRole("dialog", { name: "New app from a Docker image" });
+  await form.getByLabel("Name").fill(name);
+  await form.getByLabel("Image").fill(image);
+  await form.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
+}
+
+/** Deploys the open app for the first time and waits for the deploy to finish. */
+export async function firstDeploy(page: Page) {
+  await page.getByRole("button", { name: "Deploy", exact: true }).click();
+  await expect(page.getByRole("main").getByText("1/1")).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole("button", { name: "Deploy", exact: true })).toBeEnabled({ timeout: 30_000 });
+}
