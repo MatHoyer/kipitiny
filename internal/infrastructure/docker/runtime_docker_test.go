@@ -122,3 +122,61 @@ func readLogs(t *testing.T, rt domain.ContainerRuntime, id string) string {
 	}
 	return string(b)
 }
+
+// WaitHealthy on containers that exit on start, like a MongoDB whose first
+// start lost the race for its port (exit 48): the error carries the last log
+// lines, and one restart by the restart policy is waited through.
+func TestWaitHealthyExitDocker(t *testing.T) {
+	if os.Getenv("KIPITINY_TEST_DOCKER") == "" {
+		t.Skip("KIPITINY_TEST_DOCKER not set")
+	}
+	ctx := context.Background()
+	c, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.EnsureImage(ctx, "busybox", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	start := func(t *testing.T, cmd string, restart domain.RestartPolicy) string {
+		name := "kipitiny-test-exit-" + strings.ToLower(ids.New())
+		id, err := c.Run(ctx, domain.ContainerSpec{
+			Name: name, Image: "busybox", Labels: map[string]string{"kipitiny.test": name}, Log: true,
+			Cmd: []string{"sh", "-c", cmd}, Restart: restart,
+			// Starting until /ready exists: running alone would count as healthy.
+			Healthcheck: &domain.HealthConfig{Test: []string{"CMD", "test", "-f", "/ready"}, Interval: time.Hour, StartPeriod: time.Minute, StartInterval: time.Second},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = c.RemoveContainer(context.Background(), id, 0) })
+		return id
+	}
+	const fail = "echo starting; echo 'bind: address already in use' >&2; exit 48"
+	wantLogs := func(t *testing.T, err error, msg string) {
+		t.Helper()
+		if err == nil || !strings.Contains(err.Error(), msg) || !strings.Contains(err.Error(), "starting") ||
+			!strings.Contains(err.Error(), "bind: address already in use") {
+			t.Fatalf("err = %v", err)
+		}
+	}
+
+	t.Run("exited", func(t *testing.T) {
+		wantLogs(t, c.WaitHealthy(ctx, start(t, fail, domain.RestartPolicy{}), time.Minute), "container exited (code 48)")
+	})
+	t.Run("restarted once", func(t *testing.T) {
+		// Exits the first time, serves the second: the writable layer survives a restart.
+		id := start(t, "[ -f /started ] && touch /ready && exec sleep 300; touch /started; exit 48",
+			domain.RestartPolicy{Name: domain.RestartOnFailure, MaxRetries: 3})
+		if err := c.WaitHealthy(ctx, id, time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		if info, err := c.InspectContainer(ctx, id); err != nil || info.RestartCount != 1 {
+			t.Fatalf("restarts = %d, %v", info.RestartCount, err)
+		}
+	})
+	t.Run("crash loop", func(t *testing.T) {
+		id := start(t, fail, domain.RestartPolicy{Name: domain.RestartUnlessStopped})
+		wantLogs(t, c.WaitHealthy(ctx, id, time.Minute), "container keeps restarting")
+	})
+}

@@ -270,7 +270,9 @@ func (c *Client) RemoveVolume(ctx context.Context, name string) error {
 }
 
 // WaitHealthy polls a container until its healthcheck passes. Containers
-// without a healthcheck count as healthy once running.
+// without a healthcheck count as healthy once running. One restart by its
+// restart policy is waited through (Docker reports it unhealthy meanwhile);
+// a second one means it keeps crashing.
 func (c *Client) WaitHealthy(ctx context.Context, id string, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -284,8 +286,11 @@ func (c *Client) WaitHealthy(ctx context.Context, id string, timeout time.Durati
 		st := res.Container.State
 		switch {
 		case st == nil:
+		case res.Container.RestartCount > 1:
+			return fmt.Errorf("container keeps restarting%s", c.lastLogLines(ctx, id))
+		case st.Restarting:
 		case !st.Running && st.Status != container.StateCreated:
-			return fmt.Errorf("container exited (code %d)", st.ExitCode)
+			return fmt.Errorf("container exited (code %d)%s", st.ExitCode, c.lastLogLines(ctx, id))
 		case st.Health == nil && st.Running:
 			return nil
 		case st.Health != nil && st.Health.Status == container.Healthy:
@@ -299,6 +304,26 @@ func (c *Client) WaitHealthy(ctx context.Context, id string, timeout time.Durati
 		case <-tick.C:
 		}
 	}
+}
+
+// lastLogLines is the end of a container's logs, as an error's suffix: a
+// container that exits on start says why there.
+func (c *Client) lastLogLines(ctx context.Context, id string) string {
+	rc, err := c.Logs(context.WithoutCancel(ctx), id, domain.LogOptions{Tail: "20"})
+	if err != nil {
+		return ""
+	}
+	defer rc.Close()
+	b, _ := io.ReadAll(rc)
+	const maxLen = 8 << 10 // lines can be long (MongoDB logs JSON)
+	if len(b) > maxLen {
+		b = b[len(b)-maxLen:]
+	}
+	s := strings.TrimSpace(string(b))
+	if s == "" {
+		return ""
+	}
+	return ", last log lines:\n" + s
 }
 
 // RemoveContainerAndVolumes force-removes a container with its anonymous volumes.
