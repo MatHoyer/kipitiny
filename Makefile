@@ -45,9 +45,13 @@ site-demo:
 
 # Every Go test, the Docker-backed ones included (they need a daemon), with the race
 # detector and coverage of internal/; fails under COVERAGE_FLOOR, which only goes up.
+# cmd/kipitiny's API journeys run a whole manager, whose reconciler removes the containers
+# it doesn't know: they run after the other packages, never beside internal/core's.
 COVERAGE_FLOOR := 68
 cover: ui-stub
-	CGO_ENABLED=1 KIPITINY_TEST_DOCKER=1 go test -race -timeout 30m -coverpkg=./internal/... -coverprofile=cover.out ./...
+	CGO_ENABLED=1 KIPITINY_TEST_DOCKER=1 go test -race -timeout 30m -coverpkg=./internal/... -coverprofile=cover.out $$(go list ./... | grep -v '/cmd/kipitiny$$')
+	CGO_ENABLED=1 KIPITINY_TEST_DOCKER=1 go test -race -timeout 30m -coverpkg=./internal/... -coverprofile=cover-api.out ./cmd/kipitiny
+	tail -n +2 cover-api.out >> cover.out && rm cover-api.out
 	@go tool cover -func=cover.out | awk -v floor=$(COVERAGE_FLOOR) '/^total:/ { sub("%", "", $$3); print "coverage " $$3 "% (floor " floor "%)"; if ($$3 + 0 < floor) exit 1 }'
 
 test: ui-stub
